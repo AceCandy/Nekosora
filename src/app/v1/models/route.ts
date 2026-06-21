@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { eq, and } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { verifyKey, extractBearer } from "@/lib/keys";
+import { apiErrorLocalized, ErrorCode } from "@/lib/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,17 +14,11 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   const rawKey = extractBearer(req.headers.get("authorization"));
   if (!rawKey) {
-    return NextResponse.json(
-      { error: { message: "缺少 Authorization: Bearer 头", type: "invalid_request_error" } },
-      { status: 401 },
-    );
+    return apiErrorLocalized(ErrorCode.AUTH_MISSING_KEY, req);
   }
   const verified = await verifyKey(rawKey);
   if (!verified) {
-    return NextResponse.json(
-      { error: { message: "无效或已禁用的 API 密钥", type: "invalid_request_error" } },
-      { status: 401 },
-    );
+    return apiErrorLocalized(ErrorCode.AUTH_INVALID_KEY, req);
   }
 
   const db = await getDb();

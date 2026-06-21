@@ -38,6 +38,8 @@ export async function POST(req: NextRequest) {
     // P2-B:模板 ID + 变量(用户选定模板时传入)。
     templateId?: string;
     templateVars?: Record<string, string>;
+    // I-12b:指令卡 ID 列表(用户在 chat 勾选的指令卡,渲染为 system 上下文注入)。
+    instructionCardIds?: string[];
   };
   try {
     body = await req.json();
@@ -208,6 +210,27 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // ===== I-12b:加载指令卡(若指定)=====
+  // 把选中的指令卡渲染为 <instruction_card_context> XML,追加到 system prompt。
+  // 纯文本上下文,无执行能力(契约见 renderCardContext)。
+  let cardSystemPrompt: string | null = null;
+  if (body.instructionCardIds && body.instructionCardIds.length > 0) {
+    const { getCardsByIds, renderCardContext, incUseCount: incCardUse } = await import(
+      "@/lib/instruction-cards/service"
+    );
+    const cards = await getCardsByIds(user.id, body.instructionCardIds);
+    cardSystemPrompt = renderCardContext(cards);
+    if (cards.length > 0) {
+      incCardUse(cards.map((c) => c.id)).catch(() => {}); // 异步计数
+    }
+  }
+  // 合并 template + card 两个 system 来源(均作为额外 system 指令)。
+  const extraSystemParts = [templateSystemPrompt, cardSystemPrompt].filter(
+    (p): p is string => p !== null,
+  );
+  const mergedSystemPrompt =
+    extraSystemParts.length > 0 ? extraSystemParts.join("\n\n") : null;
+
   // 提取 RAG 注入的文件上下文(若 RAG 已把 system 注入 effectiveMessages,这里分离出来给 assembler)
   // 简化:RAG 已直接修改了 effectiveMessages 的 system 块,assembler 会保留它。
   const assembled = assembleContext({
@@ -215,7 +238,7 @@ export async function POST(req: NextRequest) {
     memories,
     compaction,
     fileContext: null, // RAG 已在上一步直接注入到 messages
-    templateSystemPrompt,
+    templateSystemPrompt: mergedSystemPrompt, // 合并 template + 指令卡
     maxTokens: 32000,
   });
 

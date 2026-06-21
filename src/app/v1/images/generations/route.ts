@@ -15,6 +15,7 @@ import { verifyKey, extractBearer } from "@/lib/keys";
 import { generateImageViaRoute, RoutingError } from "@/lib/providers/multimodal/image-gen";
 import { getStorage } from "@/lib/infra/storage";
 import { logUsage } from "@/lib/usage";
+import { apiErrorLocalized, ErrorCode, routingCodeToErrorCode } from "@/lib/errors";
 import type { LogUsageParams } from "@/lib/usage";
 
 export const runtime = "nodejs";
@@ -24,11 +25,11 @@ export async function POST(req: NextRequest) {
   // 1. 鉴权
   const rawKey = extractBearer(req.headers.get("authorization"));
   if (!rawKey) {
-    return openaiError("缺少 Authorization: Bearer 头", "missing_api_key", 401);
+    return apiErrorLocalized(ErrorCode.AUTH_MISSING_KEY, req);
   }
   const verified = await verifyKey(rawKey);
   if (!verified) {
-    return openaiError("无效或已禁用的 API 密钥", "invalid_api_key", 401);
+    return apiErrorLocalized(ErrorCode.AUTH_INVALID_KEY, req);
   }
 
   // 2. 解析请求体
@@ -36,13 +37,13 @@ export async function POST(req: NextRequest) {
   try {
     body = await req.json();
   } catch {
-    return openaiError("请求体不是合法 JSON", "invalid_request_error", 400);
+    return apiErrorLocalized(ErrorCode.REQUEST_INVALID_JSON, req);
   }
 
   const model = body.model as string | undefined;
   const prompt = body.prompt as string | undefined;
   if (!model || !prompt) {
-    return openaiError("model 和 prompt 为必填项", "invalid_request_error", 400);
+    return apiErrorLocalized(ErrorCode.REQUEST_MISSING_FIELD, req, { fields: ["model", "prompt"] });
   }
 
   const n = Number(body.n ?? 1);
@@ -96,7 +97,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     if (err instanceof RoutingError) {
-      return openaiError(err.message, err.code, 400);
+      return apiErrorLocalized(routingCodeToErrorCode(err.code), req);
     }
     console.error("[/v1/images/generations] 失败:", err);
     await safeLogUsage({
@@ -108,10 +109,10 @@ export async function POST(req: NextRequest) {
       status: "failed",
       errorCode: "generation_failed",
     });
-    return openaiError(
-      err instanceof Error ? err.message : "图像生成失败",
-      "generation_failed",
-      502,
+    return apiErrorLocalized(
+      ErrorCode.MEDIA_IMAGE_GEN_FAILED,
+      req,
+      err instanceof Error ? { message: err.message } : undefined,
     );
   }
 }
@@ -119,13 +120,6 @@ export async function POST(req: NextRequest) {
 type ImageGenOptions = {
   size?: "256x256" | "512x512" | "1024x1024" | "1792x1024" | "1024x1792";
 };
-
-function openaiError(message: string, code: string, status: number) {
-  return NextResponse.json(
-    { error: { message, type: status >= 500 ? "server_error" : "invalid_request_error", code } },
-    { status },
-  );
-}
 
 async function safeLogUsage(params: LogUsageParams): Promise<void> {
   try {
