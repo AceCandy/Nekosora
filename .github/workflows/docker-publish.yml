@@ -1,0 +1,92 @@
+# 双 registry 发布:GHCR + DockerHub。
+#
+# 在 ghcr-image.yml 基础上扩展,DockerHub 需额外配置 secret:
+#   DOCKERHUB_USERNAME  DockerHub 账号
+#   DOCKERHUB_TOKEN     访问令牌(https://hub.docker.com/settings/security)
+#
+# 拉取镜像(任选其一):
+#   docker pull ghcr.io/acecandy/nekusora:latest
+#   docker pull acecandy/nekusora:latest
+#
+# 触发条件与 GHCR 一致:push v* 标签 / push main / 手动。
+name: Publish Docker image (GHCR + DockerHub)
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+env:
+  GHCR_REGISTRY: ghcr.io
+  DOCKERHUB_REGISTRY: docker.io
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU(多架构支持)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # --- GHCR 登录(用自动注入的 GITHUB_TOKEN,无需额外 secret)---
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.GHCR_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # --- DockerHub 登录(需手动配 secret,无则跳过 DockerHub push)---
+      - name: Log in to DockerHub
+        id: dockerhub-login
+        uses: docker/login-action@v3
+        continue-on-error: true
+        with:
+          registry: ${{ env.DOCKERHUB_REGISTRY }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # 标签:语义化版本 + sha + edge。
+      # 通过 docker/metadata-action 的 images 列表,自动为两个 registry 生成对应 tag。
+      # DockerHub image 名 = <dockerhub_username>/<repo> (全小写)。
+      - name: Extract metadata(标签 + labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          # 两个 registry 的完整镜像名;secret 未配置时 DockerHub 的会被忽略(见下方条件)
+          images: |
+            ${{ env.GHCR_REGISTRY }}/${{ github.repository }}
+            ${{ steps.dockerhub-login.outcome == 'success' && format('{0}/{1}', env.DOCKERHUB_REGISTRY, github.repository) || '' }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=semver,pattern=latest
+            type=edge,branch=main
+            type=sha,format=short
+
+      - name: Build and push
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Print image digest
+        run: echo "digest ${{ steps.push.outputs.digest }}"

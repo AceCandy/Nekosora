@@ -1,0 +1,6 @@
+# issue 配置 —— 允许用户选择模板或自由创建
+blank_issues_enabled: true
+contact_links:
+  - name: 💬 提问 / 讨论
+    url: https://github.com/AceCandy/Nekosora/discussions
+    about: 使用问题、想法讨论请发到 Discussions

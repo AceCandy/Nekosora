@@ -1,20 +1,51 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getMessages } from "next-intl/server";
 import "./globals.css";
+import RegisterSW from "./RegisterSW";
 
 export const metadata: Metadata = {
-  title: "Nekusora",
+  title: "Nekusora · 星枢",
   description: "AI 聊天工作台 + OpenAI 兼容模型网关",
+  applicationName: "Nekusora",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Nekusora",
+  },
+  icons: {
+    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/icon.svg" }],
+    shortcut: [{ url: "/icon.svg" }],
+  },
+  formatDetection: { telephone: false },
 };
 
-export default function RootLayout({
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#1a1a2e" },
+  ],
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+};
+
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  const locale = await getLocale();
+  const messages = await getMessages();
+
   return (
-    <html lang="zh-CN" suppressHydrationWarning>
-      <body>{children}{/* impeccable-live-start */}
-<script async src="http://localhost:8400/live.js"></script>
-{/* impeccable-live-end */}
-</body>
+    <html lang={locale} suppressHydrationWarning>
+      <body>
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          {children}
+        </NextIntlClientProvider>
+        <RegisterSW />
+      </body>
     </html>
   );
 }

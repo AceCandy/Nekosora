@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* 让 Tailwind 扫描 streamdown 内部的工具类(代码高亮/表格/块等),否则这些类会被 purge 掉。 */
+@source "../node_modules/streamdown/dist/*.js";
+
 @theme {
   --color-sora-blue: oklch(0.60 0.15 250);
   --color-sora-blue-hover: oklch(0.55 0.16 250);
