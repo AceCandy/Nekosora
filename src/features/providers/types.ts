@@ -3,9 +3,6 @@
  * 本文件为普通类型模块,不是 server action 文件;类型在编译期擦除,不会进入客户端 bundle。
  */
 
-/**
- * 一个可绑给 <form action={...}> 的 Server Action 类型。
- * React 的 form action 签名要求 (formData: FormData) => void | Promise<void>;
- * 无论原 action 还是已 .bind 前缀参数的版本,最终调用签名都一致。
- */
-export type FormDataSerializableAction = (formData: FormData) => void | Promise<void>;
+// 通用 Server Action 类型已挪到 shared(避免 shared/ui 反向依赖 features)。
+// 此处 re-export 保持向后兼容,新代码请直接 import from "@/shared/lib/types"。
+export type { FormDataSerializableAction } from "@/shared/lib/types";

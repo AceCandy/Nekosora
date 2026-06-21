@@ -1,7 +1,8 @@
 "use client";
 import { useState } from "react";
-import type { FormDataSerializableAction } from "@/components/providers/types";
-import Modal from "@/components/ui/Modal";
+import { useTranslations } from "next-intl";
+import type { FormDataSerializableAction } from "@/features/providers/types";
+import Modal from "@/shared/ui/Modal";
 
 export interface RouteInitial {
   providerId?: string;
@@ -49,6 +50,7 @@ export default function RouteFormDialog({
   initial,
   protocols = DEFAULT_PROTOCOLS,
 }: RouteFormDialogProps) {
+  const t = useTranslations("models");
   const isEdit = mode === "edit";
   const [formKey, setFormKey] = useState(0);
 
@@ -61,7 +63,7 @@ export default function RouteFormDialog({
     <Modal
       open={open}
       onClose={handleClose}
-      title={isEdit ? "编辑路由" : "添加路由"}
+      title={isEdit ? t("editRoute") : t("addRouteTitle")}
     >
       <form
         key={formKey}
@@ -70,14 +72,14 @@ export default function RouteFormDialog({
         className="space-y-4"
       >
         <label className="block">
-          <span className="text-sm font-medium">Provider *</span>
+          <span className="text-sm font-medium">{t("upstreamProviderLabel")}</span>
           <select
             name="providerId"
             required
             defaultValue={initial?.providerId ?? ""}
             className={inputCls}
           >
-            <option value="">选择 Provider...</option>
+            <option value="">{t("selectProvider")}</option>
             {providers.map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
@@ -86,7 +88,7 @@ export default function RouteFormDialog({
 
         <label className="block">
           <span className="text-sm font-medium">
-            上游真实模型名 * <span className="text-xs font-normal text-neutral-400">(发给上游的)</span>
+            {t("upstreamModelNameShortLabel")} <span className="text-xs font-normal text-neutral-400">{t("upstreamModelShortHint")}</span>
           </span>
           <input
             name="upstreamModelName"
@@ -99,7 +101,7 @@ export default function RouteFormDialog({
 
         <div className="grid grid-cols-3 gap-4">
           <label className="block">
-            <span className="text-sm font-medium">协议</span>
+            <span className="text-sm font-medium">{t("colProtocol")}</span>
             <select
               name="protocol"
               defaultValue={initial?.protocol ?? "openai"}
@@ -111,8 +113,8 @@ export default function RouteFormDialog({
             </select>
           </label>
           <label className="block">
-            <span className="text-sm font-medium" title="数字越小越优先;主备故障转移用">
-              优先级
+            <span className="text-sm font-medium" title={t("priorityTitle")}>
+              {t("priorityLabel")}
             </span>
             <input
               name="priority"
@@ -122,8 +124,8 @@ export default function RouteFormDialog({
             />
           </label>
           <label className="block">
-            <span className="text-sm font-medium" title="同优先级组内加权随机;数字越大越易选中">
-              权重
+            <span className="text-sm font-medium" title={t("weightTitle")}>
+              {t("weightLabel")}
             </span>
             <input
               name="weight"
@@ -135,7 +137,7 @@ export default function RouteFormDialog({
           </label>
         </div>
         <p className="text-xs text-neutral-400">
-          <b>优先级</b>:数字小的优先(主备);同优先级内按 <b>权重</b> 加权随机(负载均衡)。
+          {t("priorityWeightExplanation")}
         </p>
 
         <div className="flex justify-end gap-2 pt-2">
@@ -144,13 +146,13 @@ export default function RouteFormDialog({
             onClick={handleClose}
             className="rounded-md border border-neutral-300 px-4 py-2 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
           >
-            取消
+            {t("cancel")}
           </button>
           <button
             type="submit"
             className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-white dark:text-black"
           >
-            {isEdit ? "保存" : "创建"}
+            {isEdit ? t("save") : t("create")}
           </button>
         </div>
       </form>

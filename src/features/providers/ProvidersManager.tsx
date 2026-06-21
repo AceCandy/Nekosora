@@ -1,14 +1,15 @@
 "use client";
 import { useState } from "react";
-import type { FormDataSerializableAction } from "@/components/providers/types";
-import type { EditorRow } from "@/components/providers/KeyBundleEditor";
-import ProviderFormDialog from "@/components/providers/ProviderFormDialog";
-import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import { useTranslations } from "next-intl";
+import type { FormDataSerializableAction } from "@/features/providers/types";
+import type { EditorRow } from "@/features/providers/KeyBundleEditor";
+import ProviderFormDialog from "@/features/providers/ProviderFormDialog";
+import ConfirmDialog from "@/shared/ui/ConfirmDialog";
 import { Plus, Edit2, Play, Square, Trash2, ShieldAlert } from "lucide-react";
 import { clsx } from "clsx";
-import Button from "@/components/ui/Button";
-import Badge from "@/components/ui/Badge";
-import StatusDot from "@/components/ui/StatusDot";
+import { Button } from "@/shared/ui/Button";
+import Badge from "@/shared/ui/Badge";
+import StatusDot from "@/shared/ui/StatusDot";
 
 export interface ProviderItem {
   id: string;
@@ -37,6 +38,7 @@ export default function ProvidersManager({
   toggleActions,
   deleteActions,
 }: ProvidersManagerProps) {
+  const t = useTranslations("providers");
   const [addOpen, setAddOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -48,7 +50,7 @@ export default function ProvidersManager({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <span className="text-xs font-mono text-neutral-400 dark:text-neutral-500 uppercase tracking-wider">
-          已配置上游服务商: {providers.length}
+          {t("configuredCount", { count: providers.length })}
         </span>
         <Button
           variant="primary"
@@ -57,7 +59,7 @@ export default function ProvidersManager({
           className="font-semibold"
         >
           <Plus className="w-3.5 h-3.5" />
-          <span>添加上游服务商</span>
+          <span>{t("addProvider")}</span>
         </Button>
       </div>
 
@@ -65,19 +67,19 @@ export default function ProvidersManager({
         <table className="w-full text-sm border-collapse text-left">
           <thead className="bg-neutral-50/70 dark:bg-neutral-900/50 border-b border-morning-mist dark:border-deep-space text-neutral-500 dark:text-neutral-400 font-mono text-xs uppercase">
             <tr>
-              <th className="p-3.5 font-medium">服务商名称</th>
-              <th className="p-3.5 font-medium">支持协议</th>
-              <th className="p-3.5 font-medium">接口地址 (Base URL)</th>
-              <th className="p-3.5 font-medium text-center">API 密钥数量</th>
-              <th className="p-3.5 font-medium">状态</th>
-              <th className="p-3.5 font-medium text-right">管理操作</th>
+              <th className="p-3.5 font-medium">{t("colName")}</th>
+              <th className="p-3.5 font-medium">{t("colProtocol")}</th>
+              <th className="p-3.5 font-medium">{t("colBaseUrl")}</th>
+              <th className="p-3.5 font-medium text-center">{t("colKeyCount")}</th>
+              <th className="p-3.5 font-medium">{t("colStatus")}</th>
+              <th className="p-3.5 font-medium text-right">{t("colActions")}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800/60">
             {providers.length === 0 ? (
               <tr>
                 <td colSpan={6} className="p-10 text-center text-xs text-neutral-400 dark:text-neutral-500">
-                  暂无 Provider，点击右上方按钮添加。
+                  {t("emptyState")}
                 </td>
               </tr>
             ) : (
@@ -109,10 +111,10 @@ export default function ProvidersManager({
                       size="sm"
                       onClick={() => setEditId(p.id)}
                       className="text-neutral-750 hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-white"
-                      title="编辑"
+                      title={t("edit")}
                     >
                       <Edit2 className="w-3.5 h-3.5" />
-                      <span>编辑</span>
+                      <span>{t("edit")}</span>
                     </Button>
 
                     <form action={toggleActions[p.id]} className="inline">
@@ -125,17 +127,17 @@ export default function ProvidersManager({
                             ? "text-amber-600 dark:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/20"
                             : "text-green-600 dark:text-green-500 hover:bg-green-50 dark:hover:bg-green-950/20"
                         )}
-                        title={p.enabled ? "禁用" : "启用"}
+                        title={p.enabled ? t("disable") : t("enable")}
                       >
                         {p.enabled ? (
                           <>
                             <Square className="w-3.5 h-3.5 fill-current" />
-                            <span>禁用</span>
+                            <span>{t("disable")}</span>
                           </>
                         ) : (
                           <>
                             <Play className="w-3.5 h-3.5 fill-current" />
-                            <span>启用</span>
+                            <span>{t("enable")}</span>
                           </>
                         )}
                       </Button>
@@ -146,10 +148,10 @@ export default function ProvidersManager({
                       size="sm"
                       onClick={() => setDeleteId(p.id)}
                       className="text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 hover:text-red-650"
-                      title="删除"
+                      title={t("delete")}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
-                      <span>删除</span>
+                      <span>{t("delete")}</span>
                     </Button>
                   </td>
                 </tr>
@@ -190,19 +192,19 @@ export default function ProvidersManager({
         <ConfirmDialog
           open={true}
           onClose={() => setDeleteId(null)}
-          title="删除 Provider"
+          title={t("deleteTitle")}
           message={
             <div className="flex gap-3 text-sm text-neutral-600 dark:text-neutral-400 mt-2">
               <ShieldAlert className="w-5 h-5 text-red-500 shrink-0" />
               <div>
-                确定要删除 <span className="font-semibold text-neutral-900 dark:text-white">“{deleting.name}”</span> 吗？
+                {t("deleteConfirm", { name: deleting.name })}
                 <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1 leading-normal">
-                  此操作不可逆。删除此 Provider 后，绑定在其之上的模型与路由将会失效。
+                  {t("deleteWarning")}
                 </p>
               </div>
             </div>
           }
-          confirmLabel="确定删除"
+          confirmLabel={t("deleteButton")}
           danger
           action={deleteActions[deleting.id]}
         />

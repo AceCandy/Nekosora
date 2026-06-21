@@ -1,11 +1,12 @@
 "use client";
 import { useState } from "react";
-import type { FormDataSerializableAction } from "@/components/providers/types";
-import Modal from "@/components/ui/Modal";
-import KeyBundleEditor, { type EditorRow } from "@/components/providers/KeyBundleEditor";
-import Input from "@/components/ui/Input";
-import Select from "@/components/ui/Select";
-import Button from "@/components/ui/Button";
+import { useTranslations } from "next-intl";
+import type { FormDataSerializableAction } from "@/features/providers/types";
+import Modal from "@/shared/ui/Modal";
+import KeyBundleEditor, { type EditorRow } from "@/features/providers/KeyBundleEditor";
+import Input from "@/shared/ui/Input";
+import Select from "@/shared/ui/Select";
+import { Button } from "@/shared/ui/Button";
 
 interface ProviderFormDialogProps {
   open: boolean;
@@ -31,6 +32,7 @@ export default function ProviderFormDialog({
   protocols,
   initial,
 }: ProviderFormDialogProps) {
+  const t = useTranslations("providers");
   const isEdit = mode === "edit";
   const [formKey, setFormKey] = useState(0);
 
@@ -43,7 +45,7 @@ export default function ProviderFormDialog({
     <Modal
       open={open}
       onClose={handleClose}
-      title={isEdit ? "编辑 Provider" : "添加 Provider"}
+      title={isEdit ? t("editTitle") : t("addTitle")}
     >
       <form
         key={formKey}
@@ -55,16 +57,16 @@ export default function ProviderFormDialog({
       >
         <div className="grid grid-cols-2 gap-4">
           <label className="block">
-            <span className={labelCls}>名称</span>
+            <span className={labelCls}>{t("fieldName")}</span>
             <Input
               name="name"
               required
               defaultValue={initial?.name ?? ""}
-              placeholder="如: OpenAI 官方"
+              placeholder={t("fieldNamePlaceholder")}
             />
           </label>
           <label className="block">
-            <span className={labelCls}>协议</span>
+            <span className={labelCls}>{t("fieldProtocol")}</span>
             <Select
               name="protocol"
               defaultValue={initial?.protocol ?? protocols[0]?.value ?? "openai"}
@@ -78,7 +80,7 @@ export default function ProviderFormDialog({
             </Select>
           </label>
           <label className="block col-span-2">
-            <span className={labelCls}>Base URL</span>
+            <span className={labelCls}>{t("fieldBaseUrl")}</span>
             <Input
               name="baseUrl"
               required
@@ -87,32 +89,31 @@ export default function ProviderFormDialog({
             />
           </label>
           <div className="block col-span-2">
-            <span className={labelCls}>API Key (支持多密钥加权负载均衡)</span>
+            <span className={labelCls}>{t("fieldApiKey")}</span>
             <KeyBundleEditor
               initialRows={initial?.keys}
               requireKeys={!isEdit}
             />
           </div>
         </div>
-        
+
         <div className="flex justify-end gap-2.5 pt-4 border-t border-morning-mist dark:border-deep-space">
           <Button
             variant="secondary"
             size="sm"
             onClick={handleClose}
           >
-            取消
+            {t("cancel")}
           </Button>
           <Button
             type="submit"
             variant="contrast"
             size="sm"
           >
-            {isEdit ? "保存" : "创建"}
+            {isEdit ? t("save") : t("create")}
           </Button>
         </div>
       </form>
     </Modal>
   );
 }
-

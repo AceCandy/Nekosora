@@ -1,18 +1,19 @@
 "use client";
 import { Fragment, useState } from "react";
+import { useTranslations } from "next-intl";
 import type { ModelCapabilities } from "@/db/types";
-import type { FormDataSerializableAction } from "@/components/providers/types";
+import type { FormDataSerializableAction } from "@/features/providers/types";
 import ModelFormDialog, {
   type GlobalModelInitial,
   type ByoModelInitial,
-} from "@/components/models/ModelFormDialog";
-import RouteFormDialog from "@/components/models/RouteFormDialog";
-import ConfirmDialog from "@/components/ui/ConfirmDialog";
+} from "@/features/models/ModelFormDialog";
+import RouteFormDialog from "@/features/models/RouteFormDialog";
+import ConfirmDialog from "@/shared/ui/ConfirmDialog";
 import { Plus, Edit2, Play, Square, Trash2, ShieldAlert, GitCommit, ChevronDown, ChevronUp } from "lucide-react";
 import { clsx } from "clsx";
-import Button from "@/components/ui/Button";
-import Badge from "@/components/ui/Badge";
-import StatusDot from "@/components/ui/StatusDot";
+import { Button } from "@/shared/ui/Button";
+import Badge from "@/shared/ui/Badge";
+import StatusDot from "@/shared/ui/StatusDot";
 
 // ---------- 共享数据形状 ----------
 
@@ -83,6 +84,7 @@ export default function ModelsManager({
   deleteRouteActions,
   toggleRouteActions,
 }: ModelsManagerProps) {
+  const t = useTranslations("models");
   const isAdmin = variant === "global";
   const [addOpen, setAddOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -102,7 +104,7 @@ export default function ModelsManager({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <span className="text-xs font-mono text-neutral-400 dark:text-neutral-500 uppercase tracking-wider">
-          已配置模型: {models.length}
+          {t("configuredCount", { count: models.length })}
         </span>
         <Button
           variant="primary"
@@ -111,7 +113,7 @@ export default function ModelsManager({
           className="font-semibold"
         >
           <Plus className="w-3.5 h-3.5" />
-          <span>添加模型</span>
+          <span>{t("addModel")}</span>
         </Button>
       </div>
 
@@ -119,22 +121,22 @@ export default function ModelsManager({
         <table className="w-full text-sm border-collapse text-left">
           <thead className="bg-neutral-50/70 dark:bg-neutral-900/50 border-b border-morning-mist dark:border-deep-space text-neutral-500 dark:text-neutral-400 font-mono text-xs uppercase">
             <tr>
-              <th className="p-3.5 font-medium">对外名</th>
+              <th className="p-3.5 font-medium">{t("colExternalName")}</th>
               {isAdmin ? (
                 <>
-                  <th className="p-3.5 font-medium">显示名</th>
-                  <th className="p-3.5 font-medium">厂商</th>
-                  <th className="p-3.5 font-medium">访问范围</th>
-                  <th className="p-3.5 font-medium text-center">路由数</th>
+                  <th className="p-3.5 font-medium">{t("colDisplayName")}</th>
+                  <th className="p-3.5 font-medium">{t("colVendor")}</th>
+                  <th className="p-3.5 font-medium">{t("colAccessScope")}</th>
+                  <th className="p-3.5 font-medium text-center">{t("colRouteCount")}</th>
                 </>
               ) : (
                 <>
-                  <th className="p-3.5 font-medium">上游名</th>
+                  <th className="p-3.5 font-medium">{t("colUpstreamName")}</th>
                   <th className="p-3.5 font-medium">Provider</th>
                 </>
               )}
-              <th className="p-3.5 font-medium">状态</th>
-              <th className="p-3.5 font-medium text-right">操作</th>
+              <th className="p-3.5 font-medium">{t("colStatus")}</th>
+              <th className="p-3.5 font-medium text-right">{t("colActions")}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800/60">
@@ -144,7 +146,7 @@ export default function ModelsManager({
                   colSpan={isAdmin ? 7 : 5}
                   className="p-10 text-center text-xs text-neutral-400 dark:text-neutral-500"
                 >
-                  暂无模型，点击右上方按钮添加。
+                  {t("emptyState")}
                 </td>
               </tr>
             ) : (
@@ -173,7 +175,7 @@ export default function ModelsManager({
                           </td>
                           <td className="p-3.5 text-xs">
                             <Badge variant={m.accessScope === "public" ? "success" : "warning"}>
-                              {m.accessScope === "public" ? "全局公开" : "内部私有"}
+                              {m.accessScope === "public" ? t("scopePublic") : t("scopeInternal")}
                             </Badge>
                           </td>
                           <td className="p-3.5 text-center font-mono text-xs">
@@ -206,10 +208,10 @@ export default function ModelsManager({
                                 ? "text-neutral-800 dark:text-white bg-neutral-100 dark:bg-neutral-800"
                                 : "text-sora-blue hover:bg-blue-50 dark:hover:bg-blue-950/20"
                             )}
-                            title="配置网关路由"
+                            title={t("configureRoutes")}
                           >
                             <GitCommit className="w-3.5 h-3.5" />
-                            <span>路由 ({modelRoutes.length})</span>
+                            <span>{t("routesWithCount", { count: modelRoutes.length })}</span>
                             {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                           </Button>
                         )}
@@ -218,10 +220,10 @@ export default function ModelsManager({
                           size="sm"
                           onClick={() => setEditId(m.id)}
                           className="text-neutral-750 hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-white"
-                          title="编辑"
+                          title={t("edit")}
                         >
                           <Edit2 className="w-3.5 h-3.5" />
-                          <span>编辑</span>
+                          <span>{t("edit")}</span>
                         </Button>
                         <form action={toggleActions[m.id]} className="inline">
                           <Button
@@ -233,17 +235,17 @@ export default function ModelsManager({
                                 ? "text-amber-600 dark:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/20"
                                 : "text-green-600 dark:text-green-500 hover:bg-green-50 dark:hover:bg-green-950/20"
                             )}
-                            title={m.enabled ? "禁用" : "启用"}
+                            title={m.enabled ? t("disable") : t("enable")}
                           >
                             {m.enabled ? (
                               <>
                                 <Square className="w-3.5 h-3.5 fill-current" />
-                                <span>禁用</span>
+                                <span>{t("disable")}</span>
                               </>
                             ) : (
                               <>
                                 <Play className="w-3.5 h-3.5 fill-current" />
-                                <span>启用</span>
+                                <span>{t("enable")}</span>
                               </>
                             )}
                           </Button>
@@ -253,10 +255,10 @@ export default function ModelsManager({
                           size="sm"
                           onClick={() => setDeleteId(m.id)}
                           className="text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 hover:text-red-650"
-                          title="删除"
+                          title={t("delete")}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
-                          <span>删除</span>
+                          <span>{t("delete")}</span>
                         </Button>
                       </td>
                     </tr>
@@ -350,19 +352,19 @@ export default function ModelsManager({
         <ConfirmDialog
           open={true}
           onClose={() => setDeleteId(null)}
-          title="删除模型"
+          title={t("deleteModelTitle")}
           message={
             <div className="flex gap-3 text-sm text-neutral-600 dark:text-neutral-400 mt-2">
               <ShieldAlert className="w-5 h-5 text-red-500 shrink-0" />
               <div>
-                确定要删除模型 <span className="font-semibold text-neutral-900 dark:text-white">“{deleting.name}”</span> 吗？
+                {t("deleteModelConfirm", { name: deleting.name })}
                 <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1 leading-normal">
-                  {isAdmin ? "⚠️ 该模型为全局模型，删除后所有关联的上游网关路由、子密钥模型映射将一并被删除。该操作不可撤销。" : "⚠️ 该操作将移除自定义模型绑定，不可撤销。"}
+                  {isAdmin ? t("deleteGlobalWarning") : t("deleteByoWarning")}
                 </p>
               </div>
             </div>
           }
-          confirmLabel="确定删除"
+          confirmLabel={t("confirmDelete")}
           danger
           action={deleteActions[deleting.id]}
         />
@@ -372,19 +374,19 @@ export default function ModelsManager({
         <ConfirmDialog
           open={true}
           onClose={() => setRouteDeleteId(null)}
-          title="删除网关路由"
+          title={t("deleteRouteTitle")}
           message={
             <div className="flex gap-3 text-sm text-neutral-600 dark:text-neutral-400 mt-2">
               <ShieldAlert className="w-5 h-5 text-red-500 shrink-0" />
               <div>
-                确定删除该模型指向上游 <span className="font-semibold text-neutral-900 dark:text-white">“{routeDeleting.providerName}”</span> 的负载路由吗？
+                {t("deleteRouteConfirm", { name: routeDeleting.providerName })}
                 <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1 leading-normal font-mono">
-                  上游模型: {routeDeleting.upstreamModelName}
+                  {t("upstreamModelLabel", { name: routeDeleting.upstreamModelName })}
                 </p>
               </div>
             </div>
           }
-          confirmLabel="确定删除"
+          confirmLabel={t("confirmDelete")}
           danger
           action={deleteRouteActions[routeDeleting.id]}
         />
@@ -408,11 +410,12 @@ function RouteListPanel({
   onDelete,
   toggleActions,
 }: RouteListPanelProps) {
+  const t = useTranslations("models");
   return (
     <div className="space-y-3 p-4 rounded-lg bg-neutral-50/50 dark:bg-neutral-950/20 border border-neutral-200/65 dark:border-neutral-800/80">
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
-          该模型的负载转发路由 (按优先级故障转移，同优先级内加权负载均衡)
+          {t("routePanelHint")}
         </span>
         <Button
           type="button"
@@ -422,26 +425,26 @@ function RouteListPanel({
           className="font-semibold"
         >
           <Plus className="w-3 h-3" />
-          <span>添加路由</span>
+          <span>{t("addRoute")}</span>
         </Button>
       </div>
 
       {routes.length === 0 ? (
         <p className="text-xs text-neutral-400 dark:text-neutral-500 py-3 text-center border border-dashed border-neutral-200 dark:border-neutral-800 rounded">
-          暂无可用负载路由，该模型当前将无法接收网关调用。
+          {t("noRoutesHint")}
         </p>
       ) : (
         <div className="rounded-md border border-morning-mist dark:border-deep-space overflow-hidden bg-nebula-white dark:bg-twilight-obsidian">
           <table className="w-full text-xs text-left">
             <thead className="bg-neutral-50 dark:bg-neutral-900 text-neutral-500 dark:text-neutral-400 font-mono text-[10px] uppercase border-b border-morning-mist dark:border-deep-space">
               <tr>
-                <th className="p-2.5 font-medium">上游服务商</th>
-                <th className="p-2.5 font-medium">上游模型名</th>
-                <th className="p-2.5 font-medium">协议</th>
-                <th className="p-2.5 font-medium text-center">优先级</th>
-                <th className="p-2.5 font-medium text-center">负载权重</th>
-                <th className="p-2.5 font-medium">状态</th>
-                <th className="p-2.5 font-medium text-right">操作</th>
+                <th className="p-2.5 font-medium">{t("colUpstreamProvider")}</th>
+                <th className="p-2.5 font-medium">{t("colUpstreamModelName")}</th>
+                <th className="p-2.5 font-medium">{t("colProtocol")}</th>
+                <th className="p-2.5 font-medium text-center">{t("colPriority")}</th>
+                <th className="p-2.5 font-medium text-center">{t("colWeight")}</th>
+                <th className="p-2.5 font-medium">{t("colStatus")}</th>
+                <th className="p-2.5 font-medium text-right">{t("colActions")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800/60">
@@ -470,7 +473,7 @@ function RouteListPanel({
                       className="text-neutral-750 hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-white"
                     >
                       <Edit2 className="w-3 h-3" />
-                      <span>编辑</span>
+                      <span>{t("edit")}</span>
                     </Button>
                     {toggleActions?.[r.id] && (
                       <form action={toggleActions[r.id]} className="inline">
@@ -487,12 +490,12 @@ function RouteListPanel({
                           {r.enabled ? (
                             <>
                               <Square className="w-3 h-3 fill-current" />
-                              <span>禁用</span>
+                              <span>{t("disable")}</span>
                             </>
                           ) : (
                             <>
                               <Play className="w-3 h-3 fill-current" />
-                              <span>启用</span>
+                              <span>{t("enable")}</span>
                             </>
                           )}
                         </Button>
@@ -504,7 +507,7 @@ function RouteListPanel({
                       onClick={() => onDelete(r.id)}
                       className="text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 hover:text-red-650"
                     >
-                      删除
+                      {t("delete")}
                     </Button>
                   </td>
                 </tr>
@@ -514,7 +517,7 @@ function RouteListPanel({
         </div>
       )}
       <p className="text-[11px] text-neutral-400">
-        提示:不同优先级 = 主备(高的全挂才降级);同优先级 = 按权重加权负载。
+        {t("priorityWeightTip")}
       </p>
     </div>
   );

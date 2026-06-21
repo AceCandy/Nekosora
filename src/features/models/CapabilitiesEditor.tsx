@@ -1,14 +1,16 @@
 "use client";
 import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import type { ModelCapabilities } from "@/db/types";
 import { ChevronRight, ChevronDown } from "lucide-react";
 
-const CAP_DEFS: { key: keyof ModelCapabilities; label: string; hint: string }[] = [
-  { key: "stream", label: "流式 (Stream)", hint: "支持 SSE 增量输出" },
-  { key: "tools", label: "工具调用 (Tools)", hint: "支持 function calling" },
-  { key: "vision", label: "视觉 (Vision)", hint: "支持图片多模态输入" },
-  { key: "systemPrompt", label: "系统提示词 (System)", hint: "支持预设 system role" },
-  { key: "reasoning", label: "推理 (Reasoning)", hint: "支持思维链深度推理" },
+// label/hint 存 i18n key,渲染时按 locale 翻译。
+const CAP_DEFS: { key: keyof ModelCapabilities; labelKey: string; hintKey: string }[] = [
+  { key: "stream", labelKey: "capStream", hintKey: "capStreamHint" },
+  { key: "tools", labelKey: "capTools", hintKey: "capToolsHint" },
+  { key: "vision", labelKey: "capVision", hintKey: "capVisionHint" },
+  { key: "systemPrompt", labelKey: "capSystemPrompt", hintKey: "capSystemPromptHint" },
+  { key: "reasoning", labelKey: "capReasoning", hintKey: "capReasoningHint" },
 ];
 
 interface CapabilitiesEditorProps {
@@ -16,6 +18,7 @@ interface CapabilitiesEditorProps {
 }
 
 export default function CapabilitiesEditor({ initial }: CapabilitiesEditorProps) {
+  const t = useTranslations("models");
   const [caps, setCaps] = useState<ModelCapabilities>(initial ?? {});
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [advancedText, setAdvancedText] = useState<string>(
@@ -55,7 +58,7 @@ export default function CapabilitiesEditor({ initial }: CapabilitiesEditorProps)
           <label
             key={d.key}
             className="flex items-center gap-2 text-xs text-neutral-600 dark:text-neutral-300 cursor-pointer select-none py-1 hover:text-neutral-900 dark:hover:text-white transition-colors"
-            title={d.hint}
+            title={t(d.hintKey)}
           >
             <input
               type="checkbox"
@@ -63,7 +66,7 @@ export default function CapabilitiesEditor({ initial }: CapabilitiesEditorProps)
               onChange={() => toggle(d.key)}
               className="rounded border-neutral-300 text-blue-600 focus:ring-blue-500/30 transition-colors"
             />
-            <span>{d.label}</span>
+            <span>{t(d.labelKey)}</span>
           </label>
         ))}
       </div>
@@ -76,7 +79,7 @@ export default function CapabilitiesEditor({ initial }: CapabilitiesEditorProps)
             className="inline-flex items-center gap-0.5 text-xs text-blue-600 hover:text-blue-700 transition-colors"
           >
             <ChevronRight className="w-3.5 h-3.5" />
-            <span>配置高级能力参数 (JSON)</span>
+            <span>{t("advancedConfigToggle")}</span>
           </button>
         ) : (
           <div className="space-y-2 animate-in fade-in slide-in-from-top-1 duration-150">
@@ -86,7 +89,7 @@ export default function CapabilitiesEditor({ initial }: CapabilitiesEditorProps)
               className="inline-flex items-center gap-0.5 text-xs text-blue-600 hover:text-blue-700 transition-colors"
             >
               <ChevronDown className="w-3.5 h-3.5" />
-              <span>收起高级配置，改用复选框</span>
+              <span>{t("collapseAdvancedConfig")}</span>
             </button>
             <div className="space-y-1">
               <textarea
@@ -98,7 +101,7 @@ export default function CapabilitiesEditor({ initial }: CapabilitiesEditorProps)
                 placeholder='{"stream":true,"tools":true}'
               />
               <p className="text-[10px] text-neutral-400 dark:text-neutral-500">
-                💡 JSON 格式必须是有效的键值对。若语法错误将不会同步至上方复选框。
+                {t("advancedConfigHint")}
               </p>
             </div>
           </div>

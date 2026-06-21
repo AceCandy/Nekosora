@@ -1,8 +1,9 @@
 "use client";
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { Eye, EyeOff, Plus, Trash2 } from "lucide-react";
-import Input from "@/components/ui/Input";
-import Button from "@/components/ui/Button";
+import Input from "@/shared/ui/Input";
+import { Button } from "@/shared/ui/Button";
 
 export interface EditorRow {
   key: string;
@@ -18,6 +19,7 @@ export default function KeyBundleEditor({
   requireKeys = true,
   initialRows,
 }: KeyBundleEditorProps) {
+  const t = useTranslations("providers");
   const [rows, setRows] = useState<EditorRow[]>(
     initialRows && initialRows.length > 0
       ? initialRows
@@ -52,21 +54,21 @@ export default function KeyBundleEditor({
               value={row.key}
               onChange={(e) => update(i, "key", e.target.value)}
               className="pr-9 font-mono text-xs"
-              placeholder={`上游 API Key #${i + 1}`}
+              placeholder={t("keyPlaceholder", { index: i + 1 })}
               autoComplete="off"
             />
             <button
               type="button"
               onClick={() => toggleReveal(i)}
               className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-250 p-0.5 rounded transition-colors"
-              aria-label={revealed[i] ? "隐藏 key 明文" : "显示 key 明文"}
-              title={revealed[i] ? "隐藏" : "显示"}
+              aria-label={revealed[i] ? t("hideKeyAria") : t("showKeyAria")}
+              title={revealed[i] ? t("hideKey") : t("showKey")}
             >
               {revealed[i] ? <EyeOff size={15} /> : <Eye size={15} />}
             </button>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
-            <span className="text-xs font-semibold text-neutral-500 dark:text-neutral-400">权重</span>
+            <span className="text-xs font-semibold text-neutral-500 dark:text-neutral-400">{t("weight")}</span>
             <Input
               name="keys[].weight"
               type="number"
@@ -84,8 +86,8 @@ export default function KeyBundleEditor({
             onClick={() => removeRow(i)}
             className="shrink-0 p-2 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 disabled:opacity-30 transition-colors"
             disabled={rows.length <= 1}
-            aria-label="删除该 key"
-            title="删除此 Key"
+            aria-label={t("deleteKeyAria")}
+            title={t("deleteKeyTitle")}
           >
             <Trash2 size={16} />
           </Button>
@@ -98,15 +100,13 @@ export default function KeyBundleEditor({
         className="inline-flex items-center gap-1 text-xs font-semibold text-sora-blue hover:text-sora-blue-hover transition-colors"
       >
         <Plus size={14} />
-        <span>添加一个 API Key</span>
+        <span>{t("addApiKey")}</span>
       </button>
 
       <p className="text-xs text-neutral-400 dark:text-neutral-500 leading-normal flex items-start gap-1">
         <span className="text-sora-blue shrink-0">※</span>
         <span>
-          {requireKeys
-            ? "同一上游的多个 Key 之间按权重随机选用；若某个 Key 异常，网关将自动选用下一个 Key 容灾重试。"
-            : "已安全加载当前 Key 配置，您可以直接添加、编辑或删除行；保存后将进行整体更新。"}
+          {requireKeys ? t("keyHintRequired") : t("keyHintEdit")}
         </span>
       </p>
     </div>

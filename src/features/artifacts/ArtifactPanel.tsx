@@ -1,12 +1,8 @@
 "use client";
+
+import { useTranslations } from "next-intl";
 /**
  * Artifact 面板 —— P1-B。
- *
- * 右侧独立面板,渲染代码块 / Mermaid / SVG / HTML / Markdown。
- * 支持复制、下载、关闭。
- *
- * 设计贴合 DESIGN.md:无彩色侧条(border-morning-mist 细线)、
- * 静止无投影、代码沿用 react-syntax-highlighter 主题。
  *
  * Mermaid 用动态 import(避免 1.2MB 进首屏 bundle)。
  */
@@ -26,6 +22,7 @@ export interface Artifact {
 
 /** Mermaid 图表渲染(独立组件,隔离动态 import + 异步 state)。 */
 function MermaidDiagram({ id, content }: { id: string; content: string }) {
+  const t = useTranslations("artifacts");
   const [svg, setSvg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,8 +41,8 @@ function MermaidDiagram({ id, content }: { id: string; content: string }) {
     return () => { cancelled = true; };
   }, [id, content]);
 
-  if (error) return <div className="text-xs text-neutral-400 p-3">Mermaid 渲染失败: {error}</div>;
-  if (!svg) return <div className="text-xs text-neutral-400 animate-pulse">渲染图表中…</div>;
+  if (error) return <div className="text-xs text-neutral-400 p-3">{t("mermaidFailed")} {error}</div>;
+  if (!svg) return <div className="text-xs text-neutral-400 animate-pulse">{t("rendering")}</div>;
   return <div className="flex items-center justify-center min-h-full" dangerouslySetInnerHTML={{ __html: svg }} />;
 }
 
@@ -58,6 +55,7 @@ export function ArtifactPanel({
   onClose: () => void;
   className?: string;
 }) {
+  const t = useTranslations("artifacts");
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(() => {
@@ -93,21 +91,21 @@ export function ArtifactPanel({
           <button
             onClick={handleCopy}
             className="p-1.5 rounded hover:bg-neutral-100 dark:hover:bg-neutral-900 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors"
-            title="复制"
+            title={t("copy")}
           >
             {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
           </button>
           <button
             onClick={handleDownload}
             className="p-1.5 rounded hover:bg-neutral-100 dark:hover:bg-neutral-900 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors"
-            title="下载"
+            title={t("download")}
           >
             <Download className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={onClose}
             className="p-1.5 rounded hover:bg-neutral-100 dark:hover:bg-neutral-900 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors"
-            title="关闭面板"
+            title={t("closePanel")}
           >
             <X className="w-3.5 h-3.5" />
           </button>

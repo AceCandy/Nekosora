@@ -1,9 +1,10 @@
 "use client";
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import type { ModelCapabilities } from "@/db/types";
-import type { FormDataSerializableAction } from "@/components/providers/types";
-import Modal from "@/components/ui/Modal";
-import CapabilitiesEditor from "@/components/models/CapabilitiesEditor";
+import type { FormDataSerializableAction } from "@/features/providers/types";
+import Modal from "@/shared/ui/Modal";
+import CapabilitiesEditor from "@/features/models/CapabilitiesEditor";
 
 export interface GlobalModelInitial {
   name?: string;
@@ -45,6 +46,7 @@ export default function ModelFormDialog({
   byoProviders,
   initial,
 }: ModelFormDialogProps) {
+  const t = useTranslations("models");
   const isEdit = mode === "edit";
   const [formKey, setFormKey] = useState(0);
 
@@ -55,8 +57,8 @@ export default function ModelFormDialog({
 
   const title =
     variant === "global"
-      ? isEdit ? "编辑全局模型" : "添加全局模型"
-      : isEdit ? "编辑自定义模型" : "添加自定义模型";
+      ? isEdit ? t("editGlobalModel") : t("addGlobalModel")
+      : isEdit ? t("editByoModel") : t("addByoModel");
 
   const gi = variant === "global" ? (initial as GlobalModelInitial | undefined) : undefined;
   const bi = variant === "byo" ? (initial as ByoModelInitial | undefined) : undefined;
@@ -71,14 +73,14 @@ export default function ModelFormDialog({
       >
         {variant === "byo" && (
           <label className="block">
-            <span className={labelCls}>上游 Provider *</span>
+            <span className={labelCls}>{t("upstreamProviderLabel")}</span>
             <select
               name="providerId"
               required
               defaultValue={bi?.providerId ?? ""}
               className={inputCls}
             >
-              <option value="">选择 Provider...</option>
+              <option value="">{t("selectProvider")}</option>
               {byoProviders?.map((p) => (
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
@@ -89,7 +91,7 @@ export default function ModelFormDialog({
         <div className={variant === "global" ? "grid grid-cols-2 gap-4" : "space-y-4"}>
           <label className="block">
             <span className={labelCls}>
-              对外模型名称 * <span className="text-[10px] lowercase font-normal text-neutral-400">(调用方可见的 Model ID)</span>
+              {t("externalModelNameLabel")} <span className="text-[10px] lowercase font-normal text-neutral-400">{t("externalModelNameHint")}</span>
             </span>
             <input
               name="name"
@@ -104,7 +106,7 @@ export default function ModelFormDialog({
             <>
               <label className="block">
                 <span className={labelCls}>
-                  显示名称 * <span className="text-[10px] font-normal text-neutral-400">(UI 界面显示名称)</span>
+                  {t("displayNameLabel")} <span className="text-[10px] font-normal text-neutral-400">{t("displayNameHint")}</span>
                 </span>
                 <input
                   name="displayName"
@@ -117,7 +119,7 @@ export default function ModelFormDialog({
 
               <label className="block">
                 <span className={labelCls}>
-                  厂商 <span className="text-[10px] font-normal text-neutral-400">(可选, 如 openai/anthropic)</span>
+                  {t("colVendor")} <span className="text-[10px] font-normal text-neutral-400">{t("vendorHint")}</span>
                 </span>
                 <input
                   name="vendor"
@@ -128,21 +130,21 @@ export default function ModelFormDialog({
               </label>
 
               <label className="block">
-                <span className={labelCls}>访问权限范围</span>
+                <span className={labelCls}>{t("accessScopeLabel")}</span>
                 <select
                   name="accessScope"
                   defaultValue={gi?.accessScope ?? "public"}
                   className={inputCls}
                 >
-                  <option value="public">公开 (Public - 用户/网关可调用)</option>
-                  <option value="internal">内部 (Internal - 仅限系统内部任务)</option>
+                  <option value="public">{t("scopePublicOption")}</option>
+                  <option value="internal">{t("scopeInternalOption")}</option>
                 </select>
               </label>
             </>
           ) : (
             <label className="block">
               <span className={labelCls}>
-                上游真实模型名称 * <span className="text-[10px] font-normal text-neutral-400">(具体发给上游 API 的 Model ID)</span>
+                {t("upstreamModelNameLabel")} <span className="text-[10px] font-normal text-neutral-400">{t("upstreamModelNameHint")}</span>
               </span>
               <input
                 name="upstreamModelName"
@@ -159,32 +161,32 @@ export default function ModelFormDialog({
           <>
             <label className="block">
               <span className={labelCls}>
-                默认系统提示词 (System Prompt) <span className="text-[10px] font-normal text-neutral-400">(可选)</span>
+                {t("systemPromptLabel")} <span className="text-[10px] font-normal text-neutral-400">{t("optionalHint")}</span>
               </span>
               <textarea
                 name="systemPrompt"
                 rows={3}
                 defaultValue={gi?.systemPrompt ?? ""}
                 className="mt-1 w-full rounded-md border border-neutral-200 dark:border-neutral-800 px-3.5 py-2 text-sm bg-white dark:bg-[#0f121a] focus:outline-none focus:border-blue-500 dark:focus:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500/20 transition-all duration-150 resize-none text-neutral-800 dark:text-neutral-200"
-                placeholder="在此为该模型预设系统提示词..."
+                placeholder={t("systemPromptPlaceholder")}
               />
             </label>
             <label className="block">
               <span className={labelCls}>
-                简短描述 (Description) <span className="text-[10px] font-normal text-neutral-400">(可选)</span>
+                {t("descriptionLabel")} <span className="text-[10px] font-normal text-neutral-400">{t("optionalHint")}</span>
               </span>
               <input
                 name="description"
                 defaultValue={gi?.description ?? ""}
                 className={inputCls}
-                placeholder="用一句话介绍该模型..."
+                placeholder={t("descriptionPlaceholder")}
               />
             </label>
           </>
         )}
 
         <div className="block pt-1">
-          <span className={labelCls}>模型内置能力参数</span>
+          <span className={labelCls}>{t("capabilitiesLabel")}</span>
           <CapabilitiesEditor initial={gi?.capabilities ?? bi?.capabilities} />
         </div>
 
@@ -194,18 +196,16 @@ export default function ModelFormDialog({
             onClick={handleClose}
             className="rounded-md border border-neutral-200 dark:border-neutral-800 px-4 py-2 text-xs font-semibold text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors"
           >
-            取消
+            {t("cancel")}
           </button>
           <button
             type="submit"
             className="rounded-md bg-neutral-900 hover:bg-neutral-800 dark:bg-white dark:text-black dark:hover:bg-neutral-100 px-4 py-2 text-xs font-semibold text-white transition-colors shadow-none"
           >
-            {isEdit ? "保存" : "创建"}
+            {isEdit ? t("save") : t("create")}
           </button>
         </div>
       </form>
     </Modal>
   );
 }
-
-

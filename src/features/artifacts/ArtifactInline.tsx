@@ -1,9 +1,7 @@
 "use client";
-/**
- * Artifact 内嵌入口 —— 在消息流里渲染"有可渲染产物"的折叠按钮。
- * 点击展开预览 / 在面板打开。
- */
+
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { Code2, ChevronDown, ChevronRight, PanelRight } from "lucide-react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
@@ -17,6 +15,7 @@ export function ArtifactInline({
   artifacts: Artifact[];
   onOpenPanel: (a: Artifact) => void;
 }) {
+  const t = useTranslations("artifacts");
   const [expanded, setExpanded] = useState(false);
 
   if (artifacts.length === 0) return null;
@@ -29,7 +28,7 @@ export function ArtifactInline({
       >
         {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
         <Code2 className="w-3 h-3" />
-        <span>{artifacts.length} 个可渲染产物</span>
+        <span>{t("renderableCount", { count: artifacts.length })}</span>
         <span className="text-neutral-300 dark:text-neutral-600">·</span>
         <span className="truncate">{artifacts.map((a) => a.title).join(", ")}</span>
       </button>
@@ -47,7 +46,7 @@ export function ArtifactInline({
                   className="inline-flex items-center gap-1 text-[10px] text-sora-blue hover:underline"
                 >
                   <PanelRight className="w-3 h-3" />
-                  面板打开
+                  {t("openPanel")}
                 </button>
               </div>
               <SyntaxHighlighter
