@@ -1,19 +1,23 @@
 "use client";
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { Send, Paperclip, Loader2, Sparkles, RefreshCw, Cpu, User } from "lucide-react";
 import { clsx } from "clsx";
-import { ArtifactPanel, type Artifact } from "@/components/artifacts/ArtifactPanel";
-import { ArtifactInline } from "@/components/artifacts/ArtifactInline";
+import { ArtifactPanel, type Artifact } from "@/features/artifacts/ArtifactPanel";
+import { ArtifactInline } from "@/features/artifacts/ArtifactInline";
 import { Markdown } from "@/shared/components/markdown/Markdown";
+import FilePreviewModal, { type PreviewableFile } from "@/shared/components/file-preview/FilePreviewModal";
 import { useChatRuntime } from "@/features/chat/hooks/useChatRuntime";
 import { useChatAttachments } from "@/features/chat/hooks/useChatAttachments";
 import { useChatScrollController } from "@/features/chat/hooks/useChatScrollController";
-import type { ChatMessage, ModelOption } from "@/features/chat/model/types";
+import type { ChatMessage, ModelOption, CardOption } from "@/features/chat/model/types";
 
-export type { ChatMessage, ModelOption } from "@/features/chat/model/types";
+export type { ChatMessage, ModelOption, CardOption } from "@/features/chat/model/types";
 
 interface ChatComposerProps {
   models: ModelOption[];
+  /** 可用的指令卡(空数组则不显示选择器)。 */
+  cards?: CardOption[];
   conversationId?: string;
   initialMessages?: ChatMessage[];
 }
@@ -30,13 +34,18 @@ interface ChatComposerProps {
  */
 export default function ChatComposer({
   models,
+  cards = [],
   conversationId: initialConvId,
   initialMessages = [],
 }: ChatComposerProps) {
   // 内部 state 存 name(对外 ID),保证 API 调用稳定;UI 渲染时再映射到 displayName
+  const t = useTranslations("chat");
   const [model, setModel] = useState(models[0]?.name ?? "");
   const [input, setInput] = useState("");
   const [activeArtifact, setActiveArtifact] = useState<Artifact | null>(null);
+  const [previewFile, setPreviewFile] = useState<PreviewableFile | null>(null);
+  const [selectedCardIds, setSelectedCardIds] = useState<string[]>([]);
+  const [cardPickerOpen, setCardPickerOpen] = useState(false);
 
   const attachments = useChatAttachments(initialConvId ?? null);
   const runtime = useChatRuntime({
@@ -47,7 +56,7 @@ export default function ChatComposer({
   const messagesEndRef = useChatScrollController(runtime.messages);
 
   const handleSend = () => {
-    runtime.send(input, model);
+    runtime.send(input, model, selectedCardIds);
     setInput("");
   };
 
@@ -56,9 +65,9 @@ export default function ChatComposer({
       <div className="flex-1 flex items-center justify-center text-neutral-400 p-8">
         <div className="text-center space-y-2 max-w-sm">
           <Cpu className="w-8 h-8 mx-auto text-neutral-300 dark:text-neutral-700 animate-pulse" />
-          <h3 className="text-sm font-semibold">暂无可用模型</h3>
+          <h3 className="text-sm font-semibold">{t("noModels")}</h3>
           <p className="text-xs text-neutral-450 dark:text-neutral-500 leading-relaxed">
-            请联系系统管理员配置上游 Provider 资源，或在用户控制面板自行添加 BYO 独享模型。
+            {t("noModelsDesc")}
           </p>
         </div>
       </div>
@@ -78,9 +87,9 @@ export default function ChatComposer({
                 <Sparkles className="w-5 h-5 text-blue-500" />
               </div>
               <div className="space-y-1.5">
-                <h2 className="text-base font-bold text-neutral-800 dark:text-white">欢迎来到 Nekusora 调试工作台</h2>
+                <h2 className="text-base font-bold text-neutral-800 dark:text-white">{t("welcomeTitle")}</h2>
                 <p className="text-xs text-neutral-450 dark:text-neutral-500 max-w-[280px] mx-auto leading-relaxed">
-                  大呼吸感流式对话排版，已载入个性化记忆。请选择模型开始您的提问。
+                  {t("welcomeDesc")}
                 </p>
               </div>
             </div>
@@ -111,7 +120,7 @@ export default function ChatComposer({
                     ) : runtime.streaming && i === runtime.messages.length - 1 ? (
                       <span className="inline-flex items-center gap-1.5 text-neutral-400">
                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        思考中…
+                        {t("thinking")}
                       </span>
                     ) : null}
                   </div>
@@ -123,7 +132,7 @@ export default function ChatComposer({
                     className="inline-flex items-center gap-1 text-[11px] font-semibold text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors"
                   >
                     <RefreshCw className="w-3 h-3" />
-                    <span>重新生成</span>
+                    <span>{t("regenerate")}</span>
                   </button>
                 )}
 
@@ -137,7 +146,7 @@ export default function ChatComposer({
                 {m.role === "assistant" && m.trace && (
                   <details className="text-[11px] text-neutral-400 border border-morning-mist dark:border-deep-space/80 rounded-md bg-neutral-50/30 dark:bg-[#0d0f14]/10 overflow-hidden max-w-[75ch]">
                     <summary className="cursor-pointer hover:text-neutral-600 dark:hover:text-neutral-300 px-3 py-1.5 font-mono select-none flex items-center gap-1">
-                      <span>🔍 路由链路追踪 ({m.trace.sentMessageCount ?? 0} 条上下文 · {m.trace.totalTokenEstimate ?? 0} tokens 消耗)</span>
+                      <span>🔍 {t("routeTrace")} ({m.trace.sentMessageCount ?? 0} {t("contextCount")} · {m.trace.totalTokenEstimate ?? 0} {t("tokensUsed")})</span>
                     </summary>
                     <div className="px-3 pb-2 pt-0.5 space-y-1 font-mono text-[10px] text-neutral-450 dark:text-neutral-500 border-t border-morning-mist dark:border-deep-space/60 mt-1">
                       {m.trace.blocks?.map((b, bi) => (
@@ -193,13 +202,97 @@ export default function ChatComposer({
             <label
               htmlFor="file-upload"
               className="inline-flex items-center gap-1 rounded-md border border-morning-mist dark:border-deep-space bg-white dark:bg-[#0f121a] px-3 py-1.5 text-xs font-semibold text-neutral-600 dark:text-neutral-300 cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-all duration-150"
-              title="选择文件上传"
+              title={t("uploadAttachment")}
             >
               <Paperclip className="w-3.5 h-3.5 text-neutral-400" />
-              <span>上传附件</span>
+              <span>{t("uploadAttachment")}</span>
             </label>
 
-            {attachments.attached.map((a) => (
+            {/* 指令卡选择器(I-12b):点开下拉多选,已选显示为 chip */}
+            {cards.length > 0 && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setCardPickerOpen((v) => !v)}
+                  className={clsx(
+                    "inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-semibold transition-all duration-150",
+                    selectedCardIds.length > 0
+                      ? "border-sora-blue/30 bg-sora-blue/[0.04] text-sora-blue"
+                      : "border-morning-mist dark:border-deep-space bg-white dark:bg-[#0f121a] text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900",
+                  )}
+                  title={t("instructionCard")}
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>{t("instructionCard")}{selectedCardIds.length > 0 ? ` (${selectedCardIds.length})` : ""}</span>
+                </button>
+
+                {cardPickerOpen && (
+                  <>
+                    {/* 点击外部关闭 */}
+                    <div className="fixed inset-0 z-20" onClick={() => setCardPickerOpen(false)} />
+                    <div className="absolute z-30 mt-1 w-64 max-h-72 overflow-y-auto rounded-md border border-morning-mist dark:border-deep-space bg-white dark:bg-[#0f121a] shadow-lg p-1">
+                      {cards.map((c) => {
+                        const checked = selectedCardIds.includes(c.id);
+                        return (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() =>
+                              setSelectedCardIds((prev) =>
+                                checked ? prev.filter((id) => id !== c.id) : [...prev, c.id],
+                              )
+                            }
+                            className={clsx(
+                              "w-full text-left rounded px-2 py-1.5 text-xs transition-colors flex items-start gap-2",
+                              checked
+                                ? "bg-sora-blue/[0.06] text-sora-blue"
+                                : "text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900",
+                            )}
+                          >
+                            <span className={clsx("mt-0.5 shrink-0", checked ? "opacity-100" : "opacity-30")}>
+                              {checked ? "✓" : "○"}
+                            </span>
+                            <span className="min-w-0">
+                              <span className="font-semibold block truncate">{c.title}</span>
+                              <span className="text-[10px] text-neutral-400 font-mono">/{c.trigger}</span>
+                              {c.description && (
+                                <span className="text-[10px] text-neutral-400 block truncate">{c.description}</span>
+                              )}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* 已选指令卡 chip(可单独移除) */}
+            {selectedCardIds.map((id) => {
+              const card = cards.find((c) => c.id === id);
+              if (!card) return null;
+              return (
+                <span
+                  key={id}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-sora-blue/20 bg-sora-blue/[0.04] px-2.5 py-1 text-[11px] font-medium text-sora-blue"
+                >
+                  <Sparkles className="w-3 h-3" />
+                  <span className="max-w-[100px] truncate">{card.title}</span>
+                  <button
+                    onClick={() => setSelectedCardIds((prev) => prev.filter((x) => x !== id))}
+                    className="hover:opacity-75 p-0.5"
+                    title={t("attachRemove")}
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              );
+            })}
+
+            {attachments.attached.map((a) => {
+              const isPreviewable = a.status === "uploaded" && a.fileId;
+              return (
               <span
                 key={a.id}
                 className={clsx(
@@ -210,6 +303,13 @@ export default function ChatComposer({
                   a.status === "error" && "bg-red-500/[0.04] border-red-500/20 text-red-500"
                 )}
               >
+                <button
+                  type="button"
+                  disabled={!isPreviewable}
+                  onClick={() => isPreviewable && setPreviewFile({ fileId: a.fileId!, filename: a.filename, mime: guessMime(a.filename) })}
+                  className="inline-flex items-center gap-1.5 disabled:cursor-default enabled:cursor-pointer"
+                  title={isPreviewable ? t("attachPreview") : undefined}
+                >
                 {a.status === "uploading" ? (
                   <Loader2 className="w-3 h-3 text-neutral-400 animate-spin" />
                 ) : a.isImage && a.previewUrl ? (
@@ -231,20 +331,22 @@ export default function ChatComposer({
 
                 <span className="max-w-[120px] truncate" title={a.filename}>
                   {a.filename}
-                  {a.status === "pending" && " (待上传)"}
-                  {a.status === "uploading" && " (上传中...)"}
-                  {a.status === "error" && " (失败)"}
+                  {a.status === "pending" && ` ${t("attachPending")}`}
+                  {a.status === "uploading" && ` ${t("attachUploading")}`}
+                  {a.status === "error" && ` ${t("attachError")}`}
                 </span>
+                </button>
 
                 <button
                   onClick={() => attachments.removeAttachment(a.id)}
                   className="hover:opacity-75 font-semibold p-0.5 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-850 transition-colors"
-                  title="移除"
+                  title={t("attachRemove")}
                 >
                   <X className="w-3 h-3 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300" />
                 </button>
               </span>
-            ))}
+              );
+            })}
           </div>
 
           {/* Prompt input field */}
@@ -283,7 +385,7 @@ export default function ChatComposer({
                   handleSend();
                 }
               }}
-              placeholder="发送消息，按 Enter 发送，Shift + Enter 换行..."
+              placeholder={t("placeholder")}
               rows={2}
               className="flex-1 bg-transparent border-0 outline-none text-sm resize-none focus:ring-0 text-neutral-800 dark:text-neutral-200 py-1.5 px-2.5 leading-relaxed placeholder-neutral-400"
               disabled={runtime.streaming}
@@ -293,7 +395,7 @@ export default function ChatComposer({
               <button
                 onClick={runtime.stopGeneration}
                 className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-red-500 hover:bg-red-600 text-white hover:shadow-[0_4px_12px_rgba(239,68,68,0.15)] transition-all duration-200 shrink-0 shadow-none cursor-pointer"
-                title="停止生成"
+                title={t("stopGeneration")}
               >
                 <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
                   <rect x="5" y="5" width="14" height="14" rx="1" />
@@ -304,7 +406,7 @@ export default function ChatComposer({
                 onClick={handleSend}
                 disabled={!input.trim()}
                 className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-sora-blue hover:bg-sora-blue-hover text-white hover:shadow-[0_4px_12px_rgba(0,0,0,0.05)] disabled:opacity-40 disabled:hover:shadow-none transition-all duration-200 shrink-0 shadow-none cursor-pointer"
-                title="发送消息"
+                title={t("send")}
               >
                 <Send className="w-4 h-4" />
               </button>
@@ -323,8 +425,31 @@ export default function ChatComposer({
           />
         </div>
       )}
+
+      {/* 文件预览弹窗(点击附件 chip 触发) */}
+      <FilePreviewModal file={previewFile} onClose={() => setPreviewFile(null)} />
     </div>
   );
+}
+
+/** 按扩展名粗略推断 mime(附件上传时未持久化 mime,预览需用它路由)。 */
+function guessMime(filename: string): string {
+  const ext = filename.toLowerCase().split(".").pop() ?? "";
+  const map: Record<string, string> = {
+    pdf: "application/pdf",
+    png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg",
+    gif: "image/gif", webp: "image/webp", svg: "image/svg+xml",
+    mp3: "audio/mpeg", wav: "audio/wav", ogg: "audio/ogg",
+    mp4: "video/mp4", webm: "video/webm",
+    txt: "text/plain", md: "text/markdown",
+    json: "application/json", xml: "application/xml",
+    js: "text/javascript", ts: "text/typescript", tsx: "text/typescript",
+    py: "text/x-python", go: "text/x-go", rs: "text/rust",
+    html: "text/html", css: "text/css",
+    yaml: "application/x-yaml", yml: "application/x-yaml",
+    csv: "text/csv",
+  };
+  return map[ext] ?? "application/octet-stream";
 }
 
 // Small helper close button

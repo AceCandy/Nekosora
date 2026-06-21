@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useTranslations } from "next-intl";
 import { Share2, Check } from "lucide-react";
 
 export default function ChatHeader({
@@ -12,6 +13,7 @@ export default function ChatHeader({
   messageCount: number;
   createShareAction: (id: string) => Promise<string>;
 }) {
+  const t = useTranslations("chat");
   const [isPending, startTransition] = useTransition();
   const [copied, setCopied] = useState(false);
 
@@ -32,7 +34,7 @@ export default function ChatHeader({
   return (
     <div className="flex items-center justify-between px-6 py-3.5 border-b border-neutral-200 dark:border-neutral-800 bg-[#fcfdff] dark:bg-[#0d0f14]">
       <span className="text-xs font-mono text-neutral-400 dark:text-neutral-500 uppercase tracking-wider">
-        {messageCount} 条对话记录
+        {t("messageCount", { count: messageCount })}
       </span>
       <button
         onClick={handleShare}
@@ -42,12 +44,12 @@ export default function ChatHeader({
         {copied ? (
           <>
             <Check className="w-3.5 h-3.5 text-green-600 dark:text-green-500" />
-            <span className="text-green-600 dark:text-green-500">已复制分享链接</span>
+            <span className="text-green-600 dark:text-green-500">{t("shareCopied")}</span>
           </>
         ) : (
           <>
             <Share2 className="w-3.5 h-3.5" />
-            <span>分享此对话</span>
+            <span>{t("shareThisConversation")}</span>
           </>
         )}
       </button>

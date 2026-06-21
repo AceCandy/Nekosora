@@ -1,8 +1,10 @@
 import Link from "next/link";
-import { listConversations, getVisibleModels, getMessages, getArtifactsByConversation } from "../actions";
-import { createShare } from "../share-actions";
-import ChatComposer from "../ChatComposer";
-import ChatHeader from "./ChatHeader";
+import { getTranslations } from "next-intl/server";
+import { listConversations, getVisibleModels, getMessages, getArtifactsByConversation } from "@/features/chat/actions/conversations";
+import { createShare } from "@/features/chat/actions/share";
+import { listMyCards } from "@/features/panel/cards/actions";
+import ChatComposer, { type ModelOption } from "@/features/chat/components/ChatComposer";
+import ChatHeader from "@/features/chat/components/ChatHeader";
 import { MessageSquare } from "lucide-react";
 
 export default async function ChatConversationPage({
@@ -11,15 +13,23 @@ export default async function ChatConversationPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [conversations, { globals, byos }, msgs, artifactsMap] = await Promise.all([
+  const t = await getTranslations("chat");
+  const [conversations, { globals, byos }, msgs, artifactsMap, cards] = await Promise.all([
     listConversations(),
     getVisibleModels(),
     getMessages(id).catch(() => []),
     getArtifactsByConversation(id).catch(() => ({})),
+    listMyCards(),
   ]);
-  const models = [
-    ...globals.map((m: Record<string, unknown>) => m.name as string),
-    ...byos.map((r: Record<string, unknown>) => (r.model as Record<string, unknown>).name as string),
+  const models: ModelOption[] = [
+    ...globals.map((m: Record<string, unknown>) => ({
+      name: m.name as string,
+      displayName: (m.displayName as string | undefined) ?? undefined,
+    })),
+    // BYO 模型表无 displayName,UI 回退到 name
+    ...byos.map((r: Record<string, unknown>) => ({
+      name: (r.model as Record<string, unknown>).name as string,
+    })),
   ];
 
   // Convert messages to ChatComposer format(P1-B:关联 artifacts)
@@ -44,7 +54,7 @@ export default async function ChatConversationPage({
       <div className="w-60 border-r border-neutral-200 dark:border-neutral-800 overflow-y-auto shrink-0 bg-neutral-50/30 dark:bg-[#0c0d12]">
         <div className="p-3 space-y-1">
           <div className="px-3 py-1.5 text-xs font-semibold text-neutral-400 dark:text-neutral-500 uppercase tracking-wider">
-            会话历史
+            {t("conversations")}
           </div>
           {conversations.map((c: Record<string, unknown>) => {
             const isCurrent = c.id === id;
@@ -76,6 +86,7 @@ export default async function ChatConversationPage({
         <div className="flex-1 min-h-0">
           <ChatComposer
             models={models}
+            cards={cards}
             conversationId={id}
             initialMessages={initialMessages}
           />
