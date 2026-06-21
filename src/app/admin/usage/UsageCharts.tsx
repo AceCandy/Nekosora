@@ -9,6 +9,7 @@ import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
+import { useTranslations } from "next-intl";
 
 export interface TimeSeriesPoint {
   bucket: string;
@@ -38,6 +39,7 @@ function formatBucket(b: string): string {
 }
 
 export function RequestsTrendChart({ data }: { data: TimeSeriesPoint[] }) {
+  const t = useTranslations("admin.usage");
   const chartData = data.map((d) => ({
     bucket: formatBucket(d.bucket),
     prompt: d.promptTokens,
@@ -64,14 +66,15 @@ export function RequestsTrendChart({ data }: { data: TimeSeriesPoint[] }) {
           formatter={formatNumber}
         />
         <Legend wrapperStyle={legendStyle} />
-        <Area type="monotone" dataKey="prompt" name="输入 tokens" stackId="1" stroke={PROMPT_COLOR} fill="url(#gPrompt)" strokeWidth={1.5} />
-        <Area type="monotone" dataKey="completion" name="输出 tokens" stackId="1" stroke={COMPLETION_COLOR} fill="url(#gCompletion)" strokeWidth={1.5} />
+        <Area type="monotone" dataKey="prompt" name={t("legendPromptTokens")} stackId="1" stroke={PROMPT_COLOR} fill="url(#gPrompt)" strokeWidth={1.5} />
+        <Area type="monotone" dataKey="completion" name={t("legendCompletionTokens")} stackId="1" stroke={COMPLETION_COLOR} fill="url(#gCompletion)" strokeWidth={1.5} />
       </AreaChart>
     </ResponsiveContainer>
   );
 }
 
 export function ModelTokensChart({ data }: { data: ModelRow[] }) {
+  const t = useTranslations("admin.usage");
   // 仅取 Top 6 模型,避免柱子过多。
   const top = data.slice(0, 6).map((d) => ({
     model: d.model.length > 16 ? d.model.slice(0, 14) + "…" : d.model,
@@ -89,8 +92,8 @@ export function ModelTokensChart({ data }: { data: ModelRow[] }) {
           formatter={formatNumber}
         />
         <Legend wrapperStyle={legendStyle} />
-        <Bar dataKey="prompt" name="输入 tokens" fill={PROMPT_COLOR} radius={[3, 3, 0, 0]} />
-        <Bar dataKey="completion" name="输出 tokens" fill={COMPLETION_COLOR} radius={[3, 3, 0, 0]} />
+        <Bar dataKey="prompt" name={t("legendPromptTokens")} fill={PROMPT_COLOR} radius={[3, 3, 0, 0]} />
+        <Bar dataKey="completion" name={t("legendCompletionTokens")} fill={COMPLETION_COLOR} radius={[3, 3, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   );
@@ -126,6 +129,7 @@ export function ModelCallsPie({ data }: { data: ModelRow[] }) {
 }
 
 export function SourceBar({ data }: { data: SourceRow[] }) {
+  const t = useTranslations("admin.usage");
   return (
     <ResponsiveContainer width="100%" height={180}>
       <BarChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
@@ -136,7 +140,7 @@ export function SourceBar({ data }: { data: SourceRow[] }) {
           contentStyle={tooltipStyle}
           formatter={formatNumber}
         />
-        <Bar dataKey="calls" name="调用次数" fill={CALLS_COLOR} radius={[3, 3, 0, 0]} />
+        <Bar dataKey="calls" name={t("legendCalls")} fill={CALLS_COLOR} radius={[3, 3, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   );

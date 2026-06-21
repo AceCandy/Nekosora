@@ -1,3 +1,4 @@
+import { getTranslations } from "next-intl/server";
 import {
   getMyProviders,
   createMyProvider,
@@ -8,16 +9,17 @@ import {
 import { revealKeyBundle } from "@/lib/providers/keys";
 import ProvidersManager, {
   type ProviderItem,
-} from "@/components/providers/ProvidersManager";
+} from "@/features/providers/ProvidersManager";
 
 /** BYO 不支持 custom 协议。 */
 const PROTOCOLS = [
-  { value: "openai", label: "openai(兼容)" },
+  { value: "openai", label: "openai" },
   { value: "anthropic", label: "anthropic" },
   { value: "gemini", label: "gemini" },
 ];
 
 export default async function MyProvidersPage() {
+  const t = await getTranslations("panel.providers");
   const rows = await getMyProviders();
 
   const providers: ProviderItem[] = rows.map((p: Record<string, unknown>) => ({
@@ -45,9 +47,9 @@ export default async function MyProvidersPage() {
   return (
     <div className="space-y-4 max-w-3xl">
       <div>
-        <h1 className="text-xl font-bold mb-2">我的 Providers</h1>
+        <h1 className="text-xl font-bold mb-2">{t("title")}</h1>
         <p className="text-sm text-neutral-500">
-          添加你自己的上游 Provider(base_url + key)。这里的 key 会加密存储,仅你可调用。
+          {t("desc")}
         </p>
       </div>
       <ProvidersManager

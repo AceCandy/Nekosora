@@ -1,11 +1,16 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { getTranslations } from "next-intl/server";
 import { requireAdmin } from "@/lib/session";
 import { signOut } from "@/lib/auth-client";
+import LanguageSwitcher from "@/shared/components/LanguageSwitcher";
 import AdminSidebarNav from "./AdminSidebarNav";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await requireAdmin();
+  const t = await getTranslations("panel");
+  const tc = await getTranslations("nav");
+  const ta = await getTranslations("admin.users");
 
   return (
     <div className="flex min-h-screen bg-[#fcfdff] text-[#0f121a] dark:bg-[#0d0f14] dark:text-[#f1f3f7] transition-colors duration-200">
@@ -16,24 +21,25 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               Nekusora
             </Link>
             <div className="text-[10px] text-neutral-400 dark:text-neutral-500 font-mono mt-0.5 truncate">
-              {user.email} (管理员)
+              {user.email} ({ta("roleAdmin")})
             </div>
           </div>
           <AdminSidebarNav />
         </div>
 
         <div className="pt-4 border-t border-morning-mist dark:border-deep-space space-y-2">
+          <LanguageSwitcher className="block rounded-md px-3 py-2" />
           <Link
             href="/chat"
             className="block rounded-md px-3 py-2 text-sm font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-50 dark:text-neutral-400 dark:hover:text-neutral-100 dark:hover:bg-neutral-900/50 transition-all duration-150"
           >
-            进入 Chat →
+            {t("enterChat")}
           </Link>
           <Link
             href="/panel/keys"
             className="block rounded-md px-3 py-2 text-sm font-medium text-neutral-500 hover:text-neutral-800 dark:text-neutral-500 dark:hover:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 transition-all duration-150"
           >
-            用户面板
+            {tc("panel")}
           </Link>
           <form
             action={async () => {
@@ -43,7 +49,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             }}
           >
             <button className="block w-full text-left rounded-md px-3 py-2 text-sm font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 transition-all duration-150">
-              退出
+              {tc("logout")}
             </button>
           </form>
         </div>

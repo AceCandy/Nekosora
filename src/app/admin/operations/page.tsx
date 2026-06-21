@@ -7,6 +7,7 @@
  * 对标 admin 其他页:莫兰迪灰调、shadow-none、border 细线分隔。
  */
 import { desc, sql } from "drizzle-orm";
+import { getTranslations } from "next-intl/server";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { requireAdmin } from "@/lib/session";
 import { getEnvInfo } from "@/lib/infra/env";
@@ -23,6 +24,7 @@ async function readGauge(name: string): Promise<number> {
 }
 
 export default async function OperationsPage() {
+  const t = await getTranslations("admin.operations");
   await requireAdmin();
   const env = getEnvInfo();
   const db = await getDb();
@@ -45,68 +47,71 @@ export default async function OperationsPage() {
   // 从 registry 文本输出读活跃流式计数(prom-client v15 get() 为异步,改走 metrics 文本)。
   const activeStreamsValue = await readGauge("nekusora_active_streams");
 
+  // createdAt 在 PG 是 timestamp,SQLite 是 epoch 整数,统一用 now() - 1 hour。
   const lastHourCalls = await db
     .select({ calls: sql<number>`count(*)` })
     .from(s.usageLogs)
-    .where(sql`${s.usageLogs.createdAt} > ${Math.floor(Date.now() / 1000) - 3600}`);
+    .where(sql`${s.usageLogs.createdAt} > ${env.dbDialect === "pg"
+        ? sql`now() - interval '1 hour'`
+        : sql`unixepoch() - 3600`}`);
 
   return (
     <div className="space-y-10 max-w-5xl">
       <div>
-        <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-white">运维监控 (Operations)</h1>
-        <p className="mt-1 text-sm text-neutral-500">系统实时状态、依赖健康度、活跃连接与上游 Provider 表现。</p>
+        <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-white">{t("title")}</h1>
+        <p className="mt-1 text-sm text-neutral-500">{t("desc")}</p>
       </div>
 
       {/* 实时指标卡片 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <InfoCard label="活跃流式连接" value={String(activeStreamsValue)} hint="当前并发" />
-        <InfoCard label="近 1 小时调用" value={String(Number(lastHourCalls[0]?.calls ?? 0))} hint="请求计数" />
-        <InfoCard label="数据库" value={env.dbDialect.toUpperCase()} hint={env.dbDialect === "pg" ? "PostgreSQL" : "SQLite"} />
-        <InfoCard label="存储驱动" value={env.storageDriver} hint={env.storageDriver === "local" ? "本地磁盘" : "S3 兼容"} />
+        <InfoCard label={t("metricActiveStreams")} value={String(activeStreamsValue)} hint={t("metricActiveStreamsHint")} />
+        <InfoCard label={t("metricLastHourCalls")} value={String(Number(lastHourCalls[0]?.calls ?? 0))} hint={t("metricLastHourCallsHint")} />
+        <InfoCard label={t("metricDb")} value={env.dbDialect.toUpperCase()} hint={env.dbDialect === "pg" ? "PostgreSQL" : "SQLite"} />
+        <InfoCard label={t("metricStorage")} value={env.storageDriver} hint={env.storageDriver === "local" ? t("storageLocal") : t("storageS3")} />
       </div>
 
       {/* 系统依赖状态 */}
       <div className="space-y-4">
-        <h2 className="text-base font-semibold text-neutral-900 dark:text-white">系统依赖</h2>
+        <h2 className="text-base font-semibold text-neutral-900 dark:text-white">{t("depsTitle")}</h2>
         <div className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] overflow-hidden shadow-none">
           <div className="divide-y divide-neutral-100 dark:divide-neutral-800">
-            <DepRow name="数据库" value={env.dbDialect === "pg" ? "PostgreSQL + pgvector" : "SQLite + sqlite-vec"} ok />
-            <DepRow name="缓存" value={env.hasRedis ? "Redis" : "内存 LRU(降级)"} ok />
+            <DepRow name={t("metricDb")} value={env.dbDialect === "pg" ? "PostgreSQL + pgvector" : "SQLite + sqlite-vec"} ok />
+            <DepRow name={t("depCache")} value={env.hasRedis ? "Redis" : t("depCacheLru")} ok />
             <DepRow
-              name="任务队列"
-              value={env.queueAvailable ? "pg-boss(PostgreSQL)" : "禁用(SQLite 单进程)"}
+              name={t("depQueue")}
+              value={env.queueAvailable ? "pg-boss(PostgreSQL)" : t("depQueueDisabled")}
               ok
             />
             <DepRow
-              name="对象存储"
-              value={env.storageDriver === "local" ? "本地磁盘(降级)" : `${env.storageDriver} (S3 兼容)`}
+              name={t("depStorage")}
+              value={env.storageDriver === "local" ? t("depStorageLocal") : `${env.storageDriver} (S3)`}
               ok
             />
-            <DepRow name="指标端点" value="/metrics (Prometheus)" ok />
-            <DepRow name="健康检查" value="/healthz · /healthz/ready" ok />
+            <DepRow name={t("depMetrics")} value="/metrics (Prometheus)" ok />
+            <DepRow name={t("depHealth")} value="/healthz · /healthz/ready" ok />
           </div>
         </div>
       </div>
 
       {/* Provider 健康(最近成功率) */}
       <div className="space-y-4">
-        <h2 className="text-base font-semibold text-neutral-900 dark:text-white">上游 Provider 健康</h2>
+        <h2 className="text-base font-semibold text-neutral-900 dark:text-white">{t("providerHealthTitle")}</h2>
         <div className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] overflow-hidden shadow-none">
           <div className="overflow-x-auto">
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="bg-neutral-50/70 border-b border-neutral-200 text-neutral-500 dark:bg-neutral-900/50 dark:border-neutral-800 dark:text-neutral-400 text-xs uppercase tracking-wider font-semibold">
                   <th className="text-left px-5 py-3">Provider</th>
-                  <th className="text-right px-5 py-3">调用数</th>
-                  <th className="text-right px-5 py-3">成功率</th>
-                  <th className="text-right px-5 py-3">平均延迟</th>
+                  <th className="text-right px-5 py-3">{t("thCalls")}</th>
+                  <th className="text-right px-5 py-3">{t("thSuccessRate")}</th>
+                  <th className="text-right px-5 py-3">{t("thAvgLatency")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
                 {providerHealth.length === 0 && (
                   <tr>
                     <td colSpan={4} className="px-5 py-10 text-center text-neutral-400 dark:text-neutral-500">
-                      暂无 Provider 调用数据
+                      {t("providerEmpty")}
                     </td>
                   </tr>
                 )}

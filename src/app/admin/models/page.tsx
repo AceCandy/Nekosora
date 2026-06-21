@@ -15,8 +15,9 @@ import ModelsManager, {
   type ModelItem,
   type RouteItem,
   type ProviderOption,
-} from "@/components/models/ModelsManager";
+} from "@/features/models/ModelsManager";
 import type { ModelCapabilities } from "@/db/types";
+import { getTranslations } from "next-intl/server";
 
 const PROTOCOLS = [
   { value: "openai", label: "openai" },
@@ -26,6 +27,7 @@ const PROTOCOLS = [
 ];
 
 export default async function ModelsPage() {
+  const t = await getTranslations("admin.models");
   const [models, providers, routes] = await Promise.all([
     listModels(),
     listProviders(),
@@ -90,9 +92,9 @@ export default async function ModelsPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-xl font-bold mb-2">Models(全局对外模型)</h1>
+        <h1 className="text-xl font-bold mb-2">{t("title")}</h1>
         <p className="text-sm text-neutral-500 mb-4">
-          对外模型 + 路由绑定。每个模型可绑定多个 Provider,按优先级故障转移、同优先级加权负载。
+          {t("title")}
         </p>
       </div>
       <ModelsManager

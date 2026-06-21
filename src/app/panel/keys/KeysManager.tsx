@@ -1,11 +1,12 @@
 "use client";
 import { useState, useTransition } from "react";
+import { useTranslations } from "next-intl";
 import { Copy, Check, Key, ShieldAlert, Plus, X } from "lucide-react";
 import { clsx } from "clsx";
-import Button from "@/components/ui/Button";
-import Input from "@/components/ui/Input";
-import Select from "@/components/ui/Select";
-import Badge from "@/components/ui/Badge";
+import { Button } from "@/shared/ui/Button";
+import Input from "@/shared/ui/Input";
+import Select from "@/shared/ui/Select";
+import Badge from "@/shared/ui/Badge";
 
 export interface KeyModelBindingRecord {
   id: string;
@@ -55,6 +56,7 @@ export default function KeysManager({
   bindModelAction,
   unbindBindingAction,
 }: KeysManagerProps) {
+  const t = useTranslations("panel.keys");
   const master = keys.find((k) => k.kind === "master");
   const subKeys = keys.filter((k) => k.kind === "sub");
 
@@ -94,8 +96,7 @@ export default function KeysManager({
     if (!subKeyNameInput.trim()) return;
     const name = subKeyNameInput.trim();
     setSubKeyNameInput("");
-    
-    // We call the action directly
+
     startTransition(async () => {
       try {
         const rawKey = await newSubKeyAction(name);
@@ -156,13 +157,13 @@ export default function KeysManager({
             <div className="flex items-start gap-2.5 text-amber-600 dark:text-amber-400">
               <ShieldAlert className="w-5 h-5 mt-0.5 shrink-0" />
               <div>
-                <h3 className="text-sm font-semibold">请复制并保存您的子密钥</h3>
+                <h3 className="text-sm font-semibold">{t("saveSubkeyPrompt")}</h3>
                 <p className="text-xs text-amber-600/85 dark:text-amber-400/80 mt-0.5">
-                  该密钥名称为 <strong className="font-semibold">“{newRawKey.name}”</strong>。出于安全考虑，此明文密钥仅在此处显示一次，刷新或关闭卡片后将无法找回。
+                  {t("subkeyWarning", { name: newRawKey.name })}
                 </p>
               </div>
             </div>
-            
+
             <div className="flex items-center gap-2 bg-white dark:bg-[#0f121a] border border-amber-500/20 rounded px-3 py-2">
               <code className="text-xs font-mono select-all break-all flex-1 text-neutral-800 dark:text-neutral-200">
                 {newRawKey.key}
@@ -170,7 +171,7 @@ export default function KeysManager({
               <button
                 onClick={handleCopyRaw}
                 className="p-1 rounded text-amber-600 hover:bg-amber-500/10 transition-colors"
-                title="复制密钥"
+                title={t("copyKey")}
               >
                 {copiedRaw ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
               </button>
@@ -182,14 +183,14 @@ export default function KeysManager({
               onClick={() => setNewRawKey(null)}
               className="w-full bg-amber-600 hover:bg-amber-700 border-none text-white"
             >
-              我已妥善记录，关闭此卡片
+              {t("recordedClose")}
             </Button>
           </div>
         )}
 
         {/* Master Key Section */}
         <div className="space-y-3">
-          <h2 className="text-sm font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">主密钥</h2>
+          <h2 className="text-sm font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">{t("masterKey")}</h2>
           {master ? (
             <div className="rounded-lg border border-morning-mist dark:border-deep-space bg-nebula-white dark:bg-twilight-obsidian p-4 flex items-center justify-between transition-colors duration-150">
               <div className="space-y-1.5 max-w-[75%]">
@@ -199,13 +200,13 @@ export default function KeysManager({
                   <button
                     onClick={() => handleCopyPrefix(master.id, master.keyPrefix)}
                     className="text-neutral-400 hover:text-neutral-600 p-0.5 rounded transition-colors"
-                    title="复制前缀"
+                    title={t("copyPrefix")}
                   >
                     {copiedId === master.id ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
                   </button>
                 </div>
                 <div className="text-xs text-neutral-400 leading-normal">
-                  主密钥可直接调用全部可见模型。仅在创建时显示明文。
+                  {t("masterKeyDesc")}
                 </div>
               </div>
               <Button
@@ -214,7 +215,7 @@ export default function KeysManager({
                 onClick={() => handleDisableKey(master.id)}
                 className="text-red-500 hover:text-red-650 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20"
               >
-                禁用
+                {t("disable")}
               </Button>
             </div>
           ) : (
@@ -224,15 +225,15 @@ export default function KeysManager({
               onClick={handleCreateMaster}
               className="w-full py-2.5 text-sm"
             >
-              生成主密钥
+              {t("generateMaster")}
             </Button>
           )}
         </div>
 
         {/* Sub Keys Section */}
         <div className="space-y-3">
-          <h2 className="text-sm font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">子密钥</h2>
-          
+          <h2 className="text-sm font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">{t("subKeys")}</h2>
+
           {/* Create Subkey Inline Form */}
           <form onSubmit={handleCreateSubKey} className="flex gap-2">
             <Input
@@ -240,7 +241,7 @@ export default function KeysManager({
               required
               value={subKeyNameInput}
               onChange={(e) => setSubKeyNameInput(e.target.value)}
-              placeholder="子密钥名称(如:生产环境)"
+              placeholder={t("subkeyNamePlaceholder")}
               className="flex-1"
             />
             <Button
@@ -249,7 +250,7 @@ export default function KeysManager({
               loading={isPending}
               className="px-4"
             >
-              创建
+              {t("create")}
             </Button>
           </form>
 
@@ -257,7 +258,7 @@ export default function KeysManager({
           <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1">
             {subKeys.length === 0 ? (
               <p className="text-xs text-neutral-400 py-6 text-center border border-dashed border-neutral-200 dark:border-neutral-800 rounded-lg">
-                暂无子密钥。创建子密钥后可配置模型绑定。
+                {t("emptySubkeys")}
               </p>
             ) : (
               subKeys.map((sk) => {
@@ -283,7 +284,7 @@ export default function KeysManager({
                             handleCopyPrefix(sk.id, sk.keyPrefix);
                           }}
                           className="text-neutral-400 hover:text-neutral-600 p-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                          title="复制前缀"
+                          title={t("copyPrefix")}
                         >
                           {copiedId === sk.id ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
                         </button>
@@ -298,7 +299,7 @@ export default function KeysManager({
                       }}
                       className="text-red-500 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-red-50 dark:hover:bg-red-950/20 hover:text-red-650"
                     >
-                      禁用
+                      {t("disable")}
                     </Button>
                   </div>
                 );
@@ -313,16 +314,16 @@ export default function KeysManager({
         {!selectedSubKey ? (
           <div className="rounded-xl border-2 border-dashed border-neutral-200 dark:border-neutral-800 p-12 text-center flex flex-col items-center justify-center min-h-[300px]">
             <Key className="w-10 h-10 text-neutral-300 dark:text-neutral-700 mb-3" />
-            <h3 className="text-sm font-semibold text-neutral-500 dark:text-neutral-400">未选中子密钥</h3>
+            <h3 className="text-sm font-semibold text-neutral-500 dark:text-neutral-400">{t("noSubkeySelected")}</h3>
             <p className="text-xs text-neutral-400 mt-1 max-w-[240px]">
-              选择左侧的一个子密钥以对其配置具体可用模型绑定关系。
+              {t("noSubkeySelectedDesc")}
             </p>
           </div>
         ) : (
           <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#0d0f14] p-6 space-y-6 transition-colors duration-150 animate-in fade-in duration-200">
             {/* Panel Header */}
             <div className="border-b border-neutral-100 dark:border-neutral-800 pb-4">
-              <div className="text-xs font-medium text-neutral-400 uppercase tracking-wider mb-1">子密钥绑定管理</div>
+              <div className="text-xs font-medium text-neutral-400 uppercase tracking-wider mb-1">{t("bindingManagement")}</div>
               <h3 className="text-base font-bold text-neutral-800 dark:text-white flex items-center gap-2">
                 <span>{selectedSubKey.name}</span>
                 <span className="font-mono text-xs text-neutral-400 dark:text-neutral-500 bg-neutral-50 dark:bg-[#0f121a] px-2 py-0.5 rounded border border-neutral-200/50 dark:border-neutral-800/50">
@@ -333,17 +334,17 @@ export default function KeysManager({
 
             {/* Bindings List */}
             <div className="space-y-3">
-              <div className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">已绑定模型 ({selectedSubKey.bindings.length})</div>
-              
+              <div className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">{t("boundModels", { count: selectedSubKey.bindings.length })}</div>
+
               <div className="flex flex-wrap gap-2 min-h-[50px] p-4 rounded-lg bg-neutral-50 dark:bg-[#0f121a]/50 border border-neutral-100 dark:border-neutral-900">
                 {selectedSubKey.bindings.length === 0 ? (
-                  <span className="text-xs text-neutral-400">无绑定。此子密钥当前将无法调用网关内的任何模型。</span>
+                  <span className="text-xs text-neutral-400">{t("noBindings")}</span>
                 ) : (
                   selectedSubKey.bindings.map((b) => {
                     const scope = b.scope as "global" | "byo";
                     const modelId = scope === "global" ? b.globalModelId : b.userModelId;
                     const modelName = getModelName(scope, modelId);
-                    
+
                     return (
                       <Badge
                         key={b.id}
@@ -355,7 +356,7 @@ export default function KeysManager({
                         <button
                           onClick={() => handleUnbind(b.id)}
                           className="text-neutral-400 hover:text-red-500 p-0.5 rounded-full transition-colors ml-1"
-                          title="解绑模型"
+                          title={t("unbind")}
                         >
                           <X className="w-3.5 h-3.5" />
                         </button>
@@ -368,18 +369,18 @@ export default function KeysManager({
 
             {/* Bind New Model Form */}
             <form onSubmit={handleBindModel} className="space-y-3 pt-2">
-              <div className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">绑定新模型</div>
-              
+              <div className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">{t("bindNewModel")}</div>
+
               <div className="flex gap-2">
                 <Select
                   value={selectedModelVal}
                   onChange={(e) => setSelectedModelVal(e.target.value)}
                   className="flex-1"
                 >
-                  <option value="">+ 选择需要绑定的上游模型...</option>
-                  
+                  <option value="">{t("selectModelPlaceholder")}</option>
+
                   {bindable.globals.length > 0 && (
-                    <optgroup label="全局模型 (Global Models)" className="font-semibold text-xs text-neutral-400">
+                    <optgroup label={t("globalModels")} className="font-semibold text-xs text-neutral-400">
                       {bindable.globals.map((m) => (
                         <option key={m.id} value={`global:${m.id}`}>
                           {m.name}
@@ -389,7 +390,7 @@ export default function KeysManager({
                   )}
 
                   {bindable.byos.length > 0 && (
-                    <optgroup label="我的模型 (BYO Models)" className="font-semibold text-xs text-neutral-400">
+                    <optgroup label={t("byoModels")} className="font-semibold text-xs text-neutral-400">
                       {bindable.byos.map((m) => (
                         <option key={m.id} value={`byo:${m.id}`}>
                           {m.name}
@@ -407,11 +408,11 @@ export default function KeysManager({
                   className="font-semibold flex items-center gap-1"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>绑定</span>
+                  <span>{t("bind")}</span>
                 </Button>
               </div>
               <p className="text-[11px] text-neutral-400">
-                绑定后，持有该子密钥的客户端即可调用所选的上游模型。
+                {t("bindHint")}
               </p>
             </form>
           </div>

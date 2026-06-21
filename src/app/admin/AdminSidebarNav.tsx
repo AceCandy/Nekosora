@@ -3,20 +3,22 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { clsx } from "clsx";
 
 const navItems = [
-  { href: "/admin/providers", label: "全局服务商 (Providers)" },
-  { href: "/admin/models", label: "对外模型与路由" },
-  { href: "/admin/users", label: "用户账号管理" },
-  { href: "/admin/usage", label: "网关调用用量" },
-  { href: "/admin/templates", label: "Prompt 模板" },
-  { href: "/admin/operations", label: "运维监控" },
+  { href: "/admin/providers", labelKey: "globalProviders" },
+  { href: "/admin/models", labelKey: "globalModels" },
+  { href: "/admin/users", labelKey: "users" },
+  { href: "/admin/usage", labelKey: "usage" },
+  { href: "/admin/templates", labelKey: "templates" },
+  { href: "/admin/operations", labelKey: "operations" },
 ];
 
 export default function AdminSidebarNav() {
   const pathname = usePathname();
   const router = useRouter();
+  const t = useTranslations("nav");
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -59,7 +61,7 @@ export default function AdminSidebarNav() {
                 : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-50 dark:text-neutral-400 dark:hover:text-neutral-100 dark:hover:bg-neutral-900/50"
             )}
           >
-            <span>{item.label}</span>
+            <span>{t(item.labelKey)}</span>
             <span className="hidden sm:inline-block text-[10px] font-mono border border-neutral-200 dark:border-neutral-800 rounded px-1.5 py-0.5 text-neutral-400 dark:text-neutral-500 opacity-0 group-hover/nav:opacity-100 transition-opacity">
               {index + 1}
             </span>

@@ -1,12 +1,14 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { signIn } from "@/lib/auth-client";
 import Link from "next/link";
-import Input from "@/components/ui/Input";
-import Button from "@/components/ui/Button";
+import Input from "@/shared/ui/Input";
+import { Button } from "@/shared/ui/Button";
 
 export default function LoginPage() {
+  const t = useTranslations("login");
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -20,7 +22,7 @@ export default function LoginPage() {
     const res = await signIn.email({ email, password });
     setLoading(false);
     if (res.error) {
-      setError(res.error.message ?? "登录失败，请检查您的账号与密码");
+      setError(res.error.message ?? t("failed"));
       return;
     }
     router.push("/chat");
@@ -29,7 +31,6 @@ export default function LoginPage() {
 
   return (
     <main className="relative flex min-h-screen items-center justify-center bg-[#fcfdff] text-[#0f121a] dark:bg-[#0d0f14] dark:text-[#f1f3f7] p-6 transition-colors duration-200 overflow-hidden">
-      {/* 天空冷调柔光背景 */}
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,rgba(59,130,246,0.03),transparent_50%)] dark:bg-[radial-gradient(circle_at_50%_40%,rgba(59,130,246,0.05),transparent_50%)]" />
 
       <div className="relative z-10 w-full max-w-[400px] space-y-6">
@@ -37,13 +38,13 @@ export default function LoginPage() {
           <Link href="/" className="inline-block text-3xl font-extrabold tracking-tight text-neutral-950 dark:text-white">
             Nekusora
           </Link>
-          <p className="text-xs text-neutral-400 dark:text-neutral-500 font-medium">登录到平台管理后台</p>
+          <p className="text-xs text-neutral-400 dark:text-neutral-500 font-medium">{t("subtitle")}</p>
         </div>
 
         <div className="rounded-lg border border-morning-mist bg-white p-6 dark:border-deep-space dark:bg-twilight-obsidian shadow-none">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
-              <label className="block text-xs font-semibold text-neutral-600 dark:text-neutral-400">电子邮箱</label>
+              <label className="block text-xs font-semibold text-neutral-600 dark:text-neutral-400">{t("email")}</label>
               <Input
                 type="email"
                 value={email}
@@ -55,7 +56,7 @@ export default function LoginPage() {
             </div>
 
             <div className="space-y-1.5">
-              <label className="block text-xs font-semibold text-neutral-600 dark:text-neutral-400">安全密码</label>
+              <label className="block text-xs font-semibold text-neutral-600 dark:text-neutral-400">{t("password")}</label>
               <Input
                 type="password"
                 value={password}
@@ -77,14 +78,14 @@ export default function LoginPage() {
               loading={loading}
               className="w-full"
             >
-              安全登录
+              {t("submit")}
             </Button>
           </form>
         </div>
 
         <div className="text-center">
           <Link href="/" className="text-xs text-neutral-400 hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300 transition-colors">
-            ← 返回首页
+            ← {t("back")}
           </Link>
         </div>
       </div>

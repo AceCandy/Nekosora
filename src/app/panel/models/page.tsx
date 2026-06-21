@@ -9,10 +9,12 @@ import {
 import ModelsManager, {
   type ModelItem,
   type ProviderOption,
-} from "@/components/models/ModelsManager";
+} from "@/features/models/ModelsManager";
 import type { ModelCapabilities } from "@/db/types";
+import { getTranslations } from "next-intl/server";
 
 export default async function MyModelsPage() {
+  const t = await getTranslations("panel.models");
   const [models, providers] = await Promise.all([getMyModels(), getMyProviders()]);
 
   // —— 映射数据形状 ——
@@ -45,13 +47,13 @@ export default async function MyModelsPage() {
   return (
     <div className="space-y-8 max-w-3xl">
       <div>
-        <h1 className="text-xl font-bold mb-2">我的 Models</h1>
+        <h1 className="text-xl font-bold mb-2">{t("title")}</h1>
         <p className="text-sm text-neutral-500">
-          在你的 Provider 上定义模型(对外名 + 上游真实名)。这些模型可绑定到子密钥,或在 Chat 中使用。
+          {t("desc")}
         </p>
       </div>
       {providers.length === 0 ? (
-        <p className="text-sm text-amber-600">请先在「我的 Providers」添加至少一个 Provider。</p>
+        <p className="text-sm text-amber-600">{t("needProvider")}</p>
       ) : (
         <ModelsManager
           variant="byo"
