@@ -15,6 +15,7 @@ import { streamText } from "ai";
 import { resolveRoutes, RoutingError } from "@/lib/routing";
 import { buildLanguageModelWithKey } from "@/lib/providers/registry";
 import { orderedWeightedKeys } from "@/lib/providers/keys";
+import { recordSuccess, recordFailure } from "@/lib/circuit-breaker";
 import { logUsage } from "@/lib/usage";
 import type {
   CallContext,
@@ -109,6 +110,8 @@ export async function* streamChat(
           }
           succeeded = true;
           routeDone = true;
+          // 成功 → 重置该 provider 的熔断器(closed)。
+          if (route.provider.id) recordSuccess(route.provider.id);
           break; // 正常完成
         } catch (err) {
           lastError = err;
@@ -127,8 +130,9 @@ export async function* streamChat(
       }
       if (succeeded || routeDone) break;
 
-      // 路由级故障转移
+      // 路由级故障转移。可转移错误(连接/5xx/限流)→ 上报熔断器,尝试下一条。
       if (i === routes.length - 1 || !isFailoverableError(lastError)) break;
+      if (route.provider.id) recordFailure(route.provider.id);
       console.warn(
         `[streamChat] 路由转移 ${i + 1}/${routes.length} (model=${route.upstreamModelName}):`,
         lastError instanceof Error ? lastError.message : lastError,

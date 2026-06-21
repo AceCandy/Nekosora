@@ -18,8 +18,9 @@ import { metricsEnabled, metricsOutput } from "@/lib/infra/metrics";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-// Prometheus 文本格式(非 JSON)。
-export const contentType = "text/plain; version=0.0.4; charset=utf-8";
+// Prometheus 文本格式(非 JSON)。用非导出常量,避免 Next route 类型校验
+// 把 contentType 误判为 route 配置字段(与 dynamic/revalidate 等同类)。
+const PROMETHEUS_CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8";
 
 export async function GET() {
   if (!metricsEnabled()) {
@@ -29,7 +30,7 @@ export async function GET() {
   return new NextResponse(body, {
     status: 200,
     headers: {
-      "Content-Type": contentType,
+      "Content-Type": PROMETHEUS_CONTENT_TYPE,
       "Cache-Control": "no-store",
     },
   });
