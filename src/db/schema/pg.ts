@@ -1,0 +1,627 @@
+/**
+ * PostgreSQL schema —— Better Auth 认证表 + Nekusora 业务表。
+ *
+ * 与 ./sqlite.ts 保持表名、字段语义一致,仅列类型与方言差异不同。
+ * pgvector 用于向量检索(文件 RAG)。
+ */
+import {
+  pgTable,
+  text,
+  boolean,
+  integer,
+  timestamp,
+  jsonb,
+  index,
+  uniqueIndex,
+  vector,
+  pgEnum,
+} from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import type {
+  ModelCapabilities,
+  ContextPolicy,
+  TokenUsage,
+  ProcessTrace,
+} from "@/db/types";
+
+// ===========================================================================
+// Better Auth 认证表(admin 插件 + 自定义 status)
+// ===========================================================================
+
+export const user = pgTable("user", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  emailVerified: boolean("email_verified").notNull().default(false),
+  image: text("image"),
+  // admin 插件
+  role: text("role").notNull().default("user"), // "user" | "admin"
+  banned: boolean("banned").notNull().default(false),
+  banReason: text("ban_reason"),
+  banExpires: timestamp("ban_expires"),
+  // 自定义
+  status: text("status").notNull().default("active"), // "active" | "disabled"
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const session = pgTable("session", {
+  id: text("id").primaryKey(),
+  expiresAt: timestamp("expires_at").notNull(),
+  token: text("token").notNull().unique(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+});
+
+export const account = pgTable("account", {
+  id: text("id").primaryKey(),
+  accountId: text("account_id").notNull(),
+  providerId: text("provider_id").notNull(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  accessTokenExpiresAt: timestamp("access_token_expires_at"),
+  refreshTokenExpiresAt: timestamp("refresh_token_expires_at"),
+  scope: text("scope"),
+  idToken: text("id_token"),
+  password: text("password"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const verification = pgTable("verification", {
+  id: text("id").primaryKey(),
+  identifier: text("identifier").notNull(),
+  value: text("value").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+// ===========================================================================
+// 密钥层级(单表自引用)
+//   主 Key: kind='master', parent_id=NULL, 每用户唯一
+//   子 Key: kind='sub', parent_id=主key.id, 可多个
+// ===========================================================================
+
+export const apiKeyKinds = pgEnum("api_key_kind", ["master", "sub"]);
+
+export const apiKeys = pgTable(
+  "api_keys",
+  {
+    id: text("id").primaryKey().default("(gen_random_uuid())"),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    parentId: text("parent_id"), // 主 key 为 NULL;子 key 指向主 key.id
+    kind: apiKeyKinds("kind").notNull(),
+    name: text("name").notNull(),
+    keyHash: text("key_hash").notNull(), // sha256(完整 sk 字符串)
+    keyPrefix: text("key_prefix").notNull(), // 显示用,如 "sk-abcd…"
+    enabled: boolean("enabled").notNull().default(true),
+    lastUsedAt: timestamp("last_used_at"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("api_keys_user_idx").on(t.userId),
+    index("api_keys_parent_idx").on(t.parentId),
+    // 每用户仅一个主 key:部分唯一索引,仅约束 kind='master' 的行。
+    uniqueIndex("api_keys_master_unique_idx")
+      .on(t.userId)
+      .where(sql`kind = 'master'`),
+  ],
+);
+
+// ===========================================================================
+// 全局 Provider / 模型(管理员域,四表路由器)
+// ===========================================================================
+
+export const providerProtocol = pgEnum("provider_protocol", [
+  "openai",
+  "anthropic",
+  "gemini",
+  "custom",
+  // P1-D:非 chat 协议族(OpenAI 兼容格式)。
+  "openai-images",
+  "openai-audio-stt",
+  "openai-audio-tts",
+]);
+export const accessScope = pgEnum("access_scope", ["public", "internal"]);
+
+export const globalProviders = pgTable("global_providers", {
+  id: text("id").primaryKey().default("(gen_random_uuid())"),
+  name: text("name").notNull(),
+  protocol: providerProtocol("protocol").notNull(),
+  baseUrl: text("base_url").notNull(),
+  apiKeysEnc: text("api_keys_enc").notNull(), // AES-GCM 加密的密钥 bundle JSON
+  keyStrategy: text("key_strategy").notNull().default("round_robin"),
+  enabled: boolean("enabled").notNull().default(true),
+  priority: integer("priority").notNull().default(0),
+  connectTimeoutMs: integer("connect_timeout_ms"),
+  readTimeoutMs: integer("read_timeout_ms"),
+  streamIdleTimeoutMs: integer("stream_idle_timeout_ms"),
+  headersJson: jsonb("headers_json").$type<Record<string, string>>(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const globalModels = pgTable("global_models", {
+  id: text("id").primaryKey().default("(gen_random_uuid())"),
+  name: text("name").notNull().unique(), // 对外模型名(用户/调用方看到)
+  displayName: text("display_name").notNull(),
+  vendor: text("vendor"),
+  icon: text("icon"),
+  capabilities: jsonb("capabilities").$type<ModelCapabilities>().notNull().default({}),
+  systemPrompt: text("system_prompt"),
+  description: text("description"),
+  accessScope: accessScope("access_scope").notNull().default("public"),
+  enabled: boolean("enabled").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const globalRoutes = pgTable(
+  "global_routes",
+  {
+    id: text("id").primaryKey().default("(gen_random_uuid())"),
+    modelId: text("model_id")
+      .notNull()
+      .references(() => globalModels.id, { onDelete: "cascade" }),
+    providerId: text("provider_id")
+      .notNull()
+      .references(() => globalProviders.id, { onDelete: "cascade" }),
+    upstreamModelName: text("upstream_model_name").notNull(),
+    protocol: providerProtocol("protocol").notNull(),
+    priority: integer("priority").notNull().default(0),
+    weight: integer("weight").notNull().default(1),
+    enabled: boolean("enabled").notNull().default(true),
+    headersJson: jsonb("headers_json").$type<Record<string, string>>(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("global_routes_model_idx").on(t.modelId)],
+);
+
+// ===========================================================================
+// 用户 BYO Provider / 模型(用户私有域)
+// ===========================================================================
+
+export const userProviders = pgTable("user_providers", {
+  id: text("id").primaryKey().default("(gen_random_uuid())"),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  protocol: providerProtocol("protocol").notNull(),
+  baseUrl: text("base_url").notNull(),
+  apiKeyEnc: text("api_key_enc").notNull(), // AES-GCM 加密
+  enabled: boolean("enabled").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const userModels = pgTable("user_models", {
+  id: text("id").primaryKey().default("(gen_random_uuid())"),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  providerId: text("provider_id")
+    .notNull()
+    .references(() => userProviders.id, { onDelete: "cascade" }),
+  name: text("name").notNull(), // 用户自定义对外模型名
+  upstreamModelName: text("upstream_model_name").notNull(),
+  capabilities: jsonb("capabilities").$type<ModelCapabilities>().notNull().default({}),
+  enabled: boolean("enabled").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ===========================================================================
+// 子 Key 模型绑定(双来源 union:全局模型 ∪ 用户 BYO 模型)
+// ===========================================================================
+
+export const bindingScope = pgEnum("binding_scope", ["global", "byo"]);
+
+export const keyModelBindings = pgTable(
+  "key_model_bindings",
+  {
+    id: text("id").primaryKey().default("(gen_random_uuid())"),
+    keyId: text("key_id")
+      .notNull()
+      .references(() => apiKeys.id, { onDelete: "cascade" }),
+    scope: bindingScope("scope").notNull(),
+    globalModelId: text("global_model_id").references(() => globalModels.id, {
+      onDelete: "cascade",
+    }),
+    userModelId: text("user_model_id").references(() => userModels.id, {
+      onDelete: "cascade",
+    }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("key_model_bindings_key_idx").on(t.keyId),
+    uniqueIndex("key_model_bindings_unique_idx").on(
+      t.keyId,
+      t.scope,
+      t.globalModelId,
+      t.userModelId,
+    ),
+  ],
+);
+
+// ===========================================================================
+// WebChat 会话 / 消息(双链树)/ runs / 工具调用
+// ===========================================================================
+
+export const conversations = pgTable(
+  "conversations",
+  {
+    id: text("id").primaryKey().default("(gen_random_uuid())"),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    title: text("title").notNull().default("新会话"),
+    projectId: text("project_id"),
+    modelName: text("model_name"), // 记录使用的对外模型名
+    contextPolicy: jsonb("context_policy").$type<ContextPolicy>(), // per-conversation 快照
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [index("conversations_user_idx").on(t.userId)],
+);
+
+export const messageStatus = pgEnum("message_status", [
+  "pending",
+  "streaming",
+  "success",
+  "interrupted",
+]);
+
+export const messages = pgTable(
+  "messages",
+  {
+    id: text("id").primaryKey().default("(gen_random_uuid())"),
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    publicId: text("public_id").notNull().unique(), // 稳定 UUID,客户端可见
+    parentId: text("parent_id"), // 自引用:分支树父节点
+    sourceId: text("source_id"), // 自引用:fork 点(被重试/编辑的原消息)
+    runId: text("run_id"), // "run_" + uuid
+    role: text("role").notNull(), // "user" | "assistant" | "system"
+    content: jsonb("content").notNull(), // OpenAI 消息内容格式
+    contentType: text("content_type").notNull().default("text"),
+    branchReason: text("branch_reason"), // "retry" | "edit" | ...
+    status: messageStatus("status").notNull().default("success"),
+    tokenUsage: jsonb("token_usage").$type<TokenUsage>(),
+    errorCode: text("error_code"),
+    errorMessage: text("error_message"),
+    processTrace: jsonb("process_trace").$type<ProcessTrace>(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("messages_conversation_idx").on(t.conversationId),
+    index("messages_parent_idx").on(t.parentId),
+    index("messages_run_idx").on(t.runId),
+  ],
+);
+
+export const runs = pgTable("runs", {
+  id: text("id").primaryKey().default("(gen_random_uuid())"),
+  runId: text("run_id").notNull().unique(),
+  conversationId: text("conversation_id").references(() => conversations.id, {
+    onDelete: "cascade",
+  }),
+  userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
+  upstreamId: text("upstream_id"),
+  platformModelName: text("platform_model_name"),
+  routedBindingCode: text("routed_binding_code"),
+  modelVendor: text("model_vendor"),
+  firstTokenLatencyMs: integer("first_token_latency_ms"),
+  tokenUsage: jsonb("token_usage").$type<TokenUsage>(),
+  status: text("status").notNull().default("running"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const toolCalls = pgTable("tool_calls", {
+  id: text("id").primaryKey().default("(gen_random_uuid())"),
+  runId: text("run_id")
+    .notNull()
+    .references(() => runs.runId, { onDelete: "cascade" }),
+  toolCallId: text("tool_call_id").notNull(),
+  toolType: text("tool_type").notNull(), // "server" | "local"
+  toolName: text("tool_name").notNull(),
+  status: text("status").notNull().default("pending"),
+  inputJson: jsonb("input_json"),
+  outputJson: jsonb("output_json"),
+  errorJson: jsonb("error_json"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const conversationProjects = pgTable("conversation_projects", {
+  id: text("id").primaryKey().default("(gen_random_uuid())"),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  systemPrompt: text("system_prompt"),
+  color: text("color"),
+  icon: text("icon"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ===========================================================================
+// MCP servers(P1-A —— 外部工具接入)
+// ===========================================================================
+
+export const mcpServers = pgTable(
+  "mcp_servers",
+  {
+    id: text("id").primaryKey().default("(gen_random_uuid())"),
+    userId: text("user_id").references(() => user.id, { onDelete: "cascade" }), // null=全局
+    name: text("name").notNull(),
+    transport: text("transport").notNull(), // "stdio" | "sse" | "http"
+    command: text("command"),
+    args: jsonb("args").$type<string[]>(),
+    envEnc: text("env_enc"),
+    url: text("url"),
+    headersJson: jsonb("headers_json").$type<Record<string, string>>(),
+    enabled: boolean("enabled").notNull().default(true),
+    cachedTools: jsonb("cached_tools").$type<unknown[]>(),
+    lastConnectedAt: timestamp("last_connected_at"),
+    lastError: text("last_error"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [index("mcp_servers_user_idx").on(t.userId), index("mcp_servers_enabled_idx").on(t.enabled)],
+);
+
+// ===========================================================================
+// Artifacts(P1-B —— 代码块/Mermaid/SVG 等可渲染产物)
+// ===========================================================================
+
+export const artifacts = pgTable(
+  "artifacts",
+  {
+    id: text("id").primaryKey().default("(gen_random_uuid())"),
+    messageId: text("message_id")
+      .notNull()
+      .references(() => messages.id, { onDelete: "cascade" }),
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    title: text("title").notNull(),
+    language: text("language"),
+    content: text("content").notNull(),
+    version: integer("version").notNull().default(1),
+    parentArtifactId: text("parent_artifact_id"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("artifacts_msg_idx").on(t.messageId), index("artifacts_conv_idx").on(t.conversationId)],
+);
+
+export const conversationShares = pgTable("conversation_shares", {
+  id: text("id").primaryKey().default("(gen_random_uuid())"),
+  shareId: text("share_id").notNull().unique(),
+  conversationId: text("conversation_id")
+    .notNull()
+    .references(() => conversations.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("active"),
+  titleSnapshot: text("title_snapshot"),
+  modelSnapshot: text("model_snapshot"),
+  messageIdsJson: jsonb("message_ids_json").$type<string[]>(),
+  defaultMessageIdsJson: jsonb("default_message_ids_json").$type<string[]>(),
+  revokedAt: timestamp("revoked_at"),
+  regeneratedAt: timestamp("regenerated_at"),
+  lastAccessedAt: timestamp("last_accessed_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ===========================================================================
+// 文件 / RAG
+// ===========================================================================
+
+export const fileObjects = pgTable(
+  "file_objects",
+  {
+    id: text("id").primaryKey().default("(gen_random_uuid())"),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    conversationId: text("conversation_id").references(() => conversations.id, {
+      onDelete: "set null",
+    }),
+    filename: text("filename").notNull(),
+    mime: text("mime").notNull(),
+    storagePath: text("storage_path").notNull(),
+    size: integer("size").notNull(),
+    processingStatus: text("processing_status").notNull().default("pending"),
+    extractStatus: text("extract_status"),
+    extractEngine: text("extract_engine"),
+    extractChars: integer("extract_chars"),
+    extractPages: integer("extract_pages"),
+    ocrUsed: boolean("ocr_used"),
+    ragReady: boolean("rag_ready").notNull().default(false),
+    ragReason: text("rag_reason"),
+    embedStatus: text("embed_status"),
+    embedError: text("embed_error"),
+    pageCount: integer("page_count"),
+    chunkCount: integer("chunk_count"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("file_objects_user_idx").on(t.userId)],
+);
+
+export const fileChunks = pgTable(
+  "file_chunks",
+  {
+    id: text("id").primaryKey().default("(gen_random_uuid())"),
+    fileId: text("file_id")
+      .notNull()
+      .references(() => fileObjects.id, { onDelete: "cascade" }),
+    chunkIndex: integer("chunk_index").notNull(),
+    pageNum: integer("page_num"),
+    charOffset: integer("char_offset"),
+    content: text("content").notNull(),
+    tokenCount: integer("token_count").notNull().default(0),
+    embedding: vector("embedding", { dimensions: 1536 }),
+  },
+  (t) => [
+    index("file_chunks_file_idx").on(t.fileId),
+    // pgvector 的 HNSW 相似度索引由迁移后置 SQL 创建(drizzle 暂无声明式向量索引 API):
+    //   CREATE INDEX file_chunks_embedding_idx ON file_chunks
+    //     USING hnsw (embedding vector_cosine_ops);
+  ],
+);
+
+export const contextSnapshots = pgTable("context_snapshots", {
+  id: text("id").primaryKey().default("(gen_random_uuid())"),
+  conversationId: text("conversation_id")
+    .notNull()
+    .references(() => conversations.id, { onDelete: "cascade" }),
+  messageId: text("message_id").references(() => messages.id, {
+    onDelete: "cascade",
+  }),
+  runId: text("run_id"),
+  fromTurn: integer("from_turn"),
+  toTurn: integer("to_turn"),
+  coveredUntilMessageId: text("covered_until_message_id"),
+  coveredUntilPublicId: text("covered_until_public_id"),
+  coveragePathHash: text("coverage_path_hash").notNull(), // 滚动 SHA(id:publicID:parentID:role)
+  coveredMessageCount: integer("covered_message_count").notNull(),
+  sourceTokens: integer("source_tokens"),
+  summaryTokens: integer("summary_tokens"),
+  summaryText: text("summary_text").notNull(),
+  strategy: text("strategy").notNull(), // "turn_cap" | "token_cap"
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ===========================================================================
+// Prompt 模板 / Agent 模板(P2-B)
+// ===========================================================================
+
+export const promptTemplates = pgTable(
+  "prompt_templates",
+  {
+    id: text("id").primaryKey().default("(gen_random_uuid())"),
+    userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
+    scope: text("scope").notNull(), // "builtin" | "private" | "shared"
+    name: text("name").notNull(),
+    description: text("description"),
+    category: text("category"),
+    icon: text("icon"),
+    systemPrompt: text("system_prompt"),
+    userTemplate: text("user_template"),
+    variables: jsonb("variables").$type<unknown[]>(),
+    recommendedModel: text("recommended_model"),
+    isAgent: boolean("is_agent").notNull().default(false),
+    agentConfig: jsonb("agent_config").$type<unknown>(),
+    enabled: boolean("enabled").notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    useCount: integer("use_count").notNull().default(0),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [index("prompt_templates_scope_idx").on(t.scope)],
+);
+
+export const userMemories = pgTable(
+  "user_memories",
+  {
+    id: text("id").primaryKey().default("(gen_random_uuid())"),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    scope: text("scope").notNull(), // "preference" | "profile" | "custom"
+    content: text("content").notNull(),
+    embedding: vector("embedding", { dimensions: 1536 }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("user_memories_user_idx").on(t.userId)],
+);
+
+// ===========================================================================
+// 设置 / 用量
+// ===========================================================================
+
+export const systemSettings = pgTable(
+  "system_settings",
+  {
+    id: text("id").primaryKey().default("(gen_random_uuid())"),
+    namespace: text("namespace").notNull(),
+    key: text("key").notNull(),
+    value: text("value").notNull(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("system_settings_unique_idx").on(t.namespace, t.key)],
+);
+
+export const userSettings = pgTable(
+  "user_settings",
+  {
+    id: text("id").primaryKey().default("(gen_random_uuid())"),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    key: text("key").notNull(),
+    value: text("value").notNull(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("user_settings_unique_idx").on(t.userId, t.key)],
+);
+
+export const usageLogs = pgTable(
+  "usage_logs",
+  {
+    id: text("id").primaryKey().default("(gen_random_uuid())"),
+    source: text("source").notNull(), // "chat" | "gateway"
+    userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
+    apiKeyId: text("api_key_id").references(() => apiKeys.id, {
+      onDelete: "set null",
+    }),
+    keyKind: text("key_kind"), // "master" | "sub" | null(chat)
+    model: text("model").notNull(),
+    providerRef: text("provider_ref"),
+    promptTokens: integer("prompt_tokens").notNull().default(0),
+    completionTokens: integer("completion_tokens").notNull().default(0),
+    cacheReadTokens: integer("cache_read_tokens").notNull().default(0),
+    cacheWriteTokens: integer("cache_write_tokens").notNull().default(0),
+    reasoningTokens: integer("reasoning_tokens").notNull().default(0),
+    latencyMs: integer("latency_ms"),
+    status: text("status").notNull().default("success"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("usage_logs_user_idx").on(t.userId),
+    index("usage_logs_created_idx").on(t.createdAt),
+    index("usage_logs_model_idx").on(t.model),
+  ],
+);
+
+// ===========================================================================
+// 共享类型(dialect 中立,re-export)
+// ===========================================================================
+
+export type {
+  ModelCapabilities,
+  ContextPolicy,
+  TokenUsage,
+  ProcessTraceBlock,
+  ProcessTrace,
+  ApiKeyKind,
+  ProviderProtocol,
+  AccessScope,
+  BindingScope,
+  MessageStatus,
+} from "@/db/types";

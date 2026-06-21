@@ -1,0 +1,40 @@
+# Nekusora 本地开发基础设施。
+# 仅在你想用 PostgreSQL + Redis(而非默认的 SQLite + 内存缓存)时启动:
+#   docker compose up -d
+# 然后在 .env.local 取消对应 DATABASE_URL / REDIS_URL 的注释。
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: nekusora-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nekusora
+      POSTGRES_PASSWORD: nekusora
+      POSTGRES_DB: nekusora
+    ports:
+      - "5432:5432"
+    volumes:
+      - nekusora-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nekusora"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: nekusora-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - nekusora-redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  nekusora-pgdata:
+  nekusora-redisdata:

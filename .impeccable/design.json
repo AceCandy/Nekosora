@@ -1,0 +1,171 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-06-18T15:10:00Z",
+  "title": "Design System: Nekusora",
+  "extensions": {
+    "colorMeta": {
+      "primary": {
+        "role": "primary",
+        "displayName": "Sora Blue",
+        "canonical": "oklch(60% 0.15 250)",
+        "tonalRamp": [
+          "oklch(15% 0.15 250)",
+          "oklch(30% 0.15 250)",
+          "oklch(45% 0.15 250)",
+          "oklch(60% 0.15 250)",
+          "oklch(70% 0.15 250)",
+          "oklch(80% 0.12 250)",
+          "oklch(90% 0.08 250)",
+          "oklch(96% 0.03 250)"
+        ]
+      },
+      "secondary": {
+        "role": "secondary",
+        "displayName": "Neku Amber",
+        "canonical": "oklch(75% 0.15 80)",
+        "tonalRamp": [
+          "oklch(15% 0.12 80)",
+          "oklch(30% 0.15 80)",
+          "oklch(50% 0.15 80)",
+          "oklch(70% 0.15 80)",
+          "oklch(80% 0.15 80)",
+          "oklch(90% 0.10 80)",
+          "oklch(95% 0.05 80)",
+          "oklch(98% 0.02 80)"
+        ]
+      },
+      "neutral-bg": {
+        "role": "neutral",
+        "displayName": "Nebula White",
+        "canonical": "oklch(99% 0.003 250)",
+        "tonalRamp": [
+          "oklch(12% 0.003 250)",
+          "oklch(25% 0.003 250)",
+          "oklch(45% 0.003 250)",
+          "oklch(65% 0.003 250)",
+          "oklch(80% 0.003 250)",
+          "oklch(90% 0.003 250)",
+          "oklch(96% 0.003 250)",
+          "oklch(99% 0.003 250)"
+        ]
+      },
+      "dark-bg": {
+        "role": "neutral",
+        "displayName": "Twilight Obsidian",
+        "canonical": "oklch(10% 0.01 260)",
+        "tonalRamp": [
+          "oklch(10% 0.01 260)",
+          "oklch(18% 0.01 260)",
+          "oklch(30% 0.01 260)",
+          "oklch(45% 0.01 260)",
+          "oklch(60% 0.01 260)",
+          "oklch(75% 0.01 260)",
+          "oklch(90% 0.008 260)",
+          "oklch(97% 0.005 260)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "用于品牌首页大标题"
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "用于聊天消息正文与说明段落"
+      }
+    },
+    "shadows": [
+      {
+        "name": "orbital-hover",
+        "value": "0 4px 12px rgba(0, 0, 0, 0.05)",
+        "purpose": "按钮 Hover 态及轻量卡片的悬浮效果"
+      },
+      {
+        "name": "pivot-modal",
+        "value": "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)",
+        "purpose": "顶层弹窗（Modal）的沉降阴影"
+      }
+    ],
+    "motion": [
+      {
+        "name": "standard-ease",
+        "value": "cubic-bezier(0.4, 0, 0.2, 1)",
+        "purpose": "系统交互状态切换的默认过渡函数"
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "mobile-max",
+        "value": "640px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "主要操作按钮，例如发送消息或保存配置。",
+      "html": "<button class=\"ds-btn-primary\">发送消息</button>",
+      "css": ".ds-btn-primary { background: #3b82f6; color: #fcfdff; padding: 8px 16px; border-radius: 6px; font-size: 14px; font-weight: 500; border: none; cursor: pointer; transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1); } .ds-btn-primary:hover { background: #2563eb; box-shadow: 0 4px 12px rgba(0,0,0,0.05); } .ds-btn-primary:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "次要操作按钮，例如取消操作或辅助选项。",
+      "html": "<button class=\"ds-btn-secondary\">取消</button>",
+      "css": ".ds-btn-secondary { background: #fcfdff; color: #0f121a; padding: 8px 16px; border-radius: 6px; font-size: 14px; font-weight: 500; border: 1px solid #e2e8f0; cursor: pointer; transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1); } .ds-btn-secondary:hover { background: #f1f3f7; } .ds-btn-secondary:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }"
+    },
+    {
+      "name": "Dialog Modal",
+      "kind": "custom",
+      "refersTo": "dialog-modal",
+      "description": "轻量对话弹窗，基于原生 <dialog> 实现。",
+      "html": "<div class=\"ds-dialog-overlay\"><div class=\"ds-dialog\"><header class=\"ds-dialog-header\"><h2 class=\"ds-dialog-title\">弹窗标题</h2><button class=\"ds-dialog-close\">✕</button></header><div class=\"ds-dialog-body\">弹窗正文内容。星枢天流系统强调纯文本的呼吸感排版。</div><footer class=\"ds-dialog-footer\"><button class=\"ds-btn-secondary\">取消</button><button class=\"ds-btn-primary\">确定</button></footer></div></div>",
+      "css": ".ds-dialog-overlay { display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.4); padding: 16px; position: fixed; inset: 0; z-index: 100; } .ds-dialog { background: #fcfdff; border: 1px solid #e2e8f0; border-radius: 8px; width: 100%; max-width: 640px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1); overflow: hidden; display: flex; flex-col; } .ds-dialog-header { display: flex; align-items: center; justify-content: space-between; border-b: 1px solid #e2e8f0; padding: 12px 20px; } .ds-dialog-title { font-size: 16px; font-weight: 600; color: #0f121a; margin: 0; } .ds-dialog-close { background: none; border: none; color: #94a3b8; font-size: 16px; cursor: pointer; } .ds-dialog-close:hover { color: #475569; } .ds-dialog-body { padding: 16px 20px; font-size: 14px; line-height: 1.5; color: #475569; } .ds-dialog-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-t: 1px solid #e2e8f0; } .ds-btn-primary { background: #3b82f6; color: #fcfdff; padding: 8px 16px; border-radius: 6px; font-size: 14px; font-weight: 500; border: none; cursor: pointer; } .ds-btn-secondary { background: #fcfdff; color: #0f121a; padding: 8px 16px; border-radius: 6px; font-size: 14px; font-weight: 500; border: 1px solid #e2e8f0; cursor: pointer; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "星枢天流 (The Astral Skyline)",
+    "overview": "星枢天流设计系统是为 Nekusora (星枢) 打造的专业视觉系统。它融合了「猫与天空」的温和治愈感，与「高可用网关」的精密工程质感。聊天体验开阔、宁静；网关控制侧提供星图般精密、高效的严谨交互。",
+    "keyCharacteristics": [
+      "暮色微澜与星云纯白：冷调夜空背景底色",
+      "治愈般的轻柔交互：无感投影与超薄分隔线",
+      "双面性格的秩序：温和流式聊天与严谨莫兰迪网关配置"
+    ],
+    "rules": [
+      {
+        "name": "天空罕有原则",
+        "body": "主彩色 Sora Blue 在页面中的出现面积必须控制在 10% 以内。",
+        "section": "colors"
+      },
+      {
+        "name": "莫兰迪中性规则",
+        "body": "在配置页中，所有次级色板均采用莫兰迪中性色，严禁使用高饱和度纯色。",
+        "section": "colors"
+      },
+      {
+        "name": "克制缩放规则",
+        "body": "所有字号大小在不同视口下均使用固定的 rem 比例，不使用 clamp() 自动缩放。",
+        "section": "typography"
+      },
+      {
+        "name": "零影子规则",
+        "body": "除非在悬浮、弹出层或 hover 响应中，否则卡片及容器在静止状态下一律无投影。",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do 对所有的正文消息段落严格应用 max-w-[75ch] 的宽度限制",
+      "Do 对所有的输入域以及主操作按钮显式声明 :focus-visible 轮廓环",
+      "Do 确保暗色文字 (Nebula Silver) 和亮色文字 (Space Ink) 拥有 >= 4.5:1 的高对比度"
+    ],
+    "donts": [
+      "Don't 使用奶油色、暖沙色背景等带有泛滥 AI 生成痕迹的暖灰色",
+      "Don't 在任何 Card、Modal 或 Callout 容器上使用粗边框或彩色侧边单侧边框",
+      "Don't 滥用毛玻璃背景 (backdrop-filter)"
+    ]
+  }
+}
