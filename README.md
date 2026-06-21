@@ -92,12 +92,15 @@ Nekusora(星枢,取自 Neku 猫 / Sora 天空)把两件事揉进了同一个产�
 
 ```bash
 pnpm install
-pnpm db:push:sqlite          # 建表
-pnpm seed                     # 创建管理员账号
+pnpm db:push:sqlite          # 建表(SQLite 模式,一次性)
 pnpm dev                      # 启动 http://localhost:3000
 ```
 
-首次登录:用 `seed` 打印的管理员邮箱密码登录 `/login`。
+> 首次启动会**自动**创建首个管理员账号(读 `.env.local` 的 `SEED_ADMIN_*`)。
+> PG 模式下连建表也会自动跑(`drizzle migrate`),无需手动 migrate。
+> `pnpm seed` 仅用于手动重置管理员。
+
+首次登录:用 `.env.local` 里 `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` 登录 `/login`。
 
 ### 配置上游 Provider
 
@@ -135,9 +138,7 @@ resp = client.chat.completions.create(
 ```bash
 docker compose up -d           # 启动 pg + redis
 # 取消 .env.local 中 DATABASE_URL / REDIS_URL 注释,设 DB_DIALECT=pg
-pnpm db:migrate:pg
-pnpm seed
-pnpm dev                       # 主进程
+pnpm dev                       # 主进程(首次启动自动建表 + 建管理员)
 pnpm worker                    # 另开终端:文件处理队列(PG 模式)
 ```
 

@@ -1,5 +1,5 @@
 "use client";
-import type { FormDataSerializableAction } from "@/components/providers/types";
+import type { FormDataSerializableAction } from "@/shared/lib/types";
 import Modal from "@/shared/ui/Modal";
 
 interface ConfirmDialogProps {

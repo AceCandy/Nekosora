@@ -3,12 +3,32 @@ import { useEffect, useRef } from "react";
 import { X } from "lucide-react";
 
 interface ModalProps {
-  /** 受控开关:true 时打开,false 时关闭。 */
+  /**
+   * 是否打开。false 时组件返回 null(<dialog> 不挂载),避免关闭后仍可见。
+   */
   open: boolean;
-  /** 请求关闭的回调(点遮罩 / 按 ESC / 点关闭按钮时触发)。 */
+  /**
+   * 关闭回调(ESC / 遮罩点击 / 关闭按钮触发)。父组件据此把 open 切回 false。
+   */
   onClose: () => void;
-  title: string;
+  /**
+   * 标题(显示在 header)。传空字符串可隐藏 header 文字,但仍保留关闭按钮区。
+   */
+  title?: string;
+  /**
+   * 内容。
+   */
   children: React.ReactNode;
+  /**
+   * 覆盖 <dialog> 的宽度等样式(覆盖默认 w-[min(640px,92vw)])。
+   * 例如:max-w-4xl w-[min(900px,92vw)]
+   */
+  dialogClassName?: string;
+  /**
+   * 覆盖内容容器的 padding(默认 px-5 py-4)。
+   * 例如预览场景需 p-0 让内容撑满。
+   */
+  bodyClassName?: string;
 }
 
 /**
@@ -24,7 +44,14 @@ interface ModalProps {
  *   2. 打开时挂载 <dialog> 并在 useEffect 里调 showModal()(必须在 DOM 挂载后调用)。
  *   3. close/ESC/遮罩点击 → 触发 onClose → 父组件把 open 切回 false → 本组件卸载 dialog。
  */
-export default function Modal({ open, onClose, title, children }: ModalProps) {
+export default function Modal({
+  open,
+  onClose,
+  title,
+  children,
+  dialogClassName,
+  bodyClassName,
+}: ModalProps) {
   const ref = useRef<HTMLDialogElement>(null);
 
   // 挂载后/打开时调 showModal。由于在 open=false 时返回 null，
@@ -50,24 +77,25 @@ export default function Modal({ open, onClose, title, children }: ModalProps) {
         // 点击 backdrop:原生 dialog 元素本身就是 backdrop 区域,event.target === dialog。
         if (e.target === ref.current) onClose();
       }}
-      className="
-        m-auto w-[min(640px,92vw)] rounded-lg border border-morning-mist bg-white p-0
-        text-space-ink shadow-xl backdrop:bg-black/40
-        dark:border-deep-space dark:bg-twilight-obsidian dark:text-nebula-silver
-      "
+      className={
+        dialogClassName ??
+        "m-auto w-[min(640px,92vw)] rounded-lg border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/40 dark:border-deep-space dark:bg-twilight-obsidian dark:text-nebula-silver"
+      }
     >
-      <header className="flex items-center justify-between border-b border-morning-mist px-5 py-3 dark:border-deep-space">
-        <h2 className="text-base font-semibold">{title}</h2>
-        <button
-          type="button"
-          onClick={onClose}
-          className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-250 p-1 rounded transition-colors inline-flex items-center justify-center"
-          aria-label="关闭"
-        >
-          <X className="w-4 h-4" />
-        </button>
-      </header>
-      <div className="px-5 py-4">{children}</div>
+      {title !== undefined && (
+        <header className="flex items-center justify-between border-b border-morning-mist px-5 py-3 dark:border-deep-space">
+          <h2 className="text-base font-semibold">{title}</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-250 p-1 rounded transition-colors inline-flex items-center justify-center"
+            aria-label="关闭"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </header>
+      )}
+      <div className={bodyClassName ?? "px-5 py-4"}>{children}</div>
     </dialog>
   );
 }

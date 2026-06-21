@@ -2,6 +2,11 @@
  * Seed 脚本 —— 创建首个管理员账号(若数据库无任何用户)。
  * 运行:pnpm seed
  *
+ * ⚠️ 正常情况下启动会自动 bootstrap(见 src/lib/infra/db/bootstrap.ts 与
+ *    src/instrumentation.ts):首次启动建表 + 建管理员。本脚本仅用于:
+ *      - 手动重置管理员(CI、密码丢失、切换种子账号)
+ *      - 在未启用启动 bootstrap 的环境补建账号
+ *
  * 幂等:已有用户则跳过。
  */
 import { eq } from "drizzle-orm";
