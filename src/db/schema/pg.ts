@@ -536,6 +536,42 @@ export const promptTemplates = pgTable(
   (t) => [index("prompt_templates_scope_idx").on(t.scope)],
 );
 
+/**
+ * 指令卡(instruction_cards)—— DEEIX skill 模式的本地实现。
+ *
+ * 本质:带 slash trigger 的可共享 system prompt 片段(纯文本,无执行能力)。
+ * 用户发消息时手动勾选若干卡,服务端渲染为 <instruction_card_context> XML 注入 system message。
+ *
+ * scope:
+ *   - builtin  系统内置(管理员配,全用户可见)
+ *   - shared   用户共享(全用户可见,仅属主可改)
+ *   - private  私有(仅属主可见)
+ *
+ * trigger:slash 命令名(如 "翻译官"),用户输入 /翻译官 或在 UI 勾选触发。
+ * markdown:指令正文(支持 markdown 语法,上限 10000 字符)。
+ */
+export const instructionCards = pgTable(
+  "instruction_cards",
+  {
+    id: text("id").primaryKey().default("(gen_random_uuid())"),
+    userId: text("user_id").references(() => user.id, { onDelete: "cascade" }), // null=builtin
+    scope: text("scope").notNull(), // "builtin" | "private" | "shared"
+    trigger: text("trigger").notNull(), // slash 命令名(唯一性由应用层在 scope 内保证)
+    title: text("title").notNull(),
+    description: text("description"),
+    markdown: text("markdown").notNull(), // 指令正文
+    enabled: boolean("enabled").notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    useCount: integer("use_count").notNull().default(0),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("instruction_cards_scope_idx").on(t.scope),
+    index("instruction_cards_user_idx").on(t.userId),
+  ],
+);
+
 export const userMemories = pgTable(
   "user_memories",
   {

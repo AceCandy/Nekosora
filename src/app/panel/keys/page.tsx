@@ -1,3 +1,4 @@
+import { getTranslations } from "next-intl/server";
 import {
   getMyKeys,
   ensureMasterKey,
@@ -11,6 +12,7 @@ import {
 import KeysManager, { type ApiKeyRecord, type BindableModels } from "./KeysManager";
 
 export default async function KeysPage() {
+  const t = await getTranslations("panel.keys");
   const [keys, bindable] = await Promise.all([getMyKeys(), getBindableModels()]);
 
   // Parallel prefetch of all bindings for subkeys
@@ -70,9 +72,9 @@ export default async function KeysPage() {
   return (
     <div className="space-y-6 max-w-6xl">
       <div>
-        <h1 className="text-xl font-bold mb-1">API Keys & 权限绑定</h1>
+        <h1 className="text-xl font-bold mb-1">{t("title")}</h1>
         <p className="text-sm text-neutral-500">
-          管理您调用网关模型的 API 密钥。主密钥拥有全部权限，子密钥可精细控制绑定的上游模型范围。
+          {t("desc")}
         </p>
       </div>
 

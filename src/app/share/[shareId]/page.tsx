@@ -1,4 +1,5 @@
-import { getShare } from "@/app/chat/share-actions";
+import { getShare } from "@/features/chat/actions/share";
+import { getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 
@@ -10,6 +11,7 @@ export default async function SharePage({
   const { shareId } = await params;
   const share = await getShare(shareId);
   if (!share) notFound();
+  const t = await getTranslations("share");
 
   return (
     <main className="relative min-h-screen bg-[#fcfdff] text-[#0f121a] dark:bg-[#0d0f14] dark:text-[#f1f3f7] p-6 sm:p-12 transition-colors duration-200 overflow-hidden">
@@ -21,13 +23,13 @@ export default async function SharePage({
         <div className="rounded-lg border border-neutral-200/80 bg-white/40 p-5 backdrop-blur-sm dark:border-neutral-800/80 dark:bg-[#12141a]/40 shadow-none space-y-3">
           <div className="flex items-center justify-between gap-4">
             <span className="text-[10px] text-neutral-400 dark:text-neutral-500 font-mono tracking-wider uppercase font-semibold">
-              对话分享快照 (Snapshot)
+              {t("snapshot")}
             </span>
-            <Link 
-              href="/" 
+            <Link
+              href="/"
               className="text-xs text-blue-600 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300 font-medium transition-colors"
             >
-              了解 Nekusora →
+              {t("learnMore")}
             </Link>
           </div>
           <div>
@@ -41,7 +43,7 @@ export default async function SharePage({
                 </span>
               )}
               <span className="text-[10px] text-neutral-400 dark:text-neutral-500">
-                静态只读归档
+                {t("readonly")}
               </span>
             </div>
           </div>
@@ -54,7 +56,7 @@ export default async function SharePage({
             return (
               <div key={i} className={`flex flex-col ${isUser ? "items-end" : "items-start"} space-y-1`}>
                 <div className="text-[10px] font-semibold text-neutral-400 dark:text-neutral-500 px-1 uppercase tracking-wider">
-                  {isUser ? "您" : "AI 助手"}
+                  {isUser ? t("user") : t("assistant")}
                 </div>
                 <div
                   className={
@@ -72,7 +74,7 @@ export default async function SharePage({
 
         {/* 底部版权或指引 */}
         <div className="text-center pt-8 border-t border-neutral-200/50 dark:border-neutral-800/50 text-[11px] text-neutral-400 dark:text-neutral-500">
-          生成自 <span className="font-semibold text-neutral-600 dark:text-neutral-400">Nekusora</span> AI 工作台。快照内容不可编辑。
+          {t("generatedFrom")} <span className="font-semibold text-neutral-600 dark:text-neutral-400">Nekusora</span> {t("workbench")}
         </div>
       </div>
     </main>

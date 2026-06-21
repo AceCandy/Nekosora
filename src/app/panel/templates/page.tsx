@@ -5,6 +5,7 @@
  * 支持快速跳转到 chat 使用(带 templateId query)。
  */
 import Link from "next/link";
+import { getTranslations } from "next-intl/server";
 import { requireSession } from "@/lib/session";
 import { listTemplates } from "@/lib/templates/service";
 
@@ -12,12 +13,13 @@ export const dynamic = "force-dynamic";
 
 export default async function PanelTemplatesPage() {
   const user = await requireSession();
+  const tt = await getTranslations("panel.templates");
   const templates = await listTemplates({ userId: user.id });
 
   // 按分类分组
   const groups = new Map<string, typeof templates>();
   for (const t of templates) {
-    const cat = t.category ?? "其他";
+    const cat = t.category ?? tt("defaultCategory");
     const arr = groups.get(cat) ?? [];
     arr.push(t);
     groups.set(cat, arr);
@@ -26,15 +28,15 @@ export default async function PanelTemplatesPage() {
   return (
     <div className="space-y-8 max-w-4xl">
       <div>
-        <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-white">Prompt 模板</h1>
+        <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-white">{tt("title")}</h1>
         <p className="mt-1 text-sm text-neutral-500">
-          可复用的提示词模板与 Agent。选择模板后可在 Chat 中填入变量快速启动对话。
+          {tt("desc")}
         </p>
       </div>
 
       {templates.length === 0 && (
         <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#12141a] p-10 text-center shadow-none">
-          <p className="text-sm text-neutral-400">暂无可用模板</p>
+          <p className="text-sm text-neutral-400">{tt("empty")}</p>
         </div>
       )}
 
@@ -68,13 +70,13 @@ export default async function PanelTemplatesPage() {
                 )}
                 <div className="mt-3 flex items-center justify-between">
                   <span className="text-[10px] text-neutral-400">
-                    {t.variables.length > 0 ? `${t.variables.length} 个变量` : "无变量"}
+                    {t.variables.length > 0 ? tt("varCount", { count: t.variables.length }) : tt("noVars")}
                   </span>
                   <Link
                     href={`/chat?templateId=${t.id}`}
                     className="text-xs font-medium text-sora-blue hover:underline"
                   >
-                    使用 →
+                    {tt("use")}
                   </Link>
                 </div>
               </div>

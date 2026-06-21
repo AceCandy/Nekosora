@@ -503,6 +503,34 @@ export const promptTemplates = sqliteTable(
   (t) => [index("prompt_templates_scope_idx").on(t.scope)],
 );
 
+/**
+ * 指令卡(instruction_cards)—— DEEIX skill 模式的本地实现。
+ *
+ * 本质:带 slash trigger 的可共享 system prompt 片段(纯文本,无执行能力)。
+ * 与 pg.ts 同名表语义一致,仅列类型差异。详见 pg.ts 的注释。
+ */
+export const instructionCards = sqliteTable(
+  "instruction_cards",
+  {
+    id: text("id").primaryKey().default(uuid),
+    userId: text("user_id").references(() => user.id, { onDelete: "cascade" }), // null=builtin
+    scope: text("scope").notNull(), // "builtin" | "private" | "shared"
+    trigger: text("trigger").notNull(), // slash 命令名
+    title: text("title").notNull(),
+    description: text("description"),
+    markdown: text("markdown").notNull(), // 指令正文
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    useCount: integer("use_count").notNull().default(0),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(now),
+  },
+  (t) => [
+    index("instruction_cards_scope_idx").on(t.scope),
+    index("instruction_cards_user_idx").on(t.userId),
+  ],
+);
+
 export const userMemories = sqliteTable(
   "user_memories",
   {

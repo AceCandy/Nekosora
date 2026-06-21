@@ -6,18 +6,20 @@ import {
   deleteProvider,
 } from "../actions";
 import { revealKeyBundle } from "@/lib/providers/keys";
+import { getTranslations } from "next-intl/server";
 import ProvidersManager, {
   type ProviderItem,
-} from "@/components/providers/ProvidersManager";
+} from "@/features/providers/ProvidersManager";
 
 const PROTOCOLS = [
-  { value: "openai", label: "openai(兼容)" },
+  { value: "openai", label: "openai" },
   { value: "anthropic", label: "anthropic" },
   { value: "gemini", label: "gemini" },
   { value: "custom", label: "custom" },
 ];
 
 export default async function ProvidersPage() {
+  const t = await getTranslations("admin.providers");
   const rows = await listProviders();
 
   const providers: ProviderItem[] = rows.map((p: Record<string, unknown>) => ({
@@ -46,7 +48,7 @@ export default async function ProvidersPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-xl font-bold mb-4">Providers(全局上游)</h1>
+        <h1 className="text-xl font-bold mb-4">{t("title")}</h1>
         <ProvidersManager
           providers={providers}
           protocols={PROTOCOLS}

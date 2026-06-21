@@ -3,19 +3,23 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { clsx } from "clsx";
 
+// href + nav 字典 key(label 运行时按 locale 渲染)。
 const navItems = [
-  { href: "/panel/keys", label: "API 密钥管理" },
-  { href: "/panel/providers", label: "上游服务商" },
-  { href: "/panel/models", label: "模型代理" },
-  { href: "/panel/templates", label: "Prompt 模板" },
-  { href: "/panel/memory", label: "长期记忆归档" },
+  { href: "/panel/keys", labelKey: "keys" },
+  { href: "/panel/providers", labelKey: "providers" },
+  { href: "/panel/models", labelKey: "models" },
+  { href: "/panel/templates", labelKey: "templates" },
+  { href: "/panel/cards", labelKey: "cards" },
+  { href: "/panel/memory", labelKey: "memory" },
 ];
 
 export default function SidebarNav() {
   const pathname = usePathname();
   const router = useRouter();
+  const t = useTranslations("nav");
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -58,7 +62,7 @@ export default function SidebarNav() {
                 : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-50 dark:text-neutral-400 dark:hover:text-neutral-100 dark:hover:bg-neutral-900/50"
             )}
           >
-            <span>{item.label}</span>
+            <span>{t(item.labelKey)}</span>
             <span className="hidden sm:inline-block text-[10px] font-mono border border-neutral-200 dark:border-neutral-800 rounded px-1.5 py-0.5 text-neutral-400 dark:text-neutral-500 opacity-0 group-hover/nav:opacity-100 transition-opacity">
               {index + 1}
             </span>

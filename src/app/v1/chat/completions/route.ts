@@ -12,6 +12,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { streamChat } from "@/lib/stream";
 import { verifyKey, extractBearer } from "@/lib/keys";
+import { apiErrorLocalized, ErrorCode } from "@/lib/errors";
 import type { IRRequest } from "@/lib/providers/types";
 
 export const runtime = "nodejs";
@@ -22,17 +23,11 @@ export async function POST(req: NextRequest) {
   // 1. 鉴权
   const rawKey = extractBearer(req.headers.get("authorization"));
   if (!rawKey) {
-    return NextResponse.json(
-      { error: { message: "缺少 Authorization: Bearer 头", type: "invalid_request_error", code: "missing_api_key" } },
-      { status: 401 },
-    );
+    return apiErrorLocalized(ErrorCode.AUTH_MISSING_KEY, req);
   }
   const verified = await verifyKey(rawKey);
   if (!verified) {
-    return NextResponse.json(
-      { error: { message: "无效或已禁用的 API 密钥", type: "invalid_request_error", code: "invalid_api_key" } },
-      { status: 401 },
-    );
+    return apiErrorLocalized(ErrorCode.AUTH_INVALID_KEY, req);
   }
 
   // 2. 解析请求体
@@ -40,19 +35,13 @@ export async function POST(req: NextRequest) {
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json(
-      { error: { message: "请求体不是合法 JSON", type: "invalid_request_error" } },
-      { status: 400 },
-    );
+    return apiErrorLocalized(ErrorCode.REQUEST_INVALID_JSON, req);
   }
 
   const model = body.model as string | undefined;
   const messages = body.messages as IRRequest["messages"] | undefined;
   if (!model || !Array.isArray(messages) || messages.length === 0) {
-    return NextResponse.json(
-      { error: { message: "model 和 messages 为必填项", type: "invalid_request_error" } },
-      { status: 400 },
-    );
+    return apiErrorLocalized(ErrorCode.REQUEST_MISSING_FIELD, req, { fields: ["model", "messages"] });
   }
 
   const stream = body.stream === true;

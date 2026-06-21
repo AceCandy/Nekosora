@@ -12,6 +12,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { verifyKey, extractBearer } from "@/lib/keys";
 import { transcribeViaRoute, RoutingError } from "@/lib/providers/multimodal/audio-stt";
+import { apiErrorLocalized, ErrorCode, routingCodeToErrorCode } from "@/lib/errors";
 import { logUsage } from "@/lib/usage";
 
 export const runtime = "nodejs";
@@ -19,15 +20,15 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   const rawKey = extractBearer(req.headers.get("authorization"));
-  if (!rawKey) return openaiError("缺少 Authorization: Bearer 头", "missing_api_key", 401);
+  if (!rawKey) return apiErrorLocalized(ErrorCode.AUTH_MISSING_KEY, req);
   const verified = await verifyKey(rawKey);
-  if (!verified) return openaiError("无效或已禁用的 API 密钥", "invalid_api_key", 401);
+  if (!verified) return apiErrorLocalized(ErrorCode.AUTH_INVALID_KEY, req);
 
   let formData: FormData;
   try {
     formData = await req.formData();
   } catch {
-    return openaiError("请求体必须是 multipart/form-data", "invalid_request_error", 400);
+    return apiErrorLocalized(ErrorCode.REQUEST_INVALID_JSON, req);
   }
 
   const model = String(formData.get("model") ?? "");
@@ -35,8 +36,10 @@ export async function POST(req: NextRequest) {
   const language = String(formData.get("language") ?? "") || undefined;
   const prompt = String(formData.get("prompt") ?? "") || undefined;
 
-  if (!model) return openaiError("model 为必填项", "invalid_request_error", 400);
-  if (!(file instanceof File)) return openaiError("file 为必填项(音频文件)", "invalid_request_error", 400);
+  if (!model) return apiErrorLocalized(ErrorCode.REQUEST_MISSING_FIELD, req, { fields: ["model"] });
+  if (!(file instanceof File)) {
+    return apiErrorLocalized(ErrorCode.REQUEST_MISSING_FIELD, req, { fields: ["file"] });
+  }
 
   const audio = Buffer.from(await file.arrayBuffer());
   const ctx = verified.ctx;
@@ -60,7 +63,7 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json({ text: result.text });
   } catch (err) {
-    if (err instanceof RoutingError) return openaiError(err.message, err.code, 400);
+    if (err instanceof RoutingError) return apiErrorLocalized(routingCodeToErrorCode(err.code), req);
     console.error("[/v1/audio/transcriptions] 失败:", err);
     await safeLogUsage({
       ctx,
@@ -71,19 +74,12 @@ export async function POST(req: NextRequest) {
       status: "failed",
       errorCode: "generation_failed",
     });
-    return openaiError(
-      err instanceof Error ? err.message : "语音转写失败",
-      "generation_failed",
-      502,
+    return apiErrorLocalized(
+      ErrorCode.MEDIA_STT_FAILED,
+      req,
+      err instanceof Error ? { message: err.message } : undefined,
     );
   }
-}
-
-function openaiError(message: string, code: string, status: number) {
-  return NextResponse.json(
-    { error: { message, type: status >= 500 ? "server_error" : "invalid_request_error", code } },
-    { status },
-  );
 }
 
 async function safeLogUsage(params: Parameters<typeof logUsage>[0]): Promise<void> {

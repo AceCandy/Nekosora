@@ -17,6 +17,8 @@
 import { eq, and, asc } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { parseKeyBundle, pickWeightedKey } from "@/lib/providers/keys";
+import { isProviderAllowed } from "@/lib/circuit-breaker";
+import { getRouteRepository } from "@/lib/repositories/route-repository";
 import type {
   ResolvedRoute,
   ResolvedProvider,
@@ -56,34 +58,20 @@ export async function resolveRoutes(
   ctx: CallContext,
   modelName: string,
 ): Promise<ResolvedRoute[]> {
-  const db = await getDb();
-  const schema = getSchema();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const s = schema as any;
+  const repo = getRouteRepository();
 
   // --- 1. 判断是否为子 key,以及绑定约束 ---
   let allowedGlobalModelIds: Set<string> | null = null; // null = 不限
   let allowedUserModelIds: Set<string> | null = null;
 
   if (ctx.keyKind === "sub" && ctx.apiKeyId) {
-    const bindings = await db
-      .select()
-      .from(s.keyModelBindings)
-      .where(eq(s.keyModelBindings.keyId, ctx.apiKeyId));
-    allowedGlobalModelIds = new Set(
-      bindings.filter((b: { scope: string }) => b.scope === "global").map((b: { globalModelId: string }) => b.globalModelId),
-    );
-    allowedUserModelIds = new Set(
-      bindings.filter((b: { scope: string }) => b.scope === "byo").map((b: { userModelId: string }) => b.userModelId),
-    );
+    const bindings = await repo.findKeyModelBindings(ctx.apiKeyId);
+    allowedGlobalModelIds = bindings.globalModelIds;
+    allowedUserModelIds = bindings.userModelIds;
   }
 
   // --- 2. 尝试全局模型 ---
-  const [globalModel] = await db
-    .select()
-    .from(s.globalModels)
-    .where(and(eq(s.globalModels.name, modelName), eq(s.globalModels.enabled, true)))
-    .limit(1);
+  const globalModel = await repo.findEnabledGlobalModel(modelName);
 
   if (globalModel) {
     // access_scope=internal 的模型不对外开放(仅系统任务用)。
@@ -98,17 +86,7 @@ export async function resolveRoutes(
   }
 
   // --- 3. 尝试用户 BYO 模型(仅该用户的) ---
-  const [userModel] = await db
-    .select()
-    .from(s.userModels)
-    .where(
-      and(
-        eq(s.userModels.name, modelName),
-        eq(s.userModels.userId, ctx.userId),
-        eq(s.userModels.enabled, true),
-      ),
-    )
-    .limit(1);
+  const userModel = await repo.findEnabledUserModel(modelName, ctx.userId);
 
   if (userModel) {
     if (allowedUserModelIds !== null && !allowedUserModelIds.has(userModel.id)) {
@@ -128,29 +106,9 @@ async function resolveGlobalRoutes(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   globalModel: any,
 ): Promise<ResolvedRoute[]> {
-  const db = await getDb();
-  const schema = getSchema();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const s = schema as any;
+  const repo = getRouteRepository();
 
-  const routes = await db
-    .select({
-      route: s.globalRoutes,
-      provider: s.globalProviders,
-    })
-    .from(s.globalRoutes)
-    .innerJoin(
-      s.globalProviders,
-      eq(s.globalRoutes.providerId, s.globalProviders.id),
-    )
-    .where(
-      and(
-        eq(s.globalRoutes.modelId, globalModel.id),
-        eq(s.globalRoutes.enabled, true),
-        eq(s.globalProviders.enabled, true),
-      ),
-    )
-    .orderBy(asc(s.globalRoutes.priority));
+  const routes = await repo.findEnabledGlobalRoutes(globalModel.id);
 
   if (routes.length === 0) {
     throw new RoutingError("no_route", `模型 ${globalModel.name} 没有可用路由`);
@@ -170,7 +128,7 @@ async function resolveGlobalRoutes(
     }),
   );
 
-  return orderRoutes(resolved);
+  return filterByCircuitBreaker(orderRoutes(resolved));
 }
 
 /** BYO 模型 → 单条路由。 */
@@ -178,21 +136,9 @@ async function resolveByoRoute(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   userModel: any,
 ): Promise<ResolvedRoute[]> {
-  const db = await getDb();
-  const schema = getSchema();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const s = schema as any;
+  const repo = getRouteRepository();
 
-  const [provider] = await db
-    .select()
-    .from(s.userProviders)
-    .where(
-      and(
-        eq(s.userProviders.id, userModel.providerId),
-        eq(s.userProviders.enabled, true),
-      ),
-    )
-    .limit(1);
+  const provider = await repo.findEnabledUserProvider(userModel.providerId);
 
   if (!provider) {
     throw new RoutingError("no_route", `模型 ${userModel.name} 的 provider 已禁用`);
@@ -230,6 +176,18 @@ function orderRoutes(routes: ResolvedRoute[]): ResolvedRoute[] {
     result.push(...weightedShuffle(groups.get(p)!));
   }
   return result;
+}
+
+/**
+ * 熔断过滤:跳过处于 open 态的 provider 的路由。
+ *
+ * 若全部路由对应的 provider 都被熔断,降级返回原始全集——
+ * 避免单 provider 故障导致整个模型对所有用户 503(雪崩)。
+ * 调用方仍会逐条尝试,撞墙的错误由 streamChat 的故障转移处理。
+ */
+function filterByCircuitBreaker(routes: ResolvedRoute[]): ResolvedRoute[] {
+  const allowed = routes.filter((r) => isProviderAllowed(r.provider.id));
+  return allowed.length > 0 ? allowed : routes;
 }
 
 /** 按 weight 做加权随机抽取(无放回),返回打乱后的顺序。 */

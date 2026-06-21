@@ -1,9 +1,12 @@
 import Link from "next/link";
+import { getTranslations } from "next-intl/server";
 import { requireSession } from "@/lib/session";
 import { Plus, Key, Settings2 } from "lucide-react";
 
 export default async function ChatLayout({ children }: { children: React.ReactNode }) {
   const user = await requireSession();
+  const t = await getTranslations("chat");
+  const tc = await getTranslations("nav");
 
   return (
     <div className="flex min-h-screen bg-[#fcfdff] text-[#0f121a] dark:bg-[#0d0f14] dark:text-[#f1f3f7] transition-colors duration-200">
@@ -23,7 +26,7 @@ export default async function ChatLayout({ children }: { children: React.ReactNo
             className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-900 px-3 py-2 text-sm font-semibold text-neutral-700 dark:text-neutral-200 transition-all duration-150 ease-out"
           >
             <Plus className="w-4 h-4 text-blue-500" />
-            <span>新会话</span>
+            <span>{t("newConversation")}</span>
           </Link>
         </div>
 
@@ -33,7 +36,7 @@ export default async function ChatLayout({ children }: { children: React.ReactNo
             className="inline-flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs font-medium text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 transition-all duration-150"
           >
             <Key className="w-3.5 h-3.5" />
-            <span>API Keys 密钥管理</span>
+            <span>{tc("keys")}</span>
           </Link>
           {user.role === "admin" && (
             <Link
@@ -41,7 +44,7 @@ export default async function ChatLayout({ children }: { children: React.ReactNo
               className="inline-flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs font-medium text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 transition-all duration-150"
             >
               <Settings2 className="w-3.5 h-3.5" />
-              <span>控制台管理后台</span>
+              <span>{tc("panel")}</span>
             </Link>
           )}
         </div>

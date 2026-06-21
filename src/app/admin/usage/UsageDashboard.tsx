@@ -4,6 +4,7 @@
  * 范围切换通过更新 URL query 触发 server 重新渲染。
  */
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { clsx } from "clsx";
 import {
   RequestsTrendChart, ModelTokensChart, ModelCallsPie, SourceBar,
@@ -11,10 +12,10 @@ import {
 import type { TimeRange } from "@/lib/usage-aggregate";
 import type { TimeSeriesPoint, ModelRow, SourceRow } from "./UsageCharts";
 
-const RANGES: { value: TimeRange; label: string }[] = [
-  { value: "24h", label: "24 小时" },
-  { value: "7d", label: "7 天" },
-  { value: "30d", label: "30 天" },
+const RANGES: { value: TimeRange; labelKey: "range24h" | "range7d" | "range30d" }[] = [
+  { value: "24h", labelKey: "range24h" },
+  { value: "7d", labelKey: "range7d" },
+  { value: "30d", labelKey: "range30d" },
 ];
 
 function MetricCard({ label, value, hint }: { label: string; value: string; hint?: string }) {
@@ -36,6 +37,7 @@ export function UsageDashboard({
   byModel: ModelRow[];
   bySource: SourceRow[];
 }) {
+  const t = useTranslations("admin.usage");
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -50,14 +52,14 @@ export function UsageDashboard({
     <div className="space-y-6">
       {/* 总量卡片 */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        <MetricCard label="累计调用" value={totals.calls.toLocaleString()} hint="全部时间" />
-        <MetricCard label="累计输入 Tokens" value={totals.promptTokens.toLocaleString()} hint="全部时间" />
-        <MetricCard label="累计输出 Tokens" value={totals.completionTokens.toLocaleString()} hint="全部时间" />
+        <MetricCard label={t("metricTotalCalls")} value={totals.calls.toLocaleString()} hint={t("metricAllTime")} />
+        <MetricCard label={t("metricTotalPromptTokens")} value={totals.promptTokens.toLocaleString()} hint={t("metricAllTime")} />
+        <MetricCard label={t("metricTotalCompletionTokens")} value={totals.completionTokens.toLocaleString()} hint={t("metricAllTime")} />
       </div>
 
       {/* 范围选择器 */}
       <div className="flex items-center gap-2">
-        <span className="text-xs text-neutral-400 dark:text-neutral-500 mr-1">时间范围:</span>
+        <span className="text-xs text-neutral-400 dark:text-neutral-500 mr-1">{t("rangeSelector")}</span>
         {RANGES.map((r) => (
           <button
             key={r.value}
@@ -69,7 +71,7 @@ export function UsageDashboard({
                 : "bg-white dark:bg-[#12141a] text-neutral-500 border-neutral-200 dark:border-neutral-800 hover:text-neutral-700 dark:hover:text-neutral-300",
             )}
           >
-            {r.label}
+            {t(r.labelKey)}
           </button>
         ))}
       </div>
@@ -77,9 +79,9 @@ export function UsageDashboard({
       {/* 图表网格 */}
       <div className="space-y-4">
         <div className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] p-5 shadow-none">
-          <h3 className="text-sm font-semibold text-neutral-700 dark:text-neutral-200 mb-4">Token 消耗趋势(堆叠面积)</h3>
+          <h3 className="text-sm font-semibold text-neutral-700 dark:text-neutral-200 mb-4">{t("chartTokensTrend")}</h3>
           {series.length === 0 ? (
-            <div className="h-[260px] flex items-center justify-center text-xs text-neutral-400">所选范围暂无数据</div>
+            <div className="h-[260px] flex items-center justify-center text-xs text-neutral-400">{t("chartEmptyRange")}</div>
           ) : (
             <RequestsTrendChart data={series} />
           )}
@@ -87,17 +89,17 @@ export function UsageDashboard({
 
         <div className="grid md:grid-cols-2 gap-4">
           <div className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] p-5 shadow-none">
-            <h3 className="text-sm font-semibold text-neutral-700 dark:text-neutral-200 mb-4">各模型 Token 消耗(Top 6)</h3>
+            <h3 className="text-sm font-semibold text-neutral-700 dark:text-neutral-200 mb-4">{t("chartModelTokens")}</h3>
             {byModel.length === 0 ? (
-              <div className="h-[260px] flex items-center justify-center text-xs text-neutral-400">暂无数据</div>
+              <div className="h-[260px] flex items-center justify-center text-xs text-neutral-400">{t("chartEmpty")}</div>
             ) : (
               <ModelTokensChart data={byModel} />
             )}
           </div>
           <div className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] p-5 shadow-none">
-            <h3 className="text-sm font-semibold text-neutral-700 dark:text-neutral-200 mb-4">模型调用分布</h3>
+            <h3 className="text-sm font-semibold text-neutral-700 dark:text-neutral-200 mb-4">{t("chartCallsDistribution")}</h3>
             {byModel.length === 0 ? (
-              <div className="h-[260px] flex items-center justify-center text-xs text-neutral-400">暂无数据</div>
+              <div className="h-[260px] flex items-center justify-center text-xs text-neutral-400">{t("chartEmpty")}</div>
             ) : (
               <ModelCallsPie data={byModel} />
             )}
@@ -105,9 +107,9 @@ export function UsageDashboard({
         </div>
 
         <div className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] p-5 shadow-none">
-          <h3 className="text-sm font-semibold text-neutral-700 dark:text-neutral-200 mb-4">来源分布(Chat / Gateway)</h3>
+          <h3 className="text-sm font-semibold text-neutral-700 dark:text-neutral-200 mb-4">{t("chartSourceDistribution")}</h3>
           {bySource.length === 0 ? (
-            <div className="h-[180px] flex items-center justify-center text-xs text-neutral-400">暂无数据</div>
+            <div className="h-[180px] flex items-center justify-center text-xs text-neutral-400">{t("chartEmpty")}</div>
           ) : (
             <SourceBar data={bySource} />
           )}

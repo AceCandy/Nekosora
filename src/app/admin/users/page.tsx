@@ -1,16 +1,18 @@
 import { listUsers, toggleUserStatus } from "../actions";
-import Button from "@/components/ui/Button";
-import Badge from "@/components/ui/Badge";
-import StatusDot from "@/components/ui/StatusDot";
+import { getTranslations } from "next-intl/server";
+import { Button } from "@/shared/ui/Button";
+import Badge from "@/shared/ui/Badge";
+import StatusDot from "@/shared/ui/StatusDot";
 
 export default async function UsersPage() {
   const users = await listUsers();
+  const t = await getTranslations("admin.users");
 
   return (
     <div className="space-y-6 max-w-5xl">
       <div>
-        <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-white">用户授权管理 (Users)</h1>
-        <p className="mt-1 text-sm text-neutral-500">查看平台已注册用户，并启用或禁用用户的 API 调用权限。</p>
+        <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-white">{t("title")}</h1>
+        <p className="mt-1 text-sm text-neutral-500">{t("title")}</p>
       </div>
 
       <div className="rounded-lg border border-morning-mist bg-nebula-white dark:border-deep-space dark:bg-twilight-obsidian overflow-hidden shadow-none transition-all duration-200">
@@ -18,18 +20,18 @@ export default async function UsersPage() {
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="bg-neutral-50/70 border-b border-morning-mist text-neutral-500 dark:bg-neutral-900/50 dark:border-deep-space dark:text-neutral-400 text-xs uppercase tracking-wider font-semibold">
-                <th className="text-left px-5 py-3 font-semibold">邮箱</th>
-                <th className="text-left px-5 py-3 font-semibold">姓名</th>
-                <th className="text-left px-5 py-3 font-semibold">角色</th>
-                <th className="text-left px-5 py-3 font-semibold">状态</th>
-                <th className="text-right px-5 py-3 font-semibold">操作</th>
+                <th className="text-left px-5 py-3 font-semibold">{t("thEmail")}</th>
+                <th className="text-left px-5 py-3 font-semibold">{t("thName")}</th>
+                <th className="text-left px-5 py-3 font-semibold">{t("thRole")}</th>
+                <th className="text-left px-5 py-3 font-semibold">{t("thStatus")}</th>
+                <th className="text-right px-5 py-3 font-semibold">{t("thActions")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100 dark:divide-deep-space">
               {users.length === 0 && (
                 <tr>
                   <td colSpan={5} className="px-5 py-10 text-center text-neutral-400 dark:text-neutral-500">
-                    暂无用户数据
+                    {t("empty")}
                   </td>
                 </tr>
               )}
@@ -47,16 +49,16 @@ export default async function UsersPage() {
                   <td className="px-5 py-3.5">
                     {u.role === "admin" ? (
                       <Badge variant="primary" className="rounded-full px-2 py-0.5 text-xs font-semibold">
-                        管理员
+                        {t("roleAdminLabel")}
                       </Badge>
                     ) : (
                       <Badge variant="neutral" className="rounded-full px-2 py-0.5 text-xs">
-                        普通用户
+                        {t("roleUserLabel")}
                       </Badge>
                     )}
                   </td>
                   <td className="px-5 py-3.5">
-                    <StatusDot enabled={u.status === "active"} label={u.status === "active" ? "正常" : "已禁用"} />
+                    <StatusDot enabled={u.status === "active"} label={u.status === "active" ? t("statusActive") : t("statusDisabled")} />
                   </td>
                   <td className="px-5 py-3.5 text-right">
                     {u.role !== "admin" ? (
@@ -65,7 +67,7 @@ export default async function UsersPage() {
                         className="inline"
                       >
                         <Button type="submit" variant="secondary" size="sm" className="font-semibold">
-                          {u.status === "active" ? "禁用账号" : "启用账号"}
+                          {u.status === "active" ? t("actionDisable") : t("actionEnable")}
                         </Button>
                       </form>
                     ) : (
@@ -79,7 +81,7 @@ export default async function UsersPage() {
         </div>
       </div>
       <div className="rounded-lg border border-neutral-100 bg-neutral-50/50 p-4 text-xs text-neutral-500 dark:border-neutral-800 dark:bg-neutral-950/20 dark:text-neutral-500 leading-relaxed">
-        新用户通常在首次通过 Better Auth 登录时自动同步，或由系统初始化种子脚本创建。
+        {t("footerNote")}
       </div>
     </div>
   );

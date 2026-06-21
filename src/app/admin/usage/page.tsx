@@ -1,4 +1,5 @@
 import { desc, sql } from "drizzle-orm";
+import { getTranslations } from "next-intl/server";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { requireAdmin } from "@/lib/session";
 import { getTimeSeries, getModelBreakdown, getSourceBreakdown, type TimeRange } from "@/lib/usage-aggregate";
@@ -13,6 +14,7 @@ export default async function UsagePage({
   searchParams: Promise<{ range?: string }>;
 }) {
   await requireAdmin();
+  const t = await getTranslations("admin.usage");
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
@@ -47,8 +49,8 @@ export default async function UsagePage({
   return (
     <div className="space-y-10 max-w-5xl">
       <div>
-        <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-white">网关调用与用量统计</h1>
-        <p className="mt-1 text-sm text-neutral-500">统计平台模型的调用频率、消耗 Tokens,并以图表可视化趋势。</p>
+        <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-white">{t("title")}</h1>
+        <p className="mt-1 text-sm text-neutral-500">{t("title")}</p>
       </div>
 
       <UsageDashboard
@@ -64,25 +66,25 @@ export default async function UsagePage({
       />
 
       <div className="space-y-4">
-        <h2 className="text-base font-semibold text-neutral-900 dark:text-white">最近 20 条调用日志</h2>
+        <h2 className="text-base font-semibold text-neutral-900 dark:text-white">{t("recentLogs")}</h2>
         <div className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] overflow-hidden shadow-none transition-all duration-200">
           <div className="overflow-x-auto">
             <table className="w-full text-xs border-collapse">
               <thead>
                 <tr className="bg-neutral-50/70 border-b border-neutral-200 text-neutral-500 dark:bg-neutral-900/50 dark:border-neutral-800 dark:text-neutral-400 uppercase tracking-wider font-semibold">
-                  <th className="text-left px-4 py-3 font-semibold">来源</th>
-                  <th className="text-left px-4 py-3 font-semibold">请求模型</th>
-                  <th className="text-left px-4 py-3 font-semibold">上游 Provider</th>
-                  <th className="text-right px-4 py-3 font-semibold">总 tokens</th>
-                  <th className="text-right px-4 py-3 font-semibold">耗时</th>
-                  <th className="text-right px-4 py-3 font-semibold">响应状态</th>
+                  <th className="text-left px-4 py-3 font-semibold">{t("thSource")}</th>
+                  <th className="text-left px-4 py-3 font-semibold">{t("thModel")}</th>
+                  <th className="text-left px-4 py-3 font-semibold">{t("thUpstream")}</th>
+                  <th className="text-right px-4 py-3 font-semibold">{t("thTotalTokens")}</th>
+                  <th className="text-right px-4 py-3 font-semibold">{t("thLatency")}</th>
+                  <th className="text-right px-4 py-3 font-semibold">{t("thStatus")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
                 {recent.length === 0 && (
                   <tr>
                     <td colSpan={6} className="px-4 py-10 text-center text-neutral-400 dark:text-neutral-500">
-                      暂无调用日志
+                      {t("emptyLogs")}
                     </td>
                   </tr>
                 )}
