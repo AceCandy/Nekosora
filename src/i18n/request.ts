@@ -13,7 +13,7 @@ export const defaultLocale: Locale = "zh-CN";
  *   1. cookie "locale" 存在且有效 → 用它
  *   2. 否则用 defaultLocale(zh-CN)
  *
- * 首次访问的自动检测由 middleware 完成(读 Accept-Language 写 cookie)。
+ * 首次访问的自动检测由 src/middleware.ts 完成(读 Accept-Language 写 locale cookie)。
  */
 export default getRequestConfig(async () => {
   const cookieStore = await cookies();

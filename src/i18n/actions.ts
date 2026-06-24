@@ -7,7 +7,7 @@ import { locales, type Locale } from "@/i18n/request";
 /**
  * 切换语言 —— 写入 locale cookie,触发全站 revalidate。
  *
- * cookie 被 middleware + i18n/request.ts 读取,决定渲染 locale。
+ * cookie 被 src/middleware.ts(写)+ i18n/request.ts(读)协同,决定渲染 locale。
  * revalidatePath("/", "layout") 确保所有布局层重新渲染。
  */
 export async function setLocale(locale: Locale): Promise<void> {

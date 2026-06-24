@@ -54,6 +54,9 @@
     "usage": "Gateway Usage",
     "globalProviders": "Global Providers",
     "globalModels": "Models & Routing",
+    "globalTemplates": "Global Templates",
+    "sectionMyConfig": "My Config",
+    "sectionGlobalManagement": "Global Management",
     "settings": "Settings",
     "logout": "Log out"
   },

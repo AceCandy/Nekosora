@@ -54,6 +54,9 @@
     "usage": "网关调用用量",
     "globalProviders": "全局服务商 (Providers)",
     "globalModels": "对外模型与路由",
+    "globalTemplates": "全局模板 (Templates)",
+    "sectionMyConfig": "我的配置",
+    "sectionGlobalManagement": "全局管理",
     "settings": "设置",
     "logout": "退出登录"
   },

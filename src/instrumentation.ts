@@ -12,8 +12,10 @@
  *        const p = "@/lib/infra/db/bootstrap"; await import(p);
  *      —— 这是 webpack/Turbopack 识别的"不要分析这个动态 import"信号。
  *
- * bootstrap 全程在 Node server 进程跑(建表/迁移 + 首个管理员)。
- * 失败则 throw,硬阻断启动,让"启动了但用不了"的问题在启动阶段就暴露。
+ * bootstrap 全程在 Node server 进程跑:连通性探测 + 自动建表(migrate)+ 首个管理员。
+ * **DB 连接失败 / 建表失败 / 管理员创建失败均会 throw 阻断启动** ——
+ * 让 DB 状态异常在启动阶段尽早暴露,避免"启动了但运行时才报错"。
+ * 仅 pgvector 扩展创建保留 warn(部分托管 PG 禁建扩展,不影响核心)。
  *
  * pg-boss 队列初始化仍由独立 worker 进程(src/worker.ts)负责,不在本文件做。
  */
@@ -30,14 +32,10 @@ export async function register(): Promise<void> {
       `Queue=${dialect === "pg" ? "需运行 pnpm worker" : "disabled(sqlite)"}`,
   );
 
-  try {
-    // 防线 2:变量路径 import,阻止 Turbopack 静态预扫描依赖图。
-    const bootstrapPath = "@/lib/infra/db/bootstrap";
-    const { bootstrapDatabase } = await import(bootstrapPath);
-    await bootstrapDatabase();
-    console.log("[instrumentation] ✅ 数据库就绪(表已建/迁移,管理员已确认)");
-  } catch (e) {
-    console.error("[instrumentation] ❌ 数据库 bootstrap 失败:", e);
-    throw e; // 硬阻断:让 Next 启动失败可见
-  }
+  // 防线 2:变量路径 import,阻止 Turbopack 静态预扫描依赖图。
+  const bootstrapPath = "@/lib/infra/db/bootstrap";
+  const { bootstrapDatabase } = await import(bootstrapPath);
+  // DB 连接/建表/管理员失败均会 throw,直接阻断启动(bootstrap 内部已封装错误信息)。
+  await bootstrapDatabase();
+  console.log("[instrumentation] ✅ 数据库 bootstrap 完成");
 }
