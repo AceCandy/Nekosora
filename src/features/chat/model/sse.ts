@@ -6,25 +6,44 @@
  *
  * SSE 帧格式(见 /api/chat route):
  *   data: {"type":"delta","text":"..."}
+ *   data: {"type":"reasoning","text":"..."}
+ *   data: {"type":"tool_call","toolName":"...","args":{...}}
+ *   data: {"type":"tool_result","toolName":"...","isError":false}
+ *   data: {"type":"search_result","results":[{"title":"...","url":"...","snippet":"..."}]}
  *   data: {"type":"error","error":"..."}
  *   data: {"type":"trace","trace":{...}}
+ *   data: {"type":"title_updated","title":"...","conversationId":"..."}
  *   data: [DONE]
  */
 export interface SSEEvent {
-  type: "delta" | "error" | "trace";
+  type: "delta" | "reasoning" | "tool_call" | "tool_result" | "search_result" | "error" | "trace" | "title_updated";
   text?: string;
+  toolName?: string;
+  args?: unknown;
+  isError?: boolean;
+  results?: { title: string; url: string; snippet: string }[];
   error?: string;
   trace?: {
     totalTokenEstimate?: number;
     sentMessageCount?: number;
     blocks?: { kind: string; title?: string; tokenEstimate?: number }[];
   };
+  /** title_updated:会话自动生成的新标题。 */
+  title?: string;
+  /** title_updated:对应的会话 ID。 */
+  conversationId?: string;
 }
 
 export interface SSEHandlers {
   onDelta: (text: string) => void;
+  onReasoning?: (text: string) => void;
+  onToolCall?: (toolName: string, args: unknown) => void;
+  onToolResult?: (toolName: string, isError: boolean) => void;
+  onSearchResult?: (results: { title: string; url: string; snippet: string }[]) => void;
   onError?: (error: string) => void;
   onTrace?: (trace: SSEEvent["trace"]) => void;
+  /** 会话标题自动生成完成后触发(用于刷新侧栏会话列表)。 */
+  onTitleUpdated?: (title: string, conversationId: string) => void;
 }
 
 /**
@@ -61,10 +80,20 @@ export async function consumeChatSSE(
           const ev = JSON.parse(data) as SSEEvent;
           if (ev.type === "delta" && ev.text !== undefined) {
             handlers.onDelta(ev.text);
+          } else if (ev.type === "reasoning" && ev.text !== undefined) {
+            handlers.onReasoning?.(ev.text);
+          } else if (ev.type === "tool_call" && ev.toolName !== undefined) {
+            handlers.onToolCall?.(ev.toolName, ev.args);
+          } else if (ev.type === "tool_result" && ev.toolName !== undefined) {
+            handlers.onToolResult?.(ev.toolName, ev.isError ?? false);
+          } else if (ev.type === "search_result" && ev.results !== undefined) {
+            handlers.onSearchResult?.(ev.results);
           } else if (ev.type === "error" && ev.error !== undefined) {
             handlers.onError?.(ev.error);
           } else if (ev.type === "trace" && ev.trace !== undefined) {
             handlers.onTrace?.(ev.trace);
+          } else if (ev.type === "title_updated" && ev.title !== undefined && ev.conversationId !== undefined) {
+            handlers.onTitleUpdated?.(ev.title, ev.conversationId);
           }
         } catch {
           /* ignore parse errors */

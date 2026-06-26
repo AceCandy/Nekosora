@@ -12,9 +12,10 @@ import { estimateTokens } from "@/lib/tokens";
 
 const BLOCK_SEPARATOR = "\n\n---\n\n";
 
-/** 从组装后的 messages 推断 trace blocks。 */
+/** 从组装后的 messages 推断 trace blocks。originalMessageCount 为压缩前的消息总数(可选)。 */
 export function buildTrace(
   messages: { role: string; content: string | unknown[] }[],
+  originalMessageCount?: number,
 ): ProcessTrace {
   const blocks: ProcessTraceBlock[] = [];
   let fullCount = 0;
@@ -44,7 +45,8 @@ export function buildTrace(
     mode: "standard",
     totalTokenEstimate: sentTokens,
     sentTokenEstimate: sentTokens,
-    fullMessageCount: fullCount,
+    // fullMessageCount = 压缩前的原始消息数(若提供);否则等于发送数(无压缩)
+    fullMessageCount: originalMessageCount ?? fullCount,
     sentMessageCount: fullCount,
     blocks,
   };

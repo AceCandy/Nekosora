@@ -15,11 +15,13 @@ import { cacheWrap } from "@/lib/infra/cache";
 const PREFERENCE_CAP_CHARS = 400;
 
 export type MemoryScope = "preference" | "profile" | "custom";
+export type MemorySource = "manual" | "ai";
 
 export interface UserMemory {
   id: string;
   scope: MemoryScope;
   content: string;
+  source: MemorySource;
 }
 
 /** 读取用户全部记忆(带 60s 缓存)。 */
@@ -31,7 +33,7 @@ export async function getMemories(userId: string): Promise<UserMemory[]> {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const s = getSchema() as any;
       const rows = await db
-        .select({ id: s.userMemories.id, scope: s.userMemories.scope, content: s.userMemories.content })
+        .select({ id: s.userMemories.id, scope: s.userMemories.scope, content: s.userMemories.content, source: s.userMemories.source })
         .from(s.userMemories)
         .where(eq(s.userMemories.userId, userId));
       return rows as UserMemory[];
@@ -40,12 +42,30 @@ export async function getMemories(userId: string): Promise<UserMemory[]> {
   );
 }
 
-/** 添加一条记忆。 */
+/** 添加一条记忆(手动来源)。 */
 export async function addMemory(userId: string, scope: MemoryScope, content: string): Promise<void> {
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
-  await db.insert(s.userMemories).values({ userId, scope, content });
+  await db.insert(s.userMemories).values({ userId, scope, content, source: "manual" });
+}
+
+/** 更新记忆内容(重新生成 embedding)。 */
+export async function updateMemory(userId: string, memoryId: string, content: string): Promise<void> {
+  const db = await getDb();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const s = getSchema() as any;
+  let embedding = null;
+  try {
+    const { embedText } = await import("@/lib/rag/embedding");
+    embedding = await embedText(content);
+  } catch {
+    /* embedding 不可用时置空 */
+  }
+  await db
+    .update(s.userMemories)
+    .set({ content, embedding })
+    .where(and(eq(s.userMemories.id, memoryId), eq(s.userMemories.userId, userId)));
 }
 
 /** 删除记忆。 */

@@ -4,7 +4,7 @@
  * dialect 差异(PG date_trunc / SQLite strftime)在此封装,业务层不感知。
  * 时间桶粒度:hour(24h 范围)/ day(7d/30d 范围)。
  */
-import { sql, and, gte } from "drizzle-orm";
+import { sql, and, gte, eq } from "drizzle-orm";
 import { getDb, getSchema, isPg } from "@/lib/infra/db";
 
 export type TimeRange = "24h" | "7d" | "30d";
@@ -49,12 +49,14 @@ function bucketExpr(range: TimeRange): unknown {
   return sql`strftime(${fmt}, ${col}, 'unixepoch')`.as("bucket");
 }
 
-/** 时间序列(按桶聚合 calls + tokens)。 */
-export async function getTimeSeries(range: TimeRange): Promise<TimeSeriesPoint[]> {
+/** 时间序列(按桶聚合 calls + tokens)。可选 userId 限定为某用户。 */
+export async function getTimeSeries(range: TimeRange, userId?: string): Promise<TimeSeriesPoint[]> {
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
   const start = rangeStart(range);
+  const conds = [gte(s.usageLogs.createdAt, start)];
+  if (userId) conds.push(eq(s.usageLogs.userId, userId));
 
   const rows = await db
     .select({
@@ -64,7 +66,7 @@ export async function getTimeSeries(range: TimeRange): Promise<TimeSeriesPoint[]
       completionTokens: sql<number>`coalesce(sum(${s.usageLogs.completionTokens}),0)`,
     })
     .from(s.usageLogs)
-    .where(gte(s.usageLogs.createdAt, start))
+    .where(and(...conds))
     .groupBy(sql`bucket`)
     .orderBy(sql`bucket`);
 
@@ -76,12 +78,14 @@ export async function getTimeSeries(range: TimeRange): Promise<TimeSeriesPoint[]
   }));
 }
 
-/** 模型分布(范围内)。 */
-export async function getModelBreakdown(range: TimeRange): Promise<ModelBreakdownRow[]> {
+/** 模型分布(范围内)。可选 userId 限定为某用户。 */
+export async function getModelBreakdown(range: TimeRange, userId?: string): Promise<ModelBreakdownRow[]> {
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
   const start = rangeStart(range);
+  const conds = [gte(s.usageLogs.createdAt, start)];
+  if (userId) conds.push(eq(s.usageLogs.userId, userId));
 
   const rows = await db
     .select({
@@ -91,7 +95,7 @@ export async function getModelBreakdown(range: TimeRange): Promise<ModelBreakdow
       completionTokens: sql<number>`coalesce(sum(${s.usageLogs.completionTokens}),0)`,
     })
     .from(s.usageLogs)
-    .where(gte(s.usageLogs.createdAt, start))
+    .where(and(...conds))
     .groupBy(s.usageLogs.model)
     .orderBy(sql`count(*) DESC`);
 
@@ -103,12 +107,14 @@ export async function getModelBreakdown(range: TimeRange): Promise<ModelBreakdow
   }));
 }
 
-/** 来源分布(chat vs gateway)。 */
-export async function getSourceBreakdown(range: TimeRange): Promise<SourceBreakdownRow[]> {
+/** 来源分布(chat vs gateway)。可选 userId 限定为某用户。 */
+export async function getSourceBreakdown(range: TimeRange, userId?: string): Promise<SourceBreakdownRow[]> {
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
   const start = rangeStart(range);
+  const conds = [gte(s.usageLogs.createdAt, start)];
+  if (userId) conds.push(eq(s.usageLogs.userId, userId));
 
   const rows = await db
     .select({
@@ -116,7 +122,7 @@ export async function getSourceBreakdown(range: TimeRange): Promise<SourceBreakd
       calls: sql<number>`count(*)`,
     })
     .from(s.usageLogs)
-    .where(and(gte(s.usageLogs.createdAt, start)))
+    .where(and(...conds))
     .groupBy(s.usageLogs.source)
     .orderBy(sql`count(*) DESC`);
 

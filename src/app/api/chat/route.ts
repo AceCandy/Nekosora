@@ -40,6 +40,10 @@ export async function POST(req: NextRequest) {
     templateVars?: Record<string, string>;
     // I-12b:指令卡 ID 列表(用户在 chat 勾选的指令卡,渲染为 system 上下文注入)。
     instructionCardIds?: string[];
+    // P1-6:联网搜索开关(前端 toggle)。on/off。
+    webSearch?: boolean;
+    // P2-10a:挂载的知识库 ID(检索其下文件 chunks)。
+    knowledgeBaseIds?: string[];
   };
   try {
     body = await req.json();
@@ -99,7 +103,13 @@ export async function POST(req: NextRequest) {
   // ===== RAG 检索(三模式:auto / full_context / rag) =====
   let effectiveMessages = body.messages;
   let ragStatus: string | null = null;
-  const fileIds = body.fileIds ?? [];
+  // 合并附件 fileIds + 知识库 fileIds(知识库文件纳入 RAG 检索范围)
+  let fileIds = body.fileIds ?? [];
+  if (body.knowledgeBaseIds && body.knowledgeBaseIds.length > 0) {
+    const { getFileIdsByKnowledgeBases } = await import("@/lib/knowledge-base/service");
+    const kbFileIds = await getFileIdsByKnowledgeBases(body.knowledgeBaseIds);
+    fileIds = [...new Set([...fileIds, ...kbFileIds])];
+  }
 
   // ===== P1-C:vision 图片附件分离 =====
   // 图片不走 RAG 文本提取(已在 extract.ts 标 image_skipped),
@@ -161,13 +171,34 @@ export async function POST(req: NextRequest) {
     ragStatus = built.ragStatus;
   }
 
+  // ===== 联网搜索(可选)=====
+  // 优先用请求体 webSearch(前端 toggle),其次读用户 chat.web_search 设置
+  let searchBundle: { results: { title: string; url: string; snippet: string }[]; hit: boolean } | null = null;
+  const webSearchOn = body.webSearch === true;
+  if (webSearchOn) {
+    const { searchWeb } = await import("@/lib/web-search/service");
+    searchBundle = await searchWeb(userContent);
+  }
+
   // ===== 长期记忆 + 上下文压缩 + 槽位组装 =====
   const { getMemories } = await import("@/lib/memory/service");
   const { maybeCompact } = await import("@/lib/compact/service");
   const { assembleContext } = await import("@/lib/context-assembler");
 
-  // 加载用户记忆(带缓存)
-  const memories = await getMemories(user.id).catch(() => []);
+  // 加载用户记忆(带缓存):preference 全量 + profile/custom 语义召回
+  const allMemories = await getMemories(user.id).catch(() => []);
+  let memories = allMemories;
+  try {
+    const { recallMemories } = await import("@/lib/memory/recall");
+    const recalled = await recallMemories(user.id, userContent);
+    if (recalled.length > 0) {
+      // preference 仍走全量;profile/custom 用召回结果替换
+      const prefs = allMemories.filter((m: { scope: string }) => m.scope === "preference");
+      memories = [...prefs, ...recalled];
+    }
+  } catch {
+    /* 召回失败回退全量 */
+  }
 
   // 上下文压缩(读取历史消息判断是否需要摘要)
   // 取已有消息(从 DB 读当前会话消息路径,用于 CoveragePathHash)
@@ -188,6 +219,16 @@ export async function POST(req: NextRequest) {
     compaction = await maybeCompact(body.conversationId, compactionMsgs);
   } catch (err) {
     console.warn("[chat] 压缩失败,跳过:", err);
+  }
+
+  // ===== 输出方式(会话级:读 conversations.outputModeId,注入对应 systemPrompt)=====
+  let outputModePrompt: string | null = null;
+  if (conv.outputModeId) {
+    const { getOutputMode } = await import("@/lib/output-modes/service");
+    const mode = await getOutputMode(conv.outputModeId).catch(() => null);
+    if (mode?.enabled && mode.systemPrompt) {
+      outputModePrompt = mode.systemPrompt;
+    }
   }
 
   // ===== P2-B:加载 Prompt 模板(若指定)=====
@@ -224,8 +265,13 @@ export async function POST(req: NextRequest) {
       incCardUse(cards.map((c) => c.id)).catch(() => {}); // 异步计数
     }
   }
-  // 合并 template + card 两个 system 来源(均作为额外 system 指令)。
-  const extraSystemParts = [templateSystemPrompt, cardSystemPrompt].filter(
+  // 合并 output_mode + template + card + web_search 四个 system 来源(均作为额外 system 指令)。
+  let searchContext: string | null = null;
+  if (searchBundle?.hit) {
+    const { renderSearchContext } = await import("@/lib/web-search/service");
+    searchContext = renderSearchContext(searchBundle.results);
+  }
+  const extraSystemParts = [outputModePrompt, templateSystemPrompt, cardSystemPrompt, searchContext].filter(
     (p): p is string => p !== null,
   );
   const mergedSystemPrompt =
@@ -244,7 +290,8 @@ export async function POST(req: NextRequest) {
 
   // ===== process_trace:记录实际发送给模型的 prompt 结构 =====
   const { buildTrace } = await import("@/lib/trace");
-  const trace = buildTrace(assembled);
+  // originalMessageCount = 压缩前 DB 中的消息总数(沿当前分支),供 UI 展示压缩前后对比
+  const trace = buildTrace(assembled, compactionMsgs.length);
 
   // 构造调用上下文(用户态,非 key)
   const irRequest: IRRequest = {
@@ -259,6 +306,15 @@ export async function POST(req: NextRequest) {
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       let assistantText = "";
+      let assistantReasoning = "";
+      // 如有联网搜索结果,发 search_result 事件供 UI 展示引用
+      if (searchBundle?.hit) {
+        controller.enqueue(
+          encoder.encode(
+            `data: ${JSON.stringify({ type: "search_result", results: searchBundle.results })}\n\n`,
+          ),
+        );
+      }
       // 如有 RAG 检索结果,先发一个 rag_search 事件供 UI 显示
       if (ragStatus) {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "rag_search", status: ragStatus })}\n\n`));
@@ -288,6 +344,9 @@ export async function POST(req: NextRequest) {
           if (ev.type === "text-delta") {
             assistantText += ev.text;
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "delta", text: ev.text })}\n\n`));
+          } else if (ev.type === "reasoning-delta") {
+            assistantReasoning += ev.text;
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "reasoning", text: ev.text })}\n\n`));
           } else if (ev.type === "finish") {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "finish", usage: ev.usage })}\n\n`));
           } else if (ev.type === "tool-call") {
@@ -317,6 +376,7 @@ export async function POST(req: NextRequest) {
           parentId: userMsgRow?.id ?? null,
           role: "assistant",
           content: assistantText,
+          reasoning: assistantReasoning || null,
           status: assistantText ? "success" : "interrupted",
           processTrace: trace,
         });
@@ -352,6 +412,30 @@ export async function POST(req: NextRequest) {
         }
         // 更新会话时间
         await db.update(s.conversations).set({ updatedAt: new Date() }).where(eq(s.conversations.id, body.conversationId));
+
+        // 异步提取记忆 + 自动生成会话标题(不阻塞响应;失败静默)
+        if (assistantText) {
+          const recentMessages = [...body.messages, { role: "assistant", content: assistantText }]
+            .map((m) => ({ role: m.role, content: typeof m.content === "string" ? m.content : String(m.content ?? "") }));
+          const { extractMemories } = await import("@/lib/memory/extract");
+          extractMemories(user.id, body.conversationId, recentMessages, body.model).catch(() => {});
+
+          // 首条 user 消息触发标题自动生成(service 内判断仅默认标题才生成)。
+          // 通过 onTitle 回调推送 title_updated 帧(fallback 和最终标题各一次),
+          // 由前端 router.refresh 刷新会话列表。
+          try {
+            const { maybeGenerateTitle } = await import("@/lib/conversation-title/service");
+            await maybeGenerateTitle(user.id, body.conversationId, userContent, body.model, (title) => {
+              controller.enqueue(
+                encoder.encode(
+                  `data: ${JSON.stringify({ type: "title_updated", title, conversationId: body.conversationId })}\n\n`,
+                ),
+              );
+            });
+          } catch {
+            /* 标题生成失败不阻断主流程 */
+          }
+        }
         controller.close();
       }
     },

@@ -114,6 +114,10 @@ export const globalProviders = sqliteTable("global_providers", {
   readTimeoutMs: integer("read_timeout_ms"),
   streamIdleTimeoutMs: integer("stream_idle_timeout_ms"),
   headersJson: text("headers_json", { mode: "json" }).$type<Record<string, string>>(),
+  // 最近一次全量密钥检测的聚合健康度(检测所有 key 后回写)。
+  lastHealthCheckedAt: integer("last_health_checked_at", { mode: "timestamp" }),
+  lastHealthyKeyCount: integer("last_healthy_key_count"),
+  lastTotalKeyCount: integer("last_total_key_count"),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(now),
 });
@@ -148,7 +152,6 @@ export const globalRoutes = sqliteTable(
       .notNull()
       .references(() => globalProviders.id, { onDelete: "cascade" }),
     upstreamModelName: text("upstream_model_name").notNull(),
-    protocol: text("protocol").notNull(),
     priority: integer("priority").notNull().default(0),
     weight: integer("weight").notNull().default(1),
     enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
@@ -172,6 +175,10 @@ export const userProviders = sqliteTable("user_providers", {
   baseUrl: text("base_url").notNull(),
   apiKeyEnc: text("api_key_enc").notNull(),
   enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  // 最近一次全量密钥检测的聚合健康度。
+  lastHealthCheckedAt: integer("last_health_checked_at", { mode: "timestamp" }),
+  lastHealthyKeyCount: integer("last_healthy_key_count"),
+  lastTotalKeyCount: integer("last_total_key_count"),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(now),
 });
@@ -239,6 +246,9 @@ export const conversations = sqliteTable(
     title: text("title").notNull().default("新会话"),
     projectId: text("project_id"),
     modelName: text("model_name"),
+    outputModeId: text("output_mode_id"),
+    pinned: integer("pinned", { mode: "boolean" }).notNull().default(false),
+    archived: integer("archived", { mode: "boolean" }).notNull().default(false),
     contextPolicy: text("context_policy", { mode: "json" })
       .$type<import("@/db/types").ContextPolicy>(),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),
@@ -260,6 +270,7 @@ export const messages = sqliteTable(
     runId: text("run_id"),
     role: text("role").notNull(),
     content: text("content", { mode: "json" }).notNull(),
+    reasoning: text("reasoning"),
     contentType: text("content_type").notNull().default("text"),
     branchReason: text("branch_reason"),
     status: text("status").notNull().default("success"),
@@ -402,6 +413,47 @@ export const conversationShares = sqliteTable("conversation_shares", {
 });
 
 // ===========================================================================
+// 图像生成任务
+// ===========================================================================
+
+export const imageJobs = sqliteTable(
+  "image_jobs",
+  {
+    id: text("id").primaryKey().default(uuid),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    model: text("model").notNull(),
+    prompt: text("prompt").notNull(),
+    n: integer("n").notNull().default(1),
+    size: text("size"),
+    status: text("status").notNull().default("pending"),
+    resultUrls: text("result_urls", { mode: "json" }).$type<string[]>(),
+    error: text("error"),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),
+  },
+  (t) => [index("image_jobs_user_idx").on(t.userId)],
+);
+
+// ===========================================================================
+// 知识库(多库 RAG)
+// ===========================================================================
+
+export const knowledgeBases = sqliteTable(
+  "knowledge_bases",
+  {
+    id: text("id").primaryKey().default(uuid),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description"),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),
+  },
+  (t) => [index("knowledge_bases_user_idx").on(t.userId)],
+);
+
+// ===========================================================================
 // 文件 / RAG(向量用 blob,sqlite-vec 扩展运行时加载)
 // ===========================================================================
 
@@ -415,6 +467,7 @@ export const fileObjects = sqliteTable(
     conversationId: text("conversation_id").references(() => conversations.id, {
       onDelete: "set null",
     }),
+    knowledgeBaseId: text("knowledge_base_id"),
     filename: text("filename").notNull(),
     mime: text("mime").notNull(),
     storagePath: text("storage_path").notNull(),
@@ -531,6 +584,26 @@ export const instructionCards = sqliteTable(
   ],
 );
 
+// ===========================================================================
+// 输出方式(管理员预设的会话级输出模式)
+// ===========================================================================
+
+export const outputModes = sqliteTable(
+  "output_modes",
+  {
+    id: text("id").primaryKey().default(uuid),
+    name: text("name").notNull(),
+    description: text("description"),
+    systemPrompt: text("system_prompt").notNull(),
+    icon: text("icon"),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(now),
+  },
+  (t) => [index("output_modes_enabled_idx").on(t.enabled)],
+);
+
 export const userMemories = sqliteTable(
   "user_memories",
   {
@@ -539,6 +612,7 @@ export const userMemories = sqliteTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     scope: text("scope").notNull(),
+    source: text("source").notNull().default("manual"), // "manual" | "ai"
     content: text("content").notNull(),
     embedding: text("embedding", { mode: "json" }).$type<number[]>(),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),

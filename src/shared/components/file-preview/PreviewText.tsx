@@ -29,6 +29,7 @@ export default function PreviewText({ url, filename, mime }: PreviewTextProps) {
 
   useEffect(() => {
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setContent(null);
     setError(null);
     setTruncated(false);

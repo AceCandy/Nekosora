@@ -1,10 +1,11 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import type { ModelCapabilities } from "@/db/types";
 import type { FormDataSerializableAction } from "@/features/providers/types";
 import Modal from "@/shared/ui/Modal";
 import CapabilitiesEditor from "@/features/models/CapabilitiesEditor";
+import UpstreamModelPicker, { type FetchModelsAction } from "@/features/models/UpstreamModelPicker";
 
 export interface GlobalModelInitial {
   name?: string;
@@ -30,6 +31,8 @@ interface ModelFormDialogProps {
   action: FormDataSerializableAction;
   variant: "global" | "byo";
   byoProviders?: { id: string; name: string }[];
+  /** byo 模式下拉取上游模型列表的 action(按 providerId)。 */
+  fetchModelsAction?: FetchModelsAction;
   initial?: GlobalModelInitial | ByoModelInitial;
 }
 
@@ -44,11 +47,19 @@ export default function ModelFormDialog({
   action,
   variant,
   byoProviders,
+  fetchModelsAction,
   initial,
 }: ModelFormDialogProps) {
   const t = useTranslations("models");
   const isEdit = mode === "edit";
+
+  const gi = variant === "global" ? (initial as GlobalModelInitial | undefined) : undefined;
+  const bi = variant === "byo" ? (initial as ByoModelInitial | undefined) : undefined;
+
   const [formKey, setFormKey] = useState(0);
+  // byo 模式下 provider 选择需受控,以便拉取按钮据此请求对应上游。
+  const [byoProviderId, setByoProviderId] = useState(bi?.providerId ?? "");
+  const upstreamInputRef = useRef<HTMLInputElement>(null);
 
   const handleClose = () => {
     onClose();
@@ -59,9 +70,6 @@ export default function ModelFormDialog({
     variant === "global"
       ? isEdit ? t("editGlobalModel") : t("addGlobalModel")
       : isEdit ? t("editByoModel") : t("addByoModel");
-
-  const gi = variant === "global" ? (initial as GlobalModelInitial | undefined) : undefined;
-  const bi = variant === "byo" ? (initial as ByoModelInitial | undefined) : undefined;
 
   return (
     <Modal open={open} onClose={handleClose} title={title}>
@@ -77,7 +85,8 @@ export default function ModelFormDialog({
             <select
               name="providerId"
               required
-              defaultValue={bi?.providerId ?? ""}
+              value={byoProviderId}
+              onChange={(e) => setByoProviderId(e.target.value)}
               className={inputCls}
             >
               <option value="">{t("selectProvider")}</option>
@@ -146,13 +155,23 @@ export default function ModelFormDialog({
               <span className={labelCls}>
                 {t("upstreamModelNameLabel")} <span className="text-[10px] font-normal text-neutral-400">{t("upstreamModelNameHint")}</span>
               </span>
-              <input
-                name="upstreamModelName"
-                required
-                defaultValue={bi?.upstreamModelName ?? ""}
-                className={inputCls}
-                placeholder="gpt-4o-2024-08-06"
-              />
+              <div className="flex items-center gap-2">
+                <input
+                  ref={upstreamInputRef}
+                  name="upstreamModelName"
+                  required
+                  defaultValue={bi?.upstreamModelName ?? ""}
+                  className={inputCls}
+                  placeholder="gpt-4o-2024-08-06"
+                />
+                {fetchModelsAction && (
+                  <UpstreamModelPicker
+                    fetchAction={fetchModelsAction}
+                    providerId={byoProviderId}
+                    inputRef={upstreamInputRef}
+                  />
+                )}
+              </div>
             </label>
           )}
         </div>

@@ -49,8 +49,8 @@ function mapRow(row: any): InstructionCard {
   };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function schema() {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return getSchema() as any;
 }
 

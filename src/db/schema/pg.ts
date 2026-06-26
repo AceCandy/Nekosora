@@ -96,7 +96,7 @@ export const apiKeyKinds = pgEnum("api_key_kind", ["master", "sub"]);
 export const apiKeys = pgTable(
   "api_keys",
   {
-    id: text("id").primaryKey().default("(gen_random_uuid())"),
+    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
@@ -136,7 +136,7 @@ export const providerProtocol = pgEnum("provider_protocol", [
 export const accessScope = pgEnum("access_scope", ["public", "internal"]);
 
 export const globalProviders = pgTable("global_providers", {
-  id: text("id").primaryKey().default("(gen_random_uuid())"),
+  id: text("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   protocol: providerProtocol("protocol").notNull(),
   baseUrl: text("base_url").notNull(),
@@ -148,12 +148,16 @@ export const globalProviders = pgTable("global_providers", {
   readTimeoutMs: integer("read_timeout_ms"),
   streamIdleTimeoutMs: integer("stream_idle_timeout_ms"),
   headersJson: jsonb("headers_json").$type<Record<string, string>>(),
+  // 最近一次全量密钥检测的聚合健康度(检测所有 key 后回写)。
+  lastHealthCheckedAt: timestamp("last_health_checked_at"),
+  lastHealthyKeyCount: integer("last_healthy_key_count"),
+  lastTotalKeyCount: integer("last_total_key_count"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
 export const globalModels = pgTable("global_models", {
-  id: text("id").primaryKey().default("(gen_random_uuid())"),
+  id: text("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull().unique(), // 对外模型名(用户/调用方看到)
   displayName: text("display_name").notNull(),
   vendor: text("vendor"),
@@ -171,7 +175,7 @@ export const globalModels = pgTable("global_models", {
 export const globalRoutes = pgTable(
   "global_routes",
   {
-    id: text("id").primaryKey().default("(gen_random_uuid())"),
+    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
     modelId: text("model_id")
       .notNull()
       .references(() => globalModels.id, { onDelete: "cascade" }),
@@ -179,7 +183,6 @@ export const globalRoutes = pgTable(
       .notNull()
       .references(() => globalProviders.id, { onDelete: "cascade" }),
     upstreamModelName: text("upstream_model_name").notNull(),
-    protocol: providerProtocol("protocol").notNull(),
     priority: integer("priority").notNull().default(0),
     weight: integer("weight").notNull().default(1),
     enabled: boolean("enabled").notNull().default(true),
@@ -194,7 +197,7 @@ export const globalRoutes = pgTable(
 // ===========================================================================
 
 export const userProviders = pgTable("user_providers", {
-  id: text("id").primaryKey().default("(gen_random_uuid())"),
+  id: text("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: text("user_id")
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
@@ -203,12 +206,16 @@ export const userProviders = pgTable("user_providers", {
   baseUrl: text("base_url").notNull(),
   apiKeyEnc: text("api_key_enc").notNull(), // AES-GCM 加密
   enabled: boolean("enabled").notNull().default(true),
+  // 最近一次全量密钥检测的聚合健康度。
+  lastHealthCheckedAt: timestamp("last_health_checked_at"),
+  lastHealthyKeyCount: integer("last_healthy_key_count"),
+  lastTotalKeyCount: integer("last_total_key_count"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
 export const userModels = pgTable("user_models", {
-  id: text("id").primaryKey().default("(gen_random_uuid())"),
+  id: text("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: text("user_id")
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
@@ -231,7 +238,7 @@ export const bindingScope = pgEnum("binding_scope", ["global", "byo"]);
 export const keyModelBindings = pgTable(
   "key_model_bindings",
   {
-    id: text("id").primaryKey().default("(gen_random_uuid())"),
+    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
     keyId: text("key_id")
       .notNull()
       .references(() => apiKeys.id, { onDelete: "cascade" }),
@@ -262,13 +269,16 @@ export const keyModelBindings = pgTable(
 export const conversations = pgTable(
   "conversations",
   {
-    id: text("id").primaryKey().default("(gen_random_uuid())"),
+    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     title: text("title").notNull().default("新会话"),
     projectId: text("project_id"),
     modelName: text("model_name"), // 记录使用的对外模型名
+    outputModeId: text("output_mode_id"), // 当前会话的输出方式(管理员预设的 prompt 模板)
+    pinned: boolean("pinned").notNull().default(false), // 是否置顶
+    archived: boolean("archived").notNull().default(false), // 是否归档
     contextPolicy: jsonb("context_policy").$type<ContextPolicy>(), // per-conversation 快照
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -286,7 +296,7 @@ export const messageStatus = pgEnum("message_status", [
 export const messages = pgTable(
   "messages",
   {
-    id: text("id").primaryKey().default("(gen_random_uuid())"),
+    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
     conversationId: text("conversation_id")
       .notNull()
       .references(() => conversations.id, { onDelete: "cascade" }),
@@ -296,6 +306,7 @@ export const messages = pgTable(
     runId: text("run_id"), // "run_" + uuid
     role: text("role").notNull(), // "user" | "assistant" | "system"
     content: jsonb("content").notNull(), // OpenAI 消息内容格式
+    reasoning: text("reasoning"), // 推理过程(thinking),仅 reasoning 模型产出
     contentType: text("content_type").notNull().default("text"),
     branchReason: text("branch_reason"), // "retry" | "edit" | ...
     status: messageStatus("status").notNull().default("success"),
@@ -313,7 +324,7 @@ export const messages = pgTable(
 );
 
 export const runs = pgTable("runs", {
-  id: text("id").primaryKey().default("(gen_random_uuid())"),
+  id: text("id").primaryKey().default(sql`gen_random_uuid()`),
   runId: text("run_id").notNull().unique(),
   conversationId: text("conversation_id").references(() => conversations.id, {
     onDelete: "cascade",
@@ -330,7 +341,7 @@ export const runs = pgTable("runs", {
 });
 
 export const toolCalls = pgTable("tool_calls", {
-  id: text("id").primaryKey().default("(gen_random_uuid())"),
+  id: text("id").primaryKey().default(sql`gen_random_uuid()`),
   runId: text("run_id")
     .notNull()
     .references(() => runs.runId, { onDelete: "cascade" }),
@@ -345,7 +356,7 @@ export const toolCalls = pgTable("tool_calls", {
 });
 
 export const conversationProjects = pgTable("conversation_projects", {
-  id: text("id").primaryKey().default("(gen_random_uuid())"),
+  id: text("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: text("user_id")
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
@@ -364,7 +375,7 @@ export const conversationProjects = pgTable("conversation_projects", {
 export const mcpServers = pgTable(
   "mcp_servers",
   {
-    id: text("id").primaryKey().default("(gen_random_uuid())"),
+    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
     userId: text("user_id").references(() => user.id, { onDelete: "cascade" }), // null=全局
     name: text("name").notNull(),
     transport: text("transport").notNull(), // "stdio" | "sse" | "http"
@@ -390,7 +401,7 @@ export const mcpServers = pgTable(
 export const artifacts = pgTable(
   "artifacts",
   {
-    id: text("id").primaryKey().default("(gen_random_uuid())"),
+    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
     messageId: text("message_id")
       .notNull()
       .references(() => messages.id, { onDelete: "cascade" }),
@@ -412,7 +423,7 @@ export const artifacts = pgTable(
 );
 
 export const conversationShares = pgTable("conversation_shares", {
-  id: text("id").primaryKey().default("(gen_random_uuid())"),
+  id: text("id").primaryKey().default(sql`gen_random_uuid()`),
   shareId: text("share_id").notNull().unique(),
   conversationId: text("conversation_id")
     .notNull()
@@ -429,19 +440,64 @@ export const conversationShares = pgTable("conversation_shares", {
 });
 
 // ===========================================================================
+// 图像生成任务
+// ===========================================================================
+
+/** 图像生成任务状态。 */
+export type ImageJobStatus = "pending" | "done" | "failed";
+
+export const imageJobs = pgTable(
+  "image_jobs",
+  {
+    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    model: text("model").notNull(),
+    prompt: text("prompt").notNull(),
+    n: integer("n").notNull().default(1),
+    size: text("size"),
+    status: text("status").notNull().default("pending"),
+    resultUrls: jsonb("result_urls").$type<string[]>(),
+    error: text("error"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("image_jobs_user_idx").on(t.userId)],
+);
+
+// ===========================================================================
+// 知识库(多库 RAG)
+// ===========================================================================
+
+export const knowledgeBases = pgTable(
+  "knowledge_bases",
+  {
+    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("knowledge_bases_user_idx").on(t.userId)],
+);
+
+// ===========================================================================
 // 文件 / RAG
 // ===========================================================================
 
 export const fileObjects = pgTable(
   "file_objects",
   {
-    id: text("id").primaryKey().default("(gen_random_uuid())"),
+    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     conversationId: text("conversation_id").references(() => conversations.id, {
       onDelete: "set null",
     }),
+    knowledgeBaseId: text("knowledge_base_id"),
     filename: text("filename").notNull(),
     mime: text("mime").notNull(),
     storagePath: text("storage_path").notNull(),
@@ -466,7 +522,7 @@ export const fileObjects = pgTable(
 export const fileChunks = pgTable(
   "file_chunks",
   {
-    id: text("id").primaryKey().default("(gen_random_uuid())"),
+    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
     fileId: text("file_id")
       .notNull()
       .references(() => fileObjects.id, { onDelete: "cascade" }),
@@ -486,7 +542,7 @@ export const fileChunks = pgTable(
 );
 
 export const contextSnapshots = pgTable("context_snapshots", {
-  id: text("id").primaryKey().default("(gen_random_uuid())"),
+  id: text("id").primaryKey().default(sql`gen_random_uuid()`),
   conversationId: text("conversation_id")
     .notNull()
     .references(() => conversations.id, { onDelete: "cascade" }),
@@ -514,7 +570,7 @@ export const contextSnapshots = pgTable("context_snapshots", {
 export const promptTemplates = pgTable(
   "prompt_templates",
   {
-    id: text("id").primaryKey().default("(gen_random_uuid())"),
+    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
     userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
     scope: text("scope").notNull(), // "builtin" | "private" | "shared"
     name: text("name").notNull(),
@@ -553,7 +609,7 @@ export const promptTemplates = pgTable(
 export const instructionCards = pgTable(
   "instruction_cards",
   {
-    id: text("id").primaryKey().default("(gen_random_uuid())"),
+    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
     userId: text("user_id").references(() => user.id, { onDelete: "cascade" }), // null=builtin
     scope: text("scope").notNull(), // "builtin" | "private" | "shared"
     trigger: text("trigger").notNull(), // slash 命令名(唯一性由应用层在 scope 内保证)
@@ -572,14 +628,35 @@ export const instructionCards = pgTable(
   ],
 );
 
+// ===========================================================================
+// 输出方式(管理员预设的会话级输出模式,如「HTML 渲染」「简洁输出」)
+// ===========================================================================
+
+export const outputModes = pgTable(
+  "output_modes",
+  {
+    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
+    name: text("name").notNull(), // 显示名(如「HTML 渲染」)
+    description: text("description"),
+    systemPrompt: text("system_prompt").notNull(), // 注入会话的 system 指令
+    icon: text("icon"), // 图标名(lucide,可选)
+    enabled: boolean("enabled").notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [index("output_modes_enabled_idx").on(t.enabled)],
+);
+
 export const userMemories = pgTable(
   "user_memories",
   {
-    id: text("id").primaryKey().default("(gen_random_uuid())"),
+    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     scope: text("scope").notNull(), // "preference" | "profile" | "custom"
+    source: text("source").notNull().default("manual"), // "manual" | "ai"(记忆来源)
     content: text("content").notNull(),
     embedding: vector("embedding", { dimensions: 1536 }),
     createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -594,7 +671,7 @@ export const userMemories = pgTable(
 export const systemSettings = pgTable(
   "system_settings",
   {
-    id: text("id").primaryKey().default("(gen_random_uuid())"),
+    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
     namespace: text("namespace").notNull(),
     key: text("key").notNull(),
     value: text("value").notNull(),
@@ -606,7 +683,7 @@ export const systemSettings = pgTable(
 export const userSettings = pgTable(
   "user_settings",
   {
-    id: text("id").primaryKey().default("(gen_random_uuid())"),
+    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
@@ -620,7 +697,7 @@ export const userSettings = pgTable(
 export const usageLogs = pgTable(
   "usage_logs",
   {
-    id: text("id").primaryKey().default("(gen_random_uuid())"),
+    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
     source: text("source").notNull(), // "chat" | "gateway"
     userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
     apiKeyId: text("api_key_id").references(() => apiKeys.id, {

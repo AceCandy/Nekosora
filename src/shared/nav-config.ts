@@ -22,6 +22,8 @@ const myConfigGroup: NavGroup = {
     { href: "/panel/templates", labelKey: "templates" },
     { href: "/panel/cards", labelKey: "cards" },
     { href: "/panel/memory", labelKey: "memory" },
+    { href: "/panel/knowledge", labelKey: "knowledge" },
+    { href: "/panel/usage", labelKey: "myUsage" },
   ],
 };
 
@@ -32,9 +34,11 @@ const globalManagementGroup: NavGroup = {
     { href: "/admin/providers", labelKey: "globalProviders" },
     { href: "/admin/models", labelKey: "globalModels" },
     { href: "/admin/templates", labelKey: "globalTemplates" },
+    { href: "/admin/output-modes", labelKey: "outputModes" },
     { href: "/admin/users", labelKey: "users" },
     { href: "/admin/usage", labelKey: "usage" },
     { href: "/admin/operations", labelKey: "operations" },
+    { href: "/admin/settings", labelKey: "settings" },
   ],
 };
 
@@ -47,8 +51,9 @@ export function panelNavGroups(role: SessionUser["role"]): NavGroup[] {
 }
 
 /**
- * /admin 侧栏分组:进入者必为 admin(由 requireAdmin 守卫),仅展示全局管理项,无个人配置。
+ * /admin 侧栏分组:进入者必为 admin(由 requireAdmin 守卫)。
+ * 个人配置组常驻,与 /panel 下 admin 视角保持一致,避免跨段跳转时左侧 tab 闪失。
  */
 export function adminNavGroups(): NavGroup[] {
-  return [{ items: globalManagementGroup.items }];
+  return [myConfigGroup, globalManagementGroup];
 }

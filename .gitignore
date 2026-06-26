@@ -28,6 +28,7 @@ yarn-error.log*
 !.env.example
 
 # local data (SQLite fallback db, file uploads)
+docs/cankao/
 /data
 /uploads
 
@@ -46,6 +47,9 @@ yarn-error.log*
 .vscode/*
 !.vscode/extensions.json
 .idea
+
+# local CLI 工具产物(个人本地,不入仓库)
+.zcode/
 
 # trellis developer identity (gitignored by convention)
 .trellis/.developer

@@ -11,7 +11,7 @@
  * 用量记录在 streamChat 层(持有 ctx),不塞进 streamText 的 onFinish 闭包。
  * 借鉴 DEEIX:run_id 标识一次生成;用量含 cache 拆分。
  */
-import { streamText } from "ai";
+import { streamText, generateText } from "ai";
 import { resolveRoutes, RoutingError } from "@/lib/routing";
 import { buildLanguageModelWithKey } from "@/lib/providers/registry";
 import { orderedWeightedKeys } from "@/lib/providers/keys";
@@ -33,7 +33,7 @@ export interface StreamChatOptions {
 }
 
 /** 判断错误是否值得路由级故障转移(连接/5xx/限流类),而非确定性失败。 */
-function isFailoverableError(err: unknown): boolean {
+export function isFailoverableError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
   // 参数/模型类错误通常对所有路由都一样,不转移。
   if (/model_not_found|invalid_request|context.*length/i.test(msg)) {
@@ -43,7 +43,7 @@ function isFailoverableError(err: unknown): boolean {
 }
 
 /** 判断错误是否像是"该 key 无效"(应换 key 重试,而非判定整个 provider 不可用)。 */
-function isKeyAuthError(err: unknown): boolean {
+export function isKeyAuthError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
   return /invalid_api_key|authentication|incorrect.*api.*key|401|403/i.test(msg);
 }
@@ -183,6 +183,10 @@ async function* streamWithRoute(
       case "text-delta":
         yield { type: "text-delta", text: part.text };
         break;
+      case "reasoning-delta":
+        // 推理增量(如 deepseek-r1/Claude thinking)透传给 UI。
+        yield { type: "reasoning-delta", text: part.text };
+        break;
       case "tool-call":
         yield {
           type: "tool-call",
@@ -191,6 +195,11 @@ async function* streamWithRoute(
           args: part.input,
         };
         break;
+      case "error":
+        // 上游流式错误必须抛出,交由故障转移逻辑处理;
+        // 否则 step 记录为空,await result.totalUsage 会被 SDK 二次包装成
+        // "No output generated",真实错误(key/模型/额度等)会被吞掉。
+        throw part.error instanceof Error ? part.error : new Error(String(part.error));
       default:
         break; // 其他 part 类型(step-start/tool-call-streaming 等)暂不转发。
     }
@@ -205,6 +214,121 @@ async function* streamWithRoute(
     cachedInputTokens: (finalUsage as { cachedInputTokens?: number }).cachedInputTokens,
   };
   yield { type: "finish", finishReason: await result.finishReason, usage: irUsage };
+}
+
+// ===========================================================================
+// 非流式生成 —— 副任务专用(标题生成 / 记忆抽取等)
+// ===========================================================================
+
+export interface GenerateChatResult {
+  text: string;
+  usage?: IRUsage;
+  /** 失败时为错误信息(生成失败时 text 为空)。 */
+  error?: string;
+}
+
+/**
+ * 非流式生成。与 streamChat 共享路由解析、key 加权、熔断、用量记录,
+ * 但内部用 generateText 一次性返回(不产出可见 reasoning,thinking 默认关闭)。
+ *
+ * 适用于标题生成、记忆抽取等「只要最终文本」的轻量副任务。
+ */
+export async function generateChat(opts: StreamChatOptions): Promise<GenerateChatResult> {
+  const { ctx, request, runId = `run_${crypto.randomUUID()}` } = opts;
+  const startedAt = Date.now();
+  let finalUsage: IRUsage = {};
+  let usedRoute: ResolvedRoute | undefined;
+
+  // metrics 惰性降级,与 streamChat 一致。
+  let releaseStream: () => void = () => {};
+  try {
+    const m = await import("@/lib/infra/metrics");
+    m.acquireStream();
+    releaseStream = m.releaseStream;
+  } catch {
+    /* metrics 不可用,忽略 */
+  }
+
+  let routes: ResolvedRoute[];
+  try {
+    routes = await resolveRoutes(ctx, request.model);
+  } catch (err) {
+    await logUsage({
+      ctx, runId, model: request.model, usage: {},
+      latencyMs: Date.now() - startedAt, status: "failed", errorCode: "routing_error",
+    });
+    return { text: "", error: err instanceof Error ? err.message : "路由解析失败" };
+  }
+
+  let lastError: unknown = null;
+  let succeeded = false;
+  let text = "";
+  try {
+    for (let i = 0; i < routes.length; i++) {
+      const route = routes[i];
+      usedRoute = route;
+      const keySeq = orderedWeightedKeys(route.provider.keys);
+
+      let routeDone = false;
+      for (let k = 0; k < keySeq.length; k++) {
+        const tryKey = keySeq[k].key;
+        try {
+          const model = buildLanguageModelWithKey(route, tryKey);
+          const result = await generateText({
+            model,
+            messages: request.messages as never,
+            temperature: request.temperature,
+            maxOutputTokens: request.max_tokens,
+            topP: request.top_p,
+          });
+          text = result.text;
+          const u = result.usage;
+          finalUsage = {
+            inputTokens: u.inputTokens,
+            outputTokens: u.outputTokens,
+            totalTokens: u.totalTokens,
+            reasoningTokens: (u as { reasoningTokens?: number }).reasoningTokens,
+            cachedInputTokens: (u as { cachedInputTokens?: number }).cachedInputTokens,
+          };
+          succeeded = true;
+          routeDone = true;
+          if (route.provider.id) recordSuccess(route.provider.id);
+          break;
+        } catch (err) {
+          lastError = err;
+          const hasMoreKeys = k < keySeq.length - 1;
+          if (isKeyAuthError(err) && hasMoreKeys) continue;
+          break;
+        }
+      }
+      if (succeeded || routeDone) break;
+
+      if (i === routes.length - 1 || !isFailoverableError(lastError)) break;
+      if (route.provider.id) recordFailure(route.provider.id);
+      console.warn(
+        `[generateChat] 路由转移 ${i + 1}/${routes.length} (model=${route.upstreamModelName}):`,
+        lastError instanceof Error ? lastError.message : lastError,
+      );
+    }
+
+    if (!succeeded) {
+      const errMsg = lastError instanceof Error ? lastError.message : "生成失败";
+      return { text: "", usage: finalUsage, error: errMsg };
+    }
+    return { text, usage: finalUsage };
+  } finally {
+    releaseStream();
+    await logUsage({
+      ctx,
+      runId,
+      model: request.model,
+      providerRef: usedRoute ? `${usedRoute.source}:${usedRoute.provider.id}` : undefined,
+      usage: finalUsage,
+      latencyMs: Date.now() - startedAt,
+      status: succeeded ? "success" : "failed",
+      errorCode: succeeded ? undefined : "generation_failed",
+    });
+  }
 }
 
 // ===========================================================================

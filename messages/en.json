@@ -58,7 +58,11 @@
     "sectionMyConfig": "My Config",
     "sectionGlobalManagement": "Global Management",
     "settings": "Settings",
-    "logout": "Log out"
+    "logout": "Log out",
+    "myUsage": "My usage",
+    "image": "Image",
+    "knowledge": "Knowledge",
+    "outputModes": "Output modes"
   },
   "chat": {
     "welcomeTitle": "Welcome to Nekusora",
@@ -90,7 +94,30 @@
     "attachError": "(failed)",
     "attachRemove": "Remove",
     "attachPreview": "Click to preview",
-    "attachSelectFile": "Upload attachment"
+    "attachSelectFile": "Upload attachment",
+    "edit": "Edit",
+    "editCancel": "Cancel",
+    "editSaveAndResend": "Save & resend",
+    "groupPinned": "Pinned",
+    "groupToday": "Today",
+    "groupYesterday": "Yesterday",
+    "groupEarlier": "Earlier",
+    "groupArchived": "Archived",
+    "searchConversations": "Search conversations…",
+    "actionPin": "Pin",
+    "actionUnpin": "Unpin",
+    "actionArchive": "Archive",
+    "actionUnarchive": "Unarchive",
+    "actionDelete": "Delete",
+    "deleteConfirm": "Delete this conversation? This cannot be undone.",
+    "totalTokens": "{count} tokens total",
+    "webSources": "Sources",
+    "webSearch": "Web",
+    "prevVersion": "Previous version",
+    "nextVersion": "Next version",
+    "knowledgeBase": "Knowledge",
+    "outputMode": "Output mode",
+    "outputModeDefault": "Default"
   },
   "panel": {
     "title": "Dashboard",
@@ -170,7 +197,10 @@
       "addBtn": "Add memory entry",
       "guideTitle": "💡 Guidelines:",
       "guide1": "1. preference: store model tone/style/language prefs. Always injected at the top of context.",
-      "guide2": "2. profile / custom: record job, tech stack, project descriptions and other profile info."
+      "guide2": "2. profile / custom: record job, tech stack, project descriptions and other profile info.",
+      "sourceAi": "AI extracted",
+      "sourceManual": "Manual",
+      "save": "Save"
     },
     "cards": {
       "title": "Instruction Cards",
@@ -195,6 +225,23 @@
       "titlePlaceholder": "Senior Translator",
       "descPlaceholder": "Chinese-English translation, professional tone",
       "contentPlaceholder": "You are a senior translator. Translate user input between Chinese and English..."
+    },
+    "knowledge": {
+      "desc": "Manage knowledge bases, ingest files, and mount them for retrieval in chat.",
+      "createTitle": "Create knowledge base",
+      "namePlaceholder": "Name",
+      "descPlaceholder": "Description (optional)",
+      "createBtn": "Create",
+      "empty": "No knowledge bases yet",
+      "files": "files",
+      "delete": "Delete",
+      "selectFile": "Select a file to attach…",
+      "attach": "Attach",
+      "debugTitle": "Retrieval debug",
+      "debugPlaceholder": "Test query…",
+      "search": "Search",
+      "debugStatus": "Status",
+      "chunks": "chunks"
     }
   },
   "admin": {
@@ -257,6 +304,27 @@
       "thAvgLatency": "Avg latency",
       "providerEmpty": "No provider call data"
     },
+    "settings": {
+      "desc": "Manage system-level model configuration for embedding, web search, title generation, and other auxiliary tasks. Changes take effect immediately after saving.",
+      "configTitle": "Model configuration",
+      "configDesc": "Configure embedding (memory recall / RAG) and web search providers and keys. Takes effect immediately after saving.",
+      "embeddingTitle": "Embedding model",
+      "embeddingProvider": "Upstream provider",
+      "embeddingModel": "Model name",
+      "embeddingHint": "Dimension must be 1536 (e.g. text-embedding-3-small). Requires an openai-protocol provider configured in Global Providers.",
+      "webSearchTitle": "Web search",
+      "webSearchProvider": "Provider",
+      "webSearchApiKey": "API key",
+      "webSearchModel": "Model name (zhipu only)",
+      "webSearchHint": "Tavily/Bocha need no model; zhipu requires one (e.g. glm-4-plus). Empty key disables web search.",
+      "titleTaskTitle": "Title generation model",
+      "titleTaskModel": "Model name",
+      "titleTaskHint": "Model used for auto-generating conversation titles (non-streaming, no reasoning). Leave empty to fall back to the current chat model. Routing is resolved by model name via the gateway.",
+      "configSave": "Save",
+      "configSaved": "Saved",
+      "configSelectProvider": "Select provider…",
+      "configNoProviders": "No enabled providers. Add one in Global Providers first."
+    },
     "models": {
       "title": "Global Models"
     },
@@ -303,7 +371,8 @@
       "thTotalTokens": "Total tokens",
       "thLatency": "Latency",
       "thStatus": "Status",
-      "emptyLogs": "No call logs"
+      "emptyLogs": "No call logs",
+      "myUsage": "My usage"
     },
     "overview": {
       "title": "Admin Overview",
@@ -325,6 +394,41 @@
       "linkUsageTitle": "Usage Dashboard",
       "linkUsageDesc": "View gateway call logs, token consumption and latency details",
       "gatewayHint": "Gateway calls: API base URL is <base>/v1</base>, API keys are managed in <link>Dashboard</link>."
+    },
+    "outputModes": {
+      "desc": "Preset session-level output modes that guide the model to answer in a specific format/style (e.g. an HTML mode makes the model emit renderable HTML). Users pick one in the chat toolbar.",
+      "createTitle": "New output mode",
+      "namePlaceholder": "Name (e.g. HTML render)",
+      "iconPlaceholder": "Icon name (optional, e.g. Code2)",
+      "descPlaceholder": "Short description",
+      "promptPlaceholder": "systemPrompt instruction. E.g. for an HTML mode: Respond with a single self-contained HTML document, all styles inlined in a style tag, no external resources, wrapped in an html code fence.",
+      "createBtn": "Create",
+      "empty": "No output modes yet",
+      "disabled": "disabled",
+      "enabled": "Enabled",
+      "delete": "Delete",
+      "save": "Save",
+      "configuredCount": "Configured output modes: {count}",
+      "addBtn": "Add Output Mode",
+      "editTitle": "Edit Output Mode",
+      "fieldName": "Name",
+      "fieldIcon": "Icon (from Lucide set)",
+      "fieldDesc": "Description",
+      "fieldPrompt": "System Prompt Instruction",
+      "fieldSortOrder": "Sort Order",
+      "fieldEnabled": "Enable this output mode",
+      "colName": "Name",
+      "colIcon": "Icon",
+      "colDesc": "Description",
+      "colPrompt": "System Prompt Instruction",
+      "colSortOrder": "Sort Order",
+      "colStatus": "Status",
+      "colActions": "Actions",
+      "deleteTitle": "Delete Output Mode",
+      "deleteConfirm": "Are you sure you want to delete \"{name}\"?",
+      "deleteWarning": "This action is irreversible and will permanently delete this output mode from the database.",
+      "deleteButton": "Delete",
+      "cancel": "Cancel"
     }
   },
   "errors": {
@@ -431,7 +535,27 @@
     "capReasoningHint": "Supports chain-of-thought reasoning",
     "advancedConfigToggle": "Configure advanced capabilities (JSON)",
     "collapseAdvancedConfig": "Collapse advanced config, use checkboxes",
-    "advancedConfigHint": "💡 JSON must be valid key-value pairs. Syntax errors won't sync to checkboxes."
+    "advancedConfigHint": "💡 JSON must be valid key-value pairs. Syntax errors won't sync to checkboxes.",
+    "fetchModels": "Fetch list",
+    "fetchModelsTitle": "Fetch model list from upstream",
+    "fetchModelsSelectProviderFirst": "Select an upstream provider first",
+    "fetchModelsSearchPlaceholder": "Search model name...",
+    "fetchModelsEmpty": "No models fetched; the upstream may not support /models",
+    "fetchModelsHint": "Fetch real available models from upstream /models and auto-fill on click. You can still type manually if the upstream has no list endpoint.",
+    "fetchError": "Fetch failed",
+    "fetching": "Fetching...",
+    "testModel": "Test",
+    "testModelTitle": "Test model availability (sends one minimal request to upstream, syncs circuit breaker)",
+    "syncCheck": "Check sync",
+    "syncRecheck": "Recheck",
+    "syncCheckTitle": "Fetch upstream model list and compare local routes against it",
+    "syncSynced": "Synced",
+    "syncLocalOnly": "Missing upstream",
+    "syncLocalOnlyHint": "Upstream does not have this model: may be retired or misnamed",
+    "keyValid": "OK",
+    "keyInvalid": "Auth failed",
+    "keyNetworkError": "Network error",
+    "keyUnknownError": "Test failed"
   },
   "providers": {
     "configuredCount": "Configured providers: {count}",
@@ -457,6 +581,8 @@
     "fieldNamePlaceholder": "e.g. OpenAI official",
     "fieldProtocol": "Protocol",
     "fieldBaseUrl": "Base URL",
+    "modelsUrlPreview": "Models URL",
+    "resetDefault": "Reset to default",
     "fieldApiKey": "API Key (supports multi-key weighted load balancing)",
     "cancel": "Cancel",
     "save": "Save",
@@ -472,6 +598,16 @@
     "addApiKey": "Add an API key",
     "keyHintRequired": "Multiple keys for the same upstream are selected by weight; if one fails, the gateway auto-selects the next for retry.",
     "keyHintEdit": "Current key config is safely loaded. You can add, edit or delete rows; all updates on save.",
+    "testKey": "Test",
+    "testKeyTitle": "Test key connectivity (sends one minimal request to upstream)",
+    "testAllKeys": "Test all",
+    "healthCheck": "Check",
+    "healthCheckTitle": "Check health of all keys for this provider (result is saved)",
+    "healthPartial": "partial",
+    "keyValid": "OK",
+    "keyInvalid": "Auth failed",
+    "keyNetworkError": "Network error",
+    "keyUnknownError": "Test failed",
     "protocolOpenaiCompatible": "openai (compatible)"
   },
   "filePreview": {
@@ -505,7 +641,9 @@
     "rendering": "Rendering diagram…",
     "closePanel": "Close panel",
     "renderableCount": "{count} renderable artifacts",
-    "openPanel": "Open panel"
+    "openPanel": "Open panel",
+    "htmlPreview": "HTML preview",
+    "openExternal": "Open in new window"
   },
   "share": {
     "title": "Shared conversation",
@@ -518,5 +656,21 @@
     "assistant": "AI Assistant",
     "generatedFrom": "Generated by",
     "workbench": "AI workbench. Snapshot content is read-only."
+  },
+  "image": {
+    "title": "Image generation",
+    "subtitle": "Pick an image model and generate images from a prompt",
+    "model": "Model",
+    "prompt": "Prompt",
+    "promptPlaceholder": "Describe the image to generate...",
+    "count": "Count",
+    "size": "Size",
+    "generate": "Generate",
+    "generating": "Generating…",
+    "currentResult": "Current result",
+    "history": "History",
+    "emptyHistory": "No images yet",
+    "download": "Download",
+    "noModels": "No image-generation models available. Configure a model with capabilities.imageGeneration."
   }
 }

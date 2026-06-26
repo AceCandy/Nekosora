@@ -9,13 +9,29 @@ import type { Artifact } from "@/features/artifacts/ArtifactPanel";
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+  reasoning?: string; // 推理过程(thinking),仅 reasoning 模型产出
   publicId?: string;
+  /** 工具调用过程(MCP):按发生顺序记录每次调用及结果。 */
+  toolCalls?: ToolCallRecord[];
+  /** 联网搜索引用来源。 */
+  searchResults?: { title: string; url: string; snippet: string }[];
+  /** 版本信息:当前消息的同级兄弟数(>1 时显示切换器)。 */
+  versionInfo?: { current: number; total: number };
   trace?: {
     totalTokenEstimate?: number;
+    sentTokenEstimate?: number;
+    fullMessageCount?: number;
     sentMessageCount?: number;
     blocks?: { kind: string; title?: string; tokenEstimate?: number }[];
   };
   artifacts?: Artifact[]; // 关联的可渲染产物
+}
+
+/** 单次工具调用记录:调用时 status="calling",结果返回后更新。 */
+export interface ToolCallRecord {
+  toolName: string;
+  args?: unknown;
+  status: "calling" | "done" | "error";
 }
 
 /** 附件上传项的状态机。 */
@@ -42,4 +58,19 @@ export interface CardOption {
   trigger: string;
   title: string;
   description?: string | null;
+}
+
+/** 知识库选项(供 chat 选择器用)。 */
+export interface KnowledgeBaseOption {
+  id: string;
+  name: string;
+  fileCount: number;
+}
+
+/** 输出方式选项(管理员预设的会话级输出模式)。 */
+export interface OutputModeOption {
+  id: string;
+  name: string;
+  description?: string | null;
+  icon?: string | null;
 }

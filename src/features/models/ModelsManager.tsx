@@ -8,6 +8,9 @@ import ModelFormDialog, {
   type ByoModelInitial,
 } from "@/features/models/ModelFormDialog";
 import RouteFormDialog from "@/features/models/RouteFormDialog";
+import RouteTestButton, { type RouteTestAction } from "@/features/models/RouteTestButton";
+import ModelSyncChecker, { type SyncStatus } from "@/features/models/ModelSyncChecker";
+import type { FetchModelsAction } from "@/features/models/UpstreamModelPicker";
 import ConfirmDialog from "@/shared/ui/ConfirmDialog";
 import { Plus, Edit2, Play, Square, Trash2, ShieldAlert, GitCommit, ChevronDown, ChevronUp } from "lucide-react";
 import { clsx } from "clsx";
@@ -39,7 +42,6 @@ export interface RouteItem {
   providerId: string;
   providerName: string;
   upstreamModelName: string;
-  protocol: string;
   priority: number;
   weight: number;
   enabled: boolean;
@@ -56,7 +58,6 @@ interface ModelsManagerProps {
   routes?: RouteItem[];
   providers?: ProviderOption[];
   byoProviders?: ProviderOption[];
-  protocols?: { value: string; label: string }[];
 
   createAction: FormDataSerializableAction;
   updateActions: Record<string, FormDataSerializableAction>;
@@ -66,6 +67,12 @@ interface ModelsManagerProps {
   updateRouteActions?: Record<string, FormDataSerializableAction>;
   deleteRouteActions?: Record<string, FormDataSerializableAction>;
   toggleRouteActions?: Record<string, FormDataSerializableAction>;
+  /** 拉取上游模型列表的 action(全局路由 / byo 模型用)。不传则不显示拉取按钮。 */
+  fetchModelsAction?: FetchModelsAction;
+  /** 全局路由测试 action(按 routeId 索引)。不传则路由行不显示测试按钮。 */
+  testRouteActions?: Record<string, RouteTestAction>;
+  /** BYO 模型测试 action(按 modelId 索引)。不传则 byo 行不显示测试按钮。 */
+  testModelActions?: Record<string, RouteTestAction>;
 }
 
 export default function ModelsManager({
@@ -74,7 +81,6 @@ export default function ModelsManager({
   routes,
   providers,
   byoProviders,
-  protocols,
   createAction,
   updateActions,
   deleteActions,
@@ -83,6 +89,9 @@ export default function ModelsManager({
   updateRouteActions,
   deleteRouteActions,
   toggleRouteActions,
+  fetchModelsAction,
+  testRouteActions,
+  testModelActions,
 }: ModelsManagerProps) {
   const t = useTranslations("models");
   const isAdmin = variant === "global";
@@ -196,6 +205,9 @@ export default function ModelsManager({
                         <StatusDot enabled={m.enabled} />
                       </td>
                       <td className="p-3.5 text-right space-x-1 whitespace-nowrap">
+                        {!isAdmin && testModelActions?.[m.id] && (
+                          <RouteTestButton action={testModelActions[m.id]} id={m.id} />
+                        )}
                         {isAdmin && (
                           <Button
                             variant="ghost"
@@ -271,6 +283,8 @@ export default function ModelsManager({
                             onEdit={(rid) => setRouteEditId(rid)}
                             onDelete={(rid) => setRouteDeleteId(rid)}
                             toggleActions={toggleRouteActions}
+                            testActions={testRouteActions}
+                            fetchModelsAction={fetchModelsAction}
                           />
                         </td>
                       </tr>
@@ -290,6 +304,7 @@ export default function ModelsManager({
         variant={variant}
         action={createAction}
         byoProviders={byoProviders}
+        fetchModelsAction={fetchModelsAction}
       />
       {editing && (
         <ModelFormDialog
@@ -299,6 +314,7 @@ export default function ModelsManager({
           variant={variant}
           action={updateActions[editing.id]}
           byoProviders={byoProviders}
+          fetchModelsAction={fetchModelsAction}
           initial={
             isAdmin
               ? ({
@@ -327,7 +343,7 @@ export default function ModelsManager({
           mode="add"
           action={createRouteActions[routeAddModelId]}
           providers={providers ?? []}
-          protocols={protocols}
+          fetchModelsAction={fetchModelsAction}
         />
       )}
       {isAdmin && routeEditing && updateRouteActions?.[routeEditing.id] && (
@@ -337,11 +353,10 @@ export default function ModelsManager({
           mode="edit"
           action={updateRouteActions[routeEditing.id]}
           providers={providers ?? []}
-          protocols={protocols}
+          fetchModelsAction={fetchModelsAction}
           initial={{
             providerId: routeEditing.providerId,
             upstreamModelName: routeEditing.upstreamModelName,
-            protocol: routeEditing.protocol,
             priority: routeEditing.priority,
             weight: routeEditing.weight,
           }}
@@ -401,6 +416,10 @@ interface RouteListPanelProps {
   onEdit: (routeId: string) => void;
   onDelete: (routeId: string) => void;
   toggleActions?: Record<string, FormDataSerializableAction>;
+  /** 每条路由的可用性测试 action(按 routeId)。不传则不显示测试按钮。 */
+  testActions?: Record<string, RouteTestAction>;
+  /** 拉取上游模型列表的 action(同步状态检查用)。不传则不显示检查按钮。 */
+  fetchModelsAction?: FetchModelsAction;
 }
 
 function RouteListPanel({
@@ -409,14 +428,27 @@ function RouteListPanel({
   onEdit,
   onDelete,
   toggleActions,
+  testActions,
+  fetchModelsAction,
 }: RouteListPanelProps) {
   const t = useTranslations("models");
+  // 路由级同步状态:routeId → synced/local-only/unknown。空表示未检查。
+  const [syncMap, setSyncMap] = useState<Record<string, SyncStatus>>({});
   return (
     <div className="space-y-3 p-4 rounded-lg bg-neutral-50/50 dark:bg-neutral-950/20 border border-neutral-200/65 dark:border-neutral-800/80">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
-          {t("routePanelHint")}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
+            {t("routePanelHint")}
+          </span>
+          {fetchModelsAction && routes.length > 0 && (
+            <ModelSyncChecker
+              routes={routes}
+              fetchAction={fetchModelsAction}
+              onResult={setSyncMap}
+            />
+          )}
+        </div>
         <Button
           type="button"
           variant="contrast"
@@ -440,7 +472,6 @@ function RouteListPanel({
               <tr>
                 <th className="p-2.5 font-medium">{t("colUpstreamProvider")}</th>
                 <th className="p-2.5 font-medium">{t("colUpstreamModelName")}</th>
-                <th className="p-2.5 font-medium">{t("colProtocol")}</th>
                 <th className="p-2.5 font-medium text-center">{t("colPriority")}</th>
                 <th className="p-2.5 font-medium text-center">{t("colWeight")}</th>
                 <th className="p-2.5 font-medium">{t("colStatus")}</th>
@@ -454,11 +485,16 @@ function RouteListPanel({
                   className="hover:bg-neutral-50/50 dark:hover:bg-neutral-900/10 transition-colors"
                 >
                   <td className="p-2.5 font-medium text-neutral-850 dark:text-neutral-200">{r.providerName}</td>
-                  <td className="p-2.5 font-mono text-[11px] text-neutral-500 dark:text-neutral-400">{r.upstreamModelName}</td>
-                  <td className="p-2.5 font-mono text-[11px]">
-                    <Badge variant="neutral" className="font-mono">
-                      {r.protocol}
-                    </Badge>
+                  <td className="p-2.5 font-mono text-[11px] text-neutral-500 dark:text-neutral-400">
+                    <span className="inline-flex items-center gap-1.5">
+                      {r.upstreamModelName}
+                      {syncMap[r.id] === "synced" && (
+                        <Badge variant="success">{t("syncSynced")}</Badge>
+                      )}
+                      {syncMap[r.id] === "local-only" && (
+                        <Badge variant="danger" title={t("syncLocalOnlyHint")}>{t("syncLocalOnly")}</Badge>
+                      )}
+                    </span>
                   </td>
                   <td className="p-2.5 text-center font-mono text-[11px] font-semibold">{r.priority}</td>
                   <td className="p-2.5 text-center font-mono text-[11px] font-semibold">{r.weight}</td>
@@ -466,6 +502,9 @@ function RouteListPanel({
                     <StatusDot enabled={r.enabled} />
                   </td>
                   <td className="p-2.5 text-right space-x-1 whitespace-nowrap">
+                    {testActions?.[r.id] && (
+                      <RouteTestButton action={testActions[r.id]} id={r.id} />
+                    )}
                     <Button
                       variant="ghost"
                       size="xs"

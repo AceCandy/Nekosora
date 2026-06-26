@@ -1,0 +1,25 @@
+ALTER TABLE "instruction_cards" ALTER COLUMN "id" SET DEFAULT gen_random_uuid();--> statement-breakpoint
+ALTER TABLE "api_keys" ALTER COLUMN "id" SET DEFAULT gen_random_uuid();--> statement-breakpoint
+ALTER TABLE "artifacts" ALTER COLUMN "id" SET DEFAULT gen_random_uuid();--> statement-breakpoint
+ALTER TABLE "context_snapshots" ALTER COLUMN "id" SET DEFAULT gen_random_uuid();--> statement-breakpoint
+ALTER TABLE "conversation_projects" ALTER COLUMN "id" SET DEFAULT gen_random_uuid();--> statement-breakpoint
+ALTER TABLE "conversation_shares" ALTER COLUMN "id" SET DEFAULT gen_random_uuid();--> statement-breakpoint
+ALTER TABLE "conversations" ALTER COLUMN "id" SET DEFAULT gen_random_uuid();--> statement-breakpoint
+ALTER TABLE "file_chunks" ALTER COLUMN "id" SET DEFAULT gen_random_uuid();--> statement-breakpoint
+ALTER TABLE "file_objects" ALTER COLUMN "id" SET DEFAULT gen_random_uuid();--> statement-breakpoint
+ALTER TABLE "global_models" ALTER COLUMN "id" SET DEFAULT gen_random_uuid();--> statement-breakpoint
+ALTER TABLE "global_providers" ALTER COLUMN "id" SET DEFAULT gen_random_uuid();--> statement-breakpoint
+ALTER TABLE "global_routes" ALTER COLUMN "id" SET DEFAULT gen_random_uuid();--> statement-breakpoint
+ALTER TABLE "key_model_bindings" ALTER COLUMN "id" SET DEFAULT gen_random_uuid();--> statement-breakpoint
+ALTER TABLE "mcp_servers" ALTER COLUMN "id" SET DEFAULT gen_random_uuid();--> statement-breakpoint
+ALTER TABLE "messages" ALTER COLUMN "id" SET DEFAULT gen_random_uuid();--> statement-breakpoint
+ALTER TABLE "prompt_templates" ALTER COLUMN "id" SET DEFAULT gen_random_uuid();--> statement-breakpoint
+ALTER TABLE "runs" ALTER COLUMN "id" SET DEFAULT gen_random_uuid();--> statement-breakpoint
+ALTER TABLE "system_settings" ALTER COLUMN "id" SET DEFAULT gen_random_uuid();--> statement-breakpoint
+ALTER TABLE "tool_calls" ALTER COLUMN "id" SET DEFAULT gen_random_uuid();--> statement-breakpoint
+ALTER TABLE "usage_logs" ALTER COLUMN "id" SET DEFAULT gen_random_uuid();--> statement-breakpoint
+ALTER TABLE "user_memories" ALTER COLUMN "id" SET DEFAULT gen_random_uuid();--> statement-breakpoint
+ALTER TABLE "user_models" ALTER COLUMN "id" SET DEFAULT gen_random_uuid();--> statement-breakpoint
+ALTER TABLE "user_providers" ALTER COLUMN "id" SET DEFAULT gen_random_uuid();--> statement-breakpoint
+ALTER TABLE "user_settings" ALTER COLUMN "id" SET DEFAULT gen_random_uuid();--> statement-breakpoint
+ALTER TABLE "instruction_cards" ALTER COLUMN "id" SET DEFAULT gen_random_uuid();

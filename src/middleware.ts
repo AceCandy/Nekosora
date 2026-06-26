@@ -35,7 +35,10 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
 
   // 已有有效 cookie → 放行,不做任何重写。
   if (existing && locales.includes(existing)) {
-    return NextResponse.next();
+    const res = NextResponse.next();
+    // 注入 pathname,供 server layout(headers().get("x-pathname"))按段分流。
+    res.headers.set("x-pathname", request.nextUrl.pathname);
+    return res;
   }
 
   // 首次访问:按 Accept-Language 选 locale。
@@ -52,6 +55,8 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     ) ?? defaultLocale;
 
   const res = NextResponse.next();
+  // 注入 pathname,供 server layout(headers().get("x-pathname"))按段分流。
+  res.headers.set("x-pathname", request.nextUrl.pathname);
   res.cookies.set("locale", picked, {
     path: "/",
     maxAge: 60 * 60 * 24 * 365, // 1 年,与 setLocale 保持一致

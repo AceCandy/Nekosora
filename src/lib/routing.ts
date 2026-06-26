@@ -118,7 +118,8 @@ async function resolveGlobalRoutes(
     (row: { route: Record<string, unknown>; provider: Record<string, unknown> }) => ({
       modelName: globalModel.name,
       upstreamModelName: row.route.upstreamModelName as string,
-      protocol: row.route.protocol as ResolvedRoute["protocol"],
+      // 协议归属 provider,路由不再单独存(与 BYO 路径一致)。
+      protocol: row.provider.protocol as ResolvedRoute["protocol"],
       provider: toResolvedProvider(row.provider, "apiKeysEnc"),
       priority: row.route.priority as number,
       weight: row.route.weight as number,

@@ -1,55 +1,84 @@
-import Link from "next/link";
 import { getTranslations } from "next-intl/server";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/session";
-import { Plus, Key, Settings2 } from "lucide-react";
+import { getAuth } from "@/auth";
+import { listConversations, togglePinnedConversation, toggleArchivedConversation, deleteConversation } from "@/features/chat/actions/conversations";
+import Sidebar from "@/features/chat/components/Sidebar";
 
+/**
+ * Chat 共享 layout。
+ *
+ * 将历史会话列表及控制面板按钮上移，整体侧栏抽离成 Client Component (Sidebar.tsx)
+ * 以支持移动端响应式折叠抽屉，避免挤压聊天区呼吸感。
+ */
 export default async function ChatLayout({ children }: { children: React.ReactNode }) {
   const user = await requireSession();
   const t = await getTranslations("chat");
   const tc = await getTranslations("nav");
+  const conversations = await listConversations();
+
+  async function handleSignOut() {
+    "use server";
+    const auth = await getAuth();
+    await auth.api.signOut({ headers: await headers() });
+    redirect("/login");
+  }
+
+  async function handleTogglePinned(id: string) {
+    "use server";
+    await togglePinnedConversation(id);
+  }
+
+  async function handleToggleArchived(id: string) {
+    "use server";
+    await toggleArchivedConversation(id);
+  }
+
+  async function handleDelete(id: string) {
+    "use server";
+    await deleteConversation(id);
+  }
+
+  // 会话项映射为 Sidebar 所需结构(含置顶/归档/更新时间)
+  const mappedConversations = conversations.map((c: Record<string, unknown>) => ({
+    id: c.id as string,
+    title: c.title as string,
+    pinned: (c.pinned as boolean) ?? false,
+    archived: (c.archived as boolean) ?? false,
+    updatedAt: c.updatedAt instanceof Date ? c.updatedAt.getTime() : Number(c.updatedAt ?? 0),
+  }));
 
   return (
-    <div className="flex min-h-screen bg-[#fcfdff] text-[#0f121a] dark:bg-[#0d0f14] dark:text-[#f1f3f7] transition-colors duration-200">
-      <aside className="w-60 border-r border-neutral-200 dark:border-neutral-800 p-4 flex flex-col justify-between shrink-0 bg-[#fcfdff] dark:bg-[#090b0e]">
-        <div className="space-y-4">
-          <div className="px-2 py-1">
-            <Link href="/" className="font-bold text-lg tracking-tight text-neutral-900 dark:text-white block">
-              Nekusora
-            </Link>
-            <div className="text-[10px] text-neutral-400 dark:text-neutral-500 font-mono mt-0.5 truncate">
-              {user.email}
-            </div>
-          </div>
-          
-          <Link
-            href="/chat"
-            className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-900 px-3 py-2 text-sm font-semibold text-neutral-700 dark:text-neutral-200 transition-all duration-150 ease-out"
-          >
-            <Plus className="w-4 h-4 text-blue-500" />
-            <span>{t("newConversation")}</span>
-          </Link>
-        </div>
-
-        <div className="pt-3 border-t border-neutral-200 dark:border-neutral-800 space-y-1.5">
-          <Link
-            href="/panel/keys"
-            className="inline-flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs font-medium text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 transition-all duration-150"
-          >
-            <Key className="w-3.5 h-3.5" />
-            <span>{tc("keys")}</span>
-          </Link>
-          {user.role === "admin" && (
-            <Link
-              href="/admin"
-              className="inline-flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs font-medium text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 transition-all duration-150"
-            >
-              <Settings2 className="w-3.5 h-3.5" />
-              <span>{tc("panel")}</span>
-            </Link>
-          )}
-        </div>
-      </aside>
+    <div className="flex h-screen overflow-hidden bg-nebula-white text-space-ink dark:bg-twilight-obsidian dark:text-nebula-silver transition-colors duration-200">
+      <Sidebar
+        userEmail={user.email}
+        conversations={mappedConversations}
+        newConversationText={t("newConversation")}
+        conversationsText={t("conversations")}
+        noConversationsText={t("noConversations")}
+        panelText={tc("panel")}
+        logoutText={tc("logout")}
+        groupPinnedText={t("groupPinned")}
+        groupTodayText={t("groupToday")}
+        groupYesterdayText={t("groupYesterday")}
+        groupEarlierText={t("groupEarlier")}
+        groupArchivedText={t("groupArchived")}
+        searchText={t("searchConversations")}
+        imageText={tc("image")}
+        actionPinText={t("actionPin")}
+        actionUnpinText={t("actionUnpin")}
+        actionArchiveText={t("actionArchive")}
+        actionUnarchiveText={t("actionUnarchive")}
+        actionDeleteText={t("actionDelete")}
+        deleteConfirmText={t("deleteConfirm")}
+        signOutAction={handleSignOut}
+        togglePinnedAction={handleTogglePinned}
+        toggleArchivedAction={handleToggleArchived}
+        deleteAction={handleDelete}
+      />
       <main className="flex-1 flex flex-col min-w-0">{children}</main>
     </div>
   );
 }
+

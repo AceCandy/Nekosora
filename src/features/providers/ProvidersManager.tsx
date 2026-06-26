@@ -2,8 +2,9 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import type { FormDataSerializableAction } from "@/features/providers/types";
-import type { EditorRow } from "@/features/providers/KeyBundleEditor";
+import type { EditorRow, TestKeyAction } from "@/features/providers/KeyBundleEditor";
 import ProviderFormDialog from "@/features/providers/ProviderFormDialog";
+import ProviderHealthButton, { type HealthAction } from "@/features/providers/ProviderHealthButton";
 import ConfirmDialog from "@/shared/ui/ConfirmDialog";
 import { Plus, Edit2, Play, Square, Trash2, ShieldAlert } from "lucide-react";
 import { clsx } from "clsx";
@@ -19,6 +20,12 @@ export interface ProviderItem {
   enabled: boolean;
   /** 回显的明文 key(编辑时用)。 */
   keys: EditorRow[];
+  /** 落库的最近一次健康检测结果(列表回显)。 */
+  health?: {
+    healthy: number | null;
+    total: number | null;
+    checkedAt: Date | null;
+  };
 }
 
 interface ProvidersManagerProps {
@@ -28,6 +35,10 @@ interface ProvidersManagerProps {
   updateActions: Record<string, FormDataSerializableAction>;
   toggleActions: Record<string, FormDataSerializableAction>;
   deleteActions: Record<string, FormDataSerializableAction>;
+  /** 逐 key 测试 action(可选)。传入则编辑弹窗启用密钥测试。 */
+  testKeyAction?: TestKeyAction;
+  /** 全量健康检测 action(按 id 索引)。不传则不显示检测按钮。 */
+  healthActions?: Record<string, HealthAction>;
 }
 
 export default function ProvidersManager({
@@ -37,6 +48,8 @@ export default function ProvidersManager({
   updateActions,
   toggleActions,
   deleteActions,
+  testKeyAction,
+  healthActions,
 }: ProvidersManagerProps) {
   const t = useTranslations("providers");
   const [addOpen, setAddOpen] = useState(false);
@@ -106,6 +119,13 @@ export default function ProvidersManager({
                     <StatusDot enabled={p.enabled} />
                   </td>
                   <td className="p-3.5 text-right space-x-1">
+                    {healthActions?.[p.id] && (
+                      <ProviderHealthButton
+                        action={healthActions[p.id]}
+                        providerId={p.id}
+                        initial={p.health}
+                      />
+                    )}
                     <Button
                       variant="ghost"
                       size="sm"
@@ -168,6 +188,7 @@ export default function ProvidersManager({
         mode="add"
         action={createAction}
         protocols={protocols}
+        testAction={testKeyAction}
       />
 
       {/* 编辑弹窗 */}
@@ -178,6 +199,7 @@ export default function ProvidersManager({
           mode="edit"
           action={updateActions[editing.id]}
           protocols={protocols}
+          testAction={testKeyAction}
           initial={{
             name: editing.name,
             protocol: editing.protocol,

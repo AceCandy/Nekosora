@@ -12,7 +12,12 @@ const S = () => getSchema() as any;
  */
 export async function getMessageSiblings(messagePublicId: string): Promise<{
   current: { publicId: string; parentId: string | null } | null;
-  siblings: { publicId: string; content: string; branchReason: string | null }[];
+  siblings: {
+    publicId: string;
+    content: string;
+    reasoning: string | null;
+    branchReason: string | null;
+  }[];
 }> {
   const user = await requireSession();
   const db = await getDb();
@@ -42,10 +47,16 @@ export async function getMessageSiblings(messagePublicId: string): Promise<{
     publicId: string;
     parentId: string | null;
     content: string;
+    reasoning: string | null;
     role: string;
     branchReason: string | null;
   }[];
-  const siblings = all.filter((m) => m.role === "assistant");
+  const siblings = all.filter((m) => m.role === "assistant").map((m) => ({
+    publicId: m.publicId,
+    content: typeof m.content === "string" ? m.content : String(m.content ?? ""),
+    reasoning: m.reasoning,
+    branchReason: m.branchReason,
+  }));
 
   return {
     current: { publicId: msg.publicId, parentId: msg.parentId },
@@ -123,7 +134,7 @@ export async function editMessage(
   newContent: string,
 ): Promise<{
   newUserPublicId: string;
-  parentId: string | null;
+  parentPublicId: string | null;
   messages: { role: string; content: string }[];
 }> {
   const user = await requireSession();
@@ -135,6 +146,13 @@ export async function editMessage(
 
   const [oldMsg] = await db.select().from(s.messages).where(eq(s.messages.publicId, messagePublicId)).limit(1);
   if (!oldMsg) throw new Error("消息不存在");
+
+  // 找到 parent 的 publicId(与 retryFromMessage 对齐,供前端作为 parentPublicId 传回)
+  let parentPublicId: string | null = null;
+  if (oldMsg.parentId) {
+    const [parent] = await db.select().from(s.messages).where(eq(s.messages.id, oldMsg.parentId)).limit(1);
+    parentPublicId = parent?.publicId ?? null;
+  }
 
   // 构造历史路径(到 oldMsg 的 parent)
   const allMsgs = (await db
@@ -161,7 +179,7 @@ export async function editMessage(
   const newUserPublicId = crypto.randomUUID();
   return {
     newUserPublicId,
-    parentId: oldMsg.parentId,
+    parentPublicId,
     messages: [...pathMsgs.map((m) => ({ role: m.role, content: m.content })), { role: "user", content: newContent }],
   };
 }

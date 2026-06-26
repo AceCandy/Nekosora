@@ -20,6 +20,11 @@ Managed by Trellis. Edits outside this block are preserved; edits inside may be 
 
 <!-- TRELLIS:END -->
 
+## 补充逻辑
+- 日常不需要扫描docs/cankao这个目录下的代码,这里面是参考的开源项目
+- 如果涉及到用户要求参考对应项目的逻辑的时候,优先看这个文件下的项目代码
+
+
 ## Design Context
 
 本项目 **Nekusora (星枢)** 是一套融合了聊天工作台与高可用 API 模型网关的混合型全栈平台。

@@ -1,0 +1,1 @@
+ALTER TABLE "global_routes" DROP COLUMN "protocol";
