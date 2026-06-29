@@ -8,7 +8,7 @@ import FilePreviewModal, { type PreviewableFile } from "@/shared/components/file
 import { useChatRuntime } from "@/features/chat/hooks/useChatRuntime";
 import { useChatAttachments } from "@/features/chat/hooks/useChatAttachments";
 import { useChatScrollController } from "@/features/chat/hooks/useChatScrollController";
-import { setConversationOutputMode } from "@/features/chat/actions/conversations";
+import { setConversationOutputMode, setConversationModel, setConversationWebSearch, setConversationComposerState } from "@/features/chat/actions/conversations";
 import type { ChatMessage, ModelOption, CardOption, KnowledgeBaseOption, OutputModeOption } from "@/features/chat/model/types";
 import { ChatMessageItem } from "./ChatMessageItem";
 
@@ -24,6 +24,14 @@ interface ChatComposerProps {
   outputModes?: OutputModeOption[];
   /** 当前会话已选的输出方式 ID(undefined=新会话未选)。 */
   initialOutputModeId?: string | null;
+  /** 当前会话已选模型名(回填;未传则用列表首项)。 */
+  initialModelName?: string | null;
+  /** 当前会话联网状态(回填)。 */
+  initialWebSearch?: boolean;
+  /** 当前会话已选指令卡(回填)。 */
+  initialCardIds?: string[];
+  /** 当前会话已选知识库(回填)。 */
+  initialKbIds?: string[];
   /** 当前会话 ID(切换输出方式时持久化用;新会话无)。 */
   conversationId?: string;
   initialMessages?: ChatMessage[];
@@ -41,21 +49,26 @@ export default function ChatComposer({
   knowledgeBases = [],
   outputModes = [],
   initialOutputModeId = null,
+  initialModelName = null,
+  initialWebSearch = false,
+  initialCardIds = [],
+  initialKbIds = [],
   conversationId: initialConvId,
   initialMessages = [],
 }: ChatComposerProps) {
   // 内部 state 存 name(对外 ID),保证 API 调用稳定;UI 渲染时再映射到 displayName
   const t = useTranslations("chat");
-  const [model, setModel] = useState(models[0]?.name ?? "");
+  const [model, setModel] = useState(initialModelName && models.some((m) => m.name === initialModelName) ? initialModelName : (models[0]?.name ?? ""));
   const [input, setInput] = useState("");
   const [activeArtifact, setActiveArtifact] = useState<Artifact | null>(null);
   const [previewFile, setPreviewFile] = useState<PreviewableFile | null>(null);
-  const [selectedCardIds, setSelectedCardIds] = useState<string[]>([]);
+  const [selectedCardIds, setSelectedCardIds] = useState<string[]>(initialCardIds);
   const [cardPickerOpen, setCardPickerOpen] = useState(false);
-  const [webSearch, setWebSearch] = useState(false);
-  const [selectedKbIds, setSelectedKbIds] = useState<string[]>([]);
+  const [webSearch, setWebSearch] = useState(initialWebSearch);
+  const [selectedKbIds, setSelectedKbIds] = useState<string[]>(initialKbIds);
   const [kbPickerOpen, setKbPickerOpen] = useState(false);
   const [outputModeId, setOutputModeId] = useState<string | null>(initialOutputModeId);
+  const [outputModePickerOpen, setOutputModePickerOpen] = useState(false);
   const [, startModeTransition] = useTransition();
 
   const {
@@ -84,7 +97,7 @@ export default function ChatComposer({
   }, [runtime.streaming]);
 
   const handleSend = () => {
-    runtime.send(input, model, selectedCardIds, webSearch, selectedKbIds);
+    runtime.send(input, model, selectedCardIds, webSearch, selectedKbIds, { outputModeId });
     setInput("");
   };
 
@@ -102,6 +115,50 @@ export default function ChatComposer({
         }
       });
     }
+  };
+
+  // 切换模型:本地立即更新 + 持久化到会话(已有会话时)
+  const handleModelChange = (next: string) => {
+    setModel(next);
+    const convId = runtime.conversationId ?? initialConvId;
+    if (convId) {
+      startModeTransition(async () => {
+        try {
+          await setConversationModel(convId, next);
+        } catch (err) {
+          console.error("set model failed:", err);
+        }
+      });
+    }
+  };
+
+  // 切换联网:本地立即更新 + 持久化到会话(已有会话时)
+  const handleWebSearchToggle = () => {
+    const next = !webSearch;
+    setWebSearch(next);
+    const convId = runtime.conversationId ?? initialConvId;
+    if (convId) {
+      startModeTransition(async () => {
+        try {
+          await setConversationWebSearch(convId, next);
+        } catch (err) {
+          console.error("set web search failed:", err);
+        }
+      });
+    }
+  };
+
+  // 指令卡 / 知识库变化后,整体写回 composerState(已有会话时)
+  const persistComposerState = (nextCards: string[], nextKbs: string[]) => {
+    const convId = runtime.conversationId ?? initialConvId;
+    if (!convId) return;
+    startModeTransition(async () => {
+      try {
+        await setConversationComposerState(convId, { cardIds: nextCards, kbIds: nextKbs });
+      } catch (err) {
+        console.error("set composer state failed:", err);
+      }
+    });
   };
 
   if (models.length === 0) {
@@ -163,7 +220,7 @@ export default function ChatComposer({
             <div className="flex items-center gap-2 mb-2 flex-wrap">
               <select
                 value={model}
-                onChange={(e) => setModel(e.target.value)}
+                onChange={(e) => handleModelChange(e.target.value)}
                 className="rounded-md border border-morning-mist dark:border-deep-space bg-white dark:bg-space-ink px-3 py-1.5 text-xs font-semibold text-neutral-700 dark:text-neutral-200 focus:outline-none focus:border-sora-blue dark:focus:border-sora-blue transition-colors cursor-pointer"
                 aria-label="选择对话模型"
               >
@@ -226,9 +283,11 @@ export default function ChatComposer({
                               key={c.id}
                               type="button"
                               onClick={() =>
-                                setSelectedCardIds((prev) =>
-                                  checked ? prev.filter((id) => id !== c.id) : [...prev, c.id],
-                                )
+                                setSelectedCardIds((prev) => {
+                                  const next = checked ? prev.filter((id) => id !== c.id) : [...prev, c.id];
+                                  persistComposerState(next, selectedKbIds);
+                                  return next;
+                                })
                               }
                               className={clsx(
                                 "w-full text-left rounded px-2 py-1.5 text-xs transition-colors flex items-start gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue",
@@ -259,7 +318,7 @@ export default function ChatComposer({
               {/* 联网搜索 toggle */}
               <button
                 type="button"
-                onClick={() => setWebSearch((v) => !v)}
+                onClick={handleWebSearchToggle}
                 className={clsx(
                   "inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-semibold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer",
                   webSearch
@@ -305,9 +364,11 @@ export default function ChatComposer({
                               key={kb.id}
                               type="button"
                               onClick={() =>
-                                setSelectedKbIds((prev) =>
-                                  checked ? prev.filter((id) => id !== kb.id) : [...prev, kb.id],
-                                )
+                                setSelectedKbIds((prev) => {
+                                  const next = checked ? prev.filter((id) => id !== kb.id) : [...prev, kb.id];
+                                  persistComposerState(selectedCardIds, next);
+                                  return next;
+                                })
                               }
                               className={clsx(
                                 "w-full text-left rounded px-2 py-1.5 text-xs transition-colors flex items-start gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer",
@@ -333,28 +394,73 @@ export default function ChatComposer({
               )}
 
               {/* 输出方式(会话级,写入会话记忆) */}
-              {outputModes.map((m) => {
-                const isSelected = outputModeId === m.id;
-                return (
+              {outputModes.length > 0 && (
+                <div className="relative">
                   <button
-                    key={m.id}
                     type="button"
-                    onClick={() => handleOutputModeChange(isSelected ? "" : m.id)}
+                    onClick={() => setOutputModePickerOpen((v) => !v)}
                     className={clsx(
                       "inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-semibold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer",
-                      isSelected
-                        ? "border-sora-blue/30 bg-sora-blue/[0.04] text-sora-blue"
-                        : "border-morning-mist dark:border-deep-space bg-white dark:bg-space-ink text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900",
+                      outputModeId
+                        ? "border-transparent bg-sora-blue/[0.04] text-sora-blue hover:bg-sora-blue/[0.08]"
+                        : "border-transparent bg-transparent text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900",
                     )}
-                    title={m.description ?? m.name}
-                    aria-pressed={isSelected}
-                    aria-label={m.name}
+                    title={t("outputMode")}
+                    aria-haspopup="listbox"
+                    aria-expanded={outputModePickerOpen}
+                    aria-label={t("outputMode")}
                   >
                     <Wand2 className="w-3.5 h-3.5" aria-hidden="true" />
-                    <span>{m.name}</span>
+                    <span>
+                      {outputModeId
+                        ? (outputModes.find((m) => m.id === outputModeId)?.name ?? t("outputMode"))
+                        : t("outputMode")}
+                    </span>
                   </button>
-                );
-              })}
+
+                  {outputModePickerOpen && (
+                    <>
+                      {/* 点击外部关闭 */}
+                      <div
+                        className="fixed inset-0 z-20"
+                        onClick={() => setOutputModePickerOpen(false)}
+                        aria-hidden="true"
+                      />
+                      <div className="absolute z-30 mt-1 w-64 max-h-72 overflow-y-auto rounded-md border border-morning-mist dark:border-deep-space bg-white dark:bg-space-ink shadow-lg p-1">
+                        {outputModes.map((m) => {
+                          const isSelected = outputModeId === m.id;
+                          return (
+                            <button
+                              key={m.id}
+                              type="button"
+                              onClick={() => {
+                                handleOutputModeChange(isSelected ? "" : m.id);
+                                setOutputModePickerOpen(false);
+                              }}
+                              className={clsx(
+                                "w-full text-left rounded px-2 py-1.5 text-xs transition-colors flex items-start gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer",
+                                isSelected
+                                  ? "bg-sora-blue/[0.06] text-sora-blue"
+                                  : "text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900",
+                              )}
+                            >
+                              <span className={clsx("mt-0.5 shrink-0", isSelected ? "opacity-100" : "opacity-30")} aria-hidden="true">
+                                {isSelected ? "✓" : "○"}
+                              </span>
+                              <span className="min-w-0">
+                                <span className="font-semibold block truncate">{m.name}</span>
+                                {m.description && (
+                                  <span className="text-[10px] text-neutral-400 block truncate">{m.description}</span>
+                                )}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
 
               {/* 已选指令卡 chip */}
               {selectedCardIds.map((id) => {
@@ -368,7 +474,13 @@ export default function ChatComposer({
                     <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
                     <span className="max-w-[100px] truncate">{card.title}</span>
                     <button
-                      onClick={() => setSelectedCardIds((prev) => prev.filter((x) => x !== id))}
+                      onClick={() =>
+                        setSelectedCardIds((prev) => {
+                          const next = prev.filter((x) => x !== id);
+                          persistComposerState(next, selectedKbIds);
+                          return next;
+                        })
+                      }
                       className="hover:opacity-75 p-1.5 -m-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sora-blue rounded-full cursor-pointer"
                       title={t("attachRemove")}
                       aria-label="移除指令卡"

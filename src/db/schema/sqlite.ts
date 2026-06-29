@@ -247,6 +247,9 @@ export const conversations = sqliteTable(
     projectId: text("project_id"),
     modelName: text("model_name"),
     outputModeId: text("output_mode_id"),
+    webSearch: integer("web_search", { mode: "boolean" }).notNull().default(false),
+    composerState: text("composer_state", { mode: "json" })
+      .$type<import("@/db/types").ComposerState>(),
     pinned: integer("pinned", { mode: "boolean" }).notNull().default(false),
     archived: integer("archived", { mode: "boolean" }).notNull().default(false),
     contextPolicy: text("context_policy", { mode: "json" })

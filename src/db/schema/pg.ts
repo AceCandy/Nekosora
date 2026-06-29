@@ -277,6 +277,8 @@ export const conversations = pgTable(
     projectId: text("project_id"),
     modelName: text("model_name"), // 记录使用的对外模型名
     outputModeId: text("output_mode_id"), // 当前会话的输出方式(管理员预设的 prompt 模板)
+    webSearch: boolean("web_search").notNull().default(false), // 当前会话是否启用联网搜索
+    composerState: jsonb("composer_state").$type<import("@/db/types").ComposerState>(), // 指令卡 / 知识库等数组型会话状态
     pinned: boolean("pinned").notNull().default(false), // 是否置顶
     archived: boolean("archived").notNull().default(false), // 是否归档
     contextPolicy: jsonb("context_policy").$type<ContextPolicy>(), // per-conversation 快照

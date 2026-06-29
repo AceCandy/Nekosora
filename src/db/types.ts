@@ -25,6 +25,12 @@ export interface ContextPolicy {
   compactPreserveRecentTurns?: number;
 }
 
+/** 输入区数组型会话状态(指令卡 / 知识库),存于 conversations.composerState。 */
+export interface ComposerState {
+  cardIds?: string[];
+  kbIds?: string[];
+}
+
 export interface TokenUsage {
   promptTokens?: number;
   completionTokens?: number;

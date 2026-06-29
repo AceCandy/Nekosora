@@ -65,13 +65,30 @@ export async function listConversations() {
     .orderBy(desc(S().conversations.updatedAt));
 }
 
-/** 创建新会话。 */
-export async function createConversation(modelName?: string) {
+/** 新会话首次发送时携带的输入区状态(已选输出方式 / 联网 / 指令卡 / 知识库)。 */
+export interface CreateConversationOptions {
+  outputModeId?: string | null;
+  webSearch?: boolean;
+  cardIds?: string[];
+  kbIds?: string[];
+}
+
+/** 创建新会话(可选带入首次发送时的输入区状态)。 */
+export async function createConversation(modelName?: string, options?: CreateConversationOptions) {
   const user = await requireSession();
   const db = await getDb();
   const [row] = await db
     .insert(S().conversations)
-    .values({ userId: user.id, title: "新会话", modelName: modelName ?? null })
+    .values({
+      userId: user.id,
+      title: "新会话",
+      modelName: modelName ?? null,
+      outputModeId: options?.outputModeId ?? null,
+      webSearch: options?.webSearch ?? false,
+      composerState: options && (options.cardIds?.length || options.kbIds?.length)
+        ? { cardIds: options.cardIds, kbIds: options.kbIds }
+        : null,
+    })
     .returning({ id: S().conversations.id });
   revalidatePath("/chat", "layout");
   return row.id as string;
@@ -105,33 +122,101 @@ export async function toggleArchivedConversation(id: string) {
   revalidatePath("/chat", "layout");
 }
 
-/** 设置会话的输出方式(null 表示清除,回到普通对话)。 */
-export async function setConversationOutputMode(conversationId: string, outputModeId: string | null) {
-  const user = await requireSession();
+/** 会话级输入区状态聚合视图(供 SSR 回填选择器)。 */
+export interface ConversationComposerState {
+  modelName: string | null;
+  outputModeId: string | null;
+  webSearch: boolean;
+  cardIds: string[];
+  kbIds: string[];
+}
+
+/** 校验当前用户对会话的属主关系,返回是否通过。 */
+async function assertConversationOwner(conversationId: string, userId: string) {
   const db = await getDb();
   const [conv] = await db
     .select({ userId: S().conversations.userId })
     .from(S().conversations)
     .where(eq(S().conversations.id, conversationId))
     .limit(1);
-  if (!conv || conv.userId !== user.id) throw new Error("无权操作");
+  return !!conv && conv.userId === userId;
+}
+
+/** 设置会话的输出方式(null 表示清除,回到普通对话)。 */
+export async function setConversationOutputMode(conversationId: string, outputModeId: string | null) {
+  const user = await requireSession();
+  if (!(await assertConversationOwner(conversationId, user.id))) throw new Error("无权操作");
+  const db = await getDb();
   await db
     .update(S().conversations)
-    .set({ outputModeId: outputModeId })
+    .set({ outputModeId })
     .where(eq(S().conversations.id, conversationId));
 }
 
-/** 读取会话当前选定的输出方式 ID(供历史会话恢复选择器状态)。 */
-export async function getConversationOutputMode(conversationId: string): Promise<string | null> {
+/** 设置会话使用的对外模型名(切换模型时落库)。 */
+export async function setConversationModel(conversationId: string, modelName: string) {
+  const user = await requireSession();
+  if (!(await assertConversationOwner(conversationId, user.id))) throw new Error("无权操作");
+  const db = await getDb();
+  await db
+    .update(S().conversations)
+    .set({ modelName })
+    .where(eq(S().conversations.id, conversationId));
+}
+
+/** 设置会话是否启用联网搜索。 */
+export async function setConversationWebSearch(conversationId: string, enabled: boolean) {
+  const user = await requireSession();
+  if (!(await assertConversationOwner(conversationId, user.id))) throw new Error("无权操作");
+  const db = await getDb();
+  await db
+    .update(S().conversations)
+    .set({ webSearch: enabled })
+    .where(eq(S().conversations.id, conversationId));
+}
+
+/** 设置会话的指令卡 / 知识库选择(整体替换 composerState)。 */
+export async function setConversationComposerState(
+  conversationId: string,
+  state: { cardIds?: string[]; kbIds?: string[] },
+) {
+  const user = await requireSession();
+  if (!(await assertConversationOwner(conversationId, user.id))) throw new Error("无权操作");
+  const db = await getDb();
+  await db
+    .update(S().conversations)
+    .set({ composerState: state })
+    .where(eq(S().conversations.id, conversationId));
+}
+
+/** 一次性读回会话的输入区状态(模型 / 输出方式 / 联网 / 指令卡 / 知识库),供 SSR 回填。 */
+export async function getConversationComposerState(
+  conversationId: string,
+): Promise<ConversationComposerState> {
   const user = await requireSession();
   const db = await getDb();
   const [conv] = await db
-    .select({ userId: S().conversations.userId, outputModeId: S().conversations.outputModeId })
+    .select({
+      userId: S().conversations.userId,
+      modelName: S().conversations.modelName,
+      outputModeId: S().conversations.outputModeId,
+      webSearch: S().conversations.webSearch,
+      composerState: S().conversations.composerState,
+    })
     .from(S().conversations)
     .where(eq(S().conversations.id, conversationId))
     .limit(1);
-  if (!conv || conv.userId !== user.id) return null;
-  return (conv.outputModeId as string | null) ?? null;
+  if (!conv || conv.userId !== user.id) {
+    return { modelName: null, outputModeId: null, webSearch: false, cardIds: [], kbIds: [] };
+  }
+  const composer = (conv.composerState as { cardIds?: string[]; kbIds?: string[] } | null) ?? {};
+  return {
+    modelName: (conv.modelName as string | null) ?? null,
+    outputModeId: (conv.outputModeId as string | null) ?? null,
+    webSearch: (conv.webSearch as boolean) ?? false,
+    cardIds: composer.cardIds ?? [],
+    kbIds: composer.kbIds ?? [],
+  };
 }
 
 /** 删除会话。 */

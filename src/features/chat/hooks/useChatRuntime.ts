@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createConversation } from "@/features/chat/actions/conversations";
+import { createConversation, type CreateConversationOptions } from "@/features/chat/actions/conversations";
 import { retryFromMessage, editMessage, getMessageSiblings } from "@/features/chat/actions/branch";
 import { consumeChatSSE, handleStreamError } from "@/features/chat/model/sse";
 import type { ChatMessage, ToolCallRecord } from "@/features/chat/model/types";
@@ -132,7 +132,14 @@ export function useChatRuntime({
   }, []);
 
   const send = useCallback(
-    async (text: string, model: string, instructionCardIds?: string[], webSearch?: boolean, knowledgeBaseIds?: string[]) => {
+    async (
+      text: string,
+      model: string,
+      instructionCardIds?: string[],
+      webSearch?: boolean,
+      knowledgeBaseIds?: string[],
+      createOptions?: { outputModeId?: string | null },
+    ) => {
       if (!text.trim() || !model || streaming) return;
       const userMsg: ChatMessage = { role: "user", content: text.trim() };
       const nextMessages = [...messages, userMsg];
@@ -145,7 +152,13 @@ export function useChatRuntime({
       try {
         let convId = conversationId;
         if (!convId) {
-          convId = await createConversation(model);
+          const opts: CreateConversationOptions = {
+            outputModeId: createOptions?.outputModeId,
+            webSearch,
+            cardIds: instructionCardIds,
+            kbIds: knowledgeBaseIds,
+          };
+          convId = await createConversation(model, opts);
           setConversationId(convId);
         }
 

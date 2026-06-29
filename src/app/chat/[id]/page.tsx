@@ -1,5 +1,5 @@
 import { getTranslations } from "next-intl/server";
-import { getVisibleModels, getMessages, getArtifactsByConversation, getConversationOutputMode } from "@/features/chat/actions/conversations";
+import { getVisibleModels, getMessages, getArtifactsByConversation, getConversationComposerState } from "@/features/chat/actions/conversations";
 import { createShare } from "@/features/chat/actions/share";
 import { listMyCards } from "@/features/panel/cards/actions";
 import { listKnowledgeBases } from "@/lib/knowledge-base/service";
@@ -15,14 +15,20 @@ export default async function ChatConversationPage({
 }) {
   const { id } = await params;
   void getTranslations("chat"); // 保持命名空间预热,与 chat/page 行为一致
-  const [{ globals, byos }, msgs, artifactsMap, cards, kbs, outputModes, currentOutputModeId] = await Promise.all([
+  const [{ globals, byos }, msgs, artifactsMap, cards, kbs, outputModes, composerState] = await Promise.all([
     getVisibleModels(),
     getMessages(id).catch(() => []),
     getArtifactsByConversation(id).catch(() => ({})),
     listMyCards(),
     listKnowledgeBases().catch(() => []),
     listEnabledOutputModes().catch(() => []),
-    getConversationOutputMode(id).catch(() => null),
+    getConversationComposerState(id).catch(() => ({
+      modelName: null,
+      outputModeId: null,
+      webSearch: false,
+      cardIds: [],
+      kbIds: [],
+    })),
   ]);
   const models: ModelOption[] = [
     ...globals.map((m: Record<string, unknown>) => ({
@@ -87,7 +93,11 @@ export default async function ChatConversationPage({
           cards={cards}
           knowledgeBases={knowledgeBases}
           outputModes={modes}
-          initialOutputModeId={currentOutputModeId}
+          initialModelName={composerState.modelName}
+          initialOutputModeId={composerState.outputModeId}
+          initialWebSearch={composerState.webSearch}
+          initialCardIds={composerState.cardIds}
+          initialKbIds={composerState.kbIds}
           conversationId={id}
           initialMessages={initialMessages}
         />
