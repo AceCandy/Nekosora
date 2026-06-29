@@ -35,6 +35,13 @@ export async function POST(req: NextRequest) {
     parentPublicId?: string;
     sourcePublicId?: string;
     branchReason?: string;
+    /**
+     * 本轮 user 消息的 publicId。
+     * - send 流程不传:由后端生成并插入新 user 消息。
+     * - edit/retry 流程传入:跳过 user 消息插入(编辑已原地改写 / 重生成复用原 user),
+     *   仅用于 finally 关联 assistant 消息的 parentId。
+     */
+    userPublicId?: string;
     // P2-B:模板 ID + 变量(用户选定模板时传入)。
     templateId?: string;
     templateVars?: Record<string, string>;
@@ -87,18 +94,25 @@ export async function POST(req: NextRequest) {
     sourceIdInternal = p?.id ?? null;
   }
 
-  // user 消息:parentId 指向其父(分支时);sourceId 指向被编辑的原消息
-  const userPublicId = crypto.randomUUID();
-  await db.insert(s.messages).values({
-    conversationId: body.conversationId,
-    publicId: userPublicId,
-    parentId: parentIdInternal,
-    sourceId: sourceIdInternal,
-    branchReason: body.branchReason ?? null,
-    role: "user",
-    content: userContent,
-    status: "success",
-  });
+  // user 消息:
+  // - send 流程(无 userPublicId):生成并插入新 user 消息。
+  // - edit/retry 流程(传入 userPublicId):跳过插入,复用既有的 user 消息。
+  let userPublicId: string;
+  if (body.userPublicId) {
+    userPublicId = body.userPublicId;
+  } else {
+    userPublicId = crypto.randomUUID();
+    await db.insert(s.messages).values({
+      conversationId: body.conversationId,
+      publicId: userPublicId,
+      parentId: parentIdInternal,
+      sourceId: sourceIdInternal,
+      branchReason: body.branchReason ?? null,
+      role: "user",
+      content: userContent,
+      status: "success",
+    });
+  }
 
   // ===== RAG 检索(三模式:auto / full_context / rag) =====
   let effectiveMessages = body.messages;
@@ -307,6 +321,10 @@ export async function POST(req: NextRequest) {
     async start(controller) {
       let assistantText = "";
       let assistantReasoning = "";
+      // 回传本轮 user 消息的 publicId,供前端回填后支持编辑重发。
+      controller.enqueue(
+        encoder.encode(`data: ${JSON.stringify({ type: "user_message", publicId: userPublicId })}\n\n`),
+      );
       // 如有联网搜索结果,发 search_result 事件供 UI 展示引用
       if (searchBundle?.hit) {
         controller.enqueue(

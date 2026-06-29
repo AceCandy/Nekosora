@@ -1,5 +1,5 @@
 "use server";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { requireSession } from "@/lib/session";
 
@@ -125,16 +125,18 @@ export async function retryFromMessage(
 }
 
 /**
- * 编辑用户消息后重新生成:创建一条新 user 消息(sourceId 指向原 user 消息,branchReason="edit"),
- * 返回新消息信息供前端发送。
+ * 编辑用户消息后改写主线:原地修改该 user 消息内容,并递归删除其全部子树
+ * (即原 AI 回答及之后的所有消息)。返回重生成所需的历史路径(不含被改写的消息本身,
+ * 由调用方在 messages 末尾追加新内容)。
+ *
+ * 与分支模型不同:编辑是"改写主线"而非"新建分支",因此被编辑消息之后的内容会被
+ * 物理删除。AI 回答的多版本能力由 regenerate(retry)分支提供。
  */
 export async function editMessage(
   conversationId: string,
   messagePublicId: string,
   newContent: string,
 ): Promise<{
-  newUserPublicId: string;
-  parentPublicId: string | null;
   messages: { role: string; content: string }[];
 }> {
   const user = await requireSession();
@@ -146,40 +148,129 @@ export async function editMessage(
 
   const [oldMsg] = await db.select().from(s.messages).where(eq(s.messages.publicId, messagePublicId)).limit(1);
   if (!oldMsg) throw new Error("消息不存在");
+  if (oldMsg.role !== "user") throw new Error("仅支持编辑用户消息");
 
-  // 找到 parent 的 publicId(与 retryFromMessage 对齐,供前端作为 parentPublicId 传回)
-  let parentPublicId: string | null = null;
-  if (oldMsg.parentId) {
-    const [parent] = await db.select().from(s.messages).where(eq(s.messages.id, oldMsg.parentId)).limit(1);
-    parentPublicId = parent?.publicId ?? null;
-  }
-
-  // 构造历史路径(到 oldMsg 的 parent)
+  // 递归收集 oldMsg 的全部后代(原 AI 回答及其后续整段子树)。
   const allMsgs = (await db
     .select()
     .from(s.messages)
     .where(eq(s.messages.conversationId, conversationId))
     .orderBy(s.messages.createdAt)) as {
     id: string;
-    publicId: string;
     parentId: string | null;
-    role: string;
-    content: string;
   }[];
 
-  const pathMsgs: typeof allMsgs = [];
-  let cursorId = oldMsg.parentId;
-  while (cursorId) {
-    const node = allMsgs.find((m) => m.id === cursorId);
-    if (!node) break;
-    pathMsgs.unshift(node);
-    cursorId = node.parentId;
+  const descendants: string[] = [];
+  const queue = allMsgs.filter((m) => m.parentId === oldMsg.id).map((m) => m.id);
+  while (queue.length > 0) {
+    const cur = queue.shift()!;
+    descendants.push(cur);
+    for (const m of allMsgs) {
+      if (m.parentId === cur) queue.push(m.id);
+    }
+  }
+  // 物理删除后代子树(artifacts 等依赖 messages 的表已配级联或按 messageId 关联,见 schema)
+  if (descendants.length > 0) {
+    await db.delete(s.messages).where(inArray(s.messages.id, descendants));
   }
 
-  const newUserPublicId = crypto.randomUUID();
-  return {
-    newUserPublicId,
-    parentPublicId,
-    messages: [...pathMsgs.map((m) => ({ role: m.role, content: m.content })), { role: "user", content: newContent }],
-  };
+  // 原地改写 user 消息内容,并清空其 fork 记录(改写主线后不再是任何分支的源)
+  await db
+    .update(s.messages)
+    .set({ content: newContent, sourceId: null, branchReason: null })
+    .where(eq(s.messages.id, oldMsg.id));
+
+  // 构造重生成所需历史:沿 parentId 向上回溯到根,再追加改写后的新内容
+  const pathMsgs: { role: string; content: string }[] = [];
+  const pathIds: string[] = [];
+  let cur: string | null = oldMsg.parentId;
+  while (cur) {
+    pathIds.unshift(cur);
+    const node = allMsgs.find((m) => m.id === cur);
+    cur = node?.parentId ?? null;
+  }
+  if (pathIds.length > 0) {
+    const pathRows = (await db
+      .select()
+      .from(s.messages)
+      .where(inArray(s.messages.id, pathIds))) as { id: string; role: string; content: string }[];
+    // 按 pathIds 顺序排列
+    const byId = new Map(pathRows.map((r) => [r.id, r]));
+    for (const id of pathIds) {
+      const r = byId.get(id);
+      if (r) pathMsgs.push({ role: r.role, content: r.content });
+    }
+  }
+  pathMsgs.push({ role: "user", content: newContent });
+
+  return { messages: pathMsgs };
+}
+
+/**
+ * 加载会话的"当前可见主线":从最新消息沿 parentId 回溯到根,得到默认展示的一条分支;
+ * 并为每条 assistant 消息标注其同父兄弟数(>1 时前端显示版本切换器)。
+ *
+ * 编辑改写后旧子树已被物理删除,主线天然唯一;重生成产生的多个 assistant 兄弟里,
+ * 默认取最新一条作为可见版本,其余可经切换器回看。
+ */
+export async function getVisibleBranch(conversationId: string): Promise<{
+  messages: Record<string, unknown>[];
+  /** key = assistant 消息 id,value = {current, total}(基于 createdAt 升序的序号)。 */
+  versionMap: Record<string, { current: number; total: number }>;
+}> {
+  const user = await requireSession();
+  const db = await getDb();
+  const s = S();
+
+  const [conv] = await db.select().from(s.conversations).where(eq(s.conversations.id, conversationId)).limit(1);
+  if (!conv || conv.userId !== user.id) throw new Error("会话不存在或无权访问");
+
+  const allMsgs = (await db
+    .select()
+    .from(s.messages)
+    .where(eq(s.messages.conversationId, conversationId))
+    .orderBy(s.messages.createdAt)) as Record<string, unknown>[];
+
+  if (allMsgs.length === 0) return { messages: [], versionMap: {} };
+
+  // 找最新叶子:没有其他消息以它为 parent 的节点中,createdAt 最大者。
+  const parentIds = new Set(
+    allMsgs.map((m) => m.parentId as string | null).filter((x): x is string => Boolean(x)),
+  );
+  const leaves = allMsgs.filter((m) => !parentIds.has(m.id as string));
+  // 叶子中取 createdAt 最大;无叶子(理论上仅成环)退化为全量最后一条
+  const latest = (leaves.length > 0 ? leaves : allMsgs).reduce((a, b) =>
+    new Date(b.createdAt as string) > new Date(a.createdAt as string) ? b : a,
+  );
+
+  // 从 latest 沿 parentId 回溯到根,收集主线 id 集合
+  const mainLineIds = new Set<string>();
+  let cursor: string | null = latest.id as string;
+  while (cursor) {
+    if (mainLineIds.has(cursor)) break; // 防环
+    mainLineIds.add(cursor);
+    const node = allMsgs.find((m) => m.id === cursor);
+    cursor = (node?.parentId as string | null) ?? null;
+  }
+
+  const mainMessages = allMsgs.filter((m) => mainLineIds.has(m.id as string));
+
+  // 为每个主线上 assistant 的 parent 计算兄弟版本:统计同 parentId 的 assistant 数。
+  // 主线上某 assistant 的可见版本 = 该 parentId 下 createdAt 最大的 assistant。
+  const versionMap: Record<string, { current: number; total: number }> = {};
+  // 按 parent 分组 assistant(全量,不限主线)
+  const siblingsByParent = new Map<string, Record<string, unknown>[]>();
+  for (const m of allMsgs) {
+    if (m.role !== "assistant") continue;
+    const pid = (m.parentId as string | null) ?? "__root__";
+    (siblingsByParent.get(pid) ?? siblingsByParent.set(pid, []).get(pid)!).push(m);
+  }
+  // allMsgs 已按 createdAt 升序;每组里最后一条即最新版本
+  for (const [, siblings] of siblingsByParent) {
+    if (siblings.length <= 1) continue;
+    const latestSibling = siblings[siblings.length - 1];
+    versionMap[latestSibling.id as string] = { current: siblings.length, total: siblings.length };
+  }
+
+  return { messages: mainMessages, versionMap };
 }

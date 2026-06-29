@@ -1,5 +1,6 @@
 import { getTranslations } from "next-intl/server";
-import { getVisibleModels, getMessages, getArtifactsByConversation, getConversationComposerState } from "@/features/chat/actions/conversations";
+import { getVisibleModels, getArtifactsByConversation, getConversationComposerState } from "@/features/chat/actions/conversations";
+import { getVisibleBranch } from "@/features/chat/actions/branch";
 import { createShare } from "@/features/chat/actions/share";
 import { listMyCards } from "@/features/panel/cards/actions";
 import { listKnowledgeBases } from "@/lib/knowledge-base/service";
@@ -15,9 +16,9 @@ export default async function ChatConversationPage({
 }) {
   const { id } = await params;
   void getTranslations("chat"); // 保持命名空间预热,与 chat/page 行为一致
-  const [{ globals, byos }, msgs, artifactsMap, cards, kbs, outputModes, composerState] = await Promise.all([
+  const [{ globals, byos }, branch, artifactsMap, cards, kbs, outputModes, composerState] = await Promise.all([
     getVisibleModels(),
-    getMessages(id).catch(() => []),
+    getVisibleBranch(id).catch(() => ({ messages: [], versionMap: {} })),
     getArtifactsByConversation(id).catch(() => ({})),
     listMyCards(),
     listKnowledgeBases().catch(() => []),
@@ -30,6 +31,8 @@ export default async function ChatConversationPage({
       kbIds: [],
     })),
   ]);
+  const msgs = branch.messages;
+  const versionMap = branch.versionMap as Record<string, { current: number; total: number }>;
   const models: ModelOption[] = [
     ...globals.map((m: Record<string, unknown>) => ({
       name: m.name as string,
@@ -49,6 +52,7 @@ export default async function ChatConversationPage({
     reasoning: (m.reasoning as string | null) ?? undefined,
     publicId: m.publicId as string | undefined,
     trace: m.processTrace as ChatMessage["trace"] | undefined,
+    versionInfo: versionMap[m.id as string],
     artifacts: (artifactsByMsg[m.id as string] ?? []) as
       | { id: string; kind: "code" | "mermaid" | "svg" | "html" | "katex" | "markdown"; title: string; language: string | null; content: string }[]
       | undefined,

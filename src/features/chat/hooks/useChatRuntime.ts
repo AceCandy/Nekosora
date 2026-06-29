@@ -142,6 +142,7 @@ export function useChatRuntime({
     ) => {
       if (!text.trim() || !model || streaming) return;
       const userMsg: ChatMessage = { role: "user", content: text.trim() };
+      const userMsgIdx = messages.length; // 本轮 user 消息在列表中的下标,onUserMessage 据此回填 publicId
       const nextMessages = [...messages, userMsg];
       setMessages(nextMessages);
       setStreaming(true);
@@ -191,6 +192,17 @@ export function useChatRuntime({
           onSearchResult: (results) => setSearchResults(assistantIdx, results),
           onError: (err) => setMessageContent(assistantIdx, `[错误] ${err}`),
           onTrace: (trace) => mergeTrace(assistantIdx, trace),
+          // 回填本轮 user 消息的 publicId,使其支持编辑重发
+          onUserMessage: (publicId) => {
+            setMessages((m) => {
+              if (userMsgIdx >= m.length) return m;
+              if (m[userMsgIdx].role !== "user") return m;
+              if (m[userMsgIdx].publicId) return m;
+              const updated = [...m];
+              updated[userMsgIdx] = { ...updated[userMsgIdx], publicId };
+              return updated;
+            });
+          },
           // 标题生成完成后刷新侧栏会话列表(layout 重新执行 listConversations)
           onTitleUpdated: () => router.refresh(),
         });
@@ -224,15 +236,19 @@ export function useChatRuntime({
 
       try {
         const result = await retryFromMessage(conversationId, assistantPublicId);
-        setMessages((m) => [
-          ...m,
-          { role: "assistant", content: "", publicId: result.newAssistantPublicId },
-        ]);
+        // 原地替换被重生成的 assistant 占位:默认显示新版本,旧版本经切换器回看。
+        // 截断其后内容(以新版本为后续主线的起点)。
         const assistantIdx = (() => {
           let idx = -1;
           setMessages((m) => {
-            idx = m.length - 1;
-            return m;
+            idx = m.findIndex((x) => x.publicId === assistantPublicId);
+            if (idx < 0) return m;
+            const replaced: ChatMessage = {
+              role: "assistant",
+              content: "",
+              publicId: result.newAssistantPublicId,
+            };
+            return [...m.slice(0, idx), replaced];
           });
           return idx;
         })();
@@ -244,7 +260,8 @@ export function useChatRuntime({
             conversationId,
             model,
             messages: result.messages.map((m) => ({ role: m.role, content: m.content })),
-            parentPublicId: result.parentPublicId,
+            // 复用原 user 消息(result.parentPublicId),跳过 user 插入;新 assistant 与原 assistant 同父,构成兄弟版本
+            userPublicId: result.parentPublicId,
             sourcePublicId: assistantPublicId,
             branchReason: "retry",
           }),
@@ -274,6 +291,10 @@ export function useChatRuntime({
    * 编辑用户消息后重新生成:从被编辑消息处派生新分支(branchReason="edit")。
    * 调 editMessage 取历史路径,本地把该 user 消息替换为新内容,追加 assistant 占位后流式发送。
    */
+  /**
+   * 编辑用户消息后改写主线:editMessage 已在服务端原地改写 user 内容并删除其后续子树,
+   * 此处本地同步替换并截断,再调 /api/chat 重新生成(userPublicId 复用被编辑消息,跳过插入)。
+   */
   const editAndResend = useCallback(
     async (userPublicId: string, newContent: string, model: string) => {
       if (!conversationId || streaming || !userPublicId || !newContent.trim()) return;
@@ -283,7 +304,7 @@ export function useChatRuntime({
 
       try {
         const result = await editMessage(conversationId, userPublicId, newContent.trim());
-        // 本地把被编辑的 user 消息替换为新内容,并截断其后所有消息(新分支起点)。
+        // 本地把被编辑的 user 消息替换为新内容,并截断其后所有消息。
         setMessages((m) => {
           const idx = m.findIndex((x) => x.publicId === userPublicId);
           if (idx < 0) return m;
@@ -307,8 +328,8 @@ export function useChatRuntime({
             conversationId,
             model,
             messages: result.messages.map((m) => ({ role: m.role, content: m.content })),
-            parentPublicId: result.parentPublicId,
-            sourcePublicId: userPublicId,
+            // 复用被编辑的 user 消息 publicId,后端据此跳过 user 插入并关联 assistant
+            userPublicId,
             branchReason: "edit",
           }),
           signal: controller.signal,
