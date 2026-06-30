@@ -5,7 +5,8 @@
  * 纯异步函数,无 React 依赖,便于单测。
  *
  * SSE 帧格式(见 /api/chat route):
- *   data: {"type":"user_message","publicId":"..."}   (本轮 user 消息稳定标识,最先发送)
+ *   data: {"type":"user_message","publicId":"..."}       (本轮 user 消息稳定标识,最先发送)
+ *   data: {"type":"assistant_message","publicId":"..."}  (本轮 assistant 占位消息稳定标识)
  *   data: {"type":"delta","text":"..."}
  *   data: {"type":"reasoning","text":"..."}
  *   data: {"type":"tool_call","toolName":"...","args":{...}}
@@ -19,6 +20,7 @@
 export interface SSEEvent {
   type:
     | "user_message"
+    | "assistant_message"
     | "delta"
     | "reasoning"
     | "tool_call"
@@ -42,7 +44,7 @@ export interface SSEEvent {
   title?: string;
   /** title_updated:对应的会话 ID。 */
   conversationId?: string;
-  /** user_message:本轮 user 消息的稳定标识(供前端回填后支持编辑重发)。 */
+  /** user_message / assistant_message:对应消息的稳定标识(供前端回填)。 */
   publicId?: string;
 }
 
@@ -58,6 +60,8 @@ export interface SSEHandlers {
   onTitleUpdated?: (title: string, conversationId: string) => void;
   /** 收到本轮 user 消息的稳定标识(供前端回填后支持编辑重发)。 */
   onUserMessage?: (publicId: string) => void;
+  /** 收到本轮 assistant 占位消息的稳定标识(供前端回填,无需刷新即可显示操作按钮)。 */
+  onAssistantMessage?: (publicId: string) => void;
 }
 
 /**
@@ -110,6 +114,8 @@ export async function consumeChatSSE(
             handlers.onTitleUpdated?.(ev.title, ev.conversationId);
           } else if (ev.type === "user_message" && ev.publicId !== undefined) {
             handlers.onUserMessage?.(ev.publicId);
+          } else if (ev.type === "assistant_message" && ev.publicId !== undefined) {
+            handlers.onAssistantMessage?.(ev.publicId);
           }
         } catch {
           /* ignore parse errors */

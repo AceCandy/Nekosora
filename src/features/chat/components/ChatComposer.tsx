@@ -79,7 +79,7 @@ export default function ChatComposer({
     uploadPending,
   } = useChatAttachments(initialConvId ?? null);
   const runtime = useChatRuntime({
-    initialConversationId: initialConvId ?? null,
+    conversationId: initialConvId ?? null,
     initialMessages,
     uploadAttachments: uploadPending,
   });

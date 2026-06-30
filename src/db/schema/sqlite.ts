@@ -252,6 +252,7 @@ export const conversations = sqliteTable(
       .$type<import("@/db/types").ComposerState>(),
     pinned: integer("pinned", { mode: "boolean" }).notNull().default(false),
     archived: integer("archived", { mode: "boolean" }).notNull().default(false),
+    generating: integer("generating", { mode: "boolean" }).notNull().default(false),
     contextPolicy: text("context_policy", { mode: "json" })
       .$type<import("@/db/types").ContextPolicy>(),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),

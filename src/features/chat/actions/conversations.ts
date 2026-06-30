@@ -58,6 +58,7 @@ export async function listConversations() {
       title: S().conversations.title,
       pinned: S().conversations.pinned,
       archived: S().conversations.archived,
+      generating: S().conversations.generating,
       updatedAt: S().conversations.updatedAt,
     })
     .from(S().conversations)

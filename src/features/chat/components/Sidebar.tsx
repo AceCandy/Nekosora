@@ -2,7 +2,8 @@
 
 import React, { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { Plus, Settings2, MessageSquare, LogOut, Menu, X, Search, Pin, Archive, Trash2, ImageIcon } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { Plus, Settings2, MessageSquare, LogOut, Menu, X, Search, Pin, Archive, Trash2, ImageIcon, Loader2 } from "lucide-react";
 import { clsx } from "clsx";
 
 interface ConversationItem {
@@ -10,6 +11,7 @@ interface ConversationItem {
   title: string;
   pinned: boolean;
   archived: boolean;
+  generating: boolean;
   updatedAt: number;
 }
 
@@ -81,6 +83,13 @@ export default function Sidebar({
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
+  // 当前路由对应的会话 id(/chat/{id});新对话页 /chat 为 null,不高亮历史项。
+  const pathname = usePathname();
+  const activeConvId = useMemo(() => {
+    const m = pathname?.match(/^\/chat\/([^/]+)$/);
+    return m ? m[1] : null;
+  }, [pathname]);
+
   const handleSignOut = (e: React.FormEvent) => {
     e.preventDefault();
     if (isPending) return;
@@ -143,15 +152,33 @@ export default function Sidebar({
     { key: "archived", label: groupArchivedText, items: groups.archived, collapsible: true },
   ].filter((s) => s.items.length > 0);
 
-  const renderItem = (c: ConversationItem) => (
+  const renderItem = (c: ConversationItem) => {
+    const isActive = c.id === activeConvId;
+    return (
     <div key={c.id} className="group relative">
+      {isActive && (
+        <span
+          className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[2px] rounded-full bg-sora-blue"
+          aria-hidden="true"
+        />
+      )}
       <Link
         href={`/chat/${c.id}`}
         onClick={() => setIsOpen(false)}
-        className="inline-flex w-full items-center gap-2 truncate rounded-md px-3 py-2 text-xs font-medium text-neutral-600 dark:text-neutral-450 hover:text-neutral-900 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-900 transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
+        aria-current={isActive ? "page" : undefined}
+        className={clsx(
+          "inline-flex w-full items-center gap-2 truncate rounded-md px-3 py-2 text-xs font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue",
+          isActive
+            ? "bg-sora-blue/[0.08] text-neutral-900 dark:text-white font-semibold"
+            : "text-neutral-600 dark:text-neutral-450 hover:text-neutral-900 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-900",
+        )}
       >
         {c.pinned && <Pin className="w-3 h-3 shrink-0 text-sora-blue" aria-hidden="true" />}
-        <MessageSquare className="w-3.5 h-3.5 shrink-0 opacity-60 text-neutral-400 dark:text-neutral-500" aria-hidden="true" />
+        {c.generating ? (
+          <Loader2 className="w-3.5 h-3.5 shrink-0 text-sora-blue animate-spin" aria-hidden="true" />
+        ) : (
+          <MessageSquare className={clsx("w-3.5 h-3.5 shrink-0", isActive ? "text-sora-blue opacity-100" : "opacity-60 text-neutral-400 dark:text-neutral-500")} aria-hidden="true" />
+        )}
         <span className="truncate">{c.title}</span>
       </Link>
       {/* hover 操作按钮 */}
@@ -201,7 +228,8 @@ export default function Sidebar({
         </>
       )}
     </div>
-  );
+    );
+  };
 
   return (
     <>

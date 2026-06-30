@@ -39,6 +39,8 @@ docs/cankao/
 # drizzle
 /drizzle/pg/meta
 /drizzle/sqlite/meta
+# 迁移基线重建时的本地备份(安全网,确认无误后可删)
+/drizzle/*.backup.*
 
 # typescript
 *.tsbuildinfo

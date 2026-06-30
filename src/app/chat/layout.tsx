@@ -40,12 +40,13 @@ export default async function ChatLayout({ children }: { children: React.ReactNo
     await deleteConversation(id);
   }
 
-  // 会话项映射为 Sidebar 所需结构(含置顶/归档/更新时间)
+  // 会话项映射为 Sidebar 所需结构(含置顶/归档/生成中标记/更新时间)
   const mappedConversations = conversations.map((c: Record<string, unknown>) => ({
     id: c.id as string,
     title: c.title as string,
     pinned: (c.pinned as boolean) ?? false,
     archived: (c.archived as boolean) ?? false,
+    generating: (c.generating as boolean) ?? false,
     updatedAt: c.updatedAt instanceof Date ? c.updatedAt.getTime() : Number(c.updatedAt ?? 0),
   }));
 

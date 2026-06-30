@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Sparkles, RefreshCw, Loader2, User, Pencil, X, Check, Wrench, CheckCircle2, AlertCircle, ExternalLink, ChevronLeft, ChevronRight } from "lucide-react";
+import { Sparkles, RefreshCw, Loader2, User, Pencil, X, Check, Wrench, CheckCircle2, AlertCircle, ExternalLink, ChevronLeft, ChevronRight, Copy, Volume2 } from "lucide-react";
 import { clsx } from "clsx";
 import { Markdown } from "@/shared/components/markdown/Markdown";
 import { ArtifactInline } from "@/features/artifacts/ArtifactInline";
@@ -35,8 +35,6 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
 }: ChatMessageItemProps) {
   const t = useTranslations("chat");
   const { role, content, reasoning, publicId, artifacts, trace, toolCalls, searchResults, versionInfo } = message;
-  // 流式期思考块默认展开,完成后默认折叠(由 details 的 open 属性控制)
-  const reasoningActive = isStreaming && isLast;
   const hasReasoning = Boolean(reasoning);
   // html artifact 直接内联渲染(AMC 式),其余 kind 走折叠条
   const htmlArtifacts = artifacts?.filter((a) => a.kind === "html") ?? [];
@@ -45,6 +43,52 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
   // 用户消息编辑态
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(content);
+
+  // 复制按钮反馈
+  const [copied, setCopied] = useState(false);
+
+  // 思考块展开状态:思考阶段自动展开,正文开始时自动折叠一次,之后由用户自由控制
+  const [reasoningOpen, setReasoningOpen] = useState(false);
+  const userTouchedRef = useRef(false);
+
+  // 重新生成原地替换为新 assistant 占位时,重置思考折叠状态,让新一轮自动控制重新生效
+  useEffect(() => {
+    userTouchedRef.current = false;
+    setReasoningOpen(false);
+  }, [publicId]);
+
+  // 思考阶段(无正文)展开;正文开始吐字时自动折叠一次(仅用户未手动操作时)
+  useEffect(() => {
+    if (userTouchedRef.current) return;
+    if (!hasReasoning) return;
+    const inStream = isStreaming && isLast;
+    if (inStream && !content) {
+      // 仍在思考,展开
+      if (!reasoningOpen) setReasoningOpen(true);
+    } else if (inStream && content) {
+      // 正文已开始,折叠
+      if (reasoningOpen) setReasoningOpen(false);
+    }
+  }, [hasReasoning, isStreaming, isLast, content, reasoningOpen]);
+
+  const handleReasoningToggle = () => {
+    // 仅在用户点击 summary 时标记「已手动操作」,之后自动控制永久让位。
+    // 不能用 details 的 onToggle 标记:受控 <details> 的 open 由程序改变时,
+    // 浏览器同样会派发 toggle 事件,会导致自动展开被误判为用户操作,
+    // 从而使「正文开始 → 自动折叠」失效(思考块展开后收不回)。
+    userTouchedRef.current = true;
+  };
+
+  const handleCopy = async () => {
+    if (!content) return;
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* 剪贴板不可用时静默 */
+    }
+  };
 
   return (
     <div className={clsx("flex gap-4 animate-in fade-in duration-200", role === "user" ? "justify-end" : "justify-start")}>
@@ -130,9 +174,16 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
           <div className="text-neutral-800 dark:text-neutral-200 max-w-[75ch] text-sm leading-relaxed">
             {hasReasoning && (
               <details
-                open={reasoningActive}
+                open={reasoningOpen}
+                onToggle={(e) => {
+                  // 仅同步 DOM 展开态到 state,不在此标记用户操作。
+                  // 用户操作的识别放在 summary 的 onClick 中。
+                  setReasoningOpen((e.currentTarget as HTMLDetailsElement).open);
+                }}
                 className="mb-2 rounded-md border border-morning-mist dark:border-deep-space/80 bg-neutral-50/50 dark:bg-[#0d0f14]/20 overflow-hidden">
-                <summary className="cursor-pointer hover:text-neutral-600 dark:hover:text-neutral-300 px-3 py-1.5 text-[11px] font-mono select-none flex items-center gap-1.5 text-neutral-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue">
+                <summary
+                  onClick={handleReasoningToggle}
+                  className="cursor-pointer hover:text-neutral-600 dark:hover:text-neutral-300 px-3 py-1.5 text-[11px] font-mono select-none flex items-center gap-1.5 text-neutral-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue">
                   <Sparkles className="w-3 h-3" aria-hidden="true" />
                   <span>{t("thinking")}</span>
                 </summary>
@@ -208,12 +259,35 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
               </div>
             )}
             <button
+              onClick={handleCopy}
+              disabled={!content}
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue rounded cursor-pointer disabled:opacity-40"
+              aria-label={t("copy")}
+            >
+              {copied ? (
+                <Check className="w-3 h-3 text-sora-blue" aria-hidden="true" />
+              ) : (
+                <Copy className="w-3 h-3" aria-hidden="true" />
+              )}
+              <span>{copied ? t("copied") : t("copy")}</span>
+            </button>
+            <button
               onClick={() => onRegenerate(publicId, model)}
               className="inline-flex items-center gap-1 text-[11px] font-semibold text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue rounded cursor-pointer"
               aria-label={t("regenerate")}
             >
               <RefreshCw className="w-3 h-3" aria-hidden="true" />
               <span>{t("regenerate")}</span>
+            </button>
+            <button
+              type="button"
+              disabled
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue rounded cursor-not-allowed"
+              aria-label={t("readAloud")}
+              title={t("readAloud")}
+            >
+              <Volume2 className="w-3 h-3" aria-hidden="true" />
+              <span>{t("readAloud")}</span>
             </button>
           </div>
         )}

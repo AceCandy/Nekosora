@@ -317,6 +317,11 @@ export async function POST(req: NextRequest) {
 
   // 流式返回:text/event-stream,每条 text-delta 作为一行
   const encoder = new TextEncoder();
+  // 标记会话为「生成中」(供侧栏转圈标识;在 finally 中清除)
+  await db.update(s.conversations).set({ generating: true }).where(eq(s.conversations.id, body.conversationId));
+  // 提前生成 assistant 消息 publicId:在流首帧回传给前端,使生成期间即可显示操作按钮;
+  // finally 落库时复用同一标识。
+  const assistantPublicId = crypto.randomUUID();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       let assistantText = "";
@@ -324,6 +329,10 @@ export async function POST(req: NextRequest) {
       // 回传本轮 user 消息的 publicId,供前端回填后支持编辑重发。
       controller.enqueue(
         encoder.encode(`data: ${JSON.stringify({ type: "user_message", publicId: userPublicId })}\n\n`),
+      );
+      // 回传本轮 assistant 占位消息的 publicId,供前端回填后无需刷新即可显示操作按钮。
+      controller.enqueue(
+        encoder.encode(`data: ${JSON.stringify({ type: "assistant_message", publicId: assistantPublicId })}\n\n`),
       );
       // 如有联网搜索结果,发 search_result 事件供 UI 展示引用
       if (searchBundle?.hit) {
@@ -387,7 +396,6 @@ export async function POST(req: NextRequest) {
           .from(s.messages)
           .where(eq(s.messages.publicId, userPublicId))
           .limit(1);
-        const assistantPublicId = crypto.randomUUID();
         await db.insert(s.messages).values({
           conversationId: body.conversationId,
           publicId: assistantPublicId,
@@ -428,8 +436,11 @@ export async function POST(req: NextRequest) {
             /* artifact 抽取失败不阻断主流程 */
           }
         }
-        // 更新会话时间
-        await db.update(s.conversations).set({ updatedAt: new Date() }).where(eq(s.conversations.id, body.conversationId));
+        // 更新会话时间 + 清除「生成中」标记
+        await db
+          .update(s.conversations)
+          .set({ updatedAt: new Date(), generating: false })
+          .where(eq(s.conversations.id, body.conversationId));
 
         // 异步提取记忆 + 自动生成会话标题(不阻塞响应;失败静默)
         if (assistantText) {

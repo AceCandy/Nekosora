@@ -20,7 +20,7 @@ CREATE TABLE "account" (
 );
 --> statement-breakpoint
 CREATE TABLE "api_keys" (
-	"id" text PRIMARY KEY DEFAULT '(gen_random_uuid())' NOT NULL,
+	"id" text PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" text NOT NULL,
 	"parent_id" text,
 	"kind" "api_key_kind" NOT NULL,
@@ -33,7 +33,7 @@ CREATE TABLE "api_keys" (
 );
 --> statement-breakpoint
 CREATE TABLE "artifacts" (
-	"id" text PRIMARY KEY DEFAULT '(gen_random_uuid())' NOT NULL,
+	"id" text PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"message_id" text NOT NULL,
 	"conversation_id" text NOT NULL,
 	"user_id" text NOT NULL,
@@ -47,7 +47,7 @@ CREATE TABLE "artifacts" (
 );
 --> statement-breakpoint
 CREATE TABLE "context_snapshots" (
-	"id" text PRIMARY KEY DEFAULT '(gen_random_uuid())' NOT NULL,
+	"id" text PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"conversation_id" text NOT NULL,
 	"message_id" text,
 	"run_id" text,
@@ -65,7 +65,7 @@ CREATE TABLE "context_snapshots" (
 );
 --> statement-breakpoint
 CREATE TABLE "conversation_projects" (
-	"id" text PRIMARY KEY DEFAULT '(gen_random_uuid())' NOT NULL,
+	"id" text PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" text NOT NULL,
 	"name" text NOT NULL,
 	"system_prompt" text,
@@ -76,7 +76,7 @@ CREATE TABLE "conversation_projects" (
 );
 --> statement-breakpoint
 CREATE TABLE "conversation_shares" (
-	"id" text PRIMARY KEY DEFAULT '(gen_random_uuid())' NOT NULL,
+	"id" text PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"share_id" text NOT NULL,
 	"conversation_id" text NOT NULL,
 	"status" text DEFAULT 'active' NOT NULL,
@@ -92,18 +92,24 @@ CREATE TABLE "conversation_shares" (
 );
 --> statement-breakpoint
 CREATE TABLE "conversations" (
-	"id" text PRIMARY KEY DEFAULT '(gen_random_uuid())' NOT NULL,
+	"id" text PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" text NOT NULL,
 	"title" text DEFAULT '新会话' NOT NULL,
 	"project_id" text,
 	"model_name" text,
+	"output_mode_id" text,
+	"web_search" boolean DEFAULT false NOT NULL,
+	"composer_state" jsonb,
+	"pinned" boolean DEFAULT false NOT NULL,
+	"archived" boolean DEFAULT false NOT NULL,
+	"generating" boolean DEFAULT false NOT NULL,
 	"context_policy" jsonb,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "file_chunks" (
-	"id" text PRIMARY KEY DEFAULT '(gen_random_uuid())' NOT NULL,
+	"id" text PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"file_id" text NOT NULL,
 	"chunk_index" integer NOT NULL,
 	"page_num" integer,
@@ -114,9 +120,10 @@ CREATE TABLE "file_chunks" (
 );
 --> statement-breakpoint
 CREATE TABLE "file_objects" (
-	"id" text PRIMARY KEY DEFAULT '(gen_random_uuid())' NOT NULL,
+	"id" text PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" text NOT NULL,
 	"conversation_id" text,
+	"knowledge_base_id" text,
 	"filename" text NOT NULL,
 	"mime" text NOT NULL,
 	"storage_path" text NOT NULL,
@@ -137,7 +144,7 @@ CREATE TABLE "file_objects" (
 );
 --> statement-breakpoint
 CREATE TABLE "global_models" (
-	"id" text PRIMARY KEY DEFAULT '(gen_random_uuid())' NOT NULL,
+	"id" text PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"name" text NOT NULL,
 	"display_name" text NOT NULL,
 	"vendor" text,
@@ -154,7 +161,7 @@ CREATE TABLE "global_models" (
 );
 --> statement-breakpoint
 CREATE TABLE "global_providers" (
-	"id" text PRIMARY KEY DEFAULT '(gen_random_uuid())' NOT NULL,
+	"id" text PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"name" text NOT NULL,
 	"protocol" "provider_protocol" NOT NULL,
 	"base_url" text NOT NULL,
@@ -166,16 +173,18 @@ CREATE TABLE "global_providers" (
 	"read_timeout_ms" integer,
 	"stream_idle_timeout_ms" integer,
 	"headers_json" jsonb,
+	"last_health_checked_at" timestamp,
+	"last_healthy_key_count" integer,
+	"last_total_key_count" integer,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "global_routes" (
-	"id" text PRIMARY KEY DEFAULT '(gen_random_uuid())' NOT NULL,
+	"id" text PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"model_id" text NOT NULL,
 	"provider_id" text NOT NULL,
 	"upstream_model_name" text NOT NULL,
-	"protocol" "provider_protocol" NOT NULL,
 	"priority" integer DEFAULT 0 NOT NULL,
 	"weight" integer DEFAULT 1 NOT NULL,
 	"enabled" boolean DEFAULT true NOT NULL,
@@ -183,8 +192,36 @@ CREATE TABLE "global_routes" (
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE "image_jobs" (
+	"id" text PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"user_id" text NOT NULL,
+	"model" text NOT NULL,
+	"prompt" text NOT NULL,
+	"n" integer DEFAULT 1 NOT NULL,
+	"size" text,
+	"status" text DEFAULT 'pending' NOT NULL,
+	"result_urls" jsonb,
+	"error" text,
+	"created_at" timestamp DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "instruction_cards" (
+	"id" text PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"user_id" text,
+	"scope" text NOT NULL,
+	"trigger" text NOT NULL,
+	"title" text NOT NULL,
+	"description" text,
+	"markdown" text NOT NULL,
+	"enabled" boolean DEFAULT true NOT NULL,
+	"sort_order" integer DEFAULT 0 NOT NULL,
+	"use_count" integer DEFAULT 0 NOT NULL,
+	"created_at" timestamp DEFAULT now() NOT NULL,
+	"updated_at" timestamp DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "key_model_bindings" (
-	"id" text PRIMARY KEY DEFAULT '(gen_random_uuid())' NOT NULL,
+	"id" text PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"key_id" text NOT NULL,
 	"scope" "binding_scope" NOT NULL,
 	"global_model_id" text,
@@ -192,8 +229,16 @@ CREATE TABLE "key_model_bindings" (
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE "knowledge_bases" (
+	"id" text PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"user_id" text NOT NULL,
+	"name" text NOT NULL,
+	"description" text,
+	"created_at" timestamp DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "mcp_servers" (
-	"id" text PRIMARY KEY DEFAULT '(gen_random_uuid())' NOT NULL,
+	"id" text PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" text,
 	"name" text NOT NULL,
 	"transport" text NOT NULL,
@@ -211,7 +256,7 @@ CREATE TABLE "mcp_servers" (
 );
 --> statement-breakpoint
 CREATE TABLE "messages" (
-	"id" text PRIMARY KEY DEFAULT '(gen_random_uuid())' NOT NULL,
+	"id" text PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"conversation_id" text NOT NULL,
 	"public_id" text NOT NULL,
 	"parent_id" text,
@@ -219,6 +264,7 @@ CREATE TABLE "messages" (
 	"run_id" text,
 	"role" text NOT NULL,
 	"content" jsonb NOT NULL,
+	"reasoning" text,
 	"content_type" text DEFAULT 'text' NOT NULL,
 	"branch_reason" text,
 	"status" "message_status" DEFAULT 'success' NOT NULL,
@@ -230,8 +276,20 @@ CREATE TABLE "messages" (
 	CONSTRAINT "messages_public_id_unique" UNIQUE("public_id")
 );
 --> statement-breakpoint
+CREATE TABLE "output_modes" (
+	"id" text PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"name" text NOT NULL,
+	"description" text,
+	"system_prompt" text NOT NULL,
+	"icon" text,
+	"enabled" boolean DEFAULT true NOT NULL,
+	"sort_order" integer DEFAULT 0 NOT NULL,
+	"created_at" timestamp DEFAULT now() NOT NULL,
+	"updated_at" timestamp DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "prompt_templates" (
-	"id" text PRIMARY KEY DEFAULT '(gen_random_uuid())' NOT NULL,
+	"id" text PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" text,
 	"scope" text NOT NULL,
 	"name" text NOT NULL,
@@ -252,7 +310,7 @@ CREATE TABLE "prompt_templates" (
 );
 --> statement-breakpoint
 CREATE TABLE "runs" (
-	"id" text PRIMARY KEY DEFAULT '(gen_random_uuid())' NOT NULL,
+	"id" text PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"run_id" text NOT NULL,
 	"conversation_id" text,
 	"user_id" text,
@@ -280,7 +338,7 @@ CREATE TABLE "session" (
 );
 --> statement-breakpoint
 CREATE TABLE "system_settings" (
-	"id" text PRIMARY KEY DEFAULT '(gen_random_uuid())' NOT NULL,
+	"id" text PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"namespace" text NOT NULL,
 	"key" text NOT NULL,
 	"value" text NOT NULL,
@@ -288,7 +346,7 @@ CREATE TABLE "system_settings" (
 );
 --> statement-breakpoint
 CREATE TABLE "tool_calls" (
-	"id" text PRIMARY KEY DEFAULT '(gen_random_uuid())' NOT NULL,
+	"id" text PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"run_id" text NOT NULL,
 	"tool_call_id" text NOT NULL,
 	"tool_type" text NOT NULL,
@@ -301,7 +359,7 @@ CREATE TABLE "tool_calls" (
 );
 --> statement-breakpoint
 CREATE TABLE "usage_logs" (
-	"id" text PRIMARY KEY DEFAULT '(gen_random_uuid())' NOT NULL,
+	"id" text PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"source" text NOT NULL,
 	"user_id" text,
 	"api_key_id" text,
@@ -335,16 +393,17 @@ CREATE TABLE "user" (
 );
 --> statement-breakpoint
 CREATE TABLE "user_memories" (
-	"id" text PRIMARY KEY DEFAULT '(gen_random_uuid())' NOT NULL,
+	"id" text PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" text NOT NULL,
 	"scope" text NOT NULL,
+	"source" text DEFAULT 'manual' NOT NULL,
 	"content" text NOT NULL,
 	"embedding" vector(1536),
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "user_models" (
-	"id" text PRIMARY KEY DEFAULT '(gen_random_uuid())' NOT NULL,
+	"id" text PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" text NOT NULL,
 	"provider_id" text NOT NULL,
 	"name" text NOT NULL,
@@ -355,19 +414,22 @@ CREATE TABLE "user_models" (
 );
 --> statement-breakpoint
 CREATE TABLE "user_providers" (
-	"id" text PRIMARY KEY DEFAULT '(gen_random_uuid())' NOT NULL,
+	"id" text PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" text NOT NULL,
 	"name" text NOT NULL,
 	"protocol" "provider_protocol" NOT NULL,
 	"base_url" text NOT NULL,
 	"api_key_enc" text NOT NULL,
 	"enabled" boolean DEFAULT true NOT NULL,
+	"last_health_checked_at" timestamp,
+	"last_healthy_key_count" integer,
+	"last_total_key_count" integer,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "user_settings" (
-	"id" text PRIMARY KEY DEFAULT '(gen_random_uuid())' NOT NULL,
+	"id" text PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" text NOT NULL,
 	"key" text NOT NULL,
 	"value" text NOT NULL,
@@ -398,9 +460,12 @@ ALTER TABLE "file_objects" ADD CONSTRAINT "file_objects_user_id_user_id_fk" FORE
 ALTER TABLE "file_objects" ADD CONSTRAINT "file_objects_conversation_id_conversations_id_fk" FOREIGN KEY ("conversation_id") REFERENCES "public"."conversations"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "global_routes" ADD CONSTRAINT "global_routes_model_id_global_models_id_fk" FOREIGN KEY ("model_id") REFERENCES "public"."global_models"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "global_routes" ADD CONSTRAINT "global_routes_provider_id_global_providers_id_fk" FOREIGN KEY ("provider_id") REFERENCES "public"."global_providers"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "image_jobs" ADD CONSTRAINT "image_jobs_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "instruction_cards" ADD CONSTRAINT "instruction_cards_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "key_model_bindings" ADD CONSTRAINT "key_model_bindings_key_id_api_keys_id_fk" FOREIGN KEY ("key_id") REFERENCES "public"."api_keys"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "key_model_bindings" ADD CONSTRAINT "key_model_bindings_global_model_id_global_models_id_fk" FOREIGN KEY ("global_model_id") REFERENCES "public"."global_models"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "key_model_bindings" ADD CONSTRAINT "key_model_bindings_user_model_id_user_models_id_fk" FOREIGN KEY ("user_model_id") REFERENCES "public"."user_models"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "knowledge_bases" ADD CONSTRAINT "knowledge_bases_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "mcp_servers" ADD CONSTRAINT "mcp_servers_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "messages" ADD CONSTRAINT "messages_conversation_id_conversations_id_fk" FOREIGN KEY ("conversation_id") REFERENCES "public"."conversations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "prompt_templates" ADD CONSTRAINT "prompt_templates_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -424,13 +489,18 @@ CREATE INDEX "conversations_user_idx" ON "conversations" USING btree ("user_id")
 CREATE INDEX "file_chunks_file_idx" ON "file_chunks" USING btree ("file_id");--> statement-breakpoint
 CREATE INDEX "file_objects_user_idx" ON "file_objects" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "global_routes_model_idx" ON "global_routes" USING btree ("model_id");--> statement-breakpoint
+CREATE INDEX "image_jobs_user_idx" ON "image_jobs" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "instruction_cards_scope_idx" ON "instruction_cards" USING btree ("scope");--> statement-breakpoint
+CREATE INDEX "instruction_cards_user_idx" ON "instruction_cards" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "key_model_bindings_key_idx" ON "key_model_bindings" USING btree ("key_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "key_model_bindings_unique_idx" ON "key_model_bindings" USING btree ("key_id","scope","global_model_id","user_model_id");--> statement-breakpoint
+CREATE INDEX "knowledge_bases_user_idx" ON "knowledge_bases" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "mcp_servers_user_idx" ON "mcp_servers" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "mcp_servers_enabled_idx" ON "mcp_servers" USING btree ("enabled");--> statement-breakpoint
 CREATE INDEX "messages_conversation_idx" ON "messages" USING btree ("conversation_id");--> statement-breakpoint
 CREATE INDEX "messages_parent_idx" ON "messages" USING btree ("parent_id");--> statement-breakpoint
 CREATE INDEX "messages_run_idx" ON "messages" USING btree ("run_id");--> statement-breakpoint
+CREATE INDEX "output_modes_enabled_idx" ON "output_modes" USING btree ("enabled");--> statement-breakpoint
 CREATE INDEX "prompt_templates_scope_idx" ON "prompt_templates" USING btree ("scope");--> statement-breakpoint
 CREATE UNIQUE INDEX "system_settings_unique_idx" ON "system_settings" USING btree ("namespace","key");--> statement-breakpoint
 CREATE INDEX "usage_logs_user_idx" ON "usage_logs" USING btree ("user_id");--> statement-breakpoint

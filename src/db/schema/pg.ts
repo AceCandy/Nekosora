@@ -281,6 +281,7 @@ export const conversations = pgTable(
     composerState: jsonb("composer_state").$type<import("@/db/types").ComposerState>(), // 指令卡 / 知识库等数组型会话状态
     pinned: boolean("pinned").notNull().default(false), // 是否置顶
     archived: boolean("archived").notNull().default(false), // 是否归档
+    generating: boolean("generating").notNull().default(false), // 是否正在生成(供侧栏转圈标识;服务端写入)
     contextPolicy: jsonb("context_policy").$type<ContextPolicy>(), // per-conversation 快照
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),

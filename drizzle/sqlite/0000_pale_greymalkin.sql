@@ -106,6 +106,12 @@ CREATE TABLE `conversations` (
 	`title` text DEFAULT '新会话' NOT NULL,
 	`project_id` text,
 	`model_name` text,
+	`output_mode_id` text,
+	`web_search` integer DEFAULT false NOT NULL,
+	`composer_state` text,
+	`pinned` integer DEFAULT false NOT NULL,
+	`archived` integer DEFAULT false NOT NULL,
+	`generating` integer DEFAULT false NOT NULL,
 	`context_policy` text,
 	`created_at` integer DEFAULT (unixepoch()) NOT NULL,
 	`updated_at` integer DEFAULT (unixepoch()) NOT NULL,
@@ -130,6 +136,7 @@ CREATE TABLE `file_objects` (
 	`id` text PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))) NOT NULL,
 	`user_id` text NOT NULL,
 	`conversation_id` text,
+	`knowledge_base_id` text,
 	`filename` text NOT NULL,
 	`mime` text NOT NULL,
 	`storage_path` text NOT NULL,
@@ -204,6 +211,21 @@ CREATE TABLE `global_routes` (
 );
 --> statement-breakpoint
 CREATE INDEX `global_routes_model_idx` ON `global_routes` (`model_id`);--> statement-breakpoint
+CREATE TABLE `image_jobs` (
+	`id` text PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))) NOT NULL,
+	`user_id` text NOT NULL,
+	`model` text NOT NULL,
+	`prompt` text NOT NULL,
+	`n` integer DEFAULT 1 NOT NULL,
+	`size` text,
+	`status` text DEFAULT 'pending' NOT NULL,
+	`result_urls` text,
+	`error` text,
+	`created_at` integer DEFAULT (unixepoch()) NOT NULL,
+	FOREIGN KEY (`user_id`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE INDEX `image_jobs_user_idx` ON `image_jobs` (`user_id`);--> statement-breakpoint
 CREATE TABLE `instruction_cards` (
 	`id` text PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))) NOT NULL,
 	`user_id` text,
@@ -236,6 +258,16 @@ CREATE TABLE `key_model_bindings` (
 --> statement-breakpoint
 CREATE INDEX `key_model_bindings_key_idx` ON `key_model_bindings` (`key_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `key_model_bindings_unique_idx` ON `key_model_bindings` (`key_id`,`scope`,`global_model_id`,`user_model_id`);--> statement-breakpoint
+CREATE TABLE `knowledge_bases` (
+	`id` text PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))) NOT NULL,
+	`user_id` text NOT NULL,
+	`name` text NOT NULL,
+	`description` text,
+	`created_at` integer DEFAULT (unixepoch()) NOT NULL,
+	FOREIGN KEY (`user_id`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE INDEX `knowledge_bases_user_idx` ON `knowledge_bases` (`user_id`);--> statement-breakpoint
 CREATE TABLE `mcp_servers` (
 	`id` text PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))) NOT NULL,
 	`user_id` text,
@@ -266,6 +298,7 @@ CREATE TABLE `messages` (
 	`run_id` text,
 	`role` text NOT NULL,
 	`content` text NOT NULL,
+	`reasoning` text,
 	`content_type` text DEFAULT 'text' NOT NULL,
 	`branch_reason` text,
 	`status` text DEFAULT 'success' NOT NULL,
@@ -281,6 +314,19 @@ CREATE UNIQUE INDEX `messages_public_id_unique` ON `messages` (`public_id`);--> 
 CREATE INDEX `messages_conversation_idx` ON `messages` (`conversation_id`);--> statement-breakpoint
 CREATE INDEX `messages_parent_idx` ON `messages` (`parent_id`);--> statement-breakpoint
 CREATE INDEX `messages_run_idx` ON `messages` (`run_id`);--> statement-breakpoint
+CREATE TABLE `output_modes` (
+	`id` text PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))) NOT NULL,
+	`name` text NOT NULL,
+	`description` text,
+	`system_prompt` text NOT NULL,
+	`icon` text,
+	`enabled` integer DEFAULT true NOT NULL,
+	`sort_order` integer DEFAULT 0 NOT NULL,
+	`created_at` integer DEFAULT (unixepoch()) NOT NULL,
+	`updated_at` integer DEFAULT (unixepoch()) NOT NULL
+);
+--> statement-breakpoint
+CREATE INDEX `output_modes_enabled_idx` ON `output_modes` (`enabled`);--> statement-breakpoint
 CREATE TABLE `prompt_templates` (
 	`id` text PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))) NOT NULL,
 	`user_id` text,
@@ -401,6 +447,7 @@ CREATE TABLE `user_memories` (
 	`id` text PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))) NOT NULL,
 	`user_id` text NOT NULL,
 	`scope` text NOT NULL,
+	`source` text DEFAULT 'manual' NOT NULL,
 	`content` text NOT NULL,
 	`embedding` text,
 	`created_at` integer DEFAULT (unixepoch()) NOT NULL,
