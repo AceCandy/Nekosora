@@ -117,6 +117,12 @@ export async function retryFromMessage(
     cursorId = node.parentId;
   }
 
+  // 防御:目标 assistant 为孤儿(parentId 链断在根之上)时,历史路径为空。
+  // 此时不允许重生成 —— 否则下游会拿到空 messages 数组,触发上游 400。
+  if (pathMsgs.length === 0) {
+    throw new Error("无法重生成:该消息缺少上级用户消息(数据异常)");
+  }
+
   return {
     newAssistantPublicId: crypto.randomUUID(),
     parentPublicId,

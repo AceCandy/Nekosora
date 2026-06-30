@@ -20,6 +20,7 @@ import { logUsage } from "@/lib/usage";
 import type {
   CallContext,
   IRRequest,
+  IRMessage,
   StreamEvent,
   IRUsage,
   ResolvedRoute,
@@ -159,6 +160,30 @@ export async function* streamChat(
   }
 }
 
+/**
+ * 把 messages 里的 system 消息抽到顶层 system 参数。
+ * 符合 AI SDK v5 推荐用法:system 不应混入 messages(会触发安全告警),
+ * 且抽走后若对话消息为空会违反「至少一条 user/assistant」的对话 API 契约。
+ *
+ * 多条 system 按出现顺序拼接;对话消息为空时抛错,从源头杜绝上游 400。
+ */
+function separateSystem(request: IRRequest): {
+  system: string | undefined;
+  messages: IRMessage[];
+} {
+  const systemMessages = request.messages.filter((m) => m.role === "system");
+  const dialogueMessages = request.messages.filter((m) => m.role !== "system");
+  if (dialogueMessages.length === 0) {
+    throw new Error("消息无效:缺少用户消息,无法生成回复");
+  }
+  const system =
+    systemMessages
+      .map((m) => (typeof m.content === "string" ? m.content : ""))
+      .filter(Boolean)
+      .join("\n\n") || undefined;
+  return { system, messages: dialogueMessages };
+}
+
 /** 用单条路由 + 指定 key 执行 streamText,产出统一事件。用量由调用方在 finish 事件后记录。 */
 async function* streamWithRoute(
   route: ResolvedRoute,
@@ -166,10 +191,12 @@ async function* streamWithRoute(
   apiKey: string,
 ): AsyncGenerator<StreamEvent, void, unknown> {
   const model = buildLanguageModelWithKey(route, apiKey); // 失败则抛出,交由上层故障转移
+  const { system, messages } = separateSystem(request);
 
   const result = streamText({
     model,
-    messages: request.messages as never,
+    system,
+    messages: messages as never,
     temperature: request.temperature,
     maxOutputTokens: request.max_tokens,
     topP: request.top_p,
@@ -274,9 +301,11 @@ export async function generateChat(opts: StreamChatOptions): Promise<GenerateCha
         const tryKey = keySeq[k].key;
         try {
           const model = buildLanguageModelWithKey(route, tryKey);
+          const { system, messages } = separateSystem(request);
           const result = await generateText({
             model,
-            messages: request.messages as never,
+            system,
+            messages: messages as never,
             temperature: request.temperature,
             maxOutputTokens: request.max_tokens,
             topP: request.top_p,

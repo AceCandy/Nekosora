@@ -247,6 +247,7 @@ export const conversations = sqliteTable(
     projectId: text("project_id"),
     modelName: text("model_name"),
     outputModeId: text("output_mode_id"),
+    renderStyleId: text("render_style_id"),
     webSearch: integer("web_search", { mode: "boolean" }).notNull().default(false),
     composerState: text("composer_state", { mode: "json" })
       .$type<import("@/db/types").ComposerState>(),
@@ -606,6 +607,32 @@ export const outputModes = sqliteTable(
     updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(now),
   },
   (t) => [index("output_modes_enabled_idx").on(t.enabled)],
+);
+
+// ===========================================================================
+// 输出样式(管理员预设的会话级 Markdown 渲染样式,纯渲染层不影响模型输出)
+// ===========================================================================
+
+export const renderStyles = sqliteTable(
+  "render_styles",
+  {
+    id: text("id").primaryKey().default(uuid),
+    name: text("name").notNull(),
+    description: text("description"),
+    cssClass: text("css_class").notNull(),
+    css: text("css").notNull(),
+    icon: text("icon"),
+    renderer: text("renderer").notNull().default("streamdown"),
+    builtin: integer("builtin", { mode: "boolean" }).notNull().default(false),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(now),
+  },
+  (t) => [
+    index("render_styles_enabled_idx").on(t.enabled),
+    uniqueIndex("render_styles_css_class_idx").on(t.cssClass),
+  ],
 );
 
 export const userMemories = sqliteTable(

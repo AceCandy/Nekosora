@@ -66,9 +66,10 @@ export async function listConversations() {
     .orderBy(desc(S().conversations.updatedAt));
 }
 
-/** 新会话首次发送时携带的输入区状态(已选输出方式 / 联网 / 指令卡 / 知识库)。 */
+/** 新会话首次发送时携带的输入区状态(已选输出方式 / 输出样式 / 联网 / 指令卡 / 知识库)。 */
 export interface CreateConversationOptions {
   outputModeId?: string | null;
+  renderStyleId?: string | null;
   webSearch?: boolean;
   cardIds?: string[];
   kbIds?: string[];
@@ -85,6 +86,7 @@ export async function createConversation(modelName?: string, options?: CreateCon
       title: "新会话",
       modelName: modelName ?? null,
       outputModeId: options?.outputModeId ?? null,
+      renderStyleId: options?.renderStyleId ?? null,
       webSearch: options?.webSearch ?? false,
       composerState: options && (options.cardIds?.length || options.kbIds?.length)
         ? { cardIds: options.cardIds, kbIds: options.kbIds }
@@ -127,6 +129,7 @@ export async function toggleArchivedConversation(id: string) {
 export interface ConversationComposerState {
   modelName: string | null;
   outputModeId: string | null;
+  renderStyleId: string | null;
   webSearch: boolean;
   cardIds: string[];
   kbIds: string[];
@@ -151,6 +154,17 @@ export async function setConversationOutputMode(conversationId: string, outputMo
   await db
     .update(S().conversations)
     .set({ outputModeId })
+    .where(eq(S().conversations.id, conversationId));
+}
+
+/** 设置会话的输出样式(null 表示清除,回到默认渲染)。 */
+export async function setConversationRenderStyle(conversationId: string, renderStyleId: string | null) {
+  const user = await requireSession();
+  if (!(await assertConversationOwner(conversationId, user.id))) throw new Error("无权操作");
+  const db = await getDb();
+  await db
+    .update(S().conversations)
+    .set({ renderStyleId })
     .where(eq(S().conversations.id, conversationId));
 }
 
@@ -190,7 +204,7 @@ export async function setConversationComposerState(
     .where(eq(S().conversations.id, conversationId));
 }
 
-/** 一次性读回会话的输入区状态(模型 / 输出方式 / 联网 / 指令卡 / 知识库),供 SSR 回填。 */
+/** 一次性读回会话的输入区状态(模型 / 输出方式 / 输出样式 / 联网 / 指令卡 / 知识库),供 SSR 回填。 */
 export async function getConversationComposerState(
   conversationId: string,
 ): Promise<ConversationComposerState> {
@@ -201,6 +215,7 @@ export async function getConversationComposerState(
       userId: S().conversations.userId,
       modelName: S().conversations.modelName,
       outputModeId: S().conversations.outputModeId,
+      renderStyleId: S().conversations.renderStyleId,
       webSearch: S().conversations.webSearch,
       composerState: S().conversations.composerState,
     })
@@ -208,12 +223,13 @@ export async function getConversationComposerState(
     .where(eq(S().conversations.id, conversationId))
     .limit(1);
   if (!conv || conv.userId !== user.id) {
-    return { modelName: null, outputModeId: null, webSearch: false, cardIds: [], kbIds: [] };
+    return { modelName: null, outputModeId: null, renderStyleId: null, webSearch: false, cardIds: [], kbIds: [] };
   }
   const composer = (conv.composerState as { cardIds?: string[]; kbIds?: string[] } | null) ?? {};
   return {
     modelName: (conv.modelName as string | null) ?? null,
     outputModeId: (conv.outputModeId as string | null) ?? null,
+    renderStyleId: (conv.renderStyleId as string | null) ?? null,
     webSearch: (conv.webSearch as boolean) ?? false,
     cardIds: composer.cardIds ?? [],
     kbIds: composer.kbIds ?? [],

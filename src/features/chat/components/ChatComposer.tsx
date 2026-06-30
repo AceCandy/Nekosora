@@ -1,18 +1,18 @@
 "use client";
 import { useState, useEffect, useTransition } from "react";
 import { useTranslations } from "next-intl";
-import { Send, Paperclip, Loader2, Sparkles, Cpu, X, Globe, Library, Wand2 } from "lucide-react";
+import { Send, Paperclip, Loader2, Sparkles, Cpu, X, Globe, Library, Wand2, Palette } from "lucide-react";
 import { clsx } from "clsx";
 import { ArtifactPanel, type Artifact } from "@/features/artifacts/ArtifactPanel";
 import FilePreviewModal, { type PreviewableFile } from "@/shared/components/file-preview/FilePreviewModal";
 import { useChatRuntime } from "@/features/chat/hooks/useChatRuntime";
 import { useChatAttachments } from "@/features/chat/hooks/useChatAttachments";
 import { useChatScrollController } from "@/features/chat/hooks/useChatScrollController";
-import { setConversationOutputMode, setConversationModel, setConversationWebSearch, setConversationComposerState } from "@/features/chat/actions/conversations";
-import type { ChatMessage, ModelOption, CardOption, KnowledgeBaseOption, OutputModeOption } from "@/features/chat/model/types";
+import { setConversationOutputMode, setConversationRenderStyle, setConversationModel, setConversationWebSearch, setConversationComposerState } from "@/features/chat/actions/conversations";
+import type { ChatMessage, ModelOption, CardOption, KnowledgeBaseOption, OutputModeOption, RenderStyleOption } from "@/features/chat/model/types";
 import { ChatMessageItem } from "./ChatMessageItem";
 
-export type { ChatMessage, ModelOption, CardOption, KnowledgeBaseOption, OutputModeOption } from "@/features/chat/model/types";
+export type { ChatMessage, ModelOption, CardOption, KnowledgeBaseOption, OutputModeOption, RenderStyleOption } from "@/features/chat/model/types";
 
 interface ChatComposerProps {
   models: ModelOption[];
@@ -24,6 +24,10 @@ interface ChatComposerProps {
   outputModes?: OutputModeOption[];
   /** 当前会话已选的输出方式 ID(undefined=新会话未选)。 */
   initialOutputModeId?: string | null;
+  /** 可用的输出样式(空数组则不显示选择器)。 */
+  renderStyles?: RenderStyleOption[];
+  /** 当前会话已选的输出样式 ID(undefined=新会话未选)。 */
+  initialRenderStyleId?: string | null;
   /** 当前会话已选模型名(回填;未传则用列表首项)。 */
   initialModelName?: string | null;
   /** 当前会话联网状态(回填)。 */
@@ -49,6 +53,8 @@ export default function ChatComposer({
   knowledgeBases = [],
   outputModes = [],
   initialOutputModeId = null,
+  renderStyles = [],
+  initialRenderStyleId = null,
   initialModelName = null,
   initialWebSearch = false,
   initialCardIds = [],
@@ -69,6 +75,8 @@ export default function ChatComposer({
   const [kbPickerOpen, setKbPickerOpen] = useState(false);
   const [outputModeId, setOutputModeId] = useState<string | null>(initialOutputModeId);
   const [outputModePickerOpen, setOutputModePickerOpen] = useState(false);
+  const [renderStyleId, setRenderStyleId] = useState<string | null>(initialRenderStyleId);
+  const [renderStylePickerOpen, setRenderStylePickerOpen] = useState(false);
   const [, startModeTransition] = useTransition();
 
   const {
@@ -97,9 +105,32 @@ export default function ChatComposer({
   }, [runtime.streaming]);
 
   const handleSend = () => {
-    runtime.send(input, model, selectedCardIds, webSearch, selectedKbIds, { outputModeId });
+    runtime.send(input, model, selectedCardIds, webSearch, selectedKbIds, { outputModeId, renderStyleId });
     setInput("");
   };
+
+  // 切换输出样式:本地立即更新 + 持久化到会话(已有会话时)
+  const handleRenderStyleChange = (id: string) => {
+    const next = id || null;
+    setRenderStyleId(next);
+    const convId = runtime.conversationId ?? initialConvId;
+    if (convId) {
+      startModeTransition(async () => {
+        try {
+          await setConversationRenderStyle(convId, next);
+        } catch (err) {
+          console.error("set render style failed:", err);
+        }
+      });
+    }
+  };
+
+  // 当前选中的样式 cssClass(供 ChatMessageItem 套容器 class),null 表示用默认渲染
+  const activeRenderStyle = renderStyleId
+    ? renderStyles.find((s) => s.id === renderStyleId) ?? null
+    : null;
+  const activeRenderStyleClass = activeRenderStyle?.cssClass ?? null;
+  const activeRenderStyleRenderer = activeRenderStyle?.renderer;
 
   // 切换输出方式:本地立即更新 + 持久化到会话(已有会话时)
   const handleOutputModeChange = (id: string) => {
@@ -203,6 +234,8 @@ export default function ChatComposer({
                 isLast={i === runtime.messages.length - 1}
                 isStreaming={runtime.streaming}
                 model={model}
+                renderStyleClass={activeRenderStyleClass}
+                renderStyleRenderer={activeRenderStyleRenderer}
                 onRegenerate={runtime.regenerate}
                 onEdit={runtime.editAndResend}
                 onSwitchVersion={runtime.switchVersion}
@@ -451,6 +484,74 @@ export default function ChatComposer({
                                 <span className="font-semibold block truncate">{m.name}</span>
                                 {m.description && (
                                   <span className="text-[10px] text-neutral-400 block truncate">{m.description}</span>
+                                )}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* 输出样式(会话级,写入会话记忆) */}
+              {renderStyles.length > 0 && (
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setRenderStylePickerOpen((v) => !v)}
+                    className={clsx(
+                      "inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-semibold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer",
+                      renderStyleId
+                        ? "border-transparent bg-sora-blue/[0.04] text-sora-blue hover:bg-sora-blue/[0.08]"
+                        : "border-transparent bg-transparent text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900",
+                    )}
+                    title={t("renderStyle")}
+                    aria-haspopup="listbox"
+                    aria-expanded={renderStylePickerOpen}
+                    aria-label={t("renderStyle")}
+                  >
+                    <Palette className="w-3.5 h-3.5" aria-hidden="true" />
+                    <span>
+                      {renderStyleId
+                        ? (renderStyles.find((s) => s.id === renderStyleId)?.name ?? t("renderStyle"))
+                        : t("renderStyle")}
+                    </span>
+                  </button>
+
+                  {renderStylePickerOpen && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-20"
+                        onClick={() => setRenderStylePickerOpen(false)}
+                        aria-hidden="true"
+                      />
+                      <div className="absolute z-30 mt-1 w-64 max-h-72 overflow-y-auto rounded-md border border-morning-mist dark:border-deep-space bg-white dark:bg-space-ink shadow-lg p-1">
+                        {renderStyles.map((s) => {
+                          const isSelected = renderStyleId === s.id;
+                          return (
+                            <button
+                              key={s.id}
+                              type="button"
+                              onClick={() => {
+                                handleRenderStyleChange(isSelected ? "" : s.id);
+                                setRenderStylePickerOpen(false);
+                              }}
+                              className={clsx(
+                                "w-full text-left rounded px-2 py-1.5 text-xs transition-colors flex items-start gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer",
+                                isSelected
+                                  ? "bg-sora-blue/[0.06] text-sora-blue"
+                                  : "text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900",
+                              )}
+                            >
+                              <span className={clsx("mt-0.5 shrink-0", isSelected ? "opacity-100" : "opacity-30")} aria-hidden="true">
+                                {isSelected ? "✓" : "○"}
+                              </span>
+                              <span className="min-w-0">
+                                <span className="font-semibold block truncate">{s.name}</span>
+                                {s.description && (
+                                  <span className="text-[10px] text-neutral-400 block truncate">{s.description}</span>
                                 )}
                               </span>
                             </button>

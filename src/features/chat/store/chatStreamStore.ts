@@ -21,7 +21,7 @@ export interface SendOptions {
   instructionCardIds?: string[];
   webSearch?: boolean;
   knowledgeBaseIds?: string[];
-  createOptions?: { outputModeId?: string | null };
+  createOptions?: { outputModeId?: string | null; renderStyleId?: string | null };
 }
 
 interface ChatStreamState {
@@ -174,6 +174,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
       if (!resolvedConvId) {
         const createOpts: CreateConversationOptions = {
           outputModeId: opts.createOptions?.outputModeId,
+          renderStyleId: opts.createOptions?.renderStyleId,
           webSearch: opts.webSearch,
           cardIds: opts.instructionCardIds,
           kbIds: opts.knowledgeBaseIds,

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/session";
 import { getAuth } from "@/auth";
 import { listConversations, togglePinnedConversation, toggleArchivedConversation, deleteConversation } from "@/features/chat/actions/conversations";
+import { listEnabledRenderStyles } from "@/lib/render-styles/service";
 import Sidebar from "@/features/chat/components/Sidebar";
 
 /**
@@ -17,6 +18,9 @@ export default async function ChatLayout({ children }: { children: React.ReactNo
   const t = await getTranslations("chat");
   const tc = await getTranslations("nav");
   const conversations = await listConversations();
+  // 聚合所有启用输出样式的 CSS,注入聊天页;切换样式时只需改容器 class,无需刷新
+  const renderStyles = await listEnabledRenderStyles().catch(() => []);
+  const aggregatedStyleCss = (renderStyles as { css: string }[]).map((s) => s.css).join("\n");
 
   async function handleSignOut() {
     "use server";
@@ -78,7 +82,10 @@ export default async function ChatLayout({ children }: { children: React.ReactNo
         toggleArchivedAction={handleToggleArchived}
         deleteAction={handleDelete}
       />
-      <main className="flex-1 flex flex-col min-w-0">{children}</main>
+      <main className="flex-1 flex flex-col min-w-0">
+        {aggregatedStyleCss && <style dangerouslySetInnerHTML={{ __html: aggregatedStyleCss }} />}
+        {children}
+      </main>
     </div>
   );
 }

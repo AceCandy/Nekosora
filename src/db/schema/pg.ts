@@ -277,6 +277,7 @@ export const conversations = pgTable(
     projectId: text("project_id"),
     modelName: text("model_name"), // 记录使用的对外模型名
     outputModeId: text("output_mode_id"), // 当前会话的输出方式(管理员预设的 prompt 模板)
+    renderStyleId: text("render_style_id"), // 当前会话的输出样式(管理员预设的渲染 CSS)
     webSearch: boolean("web_search").notNull().default(false), // 当前会话是否启用联网搜索
     composerState: jsonb("composer_state").$type<import("@/db/types").ComposerState>(), // 指令卡 / 知识库等数组型会话状态
     pinned: boolean("pinned").notNull().default(false), // 是否置顶
@@ -649,6 +650,33 @@ export const outputModes = pgTable(
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
   (t) => [index("output_modes_enabled_idx").on(t.enabled)],
+);
+
+// ===========================================================================
+// 输出样式(管理员预设的会话级 Markdown 渲染样式,纯渲染层不影响模型输出)
+// cssClass 作为稳定 slug,对应 DOM 上的 rs-{cssClass} 类,也是 CSS 选择器前缀
+// ===========================================================================
+
+export const renderStyles = pgTable(
+  "render_styles",
+  {
+    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
+    name: text("name").notNull(),
+    description: text("description"),
+    cssClass: text("css_class").notNull(), // 稳定 slug,对应 .rs-{cssClass} 选择器
+    css: text("css").notNull(), // 聚合注入页面的样式文本
+    icon: text("icon"),
+    renderer: text("renderer").notNull().default("streamdown"), // 渲染器:streamdown(默认) | custom(流式结束后用内置解析器重渲,支持完整 CSS)
+    builtin: boolean("builtin").notNull().default(false), // 系统内置(不可删,遵守 DESIGN)
+    enabled: boolean("enabled").notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("render_styles_enabled_idx").on(t.enabled),
+    uniqueIndex("render_styles_css_class_idx").on(t.cssClass),
+  ],
 );
 
 export const userMemories = pgTable(

@@ -74,3 +74,13 @@ export interface OutputModeOption {
   description?: string | null;
   icon?: string | null;
 }
+
+/** 输出样式选项(管理员预设的会话级 Markdown 渲染样式)。 */
+export interface RenderStyleOption {
+  id: string;
+  cssClass: string;
+  renderer: "streamdown" | "custom";
+  name: string;
+  description?: string | null;
+  icon?: string | null;
+}

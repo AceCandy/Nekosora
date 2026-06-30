@@ -5,6 +5,7 @@ import { createShare } from "@/features/chat/actions/share";
 import { listMyCards } from "@/features/panel/cards/actions";
 import { listKnowledgeBases } from "@/lib/knowledge-base/service";
 import { listEnabledOutputModes } from "@/lib/output-modes/service";
+import { listEnabledRenderStyles } from "@/lib/render-styles/service";
 import ChatComposer, { type ModelOption } from "@/features/chat/components/ChatComposer";
 import type { ChatMessage } from "@/features/chat/model/types";
 import ChatHeader from "@/features/chat/components/ChatHeader";
@@ -16,16 +17,18 @@ export default async function ChatConversationPage({
 }) {
   const { id } = await params;
   void getTranslations("chat"); // 保持命名空间预热,与 chat/page 行为一致
-  const [{ globals, byos }, branch, artifactsMap, cards, kbs, outputModes, composerState] = await Promise.all([
+  const [{ globals, byos }, branch, artifactsMap, cards, kbs, outputModes, renderStyles, composerState] = await Promise.all([
     getVisibleModels(),
     getVisibleBranch(id).catch(() => ({ messages: [], versionMap: {} })),
     getArtifactsByConversation(id).catch(() => ({})),
     listMyCards(),
     listKnowledgeBases().catch(() => []),
     listEnabledOutputModes().catch(() => []),
+    listEnabledRenderStyles().catch(() => []),
     getConversationComposerState(id).catch(() => ({
       modelName: null,
       outputModeId: null,
+      renderStyleId: null,
       webSearch: false,
       cardIds: [],
       kbIds: [],
@@ -75,6 +78,14 @@ export default async function ChatConversationPage({
     description: m.description,
     icon: m.icon,
   }));
+  const styles = (renderStyles as { id: string; cssClass: string; renderer: "streamdown" | "custom"; name: string; description?: string | null; icon?: string | null }[]).map((s) => ({
+    id: s.id,
+    cssClass: s.cssClass,
+    renderer: s.renderer,
+    name: s.name,
+    description: s.description,
+    icon: s.icon,
+  }));
 
   // Server action wrapper for sharing
   async function handleCreateShare(convId: string) {
@@ -97,8 +108,10 @@ export default async function ChatConversationPage({
           cards={cards}
           knowledgeBases={knowledgeBases}
           outputModes={modes}
+          renderStyles={styles}
           initialModelName={composerState.modelName}
           initialOutputModeId={composerState.outputModeId}
+          initialRenderStyleId={composerState.renderStyleId}
           initialWebSearch={composerState.webSearch}
           initialCardIds={composerState.cardIds}
           initialKbIds={composerState.kbIds}

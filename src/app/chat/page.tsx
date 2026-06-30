@@ -3,15 +3,17 @@ import { getVisibleModels } from "@/features/chat/actions/conversations";
 import { listMyCards } from "@/features/panel/cards/actions";
 import { listKnowledgeBases } from "@/lib/knowledge-base/service";
 import { listEnabledOutputModes } from "@/lib/output-modes/service";
+import { listEnabledRenderStyles } from "@/lib/render-styles/service";
 import ChatComposer, { type ModelOption } from "@/features/chat/components/ChatComposer";
 
 export default async function ChatPage() {
   void getTranslations("chat");
-  const [{ globals, byos }, cards, kbs, outputModes] = await Promise.all([
+  const [{ globals, byos }, cards, kbs, outputModes, renderStyles] = await Promise.all([
     getVisibleModels(),
     listMyCards(),
     listKnowledgeBases().catch(() => []),
     listEnabledOutputModes().catch(() => []),
+    listEnabledRenderStyles().catch(() => []),
   ]);
   const models: ModelOption[] = [
     ...globals.map((m: Record<string, unknown>) => ({
@@ -34,10 +36,18 @@ export default async function ChatPage() {
     description: m.description,
     icon: m.icon,
   }));
+  const styles = (renderStyles as { id: string; cssClass: string; renderer: "streamdown" | "custom"; name: string; description?: string | null; icon?: string | null }[]).map((s) => ({
+    id: s.id,
+    cssClass: s.cssClass,
+    renderer: s.renderer,
+    name: s.name,
+    description: s.description,
+    icon: s.icon,
+  }));
 
   return (
     <div className="flex-1 flex flex-col min-w-0 h-full">
-      <ChatComposer models={models} cards={cards} knowledgeBases={knowledgeBases} outputModes={modes} />
+      <ChatComposer models={models} cards={cards} knowledgeBases={knowledgeBases} outputModes={modes} renderStyles={styles} />
     </div>
   );
 }

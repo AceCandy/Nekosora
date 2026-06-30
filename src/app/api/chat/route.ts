@@ -57,7 +57,12 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: "请求体非法" }, { status: 400 });
   }
-  if (!body.conversationId || !body.model || !Array.isArray(body.messages)) {
+  if (
+    !body.conversationId ||
+    !body.model ||
+    !Array.isArray(body.messages) ||
+    body.messages.length === 0
+  ) {
     return NextResponse.json({ error: "缺少 conversationId/model/messages" }, { status: 400 });
   }
 
@@ -308,10 +313,13 @@ export async function POST(req: NextRequest) {
   const trace = buildTrace(assembled, compactionMsgs.length);
 
   // 构造调用上下文(用户态,非 key)
+  // max_tokens 全局兜底:模型表暂无该字段,统一给一个较大值避免被上游默认值
+  // (如 ARK 的 4096)在长输出处截断。将来可改为从模型配置读取。
   const irRequest: IRRequest = {
     model: body.model,
     messages: assembled as IRRequest["messages"],
     stream: true,
+    max_tokens: 16384,
   };
   const ctx = { userId: user.id, keyKind: null as null, source: "chat" as const };
 

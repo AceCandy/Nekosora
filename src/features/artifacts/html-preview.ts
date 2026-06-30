@@ -88,7 +88,6 @@ export function buildHtmlPreviewDoc(html: string): string {
 <style>
   html,body{margin:0;padding:8px;background:transparent;color:inherit;font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;font-size:14px;line-height:1.5;}
   body{color:#111827;}
-  @media (prefers-color-scheme: dark){body{color:#e5e7eb;}}
 </style>
 </head>
 <body>

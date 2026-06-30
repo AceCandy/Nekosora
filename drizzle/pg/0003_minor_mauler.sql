@@ -1,0 +1,1 @@
+ALTER TABLE "render_styles" ADD COLUMN "renderer" text DEFAULT 'streamdown' NOT NULL;

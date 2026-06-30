@@ -15,6 +15,10 @@ interface ChatMessageItemProps {
   isLast: boolean;
   isStreaming: boolean;
   model: string;
+  /** 当前会话选用的输出样式 cssClass(null 表示默认渲染)。容器会套上 rs-{cssClass} 作为 CSS 作用域。 */
+  renderStyleClass?: string | null;
+  /** 当前会话选用样式的渲染器类型(custom=流式结束后用内置解析器重渲;默认 streamdown)。 */
+  renderStyleRenderer?: "streamdown" | "custom";
   onRegenerate: (publicId: string, model: string) => void;
   onOpenArtifact: (a: Artifact) => void;
   /** 编辑用户消息后重发(publicId 为被编辑 user 消息的稳定标识)。 */
@@ -28,6 +32,8 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
   isLast,
   isStreaming,
   model,
+  renderStyleClass,
+  renderStyleRenderer,
   onRegenerate,
   onOpenArtifact,
   onEdit,
@@ -171,7 +177,10 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
           )
         ) : (
           /* Assistant 消息: 流式 markdown 渲染 */
-          <div className="text-neutral-800 dark:text-neutral-200 max-w-[75ch] text-sm leading-relaxed">
+          <div className={clsx(
+            "text-neutral-800 dark:text-neutral-200 max-w-[75ch] text-sm leading-relaxed",
+            renderStyleClass && `rs-${renderStyleClass}`,
+          )}>
             {hasReasoning && (
               <details
                 open={reasoningOpen}
@@ -223,6 +232,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
               <Markdown
                 content={content}
                 isStreaming={isStreaming && isLast}
+                renderer={renderStyleRenderer}
               />
             ) : isStreaming && isLast ? (
               <span className="inline-flex items-center gap-1.5 text-neutral-400">

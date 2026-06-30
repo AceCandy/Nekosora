@@ -1,6 +1,7 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useMemo } from "react";
+import { clsx } from "clsx";
 import { Streamdown, type AllowedTags, type ControlsConfig } from "streamdown";
 import {
   MarkdownHTMLDiv,
@@ -13,12 +14,19 @@ import {
   MarkdownHTMLSummary,
   MarkdownHTMLSpan,
 } from "./streamdown-html";
+import { parseMarkdown } from "./customRenderer";
 
 interface MarkdownProps {
   /** 待渲染的 markdown 文本(流式增量时会持续变化)。 */
   content: string;
   /** 是否正在流式接收(true 时启用未闭合块解析,避免抖动)。 */
   isStreaming?: boolean;
+  /**
+   * 渲染器:streamdown(默认,支持流式/代码高亮/KaTeX/Mermaid)
+   * 或 custom(流式结束后用内置解析器重渲,支持完整自定义 CSS 含 class 选择器)。
+   * custom 仅在 isStreaming=false 时生效;流式中始终用 streamdown。
+   */
+  renderer?: "streamdown" | "custom";
   className?: string;
 }
 
@@ -77,9 +85,22 @@ const CONTROLS: ControlsConfig = {
  *
  * 注:Tailwind 类扫描配置见 globals.css 的 @source 指令。
  */
-function MarkdownImpl({ content, isStreaming, className }: MarkdownProps) {
+function MarkdownImpl({ content, isStreaming, renderer = "streamdown", className }: MarkdownProps) {
+  // custom 渲染器:仅在流式结束后启用(流式中 streamdown 更稳)。原样渲染 AI 的 HTML/class。
+  const useCustom = renderer === "custom" && !isStreaming;
+  const customHtml = useMemo(() => (useCustom ? parseMarkdown(content) : ""), [useCustom, content]);
+
+  if (useCustom) {
+    return (
+      <div
+        className={clsx("nekusora-md", className)}
+        dangerouslySetInnerHTML={{ __html: customHtml }}
+      />
+    );
+  }
+
   return (
-    <div className={className}>
+    <div className={clsx("nekusora-md", className)}>
       <Streamdown
         mode={isStreaming ? "streaming" : "static"}
         allowedTags={ALLOWED_HTML_TAGS}

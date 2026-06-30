@@ -35,6 +35,7 @@ const globalManagementGroup: NavGroup = {
     { href: "/admin/models", labelKey: "globalModels" },
     { href: "/admin/templates", labelKey: "globalTemplates" },
     { href: "/admin/output-modes", labelKey: "outputModes" },
+    { href: "/admin/render-styles", labelKey: "renderStyles" },
     { href: "/admin/users", labelKey: "users" },
     { href: "/admin/usage", labelKey: "usage" },
     { href: "/admin/operations", labelKey: "operations" },

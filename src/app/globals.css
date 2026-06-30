@@ -18,16 +18,11 @@
   --radius-lg: 8px;
 }
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: var(--color-nebula-white);
   --foreground: var(--color-space-ink);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: var(--color-twilight-obsidian);
-    --foreground: var(--color-nebula-silver);
-  }
 }
 
 html,

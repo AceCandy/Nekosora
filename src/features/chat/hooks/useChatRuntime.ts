@@ -85,7 +85,7 @@ export function useChatRuntime({
         instructionCardIds?: string[],
         webSearch?: boolean,
         knowledgeBaseIds?: string[],
-        createOptions?: { outputModeId?: string | null },
+        createOptions?: { outputModeId?: string | null; renderStyleId?: string | null },
       ) => {
         const opts: SendOptions = { model, instructionCardIds, webSearch, knowledgeBaseIds, createOptions };
         void actions.send(key, text, opts, {
