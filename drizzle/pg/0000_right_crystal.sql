@@ -98,6 +98,7 @@ CREATE TABLE "conversations" (
 	"project_id" text,
 	"model_name" text,
 	"output_mode_id" text,
+	"render_style_id" text,
 	"web_search" boolean DEFAULT false NOT NULL,
 	"composer_state" jsonb,
 	"pinned" boolean DEFAULT false NOT NULL,
@@ -309,6 +310,21 @@ CREATE TABLE "prompt_templates" (
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE "render_styles" (
+	"id" text PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"name" text NOT NULL,
+	"description" text,
+	"css_class" text NOT NULL,
+	"css" text NOT NULL,
+	"icon" text,
+	"renderer" text DEFAULT 'streamdown' NOT NULL,
+	"builtin" boolean DEFAULT false NOT NULL,
+	"enabled" boolean DEFAULT true NOT NULL,
+	"sort_order" integer DEFAULT 0 NOT NULL,
+	"created_at" timestamp DEFAULT now() NOT NULL,
+	"updated_at" timestamp DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "runs" (
 	"id" text PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"run_id" text NOT NULL,
@@ -502,6 +518,8 @@ CREATE INDEX "messages_parent_idx" ON "messages" USING btree ("parent_id");--> s
 CREATE INDEX "messages_run_idx" ON "messages" USING btree ("run_id");--> statement-breakpoint
 CREATE INDEX "output_modes_enabled_idx" ON "output_modes" USING btree ("enabled");--> statement-breakpoint
 CREATE INDEX "prompt_templates_scope_idx" ON "prompt_templates" USING btree ("scope");--> statement-breakpoint
+CREATE INDEX "render_styles_enabled_idx" ON "render_styles" USING btree ("enabled");--> statement-breakpoint
+CREATE UNIQUE INDEX "render_styles_css_class_idx" ON "render_styles" USING btree ("css_class");--> statement-breakpoint
 CREATE UNIQUE INDEX "system_settings_unique_idx" ON "system_settings" USING btree ("namespace","key");--> statement-breakpoint
 CREATE INDEX "usage_logs_user_idx" ON "usage_logs" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "usage_logs_created_idx" ON "usage_logs" USING btree ("created_at");--> statement-breakpoint
