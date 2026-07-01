@@ -45,6 +45,9 @@ docs/cankao/
 # typescript
 *.tsbuildinfo
 
+# vitest
+coverage/
+
 # editor
 .vscode/*
 !.vscode/extensions.json

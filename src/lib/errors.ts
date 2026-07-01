@@ -76,7 +76,7 @@ interface ErrorMeta {
   i18nKey: string;
 }
 
-const ERROR_META: Record<ErrorCodeValue, ErrorMeta> = {
+export const ERROR_META: Record<ErrorCodeValue, ErrorMeta> = {
   // auth.*
   [ErrorCode.AUTH_MISSING_KEY]: {
     status: 401,

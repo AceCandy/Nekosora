@@ -167,7 +167,7 @@ export async function* streamChat(
  *
  * 多条 system 按出现顺序拼接;对话消息为空时抛错,从源头杜绝上游 400。
  */
-function separateSystem(request: IRRequest): {
+export function separateSystem(request: IRRequest): {
   system: string | undefined;
   messages: IRMessage[];
 } {
