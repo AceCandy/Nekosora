@@ -199,6 +199,15 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
         return idx;
       })();
 
+      // 取上一轮 assistant 的 publicId 作为 parentPublicId,使后端能把本轮 user 正确挂到主线上。
+      // 缺失会导致 parentId 断链,刷新后 getVisibleBranch 回溯主线时前面历史会被丢弃。
+      const parentPublicId = (() => {
+        for (let i = rt.messages.length - 1; i >= 0; i--) {
+          if (rt.messages[i].role === "assistant") return rt.messages[i].publicId;
+        }
+        return undefined;
+      })();
+
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -207,6 +216,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
           model: opts.model,
           messages: nextMessages.map((m) => ({ role: m.role, content: m.content })),
           fileIds,
+          parentPublicId,
           ...(opts.instructionCardIds && opts.instructionCardIds.length > 0 ? { instructionCardIds: opts.instructionCardIds } : {}),
           ...(opts.webSearch ? { webSearch: true } : {}),
           ...(opts.knowledgeBaseIds && opts.knowledgeBaseIds.length > 0 ? { knowledgeBaseIds: opts.knowledgeBaseIds } : {}),

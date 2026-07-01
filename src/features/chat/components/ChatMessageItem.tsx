@@ -25,6 +25,8 @@ interface ChatMessageItemProps {
   onEdit?: (publicId: string, newContent: string, model: string) => void;
   /** 切换该 assistant 消息的版本(同级兄弟)。 */
   onSwitchVersion?: (publicId: string, direction: "prev" | "next") => void;
+  /** 挂到最外层的 DOM id,供外部跳转定位(scrollIntoView)。 */
+  domId?: string;
 }
 
 export const ChatMessageItem = React.memo(function ChatMessageItem({
@@ -38,6 +40,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
   onOpenArtifact,
   onEdit,
   onSwitchVersion,
+  domId,
 }: ChatMessageItemProps) {
   const t = useTranslations("chat");
   const { role, content, reasoning, publicId, artifacts, trace, toolCalls, searchResults, versionInfo } = message;
@@ -53,37 +56,52 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
   // 复制按钮反馈
   const [copied, setCopied] = useState(false);
 
-  // 思考块展开状态:思考阶段自动展开,正文开始时自动折叠一次,之后由用户自由控制
-  const [reasoningOpen, setReasoningOpen] = useState(false);
-  const userTouchedRef = useRef(false);
+  // 思考样式条弹层状态:点击样式条打开侧边浮层查看完整思考内容
+  const [reasoningPanelOpen, setReasoningPanelOpen] = useState(false);
 
-  // 重新生成原地替换为新 assistant 占位时,重置思考折叠状态,让新一轮自动控制重新生效
+  // 思考耗时计时:reasoning 首次出现记开始时间;正文开始或流结束记结束时间
+  const reasoningStartRef = useRef<number | null>(null);
+  const reasoningEndRef = useRef<number | null>(null);
+  const [elapsed, setElapsed] = useState<number | null>(null);
+
+  // 重新生成原地替换为新 assistant 占位时,重置思考计时与弹层状态
   useEffect(() => {
-    userTouchedRef.current = false;
-    setReasoningOpen(false);
+    reasoningStartRef.current = null;
+    reasoningEndRef.current = null;
+    setElapsed(null);
+    setReasoningPanelOpen(false);
   }, [publicId]);
 
-  // 思考阶段(无正文)展开;正文开始吐字时自动折叠一次(仅用户未手动操作时)
+  // 记录思考开始/结束时间,并计算耗时
   useEffect(() => {
-    if (userTouchedRef.current) return;
     if (!hasReasoning) return;
-    const inStream = isStreaming && isLast;
-    if (inStream && !content) {
-      // 仍在思考,展开
-      if (!reasoningOpen) setReasoningOpen(true);
-    } else if (inStream && content) {
-      // 正文已开始,折叠
-      if (reasoningOpen) setReasoningOpen(false);
+    // reasoning 首次出现 → 记开始
+    if (reasoningStartRef.current === null) {
+      reasoningStartRef.current = Date.now();
     }
-  }, [hasReasoning, isStreaming, isLast, content, reasoningOpen]);
+    // 思考完成的判定:有正文开始,或流式已结束
+    const done = Boolean(content) || !(isStreaming && isLast);
+    if (done && reasoningEndRef.current === null) {
+      reasoningEndRef.current = Date.now();
+      if (reasoningStartRef.current) {
+        const secs = Math.max(1, Math.round((reasoningEndRef.current - reasoningStartRef.current) / 1000));
+        setElapsed(secs);
+      }
+    }
+  }, [hasReasoning, content, isStreaming, isLast]);
 
-  const handleReasoningToggle = () => {
-    // 仅在用户点击 summary 时标记「已手动操作」,之后自动控制永久让位。
-    // 不能用 details 的 onToggle 标记:受控 <details> 的 open 由程序改变时,
-    // 浏览器同样会派发 toggle 事件,会导致自动展开被误判为用户操作,
-    // 从而使「正文开始 → 自动折叠」失效(思考块展开后收不回)。
-    userTouchedRef.current = true;
-  };
+  // 思考是否已完成:有耗时数据即为完成
+  const reasoningDone = elapsed !== null;
+
+  // 流式思考中:正在生成且本条是最后一条且还没正文
+  const isReasoningActive = hasReasoning && isStreaming && isLast && !content;
+  // 当流式思考仍在进行时,实时滚动样式条内的内容到底部
+  const reasoningScrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (isReasoningActive && reasoningScrollRef.current) {
+      reasoningScrollRef.current.scrollTop = reasoningScrollRef.current.scrollHeight;
+    }
+  }, [reasoning, isReasoningActive]);
 
   const handleCopy = async () => {
     if (!content) return;
@@ -97,7 +115,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
   };
 
   return (
-    <div className={clsx("flex gap-4 animate-in fade-in duration-200", role === "user" ? "justify-end" : "justify-start")}>
+    <div id={domId} className={clsx("flex gap-4 animate-in fade-in duration-200 scroll-mt-4", role === "user" ? "justify-end" : "justify-start")}>
       {role === "assistant" && (
         <div className="w-7 h-7 rounded-full border border-sora-blue/10 bg-sora-blue/[0.04] flex items-center justify-center shrink-0 mt-0.5">
           <Sparkles className="w-3.5 h-3.5 text-sora-blue" aria-hidden="true" />
@@ -182,24 +200,62 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
             renderStyleClass && `rs-${renderStyleClass}`,
           )}>
             {hasReasoning && (
-              <details
-                open={reasoningOpen}
-                onToggle={(e) => {
-                  // 仅同步 DOM 展开态到 state,不在此标记用户操作。
-                  // 用户操作的识别放在 summary 的 onClick 中。
-                  setReasoningOpen((e.currentTarget as HTMLDetailsElement).open);
-                }}
-                className="mb-2 rounded-md border border-morning-mist dark:border-deep-space/80 bg-neutral-50/50 dark:bg-[#0d0f14]/20 overflow-hidden">
-                <summary
-                  onClick={handleReasoningToggle}
-                  className="cursor-pointer hover:text-neutral-600 dark:hover:text-neutral-300 px-3 py-1.5 text-[11px] font-mono select-none flex items-center gap-1.5 text-neutral-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue">
-                  <Sparkles className="w-3 h-3" aria-hidden="true" />
-                  <span>{t("thinking")}</span>
-                </summary>
-                <div className="px-3 pb-2 pt-1 text-[12px] text-neutral-500 dark:text-neutral-400 border-t border-morning-mist dark:border-deep-space/60 whitespace-pre-wrap break-words leading-relaxed">
-                  {reasoning}
-                </div>
-              </details>
+              <div className="relative mb-2">
+                {/* 思考样式条:点击打开侧边浮层查看完整内容 */}
+                <button
+                  type="button"
+                  onClick={() => setReasoningPanelOpen((v) => !v)}
+                  className={clsx(
+                    "w-full text-left rounded-md border border-morning-mist dark:border-deep-space/80 overflow-hidden transition-colors",
+                    reasoningPanelOpen ? "bg-neutral-50 dark:bg-[#0d0f14]/30" : "bg-neutral-50/50 dark:bg-[#0d0f14]/20 hover:bg-neutral-50 dark:hover:bg-[#0d0f14]/30",
+                  )}
+                >
+                  <span className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-mono select-none text-neutral-400">
+                    {isReasoningActive ? (
+                      <Loader2 className="w-3 h-3 animate-spin text-sora-blue" aria-hidden="true" />
+                    ) : (
+                      <Sparkles className="w-3 h-3" aria-hidden="true" />
+                    )}
+                    <span>{reasoningDone ? t("thoughtFor", { seconds: elapsed }) : t("thinking")}</span>
+                    <ChevronRight className={clsx("w-3 h-3 ml-auto opacity-50 transition-transform", reasoningPanelOpen && "rotate-90")} aria-hidden="true" />
+                  </span>
+                  {/* 流式思考中:样式条内固定高度滚动显示实时思考内容 */}
+                  {isReasoningActive && (
+                    <div
+                      ref={reasoningScrollRef}
+                      className="px-3 pb-2 pt-1 mx-0 max-h-20 overflow-y-auto text-[12px] text-neutral-500 dark:text-neutral-400 border-t border-morning-mist dark:border-deep-space/60 whitespace-pre-wrap break-words leading-relaxed"
+                    >
+                      {reasoning}
+                    </div>
+                  )}
+                </button>
+
+                {/* 侧边浮层:点击样式条后从左侧滑出,显示完整思考内容 */}
+                {reasoningPanelOpen && (
+                  <>
+                    {/* 点击遮罩关闭 */}
+                    <div className="fixed inset-0 z-30" onClick={() => setReasoningPanelOpen(false)} />
+                    <div className="absolute z-40 left-0 top-full mt-1 w-[420px] max-w-[80vw] max-h-[50vh] overflow-y-auto rounded-lg border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink p-3 shadow-lg">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[11px] font-mono text-neutral-400">
+                          {reasoningDone ? t("thoughtFor", { seconds: elapsed }) : t("thinking")}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setReasoningPanelOpen(false)}
+                          className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
+                          aria-label="关闭"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      <div className="text-[12px] text-neutral-500 dark:text-neutral-400 whitespace-pre-wrap break-words leading-relaxed">
+                        {reasoning}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
             )}
             {toolCalls && toolCalls.length > 0 && (
               <div className="mb-2 space-y-1">
