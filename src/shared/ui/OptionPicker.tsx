@@ -2,7 +2,7 @@
 
 import React from "react";
 import { clsx } from "clsx";
-import { Popover } from "@/shared/ui/Popover";
+import { Popover, usePopoverClose } from "@/shared/ui/Popover";
 
 /** 单个可选项：id 是稳定标识，label 为主文本，其余为可选展示。 */
 export interface OptionItem {
@@ -34,36 +34,36 @@ export interface OptionPickerProps {
   panelClassName?: string;
   /** 触发器外层是否需要 relative 定位（默认 false，Popover 内部已提供 relative 容器）。 */
   ariaLabel?: string;
+  /** 浮层垂直方向：bottom=下展（默认），top=上展。 */
+  side?: "bottom" | "top";
+  /** 是否改为 hover 打开（默认 false，沿用 click）。 */
+  openOnHover?: boolean;
 }
 
 /**
- * OptionPicker —— listbox 风格的选择器，基于 Popover。
- *
- * 收敛 chat 工具栏内多处雷同的「触发器 + click-outside + ✓/○ 项列表」结构。
- * - multi：多选，每项点击即 toggle，项左侧 ✓/○ 反映选中态。
- * - single：单选可清除，点击未选项 → 选中；点击已选项 → 触发 onClear。
- *
- * 触发器样式、项布局均沿用 chat 工具栏既有约定（sora-blue 高亮 + neutral 悬浮）。
+ * 选项列表（在 Popover 的 Provider 树内渲染，故可消费 usePopoverClose）。
+ * 单选模式下点击选项后立即请求浮层关闭。
  */
-export function OptionPicker({
+function OptionList({
   options,
   selectedIds,
   mode,
-  trigger,
-  open,
-  onClose,
   onToggle,
   onClear,
-  panelClassName = "w-64 max-h-72 overflow-y-auto",
   ariaLabel,
-}: OptionPickerProps) {
+  closeOnSingleSelect,
+}: {
+  options: OptionItem[];
+  selectedIds: string[];
+  mode: "single" | "multi";
+  onToggle: (id: string) => void;
+  onClear?: () => void;
+  ariaLabel?: string;
+  closeOnSingleSelect: boolean;
+}) {
+  const requestClose = usePopoverClose();
   return (
-    <Popover
-      open={open}
-      onClose={onClose}
-      trigger={trigger}
-      panelClassName={panelClassName}
-    >
+    <>
       {options.map((opt) => {
         const isSelected = selectedIds.includes(opt.id);
         const handleClick = () => {
@@ -72,6 +72,7 @@ export function OptionPicker({
           } else {
             onToggle(opt.id);
           }
+          if (closeOnSingleSelect) requestClose();
         };
         return (
           <button
@@ -99,6 +100,51 @@ export function OptionPicker({
           </button>
         );
       })}
+    </>
+  );
+}
+
+/**
+ * OptionPicker —— listbox 风格的选择器，基于 Popover。
+ *
+ * 收敛 chat 工具栏内多处雷同的「触发器 + click-outside + ✓/○ 项列表」结构。
+ * - multi：多选，每项点击即 toggle，项左侧 ✓/○ 反映选中态。
+ * - single：单选可清除，点击未选项 → 选中；点击已选项 → 触发 onClear。
+ *
+ * 触发器样式、项布局均沿用 chat 工具栏既有约定（sora-blue 高亮 + neutral 悬浮）。
+ */
+export function OptionPicker({
+  options,
+  selectedIds,
+  mode,
+  trigger,
+  open,
+  onClose,
+  onToggle,
+  onClear,
+  panelClassName = "w-64 max-h-72 overflow-y-auto",
+  ariaLabel,
+  side,
+  openOnHover,
+}: OptionPickerProps) {
+  return (
+    <Popover
+      open={open}
+      onClose={onClose}
+      trigger={trigger}
+      panelClassName={panelClassName}
+      side={side}
+      openOnHover={openOnHover}
+    >
+      <OptionList
+        options={options}
+        selectedIds={selectedIds}
+        mode={mode}
+        onToggle={onToggle}
+        onClear={onClear}
+        ariaLabel={ariaLabel}
+        closeOnSingleSelect={mode === "single"}
+      />
     </Popover>
   );
 }

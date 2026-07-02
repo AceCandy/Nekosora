@@ -8,6 +8,7 @@ import {
   togglePinnedConversation,
   toggleArchivedConversation,
   deleteConversation,
+  getGeneratingStatuses,
 } from "@/features/chat/actions/conversations";
 import Sidebar from "@/features/chat/components/Sidebar";
 
@@ -74,6 +75,7 @@ export default async function ImageLayout({ children }: { children: React.ReactN
         togglePinnedAction={handleTogglePinned}
         toggleArchivedAction={handleToggleArchived}
         deleteAction={handleDelete}
+        getGeneratingStatusesAction={getGeneratingStatuses}
       />
       <main className="flex-1 flex flex-col min-w-0">{children}</main>
     </div>

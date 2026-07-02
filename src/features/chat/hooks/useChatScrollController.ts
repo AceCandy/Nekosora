@@ -3,6 +3,28 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 /** 距离底部多少像素内仍视为"贴底"。 */
 const BOTTOM_THRESHOLD = 24;
+/** 回到底部动画的固定时长(比原生 smooth 短,手感更跟手)。 */
+const SCROLL_DURATION = 280;
+
+/** 自定义缓动到底部:比原生 smooth 更快,避免长距离时拖沓。 */
+function smoothScrollToBottom(el: HTMLElement) {
+  const from = el.scrollTop;
+  const to = el.scrollHeight - el.clientHeight;
+  const distance = to - from;
+  if (distance <= 0) {
+    el.scrollTop = to;
+    return;
+  }
+  const start = performance.now();
+  const step = (now: number) => {
+    const t = Math.min(1, (now - start) / SCROLL_DURATION);
+    // easeOutCubic:起步快、末段平滑收尾
+    const eased = 1 - Math.pow(1 - t, 3);
+    el.scrollTop = from + distance * eased;
+    if (t < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
 
 /**
  * 聊天滚动控制器。
@@ -46,14 +68,18 @@ export function useChatScrollController<T>(messages: T[]) {
   const scrollToBottom = useCallback(() => {
     isAtBottomRef.current = true;
     setIsAtBottom(true);
-    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    const el = scrollRef.current;
+    if (el) smoothScrollToBottom(el);
+    else endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, []);
 
   /** 用户主动发送消息时调用:强制滚到底并恢复跟随。 */
   const forceFollow = useCallback(() => {
     isAtBottomRef.current = true;
     setIsAtBottom(true);
-    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    const el = scrollRef.current;
+    if (el) smoothScrollToBottom(el);
+    else endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, []);
 
   return { scrollRef, endRef, isAtBottom, onScroll: handleScroll, scrollToBottom, forceFollow };

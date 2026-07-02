@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState, useTransition } from "react";
+import React, { useMemo, useState, useTransition, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Plus, Settings2, MessageSquare, LogOut, Menu, X, Search, Pin, Archive, Trash2, ImageIcon, Loader2 } from "lucide-react";
@@ -40,6 +40,8 @@ interface SidebarProps {
   togglePinnedAction: (id: string) => Promise<void>;
   toggleArchivedAction: (id: string) => Promise<void>;
   deleteAction: (id: string) => Promise<void>;
+  /** 轮询各会话 generating 状态,用于检测后台会话完成。 */
+  getGeneratingStatusesAction: () => Promise<{ id: string; generating: boolean }[]>;
 }
 
 /** 按更新时间归入时间分组(今天/昨天/更早)。 */
@@ -77,6 +79,7 @@ export default function Sidebar({
   togglePinnedAction,
   toggleArchivedAction,
   deleteAction,
+  getGeneratingStatusesAction,
 }: SidebarProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -89,6 +92,55 @@ export default function Sidebar({
     const m = pathname?.match(/^\/chat\/([^/]+)$/);
     return m ? m[1] : null;
   }, [pathname]);
+
+  // 后台会话完成蓝点:轮询各会话 generating 状态,记录上一轮「生成中」的集合;
+  // 当某会话从「生成中」变为「已完成」且不是当前会话,标记蓝点;点击该会话项清除。
+  const prevGeneratingRef = useRef<Set<string> | null>(null);
+  const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const statuses = await getGeneratingStatusesAction();
+        if (cancelled) return;
+        const nowGenerating = new Set(statuses.filter((s) => s.generating).map((s) => s.id));
+        const prev = prevGeneratingRef.current;
+        if (prev !== null) {
+          // 从「生成中」变为「未生成」且非当前会话 → 标记完成
+          const newlyDone: string[] = [];
+          prev.forEach((id) => {
+            if (!nowGenerating.has(id) && id !== activeConvId) newlyDone.push(id);
+          });
+          if (newlyDone.length > 0) {
+            setCompletedIds((cur) => {
+              const next = new Set(cur);
+              newlyDone.forEach((id) => next.add(id));
+              return next;
+            });
+          }
+        }
+        prevGeneratingRef.current = nowGenerating;
+      } catch {
+        /* 轮询失败静默,下轮重试 */
+      }
+    };
+    poll();
+    const timer = setInterval(poll, 6000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+    // activeConvId 进依赖:切换会话时立即重算(避免刚完成的当前会话残留蓝点)
+  }, [activeConvId, getGeneratingStatusesAction]);
+
+  const clearCompleted = (id: string) => {
+    setCompletedIds((cur) => {
+      if (!cur.has(id)) return cur;
+      const next = new Set(cur);
+      next.delete(id);
+      return next;
+    });
+  };
 
   const handleSignOut = (e: React.FormEvent) => {
     e.preventDefault();
@@ -154,6 +206,11 @@ export default function Sidebar({
 
   const renderItem = (c: ConversationItem) => {
     const isActive = c.id === activeConvId;
+    const justCompleted = !isActive && completedIds.has(c.id);
+    const handleClick = () => {
+      setIsOpen(false);
+      if (justCompleted) clearCompleted(c.id);
+    };
     return (
     <div key={c.id} className="group relative">
       {isActive && (
@@ -164,7 +221,7 @@ export default function Sidebar({
       )}
       <Link
         href={`/chat/${c.id}`}
-        onClick={() => setIsOpen(false)}
+        onClick={handleClick}
         aria-current={isActive ? "page" : undefined}
         className={clsx(
           "inline-flex w-full items-center gap-2 truncate rounded-md px-3 py-2 text-xs font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue",
@@ -176,6 +233,12 @@ export default function Sidebar({
         {c.pinned && <Pin className="w-3 h-3 shrink-0 text-sora-blue" aria-hidden="true" />}
         {c.generating ? (
           <Loader2 className="w-3.5 h-3.5 shrink-0 text-sora-blue animate-spin" aria-hidden="true" />
+        ) : justCompleted ? (
+          // 后台执行完成、尚未查看的会话:蓝点提示(点击后消失)
+          <span className="relative shrink-0 flex items-center justify-center w-3.5 h-3.5" aria-label="有新回复">
+            <MessageSquare className="w-3.5 h-3.5 opacity-60 text-neutral-400 dark:text-neutral-500" aria-hidden="true" />
+            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-sora-blue ring-2 ring-nebula-white dark:ring-[#090b0e]" />
+          </span>
         ) : (
           <MessageSquare className={clsx("w-3.5 h-3.5 shrink-0", isActive ? "text-sora-blue opacity-100" : "opacity-60 text-neutral-400 dark:text-neutral-500")} aria-hidden="true" />
         )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import type { UploadFileItem } from "@/features/chat/model/types";
 
 /**
@@ -13,10 +13,10 @@ import type { UploadFileItem } from "@/features/chat/model/types";
  *   - uploadPending:发送消息时,把 pending 项上传,返回 fileId 数组
  *
  * 上传端点:/api/upload(FormData:file, conversationId)
+ * 文件来源仅粘贴/拖拽,不再提供独立上传按钮。
  */
 export function useChatAttachments(conversationId: string | null) {
   const [attached, setAttached] = useState<UploadFileItem[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const uploadOne = useCallback(
     async (item: UploadFileItem, targetConvId: string): Promise<string | null> => {
@@ -66,8 +66,6 @@ export function useChatAttachments(conversationId: string | null) {
           await uploadOne(item, conversationId);
         }
       }
-
-      if (fileInputRef.current) fileInputRef.current.value = "";
     },
     [conversationId, uploadOne],
   );
@@ -110,7 +108,6 @@ export function useChatAttachments(conversationId: string | null) {
 
   return {
     attached,
-    fileInputRef,
     handleUpload,
     uploadPending,
     removeAttachment,

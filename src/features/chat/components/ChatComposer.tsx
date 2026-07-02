@@ -84,7 +84,6 @@ export default function ChatComposer({
 
   const {
     attached,
-    fileInputRef,
     handleUpload,
     removeAttachment,
     uploadPending,
@@ -239,8 +238,6 @@ export default function ChatComposer({
               models={models}
               model={model}
               onModelChange={handleModelChange}
-              fileInputRef={fileInputRef}
-              onUpload={handleUpload}
               attached={attached}
               onRemoveAttachment={removeAttachment}
               onPreviewFile={setPreviewFile}

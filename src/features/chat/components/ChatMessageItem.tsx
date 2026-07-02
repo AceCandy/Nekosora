@@ -94,14 +94,16 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
   const reasoningDone = elapsed !== null;
 
   // 流式思考中:正在生成且本条是最后一条且还没正文
+  // 注意:有 reasoning 时思考条已占位,下方 content 的等待态需加 !hasReasoning 判断,
+  // 否则会出现两个「思考中」(思考条 + content fallback 各一个)。
   const isReasoningActive = hasReasoning && isStreaming && isLast && !content;
-  // 当流式思考仍在进行时,实时滚动样式条内的内容到底部
-  const reasoningScrollRef = useRef<HTMLDivElement>(null);
+  // 流式思考时把单行文本横向滚到最右,使最新吐字始终可见
+  const reasoningScrollRef = useRef<HTMLSpanElement>(null);
   useEffect(() => {
-    if (isReasoningActive && reasoningScrollRef.current) {
-      reasoningScrollRef.current.scrollTop = reasoningScrollRef.current.scrollHeight;
+    if (reasoningScrollRef.current) {
+      reasoningScrollRef.current.scrollLeft = reasoningScrollRef.current.scrollWidth;
     }
-  }, [reasoning, isReasoningActive]);
+  }, [reasoning]);
 
   const handleCopy = async () => {
     if (!content) return;
@@ -201,43 +203,42 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
           )}>
             {hasReasoning && (
               <div className="relative mb-2">
-                {/* 思考样式条:点击打开侧边浮层查看完整内容 */}
+                {/* 思考单行:未吐字显「思考中」,吐字时一行横向滚动,完成后收成「已思考X秒」。点击弹窗看全文 */}
                 <button
                   type="button"
                   onClick={() => setReasoningPanelOpen((v) => !v)}
                   className={clsx(
-                    "w-full text-left rounded-md border border-morning-mist dark:border-deep-space/80 overflow-hidden transition-colors",
-                    reasoningPanelOpen ? "bg-neutral-50 dark:bg-[#0d0f14]/30" : "bg-neutral-50/50 dark:bg-[#0d0f14]/20 hover:bg-neutral-50 dark:hover:bg-[#0d0f14]/30",
+                    "flex items-center gap-1.5 w-full max-w-[75ch] rounded-md px-2.5 py-1 text-[11px] font-mono select-none text-neutral-400 dark:text-neutral-500 transition-colors hover:bg-neutral-50/70 dark:hover:bg-[#0d0f14]/20",
+                    reasoningPanelOpen && "bg-neutral-50/70 dark:bg-[#0d0f14]/20",
                   )}
                 >
-                  <span className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-mono select-none text-neutral-400">
-                    {isReasoningActive ? (
-                      <Loader2 className="w-3 h-3 animate-spin text-sora-blue" aria-hidden="true" />
-                    ) : (
-                      <Sparkles className="w-3 h-3" aria-hidden="true" />
-                    )}
-                    <span>{reasoningDone ? t("thoughtFor", { seconds: elapsed }) : t("thinking")}</span>
-                    <ChevronRight className={clsx("w-3 h-3 ml-auto opacity-50 transition-transform", reasoningPanelOpen && "rotate-90")} aria-hidden="true" />
+                  {isReasoningActive ? (
+                    <Loader2 className="w-3 h-3 shrink-0 animate-spin text-sora-blue/70" aria-hidden="true" />
+                  ) : (
+                    <Sparkles className="w-3 h-3 shrink-0 opacity-70" aria-hidden="true" />
+                  )}
+                  <span className="shrink-0">
+                    {reasoningDone ? t("thoughtFor", { seconds: elapsed }) : t("thinking")}
                   </span>
-                  {/* 流式思考中:样式条内固定高度滚动显示实时思考内容 */}
-                  {isReasoningActive && (
-                    <div
+                  {/* 吐字区域:单行横向滚动,溢出省略,弱化 */}
+                  {isReasoningActive && reasoning && (
+                    <span
                       ref={reasoningScrollRef}
-                      className="px-3 pb-2 pt-1 mx-0 max-h-20 overflow-y-auto text-[12px] text-neutral-500 dark:text-neutral-400 border-t border-morning-mist dark:border-deep-space/60 whitespace-pre-wrap break-words leading-relaxed"
+                      className="flex-1 min-w-0 overflow-x-hidden whitespace-nowrap text-neutral-400/70 dark:text-neutral-600"
                     >
                       {reasoning}
-                    </div>
+                    </span>
                   )}
+                  <ChevronRight className={clsx("w-3 h-3 shrink-0 opacity-40 transition-transform", reasoningPanelOpen && "rotate-90")} aria-hidden="true" />
                 </button>
 
-                {/* 侧边浮层:点击样式条后从左侧滑出,显示完整思考内容 */}
+                {/* 思考全文弹窗:点击单行后弹出,宽度对齐思考行,弱化样式 */}
                 {reasoningPanelOpen && (
                   <>
-                    {/* 点击遮罩关闭 */}
                     <div className="fixed inset-0 z-30" onClick={() => setReasoningPanelOpen(false)} />
-                    <div className="absolute z-40 left-0 top-full mt-1 w-[420px] max-w-[80vw] max-h-[50vh] overflow-y-auto rounded-lg border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink p-3 shadow-lg">
+                    <div className="absolute z-40 left-0 top-full mt-1 w-full max-w-[75ch] max-h-[50vh] overflow-y-auto rounded-lg border border-morning-mist dark:border-deep-space/60 bg-white dark:bg-space-ink p-3 shadow-sm">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-[11px] font-mono text-neutral-400">
+                        <span className="text-[11px] font-mono text-neutral-400 dark:text-neutral-500">
                           {reasoningDone ? t("thoughtFor", { seconds: elapsed }) : t("thinking")}
                         </span>
                         <button
@@ -290,7 +291,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
                 isStreaming={isStreaming && isLast}
                 renderer={renderStyleRenderer}
               />
-            ) : isStreaming && isLast ? (
+            ) : isStreaming && isLast && !hasReasoning ? (
               <span className="inline-flex items-center gap-1.5 text-neutral-400">
                 <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
                 {t("thinking")}

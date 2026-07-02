@@ -1,8 +1,8 @@
 "use client";
 
-import React, { type RefObject } from "react";
+import React from "react";
 import { useTranslations } from "next-intl";
-import { Paperclip, Loader2, Sparkles, Globe, Library, Wand2, Palette, X } from "lucide-react";
+import { Loader2, Sparkles, Globe, Library, Wand2, Palette, X, Paperclip } from "lucide-react";
 import { clsx } from "clsx";
 import { OptionPicker, type OptionItem } from "@/shared/ui/OptionPicker";
 import type {
@@ -35,9 +35,7 @@ export interface ChatToolbarProps {
   model: string;
   onModelChange: (name: string) => void;
 
-  // 文件上传
-  fileInputRef: RefObject<HTMLInputElement | null>;
-  onUpload: (files: FileList | File[] | null) => void;
+  // 已上传附件(仅展示 chip)
   attached: UploadFileItem[];
   onRemoveAttachment: (id: string) => void;
   onPreviewFile: (file: PreviewableFile) => void;
@@ -89,16 +87,13 @@ export function ChatToolbar(props: ChatToolbarProps) {
   const t = useTranslations("chat");
   const {
     models, model, onModelChange,
-    fileInputRef, onUpload, attached, onRemoveAttachment, onPreviewFile,
+    attached, onRemoveAttachment, onPreviewFile,
     cards, selectedCardIds, cardPickerOpen, onCardPickerToggle, onCardPickerClose, onCardToggle,
     knowledgeBases, selectedKbIds, kbPickerOpen, onKbPickerToggle, onKbPickerClose, onKbToggle,
     outputModes, outputModeId, outputModePickerOpen, onOutputModePickerToggle, onOutputModePickerClose, onOutputModeToggle, onOutputModeClear,
     renderStyles, renderStyleId, renderStylePickerOpen, onRenderStylePickerToggle, onRenderStylePickerClose, onRenderStyleToggle, onRenderStyleClear,
     webSearch, onWebSearchToggle,
   } = props;
-
-  const uploadLabelClass =
-    "inline-flex items-center gap-1 rounded-md border border-morning-mist dark:border-deep-space bg-white dark:bg-space-ink px-3 py-1.5 text-xs font-semibold text-neutral-600 dark:text-neutral-300 cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue";
 
   return (
     <div className="flex items-center gap-2 mb-2 flex-wrap">
@@ -116,20 +111,7 @@ export function ChatToolbar(props: ChatToolbarProps) {
         ))}
       </select>
 
-      {/* 文件上传 */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        multiple
-        onChange={(e) => onUpload(e.target.files)}
-        className="hidden"
-        id="file-upload"
-        aria-label="上传附件"
-      />
-      <label htmlFor="file-upload" className={uploadLabelClass} title={t("uploadAttachment")}>
-        <Paperclip className="w-3.5 h-3.5 text-neutral-400" aria-hidden="true" />
-        <span>{t("uploadAttachment")}</span>
-      </label>
+      {/* 文件上传已改为粘贴/拖拽接入,工具栏不再显示上传按钮 */}
 
       {/* 指令卡（多选） */}
       {cards.length > 0 && (
@@ -201,7 +183,7 @@ export function ChatToolbar(props: ChatToolbarProps) {
         />
       )}
 
-      {/* 输出方式（单选可清除） */}
+      {/* 输出方式（单选可清除，hover 展开 + 向上弹出） */}
       {outputModes.length > 0 && (
         <OptionPicker
           open={outputModePickerOpen}
@@ -211,6 +193,8 @@ export function ChatToolbar(props: ChatToolbarProps) {
           mode="single"
           onToggle={onOutputModeToggle}
           onClear={onOutputModeClear}
+          side="top"
+          openOnHover
           trigger={
             <button
               type="button"
@@ -235,7 +219,7 @@ export function ChatToolbar(props: ChatToolbarProps) {
         />
       )}
 
-      {/* 输出样式（单选可清除） */}
+      {/* 输出样式（单选可清除，hover 展开 + 向上弹出） */}
       {renderStyles.length > 0 && (
         <OptionPicker
           open={renderStylePickerOpen}
@@ -245,6 +229,8 @@ export function ChatToolbar(props: ChatToolbarProps) {
           mode="single"
           onToggle={onRenderStyleToggle}
           onClear={onRenderStyleClear}
+          side="top"
+          openOnHover
           trigger={
             <button
               type="button"

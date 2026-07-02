@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/session";
 import { getAuth } from "@/auth";
-import { listConversations, togglePinnedConversation, toggleArchivedConversation, deleteConversation } from "@/features/chat/actions/conversations";
+import { listConversations, togglePinnedConversation, toggleArchivedConversation, deleteConversation, getGeneratingStatuses } from "@/features/chat/actions/conversations";
 import { listEnabledRenderStyles } from "@/lib/render-styles/service";
 import Sidebar from "@/features/chat/components/Sidebar";
 
@@ -81,6 +81,7 @@ export default async function ChatLayout({ children }: { children: React.ReactNo
         togglePinnedAction={handleTogglePinned}
         toggleArchivedAction={handleToggleArchived}
         deleteAction={handleDelete}
+        getGeneratingStatusesAction={getGeneratingStatuses}
       />
       <main className="flex-1 flex flex-col min-w-0">
         {aggregatedStyleCss && <style dangerouslySetInnerHTML={{ __html: aggregatedStyleCss }} />}

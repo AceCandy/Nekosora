@@ -57,45 +57,16 @@ export function ChatOutline({ messages, streaming }: ChatOutlineProps) {
   };
 
   return (
+    // 触发容器只占横条列尺寸、垂直居中于消息区,hover 仅在此区域生效,
+    // 不再撑满整列高度(避免横条上下方空白处误触浮层)
     <div
-      className="absolute top-0 right-0 bottom-0 z-10 flex"
+      className="absolute top-1/2 right-0 -translate-y-1/2 z-10 flex items-center"
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
     >
-      {/* 横线列:贴右边缘、排布密集 */}
-      <nav
-        className="flex flex-col justify-center items-end gap-[3px] w-6 pr-2 cursor-pointer"
-        aria-label="对话大纲"
-      >
-        {turns.map((turn, i) => {
-          const isLast = i === turns.length - 1;
-          const isGenerating = isLast && streaming;
-          return (
-            <span
-              key={turn.userIndex}
-              className={clsx(
-                "block h-[2px] rounded-full transition-all duration-200",
-                isGenerating
-                  ? "w-3 bg-sora-blue"
-                  : hovered
-                    ? "w-3 bg-sora-blue/60"
-                    : "w-3 bg-neutral-300 dark:bg-neutral-600",
-              )}
-            />
-          );
-        })}
-      </nav>
-
-      {/* 完整列表浮层:hover 整列区域时从右侧滑出,显示所有轮次的用户原话 */}
+      {/* 完整列表浮层:hover 时从横条左侧弹出,显示所有轮次的用户原话 */}
       {hovered && (
-        <div
-          className="mr-1 self-center max-h-[60vh] overflow-y-auto w-64 rounded-lg border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink p-2 shadow-lg"
-          onMouseEnter={onEnter}
-          onMouseLeave={onLeave}
-        >
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 px-2 py-1">
-            对话大纲
-          </div>
+        <div className="mr-1 max-h-[60vh] overflow-y-auto w-64 rounded-lg border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink p-2 shadow-lg">
           <ul className="space-y-0.5">
             {turns.map((turn, i) => (
               <li key={turn.userIndex}>
@@ -112,6 +83,30 @@ export function ChatOutline({ messages, streaming }: ChatOutlineProps) {
           </ul>
         </div>
       )}
+
+      {/* 横线列:离右边缘留白,避免与滚动条贴合 */}
+      <nav
+        className="flex flex-col items-end gap-[5px] w-10 pr-4 cursor-pointer"
+        aria-label="对话大纲"
+      >
+        {turns.map((turn, i) => {
+          const isLast = i === turns.length - 1;
+          const isGenerating = isLast && streaming;
+          return (
+            <span
+              key={turn.userIndex}
+              className={clsx(
+                "block h-[3px] rounded-full transition-all duration-200",
+                isGenerating
+                  ? "w-6 bg-sora-blue"
+                  : hovered
+                    ? "w-6 bg-sora-blue/60"
+                    : "w-5 bg-neutral-300 dark:bg-neutral-600",
+              )}
+            />
+          );
+        })}
+      </nav>
     </div>
   );
 }

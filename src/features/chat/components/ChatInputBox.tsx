@@ -42,16 +42,19 @@ export function ChatInputBox({
         onPaste={(e) => {
           const items = e.clipboardData?.items;
           if (!items) return;
-          const imageFiles: File[] = [];
+          // 收集粘贴进来的文件项:接受任意非纯文本文件
+          // (排除 text/* 等纯文本,避免复制普通文本时误触发上传)
+          const files: File[] = [];
           for (const item of items) {
-            if (item.kind === "file" && item.type.startsWith("image/")) {
-              const f = item.getAsFile();
-              if (f) imageFiles.push(f);
-            }
+            if (item.kind !== "file") continue;
+            const f = item.getAsFile();
+            if (!f) continue;
+            if (f.type.startsWith("text/")) continue;
+            files.push(f);
           }
-          if (imageFiles.length > 0) {
+          if (files.length > 0) {
             e.preventDefault();
-            onPasteFiles(imageFiles);
+            onPasteFiles(files);
           }
         }}
         onDrop={(e) => {

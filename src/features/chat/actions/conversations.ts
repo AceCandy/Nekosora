@@ -66,6 +66,17 @@ export async function listConversations() {
     .orderBy(desc(S().conversations.updatedAt));
 }
 
+/** 轻量轮询接口:只返回当前用户各会话的 id + generating,供侧栏检测后台会话完成。 */
+export async function getGeneratingStatuses() {
+  const user = await requireSession();
+  const db = await getDb();
+  const rows = await db
+    .select({ id: S().conversations.id, generating: S().conversations.generating })
+    .from(S().conversations)
+    .where(eq(S().conversations.userId, user.id));
+  return rows as { id: string; generating: boolean }[];
+}
+
 /** 新会话首次发送时携带的输入区状态(已选输出方式 / 输出样式 / 联网 / 指令卡 / 知识库)。 */
 export interface CreateConversationOptions {
   outputModeId?: string | null;
