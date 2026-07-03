@@ -21,6 +21,31 @@ import { getDb, isPg } from "@/lib/infra/db";
 type AuthInstance = any;
 let _auth: AuthInstance | null = null;
 
+/**
+ * 开发期局域网联调用的可信 Origin 判定。
+ *
+ * Better Auth 默认只信任由 BETTER_AUTH_URL 推导出的 origin;但本机联调时 next dev
+ * 端口会顺延(3000→3001→3002),且常需用局域网 IP 而非 localhost 访问,二者都会
+ * 触发 "Invalid origin" → 403,且发生在密码校验之前。这里在非生产环境下额外放行
+ * 本机回环与 RFC1918 私有网段的任意端口;生产环境不放宽,仍受 BETTER_AUTH_URL 约束。
+ *
+ * 用精确 host 正则而非通配符 pattern,避免被相似域名绕过(如 192.168.1.205.evil.com)。
+ */
+function pickDevTrustedOrigin(request?: Request): string[] {
+  const origin = request?.headers.get("origin");
+  if (!origin) return [];
+  let host: string;
+  try {
+    host = new URL(origin).host;
+  } catch {
+    return [];
+  }
+  const loopback = /^(localhost|127\.0\.0\.1):\d{1,5}$/;
+  const ipv4Private =
+    /^(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}):\d{1,5}$/;
+  return loopback.test(host) || ipv4Private.test(host) ? [origin] : [];
+}
+
 async function buildAuth(): Promise<AuthInstance> {
   const db = await getDb();
   const instance = betterAuth({
@@ -28,6 +53,9 @@ async function buildAuth(): Promise<AuthInstance> {
       provider: isPg ? "pg" : "sqlite",
       // 表名与 Better Auth 默认一致(user/session/account/verification),无需传 schema。
     }),
+    // 非生产环境追加可信 origin(本机回环 + 私有网段任意端口);生产保持默认(由 BETTER_AUTH_URL 推导)。
+    trustedOrigins:
+      process.env.NODE_ENV === "production" ? [] : pickDevTrustedOrigin,
     emailAndPassword: {
       enabled: true,
       autoSignIn: true,
