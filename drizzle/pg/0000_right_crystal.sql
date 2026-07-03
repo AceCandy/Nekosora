@@ -1,8 +1,28 @@
-CREATE TYPE "public"."access_scope" AS ENUM('public', 'internal');--> statement-breakpoint
-CREATE TYPE "public"."api_key_kind" AS ENUM('master', 'sub');--> statement-breakpoint
-CREATE TYPE "public"."binding_scope" AS ENUM('global', 'byo');--> statement-breakpoint
-CREATE TYPE "public"."message_status" AS ENUM('pending', 'streaming', 'success', 'interrupted');--> statement-breakpoint
-CREATE TYPE "public"."provider_protocol" AS ENUM('openai', 'anthropic', 'gemini', 'custom', 'openai-images', 'openai-audio-stt', 'openai-audio-tts');--> statement-breakpoint
+DO $$ BEGIN
+ CREATE TYPE "public"."access_scope" AS ENUM('public', 'internal');
+EXCEPTION
+ WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+ CREATE TYPE "public"."api_key_kind" AS ENUM('master', 'sub');
+EXCEPTION
+ WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+ CREATE TYPE "public"."binding_scope" AS ENUM('global', 'byo');
+EXCEPTION
+ WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+ CREATE TYPE "public"."message_status" AS ENUM('pending', 'streaming', 'success', 'interrupted');
+EXCEPTION
+ WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+ CREATE TYPE "public"."provider_protocol" AS ENUM('openai', 'anthropic', 'gemini', 'custom', 'openai-images', 'openai-audio-stt', 'openai-audio-tts');
+EXCEPTION
+ WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
 CREATE TABLE "account" (
 	"id" text PRIMARY KEY NOT NULL,
 	"account_id" text NOT NULL,

@@ -26,13 +26,13 @@ export async function bootstrapDatabase(): Promise<void> {
   // --- 步骤 1:连通性探测(执行真实查询),失败即阻断 ---
   await checkConnection(db, isPg);
 
-  // --- 步骤 2:自动建表(幂等 migrate) ---
-  await runMigrations(db, isPg);
-
-  // --- 步骤 3:尽力而为的 pgvector 扩展,失败不阻断 ---
+  // --- 步骤 2:PG 迁移里包含 vector 列,扩展必须在 migrate 前尝试创建 ---
   if (isPg) {
     await ensurePgvector(db);
   }
+
+  // --- 步骤 3:自动建表(幂等 migrate) ---
+  await runMigrations(db, isPg);
 
   // --- 步骤 4:首个管理员(幂等 + 失败阻断) ---
   await ensureFirstAdmin(db, await getSchema());
@@ -51,8 +51,14 @@ export async function bootstrapDatabase(): Promise<void> {
 async function checkConnection(db: unknown, isPg: boolean): Promise<void> {
   const { sql } = await import("drizzle-orm");
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (db as any).execute(sql`select 1`);
+    // PG 与 better-sqlite3 的 drizzle 实例可用方法不同,这里按 dialect 走真实轻量查询。
+    if (isPg) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (db as any).execute(sql`select 1`);
+    } else {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (db as any).run(sql`select 1`);
+    }
     console.log(`[bootstrap] ✅ DB 连接正常(${isPg ? "pg" : "sqlite"})`);
   } catch (e) {
     throw new Error(
@@ -65,7 +71,7 @@ async function checkConnection(db: unknown, isPg: boolean): Promise<void> {
  * 自动建表:跑 drizzle migrate,消费已生成的迁移 SQL(幂等)。
  * 迁移产物路径必须与 drizzle.pg.config.ts / drizzle.sqlite.config.ts 的 `out` 一致。
  */
-async function runMigrations(db: unknown, isPg: boolean): Promise<void> {
+export async function runMigrations(db: unknown, isPg: boolean): Promise<void> {
   // 逃生口:远端表结构已由外部托管(如手工建好 / DBA 维护)时,
   // 设置 BOOTSTRAP_SKIP_MIGRATE=1 跳过本地 migrate,避免迁移产物不一致阻断启动。
   if (process.env.BOOTSTRAP_SKIP_MIGRATE === "1") {
@@ -74,6 +80,7 @@ async function runMigrations(db: unknown, isPg: boolean): Promise<void> {
   }
   try {
     if (isPg) {
+      await adoptExistingPgBaselineIfNeeded(db);
       const { migrate } = await import("drizzle-orm/node-postgres/migrator");
       await migrate(db as never, { migrationsFolder: "drizzle/pg" });
     } else {
@@ -86,6 +93,154 @@ async function runMigrations(db: unknown, isPg: boolean): Promise<void> {
       `[bootstrap] 自动建表失败,启动中止:${e instanceof Error ? e.message : e}`,
     );
   }
+}
+
+const PG_BASELINE_TYPES = [
+  "access_scope",
+  "api_key_kind",
+  "binding_scope",
+  "message_status",
+  "provider_protocol",
+] as const;
+
+const PG_BASELINE_TABLES = [
+  "account",
+  "api_keys",
+  "artifacts",
+  "context_snapshots",
+  "conversation_projects",
+  "conversation_shares",
+  "conversations",
+  "file_chunks",
+  "file_objects",
+  "global_models",
+  "global_providers",
+  "global_routes",
+  "image_jobs",
+  "instruction_cards",
+  "key_model_bindings",
+  "knowledge_bases",
+  "mcp_servers",
+  "messages",
+  "output_modes",
+  "prompt_templates",
+  "render_styles",
+  "runs",
+  "session",
+  "system_settings",
+  "tool_calls",
+  "usage_logs",
+  "user",
+  "user_memories",
+  "user_models",
+  "user_providers",
+  "user_settings",
+  "verification",
+] as const;
+
+/**
+ * 兼容旧流程:如果 PG schema 已经由 push/手工/旧启动流程完整建好,但还没有
+ * Drizzle migrator 记录,直接补基线记录,避免重新执行 0000 SQL 撞 duplicate_object。
+ * 若只存在部分对象,说明库处于半初始化状态,必须显式重置或外部接管,不能静默跳过。
+ */
+async function adoptExistingPgBaselineIfNeeded(db: unknown): Promise<void> {
+  await ensurePgMigrationTable(db);
+
+  const existingMigrations = await pgRows<{ created_at: string | number }>(
+    db,
+    "select id, hash, created_at from drizzle.__drizzle_migrations order by created_at desc limit 1",
+  );
+  if (existingMigrations.length > 0) return;
+
+  const existingTypes = await pgNameSet(
+    db,
+    `select t.typname as name
+     from pg_type t
+     join pg_namespace n on n.oid = t.typnamespace
+     where n.nspname = 'public'
+       and t.typtype = 'e'
+       and t.typname in (${quotedList(PG_BASELINE_TYPES)})`,
+  );
+  const existingTables = await pgNameSet(
+    db,
+    `select tablename as name
+     from pg_tables
+     where schemaname = 'public'
+       and tablename in (${quotedList(PG_BASELINE_TABLES)})`,
+  );
+
+  const missingTypes = PG_BASELINE_TYPES.filter((name) => !existingTypes.has(name));
+  const missingTables = PG_BASELINE_TABLES.filter((name) => !existingTables.has(name));
+  const existingObjectCount = existingTypes.size + existingTables.size;
+
+  if (existingObjectCount === 0) return;
+
+  // 仅残留 enum 时可以继续执行基线迁移:0000 SQL 的 CREATE TYPE 已做 duplicate_object 幂等。
+  if (existingTables.size === 0) return;
+
+  if (missingTypes.length > 0 || missingTables.length > 0) {
+    const missing = [...missingTypes, ...missingTables].slice(0, 12).join(", ");
+    throw new Error(
+      `[bootstrap] PG 已存在部分基线对象但没有 Drizzle 迁移记录,不能安全自动迁移。` +
+        `已存在对象数=${existingObjectCount},缺失示例=${missing || "无"}。` +
+        `如果这是一次性开发库,请清空 PG 数据卷/数据库后重启;` +
+        `如果表结构由外部维护且确认完整,设置 BOOTSTRAP_SKIP_MIGRATE=1。`,
+    );
+  }
+
+  const baseline = await readFirstMigrationMeta("drizzle/pg");
+  await pgExecute(
+    db,
+    `insert into drizzle.__drizzle_migrations ("hash", "created_at") values ('${baseline.hash}', ${baseline.folderMillis})`,
+  );
+  console.log("[bootstrap] ✅ 已收养现有 PG 基线 schema,补写 Drizzle 迁移记录");
+}
+
+async function ensurePgMigrationTable(db: unknown): Promise<void> {
+  await pgExecute(db, "create schema if not exists drizzle");
+  await pgExecute(
+    db,
+    `create table if not exists drizzle.__drizzle_migrations (
+      id serial primary key,
+      hash text not null,
+      created_at bigint
+    )`,
+  );
+}
+
+async function readFirstMigrationMeta(
+  migrationsFolder: string,
+): Promise<{ hash: string; folderMillis: number }> {
+  const { readMigrationFiles } = await import("drizzle-orm/migrator");
+  const [first] = readMigrationFiles({ migrationsFolder });
+  if (!first) throw new Error(`[bootstrap] 未找到迁移基线:${migrationsFolder}`);
+  if (!/^[a-f0-9]{64}$/i.test(first.hash)) {
+    throw new Error(`[bootstrap] 迁移 hash 异常:${first.hash}`);
+  }
+  return { hash: first.hash, folderMillis: first.folderMillis };
+}
+
+async function pgNameSet(db: unknown, query: string): Promise<Set<string>> {
+  const rows = await pgRows<{ name: string }>(db, query);
+  return new Set(rows.map((row) => row.name));
+}
+
+async function pgRows<T>(db: unknown, query: string): Promise<T[]> {
+  const result = await pgExecute(db, query);
+  if (Array.isArray(result)) return result as T[];
+  if (result && typeof result === "object" && Array.isArray((result as { rows?: unknown }).rows)) {
+    return (result as { rows: T[] }).rows;
+  }
+  return [];
+}
+
+async function pgExecute(db: unknown, query: string): Promise<unknown> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (db as any).execute(query);
+}
+
+function quotedList(values: readonly string[]): string {
+  return values.map((value) => `'${value}'`).join(", ");
 }
 
 /**
