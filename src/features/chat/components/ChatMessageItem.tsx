@@ -231,11 +231,14 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
             renderStyleClass && `rs-${renderStyleClass}`,
           )}>
             {hasReasoning && (
-              <div className="relative mb-2">
-                {/* 思考单行:未吐字显「思考中」,吐字时一行横向滚动,完成后收成「已思考X秒」。点击弹窗看全文 */}
+              <div
+                className="relative mb-2"
+                onMouseEnter={() => setReasoningPanelOpen(true)}
+                onMouseLeave={() => setReasoningPanelOpen(false)}
+              >
+                {/* 思考单行:未吐字显「思考中」,吐字时一行横向滚动,完成后收成「已思考X秒」。悬停看全文 */}
                 <button
                   type="button"
-                  onClick={() => setReasoningPanelOpen((v) => !v)}
                   className={clsx(
                     "flex items-center gap-1.5 w-full max-w-[75ch] rounded-md px-2.5 py-1 text-[11px] font-mono select-none text-neutral-400 dark:text-neutral-500 transition-colors hover:bg-neutral-50/70 dark:hover:bg-[#0d0f14]/20",
                     reasoningPanelOpen && "bg-neutral-50/70 dark:bg-[#0d0f14]/20",
@@ -261,29 +264,26 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
                   <ChevronRight className={clsx("w-3 h-3 shrink-0 opacity-40 transition-transform", reasoningPanelOpen && "rotate-90")} aria-hidden="true" />
                 </button>
 
-                {/* 思考全文弹窗:点击单行后弹出,宽度对齐思考行,弱化样式 */}
+                {/* 思考全文弹窗:悬停思考行时展开,宽度对齐思考行,弱化样式 */}
                 {reasoningPanelOpen && (
-                  <>
-                    <div className="fixed inset-0 z-30" onClick={() => setReasoningPanelOpen(false)} />
-                    <div className="absolute z-40 left-0 top-full mt-1 w-full max-w-[75ch] max-h-[50vh] overflow-y-auto rounded-lg border border-morning-mist dark:border-deep-space/60 bg-white dark:bg-space-ink p-3 shadow-sm">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-[11px] font-mono text-neutral-400 dark:text-neutral-500">
-                          {reasoningDone ? t("thoughtFor", { seconds: elapsed }) : t("thinking")}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setReasoningPanelOpen(false)}
-                          className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
-                          aria-label="关闭"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                      <div className="text-[12px] text-neutral-500 dark:text-neutral-400 whitespace-pre-wrap break-words leading-relaxed">
-                        {reasoning}
-                      </div>
+                  <div className="absolute z-40 left-0 top-full w-full max-w-[75ch] max-h-[50vh] overflow-y-auto rounded-lg border border-morning-mist dark:border-deep-space/60 bg-white dark:bg-space-ink p-3 shadow-sm">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[11px] font-mono text-neutral-400 dark:text-neutral-500">
+                        {reasoningDone ? t("thoughtFor", { seconds: elapsed }) : t("thinking")}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setReasoningPanelOpen(false)}
+                        className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 cursor-pointer"
+                        aria-label="关闭"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
                     </div>
-                  </>
+                    <div className="text-[12px] text-neutral-500 dark:text-neutral-400 whitespace-pre-wrap break-words leading-relaxed">
+                      {reasoning}
+                    </div>
+                  </div>
                 )}
               </div>
             )}
