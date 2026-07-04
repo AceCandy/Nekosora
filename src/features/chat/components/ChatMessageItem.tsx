@@ -207,7 +207,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
               <div className="rounded-2xl bg-neutral-900 text-white px-4 py-2.5 dark:bg-white dark:text-black shadow-none border border-transparent text-sm leading-relaxed whitespace-pre-wrap break-words">
                 {content}
               </div>
-              {publicId && onEdit && !isStreaming && (
+              {publicId && onEdit && !isStreaming && !conversationStreaming && (
                 <button
                   type="button"
                   onClick={() => {
@@ -221,17 +221,11 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
                   <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
                 </button>
               )}
-              {publicId && onRequestDelete && (
+              {publicId && onRequestDelete && !conversationStreaming && (
                 <button
                   type="button"
-                  disabled={conversationStreaming}
                   onClick={() => onRequestDelete?.(publicId)}
-                  className={clsx(
-                    "absolute -left-7 top-7 p-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue transition-opacity",
-                    conversationStreaming
-                      ? "opacity-30 cursor-not-allowed text-neutral-400"
-                      : "opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-red-500 dark:hover:text-red-400 cursor-pointer",
-                  )}
+                  className="absolute -left-7 top-7 p-1 rounded opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-red-500 dark:hover:text-red-400 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
                   title={t("delete")}
                   aria-label={t("delete")}
                 >
