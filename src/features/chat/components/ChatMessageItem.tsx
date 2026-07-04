@@ -9,7 +9,7 @@ import { ErrorBoundary } from "@/shared/components/ErrorBoundary";
 import { useMessageSpeech, plainTextFromMarkdown } from "@/features/chat/hooks/useMessageSpeech";
 import { ArtifactInline } from "@/features/artifacts/ArtifactInline";
 import { HtmlPreviewFrame } from "@/features/artifacts/HtmlPreviewFrame";
-import type { ChatMessage } from "@/features/chat/model/types";
+import type { ChatMessage, ModelOption } from "@/features/chat/model/types";
 import type { Artifact } from "@/features/artifacts/ArtifactPanel";
 
 /**
@@ -61,6 +61,8 @@ interface ChatMessageItemProps {
   onDelete?: (publicId: string) => void;
   /** 在 assistant 消息末尾续写生成。 */
   onContinue?: (publicId: string) => void;
+  /** 可用模型列表(>1 时重新生成弹出换模型选择)。 */
+  models?: ModelOption[];
   /** 挂到最外层的 DOM id,供外部跳转定位(scrollIntoView)。 */
   domId?: string;
 }
@@ -78,6 +80,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
   onSwitchVersion,
   onDelete,
   onContinue,
+  models = [],
   domId,
 }: ChatMessageItemProps) {
   const t = useTranslations("chat");
@@ -93,6 +96,9 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
 
   // 复制按钮反馈
   const [copied, setCopied] = useState(false);
+
+  // 重新生成换模型选择弹层(仅多模型时启用)
+  const [regenOpen, setRegenOpen] = useState(false);
 
   // 思考样式条弹层状态:点击样式条打开侧边浮层查看完整思考内容
   const [reasoningPanelOpen, setReasoningPanelOpen] = useState(false);
@@ -411,14 +417,46 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
               )}
               <span>{copied ? t("copied") : t("copy")}</span>
             </button>
-            <button
-              onClick={() => onRegenerate(publicId, model)}
-              className="inline-flex items-center gap-1 text-[11px] font-semibold text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue rounded cursor-pointer"
-              aria-label={t("regenerate")}
-            >
-              <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>{t("regenerate")}</span>
-            </button>
+            <div className="relative">
+              <button
+                onClick={() => {
+                  if (models.length > 1) setRegenOpen((v) => !v);
+                  else onRegenerate(publicId, model);
+                }}
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue rounded cursor-pointer"
+                aria-label={t("regenerate")}
+                aria-haspopup={models.length > 1 ? "listbox" : undefined}
+                aria-expanded={models.length > 1 ? regenOpen : undefined}
+              >
+                <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />
+                <span>{t("regenerate")}</span>
+              </button>
+              {regenOpen && models.length > 1 && (
+                <>
+                  <div className="fixed inset-0 z-30" onClick={() => setRegenOpen(false)} />
+                  <div className="absolute bottom-full mb-2 right-0 z-40 w-48 max-h-60 overflow-y-auto rounded-lg border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink py-1 shadow-md">
+                    {models.map((m) => (
+                      <button
+                        key={m.name}
+                        type="button"
+                        onClick={() => {
+                          onRegenerate(publicId, m.name);
+                          setRegenOpen(false);
+                        }}
+                        className={clsx(
+                          "block w-full text-left px-3 py-1.5 text-xs cursor-pointer transition-colors",
+                          m.name === model
+                            ? "text-sora-blue font-semibold"
+                            : "text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900",
+                        )}
+                      >
+                        {m.displayName ?? m.name}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
             <button
               type="button"
               disabled={!ttsSupported || !content}

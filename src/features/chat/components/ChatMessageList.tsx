@@ -6,7 +6,7 @@ import { Sparkles, ChevronDown } from "lucide-react";
 import { ChatMessageItem } from "@/features/chat/components/ChatMessageItem";
 import { ChatOutline } from "@/features/chat/components/ChatOutline";
 import { ErrorBoundary } from "@/shared/components/ErrorBoundary";
-import type { ChatMessage } from "@/features/chat/model/types";
+import type { ChatMessage, ModelOption } from "@/features/chat/model/types";
 import type { Artifact } from "@/features/artifacts/ArtifactPanel";
 
 interface ChatMessageListProps {
@@ -32,6 +32,8 @@ interface ChatMessageListProps {
   onDelete?: (publicId: string) => void;
   /** 在 assistant 消息末尾续写。 */
   onContinue?: (publicId: string) => void;
+  /** 可用模型列表(传给 ChatMessageItem 供重新生成换模型)。 */
+  models?: ModelOption[];
   /** 空状态点击示例问题：填入输入框供用户编辑后发送。 */
   onPickSample?: (text: string) => void;
 }
@@ -61,6 +63,7 @@ export function ChatMessageList({
   onOpenArtifact,
   onDelete,
   onContinue,
+  models,
   onPickSample,
 }: ChatMessageListProps) {
   const t = useTranslations("chat");
@@ -94,6 +97,7 @@ export function ChatMessageList({
                 onOpenArtifact={onOpenArtifact}
                 onDelete={onDelete}
                 onContinue={onContinue}
+                models={models}
               />
             </ErrorBoundary>
           ))}

@@ -278,6 +278,7 @@ export default function ChatComposer({
           onOpenArtifact={setActiveArtifact}
           onDelete={runtime.deleteMessage}
           onContinue={(id) => runtime.continueGeneration(id, model)}
+          models={models}
           onPickSample={handlePickSample}
         />
 
