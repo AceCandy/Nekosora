@@ -87,7 +87,7 @@
     "regenerate": "Regenerate",
     "continueGenerating": "Continue",
     "delete": "Delete",
-    "deleteMessageConfirm": "Delete this message? It will be hidden from view but the branch structure is preserved.",
+    "deleteCascadeNotice": "This user message, its AI reply, and all following messages will be deleted.",
     "copy": "Copy",
     "quote": "Quote",
     "askFollowup": "Ask",

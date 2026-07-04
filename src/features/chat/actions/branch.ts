@@ -282,21 +282,42 @@ export async function getVisibleBranch(conversationId: string): Promise<{
 }
 
 /**
- * 软删除一条消息:置 deletedAt=now,使其从默认视图隐藏但保留版本树结构(可恢复)。
- * 删中间消息时其后续消息保留(不级联);删带分支的消息时仅删当前版本,兄弟保留。
+ * 软删除一条用户消息:置 deletedAt=now。仅允许删除 user 消息,且会连带删除其对应的
+ * AI 回复及之后整段子树(递归全部后代,含后续 user / assistant),避免遗留孤儿导致
+ * 主线回溯断裂。返回被软删消息的 publicId 列表,供前端同步移除本地视图。
  */
-export async function softDeleteMessage(messagePublicId: string): Promise<void> {
+export async function softDeleteMessage(messagePublicId: string): Promise<string[]> {
   const user = await requireSession();
   const db = await getDb();
   const s = S();
 
   const [msg] = await db.select().from(s.messages).where(eq(s.messages.publicId, messagePublicId)).limit(1);
   if (!msg) throw new Error("消息不存在");
+  if (msg.role !== "user") throw new Error("仅支持删除用户消息");
 
   const [conv] = await db.select().from(s.conversations).where(eq(s.conversations.id, msg.conversationId)).limit(1);
   if (!conv || conv.userId !== user.id) throw new Error("无权操作");
 
-  await db.update(s.messages).set({ deletedAt: new Date() }).where(eq(s.messages.id, msg.id));
+  // 收集该 user 消息及其全部后代(对应 AI 回复 + 之后所有消息)
+  const allMsgs = (await db
+    .select()
+    .from(s.messages)
+    .where(and(eq(s.messages.conversationId, msg.conversationId), isNull(s.messages.deletedAt)))
+    .orderBy(s.messages.createdAt)) as { id: string; publicId: string; parentId: string | null }[];
+
+  const targetIds = new Set<string>([msg.id]);
+  const queue = allMsgs.filter((m) => m.parentId === msg.id).map((m) => m.id);
+  while (queue.length > 0) {
+    const cur = queue.shift()!;
+    targetIds.add(cur);
+    for (const m of allMsgs) {
+      if (m.parentId === cur) queue.push(m.id);
+    }
+  }
+
+  await db.update(s.messages).set({ deletedAt: new Date() }).where(inArray(s.messages.id, [...targetIds]));
+
+  return allMsgs.filter((m) => targetIds.has(m.id)).map((m) => m.publicId);
 }
 
 /**

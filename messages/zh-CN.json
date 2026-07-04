@@ -87,7 +87,7 @@
     "regenerate": "重新生成",
     "continueGenerating": "继续生成",
     "delete": "删除",
-    "deleteMessageConfirm": "确定删除此消息？删除后将从视图隐藏，版本结构保留。",
+    "deleteCascadeNotice": "将删除该用户消息及其对应的 AI 回复，以及之后的所有消息。",
     "copy": "复制",
     "quote": "引用",
     "askFollowup": "追问",

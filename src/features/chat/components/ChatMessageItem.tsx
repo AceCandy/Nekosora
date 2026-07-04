@@ -29,8 +29,10 @@ interface ChatMessageItemProps {
   onEdit?: (publicId: string, newContent: string, model: string) => void;
   /** 切换该 assistant 消息的版本(同级兄弟)。 */
   onSwitchVersion?: (publicId: string, direction: "prev" | "next") => void;
-  /** 软删除一条消息(二次确认后调用)。 */
-  onDelete?: (publicId: string) => void;
+  /** 请求删除该消息(由父层弹统一确认弹窗,确认后真正执行)。 */
+  onRequestDelete?: (publicId: string) => void;
+  /** 会话级是否正在生成(生成中时禁用删除并置灰)。 */
+  conversationStreaming?: boolean;
   /** 在 assistant 消息末尾续写生成。 */
   onContinue?: (publicId: string) => void;
   /** 可用模型列表(>1 时重新生成弹出换模型选择)。 */
@@ -50,7 +52,8 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
   onOpenArtifact,
   onEdit,
   onSwitchVersion,
-  onDelete,
+  onRequestDelete,
+  conversationStreaming,
   onContinue,
   models = [],
   domId,
@@ -218,13 +221,17 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
                   <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
                 </button>
               )}
-              {publicId && onDelete && !isStreaming && (
+              {publicId && onRequestDelete && (
                 <button
                   type="button"
-                  onClick={() => {
-                    if (window.confirm(t("deleteMessageConfirm"))) onDelete?.(publicId);
-                  }}
-                  className="absolute -left-7 top-7 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-neutral-400 hover:text-red-500 dark:hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
+                  disabled={conversationStreaming}
+                  onClick={() => onRequestDelete?.(publicId)}
+                  className={clsx(
+                    "absolute -left-7 top-7 p-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue transition-opacity",
+                    conversationStreaming
+                      ? "opacity-30 cursor-not-allowed text-neutral-400"
+                      : "opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-red-500 dark:hover:text-red-400 cursor-pointer",
+                  )}
                   title={t("delete")}
                   aria-label={t("delete")}
                 >
@@ -460,18 +467,6 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
             >
               <CornerDownRight className="w-3.5 h-3.5" aria-hidden="true" />
               <span>{t("continueGenerating")}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (window.confirm(t("deleteMessageConfirm"))) onDelete?.(publicId);
-              }}
-              className="inline-flex items-center gap-1 text-[11px] font-semibold text-neutral-400 hover:text-red-500 dark:hover:text-red-400 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue rounded cursor-pointer"
-              aria-label={t("delete")}
-              title={t("delete")}
-            >
-              <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>{t("delete")}</span>
             </button>
           </div>
         )}

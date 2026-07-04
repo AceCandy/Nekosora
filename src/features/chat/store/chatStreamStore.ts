@@ -405,10 +405,12 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
   deleteMessage: async (key, publicId) => {
     if (!publicId) return;
     try {
-      await softDeleteMessage(publicId);
+      const deletedIds = await softDeleteMessage(publicId);
+      const removeSet = new Set(deletedIds);
+      removeSet.add(publicId);
       set((s) => patchRuntime(s, key, (r) => ({
         ...r,
-        messages: r.messages.filter((m) => m.publicId !== publicId),
+        messages: r.messages.filter((m) => !removeSet.has(m.publicId ?? "")),
       })));
     } catch (err) {
       console.error("deleteMessage failed:", err);

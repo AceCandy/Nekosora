@@ -7,6 +7,7 @@ import { Sparkles, ChevronDown, Copy, Reply, MessagesSquare } from "lucide-react
 import { ChatMessageItem } from "@/features/chat/components/ChatMessageItem";
 import { ChatOutline } from "@/features/chat/components/ChatOutline";
 import { ErrorBoundary } from "@/shared/components/ErrorBoundary";
+import ConfirmDialog from "@/shared/ui/ConfirmDialog";
 import type { ChatMessage, ModelOption } from "@/features/chat/model/types";
 import type { Artifact } from "@/features/artifacts/ArtifactPanel";
 import { copyToClipboard } from "@/shared/lib/clipboard";
@@ -78,6 +79,8 @@ export function ChatMessageList({
 
   // 文本选区工具栏:选中消息正文时浮出复制 / 引用插入 / 追问
   const [selection, setSelection] = useState<{ text: string; top: number; left: number } | null>(null);
+  // 待确认删除的消息 publicId(user 消息):确认后连同其 AI 回复及后续整段子树一并删除
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   useEffect(() => {
     const compute = () => {
       const sel = window.getSelection();
@@ -143,7 +146,8 @@ export function ChatMessageList({
                         onEdit={onEdit}
                         onSwitchVersion={onSwitchVersion}
                         onOpenArtifact={onOpenArtifact}
-                        onDelete={onDelete}
+                        onRequestDelete={(pid) => setPendingDelete(pid)}
+                        conversationStreaming={streaming}
                         onContinue={onContinue}
                         models={models}
                       />
@@ -160,6 +164,20 @@ export function ChatMessageList({
 
       {/* 对话大纲:贴消息区右边缘(滚动条左侧),hover 整列弹出完整轮次列表 */}
       <ChatOutline messages={messages} streaming={streaming} />
+
+      {/* 删除二次确认:删除用户消息会连带其 AI 回复及之后整段子树 */}
+      <ConfirmDialog
+        open={!!pendingDelete}
+        onClose={() => setPendingDelete(null)}
+        title={t("delete")}
+        message={t("deleteCascadeNotice")}
+        confirmLabel={t("delete")}
+        danger
+        onConfirm={() => {
+          if (pendingDelete) onDelete?.(pendingDelete);
+          setPendingDelete(null);
+        }}
+      />
 
       {/* 选中文本浮工具栏:复制 / 引用插入输入框 / 追问 */}
       {selection && (
