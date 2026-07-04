@@ -142,7 +142,12 @@
     "outputMode": "输出方式",
     "outputModeDefault": "默认",
     "renderStyle": "输出样式",
-    "renderStyleDefault": "默认"
+    "renderStyleDefault": "默认",
+    "modelParams": "模型参数",
+    "temperature": "温度",
+    "topP": "Top P",
+    "maxTokens": "最大 token",
+    "resetDefaults": "恢复默认"
   },
   "panel": {
     "title": "控制面板",

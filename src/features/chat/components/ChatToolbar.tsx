@@ -1,8 +1,8 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Loader2, Sparkles, Globe, Library, Wand2, Palette, X, Paperclip } from "lucide-react";
+import { Loader2, Sparkles, Globe, Library, Wand2, Palette, X, Paperclip, SlidersHorizontal } from "lucide-react";
 import { clsx } from "clsx";
 import { OptionPicker, type OptionItem } from "@/shared/ui/OptionPicker";
 import type {
@@ -77,6 +77,11 @@ export interface ChatToolbarProps {
   // 联网搜索（纯 toggle，非 listbox）
   webSearch: boolean;
   onWebSearchToggle: () => void;
+
+  // 模型参数（temperature/topP/maxTokens，null=用模型默认）
+  modelParams: { temperature: number | null; topP: number | null; maxTokens: number | null };
+  onModelParamsChange: (p: { temperature?: number | null; topP?: number | null; maxTokens?: number | null }) => void;
+  onModelParamsReset: () => void;
 }
 
 /**
@@ -93,6 +98,7 @@ export function ChatToolbar(props: ChatToolbarProps) {
     outputModes, outputModeId, outputModePickerOpen, onOutputModePickerToggle, onOutputModePickerClose, onOutputModeToggle, onOutputModeClear,
     renderStyles, renderStyleId, renderStylePickerOpen, onRenderStylePickerToggle, onRenderStylePickerClose, onRenderStyleToggle, onRenderStyleClear,
     webSearch, onWebSearchToggle,
+    modelParams, onModelParamsChange, onModelParamsReset,
   } = props;
 
   return (
@@ -255,6 +261,9 @@ export function ChatToolbar(props: ChatToolbarProps) {
         />
       )}
 
+      {/* 模型参数(temperature/topP/maxTokens) */}
+      <ModelParamsPicker params={modelParams} onChange={onModelParamsChange} onReset={onModelParamsReset} />
+
       {/* 已选指令卡 chip */}
       {selectedCardIds.map((id) => {
         const card = cards.find((c) => c.id === id);
@@ -331,6 +340,99 @@ export function ChatToolbar(props: ChatToolbarProps) {
         );
       })}
     </div>
+  );
+}
+
+/** 模型参数调节 picker：temperature / topP / maxTokens,空值用模型默认。 */
+function ModelParamsPicker({
+  params,
+  onChange,
+  onReset,
+}: {
+  params: { temperature: number | null; topP: number | null; maxTokens: number | null };
+  onChange: (p: { temperature?: number | null; topP?: number | null; maxTokens?: number | null }) => void;
+  onReset: () => void;
+}) {
+  const t = useTranslations("chat");
+  const [open, setOpen] = useState(false);
+  const hasCustom = params.temperature !== null || params.topP !== null || params.maxTokens !== null;
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={clsx(
+          "inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-semibold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer",
+          hasCustom
+            ? "border-sora-blue/30 bg-sora-blue/[0.04] text-sora-blue"
+            : "border-morning-mist dark:border-deep-space bg-white dark:bg-space-ink text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900",
+        )}
+        title={t("modelParams")}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-label={t("modelParams")}
+      >
+        <SlidersHorizontal className="w-3.5 h-3.5" aria-hidden="true" />
+        <span>{t("modelParams")}</span>
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+          <div className="absolute bottom-full mb-2 left-0 z-40 w-64 rounded-lg border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink p-3 shadow-md space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-200">{t("modelParams")}</span>
+              {hasCustom && (
+                <button
+                  type="button"
+                  onClick={onReset}
+                  className="text-[11px] text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 underline underline-offset-2 cursor-pointer"
+                >
+                  {t("resetDefaults")}
+                </button>
+              )}
+            </div>
+            <ParamInput label={t("temperature")} value={params.temperature} min={0} max={2} step={0.1} onChange={(v) => onChange({ temperature: v })} />
+            <ParamInput label={t("topP")} value={params.topP} min={0} max={1} step={0.05} onChange={(v) => onChange({ topP: v })} />
+            <ParamInput label={t("maxTokens")} value={params.maxTokens} min={1} step={1} onChange={(v) => onChange({ maxTokens: v })} />
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ParamInput({
+  label,
+  value,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  label: string;
+  value: number | null;
+  min?: number;
+  max?: number;
+  step?: number;
+  onChange: (v: number | null) => void;
+}) {
+  return (
+    <label className="flex items-center justify-between gap-2 text-xs">
+      <span className="text-neutral-500 dark:text-neutral-400">{label}</span>
+      <input
+        type="number"
+        value={value ?? ""}
+        min={min}
+        max={max}
+        step={step}
+        onChange={(e) => {
+          const v = e.target.value;
+          onChange(v === "" ? null : Number(v));
+        }}
+        placeholder="默认"
+        className="w-24 rounded border border-morning-mist dark:border-deep-space/80 bg-transparent px-2 py-1 text-xs text-neutral-700 dark:text-neutral-200 focus:outline-none focus:border-sora-blue"
+      />
+    </label>
   );
 }
 

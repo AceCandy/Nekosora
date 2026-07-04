@@ -3,7 +3,7 @@
   "name": "chat-model-params",
   "title": "Chat 模型参数调节",
   "description": "(4) temperature/topP/maxTokens 参数调节：会话级持久化到 composerState，toolbar 新增参数 picker，后端 chat 接口接收并应用参数。前后端联动。",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

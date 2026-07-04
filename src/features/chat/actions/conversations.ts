@@ -144,6 +144,9 @@ export interface ConversationComposerState {
   webSearch: boolean;
   cardIds: string[];
   kbIds: string[];
+  temperature?: number | null;
+  topP?: number | null;
+  maxTokens?: number | null;
 }
 
 /** 校验当前用户对会话的属主关系,返回是否通过。 */
@@ -215,6 +218,34 @@ export async function setConversationComposerState(
     .where(eq(S().conversations.id, conversationId));
 }
 
+/**
+ * 设置会话级模型参数(temperature/topP/maxTokens),合并到既有 composerState。
+ * 传 null 表示清除该参数;undefined 不动。
+ */
+export async function setConversationModelParams(
+  conversationId: string,
+  params: { temperature?: number | null; topP?: number | null; maxTokens?: number | null },
+) {
+  const user = await requireSession();
+  if (!(await assertConversationOwner(conversationId, user.id))) throw new Error("无权操作");
+  const db = await getDb();
+  const [conv] = await db
+    .select({ composerState: S().conversations.composerState })
+    .from(S().conversations)
+    .where(eq(S().conversations.id, conversationId))
+    .limit(1);
+  const prev = (conv?.composerState as Record<string, unknown> | null) ?? {};
+  const next: Record<string, unknown> = { ...prev };
+  for (const [k, v] of Object.entries(params)) {
+    if (v === null || v === undefined) delete next[k];
+    else next[k] = v;
+  }
+  await db
+    .update(S().conversations)
+    .set({ composerState: next })
+    .where(eq(S().conversations.id, conversationId));
+}
+
 /** 一次性读回会话的输入区状态(模型 / 输出方式 / 输出样式 / 联网 / 指令卡 / 知识库),供 SSR 回填。 */
 export async function getConversationComposerState(
   conversationId: string,
@@ -234,9 +265,9 @@ export async function getConversationComposerState(
     .where(eq(S().conversations.id, conversationId))
     .limit(1);
   if (!conv || conv.userId !== user.id) {
-    return { modelName: null, outputModeId: null, renderStyleId: null, webSearch: false, cardIds: [], kbIds: [] };
+    return { modelName: null, outputModeId: null, renderStyleId: null, webSearch: false, cardIds: [], kbIds: [], temperature: null, topP: null, maxTokens: null };
   }
-  const composer = (conv.composerState as { cardIds?: string[]; kbIds?: string[] } | null) ?? {};
+  const composer = (conv.composerState as { cardIds?: string[]; kbIds?: string[]; temperature?: number; topP?: number; maxTokens?: number } | null) ?? {};
   return {
     modelName: (conv.modelName as string | null) ?? null,
     outputModeId: (conv.outputModeId as string | null) ?? null,
@@ -244,6 +275,9 @@ export async function getConversationComposerState(
     webSearch: (conv.webSearch as boolean) ?? false,
     cardIds: composer.cardIds ?? [],
     kbIds: composer.kbIds ?? [],
+    temperature: typeof composer.temperature === "number" ? composer.temperature : null,
+    topP: typeof composer.topP === "number" ? composer.topP : null,
+    maxTokens: typeof composer.maxTokens === "number" ? composer.maxTokens : null,
   };
 }
 

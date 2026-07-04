@@ -142,7 +142,12 @@
     "outputMode": "Output mode",
     "outputModeDefault": "Default",
     "renderStyle": "Render style",
-    "renderStyleDefault": "Default"
+    "renderStyleDefault": "Default",
+    "modelParams": "Parameters",
+    "temperature": "Temperature",
+    "topP": "Top P",
+    "maxTokens": "Max tokens",
+    "resetDefaults": "Reset to defaults"
   },
   "panel": {
     "title": "Dashboard",

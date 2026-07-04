@@ -11,7 +11,7 @@ import { useChatScrollController } from "@/features/chat/hooks/useChatScrollCont
 import { ChatMessageList } from "@/features/chat/components/ChatMessageList";
 import { ChatToolbar } from "@/features/chat/components/ChatToolbar";
 import { ChatInputBox } from "@/features/chat/components/ChatInputBox";
-import { setConversationOutputMode, setConversationRenderStyle, setConversationModel, setConversationWebSearch, setConversationComposerState } from "@/features/chat/actions/conversations";
+import { setConversationOutputMode, setConversationRenderStyle, setConversationModel, setConversationWebSearch, setConversationComposerState, setConversationModelParams } from "@/features/chat/actions/conversations";
 import { estimateTokens } from "@/lib/tokens";
 import type { ChatMessage, ModelOption, CardOption, KnowledgeBaseOption, OutputModeOption, RenderStyleOption } from "@/features/chat/model/types";
 
@@ -39,6 +39,8 @@ interface ChatComposerProps {
   initialCardIds?: string[];
   /** 当前会话已选知识库(回填)。 */
   initialKbIds?: string[];
+  /** 当前会话模型参数(回填)。 */
+  initialModelParams?: { temperature?: number | null; topP?: number | null; maxTokens?: number | null };
   /** 当前会话 ID(切换输出方式时持久化用;新会话无)。 */
   conversationId?: string;
   initialMessages?: ChatMessage[];
@@ -64,6 +66,7 @@ export default function ChatComposer({
   initialWebSearch = false,
   initialCardIds = [],
   initialKbIds = [],
+  initialModelParams,
   conversationId: initialConvId,
   initialMessages = [],
 }: ChatComposerProps) {
@@ -124,6 +127,37 @@ export default function ChatComposer({
   // 空状态示例问题:填入输入框,用户可编辑后发送(不自动发送,保留修改空间)
   const handlePickSample = (text: string) => {
     setInput(text);
+  };
+
+  // 模型参数(temperature/topP/maxTokens):会话级持久化,null 表示用模型默认
+  const [modelParams, setModelParams] = useState<{ temperature: number | null; topP: number | null; maxTokens: number | null }>({
+    temperature: initialModelParams?.temperature ?? null,
+    topP: initialModelParams?.topP ?? null,
+    maxTokens: initialModelParams?.maxTokens ?? null,
+  });
+  const handleModelParamsChange = (p: { temperature?: number | null; topP?: number | null; maxTokens?: number | null }) => {
+    setModelParams((prev) => ({
+      temperature: p.temperature !== undefined ? p.temperature : prev.temperature,
+      topP: p.topP !== undefined ? p.topP : prev.topP,
+      maxTokens: p.maxTokens !== undefined ? p.maxTokens : prev.maxTokens,
+    }));
+    const convId = runtime.conversationId ?? initialConvId;
+    if (convId) {
+      startModeTransition(async () => {
+        try { await setConversationModelParams(convId, p); }
+        catch (err) { console.error("set model params failed:", err); }
+      });
+    }
+  };
+  const handleModelParamsReset = () => {
+    setModelParams({ temperature: null, topP: null, maxTokens: null });
+    const convId = runtime.conversationId ?? initialConvId;
+    if (convId) {
+      startModeTransition(async () => {
+        try { await setConversationModelParams(convId, { temperature: null, topP: null, maxTokens: null }); }
+        catch (err) { console.error("reset model params failed:", err); }
+      });
+    }
   };
 
   // 当前选中的样式 cssClass(供 ChatMessageList 套容器 class),null 表示用默认渲染
@@ -285,6 +319,9 @@ export default function ChatComposer({
               onRenderStyleClear={() => handleRenderStyleChange("")}
               webSearch={webSearch}
               onWebSearchToggle={handleWebSearchToggle}
+              modelParams={modelParams}
+              onModelParamsChange={handleModelParamsChange}
+              onModelParamsReset={handleModelParamsReset}
             />
 
             <ChatInputBox

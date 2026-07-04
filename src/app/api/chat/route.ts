@@ -182,6 +182,12 @@ export async function POST(req: NextRequest) {
   if ("error" in prepared) return prepared.error;
   const { irRequest, trace, searchBundle, ragStatus, compaction } = prepared;
 
+  // 会话级模型参数(用户在 toolbar 设置)覆盖默认值;未设置则沿用 prepareChatContext 的默认
+  const composerParams = (conv.composerState as { temperature?: number; topP?: number; maxTokens?: number } | null) ?? {};
+  if (typeof composerParams.temperature === "number") irRequest.temperature = composerParams.temperature;
+  if (typeof composerParams.topP === "number") irRequest.top_p = composerParams.topP;
+  if (typeof composerParams.maxTokens === "number") irRequest.max_tokens = composerParams.maxTokens;
+
   const ctx = { userId: user.id, keyKind: null as null, source: "chat" as const };
 
   // 流式返回:text/event-stream,每条 text-delta 作为一行
