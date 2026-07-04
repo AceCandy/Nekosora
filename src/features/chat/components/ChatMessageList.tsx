@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, type RefObject } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { useTranslations } from "next-intl";
 import { Sparkles, ChevronDown, Copy, Reply, MessagesSquare } from "lucide-react";
 import { ChatMessageItem } from "@/features/chat/components/ChatMessageItem";
@@ -96,38 +97,64 @@ export function ChatMessageList({
     ? rawSamples.filter((s): s is string => typeof s === "string" && s.trim() !== "")
     : [];
 
+  // 虚拟滚动:仅渲染可见消息项 + overscan 缓冲,解决长会话卡顿;measureElement 动态测量每项实际高度。
+  // useChatScrollController 基于 scrollHeight,虚拟化撑高 div 后仍正确,贴底/跟随/平滑滚动逻辑不变。
+  const rowVirtualizer = useVirtualizer({
+    count: messages.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 200,
+    overscan: 4,
+  });
+
   return (
     // 相对外层 relative 容器,让对话大纲/回到最新按钮锚定在消息区(而非含输入框的主区)
     <div className="relative flex-1 min-h-0">
       <div ref={scrollRef} onScroll={onScroll} className="h-full overflow-y-auto px-6 py-8 md:py-12">
-        <div className="max-w-4xl mx-auto space-y-8">
-          {messages.length === 0 && (
+        {messages.length === 0 ? (
+          <div className="max-w-4xl mx-auto">
             <WelcomeBlock samples={samples} onPickSample={onPickSample} />
-          )}
-
-          {messages.map((m, i) => (
-            <ErrorBoundary key={i} name="message">
-              <ChatMessageItem
-                domId={`msg-${i}`}
-                message={m}
-                isLast={i === messages.length - 1}
-                isStreaming={streaming}
-                model={model}
-                renderStyleClass={renderStyleClass}
-                renderStyleRenderer={renderStyleRenderer}
-                onRegenerate={onRegenerate}
-                onEdit={onEdit}
-                onSwitchVersion={onSwitchVersion}
-                onOpenArtifact={onOpenArtifact}
-                onDelete={onDelete}
-                onContinue={onContinue}
-                models={models}
-              />
-            </ErrorBoundary>
-          ))}
-          {/* 底部留白缓冲:仅在流式生成时留白,让生成中的内容停在视口中部偏上;同时作为滚动锚点 */}
-          <div ref={messagesEndRef} className={streaming ? "h-32" : "h-0"} />
-        </div>
+          </div>
+        ) : (
+          <div
+            style={{ height: rowVirtualizer.getTotalSize(), position: "relative", width: "100%" }}
+          >
+            {rowVirtualizer.getVirtualItems().map((vi) => {
+              const m = messages[vi.index];
+              return (
+                <div
+                  key={vi.key}
+                  data-index={vi.index}
+                  ref={rowVirtualizer.measureElement}
+                  className="absolute top-0 left-0 w-full"
+                  style={{ transform: `translateY(${vi.start}px)` }}
+                >
+                  <div className="max-w-4xl mx-auto py-4">
+                    <ErrorBoundary name="message">
+                      <ChatMessageItem
+                        domId={`msg-${vi.index}`}
+                        message={m}
+                        isLast={vi.index === messages.length - 1}
+                        isStreaming={streaming}
+                        model={model}
+                        renderStyleClass={renderStyleClass}
+                        renderStyleRenderer={renderStyleRenderer}
+                        onRegenerate={onRegenerate}
+                        onEdit={onEdit}
+                        onSwitchVersion={onSwitchVersion}
+                        onOpenArtifact={onOpenArtifact}
+                        onDelete={onDelete}
+                        onContinue={onContinue}
+                        models={models}
+                      />
+                    </ErrorBoundary>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {/* 底部留白缓冲:仅在流式生成时留白,让生成中的内容停在视口中部偏上;同时作为滚动锚点 */}
+        <div ref={messagesEndRef} className={streaming ? "h-32" : "h-0"} />
       </div>
 
       {/* 对话大纲:贴消息区右边缘(滚动条左侧),hover 整列弹出完整轮次列表 */}
