@@ -5,10 +5,41 @@ import { useTranslations } from "next-intl";
 import { Sparkles, RefreshCw, Loader2, User, Pencil, X, Check, Wrench, CheckCircle2, AlertCircle, ExternalLink, ChevronLeft, ChevronRight, Copy, Volume2 } from "lucide-react";
 import { clsx } from "clsx";
 import { Markdown } from "@/shared/components/markdown/Markdown";
+import { ErrorBoundary } from "@/shared/components/ErrorBoundary";
 import { ArtifactInline } from "@/features/artifacts/ArtifactInline";
 import { HtmlPreviewFrame } from "@/features/artifacts/HtmlPreviewFrame";
 import type { ChatMessage } from "@/features/chat/model/types";
 import type { Artifact } from "@/features/artifacts/ArtifactPanel";
+
+/**
+ * 复制文本到剪贴板。
+ * 优先用原生 Clipboard API(仅安全上下文可用:https / localhost),
+ * 不可用或被拒绝时回退到临时 textarea + execCommand('copy'),
+ * 兼容 http 局域网 IP 等非安全上下文。返回是否复制成功。
+ */
+async function copyToClipboard(text: string): Promise<boolean> {
+  if (navigator.clipboard) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // 权限被拒等场景,继续走 execCommand 兜底
+    }
+  }
+  try {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(textarea);
+    return ok;
+  } catch {
+    return false;
+  }
+}
 
 interface ChatMessageItemProps {
   message: ChatMessage;
@@ -107,12 +138,12 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
 
   const handleCopy = async () => {
     if (!content) return;
-    try {
-      await navigator.clipboard.writeText(content);
+    const ok = await copyToClipboard(content);
+    if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch {
-      /* 剪贴板不可用时静默 */
+    } else {
+      console.warn("[ChatMessageItem] 复制失败:当前环境剪贴板不可用");
     }
   };
 
@@ -261,36 +292,49 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
             {toolCalls && toolCalls.length > 0 && (
               <div className="mb-2 space-y-1">
                 {toolCalls.map((tc, ti) => (
-                  <details
+                  <ErrorBoundary
                     key={ti}
-                    open={tc.status === "calling"}
-                    className="rounded-md border border-morning-mist dark:border-deep-space/80 bg-neutral-50/40 dark:bg-[#0d0f14]/15 overflow-hidden">
-                    <summary className="cursor-pointer hover:text-neutral-600 dark:hover:text-neutral-300 px-3 py-1.5 text-[11px] font-mono select-none flex items-center gap-1.5 text-neutral-500 dark:text-neutral-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue">
-                      {tc.status === "calling" ? (
-                        <Loader2 className="w-3 h-3 animate-spin text-sora-blue" aria-hidden="true" />
-                      ) : tc.status === "error" ? (
-                        <AlertCircle className="w-3 h-3 text-red-500" aria-hidden="true" />
-                      ) : (
-                        <CheckCircle2 className="w-3 h-3 text-green-500" aria-hidden="true" />
+                    name="tool-call"
+                    rawContent={
+                      typeof tc.args === "string"
+                        ? tc.args
+                        : tc.args !== undefined
+                          ? JSON.stringify(tc.args)
+                          : undefined
+                    }
+                  >
+                    <details
+                      open={tc.status === "calling"}
+                      className="rounded-md border border-morning-mist dark:border-deep-space/80 bg-neutral-50/40 dark:bg-[#0d0f14]/15 overflow-hidden">
+                      <summary className="cursor-pointer hover:text-neutral-600 dark:hover:text-neutral-300 px-3 py-1.5 text-[11px] font-mono select-none flex items-center gap-1.5 text-neutral-500 dark:text-neutral-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue">
+                        {tc.status === "calling" ? (
+                          <Loader2 className="w-3 h-3 animate-spin text-sora-blue" aria-hidden="true" />
+                        ) : tc.status === "error" ? (
+                          <AlertCircle className="w-3 h-3 text-red-500" aria-hidden="true" />
+                        ) : (
+                          <CheckCircle2 className="w-3 h-3 text-green-500" aria-hidden="true" />
+                        )}
+                        <Wrench className="w-3 h-3 opacity-60" aria-hidden="true" />
+                        <span>{tc.toolName}</span>
+                      </summary>
+                      {tc.args !== undefined && (
+                        <div className="px-3 pb-1.5 pt-1 text-[11px] text-neutral-500 dark:text-neutral-400 border-t border-morning-mist dark:border-deep-space/60 font-mono break-all">
+                          {typeof tc.args === "string" ? tc.args : JSON.stringify(tc.args)}
+                        </div>
                       )}
-                      <Wrench className="w-3 h-3 opacity-60" aria-hidden="true" />
-                      <span>{tc.toolName}</span>
-                    </summary>
-                    {tc.args !== undefined && (
-                      <div className="px-3 pb-1.5 pt-1 text-[11px] text-neutral-500 dark:text-neutral-400 border-t border-morning-mist dark:border-deep-space/60 font-mono break-all">
-                        {typeof tc.args === "string" ? tc.args : JSON.stringify(tc.args)}
-                      </div>
-                    )}
-                  </details>
+                    </details>
+                  </ErrorBoundary>
                 ))}
               </div>
             )}
             {content ? (
-              <Markdown
-                content={content}
-                isStreaming={isStreaming && isLast}
-                renderer={renderStyleRenderer}
-              />
+              <ErrorBoundary name="message-markdown" rawContent={content}>
+                <Markdown
+                  content={content}
+                  isStreaming={isStreaming && isLast}
+                  renderer={renderStyleRenderer}
+                />
+              </ErrorBoundary>
             ) : isStreaming && isLast && !hasReasoning ? (
               <span className="inline-flex items-center gap-1.5 text-neutral-400">
                 <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
@@ -343,7 +387,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
               className="inline-flex items-center gap-1 text-[11px] font-semibold text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue rounded cursor-pointer"
               aria-label={t("regenerate")}
             >
-              <RefreshCw className="w-3 h-3" aria-hidden="true" />
+              <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />
               <span>{t("regenerate")}</span>
             </button>
             <button

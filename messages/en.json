@@ -68,6 +68,17 @@
   "chat": {
     "welcomeTitle": "Welcome to Nekusora",
     "welcomeDesc": "Spacious streaming conversation layout with personalized memory loaded. Select a model to begin.",
+    "sampleQuestions": [
+      "Polish a product description for me",
+      "Summarize the key points of this article",
+      "Implement quicksort in Python",
+      "Give me ideas for daily team standups"
+    ],
+    "renderFailed": "This content failed to render",
+    "retry": "Retry",
+    "showRaw": "Show raw",
+    "hideRaw": "Hide",
+    "inputTokens": "~{count} tokens",
     "noModels": "No models available",
     "noModelsDesc": "Please ask your administrator to configure upstream providers, or add your own BYO models in the dashboard.",
     "thinking": "Thinking…",

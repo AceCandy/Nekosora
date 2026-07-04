@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useTransition } from "react";
+import { useState, useEffect, useMemo, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { Cpu } from "lucide-react";
 import { clsx } from "clsx";
@@ -12,6 +12,7 @@ import { ChatMessageList } from "@/features/chat/components/ChatMessageList";
 import { ChatToolbar } from "@/features/chat/components/ChatToolbar";
 import { ChatInputBox } from "@/features/chat/components/ChatInputBox";
 import { setConversationOutputMode, setConversationRenderStyle, setConversationModel, setConversationWebSearch, setConversationComposerState } from "@/features/chat/actions/conversations";
+import { estimateTokens } from "@/lib/tokens";
 import type { ChatMessage, ModelOption, CardOption, KnowledgeBaseOption, OutputModeOption, RenderStyleOption } from "@/features/chat/model/types";
 
 export type { ChatMessage, ModelOption, CardOption, KnowledgeBaseOption, OutputModeOption, RenderStyleOption } from "@/features/chat/model/types";
@@ -49,7 +50,7 @@ interface ChatComposerProps {
  * 持有所有会话级 selection state 与持久化逻辑，把渲染拆给三个子组件：
  *   - ChatMessageList：消息滚动区 + 空状态 + 对话大纲
  *   - ChatToolbar：模型/附件/4 个 picker/联网 toggle/chip 行
- *   - ChatInputBox：输入框 + 发送/停止
+ *   - ChatInputBox：输入框 + 发送/停止 + token 计数
  */
 export default function ChatComposer({
   models,
@@ -95,6 +96,13 @@ export default function ChatComposer({
   });
   const { scrollRef, endRef: messagesEndRef, isAtBottom, onScroll, scrollToBottom, forceFollow } = useChatScrollController(runtime.messages);
 
+  // 输入文本 + 图片附件的 token 估算(图片固定 255/张);非图片文件由后端解析,前端不计入
+  const inputTokens = useMemo(() => {
+    const textTokens = estimateTokens(input);
+    const imageTokens = attached.filter((a) => a.isImage).length * 255;
+    return textTokens + imageTokens;
+  }, [input, attached]);
+
   // 流式结束后,刷新有 publicId 的 assistant 消息版本信息(用于版本切换器)
   useEffect(() => {
     if (runtime.streaming) return;
@@ -111,6 +119,11 @@ export default function ChatComposer({
     setInput("");
     // 用户主动发送:强制滚到底,确保自己的发言可见
     requestAnimationFrame(() => forceFollow());
+  };
+
+  // 空状态示例问题:填入输入框,用户可编辑后发送(不自动发送,保留修改空间)
+  const handlePickSample = (text: string) => {
+    setInput(text);
   };
 
   // 当前选中的样式 cssClass(供 ChatMessageList 套容器 class),null 表示用默认渲染
@@ -229,6 +242,7 @@ export default function ChatComposer({
           onEdit={runtime.editAndResend}
           onSwitchVersion={runtime.switchVersion}
           onOpenArtifact={setActiveArtifact}
+          onPickSample={handlePickSample}
         />
 
         {/* Input Control Box */}
@@ -279,6 +293,7 @@ export default function ChatComposer({
               onStop={runtime.stopGeneration}
               onPasteFiles={handleUpload}
               onDropFiles={handleUpload}
+              tokenCount={inputTokens}
             />
           </div>
         </div>

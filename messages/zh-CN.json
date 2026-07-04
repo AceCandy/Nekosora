@@ -68,6 +68,17 @@
   "chat": {
     "welcomeTitle": "欢迎来到 Nekusora 调试工作台",
     "welcomeDesc": "大呼吸感流式对话排版，已载入个性化记忆。请选择模型开始您的提问。",
+    "sampleQuestions": [
+      "帮我润色一段产品文案",
+      "总结这篇文章的核心观点",
+      "用 Python 实现一个快速排序",
+      "给我一些团队晨会议题灵感"
+    ],
+    "renderFailed": "该内容渲染失败",
+    "retry": "重试",
+    "showRaw": "查看原始内容",
+    "hideRaw": "收起",
+    "inputTokens": "约 {count} token",
     "noModels": "暂无可用模型",
     "noModelsDesc": "请联系系统管理员配置上游服务商资源，或在用户控制面板自行添加独享模型。",
     "thinking": "思考中…",
