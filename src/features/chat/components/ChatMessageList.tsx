@@ -3,7 +3,8 @@
 import React, { useEffect, useState, type RefObject } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useTranslations } from "next-intl";
-import { Sparkles, ChevronDown, Copy, Reply, MessagesSquare } from "lucide-react";
+import { Sparkles, ChevronDown, Copy, Reply, MessagesSquare, Volume2, Square } from "lucide-react";
+import { clsx } from "clsx";
 import { ChatMessageItem } from "@/features/chat/components/ChatMessageItem";
 import { ChatOutline } from "@/features/chat/components/ChatOutline";
 import { ErrorBoundary } from "@/shared/components/ErrorBoundary";
@@ -11,6 +12,7 @@ import ConfirmDialog from "@/shared/ui/ConfirmDialog";
 import type { ChatMessage, ModelOption } from "@/features/chat/model/types";
 import type { Artifact } from "@/features/artifacts/ArtifactPanel";
 import { copyToClipboard } from "@/shared/lib/clipboard";
+import { useMessageSpeech } from "@/features/chat/hooks/useMessageSpeech";
 
 interface ChatMessageListProps {
   messages: ChatMessage[];
@@ -45,6 +47,9 @@ interface ChatMessageListProps {
   onAsk?: (text: string) => void;
 }
 
+/** 划词朗读使用的固定 id:与消息朗读互斥,同一时刻只朗读一段。 */
+const SELECTION_SPEECH_ID = "selection";
+
 /**
  * 消息列表段 —— 滚动容器 + 空状态 + 消息渲染 + 对话大纲 + 回到底部按钮。
  *
@@ -76,6 +81,8 @@ export function ChatMessageList({
   onAsk,
 }: ChatMessageListProps) {
   const t = useTranslations("chat");
+  const { supported: ttsSupported, speakingId, speak, stop: stopSpeak } = useMessageSpeech();
+  const isSelectionSpeaking = speakingId === SELECTION_SPEECH_ID;
 
   // 文本选区工具栏:选中消息正文时浮出复制 / 引用插入 / 追问
   const [selection, setSelection] = useState<{ text: string; top: number; left: number } | null>(null);
@@ -185,7 +192,7 @@ export function ChatMessageList({
           className="fixed z-50 flex items-center gap-0.5 rounded-lg border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink px-1 py-0.5 shadow-md animate-in fade-in duration-100"
           style={{
             top: Math.max(8, selection.top - 38),
-            left: Math.max(8, Math.min(selection.left - 80, (typeof window !== "undefined" ? window.innerWidth : 9999) - 168)),
+            left: Math.max(8, Math.min(selection.left - 100, (typeof window !== "undefined" ? window.innerWidth : 9999) - 210)),
           }}
         >
           <button
@@ -200,6 +207,34 @@ export function ChatMessageList({
             title={t("copy")}
           >
             <Copy className="w-3 h-3" aria-hidden="true" />{t("copy")}
+          </button>
+          <button
+            type="button"
+            disabled={!ttsSupported}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => {
+              if (isSelectionSpeaking) {
+                stopSpeak();
+                setSelection(null);
+                window.getSelection()?.removeAllRanges();
+              } else {
+                speak(SELECTION_SPEECH_ID, selection.text);
+              }
+            }}
+            className={clsx(
+              "inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed",
+              isSelectionSpeaking
+                ? "text-sora-blue"
+                : "text-neutral-500 hover:text-neutral-800 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-900",
+            )}
+            title={!ttsSupported ? t("readAloudUnsupported") : isSelectionSpeaking ? t("stopReading") : t("readAloud")}
+          >
+            {isSelectionSpeaking ? (
+              <Square className="w-3 h-3" aria-hidden="true" />
+            ) : (
+              <Volume2 className="w-3 h-3" aria-hidden="true" />
+            )}
+            {isSelectionSpeaking ? t("stopReading") : t("readAloud")}
           </button>
           {onQuote && (
             <button
