@@ -26,6 +26,27 @@ function isHtmlLine(line: string): boolean {
   return /^<\/?[a-zA-Z][\s\S]*>$/.test(trimmed) || /^<br\s*\/?>$/.test(trimmed);
 }
 
+/** 自闭合/空标签,不参与 HTML 块深度计数。 */
+const VOID_HTML_TAGS = new Set([
+  "area", "base", "br", "col", "embed", "hr", "img", "input",
+  "link", "meta", "param", "source", "track", "wbr",
+]);
+
+/** 统计一行内 HTML 标签的净深度(开标签 +1 / 闭标签 -1,void 与自闭合计 0)。 */
+function countHtmlDelta(line: string): number {
+  let delta = 0;
+  const re = /<(\/)?([a-zA-Z][a-zA-Z0-9]*)\b[^>]*?(\/)?>/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(line)) !== null) {
+    const closing = m[1] === "/";
+    const selfClosing = m[3] === "/";
+    const tag = m[2].toLowerCase();
+    if (selfClosing || VOID_HTML_TAGS.has(tag)) continue;
+    delta += closing ? -1 : 1;
+  }
+  return delta;
+}
+
 /** 判断一行是否为表格行。 */
 function isTableRow(line: string): boolean {
   return /^\s*\|(.+)\|\s*$/.test(line);
@@ -45,6 +66,8 @@ export function parseMarkdown(input: string): string {
   let inOl = false;
   let inBlockquote = false;
   let blockquoteBuffer: string[] = [];
+  /** HTML 容器块嵌套深度:>0 表示位于原生 HTML 块内,行原样透传不解析。 */
+  let htmlBlockDepth = 0;
 
   function flushParagraph() {
     if (paragraph.length) {
@@ -132,6 +155,25 @@ export function parseMarkdown(input: string): string {
       codeBuffer.push(line);
       continue;
     }
+
+    // 位于 HTML 容器块内:原样透传(含空行/裸文字/<br>/嵌套),不解析 markdown。
+    if (htmlBlockDepth > 0) {
+      html += line + "\n";
+      htmlBlockDepth = Math.max(0, htmlBlockDepth + countHtmlDelta(line));
+      continue;
+    }
+
+    // 进入 HTML 容器块:整行以 < 开头且本行开标签净增。
+    const htmlDelta = countHtmlDelta(line);
+    if (htmlDelta > 0 && trimmed.startsWith("<")) {
+      flushParagraph();
+      closeLists();
+      flushBlockquote();
+      htmlBlockDepth = htmlDelta;
+      html += line + "\n";
+      continue;
+    }
+
     if (!trimmed) {
       flushParagraph();
       closeLists();
