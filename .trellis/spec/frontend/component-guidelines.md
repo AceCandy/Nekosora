@@ -66,6 +66,22 @@
 - **增量更新**:store 内按 conversationId 找到目标消息,对副本 `content += delta` 后整体替换 `runtimes`,配 `AbortController` 支持中断。
 - **事件类型**:`delta`(文本增量)、`finish`(含 usage)、`error`、`rag_search`、`compact`、`trace`。
 
+## Markdown 渲染
+
+AI 回复正文由 `shared/components/markdown/Markdown.tsx` 渲染,两条互斥路径,改动前先确认落在哪条:
+
+- **streamdown**(默认 + 流式中):`<Streamdown>` 封装,内置 GFM/KaTeX/Mermaid/Shiki 高亮与 rehype-harden 防 XSS。流式时 `mode="streaming"` 对未闭合块容错。
+- **custom**(静态 + 选中「输出样式」时):流式结束后用 `customRenderer.ts` 的 `parseMarkdown` 重渲,原样保留 AI 的 HTML/class/style(不过滤),支持 `.takeaway`/`.card-grid` 等高级组件 class。
+
+**可执行契约(改 `parseMarkdown` 必须维持)**:
+
+- HTML 容器块(`htmlBlockDepth > 0`)内的所有行原样透传,**不参与 markdown 解析**——裸文字不得被包成 `<p>`,否则会被输出样式(如纸面杂志 `.rs-paper .nekusora-md p { color }`)改写颜色与边距。
+- 块深度由 `countHtmlDelta` 统计;void 标签(`br`/`hr`/`img`/...)与显式自闭合、同行开闭(`<div>x</div>`)不计入深度。
+- 代码块(` ``` `)优先级高于 HTML 块判定。
+- 改 `parseMarkdown` 必须跑 `src/shared/components/markdown/customRenderer.test.ts`;该测试守住「HTML 块内文字不被打散」与「普通 markdown 回归」。
+
+**内联 style 过滤**:`streamdown-html.tsx` 对放行标签调 `sanitizeHTMLStyle`;当前为原样透传(不做属性白名单/危险值拦截/中性色映射),安全兜底依赖 streamdown 内部 rehype-harden。`custom` 路径完全不过滤。
+
 ## Interaction Gotchas
 
 非显而易见的交互行为坑,踩过一次就要记住:
