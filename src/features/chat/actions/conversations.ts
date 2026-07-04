@@ -1,5 +1,5 @@
 "use server";
-import { eq, and, desc, isNull } from "drizzle-orm";
+import { eq, and, desc, isNull, like } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { requireSession } from "@/lib/session";
@@ -244,6 +244,62 @@ export async function setConversationModelParams(
     .update(S().conversations)
     .set({ composerState: next })
     .where(eq(S().conversations.id, conversationId));
+}
+
+/**
+ * 全文搜索当前用户会话的消息内容(LIKE,兼容 pg 的 jsonb 隐式转 text 与 sqlite text)。
+ * 排除软删消息,按命中消息时间倒序,最多 50 条,每条返回前后约 30 字符的片段。
+ */
+export async function searchMessages(keyword: string): Promise<Array<{
+  conversationId: string;
+  conversationTitle: string;
+  messagePublicId: string;
+  snippet: string;
+  createdAt: number;
+}>> {
+  const user = await requireSession();
+  const kw = keyword.trim();
+  if (!kw) return [];
+  const db = await getDb();
+  const s = S();
+  const rows = await db
+    .select({
+      conversationId: s.messages.conversationId,
+      conversationTitle: s.conversations.title,
+      messagePublicId: s.messages.publicId,
+      content: s.messages.content,
+      createdAt: s.messages.createdAt,
+    })
+    .from(s.messages)
+    .innerJoin(s.conversations, eq(s.messages.conversationId, s.conversations.id))
+    .where(and(
+      eq(s.conversations.userId, user.id),
+      isNull(s.messages.deletedAt),
+      like(s.messages.content, `%${kw}%`),
+    ))
+    .orderBy(desc(s.messages.createdAt))
+    .limit(50);
+  const typed = rows as Array<{ conversationId: string; conversationTitle: string | null; messagePublicId: string; content: unknown; createdAt: Date | number }>;
+  return typed.map((r) => {
+    const text = typeof r.content === "string" ? r.content : String(r.content ?? "");
+    return {
+      conversationId: r.conversationId,
+      conversationTitle: r.conversationTitle ?? "(未命名)",
+      messagePublicId: r.messagePublicId,
+      snippet: makeSnippet(text, kw),
+      createdAt: r.createdAt instanceof Date ? r.createdAt.getTime() : Number(r.createdAt),
+    };
+  });
+}
+
+/** 截取 keyword 前后约 30 字符作为命中片段,首尾用省略号标记截断。 */
+function makeSnippet(text: string, keyword: string): string {
+  const lower = text.toLowerCase();
+  const idx = lower.indexOf(keyword.toLowerCase());
+  if (idx < 0) return text.slice(0, 80);
+  const start = Math.max(0, idx - 30);
+  const end = Math.min(text.length, idx + keyword.length + 30);
+  return (start > 0 ? "…" : "") + text.slice(start, end) + (end < text.length ? "…" : "");
 }
 
 /** 一次性读回会话的输入区状态(模型 / 输出方式 / 输出样式 / 联网 / 指令卡 / 知识库),供 SSR 回填。 */

@@ -129,6 +129,8 @@
     "groupEarlier": "Earlier",
     "groupArchived": "Archived",
     "searchConversations": "Search conversations…",
+    "noSearchResults": "No matching messages",
+    "searching": "Searching…",
     "actionPin": "Pin",
     "actionUnpin": "Unpin",
     "actionArchive": "Archive",

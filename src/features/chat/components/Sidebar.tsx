@@ -3,6 +3,8 @@
 import React, { useMemo, useState, useTransition, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { searchMessages } from "@/features/chat/actions/conversations";
 import { Plus, Settings2, MessageSquare, LogOut, Menu, X, Search, Pin, Archive, Trash2, ImageIcon, Loader2 } from "lucide-react";
 import { clsx } from "clsx";
 
@@ -13,6 +15,15 @@ interface ConversationItem {
   archived: boolean;
   generating: boolean;
   updatedAt: number;
+}
+
+/** 全文搜索单条命中结果(按消息粒度)。 */
+interface SearchResult {
+  conversationId: string;
+  conversationTitle: string;
+  messagePublicId: string;
+  snippet: string;
+  createdAt: number;
 }
 
 interface SidebarProps {
@@ -42,6 +53,30 @@ interface SidebarProps {
   deleteAction: (id: string) => Promise<void>;
   /** 轮询各会话 generating 状态,用于检测后台会话完成。 */
   getGeneratingStatusesAction: () => Promise<{ id: string; generating: boolean }[]>;
+}
+
+/** 把 keyword 在片段中高亮(大小写不敏感),返回 React 节点数组。 */
+function highlightSnippet(text: string, keyword: string): React.ReactNode {
+  const kw = keyword.trim();
+  if (!kw) return text;
+  const lower = text.toLowerCase();
+  const kwl = kw.toLowerCase();
+  const parts: React.ReactNode[] = [];
+  let i = 0;
+  let idx = lower.indexOf(kwl, i);
+  let key = 0;
+  while (idx >= 0) {
+    if (idx > i) parts.push(text.slice(i, idx));
+    parts.push(
+      <mark key={key++} className="bg-sora-blue/20 text-inherit rounded px-0.5">
+        {text.slice(idx, idx + kw.length)}
+      </mark>,
+    );
+    i = idx + kw.length;
+    idx = lower.indexOf(kwl, i);
+  }
+  if (i < text.length) parts.push(text.slice(i));
+  return parts;
 }
 
 /** 按更新时间归入时间分组(今天/昨天/更早)。 */
@@ -82,7 +117,10 @@ export default function Sidebar({
   getGeneratingStatusesAction,
 }: SidebarProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const tSidebar = useTranslations("chat");
   const [query, setQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -132,6 +170,22 @@ export default function Sidebar({
     };
     // activeConvId 进依赖:切换会话时立即重算(避免刚完成的当前会话残留蓝点)
   }, [activeConvId, getGeneratingStatusesAction]);
+
+  // 全文搜索:query 非空时防抖(300ms)调 searchMessages 跨会话搜消息内容
+  useEffect(() => {
+    const q = query.trim();
+    if (!q) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      if (cancelled) return;
+      setSearching(true);
+      void searchMessages(q)
+        .then((results) => { if (!cancelled) setSearchResults(results); })
+        .catch((err) => { console.error("search messages failed:", err); if (!cancelled) setSearchResults([]); })
+        .finally(() => { if (!cancelled) setSearching(false); });
+    }, 300);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [query]);
 
   const clearCompleted = (id: string) => {
     setCompletedIds((cur) => {
@@ -387,9 +441,37 @@ export default function Sidebar({
           {conversationsText}
         </div>
 
-        {/* Scrollable Grouped Conversation List */}
+        {/* Scrollable Conversation List(query 非空时显示全文搜索结果,否则分组列表) */}
         <div className="flex-1 overflow-y-auto -mx-1 px-1 space-y-3">
-          {sections.length === 0 ? (
+          {query.trim() ? (
+            searching ? (
+              <p className="text-xs text-neutral-400 px-3 py-2 flex items-center gap-1.5">
+                <Loader2 className="w-3 h-3 animate-spin" aria-hidden="true" />
+                {tSidebar("searching")}
+              </p>
+            ) : searchResults.length === 0 ? (
+              <p className="text-xs text-neutral-400 px-3 py-2">{tSidebar("noSearchResults")}</p>
+            ) : (
+              <div className="space-y-1">
+                {searchResults.map((r) => (
+                  <Link
+                    key={`${r.conversationId}-${r.messagePublicId}-${r.createdAt}`}
+                    href={`/chat/${r.conversationId}`}
+                    onClick={() => setIsOpen(false)}
+                    className="block rounded-md px-3 py-2 hover:bg-neutral-100 dark:hover:bg-neutral-900 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
+                  >
+                    <div className="text-xs font-medium text-neutral-700 dark:text-neutral-200 truncate flex items-center gap-1.5">
+                      <MessageSquare className="w-3 h-3 shrink-0 opacity-60" aria-hidden="true" />
+                      <span className="truncate">{r.conversationTitle}</span>
+                    </div>
+                    <div className="text-[11px] text-neutral-500 dark:text-neutral-400 line-clamp-2 mt-0.5 break-all">
+                      {highlightSnippet(r.snippet, query.trim())}
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )
+          ) : sections.length === 0 ? (
             <p className="text-xs text-neutral-400 px-3 py-2">{noConversationsText}</p>
           ) : (
             sections.map((section) => (
