@@ -9,6 +9,7 @@ import { ChatOutline } from "@/features/chat/components/ChatOutline";
 import { ErrorBoundary } from "@/shared/components/ErrorBoundary";
 import type { ChatMessage, ModelOption } from "@/features/chat/model/types";
 import type { Artifact } from "@/features/artifacts/ArtifactPanel";
+import { copyToClipboard } from "@/shared/lib/clipboard";
 
 interface ChatMessageListProps {
   messages: ChatMessage[];
@@ -173,7 +174,7 @@ export function ChatMessageList({
             type="button"
             onMouseDown={(e) => e.preventDefault()}
             onClick={async () => {
-              try { await navigator.clipboard?.writeText(selection.text); } catch { /* 非安全上下文忽略 */ }
+              await copyToClipboard(selection.text);
               setSelection(null);
               window.getSelection()?.removeAllRanges();
             }}
