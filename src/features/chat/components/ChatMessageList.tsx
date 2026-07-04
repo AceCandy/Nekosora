@@ -1,8 +1,8 @@
 "use client";
 
-import React, { type RefObject } from "react";
+import React, { useEffect, useState, type RefObject } from "react";
 import { useTranslations } from "next-intl";
-import { Sparkles, ChevronDown } from "lucide-react";
+import { Sparkles, ChevronDown, Copy, Reply, MessagesSquare } from "lucide-react";
 import { ChatMessageItem } from "@/features/chat/components/ChatMessageItem";
 import { ChatOutline } from "@/features/chat/components/ChatOutline";
 import { ErrorBoundary } from "@/shared/components/ErrorBoundary";
@@ -36,6 +36,10 @@ interface ChatMessageListProps {
   models?: ModelOption[];
   /** 空状态点击示例问题：填入输入框供用户编辑后发送。 */
   onPickSample?: (text: string) => void;
+  /** 选中文本「引用」：插入输入框。 */
+  onQuote?: (text: string) => void;
+  /** 选中文本「追问」：以该文本为新问题发送。 */
+  onAsk?: (text: string) => void;
 }
 
 /**
@@ -65,8 +69,28 @@ export function ChatMessageList({
   onContinue,
   models,
   onPickSample,
+  onQuote,
+  onAsk,
 }: ChatMessageListProps) {
   const t = useTranslations("chat");
+
+  // 文本选区工具栏:选中消息正文时浮出复制 / 引用插入 / 追问
+  const [selection, setSelection] = useState<{ text: string; top: number; left: number } | null>(null);
+  useEffect(() => {
+    const compute = () => {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || sel.rangeCount === 0) return setSelection(null);
+      const text = sel.toString().trim();
+      if (!text) return setSelection(null);
+      const range = sel.getRangeAt(0);
+      if (!scrollRef.current?.contains(range.commonAncestorContainer)) return setSelection(null);
+      const rect = range.getBoundingClientRect();
+      if (rect.width === 0 && rect.height === 0) return setSelection(null);
+      setSelection({ text, top: rect.top, left: rect.left + rect.width / 2 });
+    };
+    document.addEventListener("mouseup", compute);
+    return () => document.removeEventListener("mouseup", compute);
+  }, [scrollRef]);
   const rawSamples = t.raw("sampleQuestions");
   const samples: string[] = Array.isArray(rawSamples)
     ? rawSamples.filter((s): s is string => typeof s === "string" && s.trim() !== "")
@@ -108,6 +132,53 @@ export function ChatMessageList({
 
       {/* 对话大纲:贴消息区右边缘(滚动条左侧),hover 整列弹出完整轮次列表 */}
       <ChatOutline messages={messages} streaming={streaming} />
+
+      {/* 选中文本浮工具栏:复制 / 引用插入输入框 / 追问 */}
+      {selection && (
+        <div
+          className="fixed z-50 flex items-center gap-0.5 rounded-lg border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink px-1 py-0.5 shadow-md animate-in fade-in duration-100"
+          style={{
+            top: Math.max(8, selection.top - 38),
+            left: Math.max(8, Math.min(selection.left - 80, (typeof window !== "undefined" ? window.innerWidth : 9999) - 168)),
+          }}
+        >
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={async () => {
+              try { await navigator.clipboard?.writeText(selection.text); } catch { /* 非安全上下文忽略 */ }
+              setSelection(null);
+              window.getSelection()?.removeAllRanges();
+            }}
+            className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-semibold text-neutral-500 hover:text-neutral-800 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-900 cursor-pointer"
+            title={t("copy")}
+          >
+            <Copy className="w-3 h-3" aria-hidden="true" />{t("copy")}
+          </button>
+          {onQuote && (
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => { onQuote(selection.text); setSelection(null); window.getSelection()?.removeAllRanges(); }}
+              className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-semibold text-neutral-500 hover:text-neutral-800 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-900 cursor-pointer"
+              title={t("quote")}
+            >
+              <Reply className="w-3 h-3" aria-hidden="true" />{t("quote")}
+            </button>
+          )}
+          {onAsk && (
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => { onAsk(selection.text); setSelection(null); window.getSelection()?.removeAllRanges(); }}
+              className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-semibold text-sora-blue hover:bg-sora-blue/[0.06] cursor-pointer"
+              title={t("askFollowup")}
+            >
+              <MessagesSquare className="w-3 h-3" aria-hidden="true" />{t("askFollowup")}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* 跳到最新:用户上滑离开底部时浮出,贴消息区底部内侧,点击回到底部并恢复跟随 */}
       {!isAtBottom && (

@@ -89,6 +89,8 @@
     "delete": "Delete",
     "deleteMessageConfirm": "Delete this message? It will be hidden from view but the branch structure is preserved.",
     "copy": "Copy",
+    "quote": "Quote",
+    "askFollowup": "Ask",
     "copied": "Copied",
     "readAloud": "Read aloud",
     "stopReading": "Stop reading",

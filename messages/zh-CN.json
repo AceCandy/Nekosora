@@ -89,6 +89,8 @@
     "delete": "删除",
     "deleteMessageConfirm": "确定删除此消息？删除后将从视图隐藏，版本结构保留。",
     "copy": "复制",
+    "quote": "引用",
+    "askFollowup": "追问",
     "copied": "已复制",
     "readAloud": "朗读",
     "stopReading": "停止朗读",

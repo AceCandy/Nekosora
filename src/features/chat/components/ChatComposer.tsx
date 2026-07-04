@@ -129,6 +129,16 @@ export default function ChatComposer({
     setInput(text);
   };
 
+  // 选中文本「引用」:以 Markdown 引用块插入输入框末尾
+  const handleSelectionQuote = (text: string) => {
+    setInput((prev) => (prev.trim() ? `${prev}\n\n> ${text}\n\n` : `> ${text}\n\n`));
+  };
+  // 选中文本「追问」:以选中文本为新问题直接发送(继续当前会话,不走分支)
+  const handleSelectionAsk = (text: string) => {
+    runtime.send(text, model, selectedCardIds, webSearch, selectedKbIds, { outputModeId, renderStyleId });
+    requestAnimationFrame(() => forceFollow());
+  };
+
   // 模型参数(temperature/topP/maxTokens):会话级持久化,null 表示用模型默认
   const [modelParams, setModelParams] = useState<{ temperature: number | null; topP: number | null; maxTokens: number | null }>({
     temperature: initialModelParams?.temperature ?? null,
@@ -280,6 +290,8 @@ export default function ChatComposer({
           onContinue={(id) => runtime.continueGeneration(id, model)}
           models={models}
           onPickSample={handlePickSample}
+          onQuote={handleSelectionQuote}
+          onAsk={handleSelectionAsk}
         />
 
         {/* Input Control Box */}
