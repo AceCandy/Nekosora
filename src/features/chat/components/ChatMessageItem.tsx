@@ -2,10 +2,11 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Sparkles, RefreshCw, Loader2, User, Pencil, X, Check, Wrench, CheckCircle2, AlertCircle, ExternalLink, ChevronLeft, ChevronRight, Copy, Volume2 } from "lucide-react";
+import { Sparkles, RefreshCw, Loader2, User, Pencil, X, Check, Wrench, CheckCircle2, AlertCircle, ExternalLink, ChevronLeft, ChevronRight, Copy, Volume2, Square } from "lucide-react";
 import { clsx } from "clsx";
 import { Markdown } from "@/shared/components/markdown/Markdown";
 import { ErrorBoundary } from "@/shared/components/ErrorBoundary";
+import { useMessageSpeech, plainTextFromMarkdown } from "@/features/chat/hooks/useMessageSpeech";
 import { ArtifactInline } from "@/features/artifacts/ArtifactInline";
 import { HtmlPreviewFrame } from "@/features/artifacts/HtmlPreviewFrame";
 import type { ChatMessage } from "@/features/chat/model/types";
@@ -145,6 +146,15 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
     } else {
       console.warn("[ChatMessageItem] 复制失败:当前环境剪贴板不可用");
     }
+  };
+
+  // 语音朗读:全局同时只朗读一条,朗读中按钮切换为停止态
+  const { supported: ttsSupported, speakingId, speak, stop: stopSpeak } = useMessageSpeech();
+  const isSpeaking = Boolean(publicId) && speakingId === publicId;
+  const handleToggleSpeech = () => {
+    if (!publicId || !content) return;
+    if (isSpeaking) stopSpeak();
+    else speak(publicId, plainTextFromMarkdown(content));
   };
 
   return (
@@ -392,13 +402,24 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
             </button>
             <button
               type="button"
-              disabled
-              className="inline-flex items-center gap-1 text-[11px] font-semibold text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue rounded cursor-not-allowed"
-              aria-label={t("readAloud")}
-              title={t("readAloud")}
+              disabled={!ttsSupported || !content}
+              onClick={handleToggleSpeech}
+              className={clsx(
+                "inline-flex items-center gap-1 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue rounded",
+                isSpeaking
+                  ? "text-sora-blue cursor-pointer"
+                  : "text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 cursor-pointer",
+                (!ttsSupported || !content) && "cursor-not-allowed opacity-50",
+              )}
+              aria-label={isSpeaking ? t("stopReading") : t("readAloud")}
+              title={!ttsSupported ? t("readAloudUnsupported") : isSpeaking ? t("stopReading") : t("readAloud")}
             >
-              <Volume2 className="w-3 h-3" aria-hidden="true" />
-              <span>{t("readAloud")}</span>
+              {isSpeaking ? (
+                <Square className="w-3 h-3" aria-hidden="true" />
+              ) : (
+                <Volume2 className="w-3 h-3" aria-hidden="true" />
+              )}
+              <span>{isSpeaking ? t("stopReading") : t("readAloud")}</span>
             </button>
           </div>
         )}

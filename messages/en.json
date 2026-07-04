@@ -88,6 +88,8 @@
     "copy": "Copy",
     "copied": "Copied",
     "readAloud": "Read aloud",
+    "stopReading": "Stop reading",
+    "readAloudUnsupported": "Speech synthesis is not supported in this browser",
     "send": "Send message",
     "stopGeneration": "Stop generating",
     "scrollToLatest": "Scroll to latest",
