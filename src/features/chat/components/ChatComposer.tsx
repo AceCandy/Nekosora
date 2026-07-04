@@ -333,6 +333,8 @@ export default function ChatComposer({
               onPasteFiles={handleUpload}
               onDropFiles={handleUpload}
               tokenCount={inputTokens}
+              cards={cards}
+              onCardToggle={handleCardToggle}
             />
           </div>
         </div>
