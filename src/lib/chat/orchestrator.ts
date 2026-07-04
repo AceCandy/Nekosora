@@ -7,7 +7,7 @@
  * 设计:纯输入→输出,与流式执行(段 B/C,在 route.ts 的 ReadableStream 内)无耦合,
  * 是 route.ts 唯一干净的拆分边界。失败兜底策略与原内联实现逐行对齐。
  */
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import type { IRRequest } from "@/lib/providers/types";
 import type { ProcessTrace } from "@/db/types";
@@ -169,7 +169,7 @@ export async function prepareChatContext(
   const existingMsgs = await db
     .select()
     .from(s.messages)
-    .where(eq(s.messages.conversationId, conversationId))
+    .where(and(eq(s.messages.conversationId, conversationId), isNull(s.messages.deletedAt)))
     .orderBy(s.messages.createdAt);
   const compactionMsgs = (existingMsgs as Record<string, unknown>[]).map((m) => ({
     id: m.id as string,

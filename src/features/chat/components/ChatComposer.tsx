@@ -242,6 +242,8 @@ export default function ChatComposer({
           onEdit={runtime.editAndResend}
           onSwitchVersion={runtime.switchVersion}
           onOpenArtifact={setActiveArtifact}
+          onDelete={runtime.deleteMessage}
+          onContinue={(id) => runtime.continueGeneration(id, model)}
           onPickSample={handlePickSample}
         />
 

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Sparkles, RefreshCw, Loader2, User, Pencil, X, Check, Wrench, CheckCircle2, AlertCircle, ExternalLink, ChevronLeft, ChevronRight, Copy, Volume2, Square } from "lucide-react";
+import { Sparkles, RefreshCw, Loader2, User, Pencil, X, Check, Wrench, CheckCircle2, AlertCircle, ExternalLink, ChevronLeft, ChevronRight, Copy, Volume2, Square, Trash2, CornerDownRight } from "lucide-react";
 import { clsx } from "clsx";
 import { Markdown } from "@/shared/components/markdown/Markdown";
 import { ErrorBoundary } from "@/shared/components/ErrorBoundary";
@@ -57,6 +57,10 @@ interface ChatMessageItemProps {
   onEdit?: (publicId: string, newContent: string, model: string) => void;
   /** 切换该 assistant 消息的版本(同级兄弟)。 */
   onSwitchVersion?: (publicId: string, direction: "prev" | "next") => void;
+  /** 软删除一条消息(二次确认后调用)。 */
+  onDelete?: (publicId: string) => void;
+  /** 在 assistant 消息末尾续写生成。 */
+  onContinue?: (publicId: string) => void;
   /** 挂到最外层的 DOM id,供外部跳转定位(scrollIntoView)。 */
   domId?: string;
 }
@@ -72,6 +76,8 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
   onOpenArtifact,
   onEdit,
   onSwitchVersion,
+  onDelete,
+  onContinue,
   domId,
 }: ChatMessageItemProps) {
   const t = useTranslations("chat");
@@ -232,6 +238,19 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
                   aria-label={t("edit")}
                 >
                   <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
+                </button>
+              )}
+              {publicId && onDelete && !isStreaming && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm(t("deleteMessageConfirm"))) onDelete?.(publicId);
+                  }}
+                  className="absolute -left-7 top-7 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-neutral-400 hover:text-red-500 dark:hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
+                  title={t("delete")}
+                  aria-label={t("delete")}
+                >
+                  <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
                 </button>
               )}
             </div>
@@ -420,6 +439,29 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
                 <Volume2 className="w-3 h-3" aria-hidden="true" />
               )}
               <span>{isSpeaking ? t("stopReading") : t("readAloud")}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onContinue?.(publicId)}
+              disabled={!content}
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue rounded cursor-pointer disabled:opacity-40"
+              aria-label={t("continueGenerating")}
+              title={t("continueGenerating")}
+            >
+              <CornerDownRight className="w-3.5 h-3.5" aria-hidden="true" />
+              <span>{t("continueGenerating")}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm(t("deleteMessageConfirm"))) onDelete?.(publicId);
+              }}
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-neutral-400 hover:text-red-500 dark:hover:text-red-400 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue rounded cursor-pointer"
+              aria-label={t("delete")}
+              title={t("delete")}
+            >
+              <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+              <span>{t("delete")}</span>
             </button>
           </div>
         )}

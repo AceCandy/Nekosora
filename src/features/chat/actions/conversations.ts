@@ -1,5 +1,5 @@
 "use server";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { requireSession } from "@/lib/session";
@@ -290,7 +290,7 @@ export async function getMessages(conversationId: string) {
   return db
     .select()
     .from(S().messages)
-    .where(eq(S().messages.conversationId, conversationId))
+    .where(and(eq(S().messages.conversationId, conversationId), isNull(S().messages.deletedAt)))
     .orderBy(S().messages.createdAt);
 }
 

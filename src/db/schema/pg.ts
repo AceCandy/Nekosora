@@ -318,6 +318,7 @@ export const messages = pgTable(
     errorCode: text("error_code"),
     errorMessage: text("error_message"),
     processTrace: jsonb("process_trace").$type<ProcessTrace>(),
+    deletedAt: timestamp("deleted_at"), // 软删除时间戳;null 表示未删
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (t) => [

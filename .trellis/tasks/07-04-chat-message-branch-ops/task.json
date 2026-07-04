@@ -3,7 +3,7 @@
   "name": "chat-message-branch-ops",
   "title": "Chat 消息分支操作增强",
   "description": "合并两个都改 branch.ts 的功能：(1) 单条消息删除（软删除+保留版本树，删中间消息后续保留）；(11) 继续生成 Continue Generation（续接最后 assistant 末尾继续生成 token，需后端新增 continue 能力）。属架构级，需 design.md+implement.md。",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

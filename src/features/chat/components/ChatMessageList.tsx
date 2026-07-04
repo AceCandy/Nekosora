@@ -28,6 +28,10 @@ interface ChatMessageListProps {
   onEdit?: (publicId: string, newContent: string, model: string) => void;
   onSwitchVersion?: (publicId: string, direction: "prev" | "next") => void;
   onOpenArtifact: (a: Artifact) => void;
+  /** 软删除一条消息。 */
+  onDelete?: (publicId: string) => void;
+  /** 在 assistant 消息末尾续写。 */
+  onContinue?: (publicId: string) => void;
   /** 空状态点击示例问题：填入输入框供用户编辑后发送。 */
   onPickSample?: (text: string) => void;
 }
@@ -55,6 +59,8 @@ export function ChatMessageList({
   onEdit,
   onSwitchVersion,
   onOpenArtifact,
+  onDelete,
+  onContinue,
   onPickSample,
 }: ChatMessageListProps) {
   const t = useTranslations("chat");
@@ -86,6 +92,8 @@ export function ChatMessageList({
                 onEdit={onEdit}
                 onSwitchVersion={onSwitchVersion}
                 onOpenArtifact={onOpenArtifact}
+                onDelete={onDelete}
+                onContinue={onContinue}
               />
             </ErrorBoundary>
           ))}

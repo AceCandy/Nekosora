@@ -47,6 +47,8 @@ export async function POST(req: NextRequest) {
      *   仅用于 finally 关联 assistant 消息的 parentId。
      */
     userPublicId?: string;
+    // 续写:在指定 assistant 消息内容末尾继续生成(复用其 publicId,update 同一行)。
+    continueFromPublicId?: string;
     // P2-B:模板 ID + 变量(用户选定模板时传入)。
     templateId?: string;
     templateVars?: Record<string, string>;
@@ -104,11 +106,46 @@ export async function POST(req: NextRequest) {
     sourceIdInternal = p?.id ?? null;
   }
 
+  // 续写模式:在指定 assistant 消息末尾继续生成。复用其 publicId 与所在行,
+  // finally 改走 update;stream 只发新增 delta(前端追加到既有内容)。
+  let isContinue = false;
+  let continuePrefixText = "";
+  let continueAssistantInternalId: string | null = null;
+  let continueParentUserPublicId: string | null = null;
+  if (body.continueFromPublicId) {
+    const [contMsg] = await db
+      .select()
+      .from(s.messages)
+      .where(eq(s.messages.publicId, body.continueFromPublicId))
+      .limit(1);
+    if (!contMsg || contMsg.conversationId !== body.conversationId) {
+      return NextResponse.json({ error: "续写消息不存在或不属于该会话" }, { status: 400 });
+    }
+    if (contMsg.role !== "assistant") {
+      return NextResponse.json({ error: "仅支持在 assistant 消息上续写" }, { status: 400 });
+    }
+    isContinue = true;
+    continueAssistantInternalId = contMsg.id;
+    continuePrefixText =
+      typeof contMsg.content === "string" ? contMsg.content : String(contMsg.content ?? "");
+    if (contMsg.parentId) {
+      const [parentUser] = await db
+        .select()
+        .from(s.messages)
+        .where(eq(s.messages.id, contMsg.parentId))
+        .limit(1);
+      continueParentUserPublicId = parentUser?.publicId ?? null;
+    }
+  }
+
   // user 消息:
   // - send 流程(无 userPublicId):生成并插入新 user 消息。
   // - edit/retry 流程(传入 userPublicId):跳过插入,复用既有的 user 消息。
   let userPublicId: string;
-  if (body.userPublicId) {
+  if (isContinue) {
+    // 续写沿用原 user 父消息,不插入新 user
+    userPublicId = continueParentUserPublicId ?? body.userPublicId ?? "";
+  } else if (body.userPublicId) {
     userPublicId = body.userPublicId;
   } else {
     userPublicId = crypto.randomUUID();
@@ -153,15 +190,18 @@ export async function POST(req: NextRequest) {
   await db.update(s.conversations).set({ generating: true }).where(eq(s.conversations.id, body.conversationId));
   // 提前生成 assistant 消息 publicId:在流首帧回传给前端,使生成期间即可显示操作按钮;
   // finally 落库时复用同一标识。
-  const assistantPublicId = crypto.randomUUID();
+  const assistantPublicId = isContinue ? body.continueFromPublicId! : crypto.randomUUID();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       let assistantText = "";
       let assistantReasoning = "";
       // 回传本轮 user 消息的 publicId,供前端回填后支持编辑重发。
-      controller.enqueue(
-        encoder.encode(`data: ${JSON.stringify({ type: "user_message", publicId: userPublicId })}\n\n`),
-      );
+      // 续写模式下 user 沿用原消息,前端无需回填,跳过该帧。
+      if (!isContinue) {
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify({ type: "user_message", publicId: userPublicId })}\n\n`),
+        );
+      }
       // 回传本轮 assistant 占位消息的 publicId,供前端回填后无需刷新即可显示操作按钮。
       controller.enqueue(
         encoder.encode(`data: ${JSON.stringify({ type: "assistant_message", publicId: assistantPublicId })}\n\n`),
@@ -220,25 +260,38 @@ export async function POST(req: NextRequest) {
           encoder.encode(`data: ${JSON.stringify({ type: "error", error: err instanceof Error ? err.message : "内部错误" })}\n\n`),
         );
       } finally {
-        // 持久化 assistant 消息;parentId 指向本轮 user 消息;附 process_trace
-        const [userMsgRow] = await db
-          .select({ id: s.messages.id })
-          .from(s.messages)
-          .where(eq(s.messages.publicId, userPublicId))
-          .limit(1);
-        await db.insert(s.messages).values({
-          conversationId: body.conversationId,
-          publicId: assistantPublicId,
-          parentId: userMsgRow?.id ?? null,
-          role: "assistant",
-          content: assistantText,
-          reasoning: assistantReasoning || null,
-          status: assistantText ? "success" : "interrupted",
-          processTrace: trace,
-        });
+        if (isContinue && continueAssistantInternalId) {
+          // 续写:update 既有 assistant 行,prefix + 新增内容
+          await db
+            .update(s.messages)
+            .set({
+              content: continuePrefixText + assistantText,
+              reasoning: assistantReasoning || null,
+              status: assistantText ? "success" : "interrupted",
+              processTrace: trace,
+            })
+            .where(eq(s.messages.id, continueAssistantInternalId));
+        } else {
+          // 持久化 assistant 消息;parentId 指向本轮 user 消息;附 process_trace
+          const [userMsgRow] = await db
+            .select({ id: s.messages.id })
+            .from(s.messages)
+            .where(eq(s.messages.publicId, userPublicId))
+            .limit(1);
+          await db.insert(s.messages).values({
+            conversationId: body.conversationId,
+            publicId: assistantPublicId,
+            parentId: userMsgRow?.id ?? null,
+            role: "assistant",
+            content: assistantText,
+            reasoning: assistantReasoning || null,
+            status: assistantText ? "success" : "interrupted",
+            processTrace: trace,
+          });
+        }
 
         // P1-B:抽取 artifact(代码块/Mermaid/SVG 等)并持久化。
-        if (assistantText) {
+        if (assistantText && !isContinue) {
           try {
             const { artifacts: parsed } = extractArtifacts(assistantText);
             if (parsed.length > 0) {
@@ -272,7 +325,7 @@ export async function POST(req: NextRequest) {
           .where(eq(s.conversations.id, body.conversationId));
 
         // 异步提取记忆 + 自动生成会话标题(不阻塞响应;失败静默)
-        if (assistantText) {
+        if (assistantText && !isContinue) {
           const recentMessages = [...body.messages, { role: "assistant", content: assistantText }]
             .map((m) => ({ role: m.role, content: typeof m.content === "string" ? m.content : String(m.content ?? "") }));
           extractMemories(user.id, body.conversationId, recentMessages, body.model).catch(() => {});

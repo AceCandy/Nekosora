@@ -285,6 +285,7 @@ export const messages = sqliteTable(
     errorMessage: text("error_message"),
     processTrace: text("process_trace", { mode: "json" })
       .$type<import("@/db/types").ProcessTrace>(),
+    deletedAt: integer("deleted_at", { mode: "timestamp" }), // 软删除时间戳;null 表示未删
     createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),
   },
   (t) => [

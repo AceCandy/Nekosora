@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import { createConversation, type CreateConversationOptions } from "@/features/chat/actions/conversations";
-import { retryFromMessage, editMessage, getMessageSiblings } from "@/features/chat/actions/branch";
+import { retryFromMessage, editMessage, getMessageSiblings, softDeleteMessage, continueMessage } from "@/features/chat/actions/branch";
 import { consumeChatSSE, handleStreamError } from "@/features/chat/model/sse";
 import type { ChatMessage, ToolCallRecord } from "@/features/chat/model/types";
 
@@ -48,6 +48,8 @@ interface ChatStreamState {
   ) => Promise<void>;
   regenerate: (key: string, assistantPublicId: string, model: string) => Promise<void>;
   editAndResend: (key: string, userPublicId: string, newContent: string, model: string) => Promise<void>;
+  deleteMessage: (key: string, publicId: string) => Promise<void>;
+  continueGeneration: (key: string, assistantPublicId: string, model: string) => Promise<void>;
   switchVersion: (key: string, publicId: string, direction: "prev" | "next") => Promise<void>;
   refreshVersionInfo: (key: string, publicId: string) => Promise<void>;
   stopGeneration: (key: string) => void;
@@ -395,6 +397,66 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
     } catch (err) {
       const { content } = handleStreamError(err, "网络错误");
       if (!content.includes("[错误]")) console.error("editAndResend failed:", err);
+    } finally {
+      set((s) => patchRuntime(s, key, (r) => ({ ...r, streaming: false, abortController: null })));
+    }
+  },
+
+  deleteMessage: async (key, publicId) => {
+    if (!publicId) return;
+    try {
+      await softDeleteMessage(publicId);
+      set((s) => patchRuntime(s, key, (r) => ({
+        ...r,
+        messages: r.messages.filter((m) => m.publicId !== publicId),
+      })));
+    } catch (err) {
+      console.error("deleteMessage failed:", err);
+    }
+  },
+
+  continueGeneration: async (key, assistantPublicId, model) => {
+    const rt = getRuntime(get(), key);
+    if (key === NEW_CONVERSATION_KEY || rt.streaming || !assistantPublicId) return;
+    const assistantIdx = rt.messages.findIndex((x) => x.publicId === assistantPublicId);
+    if (assistantIdx < 0) return; // 续写必须落在既有 assistant 消息上
+    set((s) => patchRuntime(s, key, (r) => ({ ...r, streaming: true })));
+    const controller = new AbortController();
+    set((s) => patchRuntime(s, key, (r) => ({ ...r, abortController: controller })));
+
+    try {
+      const result = await continueMessage(key, assistantPublicId);
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          conversationId: key,
+          model,
+          messages: result.messages.map((m) => ({ role: m.role, content: m.content })),
+          continueFromPublicId: assistantPublicId,
+        }),
+        signal: controller.signal,
+      });
+      if (!res.ok || !res.body) throw new Error("请求失败");
+
+      // 续写:delta 追加到既有 assistant 消息内容末尾(不清空原内容)
+      await consumeChatSSE(res.body, {
+        onDelta: (t) => set((s) => patchRuntime(s, key, (r) => {
+          if (assistantIdx >= r.messages.length || r.messages[assistantIdx].publicId !== assistantPublicId) return r;
+          const copy = [...r.messages];
+          copy[assistantIdx] = { ...copy[assistantIdx], content: (copy[assistantIdx].content ?? "") + t };
+          return { ...r, messages: copy };
+        })),
+        onReasoning: (t) => set((s) => patchRuntime(s, key, (r) => {
+          if (assistantIdx >= r.messages.length || r.messages[assistantIdx].publicId !== assistantPublicId) return r;
+          const copy = [...r.messages];
+          copy[assistantIdx] = { ...copy[assistantIdx], reasoning: (copy[assistantIdx].reasoning ?? "") + t };
+          return { ...r, messages: copy };
+        })),
+      });
+    } catch (err) {
+      const { content } = handleStreamError(err, "网络错误");
+      if (!content.includes("[错误]")) console.error("continueGeneration failed:", err);
     } finally {
       set((s) => patchRuntime(s, key, (r) => ({ ...r, streaming: false, abortController: null })));
     }

@@ -1,5 +1,5 @@
 "use server";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, and, isNull } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { requireSession } from "@/lib/session";
 
@@ -40,8 +40,8 @@ export async function getMessageSiblings(messagePublicId: string): Promise<{
 
   // 同 parentId 下的兄弟(含自己)
   const siblingsQuery = msg.parentId
-    ? db.select().from(s.messages).where(eq(s.messages.parentId, msg.parentId))
-    : db.select().from(s.messages).where(eq(s.messages.conversationId, msg.conversationId));
+    ? db.select().from(s.messages).where(and(eq(s.messages.parentId, msg.parentId), isNull(s.messages.deletedAt)))
+    : db.select().from(s.messages).where(and(eq(s.messages.conversationId, msg.conversationId), isNull(s.messages.deletedAt)));
 
   const all = (await siblingsQuery) as {
     publicId: string;
@@ -98,7 +98,7 @@ export async function retryFromMessage(
   const allMsgs = (await db
     .select()
     .from(s.messages)
-    .where(eq(s.messages.conversationId, conversationId))
+    .where(and(eq(s.messages.conversationId, conversationId), isNull(s.messages.deletedAt)))
     .orderBy(s.messages.createdAt)) as {
     id: string;
     publicId: string;
@@ -160,7 +160,7 @@ export async function editMessage(
   const allMsgs = (await db
     .select()
     .from(s.messages)
-    .where(eq(s.messages.conversationId, conversationId))
+    .where(and(eq(s.messages.conversationId, conversationId), isNull(s.messages.deletedAt)))
     .orderBy(s.messages.createdAt)) as {
     id: string;
     parentId: string | null;
@@ -234,7 +234,7 @@ export async function getVisibleBranch(conversationId: string): Promise<{
   const allMsgs = (await db
     .select()
     .from(s.messages)
-    .where(eq(s.messages.conversationId, conversationId))
+    .where(and(eq(s.messages.conversationId, conversationId), isNull(s.messages.deletedAt)))
     .orderBy(s.messages.createdAt)) as Record<string, unknown>[];
 
   if (allMsgs.length === 0) return { messages: [], versionMap: {} };
@@ -279,4 +279,87 @@ export async function getVisibleBranch(conversationId: string): Promise<{
   }
 
   return { messages: mainMessages, versionMap };
+}
+
+/**
+ * 软删除一条消息:置 deletedAt=now,使其从默认视图隐藏但保留版本树结构(可恢复)。
+ * 删中间消息时其后续消息保留(不级联);删带分支的消息时仅删当前版本,兄弟保留。
+ */
+export async function softDeleteMessage(messagePublicId: string): Promise<void> {
+  const user = await requireSession();
+  const db = await getDb();
+  const s = S();
+
+  const [msg] = await db.select().from(s.messages).where(eq(s.messages.publicId, messagePublicId)).limit(1);
+  if (!msg) throw new Error("消息不存在");
+
+  const [conv] = await db.select().from(s.conversations).where(eq(s.conversations.id, msg.conversationId)).limit(1);
+  if (!conv || conv.userId !== user.id) throw new Error("无权操作");
+
+  await db.update(s.messages).set({ deletedAt: new Date() }).where(eq(s.messages.id, msg.id));
+}
+
+/**
+ * 继续生成:在某条 assistant 消息内容末尾续接生成。
+ * 复用该 assistant 的 publicId(路由据此 update 同一行而非 insert 新行)。
+ * 返回历史路径 + 末尾追加该 assistant 已有内容,作为 provider 的 assistant prefill。
+ */
+export async function continueMessage(
+  conversationId: string,
+  assistantPublicId: string,
+): Promise<{
+  assistantPublicId: string;
+  parentPublicId: string | null;
+  messages: { role: string; content: string }[];
+}> {
+  const user = await requireSession();
+  const db = await getDb();
+  const s = S();
+
+  const [conv] = await db.select().from(s.conversations).where(eq(s.conversations.id, conversationId)).limit(1);
+  if (!conv || conv.userId !== user.id) throw new Error("无权操作");
+
+  const [assistant] = await db.select().from(s.messages).where(eq(s.messages.publicId, assistantPublicId)).limit(1);
+  if (!assistant) throw new Error("消息不存在");
+  if (assistant.role !== "assistant") throw new Error("仅支持在 assistant 消息上继续生成");
+
+  // 沿 parentId 回溯到根(含 user 父消息),构造历史路径
+  let parentPublicId: string | null = null;
+  if (assistant.parentId) {
+    const [parent] = await db.select().from(s.messages).where(eq(s.messages.id, assistant.parentId)).limit(1);
+    parentPublicId = parent?.publicId ?? null;
+  }
+
+  const allMsgs = (await db
+    .select()
+    .from(s.messages)
+    .where(and(eq(s.messages.conversationId, conversationId), isNull(s.messages.deletedAt)))
+    .orderBy(s.messages.createdAt)) as {
+    id: string;
+    parentId: string | null;
+    role: string;
+    content: string;
+  }[];
+
+  const pathMsgs: typeof allMsgs = [];
+  let cursorId = assistant.parentId;
+  while (cursorId) {
+    const node = allMsgs.find((m) => m.id === cursorId);
+    if (!node) break;
+    pathMsgs.unshift(node);
+    cursorId = node.parentId;
+  }
+  if (pathMsgs.length === 0) {
+    throw new Error("无法继续生成:该消息缺少上级用户消息(数据异常)");
+  }
+
+  // 末尾追加该 assistant 已有内容,作为 provider 的 assistant prefill(模型接着续写)
+  const assistantText =
+    typeof assistant.content === "string" ? assistant.content : String(assistant.content ?? "");
+  const messages = [
+    ...pathMsgs.map((m) => ({ role: m.role, content: m.content })),
+    { role: "assistant", content: assistantText },
+  ];
+
+  return { assistantPublicId, parentPublicId, messages };
 }

@@ -71,6 +71,8 @@ export function useChatRuntime({
       send: s.send,
       regenerate: s.regenerate,
       editAndResend: s.editAndResend,
+      deleteMessage: s.deleteMessage,
+      continueGeneration: s.continueGeneration,
       switchVersion: s.switchVersion,
       refreshVersionInfo: s.refreshVersionInfo,
       stopGeneration: s.stopGeneration,
@@ -112,6 +114,20 @@ export function useChatRuntime({
     [actions, key],
   );
 
+  const deleteMessage = useMemo(
+    () => (publicId: string) => {
+      void actions.deleteMessage(key, publicId);
+    },
+    [actions, key],
+  );
+
+  const continueGeneration = useMemo(
+    () => (assistantPublicId: string, model: string) => {
+      void actions.continueGeneration(key, assistantPublicId, model);
+    },
+    [actions, key],
+  );
+
   const switchVersion = useMemo(
     () => (publicId: string, direction: "prev" | "next") => {
       void actions.switchVersion(key, publicId, direction);
@@ -140,6 +156,8 @@ export function useChatRuntime({
     send,
     regenerate,
     editAndResend,
+    deleteMessage,
+    continueGeneration,
     switchVersion,
     refreshVersionInfo,
     stopGeneration,
