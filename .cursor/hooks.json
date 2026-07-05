@@ -6,6 +6,10 @@
         "command": "python3 .cursor/hooks/inject-subagent-context.py",
         "matcher": "Task|Subagent",
         "timeout": 30
+      },
+      {
+        "command": "node \".cursor/skills/impeccable/scripts/hook-before-edit.mjs\"",
+        "timeout": 5
       }
     ],
     "sessionStart": [
