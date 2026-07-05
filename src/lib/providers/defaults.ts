@@ -4,7 +4,7 @@
  * 供 ProviderFormDialog 在选择协议后自动填充默认 baseUrl、展示
  * "解析后实际请求地址"预览,降低新手填错(如 OpenAI 忘加 /v1)的概率。
  *
- * 仅对主流协议(openai/anthropic/gemini/custom)提供默认值;
+ * 仅对主流协议(openai/anthropic/gemini/openai-compatible)提供默认值;
  * 音频/图像类协议配置场景少,留空让用户自填。
  *
  * 借鉴 AQBot 的 DEFAULT_HOSTS / DEFAULT_PATHS 设计。
@@ -16,7 +16,7 @@ export const DEFAULT_HOSTS: Partial<Record<ProviderProtocol, string>> = {
   openai: "https://api.openai.com/v1",
   anthropic: "https://api.anthropic.com/v1",
   gemini: "https://generativelanguage.googleapis.com/v1beta",
-  custom: "",
+  "openai-compatible": "",
 };
 
 /** 各协议的默认模型列表端点路径(拼在 host 后拉取 /models)。 */
@@ -24,7 +24,7 @@ export const DEFAULT_MODELS_PATH: Partial<Record<ProviderProtocol, string>> = {
   openai: "/models",
   anthropic: "/models",
   gemini: "/models",
-  custom: "/models",
+  "openai-compatible": "/models",
 };
 
 /**

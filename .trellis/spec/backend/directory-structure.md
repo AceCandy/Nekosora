@@ -17,7 +17,7 @@ src/
     share/                  公开分享页
   lib/
     infra/                  降级基建:db/cache/queue/crypto/vector/env
-    providers/              统一 IR + provider 适配(openai/custom/anthropic/gemini)
+    providers/              统一 IR + provider 适配(openai/openai-compatible/anthropic/gemini)
     rag/                    RAG 流水线:embedding/chunk/extract/retrieve/context/process
     compact/                上下文压缩:coverage(CoveragePathHash)/service(4级回退)
     memory/                 长期记忆(user_memories)
@@ -53,11 +53,13 @@ src/
 | 协议 | 构造 | system 消息 | 适用上游 |
 |------|------|-----------|---------|
 | `openai` | `createOpenAI().chat()` | reasoning/非 gpt 前缀模型转 developer role | OpenAI 官方 |
-| `custom` | `createOpenAICompatible().chatModel()` | 保持 `role:"system"` | 第三方兼容(SiliconFlow/DeepSeek/Qwen/vLLM) |
+| `openai-compatible` | `createOpenAICompatible().chatModel()` | 保持 `role:"system"` | 第三方兼容(SiliconFlow/DeepSeek/Qwen/vLLM) |
 | `anthropic` | `createAnthropic().chat()` | 原生 system | Anthropic |
 | `gemini` | `createGoogle()(model)` | 原生 system | Google |
 
-> **Gotcha(custom 协议)**:`custom` 必须用 `@ai-sdk/openai-compatible`,**不能**用 `@ai-sdk/openai`。后者对非 gpt 前缀模型会把 system 消息转成 `developer` role,SiliconFlow/DeepSeek 等第三方上游不认该 role,直接 400 拒收(`Input tag 'developer' found using 'role'...`)。
+> **Gotcha(openai-compatible 协议)**:`openai-compatible` 必须用 `@ai-sdk/openai-compatible`,**不能**用 `@ai-sdk/openai`。后者对非 gpt 前缀模型会把 system 消息转成 `developer` role,SiliconFlow/DeepSeek 等第三方上游不认该 role,直接 400 拒收(`Input tag 'developer' found using 'role'...`)。
+>
+> **Gotcha(三方上游探测)**:`probeProviderKey` 未传模型名时不能硬编码占位模型(如 `gpt-4o-mini`),第三方上游(SiliconFlow 等)模型列表里没有它,会 `model_not_found` 误判探测失败。应先 `fetchUpstreamModels` 拉真实模型取首个探测,`/models` 不可达时再降级占位。
 
 **AI SDK 版本基线**:`ai`@7 + `@ai-sdk/{openai,anthropic,google}`@4 + `@ai-sdk/openai-compatible`@3(LanguageModelV4 spec),Node ≥22。
 

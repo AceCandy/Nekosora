@@ -13,7 +13,7 @@ import ProvidersManager, {
   type ProviderItem,
 } from "@/features/providers/ProvidersManager";
 
-/** BYO 不支持 custom 协议。 */
+/** BYO 不支持 openai-compatible 协议。 */
 const PROTOCOLS = [
   { value: "openai", label: "openai" },
   { value: "anthropic", label: "anthropic" },

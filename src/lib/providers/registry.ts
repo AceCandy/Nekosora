@@ -1,10 +1,11 @@
 /**
  * Provider 注册表 —— 把 ResolvedRoute(解密后的上游配置)转成 AI SDK LanguageModel。
  *
- * AI SDK v5:
- *   openai/custom → createOpenAICompatible({ baseURL, apiKey, name }).chatModel(model)
- *   anthropic     → createAnthropic({ baseURL, apiKey }).chat(model)
- *   gemini        → createGoogle({ baseURL, apiKey })(model)
+ * AI SDK V4(ai@7):
+ *   openai            → createOpenAI({ baseURL, apiKey }).chat(model)
+ *   openai-compatible → createOpenAICompatible({ baseURL, apiKey }).chatModel(model)
+ *   anthropic         → createAnthropic({ baseURL, apiKey }).chat(model)
+ *   gemini            → createGoogle({ baseURL, apiKey })(model)
  *
  * 每次请求新建 provider 实例(因为 baseURL/apiKey 来自 DB,每条路由可能不同)。
  * AI SDK 的 provider 构造很轻,无连接池开销。
@@ -44,7 +45,7 @@ export function buildLanguageModelWithKey(
       });
       return providerInstance.chat(upstreamModelName);
     }
-    case "custom": {
+    case "openai-compatible": {
       // 第三方 OpenAI 兼容上游(SiliconFlow/DeepSeek/Qwen/自建 vLLM 等):
       // 用 compatible provider,system 消息保持 role:"system",避免被转成
       // developer role 而被这些上游以 400 拒收。

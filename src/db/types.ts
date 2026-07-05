@@ -61,7 +61,7 @@ export interface ProcessTrace {
 // 枚举字面量类型(SQLite 用 text 列存储,pg 用 pgEnum)。
 export type ApiKeyKind = "master" | "sub";
 export type ProviderProtocol =
-  | "openai" | "anthropic" | "gemini" | "custom"
+  | "openai" | "anthropic" | "gemini" | "openai-compatible"
   // P1-D:非 chat 协议族(图像生成 / 语音转写 / 语音合成,均 OpenAI 兼容格式)
   | "openai-images" | "openai-audio-stt" | "openai-audio-tts";
 export type AccessScope = "public" | "internal";

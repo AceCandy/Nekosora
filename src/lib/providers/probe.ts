@@ -10,7 +10,7 @@
  *   2. fetchUpstreamModels —— 直接 fetch 上游 /models 端点拉取真实模型名,防手填出错
  *
  * 协议差异:
- *   - openai/custom: Bearer 鉴权,{data:[{id}]}
+ *   - openai/openai-compatible: Bearer 鉴权,{data:[{id}]}
  *   - anthropic:    x-api-key + anthropic-version 鉴权,{data:[{id}]}
  *   - gemini:       key 在 query param,{models:[{name:"models/xxx"}]} 需去前缀
  */
@@ -39,7 +39,7 @@ export interface UpstreamModel {
 /** 各协议用于连通性探测的占位模型名(只用于验证 key+baseUrl,不验证具体模型)。 */
 const PROBE_MODEL: Record<string, string> = {
   openai: "gpt-4o-mini",
-  custom: "gpt-4o-mini",
+  "openai-compatible": "gpt-4o-mini",
   anthropic: "claude-3-5-haiku-latest",
   gemini: "gemini-1.5-flash",
 };
@@ -67,10 +67,24 @@ export async function probeProviderKey(opts: {
     return { ok: false, error: "缺少接口地址", errorKind: "unknown" };
   }
 
+  // 决定探测用的模型名:优先调用方传入的 > 上游真实模型列表第一个 > 占位模型。
+  // 第三方兼容上游(SiliconFlow 等)模型列表里没有占位模型 gpt-4o-mini,
+  // 不传模型名时先拉 /models 取一个真实模型,避免 model_not_found 误判探测失败。
+  let probeModelName = opts.upstreamModelName;
+  if (!probeModelName) {
+    try {
+      const upstream = await fetchUpstreamModels({ protocol, baseUrl, apiKey, headers });
+      probeModelName = upstream[0]?.id;
+    } catch {
+      // /models 不规范或不可达:降级占位模型,保持原探测行为。
+    }
+    probeModelName ??= PROBE_MODEL[protocol] ?? "gpt-4o-mini";
+  }
+
   // 构造一次性 ResolvedRoute(mock),复用 registry 的协议构建逻辑。
   const route: ResolvedRoute = {
     modelName: "__probe__",
-    upstreamModelName: opts.upstreamModelName ?? PROBE_MODEL[protocol] ?? "gpt-4o-mini",
+    upstreamModelName: probeModelName,
     protocol,
     provider: {
       id: "__probe__",
@@ -142,7 +156,7 @@ export async function fetchUpstreamModels(opts: {
     case "gemini":
       return fetchGeminiModels(base, apiKey, headers);
     case "openai":
-    case "custom":
+    case "openai-compatible":
     default:
       return fetchOpenAIModels(base, apiKey, headers);
   }

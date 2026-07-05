@@ -127,7 +127,7 @@ export const providerProtocol = pgEnum("provider_protocol", [
   "openai",
   "anthropic",
   "gemini",
-  "custom",
+  "openai-compatible",
   // P1-D:非 chat 协议族(OpenAI 兼容格式)。
   "openai-images",
   "openai-audio-stt",
