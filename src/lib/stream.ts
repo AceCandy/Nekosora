@@ -195,17 +195,17 @@ async function* streamWithRoute(
 
   const result = streamText({
     model,
-    system,
+    instructions: system,
     messages: messages as never,
     temperature: request.temperature,
     maxOutputTokens: request.max_tokens,
     topP: request.top_p,
     // P1-A:工具(MCP)透传给上游模型。tools 格式已是 OpenAI function-calling 兼容。
-    tools: request.tools as never,
+    tools: request.tools as unknown as Parameters<typeof streamText>[0]["tools"],
   });
 
   // 用 fullStream 捕获 tool-call 增量(若 tools 存在),否则纯文本。
-  for await (const part of result.fullStream) {
+  for await (const part of result.stream) {
     switch (part.type) {
       case "text-delta":
         yield { type: "text-delta", text: part.text };
@@ -232,13 +232,13 @@ async function* streamWithRoute(
     }
   }
 
-  const finalUsage = await result.totalUsage;
+  const finalUsage = await result.usage;
   const irUsage: IRUsage = {
     inputTokens: finalUsage.inputTokens,
     outputTokens: finalUsage.outputTokens,
     totalTokens: finalUsage.totalTokens,
-    reasoningTokens: (finalUsage as { reasoningTokens?: number }).reasoningTokens,
-    cachedInputTokens: (finalUsage as { cachedInputTokens?: number }).cachedInputTokens,
+    reasoningTokens: finalUsage.outputTokenDetails?.reasoningTokens,
+    cachedInputTokens: finalUsage.inputTokenDetails?.cacheReadTokens,
   };
   yield { type: "finish", finishReason: await result.finishReason, usage: irUsage };
 }
@@ -304,7 +304,7 @@ export async function generateChat(opts: StreamChatOptions): Promise<GenerateCha
           const { system, messages } = separateSystem(request);
           const result = await generateText({
             model,
-            system,
+            instructions: system,
             messages: messages as never,
             temperature: request.temperature,
             maxOutputTokens: request.max_tokens,
@@ -316,8 +316,8 @@ export async function generateChat(opts: StreamChatOptions): Promise<GenerateCha
             inputTokens: u.inputTokens,
             outputTokens: u.outputTokens,
             totalTokens: u.totalTokens,
-            reasoningTokens: (u as { reasoningTokens?: number }).reasoningTokens,
-            cachedInputTokens: (u as { cachedInputTokens?: number }).cachedInputTokens,
+            reasoningTokens: u.outputTokenDetails?.reasoningTokens,
+            cachedInputTokens: u.inputTokenDetails?.cacheReadTokens,
           };
           succeeded = true;
           routeDone = true;

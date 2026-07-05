@@ -10,7 +10,7 @@
  *
  * 故障转移:逐条路由尝试,首条失败抛出(图像生成多为单次调用,不做 key 级重试)。
  */
-import { experimental_generateImage as generateImage } from "ai";
+import { generateImage as generateImage } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import type { CallContext, ResolvedRoute } from "@/lib/providers/types";
 import { resolveRoutesByCapability, RoutingError } from "@/lib/routing";

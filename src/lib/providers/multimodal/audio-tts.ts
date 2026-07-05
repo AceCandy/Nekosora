@@ -4,7 +4,7 @@
  * 复用路由器,调 AI SDK v5 的 generateSpeech。
  * 返回 audio buffer(mime 由调用方端点透传给客户端)。
  */
-import { experimental_generateSpeech as generateSpeech } from "ai";
+import { generateSpeech as generateSpeech } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import type { CallContext } from "@/lib/providers/types";
 import { resolveRoutesByCapability, RoutingError } from "@/lib/routing";

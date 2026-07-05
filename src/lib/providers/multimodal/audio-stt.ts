@@ -4,7 +4,7 @@
  * 复用路由器,调 AI SDK v5 的 transcribe。
  * OpenAI 兼容上游(audio.transcriptions.create 语义)。
  */
-import { experimental_transcribe as transcribe } from "ai";
+import { transcribe as transcribe } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import type { CallContext } from "@/lib/providers/types";
 import { resolveRoutesByCapability, RoutingError } from "@/lib/routing";

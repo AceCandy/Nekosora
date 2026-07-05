@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
@@ -24,17 +27,17 @@
     "postinstall": "node scripts/sync-pdfjs-assets.cjs"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^2.0.0",
-    "@ai-sdk/google": "^2.0.0",
-    "@ai-sdk/openai": "^2.0.0",
-    "@ai-sdk/openai-compatible": "^2.0.0",
+    "@ai-sdk/anthropic": "^4.0.8",
+    "@ai-sdk/google": "^4.0.8",
+    "@ai-sdk/openai": "^4.0.7",
+    "@ai-sdk/openai-compatible": "^3.0.5",
     "@aws-sdk/client-s3": "^3.1071.0",
     "@aws-sdk/s3-request-presigner": "^3.1071.0",
     "@keyv/redis": "^4.0.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@radix-ui/react-slot": "^1.1.1",
     "@tanstack/react-virtual": "^3.14.5",
-    "ai": "^5.0.0",
+    "ai": "^7.0.15",
     "better-auth": "^1.2.0",
     "better-sqlite3": "^11.7.0",
     "cache-manager": "^6.0.0",

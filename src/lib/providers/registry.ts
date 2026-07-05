@@ -4,19 +4,20 @@
  * AI SDK v5:
  *   openai/custom → createOpenAICompatible({ baseURL, apiKey, name }).chatModel(model)
  *   anthropic     → createAnthropic({ baseURL, apiKey }).chat(model)
- *   gemini        → createGoogleGenerativeAI({ baseURL, apiKey })(model)
+ *   gemini        → createGoogle({ baseURL, apiKey })(model)
  *
  * 每次请求新建 provider 实例(因为 baseURL/apiKey 来自 DB,每条路由可能不同)。
  * AI SDK 的 provider 构造很轻,无连接池开销。
  */
 import { createOpenAI } from "@ai-sdk/openai";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createAnthropic } from "@ai-sdk/anthropic";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { createGoogle } from "@ai-sdk/google";
 import type { LanguageModel } from "ai";
 import type { ResolvedRoute } from "./types";
 import type { ProviderProtocol } from "@/db/types";
 
-/** 从 ResolvedRoute 构造 AI SDK LanguageModel(V2,兼容 ai@5)。 */
+/** 从 ResolvedRoute 构造 AI SDK LanguageModel(V4,兼容 ai@7)。 */
 export function buildLanguageModel(route: ResolvedRoute): LanguageModel {
   return buildLanguageModelWithKey(route, route.provider.apiKey);
 }
@@ -32,10 +33,9 @@ export function buildLanguageModelWithKey(
   const commonHeaders = headers ?? {};
 
   switch (protocol as ProviderProtocol) {
-    case "openai":
-    case "custom": {
-      // @ai-sdk/openai 的 createOpenAI 可指向任意 baseURL,覆盖 OpenAI 官方、
-      // OpenRouter、自部署 vLLM、Ollama 等所有 OpenAI 兼容上游。
+    case "openai": {
+      // OpenAI 官方:createOpenAI 对 reasoning 模型(o1/o3/gpt-5 等)会把 system
+      // 消息发成 developer role,这是官方约定,官方上游接受。
       const providerInstance = createOpenAI({
         baseURL: baseUrl,
         apiKey,
@@ -43,6 +43,18 @@ export function buildLanguageModelWithKey(
         headers: commonHeaders,
       });
       return providerInstance.chat(upstreamModelName);
+    }
+    case "custom": {
+      // 第三方 OpenAI 兼容上游(SiliconFlow/DeepSeek/Qwen/自建 vLLM 等):
+      // 用 compatible provider,system 消息保持 role:"system",避免被转成
+      // developer role 而被这些上游以 400 拒收。
+      const providerInstance = createOpenAICompatible({
+        name: provider.id,
+        baseURL: baseUrl,
+        apiKey,
+        headers: commonHeaders,
+      });
+      return providerInstance.chatModel(upstreamModelName);
     }
     case "anthropic": {
       const providerInstance = createAnthropic({
@@ -53,7 +65,7 @@ export function buildLanguageModelWithKey(
       return providerInstance.chat(upstreamModelName);
     }
     case "gemini": {
-      const providerInstance = createGoogleGenerativeAI({
+      const providerInstance = createGoogle({
         baseURL: baseUrl,
         apiKey,
         headers: commonHeaders,

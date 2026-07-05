@@ -17,7 +17,7 @@ src/
     share/                  公开分享页
   lib/
     infra/                  降级基建:db/cache/queue/crypto/vector/env
-    providers/              统一 IR + provider 适配(openai/anthropic/gemini)
+    providers/              统一 IR + provider 适配(openai/custom/anthropic/gemini)
     rag/                    RAG 流水线:embedding/chunk/extract/retrieve/context/process
     compact/                上下文压缩:coverage(CoveragePathHash)/service(4级回退)
     memory/                 长期记忆(user_memories)
@@ -45,6 +45,21 @@ src/
 - **降级模块**(db/cache/queue)用动态 import 加载驱动,避免 bundler 把未用 dialect 打进 Edge 编译(见 `util/types` 教训)。
 - **唯一流式入口**:所有 LLM 调用(WebChat + 网关)都经 `streamChat()`,禁止直接调 AI SDK 的 streamText。
 - **新 provider 协议**:在 `lib/providers/registry.ts` 加 case,Chat 和网关同时受益。
+
+## Provider 协议矩阵
+
+`lib/providers/registry.ts` 的 `buildLanguageModelWithKey` 按协议四分支构造 AI SDK `LanguageModel`。关键差异在 system 消息处理:
+
+| 协议 | 构造 | system 消息 | 适用上游 |
+|------|------|-----------|---------|
+| `openai` | `createOpenAI().chat()` | reasoning/非 gpt 前缀模型转 developer role | OpenAI 官方 |
+| `custom` | `createOpenAICompatible().chatModel()` | 保持 `role:"system"` | 第三方兼容(SiliconFlow/DeepSeek/Qwen/vLLM) |
+| `anthropic` | `createAnthropic().chat()` | 原生 system | Anthropic |
+| `gemini` | `createGoogle()(model)` | 原生 system | Google |
+
+> **Gotcha(custom 协议)**:`custom` 必须用 `@ai-sdk/openai-compatible`,**不能**用 `@ai-sdk/openai`。后者对非 gpt 前缀模型会把 system 消息转成 `developer` role,SiliconFlow/DeepSeek 等第三方上游不认该 role,直接 400 拒收(`Input tag 'developer' found using 'role'...`)。
+
+**AI SDK 版本基线**:`ai`@7 + `@ai-sdk/{openai,anthropic,google}`@4 + `@ai-sdk/openai-compatible`@3(LanguageModelV4 spec),Node ≥22。
 
 ## Naming Conventions
 
