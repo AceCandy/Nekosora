@@ -231,18 +231,16 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
             renderStyleClass && `rs-${renderStyleClass}`,
           )}>
             {hasReasoning && (
-              <div
-                className="relative mb-2"
-                onMouseEnter={() => setReasoningPanelOpen(true)}
-                onMouseLeave={() => setReasoningPanelOpen(false)}
-              >
+              <div className="flex items-center gap-1.5 mb-2 max-w-[75ch]">
                 {/* 思考单行:未吐字显「思考中」,吐字时一行横向滚动,完成后收成「已思考X秒」。悬停看全文 */}
-                <button
-                  type="button"
+                {/* hover 触发区为图标 + 文字标签 + 吐字滚动; 箭头置于触发区外,不参与触发 */}
+                <div
                   className={clsx(
-                    "flex items-center gap-1.5 w-full max-w-[75ch] rounded-md px-2.5 py-1 text-[11px] font-mono select-none text-neutral-400 dark:text-neutral-500 transition-colors hover:bg-neutral-50/70 dark:hover:bg-[#0d0f14]/20",
+                    "relative flex items-center gap-1.5 flex-1 min-w-0 rounded-md px-2.5 py-1 text-[11px] font-mono select-none text-neutral-400 dark:text-neutral-500 transition-colors hover:bg-neutral-50/70 dark:hover:bg-[#0d0f14]/20",
                     reasoningPanelOpen && "bg-neutral-50/70 dark:bg-[#0d0f14]/20",
                   )}
+                  onMouseEnter={() => setReasoningPanelOpen(true)}
+                  onMouseLeave={() => setReasoningPanelOpen(false)}
                 >
                   {isReasoningActive ? (
                     <Loader2 className="w-3 h-3 shrink-0 animate-spin text-sora-blue/70" aria-hidden="true" />
@@ -261,30 +259,31 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
                       {reasoning}
                     </span>
                   )}
-                  <ChevronRight className={clsx("w-3 h-3 shrink-0 opacity-40 transition-transform", reasoningPanelOpen && "rotate-90")} aria-hidden="true" />
-                </button>
 
-                {/* 思考全文弹窗:悬停思考行时展开,宽度对齐思考行,弱化样式 */}
-                {reasoningPanelOpen && (
-                  <div className="absolute z-40 left-0 top-full w-full max-w-[75ch] max-h-[50vh] overflow-y-auto rounded-lg border border-morning-mist dark:border-deep-space/60 bg-white dark:bg-space-ink p-3 shadow-sm">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[11px] font-mono text-neutral-400 dark:text-neutral-500">
-                        {reasoningDone ? t("thoughtFor", { seconds: elapsed }) : t("thinking")}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setReasoningPanelOpen(false)}
-                        className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 cursor-pointer"
-                        aria-label="关闭"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
+                  {/* 思考全文弹窗:悬停触发区时展开,紧贴下方避免 hover 断链,宽度对齐触发区,弱化样式 */}
+                  {reasoningPanelOpen && (
+                    <div className="absolute z-40 left-0 top-full w-full max-h-[50vh] overflow-y-auto rounded-lg border border-morning-mist dark:border-deep-space/60 bg-white dark:bg-space-ink p-3 shadow-sm">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[11px] font-mono text-neutral-400 dark:text-neutral-500">
+                          {reasoningDone ? t("thoughtFor", { seconds: elapsed }) : t("thinking")}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setReasoningPanelOpen(false)}
+                          className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 cursor-pointer"
+                          aria-label="关闭"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      <div className="text-[12px] text-neutral-500 dark:text-neutral-400 whitespace-pre-wrap break-words leading-relaxed">
+                        {reasoning}
+                      </div>
                     </div>
-                    <div className="text-[12px] text-neutral-500 dark:text-neutral-400 whitespace-pre-wrap break-words leading-relaxed">
-                      {reasoning}
-                    </div>
-                  </div>
-                )}
+                  )}
+                </div>
+                {/* 箭头:在 hover 触发区外,仅指示展开状态 */}
+                <ChevronRight className={clsx("w-3 h-3 shrink-0 opacity-40 transition-transform", reasoningPanelOpen && "rotate-90")} aria-hidden="true" />
               </div>
             )}
             {toolCalls && toolCalls.length > 0 && (
