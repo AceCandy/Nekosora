@@ -333,6 +333,14 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
           copy[assistantIdx] = { ...copy[assistantIdx], reasoning: (copy[assistantIdx].reasoning ?? "") + t };
           return { ...r, messages: copy };
         })),
+        // 回填后端真实 publicId,覆盖 retryFromMessage 生成的占位 UUID;
+        // 否则生成结束后 refreshVersionInfo 拿占位 id 查不到兄弟,版本切换器无法显示。
+        onAssistantMessage: (publicId) => set((s) => patchRuntime(s, key, (r) => {
+          if (assistantIdx < 0 || assistantIdx >= r.messages.length) return r;
+          const copy = [...r.messages];
+          copy[assistantIdx] = { ...copy[assistantIdx], publicId };
+          return { ...r, messages: copy };
+        })),
       });
     } catch (err) {
       const { content } = handleStreamError(err, "网络错误");
