@@ -74,8 +74,40 @@ const { messages, streaming } = useChatStreamStore(
 
 ---
 
+## ChatMessage.status 状态机（续写触发）
+
+`ChatMessage.status?: "success" | "interrupted"` 表征一条 assistant 消息的生成状态，缺省视作完整。它是「继续生成」按钮的唯一触发依据。
+
+**渲染契约**：`ChatMessageItem` 仅当 `role === "assistant" && content && status === "interrupted"` 时渲染续写按钮——完整回答（success/缺省）不显示，从源头避免在已结束文本上续写导致重复。
+
+**status 必须双源维护**，单源都会破：
+
+| 来源 | 时机 | 作用 | 位置 |
+|------|------|------|------|
+| 前端 | `stopGeneration` abort 时把最后一条 assistant 标为 interrupted | 即时显示续写按钮，不等刷新 | `chatStreamStore.ts` |
+| 后端 | `/api/chat` finally 用 `finished` 标志落库（收到 finish 事件才 true，否则 interrupted） | 刷新会话后 `getMessages` → SSR 映射 hydrate 带回 status | `api/chat/route.ts` |
+
+```ts
+// 后端 status 判定:基于 finish 事件,不是"有没有输出文本"
+let finished = false;
+for await (const ev of gen) {
+  if (ev.type === "finish") finished = true;
+  // ...
+}
+// finally 落库(续写 UPDATE 与普通 INSERT 两处都要用 finished)
+status: finished ? "success" : "interrupted",
+```
+
+**续写完成的状态流转**（`continueGeneration`）：正常结束 → 把该消息 `status` 转为 `success`（避免对已补全内容再次续写）；被停止中断 → 保持 `interrupted`（可再次续写）。
+
+**为什么**：续写把目标 assistant 已有正文作为 messages 末尾的 assistant prefill。当 prefill 是被截断的半句话（interrupted）时，模型自然续写、不重复；当 prefill 是一段已完整结束的回答时，模型倾向复述，导致续写内容与原文雷同。因此续写必须限制在 interrupted 消息上。
+
+---
+
 ## Common Mistakes
 
+- **在完整回答上允许续写** → prefill 是已结束的整段文本，模型续写时复述原文、内容雷同。续写按钮必须仅 `status === "interrupted"` 时渲染。
+- **后端 status 用「有没有输出文本」判定** → 中断但已生成部分内容的消息被误判 success，刷新会话后前端丢 interrupted 标记、续写按钮消失。必须用「是否收到 finish 事件」判定。
 - **selector 里返回新对象/数组字面量** → zustand 判定引用变化，触发无限渲染。改用 `useShallow` + 模块级常量兜底。
 - **把流式状态放进组件本地 state** → 切路由组件卸载，流式中断。必须进全局 store。
 - **在 store 里存不可序列化的 server-only 对象** → store 是 client 域，只能存纯数据 + `AbortController` 这类浏览器对象。
