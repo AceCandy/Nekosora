@@ -201,6 +201,7 @@ export async function POST(req: NextRequest) {
     async start(controller) {
       let assistantText = "";
       let assistantReasoning = "";
+      let finished = false; // 正常收到 finish 事件才判 success,否则 interrupted
       // 回传本轮 user 消息的 publicId,供前端回填后支持编辑重发。
       // 续写模式下 user 沿用原消息,前端无需回填,跳过该帧。
       if (!isContinue) {
@@ -251,6 +252,7 @@ export async function POST(req: NextRequest) {
             assistantReasoning += ev.text;
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "reasoning", text: ev.text })}\n\n`));
           } else if (ev.type === "finish") {
+            finished = true;
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "finish", usage: ev.usage })}\n\n`));
           } else if (ev.type === "tool-call") {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "tool_call", toolName: ev.toolName, args: ev.args })}\n\n`));
@@ -273,7 +275,7 @@ export async function POST(req: NextRequest) {
             .set({
               content: continuePrefixText + assistantText,
               reasoning: assistantReasoning || null,
-              status: assistantText ? "success" : "interrupted",
+              status: finished ? "success" : "interrupted",
               processTrace: trace,
             })
             .where(eq(s.messages.id, continueAssistantInternalId));
@@ -291,7 +293,7 @@ export async function POST(req: NextRequest) {
             role: "assistant",
             content: assistantText,
             reasoning: assistantReasoning || null,
-            status: assistantText ? "success" : "interrupted",
+            status: finished ? "success" : "interrupted",
             processTrace: trace,
           });
         }

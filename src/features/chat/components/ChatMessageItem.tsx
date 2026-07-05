@@ -58,7 +58,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
   domId,
 }: ChatMessageItemProps) {
   const t = useTranslations("chat");
-  const { role, content, reasoning, publicId, artifacts, trace, toolCalls, searchResults, versionInfo } = message;
+  const { role, content, reasoning, publicId, status, artifacts, trace, toolCalls, searchResults, versionInfo } = message;
   const hasReasoning = Boolean(reasoning);
   // html artifact 直接内联渲染(AMC 式),其余 kind 走折叠条
   const htmlArtifacts = artifacts?.filter((a) => a.kind === "html") ?? [];
@@ -419,17 +419,18 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
                 </>
               )}
             </div>
-            <button
-              type="button"
-              onClick={() => onContinue?.(publicId)}
-              disabled={!content}
-              className="inline-flex items-center gap-1 text-[11px] font-semibold text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue rounded cursor-pointer disabled:opacity-40"
-              aria-label={t("continueGenerating")}
-              title={t("continueGenerating")}
-            >
-              <CornerDownRight className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>{t("continueGenerating")}</span>
-            </button>
+            {content && status === "interrupted" && (
+              <button
+                type="button"
+                onClick={() => onContinue?.(publicId)}
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue rounded cursor-pointer"
+                aria-label={t("continueGenerating")}
+                title={t("continueGenerating")}
+              >
+                <CornerDownRight className="w-3.5 h-3.5" aria-hidden="true" />
+                <span>{t("continueGenerating")}</span>
+              </button>
+            )}
           </div>
         )}
 

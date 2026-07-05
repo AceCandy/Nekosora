@@ -11,6 +11,8 @@ export interface ChatMessage {
   content: string;
   reasoning?: string; // 推理过程(thinking),仅 reasoning 模型产出
   publicId?: string;
+  /** 生成状态:interrupted 表示被中途停止(可继续生成);success 表示完整结束。缺省视作完整。 */
+  status?: "success" | "interrupted";
   /** 工具调用过程(MCP):按发生顺序记录每次调用及结果。 */
   toolCalls?: ToolCallRecord[];
   /** 联网搜索引用来源。 */

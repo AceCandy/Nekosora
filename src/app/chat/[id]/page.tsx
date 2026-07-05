@@ -57,6 +57,7 @@ export default async function ChatConversationPage({
     content: typeof m.content === "string" ? m.content : String(m.content ?? ""),
     reasoning: (m.reasoning as string | null) ?? undefined,
     publicId: m.publicId as string | undefined,
+    status: m.status as ChatMessage["status"] | undefined,
     trace: m.processTrace as ChatMessage["trace"] | undefined,
     versionInfo: versionMap[m.id as string],
     artifacts: (artifactsByMsg[m.id as string] ?? []) as

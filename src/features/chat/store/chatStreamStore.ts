@@ -464,6 +464,13 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
           return { ...r, messages: copy };
         })),
       });
+      // 续写完整结束:把该 assistant 从 interrupted 转为 success,避免对已补全内容再次续写
+      set((s) => patchRuntime(s, key, (r) => ({
+        ...r,
+        messages: r.messages.map((m) =>
+          m.publicId === assistantPublicId ? { ...m, status: "success" as const } : m,
+        ),
+      })));
     } catch (err) {
       const { content } = handleStreamError(err, "网络错误");
       if (!content.includes("[错误]")) console.error("continueGeneration failed:", err);
@@ -525,6 +532,16 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
     if (rt.abortController) {
       rt.abortController.abort();
     }
-    set((s) => patchRuntime(s, key, (r) => ({ ...r, streaming: false, abortController: null })));
+    set((s) => patchRuntime(s, key, (r) => {
+      // 中断后把最后一条 assistant 标记为 interrupted,供"继续生成"按钮显示
+      const msgs = [...r.messages];
+      for (let i = msgs.length - 1; i >= 0; i--) {
+        if (msgs[i].role === "assistant") {
+          msgs[i] = { ...msgs[i], status: "interrupted" };
+          break;
+        }
+      }
+      return { ...r, messages: msgs, streaming: false, abortController: null };
+    }));
   },
 }));
