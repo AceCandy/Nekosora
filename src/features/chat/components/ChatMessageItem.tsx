@@ -6,8 +6,6 @@ import { Sparkles, RefreshCw, Loader2, User, Pencil, X, Check, Wrench, CheckCirc
 import { clsx } from "clsx";
 import { Markdown } from "@/shared/components/markdown/Markdown";
 import { ErrorBoundary } from "@/shared/components/ErrorBoundary";
-import { ArtifactInline } from "@/features/artifacts/ArtifactInline";
-import { HtmlPreviewFrame } from "@/features/artifacts/HtmlPreviewFrame";
 import type { ChatMessage, ModelOption } from "@/features/chat/model/types";
 import type { Artifact } from "@/features/artifacts/ArtifactPanel";
 
@@ -58,11 +56,8 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
   domId,
 }: ChatMessageItemProps) {
   const t = useTranslations("chat");
-  const { role, content, reasoning, publicId, status, artifacts, trace, toolCalls, searchResults, versionInfo } = message;
+  const { role, content, reasoning, publicId, status, trace, toolCalls, searchResults, versionInfo } = message;
   const hasReasoning = Boolean(reasoning);
-  // html artifact 直接内联渲染(AMC 式),其余 kind 走折叠条
-  const htmlArtifacts = artifacts?.filter((a) => a.kind === "html") ?? [];
-  const otherArtifacts = artifacts?.filter((a) => a.kind !== "html") ?? [];
 
   // 用户消息编辑态
   const [editing, setEditing] = useState(false);
@@ -141,92 +136,87 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
           <Sparkles className="w-3.5 h-3.5 text-sora-blue" aria-hidden="true" />
         </div>
       )}
-
       <div className={clsx("max-w-[82%] space-y-2", role === "user" ? "flex flex-col items-end" : "")}>
         {role === "user" ? (
           /* 用户消息: 可编辑文本气泡 */
-          editing ? (
-            <div className="w-full max-w-[480px] space-y-1.5">
-              <textarea
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    if (publicId && draft.trim() && onEdit) {
-                      onEdit(publicId, draft, model);
-                      setEditing(false);
-                    }
-                  }
-                  if (e.key === "Escape") setEditing(false);
-                }}
-                rows={Math.min(8, Math.max(2, draft.split("\n").length))}
-                className="w-full rounded-2xl bg-neutral-900 text-white dark:bg-white dark:text-black px-4 py-2.5 text-sm leading-relaxed resize-none border border-sora-blue/40 focus:outline-none focus:border-sora-blue"
-                autoFocus
-              />
-              <div className="flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDraft(content);
+          (editing ? (<div className="w-full max-w-[480px] space-y-1.5">
+            <textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  if (publicId && draft.trim() && onEdit) {
+                    onEdit(publicId, draft, model);
                     setEditing(false);
-                  }}
-                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors cursor-pointer"
-                >
-                  <X className="w-3 h-3" aria-hidden="true" />
-                  <span>{t("editCancel")}</span>
-                </button>
-                <button
-                  type="button"
-                  disabled={!draft.trim() || draft.trim() === content.trim()}
-                  onClick={() => {
-                    if (publicId && draft.trim() && onEdit) {
-                      onEdit(publicId, draft, model);
-                      setEditing(false);
-                    }
-                  }}
-                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-sora-blue hover:opacity-80 disabled:opacity-40 transition-opacity cursor-pointer"
-                >
-                  <Check className="w-3 h-3" aria-hidden="true" />
-                  <span>{t("editSaveAndResend")}</span>
-                </button>
-              </div>
+                  }
+                }
+                if (e.key === "Escape") setEditing(false);
+              }}
+              rows={Math.min(8, Math.max(2, draft.split("\n").length))}
+              className="w-full rounded-2xl bg-neutral-900 text-white dark:bg-white dark:text-black px-4 py-2.5 text-sm leading-relaxed resize-none border border-sora-blue/40 focus:outline-none focus:border-sora-blue"
+              autoFocus
+            />
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setDraft(content);
+                  setEditing(false);
+                }}
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors cursor-pointer"
+              >
+                <X className="w-3 h-3" aria-hidden="true" />
+                <span>{t("editCancel")}</span>
+              </button>
+              <button
+                type="button"
+                disabled={!draft.trim() || draft.trim() === content.trim()}
+                onClick={() => {
+                  if (publicId && draft.trim() && onEdit) {
+                    onEdit(publicId, draft, model);
+                    setEditing(false);
+                  }
+                }}
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-sora-blue hover:opacity-80 disabled:opacity-40 transition-opacity cursor-pointer"
+              >
+                <Check className="w-3 h-3" aria-hidden="true" />
+                <span>{t("editSaveAndResend")}</span>
+              </button>
             </div>
-          ) : (
-            <div className="group relative">
-              <div className="rounded-2xl bg-neutral-900 text-white px-4 py-2.5 dark:bg-white dark:text-black shadow-none border border-transparent text-sm leading-relaxed whitespace-pre-wrap break-words">
-                {content}
-              </div>
-              {publicId && onEdit && !isStreaming && !conversationStreaming && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDraft(content);
-                    setEditing(true);
-                  }}
-                  className="absolute -left-7 top-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
-                  title={t("edit")}
-                  aria-label={t("edit")}
-                >
-                  <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
-                </button>
-              )}
-              {publicId && onRequestDelete && !conversationStreaming && (
-                <button
-                  type="button"
-                  onClick={() => onRequestDelete?.(publicId)}
-                  className="absolute -left-7 top-7 p-1 rounded opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-red-500 dark:hover:text-red-400 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
-                  title={t("delete")}
-                  aria-label={t("delete")}
-                >
-                  <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
-                </button>
-              )}
+          </div>) : (<div className="group relative">
+            <div className="rounded-2xl bg-neutral-900 text-white px-4 py-2.5 dark:bg-white dark:text-black shadow-none border border-transparent text-sm leading-relaxed whitespace-pre-wrap break-words">
+              {content}
             </div>
-          )
+            {publicId && onEdit && !isStreaming && !conversationStreaming && (
+              <button
+                type="button"
+                onClick={() => {
+                  setDraft(content);
+                  setEditing(true);
+                }}
+                className="absolute -left-7 top-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
+                title={t("edit")}
+                aria-label={t("edit")}
+              >
+                <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
+              </button>
+            )}
+            {publicId && onRequestDelete && !conversationStreaming && (
+              <button
+                type="button"
+                onClick={() => onRequestDelete?.(publicId)}
+                className="absolute -left-7 top-7 p-1 rounded opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-red-500 dark:hover:text-red-400 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
+                title={t("delete")}
+                aria-label={t("delete")}
+              >
+                <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+              </button>
+            )}
+          </div>))
         ) : (
           /* Assistant 消息: 流式 markdown 渲染 */
-          <div className={clsx(
+          (<div className={clsx(
             "text-neutral-800 dark:text-neutral-200 max-w-[75ch] text-sm leading-relaxed",
             renderStyleClass && `rs-${renderStyleClass}`,
           )}>
@@ -330,6 +320,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
                   content={content}
                   isStreaming={isStreaming && isLast}
                   renderer={renderStyleRenderer}
+                  onPreview={onOpenArtifact}
                 />
               </ErrorBoundary>
             ) : isStreaming && isLast && !hasReasoning ? (
@@ -338,7 +329,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
                 {t("thinking")}
               </span>
             ) : null}
-          </div>
+          </div>)
         )}
 
         {role === "assistant" && publicId && !isStreaming && (
@@ -434,25 +425,6 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
           </div>
         )}
 
-        {role === "assistant" && htmlArtifacts.length > 0 && (
-          <div className="space-y-2 max-w-[75ch]">
-            {htmlArtifacts.map((a, i) => (
-              <HtmlPreviewFrame
-                key={i}
-                html={a.content}
-                title={a.title}
-                onOpenPanel={() => onOpenArtifact(a)}
-              />
-            ))}
-          </div>
-        )}
-
-        {role === "assistant" && otherArtifacts.length > 0 && (
-          <ArtifactInline
-            artifacts={otherArtifacts}
-            onOpenPanel={onOpenArtifact}
-          />
-        )}
 
         {role === "assistant" && searchResults && searchResults.length > 0 && (
           <details className="text-[11px] border border-morning-mist dark:border-deep-space/80 rounded-md bg-neutral-50/30 dark:bg-[#0d0f14]/10 overflow-hidden max-w-[75ch]">
@@ -505,7 +477,6 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
           </details>
         )}
       </div>
-
       {role === "user" && (
         <div className="w-7 h-7 rounded-full border border-morning-mist dark:border-deep-space bg-neutral-50 dark:bg-neutral-900 flex items-center justify-center shrink-0 mt-0.5">
           <User className="w-3.5 h-3.5 text-neutral-600 dark:text-neutral-300" aria-hidden="true" />

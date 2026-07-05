@@ -25,8 +25,14 @@ interface HtmlPreviewFrameProps {
  * HTML Artifact 预览 —— iframe srcDoc + sandbox + 高度自适应。
  *
  * 高度自适应:iframe 内 bridge 脚本通过 postMessage 上报内容高度,
- * 父组件据此设 iframe 高度,内容多高 iframe 多高(无内部滚动条)。
+ * 父组件据此设 iframe 高度,但不超过父视口 75%(超出则 iframe 内部滚动)。
+ * 上限用于截断正反馈循环:html 内容使用 vh / 百分比高度或动态 append 时,
+ * 「上报高度 → iframe 变高 → 内容更高 → 再上报」会无限撑高页面。
  */
+/** 预览框最大高度:父视口 75%,超出由 iframe 内部滚动。 */
+const MAX_PREVIEW_HEIGHT =
+  typeof window !== "undefined" ? Math.max(MIN_PREVIEW_HEIGHT, Math.floor(window.innerHeight * 0.75)) : 640;
+
 export function HtmlPreviewFrame({ html, title, onOpenPanel, className }: HtmlPreviewFrameProps) {
   const t = useTranslations("artifacts");
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -36,7 +42,7 @@ export function HtmlPreviewFrame({ html, title, onOpenPanel, className }: HtmlPr
   // 监听 iframe 上报的高度消息
   const handleMessage = useCallback((e: MessageEvent) => {
     if (!isPreviewResizeMessage(e.data)) return;
-    const next = Math.max(MIN_PREVIEW_HEIGHT, Math.ceil(e.data.height));
+    const next = Math.min(MAX_PREVIEW_HEIGHT, Math.max(MIN_PREVIEW_HEIGHT, Math.ceil(e.data.height)));
     setHeight(next);
   }, []);
 

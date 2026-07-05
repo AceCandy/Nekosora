@@ -5,7 +5,7 @@
  *   - mermaid   → kind=mermaid
  *   - svg/html  → kind=svg/html
  *   - math/tex  → kind=katex(数学公式块)
- *   - 其他语言  → kind=code
+ *   - 其他语言  → null(普通代码,正文内联渲染,不抽成 artifact)
  *
  * 设计为纯函数(非流式场景);流式场景可后续扩展为有状态 parser。
  * 当前 WebChat 在流式结束后整体抽取(简化可靠)。
@@ -30,15 +30,19 @@ export interface ExtractResult {
 
 const FENCE_RE = /```([a-zA-Z0-9_+-]*)\n([\s\S]*?)```/g;
 
-/** 语言 → artifact kind 映射。 */
-function classifyLanguage(lang: string): ArtifactKind {
+/**
+ * 语言 → artifact kind 映射。
+ * 返回 null 表示普通代码块,正文内联渲染即可,不抽成 artifact
+ * (避免「正文一份 + 末尾可渲染物一份」的双重渲染)。
+ */
+function classifyLanguage(lang: string): ArtifactKind | null {
   const l = lang.toLowerCase().trim();
   if (l === "mermaid") return "mermaid";
   if (l === "svg") return "svg";
   if (l === "html" || l === "xml") return "html";
   if (l === "math" || l === "tex" || l === "latex") return "katex";
   if (l === "markdown" || l === "md") return "markdown";
-  return "code";
+  return null;
 }
 
 /** 推断标题(从内容首行或语言名)。 */
@@ -69,6 +73,8 @@ export function extractArtifacts(text: string): ExtractResult {
     const lang = match[1] ?? "";
     const content = match[2] ?? "";
     const kind = classifyLanguage(lang);
+    // 普通代码块不抽成 artifact,留给正文内联渲染。
+    if (kind === null) continue;
     artifacts.push({
       kind,
       title: inferTitle(kind, lang || null, content),

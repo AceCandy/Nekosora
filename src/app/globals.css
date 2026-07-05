@@ -43,3 +43,71 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
 }
+
+/*
+ * 默认态正文代码块美化。
+ *
+ * 触发条件:消息正文容器 .nekusora-md 未套 rs-xxx 输出样式类时(默认态),
+ * streamdown 输出的代码块依赖 --border / --sidebar 等 Tailwind v4 变量,
+ * 而项目未定义这些变量,导致 streamdown 自带的圆角/边框/背景失效。
+ *
+ * 选择器特异性策略:.nekusora-md + [data-streamdown] = (0,2,0),
+ * 低于三套内置样式 .rs-xxx .nekusora-md pre 的 (0,3,1),
+ * 因此 default / compact / paper 仍能正常覆盖(paper 走 custom 渲染器,
+ * 不输出 data-streamdown 元素,天然不冲突)。
+ *
+ * 不覆盖 Shiki 的 pre 内联背景:Shiki 的 token 配色与 github-light/dark 背景
+ * 配套设计,强行替换背景会让 token 颜色失配。仅给外层容器补柔和背景与圆角。
+ */
+.nekusora-md [data-streamdown="code-block"] {
+  margin: 16px 0;
+  background: oklch(0.975 0.004 250);
+  border: 1px solid oklch(0.92 0.005 250);
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+}
+.dark .nekusora-md [data-streamdown="code-block"] {
+  background: oklch(0.165 0.008 260);
+  border-color: oklch(0.24 0.01 260);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* 头部语言标签条与外层背景融合,降低视觉割裂。 */
+.nekusora-md [data-streamdown="code-block-header"] {
+  color: oklch(0.45 0.01 250);
+}
+.dark .nekusora-md [data-streamdown="code-block-header"] {
+  color: oklch(0.7 0.01 260);
+}
+
+/* 主体保留 Shiki 背景(其 token 配色与背景配套),仅统一字体与行距。 */
+.nekusora-md [data-streamdown="code-block-body"] {
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+}
+.nekusora-md [data-streamdown="code-block-body"] pre {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.nekusora-md [data-streamdown="code-block-body"] pre,
+.nekusora-md [data-streamdown="code-block-body"] code {
+  font-feature-settings: "calt" 0;
+}
+
+/* 行内代码:圆角 + 柔和底色 + 等宽字体。 */
+.nekusora-md [data-streamdown="inline-code"] {
+  background: oklch(0.94 0.005 250);
+  color: oklch(0.32 0.02 260);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.9em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+.dark .nekusora-md [data-streamdown="inline-code"] {
+  background: oklch(0.22 0.01 260);
+  color: oklch(0.85 0.015 260);
+}
