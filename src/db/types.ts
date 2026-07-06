@@ -3,12 +3,21 @@
  * 业务代码统一从 schema 取用。与具体列类型解耦。
  */
 
+/** 推理强度档位(对齐 pi ThinkingLevel 子集,预留 minimal/xhigh 扩展)。 */
+export type ThinkingLevel = "low" | "medium" | "high";
+/** 含「关闭」:off=不传 reasoning 参数,回归普通对话。 */
+export type ReasoningLevel = "off" | ThinkingLevel;
+/** per-model 级别→供应商值(字符串,语义随 protocol:openai=effort、anthropic/gemini=token 数)。null/缺省=该档不支持。 */
+export type ThinkingLevelMap = Partial<Record<ThinkingLevel, string | null>>;
+
 export interface ModelCapabilities {
   stream?: boolean;
   tools?: boolean;
   vision?: boolean;
   systemPrompt?: boolean;
   reasoning?: boolean;
+  /** per-model 推理级别映射;缺省按 protocol 默认。仅 reasoning=true 时有意义。 */
+  thinkingLevelMap?: ThinkingLevelMap;
   /** P1-D:图像生成(DALL-E / gpt-image 兼容)。 */
   imageGeneration?: boolean;
   /** P1-D:语音转文字(Whisper 兼容)。 */
@@ -29,6 +38,8 @@ export interface ContextPolicy {
 export interface ComposerState {
   cardIds?: string[];
   kbIds?: string[];
+  /** 推理级别(off/low/medium/high);缺省=off。 */
+  reasoning?: ReasoningLevel;
 }
 
 export interface TokenUsage {

@@ -151,7 +151,12 @@
     "temperature": "温度",
     "topP": "Top P",
     "maxTokens": "最大 token",
-    "resetDefaults": "恢复默认"
+    "resetDefaults": "恢复默认",
+    "reasoning": "推理",
+    "reasoningOff": "推理: 关",
+    "reasoningLow": "推理: 低",
+    "reasoningMedium": "推理: 中",
+    "reasoningHigh": "推理: 高"
   },
   "panel": {
     "title": "控制面板",
@@ -610,6 +615,11 @@
     "capSystemPromptHint": "支持预设系统角色",
     "capReasoning": "推理",
     "capReasoningHint": "支持思维链深度推理",
+    "reasoningLow": "低",
+    "reasoningMedium": "中",
+    "reasoningHigh": "高",
+    "thinkingLevelMapHint": "各级别对应的供应商值(留空=用协议默认)。OpenAI 系填 low/medium/high,Anthropic/Gemini 填 token 数。",
+    "thinkingLevelPlaceholder": "默认",
     "advancedConfigToggle": "配置高级能力参数(JSON)",
     "collapseAdvancedConfig": "收起高级配置，改用复选框",
     "advancedConfigHint": "💡 JSON 格式必须是有效的键值对。若语法错误将不会同步至上方复选框。",

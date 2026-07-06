@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import type { ModelCapabilities } from "@/db/types";
+import type { ModelCapabilities, ThinkingLevel } from "@/db/types";
 import { ChevronRight, ChevronDown } from "lucide-react";
 
 // label/hint 存 i18n key,渲染时按 locale 翻译。
@@ -27,6 +27,17 @@ export default function CapabilitiesEditor({ initial }: CapabilitiesEditorProps)
 
   const toggle = (key: keyof ModelCapabilities) => {
     setCaps((c) => ({ ...c, [key]: !c[key] }));
+  };
+
+  /** 更新某推理级别的供应商值;留空=删除该键(回退 protocol 默认)。 */
+  const updateLevel = (lvl: ThinkingLevel, raw: string) => {
+    setCaps((c) => {
+      const nextMap = { ...(c.thinkingLevelMap ?? {}) };
+      const trimmed = raw.trim();
+      if (trimmed === "") delete nextMap[lvl];
+      else nextMap[lvl] = trimmed;
+      return { ...c, thinkingLevelMap: nextMap };
+    });
   };
 
   const handleAdvancedChange = (text: string) => {
@@ -70,6 +81,28 @@ export default function CapabilitiesEditor({ initial }: CapabilitiesEditorProps)
           </label>
         ))}
       </div>
+
+      {caps.reasoning && (
+        <div className="space-y-2 p-3 rounded-lg bg-neutral-50/50 dark:bg-neutral-900/30 border border-neutral-100 dark:border-neutral-800/80">
+          <p className="text-[11px] text-neutral-500 dark:text-neutral-400">{t("thinkingLevelMapHint")}</p>
+          <div className="grid grid-cols-3 gap-2">
+            {(["low", "medium", "high"] as const).map((lvl) => (
+              <label key={lvl} className="space-y-1">
+                <span className="text-[11px] text-neutral-600 dark:text-neutral-300">
+                  {t(lvl === "low" ? "reasoningLow" : lvl === "medium" ? "reasoningMedium" : "reasoningHigh")}
+                </span>
+                <input
+                  type="text"
+                  value={caps.thinkingLevelMap?.[lvl] ?? ""}
+                  onChange={(e) => updateLevel(lvl, e.target.value)}
+                  placeholder={t("thinkingLevelPlaceholder")}
+                  className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 px-2 py-1 text-xs bg-white dark:bg-[#0f121a] focus:outline-none focus:border-blue-500 dark:focus:border-blue-500 transition-colors"
+                />
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="mt-2">
         {!showAdvanced ? (

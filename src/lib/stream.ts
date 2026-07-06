@@ -17,6 +17,7 @@ import { buildLanguageModelWithKey } from "@/lib/providers/registry";
 import { orderedWeightedKeys } from "@/lib/providers/keys";
 import { recordSuccess, recordFailure } from "@/lib/circuit-breaker";
 import { logUsage } from "@/lib/usage";
+import { buildReasoningProviderOptions } from "@/lib/reasoning";
 import type {
   CallContext,
   IRRequest,
@@ -200,6 +201,9 @@ async function* streamWithRoute(
     temperature: request.temperature,
     maxOutputTokens: request.max_tokens,
     topP: request.top_p,
+    // 推理级别 → 各供应商 providerOptions(off/不支持则不传,等价普通对话)。
+    // AI SDK SharedV4ProviderOptions 类型摩擦,沿用本文件 messages/tools 的 as never 处理。
+    providerOptions: buildReasoningProviderOptions(route.protocol, route.capabilities, request.reasoning) as never,
     // P1-A:工具(MCP)透传给上游模型。tools 格式已是 OpenAI function-calling 兼容。
     tools: request.tools as unknown as Parameters<typeof streamText>[0]["tools"],
   });

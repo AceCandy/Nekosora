@@ -7,6 +7,7 @@ import { listKnowledgeBases } from "@/lib/knowledge-base/service";
 import { listEnabledOutputModes } from "@/lib/output-modes/service";
 import { listEnabledRenderStyles } from "@/lib/render-styles/service";
 import ChatComposer, { type ModelOption } from "@/features/chat/components/ChatComposer";
+import type { ModelCapabilities } from "@/db/types";
 import type { ChatMessage } from "@/features/chat/model/types";
 import ChatHeader from "@/features/chat/components/ChatHeader";
 
@@ -35,6 +36,7 @@ export default async function ChatConversationPage({
       temperature: null,
       topP: null,
       maxTokens: null,
+      reasoning: null,
     })),
   ]);
   const msgs = branch.messages;
@@ -43,10 +45,12 @@ export default async function ChatConversationPage({
     ...globals.map((m: Record<string, unknown>) => ({
       name: m.name as string,
       displayName: (m.displayName as string | undefined) ?? undefined,
+      capabilities: (m.capabilities as ModelCapabilities | undefined) ?? undefined,
     })),
     // BYO 模型表无 displayName,UI 回退到 name
     ...byos.map((r: Record<string, unknown>) => ({
       name: (r.model as Record<string, unknown>).name as string,
+      capabilities: ((r.model as Record<string, unknown>).capabilities as ModelCapabilities | undefined) ?? undefined,
     })),
   ];
 
@@ -120,6 +124,7 @@ export default async function ChatConversationPage({
           initialCardIds={composerState.cardIds}
           initialKbIds={composerState.kbIds}
           initialModelParams={{ temperature: composerState.temperature, topP: composerState.topP, maxTokens: composerState.maxTokens }}
+          initialReasoning={composerState.reasoning ?? undefined}
           conversationId={id}
           initialMessages={initialMessages}
         />

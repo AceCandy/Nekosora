@@ -14,6 +14,7 @@ import { ChatInputBox } from "@/features/chat/components/ChatInputBox";
 import { setConversationOutputMode, setConversationRenderStyle, setConversationModel, setConversationWebSearch, setConversationComposerState, setConversationModelParams } from "@/features/chat/actions/conversations";
 import { estimateTokens } from "@/lib/tokens";
 import type { ChatMessage, ModelOption, CardOption, KnowledgeBaseOption, OutputModeOption, RenderStyleOption } from "@/features/chat/model/types";
+import type { ReasoningLevel } from "@/db/types";
 
 export type { ChatMessage, ModelOption, CardOption, KnowledgeBaseOption, OutputModeOption, RenderStyleOption } from "@/features/chat/model/types";
 
@@ -41,6 +42,8 @@ interface ChatComposerProps {
   initialKbIds?: string[];
   /** 当前会话模型参数(回填)。 */
   initialModelParams?: { temperature?: number | null; topP?: number | null; maxTokens?: number | null };
+  /** 当前会话推理级别(回填;off=关闭)。 */
+  initialReasoning?: ReasoningLevel;
   /** 当前会话 ID(切换输出方式时持久化用;新会话无)。 */
   conversationId?: string;
   initialMessages?: ChatMessage[];
@@ -67,6 +70,7 @@ export default function ChatComposer({
   initialCardIds = [],
   initialKbIds = [],
   initialModelParams,
+  initialReasoning,
   conversationId: initialConvId,
   initialMessages = [],
 }: ChatComposerProps) {
@@ -166,6 +170,19 @@ export default function ChatComposer({
       startModeTransition(async () => {
         try { await setConversationModelParams(convId, { temperature: null, topP: null, maxTokens: null }); }
         catch (err) { console.error("reset model params failed:", err); }
+      });
+    }
+  };
+
+  // 推理级别(off/low/medium/high):会话级持久化,off=删除键(等价关闭)。
+  const [reasoning, setReasoning] = useState<ReasoningLevel>(initialReasoning ?? "off");
+  const handleReasoningChange = (next: ReasoningLevel) => {
+    setReasoning(next);
+    const convId = runtime.conversationId ?? initialConvId;
+    if (convId) {
+      startModeTransition(async () => {
+        try { await setConversationModelParams(convId, { reasoning: next === "off" ? null : next }); }
+        catch (err) { console.error("set reasoning failed:", err); }
       });
     }
   };
@@ -335,6 +352,8 @@ export default function ChatComposer({
               modelParams={modelParams}
               onModelParamsChange={handleModelParamsChange}
               onModelParamsReset={handleModelParamsReset}
+              reasoning={reasoning}
+              onReasoningChange={handleReasoningChange}
             />
 
             <ChatInputBox

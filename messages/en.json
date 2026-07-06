@@ -151,7 +151,12 @@
     "temperature": "Temperature",
     "topP": "Top P",
     "maxTokens": "Max tokens",
-    "resetDefaults": "Reset to defaults"
+    "resetDefaults": "Reset to defaults",
+    "reasoning": "Reasoning",
+    "reasoningOff": "Reasoning: Off",
+    "reasoningLow": "Reasoning: Low",
+    "reasoningMedium": "Reasoning: Medium",
+    "reasoningHigh": "Reasoning: High"
   },
   "panel": {
     "title": "Dashboard",
@@ -610,6 +615,11 @@
     "capSystemPromptHint": "Supports preset system role",
     "capReasoning": "Reasoning",
     "capReasoningHint": "Supports chain-of-thought reasoning",
+    "reasoningLow": "Low",
+    "reasoningMedium": "Medium",
+    "reasoningHigh": "High",
+    "thinkingLevelMapHint": "Provider value per level (empty = protocol default). OpenAI: low/medium/high; Anthropic/Gemini: token count.",
+    "thinkingLevelPlaceholder": "Default",
     "advancedConfigToggle": "Configure advanced capabilities (JSON)",
     "collapseAdvancedConfig": "Collapse advanced config, use checkboxes",
     "advancedConfigHint": "💡 JSON must be valid key-value pairs. Syntax errors won't sync to checkboxes.",

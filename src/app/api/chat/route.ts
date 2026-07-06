@@ -21,6 +21,7 @@ import { extractMemories } from "@/lib/memory/extract";
 import { maybeGenerateTitle } from "@/lib/conversation-title/service";
 import { prepareChatContext } from "@/lib/chat/orchestrator";
 import type { IRRequest } from "@/lib/providers/types";
+import type { ReasoningLevel } from "@/db/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -183,10 +184,11 @@ export async function POST(req: NextRequest) {
   const { irRequest, trace, searchBundle, ragStatus, compaction } = prepared;
 
   // 会话级模型参数(用户在 toolbar 设置)覆盖默认值;未设置则沿用 prepareChatContext 的默认
-  const composerParams = (conv.composerState as { temperature?: number; topP?: number; maxTokens?: number } | null) ?? {};
+  const composerParams = (conv.composerState as { temperature?: number; topP?: number; maxTokens?: number; reasoning?: ReasoningLevel } | null) ?? {};
   if (typeof composerParams.temperature === "number") irRequest.temperature = composerParams.temperature;
   if (typeof composerParams.topP === "number") irRequest.top_p = composerParams.topP;
   if (typeof composerParams.maxTokens === "number") irRequest.max_tokens = composerParams.maxTokens;
+  if (composerParams.reasoning) irRequest.reasoning = composerParams.reasoning;
 
   const ctx = { userId: user.id, keyKind: null as null, source: "chat" as const };
 

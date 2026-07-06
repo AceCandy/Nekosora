@@ -2,9 +2,10 @@
 
 import React, { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Loader2, Sparkles, Globe, Library, Wand2, Palette, X, Paperclip, SlidersHorizontal } from "lucide-react";
+import { Loader2, Sparkles, Globe, Library, Wand2, Palette, X, Paperclip, SlidersHorizontal, Brain } from "lucide-react";
 import { clsx } from "clsx";
 import { OptionPicker, type OptionItem } from "@/shared/ui/OptionPicker";
+import type { ReasoningLevel, ModelCapabilities } from "@/db/types";
 import type {
   ModelOption,
   CardOption,
@@ -82,6 +83,10 @@ export interface ChatToolbarProps {
   modelParams: { temperature: number | null; topP: number | null; maxTokens: number | null };
   onModelParamsChange: (p: { temperature?: number | null; topP?: number | null; maxTokens?: number | null }) => void;
   onModelParamsReset: () => void;
+
+  // 推理级别(仅可推理模型露出控件)
+  reasoning: ReasoningLevel;
+  onReasoningChange: (v: ReasoningLevel) => void;
 }
 
 /**
@@ -99,7 +104,11 @@ export function ChatToolbar(props: ChatToolbarProps) {
     renderStyles, renderStyleId, renderStylePickerOpen, onRenderStylePickerToggle, onRenderStylePickerClose, onRenderStyleToggle, onRenderStyleClear,
     webSearch, onWebSearchToggle,
     modelParams, onModelParamsChange, onModelParamsReset,
+    reasoning, onReasoningChange,
   } = props;
+
+  // 当前选中模型的能力位(决定推理控件是否露出 + 档位)。
+  const currentCapabilities = models.find((m) => m.name === model)?.capabilities;
 
   return (
     <div className="flex items-center gap-2 mb-2 flex-wrap">
@@ -264,6 +273,9 @@ export function ChatToolbar(props: ChatToolbarProps) {
       {/* 模型参数(temperature/topP/maxTokens) */}
       <ModelParamsPicker params={modelParams} onChange={onModelParamsChange} onReset={onModelParamsReset} />
 
+      {/* 推理级别(仅可推理模型露出) */}
+      <ReasoningPicker capabilities={currentCapabilities} value={reasoning} onChange={onReasoningChange} />
+
       {/* 已选指令卡 chip */}
       {selectedCardIds.map((id) => {
         const card = cards.find((c) => c.id === id);
@@ -394,6 +406,71 @@ function ModelParamsPicker({
             <ParamInput label={t("temperature")} value={params.temperature} min={0} max={2} step={0.1} onChange={(v) => onChange({ temperature: v })} />
             <ParamInput label={t("topP")} value={params.topP} min={0} max={1} step={0.05} onChange={(v) => onChange({ topP: v })} />
             <ParamInput label={t("maxTokens")} value={params.maxTokens} min={1} step={1} onChange={(v) => onChange({ maxTokens: v })} />
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** 推理级别 picker:仅当模型 capabilities.reasoning===true 时渲染;档位按 thinkingLevelMap 动态。 */
+function ReasoningPicker({
+  capabilities,
+  value,
+  onChange,
+}: {
+  capabilities?: ModelCapabilities;
+  value: ReasoningLevel;
+  onChange: (v: ReasoningLevel) => void;
+}) {
+  const t = useTranslations("chat");
+  const [open, setOpen] = useState(false);
+  if (!capabilities?.reasoning) return null;
+  // 支持档位:无 map → 全档;有 map → 非 null 的档(undefined=回退默认,也算支持)
+  const map = capabilities.thinkingLevelMap;
+  const levels = (["low", "medium", "high"] as const).filter((lvl) => !map || map[lvl] !== null);
+  const active = value !== "off";
+  const labelKey = value === "off" ? "reasoningOff" : value === "low" ? "reasoningLow" : value === "medium" ? "reasoningMedium" : "reasoningHigh";
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={clsx(
+          "inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-semibold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer",
+          active
+            ? "border-sora-blue/30 bg-sora-blue/[0.04] text-sora-blue"
+            : "border-morning-mist dark:border-deep-space bg-white dark:bg-space-ink text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900",
+        )}
+        title={t("reasoning")}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={t("reasoning")}
+      >
+        <Brain className="w-3.5 h-3.5" aria-hidden="true" />
+        <span>{t(labelKey)}</span>
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+          <div className="absolute bottom-full mb-2 right-0 z-40 w-40 rounded-lg border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink p-1.5 shadow-md">
+            {(["off", ...levels] as ReasoningLevel[]).map((lvl) => {
+              const key = lvl === "off" ? "reasoningOff" : lvl === "low" ? "reasoningLow" : lvl === "medium" ? "reasoningMedium" : "reasoningHigh";
+              const selected = value === lvl;
+              return (
+                <button
+                  key={lvl}
+                  type="button"
+                  onClick={() => { onChange(lvl); setOpen(false); }}
+                  className={clsx(
+                    "w-full text-left px-2.5 py-1.5 rounded text-xs transition-colors cursor-pointer",
+                    selected ? "bg-sora-blue/[0.08] text-sora-blue font-semibold" : "text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900",
+                  )}
+                >
+                  {t(key)}
+                </button>
+              );
+            })}
           </div>
         </>
       )}

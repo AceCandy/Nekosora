@@ -14,6 +14,7 @@ import { streamChat } from "@/lib/stream";
 import { verifyKey, extractBearer } from "@/lib/keys";
 import { apiErrorLocalized, ErrorCode } from "@/lib/errors";
 import type { IRRequest } from "@/lib/providers/types";
+import { resolveReasoningLevel } from "@/lib/reasoning";
 
 export const runtime = "nodejs";
 // 禁用响应缓冲,保证 SSE 实时推送(Next.js 网关关键坑)。
@@ -45,6 +46,8 @@ export async function POST(req: NextRequest) {
   }
 
   const stream = body.stream === true;
+  // OpenAI 标准 reasoning_effort → 内部统一级别;无法映射则不设(等价 off)。
+  const reasoningEffort = resolveReasoningLevel(body.reasoning_effort);
   const irRequest: IRRequest = {
     model,
     messages,
@@ -53,6 +56,7 @@ export async function POST(req: NextRequest) {
     max_tokens: body.max_tokens as number | undefined,
     top_p: body.top_p as number | undefined,
     stop: body.stop as string | string[] | undefined,
+    ...(reasoningEffort ? { reasoning: reasoningEffort } : {}),
   };
 
   // 3. 调用 streamChat 并转 OpenAI 格式

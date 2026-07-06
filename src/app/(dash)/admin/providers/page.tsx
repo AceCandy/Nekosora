@@ -17,7 +17,7 @@ const PROTOCOLS = [
   { value: "openai", label: "openai" },
   { value: "anthropic", label: "anthropic" },
   { value: "gemini", label: "gemini" },
-  { value: "openai-compatible", label: "OpenAI 兼容" },
+  { value: "openai-compatible", label: "openai-compatible" },
 ];
 
 export default async function ProvidersPage() {

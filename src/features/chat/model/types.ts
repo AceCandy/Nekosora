@@ -4,6 +4,7 @@
  * 从 ChatComposer.tsx 抽离,避免 hooks 之间互相 import 组件文件。
  */
 import type { Artifact } from "@/features/artifacts/ArtifactPanel";
+import type { ModelCapabilities } from "@/db/types";
 
 /** 单条聊天消息(含可选的追踪/产物元数据)。 */
 export interface ChatMessage {
@@ -52,6 +53,7 @@ export interface UploadFileItem {
 export interface ModelOption {
   name: string;
   displayName?: string;
+  capabilities?: ModelCapabilities;
 }
 
 /** 指令卡选项(精简版,供 chat 选择器用)。 */

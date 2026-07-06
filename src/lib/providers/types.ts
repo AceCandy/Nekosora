@@ -6,7 +6,7 @@
  *
  * 加新 provider 协议 = 写一个 adapter,Chat 和网关同时受益。
  */
-import type { ProviderProtocol, ModelCapabilities } from "@/db/types";
+import type { ProviderProtocol, ModelCapabilities, ReasoningLevel } from "@/db/types";
 import type { WeightedKey } from "./keys";
 
 /** 上游 provider 的运行时配置(从数据库解密后得到)。 */
@@ -87,6 +87,8 @@ export interface IRRequest {
   top_p?: number;
   tools?: IRToolDef[];
   stop?: string | string[];
+  /** 推理级别(off/low/medium/high);stream 层据此 + route.capabilities 翻译为 providerOptions。 */
+  reasoning?: ReasoningLevel;
   /** 透传的原始字段(供 adapter 使用协议特定选项)。 */
   [key: string]: unknown;
 }

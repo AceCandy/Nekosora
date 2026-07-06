@@ -3,6 +3,7 @@ import { eq, and, desc, isNull, like } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { requireSession } from "@/lib/session";
+import type { ReasoningLevel } from "@/db/types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const S = () => getSchema() as any;
@@ -147,6 +148,7 @@ export interface ConversationComposerState {
   temperature?: number | null;
   topP?: number | null;
   maxTokens?: number | null;
+  reasoning?: ReasoningLevel | null;
 }
 
 /** 校验当前用户对会话的属主关系,返回是否通过。 */
@@ -224,7 +226,7 @@ export async function setConversationComposerState(
  */
 export async function setConversationModelParams(
   conversationId: string,
-  params: { temperature?: number | null; topP?: number | null; maxTokens?: number | null },
+  params: { temperature?: number | null; topP?: number | null; maxTokens?: number | null; reasoning?: ReasoningLevel | null },
 ) {
   const user = await requireSession();
   if (!(await assertConversationOwner(conversationId, user.id))) throw new Error("无权操作");
@@ -321,9 +323,9 @@ export async function getConversationComposerState(
     .where(eq(S().conversations.id, conversationId))
     .limit(1);
   if (!conv || conv.userId !== user.id) {
-    return { modelName: null, outputModeId: null, renderStyleId: null, webSearch: false, cardIds: [], kbIds: [], temperature: null, topP: null, maxTokens: null };
+    return { modelName: null, outputModeId: null, renderStyleId: null, webSearch: false, cardIds: [], kbIds: [], temperature: null, topP: null, maxTokens: null, reasoning: null };
   }
-  const composer = (conv.composerState as { cardIds?: string[]; kbIds?: string[]; temperature?: number; topP?: number; maxTokens?: number } | null) ?? {};
+  const composer = (conv.composerState as { cardIds?: string[]; kbIds?: string[]; temperature?: number; topP?: number; maxTokens?: number; reasoning?: ReasoningLevel } | null) ?? {};
   return {
     modelName: (conv.modelName as string | null) ?? null,
     outputModeId: (conv.outputModeId as string | null) ?? null,
@@ -334,6 +336,7 @@ export async function getConversationComposerState(
     temperature: typeof composer.temperature === "number" ? composer.temperature : null,
     topP: typeof composer.topP === "number" ? composer.topP : null,
     maxTokens: typeof composer.maxTokens === "number" ? composer.maxTokens : null,
+    reasoning: composer.reasoning ?? null,
   };
 }
 
