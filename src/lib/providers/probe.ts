@@ -2,17 +2,21 @@
  * 主动探测 —— 配置期对上游 provider 的连通性验证与模型列表拉取。
  *
  * 与运行期的被动熔断(circuit-breaker)互补:被动机制只在真实请求失败时生效,
- * 这里提供"配完即测"的主动能力,避免 key/baseUrl/upstreamModelName 配错后
- * 要等到真实调用才发现。
+ * 这里提供"配完即测"的主动能力,避免 key/baseUrl/模型名 配错后要等到真实调用才发现。
  *
- * 两个职责:
- *   1. probeProviderKey —— 用一个极小生成请求验证 "key + baseUrl + 协议" 整条链路
- *   2. fetchUpstreamModels —— 直接 fetch 上游 /models 端点拉取真实模型名,防手填出错
+ * probeProviderKey 按是否传入 upstreamModelName 区分两个职责(对齐 AQBot 的
+ * validate_key 与 test_model 分离):
+ *   - 不传模型名 → 验证 key+baseUrl+协议鉴权:GET /models 看 401/403(对齐 AQBot,
+ *     valid key → 200/400,invalid → 401/403)。不发生成请求,避免聚合中转站因
+ *     "/models 列表第一个是 voice/image 等非 chat 模型"或"预扣费 quota 不足"误判 key 无效。
+ *   - 传入模型名 → 测该具体模型可用性:发极小生成请求,验证模型 + key + 协议构建全链路。
  *
- * 协议差异:
- *   - openai/openai-compatible: Bearer 鉴权,{data:[{id}]}
- *   - anthropic:    x-api-key + anthropic-version 鉴权,{data:[{id}]}
- *   - gemini:       key 在 query param,{models:[{name:"models/xxx"}]} 需去前缀
+ * fetchUpstreamModels —— 直接 fetch 上游 /models 拉取真实模型名,防手填出错。
+ *
+ * 协议差异(鉴权头/URL):
+ *   - openai/openai-compatible: Authorization: Bearer,GET {base}/models
+ *   - anthropic:    x-api-key + anthropic-version,GET {base}/models
+ *   - gemini:       key 在 query param,GET {base}/models?key=...
  */
 import { generateText } from "ai";
 import { buildLanguageModelWithKey } from "@/lib/providers/registry";
@@ -36,55 +40,108 @@ export interface UpstreamModel {
   id: string;
 }
 
-/** 各协议用于连通性探测的占位模型名(只用于验证 key+baseUrl,不验证具体模型)。 */
-const PROBE_MODEL: Record<string, string> = {
-  openai: "gpt-4o-mini",
-  "openai-compatible": "gpt-4o-mini",
-  anthropic: "claude-3-5-haiku-latest",
-  gemini: "gemini-1.5-flash",
-};
+/** /models 探测与列表拉取的超时上限,避免异常上游拖住请求。 */
+const PROBE_TIMEOUT_MS = 15000;
 
 /**
- * 用极小生成请求探测上游 provider 的 key + baseUrl + 协议是否可用。
- *
- * 相比单独 fetch /models,走完整生成链路更能验证鉴权头格式是否正确
- * (尤其 gemini 无标准 Bearer)。成功返回延迟,失败按 isKeyAuthError 分类。
- *
- * @param upstreamModelName 可选,缺省按协议取占位模型(仅用于连通性探测)。
+ * 按协议构建 GET /models 的 URL 与鉴权头。
+ * key 连通性探测(probeKeyConnectivity)与列表拉取(fetchUpstreamModels)共用,
+ * 保证鉴权头逻辑单一来源。
+ */
+function buildModelsRequest(
+  protocol: ProviderProtocol,
+  base: string,
+  apiKey: string,
+  headers?: Record<string, string>,
+): { url: string; init: RequestInit } {
+  const merged = headers ?? {};
+  const common: RequestInit = {
+    signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+    cache: "no-store",
+  };
+  switch (protocol) {
+    case "anthropic":
+      return {
+        url: `${base}/models`,
+        init: {
+          ...common,
+          headers: {
+            "x-api-key": apiKey,
+            // 部分上游(火山 Ark 的 anthropic 兼容端点)/models 仅认 Bearer,
+            // /messages 才认 x-api-key —— 同一 key 两端点鉴权头不一致。
+            // 同时携带两种头兼容这类混搭上游;标准 anthropic 服务端忽略多余的 Authorization。
+            Authorization: `Bearer ${apiKey}`,
+            "anthropic-version": "2023-06-01",
+            ...merged,
+          },
+        },
+      };
+    case "gemini":
+      // gemini 的 key 在 URL query param,仅在本函数内部使用,不外泄到前端、不打日志。
+      return {
+        url: `${base}/models?key=${encodeURIComponent(apiKey)}`,
+        init: { ...common, headers: merged },
+      };
+    case "openai":
+    case "openai-compatible":
+    default:
+      return {
+        url: `${base}/models`,
+        init: {
+          ...common,
+          headers: { Authorization: `Bearer ${apiKey}`, ...merged },
+        },
+      };
+  }
+}
+
+/**
+ * 探测上游:不传 upstreamModelName → 验证 key 连通性(GET /models);
+ * 传 upstreamModelName → 测该具体模型可用性(极小生成请求)。
  */
 export async function probeProviderKey(opts: {
   protocol: ProviderProtocol;
   baseUrl: string;
   apiKey: string;
+  /** 传入则测试该具体模型可用性;缺省只验证 key + baseUrl + 协议鉴权。 */
   upstreamModelName?: string;
   headers?: Record<string, string>;
 }): Promise<ProbeResult> {
-  const { protocol, baseUrl, apiKey, headers } = opts;
+  const { apiKey, baseUrl, upstreamModelName } = opts;
   if (!apiKey) {
     return { ok: false, error: "缺少 API Key", errorKind: "unknown" };
   }
   if (!baseUrl) {
     return { ok: false, error: "缺少接口地址", errorKind: "unknown" };
   }
-
-  // 决定探测用的模型名:优先调用方传入的 > 上游真实模型列表第一个 > 占位模型。
-  // 第三方兼容上游(SiliconFlow 等)模型列表里没有占位模型 gpt-4o-mini,
-  // 不传模型名时先拉 /models 取一个真实模型,避免 model_not_found 误判探测失败。
-  let probeModelName = opts.upstreamModelName;
-  if (!probeModelName) {
-    try {
-      const upstream = await fetchUpstreamModels({ protocol, baseUrl, apiKey, headers });
-      probeModelName = upstream[0]?.id;
-    } catch {
-      // /models 不规范或不可达:降级占位模型,保持原探测行为。
-    }
-    probeModelName ??= PROBE_MODEL[protocol] ?? "gpt-4o-mini";
+  if (upstreamModelName) {
+    return probeModelAvailability(opts as {
+      protocol: ProviderProtocol;
+      baseUrl: string;
+      apiKey: string;
+      upstreamModelName: string;
+      headers?: Record<string, string>;
+    });
   }
+  return probeKeyConnectivity(opts);
+}
 
+/**
+ * 测具体模型可用性:用极小生成请求验证 模型 + key + baseUrl + 协议构建 全链路。
+ * 对应 AQBot 的 test_model(需要具体 modelId,返回延迟)。
+ */
+async function probeModelAvailability(opts: {
+  protocol: ProviderProtocol;
+  baseUrl: string;
+  apiKey: string;
+  upstreamModelName: string;
+  headers?: Record<string, string>;
+}): Promise<ProbeResult> {
+  const { protocol, baseUrl, apiKey, headers, upstreamModelName } = opts;
   // 构造一次性 ResolvedRoute(mock),复用 registry 的协议构建逻辑。
   const route: ResolvedRoute = {
     modelName: "__probe__",
-    upstreamModelName: probeModelName,
+    upstreamModelName,
     protocol,
     provider: {
       id: "__probe__",
@@ -98,7 +155,6 @@ export async function probeProviderKey(opts: {
     weight: 1,
     source: "global",
   };
-
   const startedAt = Date.now();
   try {
     const model = buildLanguageModelWithKey(route, apiKey);
@@ -124,6 +180,58 @@ export async function probeProviderKey(opts: {
   }
 }
 
+/**
+ * 验证 key 连通性:GET /models,按 HTTP status 判定鉴权结果。
+ *
+ * 只看鉴权头是否被接受:聚合中转站 /models 列表第一个常是非 chat 模型
+ * (voice/image),发 chat 会触发计费或 model_not_found,把好端端的 key 误判成无效。
+ * /models 同样走协议鉴权头,401/403 即 key 问题,其余视为通过。
+ */
+async function probeKeyConnectivity(opts: {
+  protocol: ProviderProtocol;
+  baseUrl: string;
+  apiKey: string;
+  headers?: Record<string, string>;
+}): Promise<ProbeResult> {
+  const { protocol, baseUrl, apiKey, headers } = opts;
+  const base = baseUrl.replace(/\/+$/, "");
+  const { url, init } = buildModelsRequest(protocol, base, apiKey, headers);
+  const startedAt = Date.now();
+  try {
+    const res = await fetch(url, init);
+    const latencyMs = Date.now() - startedAt;
+    const status = res.status;
+    if (status === 401 || status === 403) {
+      // 鉴权失败:key 无效或无权限。
+      return {
+        ok: false,
+        latencyMs,
+        error: `密钥无效或无权限 (HTTP ${status})`,
+        errorKind: "auth",
+      };
+    }
+    if (status >= 500) {
+      // 上游服务异常:能连上、鉴权未拒,但上游不可用。不归 auth,避免误导成"密钥错"。
+      return {
+        ok: false,
+        latencyMs,
+        error: `上游服务异常 (HTTP ${status} ${res.statusText})`,
+        errorKind: "unknown",
+      };
+    }
+    // 2xx/3xx/4xx(非 401/403):鉴权通过。/models 端点缺失(404)或格式不规范(400)
+    // 属端点/格式问题,不影响 key 判定,视为连通。
+    return { ok: true, latencyMs };
+  } catch (err) {
+    const latencyMs = Date.now() - startedAt;
+    const msg = err instanceof Error ? err.message : String(err);
+    const errorKind: ProbeResult["errorKind"] = isNetworkError(err)
+      ? "network"
+      : "unknown";
+    return { ok: false, latencyMs, error: msg, errorKind };
+  }
+}
+
 /** 判断错误是否为网络/超时类(非鉴权、非业务逻辑)。 */
 function isNetworkError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
@@ -134,9 +242,7 @@ function isNetworkError(err: unknown): boolean {
  * 拉取上游 provider 的真实模型列表(直接 fetch /models,不走 AI SDK)。
  *
  * AI SDK 的 provider 实例不暴露 listModels,故按协议差异自行请求。
- * 自定义上游若 /models 不规范会抛错,调用方应 catch 后降级为手填。
- *
- * 注意:gemini 的 key 在 URL query param,本函数内部使用,不返回给前端、不打日志。
+ * 自定义上游若 /models 返回错误状态会抛错,调用方应 catch 后降级为手填。
  */
 export async function fetchUpstreamModels(opts: {
   protocol: ProviderProtocol;
@@ -149,83 +255,36 @@ export async function fetchUpstreamModels(opts: {
   if (!baseUrl) throw new Error("缺少接口地址");
 
   const base = baseUrl.replace(/\/+$/, "");
-
-  switch (protocol) {
-    case "anthropic":
-      return fetchAnthropicModels(base, apiKey, headers);
-    case "gemini":
-      return fetchGeminiModels(base, apiKey, headers);
-    case "openai":
-    case "openai-compatible":
-    default:
-      return fetchOpenAIModels(base, apiKey, headers);
-  }
-}
-
-/** OpenAI 兼容:GET {base}/models,Authorization: Bearer,响应 {data:[{id}]}。 */
-async function fetchOpenAIModels(
-  base: string,
-  apiKey: string,
-  headers?: Record<string, string>,
-): Promise<UpstreamModel[]> {
-  const res = await fetch(`${base}/models`, {
-    headers: { Authorization: `Bearer ${apiKey}`, ...headers },
-    // 模型列表拉取给一个合理上限,避免异常上游拖住请求。
-    signal: AbortSignal.timeout(15000),
-    cache: "no-store",
-  });
+  const { url, init } = buildModelsRequest(protocol, base, apiKey, headers);
+  const res = await fetch(url, init);
   if (!res.ok) {
     throw new Error(`上游返回 ${res.status} ${res.statusText}`);
   }
-  const json = (await res.json()) as { data?: { id?: string }[] };
-  const ids = Array.isArray(json.data)
-    ? json.data.map((m) => m?.id).filter((id): id is string => typeof id === "string" && id.length > 0)
+  const json = await res.json();
+  // gemini 的列表结构与其他协议不同,单独解析;openai/openai-compatible/anthropic
+  // 都是 {data:[{id}]} 结构,共用 parseDataModels。
+  if (protocol === "gemini") {
+    return parseGeminiModels(json);
+  }
+  return parseDataModels(json);
+}
+
+/** OpenAI 兼容/Anthropic:响应 {data:[{id}]}。data 缺失时返回空列表(不抛错)。 */
+function parseDataModels(json: unknown): UpstreamModel[] {
+  const data = (json as { data?: { id?: string }[] | null })?.data;
+  const ids = Array.isArray(data)
+    ? data
+        .map((m) => m?.id)
+        .filter((id): id is string => typeof id === "string" && id.length > 0)
     : [];
   return ids.map((id) => ({ id }));
 }
 
-/** Anthropic:GET {base}/models,x-api-key + anthropic-version,响应 {data:[{id}]}。 */
-async function fetchAnthropicModels(
-  base: string,
-  apiKey: string,
-  headers?: Record<string, string>,
-): Promise<UpstreamModel[]> {
-  const res = await fetch(`${base}/models`, {
-    headers: {
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      ...headers,
-    },
-    signal: AbortSignal.timeout(15000),
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    throw new Error(`上游返回 ${res.status} ${res.statusText}`);
-  }
-  const json = (await res.json()) as { data?: { id?: string }[] };
-  const ids = Array.isArray(json.data)
-    ? json.data.map((m) => m?.id).filter((id): id is string => typeof id === "string" && id.length > 0)
-    : [];
-  return ids.map((id) => ({ id }));
-}
-
-/** Gemini:GET {base}/models?key={apiKey},响应 {models:[{name:"models/xxx"}]},去前缀。 */
-async function fetchGeminiModels(
-  base: string,
-  apiKey: string,
-  headers?: Record<string, string>,
-): Promise<UpstreamModel[]> {
-  const res = await fetch(`${base}/models?key=${encodeURIComponent(apiKey)}`, {
-    headers,
-    signal: AbortSignal.timeout(15000),
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    throw new Error(`上游返回 ${res.status} ${res.statusText}`);
-  }
-  const json = (await res.json()) as { models?: { name?: string }[] };
-  const ids = Array.isArray(json.models)
-    ? json.models
+/** Gemini:响应 {models:[{name:"models/xxx"}]},去前缀。models 缺失时返回空列表。 */
+function parseGeminiModels(json: unknown): UpstreamModel[] {
+  const models = (json as { models?: { name?: string }[] | null })?.models;
+  const ids = Array.isArray(models)
+    ? models
         .map((m) => m?.name?.replace(/^models\//, ""))
         .filter((id): id is string => typeof id === "string" && id.length > 0)
     : [];
