@@ -56,7 +56,7 @@ export default async function MyProvidersPage() {
   );
 
   return (
-    <div className="space-y-4 max-w-3xl">
+    <div className="space-y-4">
       <div>
         <h1 className="text-xl font-bold mb-2">{tn("providers")}</h1>
         <p className="text-sm text-neutral-500">

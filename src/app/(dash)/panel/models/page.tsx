@@ -51,7 +51,7 @@ export default async function MyModelsPage() {
   );
 
   return (
-    <div className="space-y-8 max-w-3xl">
+    <div className="space-y-8">
       <div>
         <h1 className="text-xl font-bold mb-2">{tn("models")}</h1>
         <p className="text-sm text-neutral-500">
