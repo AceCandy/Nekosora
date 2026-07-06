@@ -51,6 +51,9 @@ coverage/
 !.vscode/extensions.json
 .idea
 
+# claude code local settings(本地权限/配置,不入库)
+.claude/settings.local.json
+
 # trellis developer identity (gitignored by convention)
 .trellis/.developer
 
