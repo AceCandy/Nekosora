@@ -134,3 +134,4 @@ for (const item of items) {
 - **不要在 Server Component 用 useState** —— 加 `"use client"` 或拆成子组件。
 - **DB 行类型是 `Record<string, unknown>`** —— 渲染时用 `as string` 断言,不要直接插值 `unknown`。
 - **分支列表渲染用 `String(x)` 包裹** —— 避免 `unknown` 不能作为 ReactNode 的类型错误。
+- **i18n key 必须落在 `useTranslations(namespace)` 对应的命名空间** —— `t("reasoningLow")` 解析的是 `<namespace>.reasoningLow`;同一字面量 key 在不同 namespace 要各自补齐(如 chat 与 models 各需一份 `reasoningLow`)。运行时报 `MISSING_MESSAGE: Could not resolve <ns>.<key>` 即 namespace 错位。
