@@ -355,13 +355,14 @@ async function ensureBuiltinRenderStyles(
       }
     }
 
-    // 软删已废弃的内置样式(曾内置、现不在 presets 中的记录):置 enabled=false,既从用户
-    // 选择列表移除,又保留 id 兼容历史消息的 renderStyleId 引用(回退默认渲染)。
+    // 硬删已废弃的内置样式(曾内置、现不在 presets 中的记录):直接从表里删除。
+    // 历史 conversation.renderStyleId 若指向被删样式,聊天页 CSS 聚合只取 enabled 列表、
+    // 选用栏 find 不到即回退默认渲染,不影响消息可见性。
     const presetClasses = new Set(presets.map((p) => p.cssClass));
     const builtins = await db.select({ id: t.id, cssClass: t.cssClass }).from(t).where(eq(t.builtin, true));
     for (const row of builtins) {
       if (!presetClasses.has(row.cssClass)) {
-        await db.update(t).set({ enabled: false, updatedAt: new Date() }).where(eq(t.id, row.id));
+        await db.delete(t).where(eq(t.id, row.id));
       }
     }
     console.log(`[bootstrap] ✅ 内置输出样式预设就绪(${presets.length} 条)`);
