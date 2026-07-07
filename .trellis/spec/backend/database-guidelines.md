@@ -85,6 +85,24 @@ drizzle/sqlite/meta/_journal.json
 drizzle/sqlite/meta/0000_snapshot.json
 ```
 
+### Scenario: 数据迁移补种与 SQLite 列约束变更
+
+#### 1. Scope / Trigger
+- Trigger: 迁移需要把存量行的数据派生到新表(如 1:1 关系拆成 1:N 路由),或 SQLite 需要改列约束(NOT NULL → nullable)。
+
+#### 2. Contracts
+- **幂等数据补种**:用 `INSERT ... SELECT ... WHERE NOT EXISTS (SELECT 1 FROM <new> WHERE <业务键>)`,而不是 `ON CONFLICT`——当新表没有天然唯一约束可冲突时,`ON CONFLICT` 无法使用。重复执行只补缺失行,不产生重复。
+- **SQLite 改列约束**:SQLite 不支持 `ALTER COLUMN ... DROP NOT NULL`。drizzle-kit 生成表重建:`PRAGMA foreign_keys=OFF` → 建 `__new_<table>`(新约束)→ `INSERT INTO __new SELECT *`(全列迁移)→ `DROP <old>` → `RENAME __new TO <old>` → `PRAGMA foreign_keys=ON`。数据/FK/列完整保留。
+- 表重建会**丢失原表索引/触发器**(FK 在新表重建);重建后确认索引是否要补回。
+- 迁移 SQL 由 `drizzle-kit generate` 生成结构,**数据补种语句需手动追加**(drizzle-kit 不做数据迁移)。
+
+#### 3. Wrong vs Correct
+Wrong —— 补种用 `ON CONFLICT DO NOTHING`,但新表无唯一约束:语句报错或判重语义不成立。
+Correct —— 补种用 `INSERT ... SELECT ... WHERE NOT EXISTS` 按业务键判重。
+
+Wrong —— 在 SQLite 上手写 `ALTER TABLE ... ALTER COLUMN`:SQLite 不支持,迁移失败。
+Correct —— 让 drizzle-kit 生成表重建,校验全列 INSERT 与 FK 重建。
+
 ## Naming Conventions
 
 - 表名:snake_case 复数(`api_keys`, `global_providers`)或 Better Auth 约定的单数(`user`, `session`)。

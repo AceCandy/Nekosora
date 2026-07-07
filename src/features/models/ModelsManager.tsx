@@ -25,9 +25,6 @@ export interface ModelItem {
   name: string;
   displayName?: string;
   vendor?: string | null;
-  upstreamModelName?: string | null;
-  providerName?: string | null;
-  providerId?: string | null;
   accessScope?: string;
   enabled: boolean;
   systemPrompt?: string | null;
@@ -57,7 +54,6 @@ interface ModelsManagerProps {
   models: ModelItem[];
   routes?: RouteItem[];
   providers?: ProviderOption[];
-  byoProviders?: ProviderOption[];
 
   createAction: FormDataSerializableAction;
   updateActions: Record<string, FormDataSerializableAction>;
@@ -67,12 +63,10 @@ interface ModelsManagerProps {
   updateRouteActions?: Record<string, FormDataSerializableAction>;
   deleteRouteActions?: Record<string, FormDataSerializableAction>;
   toggleRouteActions?: Record<string, FormDataSerializableAction>;
-  /** 拉取上游模型列表的 action(全局路由 / byo 模型用)。不传则不显示拉取按钮。 */
+  /** 拉取上游模型列表的 action(路由表单拉取上游模型 / 同步检查用)。不传则不显示拉取按钮。 */
   fetchModelsAction?: FetchModelsAction;
-  /** 全局路由测试 action(按 routeId 索引)。不传则路由行不显示测试按钮。 */
+  /** 路由测试 action(按 routeId 索引)。不传则路由行不显示测试按钮。 */
   testRouteActions?: Record<string, RouteTestAction>;
-  /** BYO 模型测试 action(按 modelId 索引)。不传则 byo 行不显示测试按钮。 */
-  testModelActions?: Record<string, RouteTestAction>;
 }
 
 export default function ModelsManager({
@@ -80,7 +74,6 @@ export default function ModelsManager({
   models,
   routes,
   providers,
-  byoProviders,
   createAction,
   updateActions,
   deleteActions,
@@ -91,10 +84,11 @@ export default function ModelsManager({
   toggleRouteActions,
   fetchModelsAction,
   testRouteActions,
-  testModelActions,
 }: ModelsManagerProps) {
   const t = useTranslations("models");
   const isAdmin = variant === "global";
+  // 个人模型私有(userId 隔离),不存在 public/internal 范围;仅全局模型有 accessScope 列。
+  const hasAccessScope = isAdmin;
   const [addOpen, setAddOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -131,19 +125,10 @@ export default function ModelsManager({
           <thead className="bg-neutral-50/70 dark:bg-neutral-900/50 border-b border-morning-mist dark:border-deep-space text-neutral-500 dark:text-neutral-400 font-mono text-xs uppercase">
             <tr>
               <th className="p-3.5 font-medium">{t("colExternalName")}</th>
-              {isAdmin ? (
-                <>
-                  <th className="p-3.5 font-medium">{t("colDisplayName")}</th>
-                  <th className="p-3.5 font-medium">{t("colVendor")}</th>
-                  <th className="p-3.5 font-medium">{t("colAccessScope")}</th>
-                  <th className="p-3.5 font-medium text-center">{t("colRouteCount")}</th>
-                </>
-              ) : (
-                <>
-                  <th className="p-3.5 font-medium">{t("colUpstreamName")}</th>
-                  <th className="p-3.5 font-medium">Provider</th>
-                </>
-              )}
+              <th className="p-3.5 font-medium">{t("colDisplayName")}</th>
+              <th className="p-3.5 font-medium">{t("colVendor")}</th>
+              {hasAccessScope && <th className="p-3.5 font-medium">{t("colAccessScope")}</th>}
+              <th className="p-3.5 font-medium text-center">{t("colRouteCount")}</th>
               <th className="p-3.5 font-medium">{t("colStatus")}</th>
               <th className="p-3.5 font-medium text-right">{t("colActions")}</th>
             </tr>
@@ -152,7 +137,7 @@ export default function ModelsManager({
             {models.length === 0 ? (
               <tr>
                 <td
-                  colSpan={isAdmin ? 7 : 5}
+                  colSpan={hasAccessScope ? 7 : 6}
                   className="p-10 text-center text-xs text-neutral-400 dark:text-neutral-500"
                 >
                   {t("emptyState")}
@@ -168,65 +153,49 @@ export default function ModelsManager({
                       <td className="p-3.5 font-mono text-xs font-semibold text-neutral-800 dark:text-neutral-200">
                         {m.name}
                       </td>
-                      {isAdmin ? (
-                        <>
-                          <td className="p-3.5 text-xs text-neutral-600 dark:text-neutral-300">
-                            {m.displayName ?? "-"}
-                          </td>
-                          <td className="p-3.5 text-xs">
-                            {m.vendor ? (
-                              <Badge variant="neutral" className="font-mono text-[10px]">
-                                {m.vendor}
-                              </Badge>
-                            ) : (
-                              "-"
-                            )}
-                          </td>
-                          <td className="p-3.5 text-xs">
-                            <Badge variant={m.accessScope === "public" ? "success" : "warning"}>
-                              {m.accessScope === "public" ? t("scopePublic") : t("scopeInternal")}
-                            </Badge>
-                          </td>
-                          <td className="p-3.5 text-center font-mono text-xs">
-                            {modelRoutes.length}
-                          </td>
-                        </>
-                      ) : (
-                        <>
-                          <td className="p-3.5 font-mono text-xs text-neutral-500 dark:text-neutral-400 max-w-[180px] truncate">
-                            {m.upstreamModelName ?? "-"}
-                          </td>
-                          <td className="p-3.5 text-xs font-medium text-neutral-700 dark:text-neutral-300">
-                            {m.providerName ?? "-"}
-                          </td>
-                        </>
+                      <td className="p-3.5 text-xs text-neutral-600 dark:text-neutral-300">
+                        {m.displayName ?? "-"}
+                      </td>
+                      <td className="p-3.5 text-xs">
+                        {m.vendor ? (
+                          <Badge variant="neutral" className="font-mono text-[10px]">
+                            {m.vendor}
+                          </Badge>
+                        ) : (
+                          "-"
+                        )}
+                      </td>
+                      {hasAccessScope && (
+                        <td className="p-3.5 text-xs">
+                          <Badge variant={m.accessScope === "public" ? "success" : "warning"}>
+                            {m.accessScope === "public" ? t("scopePublic") : t("scopeInternal")}
+                          </Badge>
+                        </td>
                       )}
+                      <td className="p-3.5 text-center font-mono text-xs">
+                        {modelRoutes.length}
+                      </td>
                       <td className="p-3.5">
                         <StatusDot enabled={m.enabled} />
                       </td>
                       <td className="p-3.5 text-right space-x-1 whitespace-nowrap">
-                        {!isAdmin && testModelActions?.[m.id] && (
-                          <RouteTestButton action={testModelActions[m.id]} id={m.id} />
-                        )}
-                        {isAdmin && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() =>
-                              setExpandedModel(expanded ? null : m.id)
-                            }
-                            className={clsx(
-                              expanded
-                                ? "text-neutral-800 dark:text-white bg-neutral-100 dark:bg-neutral-800"
-                                : "text-sora-blue hover:bg-blue-50 dark:hover:bg-blue-950/20"
-                            )}
-                            title={t("configureRoutes")}
-                          >
-                            <GitCommit className="w-3.5 h-3.5" />
-                            <span>{t("routesWithCount", { count: modelRoutes.length })}</span>
-                            {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                          </Button>
-                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            setExpandedModel(expanded ? null : m.id)
+                          }
+                          className={clsx(
+                            expanded
+                              ? "text-neutral-800 dark:text-white bg-neutral-100 dark:bg-neutral-800"
+                              : "text-sora-blue hover:bg-blue-50 dark:hover:bg-blue-950/20"
+                          )}
+                          title={t("configureRoutes")}
+                        >
+                          <GitCommit className="w-3.5 h-3.5" />
+                          <span>{t("routesWithCount", { count: modelRoutes.length })}</span>
+                          {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                        </Button>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -274,9 +243,9 @@ export default function ModelsManager({
                         </Button>
                       </td>
                     </tr>
-                    {isAdmin && expanded && (
+                    {expanded && (
                       <tr className="bg-neutral-50/40 dark:bg-neutral-900/10">
-                        <td colSpan={7} className="p-4 border-t border-neutral-100 dark:border-neutral-800/60">
+                        <td colSpan={hasAccessScope ? 7 : 6} className="p-4 border-t border-neutral-100 dark:border-neutral-800/60">
                           <RouteListPanel
                             routes={modelRoutes}
                             onAdd={() => setRouteAddModelId(m.id)}
@@ -303,8 +272,6 @@ export default function ModelsManager({
         mode="add"
         variant={variant}
         action={createAction}
-        byoProviders={byoProviders}
-        fetchModelsAction={fetchModelsAction}
       />
       {editing && (
         <ModelFormDialog
@@ -313,8 +280,6 @@ export default function ModelsManager({
           mode="edit"
           variant={variant}
           action={updateActions[editing.id]}
-          byoProviders={byoProviders}
-          fetchModelsAction={fetchModelsAction}
           initial={
             isAdmin
               ? ({
@@ -327,16 +292,18 @@ export default function ModelsManager({
                   capabilities: editing.capabilities ?? {},
                 } satisfies GlobalModelInitial)
               : ({
-                  providerId: editing.providerId ?? "",
                   name: editing.name,
-                  upstreamModelName: editing.upstreamModelName ?? "",
+                  displayName: editing.displayName,
+                  vendor: editing.vendor ?? "",
+                  systemPrompt: editing.systemPrompt ?? "",
+                  description: editing.description ?? "",
                   capabilities: editing.capabilities ?? {},
                 } satisfies ByoModelInitial)
           }
         />
       )}
 
-      {isAdmin && routeAddModelId && createRouteActions?.[routeAddModelId] && (
+      {routeAddModelId && createRouteActions?.[routeAddModelId] && (
         <RouteFormDialog
           open={true}
           onClose={() => setRouteAddModelId(null)}
@@ -346,7 +313,7 @@ export default function ModelsManager({
           fetchModelsAction={fetchModelsAction}
         />
       )}
-      {isAdmin && routeEditing && updateRouteActions?.[routeEditing.id] && (
+      {routeEditing && updateRouteActions?.[routeEditing.id] && (
         <RouteFormDialog
           open={true}
           onClose={() => setRouteEditId(null)}
@@ -385,7 +352,7 @@ export default function ModelsManager({
         />
       )}
 
-      {isAdmin && routeDeleting && deleteRouteActions?.[routeDeleting.id] && (
+      {routeDeleting && deleteRouteActions?.[routeDeleting.id] && (
         <ConfirmDialog
           open={true}
           onClose={() => setRouteDeleteId(null)}

@@ -33,6 +33,11 @@ export interface RouteRepository {
 
   /** 查找 BYO 模型对应的已启用 provider。 */
   findEnabledUserProvider(providerId: string): Promise<Row | null>;
+
+  /** 查找 BYO 模型的路由链(join user_providers,按 priority 升序)。 */
+  findEnabledUserRoutes(
+    userModelId: string,
+  ): Promise<Array<{ route: Row; provider: Row }>>;
 }
 
 // ===== Drizzle 默认实现 =====
@@ -138,6 +143,32 @@ export class DrizzleRouteRepository implements RouteRepository {
       )
       .limit(1);
     return row ?? null;
+  }
+
+  async findEnabledUserRoutes(
+    userModelId: string,
+  ): Promise<Array<{ route: Row; provider: Row }>> {
+    const db = await getDb();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const s = getSchema() as any;
+    return db
+      .select({
+        route: s.userRoutes,
+        provider: s.userProviders,
+      })
+      .from(s.userRoutes)
+      .innerJoin(
+        s.userProviders,
+        eq(s.userRoutes.providerId, s.userProviders.id),
+      )
+      .where(
+        and(
+          eq(s.userRoutes.userModelId, userModelId),
+          eq(s.userRoutes.enabled, true),
+          eq(s.userProviders.enabled, true),
+        ),
+      )
+      .orderBy(asc(s.userRoutes.priority));
   }
 }
 

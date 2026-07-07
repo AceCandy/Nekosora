@@ -132,32 +132,41 @@ async function resolveGlobalRoutes(
   return filterByCircuitBreaker(orderRoutes(resolved));
 }
 
-/** BYO 模型 → 单条路由。 */
+/**
+ * BYO 模型 → 多路由链(与全局分支同构)。
+ *
+ * 查 user_routes(join user_providers)→ 映射 ResolvedRoute[] →
+ * orderRoutes(priority/weight)+ filterByCircuitBreaker(熔断过滤)。
+ * 与 resolveGlobalRoutes 的差异仅在:source="byo"、密钥列名 apiKeyEnc
+ * (比全局 apiKeysEnc 少一个 s)、id 字段 userModelId。
+ */
 async function resolveByoRoute(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   userModel: any,
 ): Promise<ResolvedRoute[]> {
   const repo = getRouteRepository();
 
-  const provider = await repo.findEnabledUserProvider(userModel.providerId);
+  const routes = await repo.findEnabledUserRoutes(userModel.id);
 
-  if (!provider) {
-    throw new RoutingError("no_route", `模型 ${userModel.name} 的 provider 已禁用`);
+  if (routes.length === 0) {
+    throw new RoutingError("no_route", `模型 ${userModel.name} 没有可用路由`);
   }
 
-  return [
-    {
+  const resolved: ResolvedRoute[] = routes.map(
+    (row: { route: Record<string, unknown>; provider: Record<string, unknown> }) => ({
       modelName: userModel.name,
-      upstreamModelName: userModel.upstreamModelName,
-      protocol: provider.protocol,
-      provider: toResolvedProvider(provider, "apiKeyEnc"),
-      priority: 0,
-      weight: 1,
-      source: "byo",
+      upstreamModelName: row.route.upstreamModelName as string,
+      protocol: row.provider.protocol as ResolvedRoute["protocol"],
+      provider: toResolvedProvider(row.provider, "apiKeyEnc"),
+      priority: row.route.priority as number,
+      weight: row.route.weight as number,
+      source: "byo" as const,
       userModelId: userModel.id,
       capabilities: userModel.capabilities,
-    },
-  ];
+    }),
+  );
+
+  return filterByCircuitBreaker(orderRoutes(resolved));
 }
 
 /**

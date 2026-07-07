@@ -5,11 +5,16 @@ import {
   updateMyModel,
   deleteMyModel,
   toggleMyModel,
+  createMyRoute,
+  updateMyRoute,
+  deleteMyRoute,
+  toggleMyRoute,
   listMyUpstreamModels,
-  testMyModel,
+  testMyRoute,
 } from "../actions";
 import ModelsManager, {
   type ModelItem,
+  type RouteItem,
   type ProviderOption,
 } from "@/features/models/ModelsManager";
 import type { ModelCapabilities } from "@/db/types";
@@ -20,23 +25,41 @@ export default async function MyModelsPage() {
   const tn = await getTranslations("nav");
   const [models, providers] = await Promise.all([getMyModels(), getMyProviders()]);
 
-  // —— 映射数据形状 ——
+  // —— 映射数据形状,适配 ModelsManager ——
   const modelItems: ModelItem[] = models.map((r: Record<string, unknown>) => ({
     id: (r.model as Record<string, unknown>).id as string,
     name: (r.model as Record<string, unknown>).name as string,
-    upstreamModelName: (r.model as Record<string, unknown>).upstreamModelName as string,
-    providerId: (r.model as Record<string, unknown>).providerId as string,
-    providerName: r.providerName as string,
+    displayName: (r.model as Record<string, unknown>).displayName as string,
+    vendor: ((r.model as Record<string, unknown>).vendor as string) ?? null,
     enabled: (r.model as Record<string, unknown>).enabled as boolean,
+    systemPrompt: ((r.model as Record<string, unknown>).systemPrompt as string) ?? null,
+    description: ((r.model as Record<string, unknown>).description as string) ?? null,
     capabilities: ((r.model as Record<string, unknown>).capabilities as ModelCapabilities) ?? null,
   }));
 
-  const byoProviders: ProviderOption[] = providers.map((p: Record<string, unknown>) => ({
+  // byo 路由外键是 userModelId(对应 global 的 modelId),映射到 RouteItem.modelId。
+  const routeItems: RouteItem[] = models.flatMap((r: Record<string, unknown>) =>
+    ((r.routes as Record<string, unknown>[]) ?? []).map((rr) => {
+      const route = rr.route as Record<string, unknown>;
+      return {
+        id: route.id as string,
+        modelId: route.userModelId as string,
+        providerId: route.providerId as string,
+        providerName: rr.providerName as string,
+        upstreamModelName: route.upstreamModelName as string,
+        priority: route.priority as number,
+        weight: route.weight as number,
+        enabled: route.enabled as boolean,
+      };
+    }),
+  );
+
+  const providerOptions: ProviderOption[] = providers.map((p: Record<string, unknown>) => ({
     id: p.id as string,
     name: p.name as string,
   }));
 
-  // —— bind 按 id 索引的 action 表 ——
+  // —— 预先 bind 每个 id / userModelId 对应的 action,组成按 id 索引的表 ——
   const updateActions = Object.fromEntries(
     modelItems.map((m) => [m.id, updateMyModel.bind(null, m.id)]),
   );
@@ -46,8 +69,21 @@ export default async function MyModelsPage() {
   const toggleActions = Object.fromEntries(
     modelItems.map((m) => [m.id, toggleMyModel.bind(null, m.id, !m.enabled)]),
   );
-  const testModelActions = Object.fromEntries(
-    modelItems.map((m) => [m.id, testMyModel.bind(null, m.id)]),
+  // 路由:createMyRoute 按 userModelId bind(每模型一个新增入口,含尚无路由的模型)
+  const createRouteActions = Object.fromEntries(
+    modelItems.map((m) => [m.id, createMyRoute.bind(null, m.id)]),
+  );
+  const updateRouteActions = Object.fromEntries(
+    routeItems.map((r) => [r.id, updateMyRoute.bind(null, r.id)]),
+  );
+  const deleteRouteActions = Object.fromEntries(
+    routeItems.map((r) => [r.id, deleteMyRoute.bind(null, r.id)]),
+  );
+  const toggleRouteActions = Object.fromEntries(
+    routeItems.map((r) => [r.id, toggleMyRoute.bind(null, r.id, !r.enabled)]),
+  );
+  const testRouteActions = Object.fromEntries(
+    routeItems.map((r) => [r.id, testMyRoute.bind(null, r.id)]),
   );
 
   return (
@@ -64,13 +100,18 @@ export default async function MyModelsPage() {
         <ModelsManager
           variant="byo"
           models={modelItems}
-          byoProviders={byoProviders}
+          routes={routeItems}
+          providers={providerOptions}
           createAction={createMyModel}
           updateActions={updateActions}
           deleteActions={deleteActions}
           toggleActions={toggleActions}
+          createRouteActions={createRouteActions}
+          updateRouteActions={updateRouteActions}
+          deleteRouteActions={deleteRouteActions}
+          toggleRouteActions={toggleRouteActions}
           fetchModelsAction={listMyUpstreamModels}
-          testModelActions={testModelActions}
+          testRouteActions={testRouteActions}
         />
       )}
     </div>

@@ -1,11 +1,10 @@
 "use client";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useTranslations } from "next-intl";
 import type { ModelCapabilities } from "@/db/types";
 import type { FormDataSerializableAction } from "@/features/providers/types";
 import Modal from "@/shared/ui/Modal";
 import CapabilitiesEditor from "@/features/models/CapabilitiesEditor";
-import UpstreamModelPicker, { type FetchModelsAction } from "@/features/models/UpstreamModelPicker";
 
 export interface GlobalModelInitial {
   name?: string;
@@ -18,9 +17,11 @@ export interface GlobalModelInitial {
 }
 
 export interface ByoModelInitial {
-  providerId?: string;
   name?: string;
-  upstreamModelName?: string;
+  displayName?: string;
+  vendor?: string;
+  systemPrompt?: string;
+  description?: string;
   capabilities?: ModelCapabilities;
 }
 
@@ -30,9 +31,6 @@ interface ModelFormDialogProps {
   mode: "add" | "edit";
   action: FormDataSerializableAction;
   variant: "global" | "byo";
-  byoProviders?: { id: string; name: string }[];
-  /** byo 模式下拉取上游模型列表的 action(按 providerId)。 */
-  fetchModelsAction?: FetchModelsAction;
   initial?: GlobalModelInitial | ByoModelInitial;
 }
 
@@ -46,20 +44,18 @@ export default function ModelFormDialog({
   mode,
   action,
   variant,
-  byoProviders,
-  fetchModelsAction,
   initial,
 }: ModelFormDialogProps) {
   const t = useTranslations("models");
   const isEdit = mode === "edit";
+  const isAdmin = variant === "global";
 
-  const gi = variant === "global" ? (initial as GlobalModelInitial | undefined) : undefined;
-  const bi = variant === "byo" ? (initial as ByoModelInitial | undefined) : undefined;
+  const gi = isAdmin ? (initial as GlobalModelInitial | undefined) : undefined;
+  const bi = !isAdmin ? (initial as ByoModelInitial | undefined) : undefined;
+  // byo 与 global 共享除 accessScope 外的全部字段,统一从 ini 取值。
+  const ini = gi ?? bi;
 
   const [formKey, setFormKey] = useState(0);
-  // byo 模式下 provider 选择需受控,以便拉取按钮据此请求对应上游。
-  const [byoProviderId, setByoProviderId] = useState(bi?.providerId ?? "");
-  const upstreamInputRef = useRef<HTMLInputElement>(null);
 
   const handleClose = () => {
     onClose();
@@ -67,7 +63,7 @@ export default function ModelFormDialog({
   };
 
   const title =
-    variant === "global"
+    isAdmin
       ? isEdit ? t("editGlobalModel") : t("addGlobalModel")
       : isEdit ? t("editByoModel") : t("addByoModel");
 
@@ -79,25 +75,7 @@ export default function ModelFormDialog({
         onSubmit={() => setTimeout(handleClose, 0)}
         className="space-y-5"
       >
-        {variant === "byo" && (
-          <label className="block">
-            <span className={labelCls}>{t("upstreamProviderLabel")}</span>
-            <select
-              name="providerId"
-              required
-              value={byoProviderId}
-              onChange={(e) => setByoProviderId(e.target.value)}
-              className={inputCls}
-            >
-              <option value="">{t("selectProvider")}</option>
-              {byoProviders?.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-          </label>
-        )}
-
-        <div className={variant === "global" ? "grid grid-cols-2 gap-4" : "space-y-4"}>
+        <div className="grid grid-cols-2 gap-4">
           <label className="block">
             <span className={labelCls}>
               {t("externalModelNameLabel")} <span className="text-[10px] lowercase font-normal text-neutral-400">{t("externalModelNameHint")}</span>
@@ -105,108 +83,79 @@ export default function ModelFormDialog({
             <input
               name="name"
               required
-              defaultValue={gi?.name ?? bi?.name ?? ""}
+              defaultValue={ini?.name ?? ""}
               className={inputCls}
               placeholder="gpt-4o"
             />
           </label>
 
-          {variant === "global" ? (
-            <>
-              <label className="block">
-                <span className={labelCls}>
-                  {t("displayNameLabel")} <span className="text-[10px] font-normal text-neutral-400">{t("displayNameHint")}</span>
-                </span>
-                <input
-                  name="displayName"
-                  required
-                  defaultValue={gi?.displayName ?? ""}
-                  className={inputCls}
-                  placeholder="GPT-4o"
-                />
-              </label>
+          <label className="block">
+            <span className={labelCls}>
+              {t("displayNameLabel")} <span className="text-[10px] font-normal text-neutral-400">{t("displayNameHint")}</span>
+            </span>
+            <input
+              name="displayName"
+              required={isAdmin}
+              defaultValue={ini?.displayName ?? ""}
+              className={inputCls}
+              placeholder="GPT-4o"
+            />
+          </label>
 
-              <label className="block">
-                <span className={labelCls}>
-                  {t("colVendor")} <span className="text-[10px] font-normal text-neutral-400">{t("vendorHint")}</span>
-                </span>
-                <input
-                  name="vendor"
-                  defaultValue={gi?.vendor ?? ""}
-                  className={inputCls}
-                  placeholder="openai"
-                />
-              </label>
+          <label className="block">
+            <span className={labelCls}>
+              {t("colVendor")} <span className="text-[10px] font-normal text-neutral-400">{t("vendorHint")}</span>
+            </span>
+            <input
+              name="vendor"
+              defaultValue={ini?.vendor ?? ""}
+              className={inputCls}
+              placeholder="openai"
+            />
+          </label>
 
-              <label className="block">
-                <span className={labelCls}>{t("accessScopeLabel")}</span>
-                <select
-                  name="accessScope"
-                  defaultValue={gi?.accessScope ?? "public"}
-                  className={inputCls}
-                >
-                  <option value="public">{t("scopePublicOption")}</option>
-                  <option value="internal">{t("scopeInternalOption")}</option>
-                </select>
-              </label>
-            </>
-          ) : (
+          {isAdmin && (
             <label className="block">
-              <span className={labelCls}>
-                {t("upstreamModelNameLabel")} <span className="text-[10px] font-normal text-neutral-400">{t("upstreamModelNameHint")}</span>
-              </span>
-              <div className="flex items-center gap-2">
-                <input
-                  ref={upstreamInputRef}
-                  name="upstreamModelName"
-                  required
-                  defaultValue={bi?.upstreamModelName ?? ""}
-                  className={inputCls}
-                  placeholder="gpt-4o-2024-08-06"
-                />
-                {fetchModelsAction && (
-                  <UpstreamModelPicker
-                    fetchAction={fetchModelsAction}
-                    providerId={byoProviderId}
-                    inputRef={upstreamInputRef}
-                  />
-                )}
-              </div>
+              <span className={labelCls}>{t("accessScopeLabel")}</span>
+              <select
+                name="accessScope"
+                defaultValue={gi?.accessScope ?? "public"}
+                className={inputCls}
+              >
+                <option value="public">{t("scopePublicOption")}</option>
+                <option value="internal">{t("scopeInternalOption")}</option>
+              </select>
             </label>
           )}
         </div>
 
-        {variant === "global" && (
-          <>
-            <label className="block">
-              <span className={labelCls}>
-                {t("systemPromptLabel")} <span className="text-[10px] font-normal text-neutral-400">{t("optionalHint")}</span>
-              </span>
-              <textarea
-                name="systemPrompt"
-                rows={3}
-                defaultValue={gi?.systemPrompt ?? ""}
-                className="mt-1 w-full rounded-md border border-neutral-200 dark:border-neutral-800 px-3.5 py-2 text-sm bg-white dark:bg-[#0f121a] focus:outline-none focus:border-blue-500 dark:focus:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500/20 transition-all duration-150 resize-none text-neutral-800 dark:text-neutral-200"
-                placeholder={t("systemPromptPlaceholder")}
-              />
-            </label>
-            <label className="block">
-              <span className={labelCls}>
-                {t("descriptionLabel")} <span className="text-[10px] font-normal text-neutral-400">{t("optionalHint")}</span>
-              </span>
-              <input
-                name="description"
-                defaultValue={gi?.description ?? ""}
-                className={inputCls}
-                placeholder={t("descriptionPlaceholder")}
-              />
-            </label>
-          </>
-        )}
+        <label className="block">
+          <span className={labelCls}>
+            {t("systemPromptLabel")} <span className="text-[10px] font-normal text-neutral-400">{t("optionalHint")}</span>
+          </span>
+          <textarea
+            name="systemPrompt"
+            rows={3}
+            defaultValue={ini?.systemPrompt ?? ""}
+            className="mt-1 w-full rounded-md border border-neutral-200 dark:border-neutral-800 px-3.5 py-2 text-sm bg-white dark:bg-[#0f121a] focus:outline-none focus:border-blue-500 dark:focus:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500/20 transition-all duration-150 resize-none text-neutral-800 dark:text-neutral-200"
+            placeholder={t("systemPromptPlaceholder")}
+          />
+        </label>
+        <label className="block">
+          <span className={labelCls}>
+            {t("descriptionLabel")} <span className="text-[10px] font-normal text-neutral-400">{t("optionalHint")}</span>
+          </span>
+          <input
+            name="description"
+            defaultValue={ini?.description ?? ""}
+            className={inputCls}
+            placeholder={t("descriptionPlaceholder")}
+          />
+        </label>
 
         <div className="block pt-1">
           <span className={labelCls}>{t("capabilitiesLabel")}</span>
-          <CapabilitiesEditor initial={gi?.capabilities ?? bi?.capabilities} />
+          <CapabilitiesEditor initial={ini?.capabilities} />
         </div>
 
         <div className="flex justify-end gap-2.5 pt-3 border-t border-neutral-100 dark:border-neutral-800/80">

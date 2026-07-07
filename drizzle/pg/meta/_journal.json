@@ -22,6 +22,20 @@
       "when": 1783270851157,
       "tag": "0002_rename_custom_protocol",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1783412550448,
+      "tag": "0003_user_routes_and_meta",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1783413372026,
+      "tag": "0004_user_models_nullable_legacy",
+      "breakpoints": true
     }
   ]
 }

@@ -219,15 +219,47 @@ export const userModels = pgTable("user_models", {
   userId: text("user_id")
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
-  providerId: text("provider_id")
-    .notNull()
-    .references(() => userProviders.id, { onDelete: "cascade" }),
+  // providerId/upstreamModelName 标遗留:多路由上线后改由 user_routes 承载。
+  // 列保留+nullable,网关与新建逻辑不再读它们(见 resolveByoRoute / createMyModel)。
+  providerId: text("provider_id").references(() => userProviders.id, {
+    onDelete: "cascade",
+  }),
   name: text("name").notNull(), // 用户自定义对外模型名
-  upstreamModelName: text("upstream_model_name").notNull(),
+  upstreamModelName: text("upstream_model_name"),
   capabilities: jsonb("capabilities").$type<ModelCapabilities>().notNull().default({}),
+  // 与全局模型对齐的元信息(均可空,旧数据默认 NULL)。
+  displayName: text("display_name"),
+  vendor: text("vendor"),
+  systemPrompt: text("system_prompt"),
+  description: text("description"),
   enabled: boolean("enabled").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
+
+// 个人模型的多路由(镜像 global_routes + userId 隔离)。
+// providerId/upstreamModelName 原先 1:1 直挂在 user_models 上,迁移后改由本表承载多条路由。
+export const userRoutes = pgTable(
+  "user_routes",
+  {
+    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    userModelId: text("user_model_id")
+      .notNull()
+      .references(() => userModels.id, { onDelete: "cascade" }),
+    providerId: text("provider_id")
+      .notNull()
+      .references(() => userProviders.id, { onDelete: "cascade" }),
+    upstreamModelName: text("upstream_model_name").notNull(),
+    priority: integer("priority").notNull().default(0),
+    weight: integer("weight").notNull().default(1),
+    enabled: boolean("enabled").notNull().default(true),
+    headersJson: jsonb("headers_json").$type<Record<string, string>>(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("user_routes_model_idx").on(t.userModelId)],
+);
 
 // ===========================================================================
 // 子 Key 模型绑定(双来源 union:全局模型 ∪ 用户 BYO 模型)

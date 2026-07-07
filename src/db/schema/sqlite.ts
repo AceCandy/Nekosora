@@ -188,18 +188,50 @@ export const userModels = sqliteTable("user_models", {
   userId: text("user_id")
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
-  providerId: text("provider_id")
-    .notNull()
-    .references(() => userProviders.id, { onDelete: "cascade" }),
+  // providerId/upstreamModelName 标遗留:多路由上线后改由 user_routes 承载。
+  // 列保留+nullable,网关与新建逻辑不再读它们(见 resolveByoRoute / createMyModel)。
+  providerId: text("provider_id").references(() => userProviders.id, {
+    onDelete: "cascade",
+  }),
   name: text("name").notNull(),
-  upstreamModelName: text("upstream_model_name").notNull(),
+  upstreamModelName: text("upstream_model_name"),
   capabilities: text("capabilities", { mode: "json" })
     .$type<import("@/db/types").ModelCapabilities>()
     .notNull()
     .default({}),
+  // 与全局模型对齐的元信息(均可空,旧数据默认 NULL)。
+  displayName: text("display_name"),
+  vendor: text("vendor"),
+  systemPrompt: text("system_prompt"),
+  description: text("description"),
   enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),
 });
+
+// 个人模型的多路由(镜像 global_routes + userId 隔离)。
+// providerId/upstreamModelName 原先 1:1 直挂在 user_models 上,迁移后改由本表承载多条路由。
+export const userRoutes = sqliteTable(
+  "user_routes",
+  {
+    id: text("id").primaryKey().default(uuid),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    userModelId: text("user_model_id")
+      .notNull()
+      .references(() => userModels.id, { onDelete: "cascade" }),
+    providerId: text("provider_id")
+      .notNull()
+      .references(() => userProviders.id, { onDelete: "cascade" }),
+    upstreamModelName: text("upstream_model_name").notNull(),
+    priority: integer("priority").notNull().default(0),
+    weight: integer("weight").notNull().default(1),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    headersJson: text("headers_json", { mode: "json" }).$type<Record<string, string>>(),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),
+  },
+  (t) => [index("user_routes_model_idx").on(t.userModelId)],
+);
 
 // ===========================================================================
 // 子 Key 模型绑定
