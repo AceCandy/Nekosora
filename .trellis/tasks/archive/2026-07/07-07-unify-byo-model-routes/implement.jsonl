@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "user_routes 新表、user_models 扩列、0003 迁移必须遵守的 DB 约定"}
+{"file": ".trellis/spec/backend/provider-probe.md", "reason": "testMyRoute 须遵守 testRoute/testByoModel 双路探测契约"}
+{"file": ".trellis/spec/backend/index.md", "reason": "backend 层总览，定位 routing/actions/repository 约定"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "ModelsManager/ModelFormDialog byo 对齐 global 的组件改动约定"}
+{"file": ".trellis/tasks/07-07-unify-byo-model-routes/research/db-schema.md", "reason": "个人 vs 全局表结构、user_routes 方案与迁移成本"}
+{"file": ".trellis/tasks/07-07-unify-byo-model-routes/research/gateway-routing.md", "reason": "resolveByoRoute 重写、RouteRepository 扩展点"}
+{"file": ".trellis/tasks/07-07-unify-byo-model-routes/research/actions-compare.md", "reason": "panel 6 个 *MyRoute 补全清单与 userId 隔离机制"}
