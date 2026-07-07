@@ -20,9 +20,9 @@ export default async function ChatPage() {
       name: m.name as string,
       displayName: (m.displayName as string | undefined) ?? undefined,
     })),
-    // BYO 模型表无 displayName,UI 回退到 name
     ...byos.map((r: Record<string, unknown>) => ({
       name: (r.model as Record<string, unknown>).name as string,
+      displayName: (r.model as Record<string, unknown>).displayName as string | undefined,
     })),
   ];
   const knowledgeBases = (kbs as { id: string; name: string; fileCount: number }[]).map((kb) => ({
