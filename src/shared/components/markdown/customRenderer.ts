@@ -6,6 +6,72 @@
  * HTML/class/style,不做过滤(信任 AI 输出,由调用方保证会话可信)。
  */
 
+import { resolveStructuredKind } from "@/lib/artifacts/structured";
+import type { StructuredKind } from "@/shared/components/structured-blocks/schema";
+
+/** 混合渲染分段:结构化代码块(chart/metric/table)与普通 markdown 文本分别处理。 */
+export type StructuredSegment =
+  | { type: "structured"; kind: StructuredKind; raw: string }
+  | { type: "markdown"; text: string };
+
+/**
+ * 将 markdown 文本按结构化代码块切成段。
+ * 结构化段交由 React 受控组件渲染,markdown 段仍走 parseMarkdown;
+ * fenced code block 天然是 markdown 块分隔符,切分不会破坏两侧结构。
+ */
+export function splitStructuredSegments(input: string): StructuredSegment[] {
+  const lines = input.replace(/\r\n/g, "\n").split("\n");
+  const segments: StructuredSegment[] = [];
+  let markdown: string[] = [];
+  let inCode = false;
+  let codeLang = "";
+  let codeBuffer: string[] = [];
+
+  function flushMarkdown() {
+    if (markdown.length && markdown.join("\n").trim()) {
+      segments.push({ type: "markdown", text: markdown.join("\n") });
+    }
+    markdown = [];
+  }
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("```")) {
+      if (!inCode) {
+        inCode = true;
+        codeLang = trimmed.slice(3).trim();
+        codeBuffer = [];
+      } else {
+        const kind = resolveStructuredKind(codeLang);
+        if (kind) {
+          flushMarkdown();
+          segments.push({ type: "structured", kind, raw: codeBuffer.join("\n") });
+        } else {
+          // 非结构化代码块原样归入 markdown 段,由 parseMarkdown 渲染为 pre/code。
+          markdown.push("```" + codeLang);
+          markdown.push(...codeBuffer);
+          markdown.push("```");
+        }
+        inCode = false;
+        codeLang = "";
+        codeBuffer = [];
+      }
+      continue;
+    }
+    if (inCode) {
+      codeBuffer.push(line);
+    } else {
+      markdown.push(line);
+    }
+  }
+  flushMarkdown();
+  // 未闭合代码块(custom 仅非流式调用,理论不出现):兜底当 markdown。
+  if (inCode) {
+    segments.push({ type: "markdown", text: ["```" + codeLang, ...codeBuffer].join("\n") });
+  }
+  return segments;
+}
+
 /** HTML 转义(代码块内容用)。 */
 function escapeHtml(str: string): string {
   return str.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");

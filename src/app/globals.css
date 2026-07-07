@@ -1,7 +1,8 @@
 @import "tailwindcss";
 
-/* 让 Tailwind 扫描 streamdown 内部的工具类(代码高亮/表格/块等),否则这些类会被 purge 掉。 */
-@source "../node_modules/streamdown/dist/*.js";
+/* 让 Tailwind 扫描 streamdown 内部的工具类(代码高亮/表格/列表/块等),否则这些类会被 purge 掉。
+   路径相对本 CSS 文件(src/app/),streamdown 在根 node_modules,故需上两级。 */
+@source "../../node_modules/streamdown/dist/*.js";
 
 @theme {
   --color-sora-blue: oklch(0.60 0.15 250);
@@ -13,6 +14,13 @@
   --color-nebula-silver: oklch(0.96 0.005 250);
   --color-morning-mist: oklch(0.92 0.01 250);
   --color-deep-space: oklch(0.25 0.02 250);
+
+  /* 结构化图表调色板：冷调蓝系为主 + 琥珀强调，遵循「星枢天流」克制冷调。 */
+  --color-chart-1: oklch(0.62 0.15 250);
+  --color-chart-2: oklch(0.65 0.12 230);
+  --color-chart-3: oklch(0.68 0.10 270);
+  --color-chart-4: oklch(0.72 0.09 200);
+  --color-chart-5: oklch(0.75 0.15 80);
   
   --radius-md: 6px;
   --radius-lg: 8px;

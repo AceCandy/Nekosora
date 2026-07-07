@@ -474,10 +474,10 @@
       "createTitle": "New render style",
       "namePlaceholder": "Name (e.g. Astral default)",
       "cssClassPlaceholder": "Slug (e.g. default)",
-      "cssClassHint": "Becomes the DOM class rs-{slug} and CSS selector prefix. Cannot be changed for built-in styles.",
+      "cssClassHint": "Becomes the DOM class rs-'{'slug'}' and CSS selector prefix. Cannot be changed for built-in styles.",
       "iconPlaceholder": "Icon name (optional, e.g. Sparkles)",
       "descPlaceholder": "Short description",
-      "cssPlaceholder": "CSS text. Start selectors with .rs-{your-slug} .nekusora-md, e.g.:\n.rs-default .nekusora-md h2 { font-size: 22px; }",
+      "cssPlaceholder": "CSS text. Start selectors with .rs-'{'your-slug'}' .nekusora-md, e.g.:\n.rs-default .nekusora-md h2 '{' font-size: 22px; '}'",
       "cssHint": "CSS is injected into the chat page as-is and applies to AI answers. Do not include malicious content. Target elements via streamdown's data-streamdown attributes.",
       "createBtn": "Create",
       "empty": "No render styles yet",
@@ -730,7 +730,8 @@
     "renderableCount": "{count} renderable artifacts",
     "openPanel": "Open panel",
     "htmlPreview": "HTML preview",
-    "openExternal": "Open in new window"
+    "openExternal": "Open in new window",
+    "structuredParseFailed": "Preview unavailable, showing source"
   },
   "share": {
     "title": "Shared conversation",

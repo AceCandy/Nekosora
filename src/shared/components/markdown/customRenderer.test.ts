@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseMarkdown } from "./customRenderer";
+import { parseMarkdown, splitStructuredSegments } from "./customRenderer";
 
 describe("parseMarkdown", () => {
   it("HTML 容器块内的裸文字不被打散为 <p>", () => {
@@ -92,5 +92,53 @@ describe("parseMarkdown", () => {
     expect(out).toContain("<pre><code>");
     expect(out).toContain("<table>");
     expect(out).toContain("<hr />");
+  });
+});
+
+describe("splitStructuredSegments", () => {
+  it("纯 markdown(无结构化块)归为单个 markdown 段", () => {
+    const segs = splitStructuredSegments("# 标题\n正文");
+    expect(segs).toHaveLength(1);
+    expect(segs[0]).toEqual({ type: "markdown", text: "# 标题\n正文" });
+  });
+
+  it("chart 代码块切为 structured 段,正文原样保留", () => {
+    const input = '```chart\n{"type":"bar","series":[{"key":"a"}],"data":[]}\n```';
+    const segs = splitStructuredSegments(input);
+    expect(segs).toHaveLength(1);
+    expect(segs[0].type).toBe("structured");
+    if (segs[0].type === "structured") {
+      expect(segs[0].kind).toBe("chart");
+      expect(segs[0].raw).toContain('"type":"bar"');
+    }
+  });
+
+  it("markdown / metric / markdown 三段切分", () => {
+    const input = "前文\n```metric\n{}\n```\n后文";
+    const segs = splitStructuredSegments(input);
+    expect(segs).toHaveLength(3);
+    expect(segs[0].type).toBe("markdown");
+    expect(segs[1].type).toBe("structured");
+    expect(segs[2].type).toBe("markdown");
+  });
+
+  it("非结构化代码块(如 js)不切分,原样归入 markdown", () => {
+    const input = "```js\nconst x = 1;\n```";
+    const segs = splitStructuredSegments(input);
+    expect(segs).toHaveLength(1);
+    expect(segs[0].type).toBe("markdown");
+    if (segs[0].type === "markdown") expect(segs[0].text).toContain("const x = 1;");
+  });
+
+  it("连续多个结构化块各自成段", () => {
+    const input = "```chart\n{}\n```\n```table\n{}\n```";
+    const segs = splitStructuredSegments(input);
+    expect(segs.filter((s) => s.type === "structured")).toHaveLength(2);
+  });
+
+  it("仅一个结构化块时,两侧空 markdown 段被过滤", () => {
+    const segs = splitStructuredSegments("```chart\n{}\n```");
+    expect(segs).toHaveLength(1);
+    expect(segs[0].type).toBe("structured");
   });
 });

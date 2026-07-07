@@ -1,0 +1,94 @@
+import { z } from "zod";
+
+/**
+ * 结构化代码块 schema —— AI 在 ```chart / ```metric / ```table 代码块内输出 JSON，
+ * 经此处的 zod 边界校验后交给受控 React 组件渲染。
+ *
+ * AI 输出属不可信外部输入（可被 prompt 注入），因此：
+ *  - 颜色一律由前端按品牌调色板分配，schema 不收 AI 色值；
+ *  - 校验失败统一返回 { ok: false }，由 MarkdownCodeBlock 入口降级为源码展示。
+ */
+
+/** 结构化代码块类型，与 html/svg/mermaid 的 PreviewableKind 互斥。 */
+export type StructuredKind = "chart" | "metric" | "table" | "callout";
+
+/** chart 单条系列：数据字段 key + 可选展示名。 */
+const ChartSeriesSchema = z.object({
+  key: z.string(),
+  label: z.string().optional(),
+});
+
+const ChartSchema = z.object({
+  type: z.enum(["bar", "line", "pie", "area"]),
+  title: z.string().optional(),
+  /** bar / line / area 的横轴字段名；pie 可省略。 */
+  xKey: z.string().optional(),
+  series: z.array(ChartSeriesSchema).min(1),
+  data: z.array(z.record(z.string(), z.unknown())),
+});
+
+const MetricItemSchema = z.object({
+  label: z.string(),
+  value: z.union([z.string(), z.number()]),
+  unit: z.string().optional(),
+  trend: z.enum(["up", "down", "flat"]).optional(),
+  delta: z.string().optional(),
+});
+
+/** metric 兼容单对象与数组：单指标渲染一张卡，多指标数组横排多张卡。 */
+const MetricSchema = z.union([MetricItemSchema, z.array(MetricItemSchema).min(1)]);
+
+const TableColumnSchema = z.object({
+  key: z.string(),
+  label: z.string(),
+  align: z.enum(["left", "center", "right"]).optional(),
+  emphasis: z.boolean().optional(),
+});
+
+const TableSchema = z.object({
+  title: z.string().optional(),
+  columns: z.array(TableColumnSchema).min(1),
+  rows: z.array(z.record(z.string(), z.unknown())),
+});
+
+/** callout 类型:warning 警告 / tip 提示 / note 注意 / error 错误,配图标与类型色。 */
+const CalloutSchema = z.object({
+  type: z.enum(["warning", "tip", "note", "error"]),
+  title: z.string().optional(),
+  body: z.string(),
+});
+
+export type ChartData = z.infer<typeof ChartSchema>;
+export type MetricItem = z.infer<typeof MetricItemSchema>;
+export type MetricData = z.infer<typeof MetricSchema>;
+export type TableData = z.infer<typeof TableSchema>;
+export type CalloutData = z.infer<typeof CalloutSchema>;
+
+export type StructuredParseFailure = "invalid_json" | "schema_mismatch";
+
+export type StructuredParseResult =
+  | { ok: true; kind: StructuredKind; data: ChartData | MetricData | TableData | CalloutData }
+  | { ok: false; kind: StructuredKind; reason: StructuredParseFailure };
+
+const STRUCTURED_SCHEMAS = {
+  chart: ChartSchema,
+  metric: MetricSchema,
+  table: TableSchema,
+  callout: CalloutSchema,
+} as const;
+
+/**
+ * 解析结构化代码块内容：JSON.parse + zod 校验。
+ * 成功返回强类型数据；失败返回降级原因，交由入口回退源码展示。
+ */
+export function parseStructured(kind: StructuredKind, raw: string): StructuredParseResult {
+  let json: unknown;
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    return { ok: false, kind, reason: "invalid_json" };
+  }
+  const parsed = STRUCTURED_SCHEMAS[kind].safeParse(json);
+  if (!parsed.success) return { ok: false, kind, reason: "schema_mismatch" };
+  return { ok: true, kind, data: parsed.data };
+}

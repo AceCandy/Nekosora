@@ -2,7 +2,6 @@
 
 import {
   memo,
-  useMemo,
   useEffect,
   useRef,
   useState,
@@ -29,9 +28,11 @@ import {
   MarkdownHTMLSummary,
   MarkdownHTMLSpan,
 } from "./streamdown-html";
-import { parseMarkdown } from "./customRenderer";
+import { parseMarkdown, splitStructuredSegments } from "./customRenderer";
 import { resolvePreviewableKind, type PreviewableKind } from "@/lib/artifacts/previewable";
+import { resolveStructuredKind } from "@/lib/artifacts/structured";
 import { copyToClipboard } from "@/shared/lib/clipboard";
+import { StructuredInlineView } from "@/shared/components/structured-blocks";
 import { MARKDOWN_CONTROLS } from "./markdownControls";
 
 interface MarkdownProps {
@@ -62,9 +63,12 @@ export type CodeBlockPreviewPayload = {
   title: string;
 };
 
-const MarkdownPreviewContext = createContext<
-  ((payload: CodeBlockPreviewPayload) => void) | null
->(null);
+interface MarkdownRenderContextValue {
+  onPreview?: (payload: CodeBlockPreviewPayload) => void;
+  /** 是否流式中:结构化块在此期间显示骨架,结束后才解析内联渲染。 */
+  isStreaming?: boolean;
+}
+const MarkdownRenderContext = createContext<MarkdownRenderContextValue | null>(null);
 
 /**
  * 放行 HTML 块标签及其 style 属性的白名单。
@@ -135,8 +139,8 @@ function inferPreviewTitle(language: string, code: string): string {
 type PreChildProps = { className?: string; children?: ReactNode; "data-block"?: string };
 
 /**
- * 自定义 streamdown pre 组件:正常渲染代码块(透传 streamdown 原始 props,
- * 保留 Shiki 高亮与 globals.css 样式),对可预览类型在右上角叠加「预览」按钮。
+ * 自定义 streamdown pre 组件:对结构化代码块(chart/metric/table)正文内联渲染,
+ * 对可预览代码块(html/svg/mermaid)在右上角叠加「预览」按钮,其余正常显示源码。
  * 仅处理 fenced code block(streamdown 传入的 children 为单个 code 元素);
  * 行内 code 走 streamdown 的 inlineCode,不受影响。
  */
@@ -145,7 +149,9 @@ function MarkdownCodeBlock({
   node: _node,
   ...rest
 }: HTMLAttributes<HTMLPreElement> & { node?: unknown }) {
-  const onPreview = useContext(MarkdownPreviewContext);
+  const ctx = useContext(MarkdownRenderContext);
+  const onPreview = ctx?.onPreview;
+  const isStreaming = ctx?.isStreaming ?? false;
   const t = useTranslations("artifacts");
   const [copied, setCopied] = useState(false);
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -156,8 +162,11 @@ function MarkdownCodeBlock({
     childArr.length === 1 && isValidElement<PreChildProps>(firstChild) ? firstChild : null;
   const language = codeEl ? getCodeLanguage(codeEl.props.className) : "";
   const code = codeEl ? getNodeText(codeEl.props.children) : "";
+
+  // 结构化块识别(chart/metric/table),与 html/svg/mermaid 预览互斥。
+  const structuredKind = resolveStructuredKind(language);
+
   const kind = resolvePreviewableKind(language, code);
-  const canPreview = Boolean(kind && onPreview && code.trim());
   const canCopy = Boolean(code.trim());
   const codeBlock = codeEl ? cloneElement(codeEl, { "data-block": "true" }) : null;
 
@@ -175,10 +184,18 @@ function MarkdownCodeBlock({
     copiedTimerRef.current = setTimeout(() => setCopied(false), 1400);
   }
 
+  // 结构化块:三态(骨架/成功/降级)集中在 StructuredInlineView。
+  if (structuredKind) {
+    return <StructuredInlineView kind={structuredKind} raw={code} isStreaming={isStreaming} />;
+  }
+
+  // 以下:非结构化源码 / html-svg-mermaid 预览。
+  const canPreview = Boolean(kind && onPreview && code.trim());
+
   return (
-    <div className="relative">
+    <div className="group relative">
       {(canCopy || (canPreview && kind && onPreview)) ? (
-        <div className="absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded-md bg-white/80 dark:bg-space-ink/80 px-1 py-1 backdrop-blur-sm">
+        <div className="absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded-md bg-white/80 dark:bg-space-ink/80 px-1 py-1 backdrop-blur-sm opacity-0 transition-opacity group-hover:opacity-100 [@media(pointer:coarse)]:opacity-100">
           {canPreview && kind && onPreview ? (
             <button
               type="button"
@@ -191,7 +208,7 @@ function MarkdownCodeBlock({
                   title: inferPreviewTitle(language, code),
                 })
               }
-              className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-950/5 hover:text-neutral-800 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
+              className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-950/5 hover:text-neutral-800 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-white focus-visible:outline focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
               title={t("openPreview")}
               aria-label={t("openPreview")}
             >
@@ -202,7 +219,7 @@ function MarkdownCodeBlock({
             <button
               type="button"
               onClick={handleCopy}
-              className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-950/5 hover:text-neutral-800 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
+              className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-950/5 hover:text-neutral-800 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-white focus-visible:outline focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
               title={copied ? t("copied") : t("copy")}
               aria-label={copied ? t("copied") : t("copy")}
             >
@@ -237,14 +254,21 @@ function MarkdownCodeBlock({
 function MarkdownImpl({ content, isStreaming, renderer = "streamdown", className, onPreview }: MarkdownProps) {
   // custom 渲染器:仅在流式结束后启用(流式中 streamdown 更稳)。原样渲染 AI 的 HTML/class。
   const useCustom = renderer === "custom" && !isStreaming;
-  const customHtml = useMemo(() => (useCustom ? parseMarkdown(content) : ""), [useCustom, content]);
 
   if (useCustom) {
+    // 按结构化代码块分段:结构化段用受控组件内联渲染,其余段用 parseMarkdown,
+    // 使「输出样式」(如纸面杂志)也能展示 chart/metric/table。
+    const segments = splitStructuredSegments(content);
     return (
-      <div
-        className={clsx("nekusora-md", className)}
-        dangerouslySetInnerHTML={{ __html: customHtml }}
-      />
+      <div className={clsx("nekusora-md", className)}>
+        {segments.map((seg, i) =>
+          seg.type === "structured" ? (
+            <StructuredInlineView key={i} kind={seg.kind} raw={seg.raw} />
+          ) : (
+            <div key={i} dangerouslySetInnerHTML={{ __html: parseMarkdown(seg.text) }} />
+          ),
+        )}
+      </div>
     );
   }
 
@@ -261,11 +285,9 @@ function MarkdownImpl({ content, isStreaming, renderer = "streamdown", className
 
   return (
     <div className={clsx("nekusora-md", className)}>
-      {onPreview ? (
-        <MarkdownPreviewContext.Provider value={onPreview}>{streamdown}</MarkdownPreviewContext.Provider>
-      ) : (
-        streamdown
-      )}
+      <MarkdownRenderContext.Provider value={{ onPreview, isStreaming }}>
+        {streamdown}
+      </MarkdownRenderContext.Provider>
     </div>
   );
 }

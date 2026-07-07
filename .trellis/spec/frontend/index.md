@@ -40,6 +40,7 @@
 | [State Management](./state-management.md) | zustand 多实例隔离、selector 稳定引用、server state | Filled |
 | [Quality Guidelines](./quality-guidelines.md) | lint/typecheck/test 门槛、必需/禁止模式、review checklist | Filled |
 | [Type Safety](./type-safety.md) | DB 行 unknown 收敛、zod 边界校验、DTO 组织 | Filled |
+| [Structured Blocks](./structured-blocks.md) | chart/metric/table/callout 双链路渲染、流式渐进、降级 | Filled |
 
 ---
 

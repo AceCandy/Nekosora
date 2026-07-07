@@ -38,10 +38,11 @@ export async function getMessageSiblings(messagePublicId: string): Promise<{
     .limit(1);
   if (!conv || conv.userId !== user.id) return { current: null, siblings: [] };
 
-  // 同 parentId 下的兄弟(含自己)
+  // 同 parentId 下的兄弟(含自己)。必须按 createdAt 升序,与 getVisibleBranch 的版本序号
+  // 约定一致:否则无 ORDER BY 时 DB 返回顺序不定,会让版本切换器把最新版本算成第 1 个。
   const siblingsQuery = msg.parentId
-    ? db.select().from(s.messages).where(and(eq(s.messages.parentId, msg.parentId), isNull(s.messages.deletedAt)))
-    : db.select().from(s.messages).where(and(eq(s.messages.conversationId, msg.conversationId), isNull(s.messages.deletedAt)));
+    ? db.select().from(s.messages).where(and(eq(s.messages.parentId, msg.parentId), isNull(s.messages.deletedAt))).orderBy(s.messages.createdAt)
+    : db.select().from(s.messages).where(and(eq(s.messages.conversationId, msg.conversationId), isNull(s.messages.deletedAt))).orderBy(s.messages.createdAt);
 
   const all = (await siblingsQuery) as {
     publicId: string;

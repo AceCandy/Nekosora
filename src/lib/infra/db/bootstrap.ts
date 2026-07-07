@@ -40,6 +40,9 @@ export async function bootstrapDatabase(): Promise<void> {
   // --- 步骤 5:内置输出样式预设(幂等,失败不阻断) ---
   await ensureBuiltinRenderStyles(db, await getSchema());
 
+  // 内置输出模式预设(幂等,失败不阻断) —— 「结构化输出」引导 AI 用 chart/metric/table 代码块
+  await ensureBuiltinOutputModes(db, await getSchema());
+
   // --- 步骤 6:清理上次崩溃残留的「生成中」标记 ---
   await clearStaleGenerating(db, await getSchema());
 }
@@ -323,11 +326,11 @@ async function ensureBuiltinRenderStyles(
   try {
     const { eq } = await import("drizzle-orm");
     const t = schema.renderStyles;
+    // paper 为「输出样式」模板范本:杂志感米色纸面 + 红色色条,使用 custom 渲染器以支持
+    // 完整 CSS(含高级组件 class)。新建皮肤时复制本预设,改 cssClass 前缀(rs-paper→rs-xxx)
+    // 与 BUILTIN_PAPER_CSS 中的 --pp-* 变量即可。
     const presets = [
-      { cssClass: "default", name: "星云默认", description: "宽松呼吸感的纯文字排版", icon: "Sparkles", sortOrder: 0, renderer: "streamdown" as const, css: BUILTIN_DEFAULT_CSS },
-      { cssClass: "compact", name: "暮色紧凑", description: "信息密度更高的紧凑排版", icon: "AlignLeft", sortOrder: 1, renderer: "streamdown" as const, css: BUILTIN_COMPACT_CSS },
-      // paper 为 DESIGN 例外:杂志感米色纸面 + 红色色条,使用 custom 渲染器以支持完整 CSS(含高级组件 class)
-      { cssClass: "paper", name: "纸面杂志", description: "杂志感米色纸面与红色标题色条", icon: "Newspaper", sortOrder: 2, renderer: "custom" as const, css: BUILTIN_PAPER_CSS },
+      { cssClass: "paper", name: "纸面杂志", description: "杂志感米色纸面与红色标题色条", icon: "Newspaper", sortOrder: 0, renderer: "custom" as const, css: BUILTIN_PAPER_CSS },
     ];
 
     for (const p of presets) {
@@ -351,9 +354,107 @@ async function ensureBuiltinRenderStyles(
         });
       }
     }
+
+    // 软删已废弃的内置样式(曾内置、现不在 presets 中的记录):置 enabled=false,既从用户
+    // 选择列表移除,又保留 id 兼容历史消息的 renderStyleId 引用(回退默认渲染)。
+    const presetClasses = new Set(presets.map((p) => p.cssClass));
+    const builtins = await db.select({ id: t.id, cssClass: t.cssClass }).from(t).where(eq(t.builtin, true));
+    for (const row of builtins) {
+      if (!presetClasses.has(row.cssClass)) {
+        await db.update(t).set({ enabled: false, updatedAt: new Date() }).where(eq(t.id, row.id));
+      }
+    }
     console.log(`[bootstrap] ✅ 内置输出样式预设就绪(${presets.length} 条)`);
   } catch (e) {
     console.warn("[bootstrap] 内置输出样式预设写入失败(忽略):", e instanceof Error ? e.message : e);
+  }
+}
+
+/** 「结构化输出」outputMode 的 systemPrompt:引导模型用 chart/metric/table 代码块展示数据。 */
+const BUILTIN_STRUCTURED_OUTPUT_PROMPT = `当回答涉及数据、指标或对比时，优先用结构化代码块展示，而不是用文字罗列数字。仅在有明确数据展示需要时使用，普通对话仍用自然语言，正文其余部分仍用 markdown。
+
+可用类型与 JSON 格式:
+
+柱状/折线/饼图/面积图用 chart:
+\`\`\`chart
+{"type":"bar","title":"标题","xKey":"day","series":[{"key":"calls","label":"调用"}],"data":[{"day":"周一","calls":120}]}
+\`\`\`
+type 可选 bar/line/pie/area。pie 时 series 取首个 key 作为数值字段，xKey 作为名称字段。
+
+关键指标用 metric(单个或多个):
+\`\`\`metric
+{"label":"QPS","value":120,"unit":"/s","trend":"up","delta":"+12%"}
+\`\`\`
+多个指标用数组形式:
+\`\`\`metric
+[{"label":"最高温","value":35,"unit":"℃","trend":"up"},{"label":"最低温","value":22,"unit":"℃","trend":"flat"}]
+\`\`\`
+trend 可选 up/down/flat。
+
+多列结构化数据用 table:
+\`\`\`table
+{"columns":[{"key":"name","label":"名称"},{"key":"v","label":"数值","align":"right"}],"rows":[{"name":"A","v":"100"}]}
+\`\`\`
+column 的 align 可选 left/center/right；emphasis 为 true 时该列加粗。
+
+强调提示用 callout(警告/提示/注意/错误):
+\`\`\`callout
+{"type":"warning","title":"额度将耗尽","body":"剩余请求不足 5%,请及时扩容。"}
+\`\`\`
+type 可选 warning/tip/note/error。
+
+代码块内必须是合法 JSON。`;
+
+/**
+ * 内置输出模式预设(幂等 upsert,失败不阻断启动)。
+ *
+ * 按固定 id 查找:不存在则插入,存在则刷新 systemPrompt/name/description/icon/sortOrder。
+ * 前端结构化块识别与渲染不依赖此 outputMode(能力常开);此预设仅用于引导 AI 主动产出。
+ */
+async function ensureBuiltinOutputModes(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  schema: any,
+): Promise<void> {
+  try {
+    const { eq } = await import("drizzle-orm");
+    const t = schema.outputModes;
+    const id = "builtin-structured-output";
+    const preset = {
+      name: "结构化输出",
+      description: "引导用 chart/metric/table 代码块展示结构化数据",
+      systemPrompt: BUILTIN_STRUCTURED_OUTPUT_PROMPT,
+      icon: "BarChart3",
+      sortOrder: 100,
+    };
+    const [existing] = await db.select({ id: t.id }).from(t).where(eq(t.id, id)).limit(1);
+    if (existing) {
+      await db
+        .update(t)
+        .set({
+          name: preset.name,
+          description: preset.description,
+          systemPrompt: preset.systemPrompt,
+          icon: preset.icon,
+          sortOrder: preset.sortOrder,
+          updatedAt: new Date(),
+        })
+        .where(eq(t.id, id));
+    } else {
+      await db.insert(t).values({
+        id,
+        name: preset.name,
+        description: preset.description,
+        systemPrompt: preset.systemPrompt,
+        icon: preset.icon,
+        enabled: true,
+        sortOrder: preset.sortOrder,
+      });
+    }
+    console.log("[bootstrap] ✅ 内置输出模式预设就绪(结构化输出)");
+  } catch (e) {
+    console.warn("[bootstrap] 内置输出模式预设写入失败(忽略):", e instanceof Error ? e.message : e);
   }
 }
 
@@ -383,113 +484,30 @@ async function clearStaleGenerating(
   }
 }
 
-// 内置「星云默认」样式:宽松呼吸感的纯文字排版,遵守 DESIGN(星云白系、无彩色粗条)。
-// 选择器以 .rs-default .nekusora-md 开头,双类特异性足以覆盖 streamdown 单类工具类。
-const BUILTIN_DEFAULT_CSS = `
-.rs-default .nekusora-md {
-  color: #1c1f26;
-  font-size: 15.5px;
-  line-height: 1.85;
-  letter-spacing: 0.01em;
-}
-.rs-default .nekusora-md :is(h1, h2, h3, h4) {
-  color: #111418;
-  line-height: 1.4;
-  letter-spacing: -0.01em;
-  font-weight: 800;
-}
-.rs-default .nekusora-md h1 { font-size: 28px; margin: 28px 0 16px; }
-.rs-default .nekusora-md h2 { font-size: 22px; margin: 32px 0 14px; padding-bottom: 8px; border-bottom: 1px solid #e6e8ec; }
-.rs-default .nekusora-md h3 { font-size: 18px; margin: 26px 0 12px; }
-.rs-default .nekusora-md h4 { font-size: 16px; margin: 22px 0 10px; }
-.rs-default .nekusora-md p { margin: 14px 0; }
-.rs-default .nekusora-md :is([data-streamdown="blockquote"]) {
-  margin: 20px 0;
-  padding: 4px 18px;
-  border-left: 2px solid #d4d7dd;
-  color: #4a5058;
-  font-style: italic;
-}
-.rs-default .nekusora-md :is([data-streamdown="blockquote"]) p { margin: 8px 0; }
-.rs-default .nekusora-md :is(ul, ol) { margin: 14px 0; padding-left: 1.5em; }
-.rs-default .nekusora-md li { margin: 6px 0; }
-.rs-default .nekusora-md :is([data-streamdown="horizontal-rule"]) {
-  border: 0;
-  border-top: 1px solid #e6e8ec;
-  margin: 28px 0;
-}
-.rs-default .nekusora-md :is([data-streamdown="inline-code"]) {
-  background: #f3f4f6;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 0.9em;
-}
-.rs-default .nekusora-md a {
-  color: #1c1f26;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-.rs-default .nekusora-md strong { color: #111418; font-weight: 700; }
-`;
-
-// 内置「暮色紧凑」样式:信息密度更高的紧凑排版,遵守 DESIGN(暮色黑系、无彩色粗条)。
-const BUILTIN_COMPACT_CSS = `
-.rs-compact .nekusora-md {
-  color: #2a2d33;
-  font-size: 14px;
-  line-height: 1.65;
-}
-.rs-compact .nekusora-md :is(h1, h2, h3, h4) {
-  color: #15171c;
-  line-height: 1.3;
-  font-weight: 700;
-}
-.rs-compact .nekusora-md h1 { font-size: 22px; margin: 20px 0 10px; }
-.rs-compact .nekusora-md h2 { font-size: 17px; margin: 22px 0 8px; }
-.rs-compact .nekusora-md h3 { font-size: 15px; margin: 18px 0 6px; }
-.rs-compact .nekusora-md h4 { font-size: 14px; margin: 16px 0 6px; }
-.rs-compact .nekusora-md p { margin: 8px 0; }
-.rs-compact .nekusora-md :is([data-streamdown="blockquote"]) {
-  margin: 12px 0;
-  padding: 2px 12px;
-  border-left: 2px solid #c8ccd2;
-  color: #555a62;
-  font-size: 0.95em;
-}
-.rs-compact .nekusora-md :is([data-streamdown="blockquote"]) p { margin: 4px 0; }
-.rs-compact .nekusora-md :is(ul, ol) { margin: 8px 0; padding-left: 1.3em; }
-.rs-compact .nekusora-md li { margin: 3px 0; }
-.rs-compact .nekusora-md :is([data-streamdown="horizontal-rule"]) {
-  border: 0;
-  border-top: 1px solid #e0e2e6;
-  margin: 16px 0;
-}
-.rs-compact .nekusora-md :is([data-streamdown="inline-code"]) {
-  background: #f0f1f3;
-  padding: 1px 4px;
-  border-radius: 3px;
-  font-size: 0.88em;
-}
-.rs-compact .nekusora-md a {
-  color: #15171c;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-.rs-compact .nekusora-md strong { color: #15171c; font-weight: 600; }
-`;
-
-// 内置「纸面杂志」样式(DESIGN 例外):杂志感米色纸面 + 红色标题色条 + Mac 圆点代码块 + 高级组件。
-// 配合 custom 渲染器(parseMarkdown)使用,完整复刻管理员提供的视觉样例(含 .takeaway/.card 等高级组件)。
+// 内置「纸面杂志」样式:杂志感米色纸面 + 红色标题色条 + Mac 圆点代码块 + 高级组件。
+// 配合 custom 渲染器(parseMarkdown)使用。同时作为「输出样式」模板范本:新建皮肤时
+// 复制本预设,改 cssClass 前缀(rs-paper→rs-xxx)与本 CSS 的 --pp-* 变量即可。
 const BUILTIN_PAPER_CSS = `
 :where(.rs-paper) {
+  /* 底色与纸面 */
   --pp-bg: #f4f3ef;
   --pp-paper: #ffffff;
-  --pp-text: #161616;
-  --pp-muted: #5f6368;
   --pp-soft: #fdfdfc;
   --pp-line: #e8ded1;
+  /* 文字层级(text 最深 → body 正文 → secondary 次级 → muted 辅助) */
+  --pp-text: #161616;
+  --pp-body: #2a2a2a;
+  --pp-secondary: #333333;
+  --pp-muted: #5f6368;
   --pp-strong: #111111;
   --pp-accent: #111111;
+  /* 代码 */
+  --pp-code-bg: #f1f1f1;
+  --pp-pre-bg: #161616;
+  --pp-pre-text: #f6f6f6;
+  /* 表格 */
+  --pp-table-head-bg: #111111;
+  /* 强调色 */
   --pp-danger: #9b1c1c;
   --pp-brand-red: #cc2222;
 }
@@ -531,14 +549,14 @@ const BUILTIN_PAPER_CSS = `
 .rs-paper .nekusora-md h4 { margin: 28px 0 12px; font-size: 18px; font-weight: 850; }
 
 /* 正文与强调 */
-.rs-paper .nekusora-md p { margin: 18px 0; color: #2a2a2a; }
+.rs-paper .nekusora-md p { margin: 18px 0; color: var(--pp-body); }
 .rs-paper .nekusora-md strong {
   font-weight: 850;
-  color: #000;
+  color: var(--pp-strong);
   background: linear-gradient(transparent 62%, rgba(255, 221, 105, 0.48) 0);
   padding: 0 3px;
 }
-.rs-paper .nekusora-md em { font-style: normal; color: #111; font-weight: 700; }
+.rs-paper .nekusora-md em { font-style: normal; color: var(--pp-strong); font-weight: 700; }
 
 /* 引用块 */
 .rs-paper .nekusora-md blockquote {
@@ -548,14 +566,14 @@ const BUILTIN_PAPER_CSS = `
   background: var(--pp-soft);
   border: 1px solid var(--pp-line);
   border-left: 5px solid var(--pp-brand-red);
-  color: #333;
+  color: var(--pp-secondary);
 }
 .rs-paper .nekusora-md blockquote p { margin: 0; font-style: italic; }
 
 /* 列表 */
 .rs-paper .nekusora-md ul { margin: 18px 0; padding-left: 1.45em; list-style: disc; }
 .rs-paper .nekusora-md ol { margin: 18px 0; padding-left: 1.45em; list-style: decimal; }
-.rs-paper .nekusora-md li { margin: 10px 0; color: #333; }
+.rs-paper .nekusora-md li { margin: 10px 0; color: var(--pp-secondary); }
 .rs-paper .nekusora-md li::marker { color: var(--pp-brand-red); }
 .rs-paper .nekusora-md hr { border: 0; height: 1px; background: var(--pp-line); margin: 38px 0; }
 
@@ -563,7 +581,7 @@ const BUILTIN_PAPER_CSS = `
 .rs-paper .nekusora-md code {
   padding: 2px 6px;
   border-radius: 6px;
-  background: #f1f1f1;
+  background: var(--pp-code-bg);
   font-size: 0.9em;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
@@ -573,8 +591,8 @@ const BUILTIN_PAPER_CSS = `
   padding: 40px 20px 18px;
   border-radius: 16px;
   overflow-x: auto;
-  background: #161616;
-  color: #f6f6f6;
+  background: var(--pp-pre-bg);
+  color: var(--pp-pre-text);
   line-height: 1.7;
   box-shadow: inset 0 1px 4px rgba(0,0,0,0.2);
 }
@@ -593,7 +611,7 @@ const BUILTIN_PAPER_CSS = `
 
 /* 链接 */
 .rs-paper .nekusora-md a {
-  color: #111;
+  color: var(--pp-strong);
   font-weight: 700;
   text-decoration: underline;
   text-decoration-thickness: 2px;
@@ -629,7 +647,7 @@ const BUILTIN_PAPER_CSS = `
   border-radius: 16px;
   background: var(--pp-soft);
   border: 1px solid var(--pp-line);
-  color: #333;
+  color: var(--pp-secondary);
 }
 .rs-paper .nekusora-md :is(.card-grid, .summary-grid, .opinion-grid) {
   display: grid;
@@ -662,14 +680,14 @@ const BUILTIN_PAPER_CSS = `
   font-size: 17px;
   line-height: 1.45;
   font-weight: 900;
-  color: #111;
+  color: var(--pp-strong);
 }
 .rs-paper .nekusora-md :is(.card, .summary-card, .opinion-card) p,
 .rs-paper .nekusora-md :is(.card-text, .summary-text) {
   margin: 0;
   font-size: 14.5px;
   line-height: 1.85;
-  color: #4f5459;
+  color: var(--pp-muted);
   font-weight: 600;
 }
 .rs-paper .nekusora-md .opinion-card { position: relative; border-left: 6px solid var(--pp-accent); }
@@ -702,7 +720,7 @@ const BUILTIN_PAPER_CSS = `
 }
 .rs-paper .nekusora-md :is(th, .compare-table th) {
   padding: 16px;
-  background: #111;
+  background: var(--pp-table-head-bg);
   color: #fff;
   text-align: left;
   font-weight: 850;
@@ -711,14 +729,14 @@ const BUILTIN_PAPER_CSS = `
 }
 .rs-paper .nekusora-md :is(td, .compare-table td) {
   padding: 18px 16px;
-  border-top: 1px solid #f0e9df;
-  color: #444;
+  border-top: 1px solid var(--pp-line);
+  color: var(--pp-secondary);
   vertical-align: top;
 }
-.rs-paper .nekusora-md tbody tr:nth-child(even) { background-color: #fdfdfc; }
+.rs-paper .nekusora-md tbody tr:nth-child(even) { background-color: var(--pp-soft); }
 .rs-paper .nekusora-md :is(td, .compare-table td):first-child {
   font-weight: 850;
-  color: #111;
+  color: var(--pp-strong);
   white-space: nowrap;
 }
 
