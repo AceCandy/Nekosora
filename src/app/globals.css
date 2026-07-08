@@ -183,13 +183,16 @@ body {
 }
 .dark .nekusora-md strong { color: var(--color-nebula-silver); }
 
-/* 表格:对齐结构化 table 视觉。streamdown 把原生 table 包在 [data-streamdown="table-wrapper"] 内、
-   并给 table 自带 border 类;故外框/圆角作用于 wrapper,table 与单元格自身边框清零,避免外层双线。 */
+/* 表格:对齐结构化 table 视觉。streamdown 在表格区域挂了多层自带 Tailwind 类
+   (wrapper 的 bg-sidebar/p-2、内层 overflow div 的 border-border/bg-background、table 的 divide-y),
+   本基线把这些深色线与多余背景统一清零,只保留 morning-mist 浅色圆角外框 + 行间水平线。 */
 .nekusora-md [data-streamdown="table-wrapper"] {
   margin: 0.5rem 0;
+  padding: 0;
   border: 1px solid var(--color-morning-mist);
   border-radius: 8px;
   overflow: hidden;
+  background: transparent;
 }
 .dark .nekusora-md [data-streamdown="table-wrapper"] {
   border-color: var(--color-deep-space);
@@ -227,4 +230,18 @@ body {
 }
 .dark .nekusora-md [data-streamdown="table"] tbody td {
   border-top-color: var(--color-deep-space);
+}
+/* streamdown 在 wrapper 内多包一层 overflow 容器(无 data-streamdown 属性),
+   自带 border-border/bg-background/rounded-md,是表格内深色实线元凶,清零,
+   只留外层 morning-mist 浅色圆角外框。 */
+.nekusora-md [data-streamdown="table-wrapper"] > div {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+/* streamdown table 自带 divide-y divide-border,会在 thead/tbody 间画深色线;
+   table { border:0 } 走自身边框,压不住 divide 的子选择器边框,故显式清零,
+   表头改靠浅底背景区分,与结构化 TableBlock 一致。 */
+.nekusora-md [data-streamdown="table"] > :is(thead, tbody) {
+  border-top: 0;
 }
