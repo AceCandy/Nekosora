@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
 /* 让 Tailwind 扫描 streamdown 内部的工具类(代码高亮/表格/列表/块等),否则这些类会被 purge 掉。
    路径相对本 CSS 文件(src/app/),streamdown 在根 node_modules,故需上两级。 */

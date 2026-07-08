@@ -128,7 +128,7 @@ export function ChatMessageList({
 
   return (
     // 相对外层 relative 容器,让对话大纲/回到最新按钮锚定在消息区(而非含输入框的主区)
-    <div className="relative flex-1 min-h-0">
+    <div className="relative flex-1 min-h-0 animate-in fade-in slide-in-from-bottom-2 duration-200">
       <div ref={scrollRef} onScroll={onScroll} className="h-full overflow-y-auto px-6 py-8 md:py-12">
         {messages.length === 0 ? (
           <div className="max-w-4xl mx-auto">
