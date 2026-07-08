@@ -77,6 +77,7 @@ components:
 - **星云银 (Nebula Silver)** (`#f1f3f7` / `oklch(96% 0.005 250)`): 暗色模式的正文字体色，以及亮色模式下的浅灰背景。
 - **晨雾灰 (Morning Mist)** (`#e2e8f0` / `oklch(92% 0.01 250)`): 亮色模式的边框与分隔线颜色。
 - **深空灰 (Deep Space)** (`#1e293b` / `oklch(25% 0.02 250)`): 暗色模式的边框与分隔线颜色。
+- **正文基线辅助灰 (Prose Utility Neutrals)**: 默认态正文(`.nekusora-md` 容器,未选输出样式时)代码块 / 行内代码 / 列表标记的辅助灰,非核心行为色板,作 prose 排版语义色集中定义于 `@theme`(`--color-prose-code-bg` / `-code-border` / `-code-header` / `-inline-bg` / `-inline-text` / `-marker`),明暗双值,冷调中性、克制无彩色。
 
 ### Named Rules
 **天空罕有原则 (The Rare Skyline Rule).** 主彩色 Sora Blue 在页面中的出现面积必须控制在 10% 以内。它的稀有度保证了它作为核心行为指引的不可忽视性。
