@@ -119,3 +119,112 @@ body {
   background: oklch(0.22 0.01 260);
   color: oklch(0.85 0.015 260);
 }
+
+/*
+ * 默认态正文排版基线(prose)。
+ *
+ * 消息未选输出样式时(容器仅 .nekusora-md),streamdown 输出裸元素,此处提供克制的
+ * 基线排版:标题 / 段落 / 列表 / 引用 / 分隔线 / 链接 / 表格。选了输出样式后,
+ * .rs-xxx .nekusora-md 特异性更高,自然覆盖本基线。遵循「星枢天流」:无彩色粗条、
+ * 静止无投影、冷调中性。
+ */
+.nekusora-md :is(h1, h2, h3, h4) {
+  color: var(--color-space-ink);
+  font-weight: 650;
+  line-height: 1.4;
+  margin: 1.5em 0 0.6em;
+}
+.dark .nekusora-md :is(h1, h2, h3, h4) {
+  color: var(--color-nebula-silver);
+}
+.nekusora-md h1 { font-size: 1.45em; }
+.nekusora-md h2 { font-size: 1.28em; }
+.nekusora-md h3 { font-size: 1.14em; }
+.nekusora-md h4 { font-size: 1em; }
+
+.nekusora-md p { margin: 0.85em 0; }
+
+.nekusora-md :is(ul, ol) { margin: 0.85em 0; padding-left: 1.5em; }
+.nekusora-md li { margin: 0.3em 0; }
+.nekusora-md li::marker { color: oklch(0.6 0.01 250); }
+.dark .nekusora-md li::marker { color: oklch(0.6 0.01 250); }
+
+.nekusora-md [data-streamdown="blockquote"] {
+  margin: 1.1em 0;
+  padding: 0.3em 1.1em;
+  border-left: 2px solid var(--color-morning-mist);
+  color: var(--color-deep-space);
+}
+.dark .nekusora-md [data-streamdown="blockquote"] {
+  border-left-color: var(--color-deep-space);
+  color: var(--color-nebula-silver);
+}
+.nekusora-md [data-streamdown="blockquote"] p { margin: 0.45em 0; }
+
+.nekusora-md [data-streamdown="horizontal-rule"] {
+  border: 0;
+  border-top: 1px solid var(--color-morning-mist);
+  margin: 1.6em 0;
+}
+.dark .nekusora-md [data-streamdown="horizontal-rule"] {
+  border-top-color: var(--color-deep-space);
+}
+
+.nekusora-md a {
+  color: var(--color-sora-blue);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.nekusora-md a:hover { text-decoration-thickness: 2px; }
+
+.nekusora-md strong {
+  font-weight: 650;
+  color: var(--color-space-ink);
+}
+.dark .nekusora-md strong { color: var(--color-nebula-silver); }
+
+/* 表格:对齐结构化 table 视觉。streamdown 把原生 table 包在 [data-streamdown="table-wrapper"] 内、
+   并给 table 自带 border 类;故外框/圆角作用于 wrapper,table 与单元格自身边框清零,避免外层双线。 */
+.nekusora-md [data-streamdown="table-wrapper"] {
+  margin: 0.5rem 0;
+  border: 1px solid var(--color-morning-mist);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.dark .nekusora-md [data-streamdown="table-wrapper"] {
+  border-color: var(--color-deep-space);
+}
+.nekusora-md [data-streamdown="table"] {
+  width: 100%;
+  margin: 0;
+  border: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.875rem;
+}
+.nekusora-md [data-streamdown="table"] :is(th, td) {
+  padding: 0.5rem 0.75rem;
+  border: 0;
+  text-align: left;
+  color: var(--color-space-ink);
+  word-break: break-word;
+}
+.dark .nekusora-md [data-streamdown="table"] :is(th, td) {
+  color: var(--color-nebula-silver);
+}
+.nekusora-md [data-streamdown="table"] thead tr {
+  background: color-mix(in oklch, var(--color-morning-mist) 50%, transparent);
+}
+.dark .nekusora-md [data-streamdown="table"] thead tr {
+  background: color-mix(in oklch, var(--color-deep-space) 40%, transparent);
+}
+.nekusora-md [data-streamdown="table"] th {
+  font-weight: 500;
+  white-space: nowrap;
+}
+.nekusora-md [data-streamdown="table"] tbody td {
+  border-top: 1px solid var(--color-morning-mist);
+}
+.dark .nekusora-md [data-streamdown="table"] tbody td {
+  border-top-color: var(--color-deep-space);
+}
