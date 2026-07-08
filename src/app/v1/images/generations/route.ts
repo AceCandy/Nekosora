@@ -112,6 +112,7 @@ export async function POST(req: NextRequest) {
       routeId: result.routeId,
       routeName: result.routeName,
       upstreamModel: result.upstreamModel,
+      upstreamKeyMasked: result.upstreamKeyMasked,
     });
 
     return NextResponse.json({

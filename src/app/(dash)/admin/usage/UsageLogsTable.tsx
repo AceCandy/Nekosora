@@ -8,6 +8,7 @@
  */
 import { useTranslations } from "next-intl";
 import { Pagination } from "@/shared/ui/Pagination";
+import { formatDateTimeLocal, formatDuration } from "@/shared/lib/format";
 import { UsageFilters, type FilterField } from "./UsageFilters";
 
 /** 客户端行类型(createdAt 已序列化为 ISO 字符串)。 */
@@ -21,8 +22,14 @@ export interface UsageLogClientRow {
   upstreamModel: string | null;
   promptTokens: number;
   completionTokens: number;
+  /** 缓存读取 token(prompt cache 命中)。 */
+  cacheReadTokens: number;
   latencyMs: number | null;
   firstTokenLatencyMs: number | null;
+  /** 命中的对外网关 key 名(panel 用量明细可见;错误视图脱敏置空)。 */
+  apiKeyName: string | null;
+  /** 命中上游 key 的脱敏快照(仅 admin 可见;panel 不下发)。 */
+  upstreamKeyMasked: string | null;
   createdAt: string;
 }
 
@@ -36,14 +43,6 @@ interface UsageLogsTableProps {
   basePath: string;
   /** 切换筛选/翻页时保留的 query(tab)。 */
   preservedParams: Record<string, string | undefined>;
-}
-
-function formatDateTime(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  // 固定格式,避免 locale 差异:YYYY-MM-DD HH:mm
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
 export function UsageLogsTable({
@@ -101,10 +100,11 @@ export function UsageLogsTable({
                 <th className="text-left px-4 py-3">{t("thCreatedAt")}</th>
                 <th className="text-left px-4 py-3">{t("thSource")}</th>
                 <th className="text-left px-4 py-3">{t("thModel")}</th>
-                <th className="text-left px-4 py-3">{t("thProvider")}</th>
                 <th className="text-left px-4 py-3">{t("thRoute")}</th>
-                <th className="text-left px-4 py-3">{t("thUpstreamModel")}</th>
-                <th className="text-right px-4 py-3">{t("thTotalTokens")}</th>
+                <th className="text-left px-4 py-3">{t("thKey")}</th>
+                <th className="text-right px-4 py-3">{t("thInput")}</th>
+                <th className="text-right px-4 py-3">{t("thOutput")}</th>
+                <th className="text-right px-4 py-3">{t("thCacheRead")}</th>
                 <th className="text-right px-4 py-3">{t("thLatency")}</th>
                 <th className="text-right px-4 py-3">{t("thTtft")}</th>
               </tr>
@@ -112,42 +112,53 @@ export function UsageLogsTable({
             <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-10 text-center text-neutral-400 dark:text-neutral-500">
+                  <td colSpan={10} className="px-4 py-10 text-center text-neutral-400 dark:text-neutral-500">
                     {t("emptyLogs")}
                   </td>
                 </tr>
               )}
               {rows.map((r) => {
-                const providerDisplay = r.providerName ?? r.providerRef ?? "-";
                 return (
                   <tr
                     key={r.id}
                     className="hover:bg-neutral-50/30 dark:hover:bg-neutral-900/10 transition-colors duration-150"
                   >
                     <td className="px-4 py-3 font-mono text-neutral-500 dark:text-neutral-400 whitespace-nowrap">
-                      {formatDateTime(r.createdAt)}
+                      {formatDateTimeLocal(r.createdAt)}
                     </td>
                     <td className="px-4 py-3 font-mono text-neutral-700 dark:text-neutral-300">
                       {t(`sources.${r.source}` as const)}
                     </td>
                     <td className="px-4 py-3 font-mono text-neutral-900 dark:text-white">{r.model}</td>
-                    <td className="px-4 py-3 text-neutral-600 dark:text-neutral-400 max-w-[160px] truncate">
-                      {providerDisplay}
-                    </td>
-                    <td className="px-4 py-3 text-neutral-600 dark:text-neutral-400 max-w-[180px] truncate">
+                    <td className="px-4 py-3 text-neutral-600 dark:text-neutral-400 max-w-[220px] truncate">
                       {r.routeName ?? "-"}
                     </td>
-                    <td className="px-4 py-3 text-neutral-600 dark:text-neutral-400 max-w-[160px] truncate">
-                      {r.upstreamModel ?? "-"}
+                    <td className="px-4 py-3">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-mono text-neutral-700 dark:text-neutral-300 truncate max-w-[180px]">
+                          {r.apiKeyName ?? "-"}
+                        </span>
+                        {r.upstreamKeyMasked && (
+                          <span className="font-mono text-[10px] text-neutral-400 dark:text-neutral-500 truncate max-w-[180px]">
+                            {r.upstreamKeyMasked}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-right font-mono text-neutral-800 dark:text-neutral-200">
-                      {(r.promptTokens + r.completionTokens).toLocaleString()}
+                      {r.promptTokens.toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-neutral-800 dark:text-neutral-200">
+                      {r.completionTokens.toLocaleString()}
                     </td>
                     <td className="px-4 py-3 text-right font-mono text-neutral-500 dark:text-neutral-400">
-                      {r.latencyMs != null ? `${r.latencyMs}ms` : "-"}
+                      {r.cacheReadTokens.toLocaleString()}
                     </td>
                     <td className="px-4 py-3 text-right font-mono text-neutral-500 dark:text-neutral-400">
-                      {r.firstTokenLatencyMs != null ? `${r.firstTokenLatencyMs}ms` : "-"}
+                      {formatDuration(r.latencyMs)}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-neutral-500 dark:text-neutral-400">
+                      {formatDuration(r.firstTokenLatencyMs)}
                     </td>
                   </tr>
                 );

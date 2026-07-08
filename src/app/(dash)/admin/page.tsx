@@ -31,7 +31,7 @@ export default async function AdminHomePage() {
   ] as const;
 
   return (
-    <div className="space-y-10 max-w-5xl">
+    <div className="space-y-10">
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-neutral-900 dark:text-white">{t("title")}</h1>
         <p className="mt-1 text-sm text-neutral-500">{t("desc")}</p>

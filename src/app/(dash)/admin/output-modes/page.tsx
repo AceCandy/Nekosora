@@ -92,7 +92,7 @@ export default async function AdminOutputModesPage() {
   );
 
   return (
-    <div className="space-y-8 max-w-5xl">
+    <div className="space-y-8">
       <div>
         <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-white flex items-center gap-2">
           <Sparkles className="w-5 h-5 text-sora-blue" />

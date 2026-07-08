@@ -25,7 +25,7 @@ export default async function AdminTemplatesPage() {
     .orderBy(desc(s.promptTemplates.createdAt));
 
   return (
-    <div className="space-y-8 max-w-5xl">
+    <div className="space-y-8">
       <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-white">{tn("globalTemplates")}</h1>
 
       <div className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] overflow-hidden shadow-none">

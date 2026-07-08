@@ -158,6 +158,10 @@ export interface UsageLogRow {
   routeId: string | null;
   routeName: string | null;
   upstreamModel: string | null;
+  /** 命中的对外网关 key 名(LEFT JOIN apiKeys.name;chat 无 apiKeyId 时为 null)。 */
+  apiKeyName: string | null;
+  /** 命中上游 key 的脱敏快照(前3后3,中间 *)。 */
+  upstreamKeyMasked: string | null;
   createdAt: Date;
 }
 
@@ -203,8 +207,9 @@ function buildUsageWhere(opts: ListUsageLogsOptions): SQL | undefined {
   return conds.length > 0 ? and(...conds) : undefined;
 }
 
+/** 把 drizzle 原始行收敛为 UsageLogRow DTO。apiKeyName 来自 LEFT JOIN apiKeys。 */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function toUsageRow(r: any): UsageLogRow {
+function toUsageRow(r: any, apiKeyName: string | null = null): UsageLogRow {
   return {
     id: String(r.id),
     source: String(r.source),
@@ -225,6 +230,8 @@ function toUsageRow(r: any): UsageLogRow {
     routeId: r.routeId ?? null,
     routeName: r.routeName ?? null,
     upstreamModel: r.upstreamModel ?? null,
+    apiKeyName,
+    upstreamKeyMasked: r.upstreamKeyMasked ?? null,
     createdAt: r.createdAt instanceof Date ? r.createdAt : new Date(r.createdAt),
   };
 }
@@ -245,10 +252,12 @@ export async function listUsageLogs(
   const pageSize = Math.max(1, opts.pageSize);
   const offset = (page - 1) * pageSize;
 
-  const [rows, countRows] = await Promise.all([
+  // LEFT JOIN apiKeys 取对外网关 key 的 name;cacheReadTokens 已在 usage_logs 列中。
+  const [rowsRaw, countRows] = await Promise.all([
     db
-      .select()
+      .select({ row: t, apiKeyName: s.apiKeys.name })
       .from(t)
+      .leftJoin(s.apiKeys, eq(t.apiKeyId, s.apiKeys.id))
       .where(where)
       .orderBy(desc(t.createdAt))
       .limit(pageSize)
@@ -257,5 +266,8 @@ export async function listUsageLogs(
   ]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return { rows: (rows as any[]).map(toUsageRow), total: Number(countRows[0]?.count ?? 0) };
+  const rows = (rowsRaw as any[]).map(({ row, apiKeyName }) =>
+    toUsageRow(row, apiKeyName ?? null),
+  );
+  return { rows, total: Number(countRows[0]?.count ?? 0) };
 }

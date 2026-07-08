@@ -783,6 +783,8 @@ export const usageLogs = pgTable(
     routeId: text("route_id"), // 命中路由 id 溯源
     routeName: text("route_name"), // 组合展示名(providerName · upstreamModel)
     upstreamModel: text("upstream_model"), // 真实上游模型名(区别于对外 model)
+    // 命中上游 key 的脱敏快照(前3后3,中间 *;运行时从明文算,绝不存明文)。
+    upstreamKeyMasked: text("upstream_key_masked"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (t) => [
@@ -809,6 +811,8 @@ export const opsErrorLogs = pgTable(
     upstreamModel: text("upstream_model"), // 真实上游模型名
     providerName: text("provider_name"), // 可读服务商名快照
     providerRef: text("provider_ref"), // 裸 <source>:<providerId>,保留溯源
+    // 命中上游 key 的脱敏快照(前3后3,中间 *;运行时从明文算,绝不存明文)。
+    upstreamKeyMasked: text("upstream_key_masked"),
     routeId: text("route_id"),
     routeName: text("route_name"),
     requestPath: text("request_path"), // 如 /v1/chat/completions

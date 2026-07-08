@@ -1,0 +1,4 @@
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"lint/typecheck/test 门槛、review checklist"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"核对不破坏双表/分流/数据层脱敏(panel key 不下发)"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"核对双 dialect 加列对齐、迁移一致"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"核对 DTO 字段与 panel 脱敏白名单"}

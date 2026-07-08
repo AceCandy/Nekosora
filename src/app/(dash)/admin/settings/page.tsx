@@ -15,7 +15,7 @@ export default async function SettingsPage() {
   const tn = await getTranslations("nav");
 
   return (
-    <div className="space-y-10 max-w-5xl">
+    <div className="space-y-10">
       <div>
         <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-white">{tn("settings")}</h1>
         <p className="mt-1 text-sm text-neutral-500">{t("desc")}</p>

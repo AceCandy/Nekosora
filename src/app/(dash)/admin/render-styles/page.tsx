@@ -95,7 +95,7 @@ export default async function AdminRenderStylesPage() {
   );
 
   return (
-    <div className="space-y-8 max-w-5xl">
+    <div className="space-y-8">
       <div>
         <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-white flex items-center gap-2">
           <Palette className="w-5 h-5 text-sora-blue" />

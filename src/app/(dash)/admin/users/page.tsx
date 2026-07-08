@@ -10,7 +10,7 @@ export default async function UsersPage() {
   const tn = await getTranslations("nav");
 
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div className="space-y-6">
       <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-white">{tn("users")}</h1>
 
       <div className="rounded-lg border border-morning-mist bg-nebula-white dark:border-deep-space dark:bg-twilight-obsidian overflow-hidden shadow-none transition-all duration-200">

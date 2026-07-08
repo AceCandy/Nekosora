@@ -13,6 +13,7 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import Badge from "@/shared/ui/Badge";
 import { Pagination } from "@/shared/ui/Pagination";
+import { formatDateTimeLocal, formatDuration } from "@/shared/lib/format";
 import { type ErrorCategory } from "@/lib/error-classify";
 import { UsageFilters, type FilterField } from "./UsageFilters";
 import { ErrorDetailDrawer } from "./ErrorDetailDrawer";
@@ -40,6 +41,10 @@ export interface ErrorLogClientRow {
   firstTokenLatencyMs: number | null;
   promptTokens: number;
   completionTokens: number;
+  /** 命中的对外网关 key 名(仅 admin 可见;panel 脱敏置空)。 */
+  apiKeyName: string | null;
+  /** 命中上游 key 的脱敏快照(仅 admin 可见;panel 脱敏置空)。 */
+  upstreamKeyMasked: string | null;
   /** 粗分类(服务端派生,前端 i18n key 后缀)。 */
   category: ErrorCategory;
   createdAt: string;
@@ -54,13 +59,6 @@ interface ErrorLogsTableProps {
   basePath: string;
   preservedParams: Record<string, string | undefined>;
   variant: "admin" | "panel";
-}
-
-function formatDateTime(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
 /** httpStatus 徽标颜色(低饱和:4xx 中性偏暖、5xx 红、null 灰)。 */
@@ -156,6 +154,7 @@ export function ErrorLogsTable({
                 <th className="text-left px-4 py-3">{t("thCreatedAt")}</th>
                 {variant === "admin" && <th className="text-left px-4 py-3">{t("thSource")}</th>}
                 <th className="text-left px-4 py-3">{t("thModel")}</th>
+                {variant === "admin" && <th className="text-left px-4 py-3">{t("thKey")}</th>}
                 {variant === "admin" && <th className="text-left px-4 py-3">{t("thProvider")}</th>}
                 {variant === "admin" && <th className="text-left px-4 py-3">{t("thRoute")}</th>}
                 {variant === "admin" && <th className="text-left px-4 py-3">{t("errors.detailPhase")}</th>}
@@ -168,7 +167,7 @@ export function ErrorLogsTable({
             <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={variant === "admin" ? 10 : 6} className="px-4 py-10 text-center text-neutral-400 dark:text-neutral-500">
+                  <td colSpan={variant === "admin" ? 11 : 6} className="px-4 py-10 text-center text-neutral-400 dark:text-neutral-500">
                     {t("errors.empty")}
                   </td>
                 </tr>
@@ -182,7 +181,7 @@ export function ErrorLogsTable({
                     onClick={() => setSelectedId(r.id)}
                   >
                     <td className="px-4 py-3 font-mono text-neutral-500 dark:text-neutral-400 whitespace-nowrap">
-                      {formatDateTime(r.createdAt)}
+                      {formatDateTimeLocal(r.createdAt)}
                     </td>
                     {variant === "admin" && (
                       <td className="px-4 py-3 font-mono text-neutral-700 dark:text-neutral-300">
@@ -192,6 +191,20 @@ export function ErrorLogsTable({
                     <td className="px-4 py-3 font-mono text-neutral-900 dark:text-white max-w-[160px] truncate">
                       {r.model}
                     </td>
+                    {variant === "admin" && (
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-mono text-neutral-700 dark:text-neutral-300 truncate max-w-[160px]">
+                            {r.apiKeyName ?? "-"}
+                          </span>
+                          {r.upstreamKeyMasked && (
+                            <span className="font-mono text-[10px] text-neutral-400 dark:text-neutral-500 truncate max-w-[160px]">
+                              {r.upstreamKeyMasked}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    )}
                     {variant === "admin" && (
                       <td className="px-4 py-3 text-neutral-600 dark:text-neutral-400 max-w-[150px] truncate">
                         {r.providerName ?? r.providerRef ?? "-"}
@@ -224,7 +237,7 @@ export function ErrorLogsTable({
                       </Badge>
                     </td>
                     <td className="px-4 py-3 text-right font-mono text-neutral-500 dark:text-neutral-400">
-                      {r.latencyMs != null ? `${r.latencyMs}ms` : "-"}
+                      {formatDuration(r.latencyMs)}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <button

@@ -57,7 +57,7 @@ export default async function OperationsPage() {
         : sql`unixepoch() - 3600`}`);
 
   return (
-    <div className="space-y-10 max-w-5xl">
+    <div className="space-y-10">
       <div>
         <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-white">{tn("operations")}</h1>
         <p className="mt-1 text-sm text-neutral-500">{t("desc")}</p>

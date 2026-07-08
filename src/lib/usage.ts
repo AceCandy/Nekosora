@@ -43,6 +43,20 @@ export interface LogUsageParams {
   errorPhase?: string;
   /** 错误具体类型。Phase 3 补传。 */
   errorType?: string;
+  /** 命中上游 key 的脱敏快照(前3后3,中间 *;运行时从明文算,绝不存明文)。 */
+  upstreamKeyMasked?: string | null;
+}
+
+/**
+ * 上游 provider key 脱敏:前3后3,中间 `*`。短 key 兜底不暴露全量。
+ * 运行时持明文,只把脱敏结果写入日志(绝不存明文)。
+ * - 空值 → null
+ * - length <= 6 → `${k.slice(0,2)}***`(避免短 key 泄露全量)
+ * - 否则 → `${k.slice(0,3)}***${k.slice(-3)}`
+ */
+export function maskKey(k?: string | null): string | null {
+  if (!k) return null;
+  return k.length <= 6 ? `${k.slice(0, 2)}***` : `${k.slice(0, 3)}***${k.slice(-3)}`;
 }
 
 /** 记录一条用量/错误日志。失败不抛错(日志记录不应阻断主流程)。 */
@@ -75,6 +89,7 @@ export async function logUsage(params: LogUsageParams): Promise<void> {
         routeId: params.routeId ?? null,
         routeName: params.routeName ?? null,
         upstreamModel: params.upstreamModel ?? null,
+        upstreamKeyMasked: params.upstreamKeyMasked ?? null,
       });
     } else {
       // 失败 / 中断 → ops_error_logs(本 Phase 能拿到的先写,缺失的留 null)。
@@ -91,6 +106,7 @@ export async function logUsage(params: LogUsageParams): Promise<void> {
         providerRef: params.providerRef ?? null,
         routeId: params.routeId ?? null,
         routeName: params.routeName ?? null,
+        upstreamKeyMasked: params.upstreamKeyMasked ?? null,
         requestPath: params.requestPath ?? null,
         stream: params.stream ?? false,
         httpStatus: params.httpStatus ?? null,

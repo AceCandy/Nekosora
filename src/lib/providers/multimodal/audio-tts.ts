@@ -8,6 +8,7 @@ import { generateSpeech as generateSpeech } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import type { CallContext } from "@/lib/providers/types";
 import { resolveRoutesByCapability, RoutingError } from "@/lib/routing";
+import { maskKey } from "@/lib/usage";
 
 export interface SynthesizeOptions {
   text: string;
@@ -28,6 +29,8 @@ export interface SynthesizeResult {
   routeName?: string;
   /** 真实上游模型名。 */
   upstreamModel?: string;
+  /** 命中上游 key 的脱敏快照(前3后3,中间 *)。 */
+  upstreamKeyMasked?: string | null;
 }
 
 const FORMAT_MIME: Record<string, string> = {
@@ -74,6 +77,7 @@ export async function synthesizeViaRoute(
     routeId: route.routeId,
     routeName: `${route.provider.name} · ${route.upstreamModelName}`,
     upstreamModel: route.upstreamModelName,
+    upstreamKeyMasked: maskKey(route.provider.apiKey),
   };
 }
 

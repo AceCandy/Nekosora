@@ -34,6 +34,10 @@ export interface ErrorLogRow {
   completionTokens: number;
   latencyMs: number | null;
   firstTokenLatencyMs: number | null;
+  /** 命中的对外网关 key 名(LEFT JOIN apiKeys.name;chat 无 apiKeyId 时为 null)。 */
+  apiKeyName: string | null;
+  /** 命中上游 key 的脱敏快照(前3后3,中间 *)。 */
+  upstreamKeyMasked: string | null;
   createdAt: Date;
 }
 
@@ -96,9 +100,9 @@ function buildWhere(opts: ListErrorLogsOptions): SQL | undefined {
   return conds.length > 0 ? and(...conds) : undefined;
 }
 
-/** 把 drizzle 原始行收敛为 ErrorLogRow DTO。 */
+/** 把 drizzle 原始行收敛为 ErrorLogRow DTO。apiKeyName 来自 LEFT JOIN apiKeys。 */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function toRow(r: any): ErrorLogRow {
+function toRow(r: any, apiKeyName: string | null = null): ErrorLogRow {
   return {
     id: String(r.id),
     requestId: String(r.requestId),
@@ -123,6 +127,8 @@ function toRow(r: any): ErrorLogRow {
     completionTokens: Number(r.completionTokens ?? 0),
     latencyMs: r.latencyMs ?? null,
     firstTokenLatencyMs: r.firstTokenLatencyMs ?? null,
+    apiKeyName,
+    upstreamKeyMasked: r.upstreamKeyMasked ?? null,
     createdAt: r.createdAt instanceof Date ? r.createdAt : new Date(r.createdAt),
   };
 }
@@ -143,10 +149,12 @@ export async function listErrorLogs(
   const pageSize = Math.max(1, opts.pageSize);
   const offset = (page - 1) * pageSize;
 
-  const [rows, countRows] = await Promise.all([
+  // LEFT JOIN apiKeys 取对外网关 key 的 name(apiKeyId 为 null 时得 null,正常)。
+  const [rowsRaw, countRows] = await Promise.all([
     db
-      .select()
+      .select({ row: t, apiKeyName: s.apiKeys.name })
       .from(t)
+      .leftJoin(s.apiKeys, eq(t.apiKeyId, s.apiKeys.id))
       .where(where)
       .orderBy(desc(t.createdAt))
       .limit(pageSize)
@@ -158,7 +166,10 @@ export async function listErrorLogs(
   ]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return { rows: (rows as any[]).map(toRow), total: Number(countRows[0]?.count ?? 0) };
+  const rows = (rowsRaw as any[]).map(({ row, apiKeyName }) =>
+    toRow(row, apiKeyName ?? null),
+  );
+  return { rows, total: Number(countRows[0]?.count ?? 0) };
 }
 
 /**
@@ -175,7 +186,14 @@ export async function getErrorLog(
   const t = s.opsErrorLogs;
   const conds: SQL[] = [eq(t.id, id)];
   if (userId) conds.push(eq(t.userId, userId));
-  const [row] = await db.select().from(t).where(and(...conds)).limit(1);
+  const [rowRaw] = await db
+    .select({ row: t, apiKeyName: s.apiKeys.name })
+    .from(t)
+    .leftJoin(s.apiKeys, eq(t.apiKeyId, s.apiKeys.id))
+    .where(and(...conds))
+    .limit(1);
+  if (!rowRaw) return null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return row ? toRow(row as any) : null;
+  const { row, apiKeyName } = rowRaw as any;
+  return toRow(row, apiKeyName ?? null);
 }

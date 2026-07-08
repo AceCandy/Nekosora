@@ -8,6 +8,7 @@ import { transcribe as transcribe } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import type { CallContext } from "@/lib/providers/types";
 import { resolveRoutesByCapability, RoutingError } from "@/lib/routing";
+import { maskKey } from "@/lib/usage";
 
 export interface TranscribeOptions {
   /** 音频字节(必填)。 */
@@ -29,6 +30,8 @@ export interface TranscribeResult {
   routeName?: string;
   /** 真实上游模型名。 */
   upstreamModel?: string;
+  /** 命中上游 key 的脱敏快照(前3后3,中间 *)。 */
+  upstreamKeyMasked?: string | null;
 }
 
 /** 通过路由链转写音频。 */
@@ -66,6 +69,7 @@ export async function transcribeViaRoute(
     routeId: route.routeId,
     routeName: `${route.provider.name} · ${route.upstreamModelName}`,
     upstreamModel: route.upstreamModelName,
+    upstreamKeyMasked: maskKey(route.provider.apiKey),
   };
 }
 

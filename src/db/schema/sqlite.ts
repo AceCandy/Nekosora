@@ -737,6 +737,8 @@ export const usageLogs = sqliteTable(
     routeId: text("route_id"), // 命中路由 id 溯源
     routeName: text("route_name"), // 组合展示名(providerName · upstreamModel)
     upstreamModel: text("upstream_model"), // 真实上游模型名(区别于对外 model)
+    // 命中上游 key 的脱敏快照(前3后3,中间 *;运行时从明文算,绝不存明文)。
+    upstreamKeyMasked: text("upstream_key_masked"),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),
   },
   (t) => [
@@ -760,6 +762,8 @@ export const opsErrorLogs = sqliteTable(
     upstreamModel: text("upstream_model"),
     providerName: text("provider_name"),
     providerRef: text("provider_ref"),
+    // 命中上游 key 的脱敏快照(前3后3,中间 *;运行时从明文算,绝不存明文)。
+    upstreamKeyMasked: text("upstream_key_masked"),
     routeId: text("route_id"),
     routeName: text("route_name"),
     requestPath: text("request_path"),

@@ -58,7 +58,7 @@ export default async function UsagePage({
   const page = Math.max(1, Number(strParam(sp.page) ?? "1") || 1);
 
   return (
-    <div className="space-y-8 max-w-5xl">
+    <div className="space-y-8">
       <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-white">{tn("usage")}</h1>
 
       <UsageTabs current={tab} basePath="/admin/usage" range={range} />
@@ -121,8 +121,11 @@ async function renderUsageTab({
     upstreamModel: r.upstreamModel,
     promptTokens: r.promptTokens,
     completionTokens: r.completionTokens,
+    cacheReadTokens: r.cacheReadTokens,
     latencyMs: r.latencyMs,
     firstTokenLatencyMs: r.firstTokenLatencyMs,
+    apiKeyName: r.apiKeyName,
+    upstreamKeyMasked: r.upstreamKeyMasked,
     createdAt: r.createdAt.toISOString(),
   }));
 
@@ -203,6 +206,8 @@ async function renderErrorsTab({
     firstTokenLatencyMs: r.firstTokenLatencyMs,
     promptTokens: r.promptTokens,
     completionTokens: r.completionTokens,
+    apiKeyName: r.apiKeyName,
+    upstreamKeyMasked: r.upstreamKeyMasked,
     category: classifyError({
       errorCode: r.errorCode,
       httpStatus: r.httpStatus ?? undefined,

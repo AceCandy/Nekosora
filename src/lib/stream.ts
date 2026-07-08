@@ -16,7 +16,7 @@ import { resolveRoutes, RoutingError } from "@/lib/routing";
 import { buildLanguageModelWithKey } from "@/lib/providers/registry";
 import { orderedWeightedKeys } from "@/lib/providers/keys";
 import { recordSuccess, recordFailure } from "@/lib/circuit-breaker";
-import { logUsage } from "@/lib/usage";
+import { logUsage, maskKey } from "@/lib/usage";
 import { classifyError } from "@/lib/error-classify";
 import { buildReasoningProviderOptions } from "@/lib/reasoning";
 import type {
@@ -93,6 +93,7 @@ export async function* streamChat(
       errorPhase: classifyError({ errorCode: errCode }).phase,
       errorType: errCode,
       stream: true,
+      upstreamKeyMasked: maskKey(usedRoute?.provider.apiKey),
     });
     return;
   }
@@ -189,6 +190,7 @@ export async function* streamChat(
       upstreamModel: usedRoute?.upstreamModelName,
       firstTokenLatencyMs,
       stream: true,
+      upstreamKeyMasked: maskKey(usedRoute?.provider.apiKey),
     });
   }
 }
@@ -331,6 +333,7 @@ export async function generateChat(opts: StreamChatOptions): Promise<GenerateCha
       errorPhase: classifyError({ errorCode: errCode }).phase,
       errorType: errCode,
       stream: false,
+      upstreamKeyMasked: maskKey(usedRoute?.provider.apiKey),
     });
     return { text: "", error: errMsg };
   }
@@ -427,6 +430,7 @@ export async function generateChat(opts: StreamChatOptions): Promise<GenerateCha
       // 非流式 generateText 一次性返回,无首 token 概念,TTFT 恒为 undefined。
       firstTokenLatencyMs: undefined,
       stream: false,
+      upstreamKeyMasked: maskKey(usedRoute?.provider.apiKey),
     });
   }
 }

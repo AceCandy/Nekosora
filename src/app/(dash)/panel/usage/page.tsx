@@ -130,8 +130,12 @@ async function renderPanelUsageTab({
     upstreamModel: r.upstreamModel,
     promptTokens: r.promptTokens,
     completionTokens: r.completionTokens,
+    cacheReadTokens: r.cacheReadTokens,
     latencyMs: r.latencyMs,
     firstTokenLatencyMs: r.firstTokenLatencyMs,
+    // 用户自己的网关 key 名可下发;上游 key 是管理员配置,对 panel 不下发(数据层脱敏)。
+    apiKeyName: r.apiKeyName,
+    upstreamKeyMasked: null,
     createdAt: r.createdAt.toISOString(),
   }));
 
@@ -215,6 +219,9 @@ async function renderPanelErrorsTab({
     firstTokenLatencyMs: null,
     promptTokens: 0,
     completionTokens: 0,
+    // panel 错误视图:key 双字段都不下发(数据层脱敏,非仅 UI 隐藏)。
+    apiKeyName: null,
+    upstreamKeyMasked: null,
     category: classifyError({
       errorCode: r.errorCode,
       httpStatus: r.httpStatus ?? undefined,

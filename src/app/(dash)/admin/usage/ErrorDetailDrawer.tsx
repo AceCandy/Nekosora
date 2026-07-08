@@ -12,6 +12,7 @@
 import Modal from "@/shared/ui/Modal";
 import Badge from "@/shared/ui/Badge";
 import { useTranslations } from "next-intl";
+import { formatDateTimeLocal, formatDuration } from "@/shared/lib/format";
 import { type ErrorCategory } from "@/lib/error-classify";
 import type { ErrorLogClientRow } from "./ErrorLogsTable";
 
@@ -20,13 +21,6 @@ interface ErrorDetailDrawerProps {
   open: boolean;
   onClose: () => void;
   variant: "admin" | "panel";
-}
-
-function formatDateTime(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
 /** 分类对应的 badge 颜色(低饱和)。 */
@@ -57,11 +51,11 @@ export function ErrorDetailDrawer({ row, open, onClose, variant }: ErrorDetailDr
 
   // 通用字段行(admin / panel 共享)。
   const commonRows: { label: string; value: string }[] = [
-    { label: t("errors.detailCreatedAt"), value: formatDateTime(row.createdAt) },
+    { label: t("errors.detailCreatedAt"), value: formatDateTimeLocal(row.createdAt) },
     { label: t("errors.detailModel"), value: row.model },
     { label: t("errors.detailCategory"), value: t(`errors.categories.${category}` as const) },
     { label: t("errors.detailHttpStatus"), value: row.httpStatus != null ? String(row.httpStatus) : "-" },
-    { label: t("errors.detailLatency"), value: row.latencyMs != null ? `${row.latencyMs}ms` : "-" },
+    { label: t("errors.detailLatency"), value: formatDuration(row.latencyMs) },
   ];
 
   // admin 专属(含敏感信息:errorMessage/provider/route/requestPath/上游/tokens/TTFT)。
@@ -69,11 +63,13 @@ export function ErrorDetailDrawer({ row, open, onClose, variant }: ErrorDetailDr
     { label: t("errors.detailErrorCode"), value: row.errorCode },
     { label: t("errors.detailPhase"), value: phaseLabel },
     { label: t("errors.detailSource"), value: t(`sources.${row.source}` as const) },
+    { label: t("thKey"), value: row.apiKeyName ?? "-" },
+    { label: t("errors.detailUpstreamKey"), value: row.upstreamKeyMasked ?? "-" },
     { label: t("errors.detailUpstreamModel"), value: row.upstreamModel ?? "-" },
     { label: t("errors.detailProvider"), value: row.providerName ?? row.providerRef ?? "-" },
     { label: t("errors.detailRoute"), value: row.routeName ?? "-" },
     { label: t("errors.detailRequestPath"), value: row.requestPath ?? "-" },
-    { label: t("errors.detailTtft"), value: row.firstTokenLatencyMs != null ? `${row.firstTokenLatencyMs}ms` : "-" },
+    { label: t("errors.detailTtft"), value: formatDuration(row.firstTokenLatencyMs) },
     { label: t("errors.detailPromptTokens"), value: String(row.promptTokens) },
     { label: t("errors.detailCompletionTokens"), value: String(row.completionTokens) },
   ];

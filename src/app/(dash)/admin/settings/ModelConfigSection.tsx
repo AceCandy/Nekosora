@@ -80,7 +80,7 @@ export default async function ModelConfigSection({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-3xl">
       <div>
         <h2 className="text-base font-semibold text-neutral-900 dark:text-white">{labels.title}</h2>
         <p className="mt-1 text-sm text-neutral-500">{labels.desc}</p>

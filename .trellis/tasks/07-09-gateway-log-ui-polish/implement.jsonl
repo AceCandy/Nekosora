@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"双表日志/分流/脱敏契约 — 改日志展示与加字段必读，不破坏上期架构"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"双 dialect(pg/sqlite) 加列 + 迁移 — Phase 1 建列必读"}
+{"file":".trellis/spec/backend/gateway-routing.md","reason":"usedRoute.provider.apiKey 透传链路 — 上游 key 脱敏快照来源"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"Server/Client 边界、样式 token、表格 UI — 前端表格与布局调整"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"DTO 扩展(apiKeyName/cacheReadTokens/upstreamKeyMasked) + panel 脱敏白名单"}
