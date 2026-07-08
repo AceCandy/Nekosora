@@ -4,11 +4,16 @@ import { clsx } from "clsx";
 import { ArrowDown, ArrowUp, Minus } from "lucide-react";
 import type { MetricData, MetricItem } from "./schema";
 
-/** 趋势方向 → 图标 + 语义色（涨绿 / 跌红 / 平灰）。 */
+/** 趋势标记 → 方向族(箭头+涨跌色)或程度族(色点+品牌蓝深浅,不暗示涨跌)。 */
 const TREND_STYLES = {
+  // 方向族
   up: { Icon: ArrowUp, className: "text-emerald-600 dark:text-emerald-400" },
   down: { Icon: ArrowDown, className: "text-rose-600 dark:text-rose-400" },
   flat: { Icon: Minus, className: "text-neutral-400 dark:text-neutral-500" },
+  // 程度族:概率 / 强度类指标常用 high/medium/low,用色点区分、避免误导为涨跌方向
+  high: { dot: "bg-sora-blue", className: "text-sora-blue" },
+  medium: { dot: "bg-sora-blue/50", className: "text-sora-blue/70" },
+  low: { dot: "bg-neutral-400 dark:bg-neutral-500", className: "text-neutral-400 dark:text-neutral-500" },
 } as const;
 
 /** 单值指标卡片：label + value + 单位 + 趋势方向 + 变化量。 */
@@ -24,7 +29,13 @@ function MetricCard({ item }: { item: MetricItem }) {
         {item.unit ? (
           <span className="text-sm text-neutral-500 dark:text-neutral-400">{item.unit}</span>
         ) : null}
-        {trend ? <trend.Icon className={clsx("w-4 h-4 self-center", trend.className)} aria-hidden="true" /> : null}
+        {trend ? (
+          "dot" in trend ? (
+            <span className={clsx("inline-block w-2 h-2 rounded-full self-center", trend.dot)} aria-hidden="true" />
+          ) : (
+            <trend.Icon className={clsx("w-4 h-4 self-center", trend.className)} aria-hidden="true" />
+          )
+        ) : null}
         {item.delta ? (
           <span className={clsx("text-xs", trend?.className ?? "text-neutral-500 dark:text-neutral-400")}>
             {item.delta}

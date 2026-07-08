@@ -390,7 +390,7 @@ type 可选 bar/line/pie/area。pie 时 series 取首个 key 作为数值字段�
 \`\`\`metric
 [{"label":"最高温","value":35,"unit":"℃","trend":"up"},{"label":"最低温","value":22,"unit":"℃","trend":"flat"}]
 \`\`\`
-trend 可选 up/down/flat。
+trend 可选 up/down/flat(方向)或 high/medium/low(程度)。
 
 多列结构化数据用 table:
 \`\`\`table

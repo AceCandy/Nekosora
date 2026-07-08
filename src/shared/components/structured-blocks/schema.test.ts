@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseStructured } from "./schema";
+import { parsePartialMetricItems, parseStructured } from "./schema";
 
 describe("parseStructured", () => {
   it("合法 chart JSON 解析成功", () => {
@@ -55,6 +55,42 @@ describe("parseStructured", () => {
     ]);
     const r = parseStructured("metric", raw);
     expect(r.ok).toBe(true);
+  });
+
+  it("metric 程度族 trend(high/medium/low)解析成功", () => {
+    const r = parseStructured(
+      "metric",
+      JSON.stringify([
+        { label: "雷雨概率", value: 70, unit: "%", trend: "high" },
+        { label: "降水日数", value: 2, unit: "天", trend: "low" },
+      ]),
+    );
+    expect(r.ok).toBe(true);
+  });
+
+  it("metric 流式增量:半截数组只返回已闭合的指标项", () => {
+    const raw = `[
+      {"label": "周三", "value": 70, "unit": "%", "trend": "high"},
+      {"label": "周二", "val`;
+    const items = parsePartialMetricItems(raw);
+    expect(items).toHaveLength(1);
+    expect(items[0].label).toBe("周三");
+    expect(items[0].trend).toBe("high");
+  });
+
+  it("metric 流式增量:字符串内的括号不误切,且字段缺失项被丢弃", () => {
+    // label 里含 } 字符,且第二个元素缺 value(未闭合,本就不会被切)
+    const raw = `[
+      {"label": "a}b", "value": 1},
+      {"label": "c"`;
+    const items = parsePartialMetricItems(raw);
+    expect(items).toHaveLength(1);
+    expect(items[0].label).toBe("a}b");
+  });
+
+  it("metric 流式增量:未出现数组起始括号返回空", () => {
+    expect(parsePartialMetricItems("")).toEqual([]);
+    expect(parsePartialMetricItems("[")).toEqual([]);
   });
 
   it("metric 空数组返回 schema_mismatch", () => {

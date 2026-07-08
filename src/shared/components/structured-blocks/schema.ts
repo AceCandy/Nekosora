@@ -31,7 +31,7 @@ const MetricItemSchema = z.object({
   label: z.string(),
   value: z.union([z.string(), z.number()]),
   unit: z.string().optional(),
-  trend: z.enum(["up", "down", "flat"]).optional(),
+  trend: z.enum(["up", "down", "flat", "high", "medium", "low"]).optional(),
   delta: z.string().optional(),
 });
 
@@ -91,4 +91,50 @@ export function parseStructured(kind: StructuredKind, raw: string): StructuredPa
   const parsed = STRUCTURED_SCHEMAS[kind].safeParse(json);
   if (!parsed.success) return { ok: false, kind, reason: "schema_mismatch" };
   return { ok: true, kind, data: parsed.data };
+}
+
+/**
+ * 流式增量解析:从半截的 metric 数组 JSON 里切出已闭合、字段齐全的指标项,
+ * 用于流式态逐张画卡,无需等整个 fenced 块闭合。
+ *
+ * 仅处理数组形态;单对象半截无法可靠切字段,仍走块闭合渲染。
+ * 按括号深度扫描,字符串内的引号/括号被正确跳过,不被 JSON 字符串内容误导。
+ */
+export function parsePartialMetricItems(raw: string): MetricItem[] {
+  const start = raw.indexOf("[");
+  if (start < 0) return [];
+  const items: MetricItem[] = [];
+  let depth = 0;
+  let inStr = false;
+  let esc = false;
+  let elemStart = -1;
+  for (let i = start + 1; i < raw.length; i++) {
+    const c = raw[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === "\\") esc = true;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') {
+      inStr = true;
+      continue;
+    }
+    if (c === "{") {
+      if (depth === 0) elemStart = i;
+      depth++;
+    } else if (c === "}") {
+      depth--;
+      if (depth === 0 && elemStart >= 0) {
+        try {
+          const parsed = MetricItemSchema.safeParse(JSON.parse(raw.slice(elemStart, i + 1)));
+          if (parsed.success) items.push(parsed.data);
+        } catch {
+          // 切出来的是闭合对象,理论必能 parse;防御性跳过意外
+        }
+        elemStart = -1;
+      }
+    }
+  }
+  return items;
 }

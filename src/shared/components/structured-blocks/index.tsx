@@ -6,7 +6,7 @@ import { clsx } from "clsx";
 import { AlertTriangle, Check, Copy } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { CalloutData, ChartData, MetricData, StructuredKind, StructuredParseResult, TableData } from "./schema";
-import { parseStructured } from "./schema";
+import { parsePartialMetricItems, parseStructured } from "./schema";
 import { MetricBlock } from "./MetricBlock";
 import { TableBlock } from "./TableBlock";
 import { CalloutBlock } from "./CalloutBlock";
@@ -66,9 +66,14 @@ export function StructuredInlineView({
 
   const result = parseStructured(kind, raw);
 
-  // 流式渐进:累积内容能解析就先渲染(fenced 块闭合即出,不必等整条消息流完);
-  // 半截 JSON 解析失败时静默骨架,不报错闪烁。流式态不显示复制按钮(内容仍在变)。
+  // 流式渐进:metric 数组支持块内增量,从未闭合的半截 JSON 切出已完成的指标项逐张渲染;
+  // 其余结构走「闭合即渲染」。切不出完整项或块未闭合时静默骨架,不报错闪烁。
+  // 流式态不显示复制按钮(内容仍在变)。
   if (isStreaming) {
+    if (kind === "metric") {
+      const items = parsePartialMetricItems(raw);
+      if (items.length > 0) return <MetricBlock data={items} />;
+    }
     return result.ok ? <StructuredBlock result={result} /> : <SkeletonBlock kind={kind} />;
   }
 
