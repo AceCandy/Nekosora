@@ -36,6 +36,13 @@
       "when": 1783413372026,
       "tag": "0004_user_models_nullable_legacy",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1783524012232,
+      "tag": "0005_flashy_dreaming_celestial",
+      "breakpoints": true
     }
   ]
 }

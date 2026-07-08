@@ -12,22 +12,30 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { streamChat } from "@/lib/stream";
 import { verifyKey, extractBearer } from "@/lib/keys";
-import { apiErrorLocalized, ErrorCode } from "@/lib/errors";
-import type { IRRequest } from "@/lib/providers/types";
+import { apiErrorLocalized, ErrorCode, ERROR_META } from "@/lib/errors";
+import { classifyError } from "@/lib/error-classify";
+import { logUsage } from "@/lib/usage";
+import type { IRRequest, CallContext } from "@/lib/providers/types";
 import { resolveReasoningLevel } from "@/lib/reasoning";
 
 export const runtime = "nodejs";
 // 禁用响应缓冲,保证 SSE 实时推送(Next.js 网关关键坑)。
 export const dynamic = "force-dynamic";
 
+/** 请求路径常量(错误日志 requestPath 用)。 */
+const REQUEST_PATH = "/v1/chat/completions";
+
 export async function POST(req: NextRequest) {
+  const startedAt = Date.now();
   // 1. 鉴权
   const rawKey = extractBearer(req.headers.get("authorization"));
   if (!rawKey) {
+    await logRouteError({ startedAt, code: ErrorCode.AUTH_MISSING_KEY });
     return apiErrorLocalized(ErrorCode.AUTH_MISSING_KEY, req);
   }
   const verified = await verifyKey(rawKey);
   if (!verified) {
+    await logRouteError({ startedAt, code: ErrorCode.AUTH_INVALID_KEY });
     return apiErrorLocalized(ErrorCode.AUTH_INVALID_KEY, req);
   }
 
@@ -36,12 +44,19 @@ export async function POST(req: NextRequest) {
   try {
     body = await req.json();
   } catch {
+    await logRouteError({ startedAt, ctx: verified.ctx, code: ErrorCode.REQUEST_INVALID_JSON });
     return apiErrorLocalized(ErrorCode.REQUEST_INVALID_JSON, req);
   }
 
   const model = body.model as string | undefined;
   const messages = body.messages as IRRequest["messages"] | undefined;
   if (!model || !Array.isArray(messages) || messages.length === 0) {
+    await logRouteError({
+      startedAt,
+      ctx: verified.ctx,
+      code: ErrorCode.REQUEST_MISSING_FIELD,
+      model: model || "(unknown)",
+    });
     return apiErrorLocalized(ErrorCode.REQUEST_MISSING_FIELD, req, { fields: ["model", "messages"] });
   }
 
@@ -220,4 +235,43 @@ async function nonStreamResponse(
     ],
     usage,
   });
+}
+
+/**
+ * 记录一条 route 层(调 streamChat 前)的失败请求到 ops_error_logs。
+ * 这些错误发生在 streamChat 之外(鉴权 / 请求体校验),stream.ts 不会记录,route 必须自己写。
+ * ctx 缺失(鉴权失败)时构造空身份,userId 由 logUsage 收敛为 null。
+ */
+async function logRouteError(opts: {
+  startedAt: number;
+  ctx?: CallContext;
+  model?: string;
+  code: string;
+  errorMessage?: string;
+}): Promise<void> {
+  const ctx: CallContext = opts.ctx ?? {
+    userId: "",
+    apiKeyId: null,
+    keyKind: null,
+    source: "gateway",
+  };
+  const httpStatus = ERROR_META[opts.code as keyof typeof ERROR_META]?.status;
+  try {
+    await logUsage({
+      ctx,
+      runId: `err_${crypto.randomUUID()}`,
+      model: opts.model ?? "(unknown)",
+      usage: {},
+      latencyMs: Date.now() - opts.startedAt,
+      status: "failed",
+      errorCode: opts.code,
+      errorMessage: opts.errorMessage,
+      httpStatus,
+      requestPath: REQUEST_PATH,
+      errorPhase: classifyError({ errorCode: opts.code, httpStatus }).phase,
+      errorType: opts.code,
+    });
+  } catch {
+    /* 日志失败不阻断主流程 */
+  }
 }

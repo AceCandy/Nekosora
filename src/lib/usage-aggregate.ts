@@ -4,7 +4,7 @@
  * dialect 差异(PG date_trunc / SQLite strftime)在此封装,业务层不感知。
  * 时间桶粒度:hour(24h 范围)/ day(7d/30d 范围)。
  */
-import { sql, and, gte, eq } from "drizzle-orm";
+import { sql, and, gte, eq, desc, lte, type SQL } from "drizzle-orm";
 import { getDb, getSchema, isPg } from "@/lib/infra/db";
 
 export type TimeRange = "24h" | "7d" | "30d";
@@ -130,4 +130,132 @@ export async function getSourceBreakdown(range: TimeRange, userId?: string): Pro
     source: String(r.source),
     calls: Number(r.calls),
   }));
+}
+
+// ===========================================================================
+// 用量明细分页查询(Phase 4):替换 admin/usage/page.tsx 写死的 limit(20),
+// 供 Phase 5 前端双 Tab 的「用量明细」调用。userId 隔离语义同 error-log-repository。
+// ===========================================================================
+
+/** 用量明细行 DTO(成功计费行,含路由可读信息快照)。 */
+export interface UsageLogRow {
+  id: string;
+  source: string;
+  userId: string | null;
+  apiKeyId: string | null;
+  keyKind: string | null;
+  model: string;
+  providerRef: string | null;
+  promptTokens: number;
+  completionTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  reasoningTokens: number;
+  latencyMs: number | null;
+  status: string;
+  firstTokenLatencyMs: number | null;
+  providerName: string | null;
+  routeId: string | null;
+  routeName: string | null;
+  upstreamModel: string | null;
+  createdAt: Date;
+}
+
+/** 用量明细过滤项(全部可选,精确匹配)。 */
+export interface UsageLogFilters {
+  model?: string;
+  providerName?: string;
+  routeName?: string;
+  source?: string;
+  startAt?: Date;
+  endAt?: Date;
+}
+
+export interface ListUsageLogsOptions {
+  page: number;
+  pageSize: number;
+  /** 用户隔离(panel 必传;admin 不传)。 */
+  userId?: string;
+  filters?: UsageLogFilters;
+}
+
+export interface ListUsageLogsResult {
+  rows: UsageLogRow[];
+  total: number;
+}
+
+/** 组装 where 条件(list 与 count 复用)。 */
+function buildUsageWhere(opts: ListUsageLogsOptions): SQL | undefined {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const s = getSchema() as any;
+  const t = s.usageLogs;
+  const conds: SQL[] = [];
+  if (opts.userId) conds.push(eq(t.userId, opts.userId));
+  const f = opts.filters;
+  if (f) {
+    if (f.model) conds.push(eq(t.model, f.model));
+    if (f.providerName) conds.push(eq(t.providerName, f.providerName));
+    if (f.routeName) conds.push(eq(t.routeName, f.routeName));
+    if (f.source) conds.push(eq(t.source, f.source));
+    if (f.startAt) conds.push(gte(t.createdAt, f.startAt));
+    if (f.endAt) conds.push(lte(t.createdAt, f.endAt));
+  }
+  return conds.length > 0 ? and(...conds) : undefined;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toUsageRow(r: any): UsageLogRow {
+  return {
+    id: String(r.id),
+    source: String(r.source),
+    userId: r.userId ?? null,
+    apiKeyId: r.apiKeyId ?? null,
+    keyKind: r.keyKind ?? null,
+    model: String(r.model),
+    providerRef: r.providerRef ?? null,
+    promptTokens: Number(r.promptTokens ?? 0),
+    completionTokens: Number(r.completionTokens ?? 0),
+    cacheReadTokens: Number(r.cacheReadTokens ?? 0),
+    cacheWriteTokens: Number(r.cacheWriteTokens ?? 0),
+    reasoningTokens: Number(r.reasoningTokens ?? 0),
+    latencyMs: r.latencyMs ?? null,
+    status: String(r.status ?? "success"),
+    firstTokenLatencyMs: r.firstTokenLatencyMs ?? null,
+    providerName: r.providerName ?? null,
+    routeId: r.routeId ?? null,
+    routeName: r.routeName ?? null,
+    upstreamModel: r.upstreamModel ?? null,
+    createdAt: r.createdAt instanceof Date ? r.createdAt : new Date(r.createdAt),
+  };
+}
+
+/**
+ * 分页查询用量明细(成功计费,按 createdAt desc)。
+ * userId 传入时强制隔离(panel);不传时看全部(admin)。
+ */
+export async function listUsageLogs(
+  opts: ListUsageLogsOptions,
+): Promise<ListUsageLogsResult> {
+  const db = await getDb();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const s = getSchema() as any;
+  const t = s.usageLogs;
+  const where = buildUsageWhere(opts);
+  const page = Math.max(1, opts.page);
+  const pageSize = Math.max(1, opts.pageSize);
+  const offset = (page - 1) * pageSize;
+
+  const [rows, countRows] = await Promise.all([
+    db
+      .select()
+      .from(t)
+      .where(where)
+      .orderBy(desc(t.createdAt))
+      .limit(pageSize)
+      .offset(offset),
+    db.select({ count: sql<number>`count(*)` }).from(t).where(where),
+  ]);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return { rows: (rows as any[]).map(toUsageRow), total: Number(countRows[0]?.count ?? 0) };
 }

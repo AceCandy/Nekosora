@@ -1,0 +1,6 @@
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"双 dialect(pg/sqlite) schema 对齐、迁移生成、命名约束 — Phase 1 建表必读"}
+{"file":".trellis/spec/backend/gateway-routing.md","reason":"resolveRoutes/ResolvedRoute 决策树 — 透传 routeId/providerName 的依据"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"统一错误契约/ErrorCode — errorPhase 与粗分类映射依据"}
+{"file":".trellis/spec/backend/directory-structure.md","reason":"app/lib/repositories 分层 — 新 error-log-repository 落位"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"Server/Client 组件、样式 token、表格/抽屉 UI 规范 — admin/panel 双 Tab 前端"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"DB 行 unknown 收敛、DTO 组织 — 双表查询 DTO 与用户端脱敏视图"}

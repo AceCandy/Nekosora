@@ -12,22 +12,40 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { verifyKey, extractBearer } from "@/lib/keys";
 import { transcribeViaRoute, RoutingError } from "@/lib/providers/multimodal/audio-stt";
-import { apiErrorLocalized, ErrorCode, routingCodeToErrorCode } from "@/lib/errors";
+import {
+  apiErrorLocalized,
+  ErrorCode,
+  routingCodeToErrorCode,
+  ERROR_META,
+} from "@/lib/errors";
+import { classifyError } from "@/lib/error-classify";
 import { logUsage } from "@/lib/usage";
+import type { CallContext } from "@/lib/providers/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/** 请求路径常量(错误日志 requestPath 用)。 */
+const REQUEST_PATH = "/v1/audio/transcriptions";
+
 export async function POST(req: NextRequest) {
+  const startedAt = Date.now();
   const rawKey = extractBearer(req.headers.get("authorization"));
-  if (!rawKey) return apiErrorLocalized(ErrorCode.AUTH_MISSING_KEY, req);
+  if (!rawKey) {
+    await logRouteError({ startedAt, code: ErrorCode.AUTH_MISSING_KEY });
+    return apiErrorLocalized(ErrorCode.AUTH_MISSING_KEY, req);
+  }
   const verified = await verifyKey(rawKey);
-  if (!verified) return apiErrorLocalized(ErrorCode.AUTH_INVALID_KEY, req);
+  if (!verified) {
+    await logRouteError({ startedAt, code: ErrorCode.AUTH_INVALID_KEY });
+    return apiErrorLocalized(ErrorCode.AUTH_INVALID_KEY, req);
+  }
 
   let formData: FormData;
   try {
     formData = await req.formData();
   } catch {
+    await logRouteError({ startedAt, ctx: verified.ctx, code: ErrorCode.REQUEST_INVALID_JSON });
     return apiErrorLocalized(ErrorCode.REQUEST_INVALID_JSON, req);
   }
 
@@ -36,14 +54,19 @@ export async function POST(req: NextRequest) {
   const language = String(formData.get("language") ?? "") || undefined;
   const prompt = String(formData.get("prompt") ?? "") || undefined;
 
-  if (!model) return apiErrorLocalized(ErrorCode.REQUEST_MISSING_FIELD, req, { fields: ["model"] });
+  if (!model) {
+    await logRouteError({ startedAt, ctx: verified.ctx, code: ErrorCode.REQUEST_MISSING_FIELD });
+    return apiErrorLocalized(ErrorCode.REQUEST_MISSING_FIELD, req, { fields: ["model"] });
+  }
   if (!(file instanceof File)) {
+    await logRouteError({
+      startedAt, ctx: verified.ctx, code: ErrorCode.REQUEST_MISSING_FIELD, model,
+    });
     return apiErrorLocalized(ErrorCode.REQUEST_MISSING_FIELD, req, { fields: ["file"] });
   }
 
   const audio = Buffer.from(await file.arrayBuffer());
   const ctx = verified.ctx;
-  const startedAt = Date.now();
 
   try {
     const result = await transcribeViaRoute(ctx, model, {
@@ -60,11 +83,22 @@ export async function POST(req: NextRequest) {
       usage: {},
       latencyMs: Date.now() - startedAt,
       status: "success",
+      // 路由可读信息快照(与 stream.ts 同款)。
+      providerName: result.providerName,
+      routeId: result.routeId,
+      routeName: result.routeName,
+      upstreamModel: result.upstreamModel,
     });
     return NextResponse.json({ text: result.text });
   } catch (err) {
-    if (err instanceof RoutingError) return apiErrorLocalized(routingCodeToErrorCode(err.code), req);
+    // 路由/能力解析失败(适配器内部抛 RoutingError):补写 ops_error_logs。
+    if (err instanceof RoutingError) {
+      const code = routingCodeToErrorCode(err.code);
+      await logRouteError({ startedAt, ctx, model, code, errorMessage: err.message });
+      return apiErrorLocalized(code, req);
+    }
     console.error("[/v1/audio/transcriptions] 失败:", err);
+    const code = ErrorCode.MEDIA_STT_FAILED;
     await safeLogUsage({
       ctx,
       runId: `stt_${crypto.randomUUID()}`,
@@ -72,13 +106,56 @@ export async function POST(req: NextRequest) {
       usage: {},
       latencyMs: Date.now() - startedAt,
       status: "failed",
-      errorCode: "generation_failed",
+      errorCode: code,
+      errorMessage: err instanceof Error ? err.message : String(err),
+      httpStatus: ERROR_META[code].status,
+      requestPath: REQUEST_PATH,
+      errorPhase: classifyError({ errorCode: code, httpStatus: ERROR_META[code].status }).phase,
+      errorType: code,
     });
     return apiErrorLocalized(
-      ErrorCode.MEDIA_STT_FAILED,
+      code,
       req,
       err instanceof Error ? { message: err.message } : undefined,
     );
+  }
+}
+
+/**
+ * 记录一条 route 层(调适配器前)的失败请求到 ops_error_logs。
+ * ctx 缺失(鉴权失败)时构造空身份,userId 由 logUsage 收敛为 null。
+ */
+async function logRouteError(opts: {
+  startedAt: number;
+  ctx?: CallContext;
+  model?: string;
+  code: string;
+  errorMessage?: string;
+}): Promise<void> {
+  const ctx: CallContext = opts.ctx ?? {
+    userId: "",
+    apiKeyId: null,
+    keyKind: null,
+    source: "gateway",
+  };
+  const httpStatus = ERROR_META[opts.code as keyof typeof ERROR_META]?.status;
+  try {
+    await logUsage({
+      ctx,
+      runId: `err_${crypto.randomUUID()}`,
+      model: opts.model ?? "(unknown)",
+      usage: {},
+      latencyMs: Date.now() - opts.startedAt,
+      status: "failed",
+      errorCode: opts.code,
+      errorMessage: opts.errorMessage,
+      httpStatus,
+      requestPath: REQUEST_PATH,
+      errorPhase: classifyError({ errorCode: opts.code, httpStatus }).phase,
+      errorType: opts.code,
+    });
+  } catch {
+    /* 日志失败不阻断主流程 */
   }
 }
 

@@ -777,12 +777,61 @@ export const usageLogs = pgTable(
     reasoningTokens: integer("reasoning_tokens").notNull().default(0),
     latencyMs: integer("latency_ms"),
     status: text("status").notNull().default("success"),
+    // —— 网关日志重构:成功计费补充字段(均 nullable,兼容历史行) ——
+    firstTokenLatencyMs: integer("first_token_latency_ms"), // 首 token 延迟(TTFT)
+    providerName: text("provider_name"), // 可读服务商名快照(替代裸 providerRef 展示)
+    routeId: text("route_id"), // 命中路由 id 溯源
+    routeName: text("route_name"), // 组合展示名(providerName · upstreamModel)
+    upstreamModel: text("upstream_model"), // 真实上游模型名(区别于对外 model)
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (t) => [
     index("usage_logs_user_idx").on(t.userId),
     index("usage_logs_created_idx").on(t.createdAt),
     index("usage_logs_model_idx").on(t.model),
+  ],
+);
+
+// 网关调用日志重构:失败 / 中断请求独立存表(物理双表)。
+// 成功计费走 usage_logs;此处只收 failed / interrupted,补全错误码 / HTTP 状态 / 阶段等。
+export const opsErrorLogs = pgTable(
+  "ops_error_logs",
+  {
+    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
+    requestId: text("request_id").notNull(), // runId,串联一次生成
+    source: text("source").notNull(), // "chat" | "gateway"
+    userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
+    apiKeyId: text("api_key_id").references(() => apiKeys.id, {
+      onDelete: "set null",
+    }),
+    keyKind: text("key_kind"), // "master" | "sub" | null(chat)
+    model: text("model").notNull(), // 对外模型名
+    upstreamModel: text("upstream_model"), // 真实上游模型名
+    providerName: text("provider_name"), // 可读服务商名快照
+    providerRef: text("provider_ref"), // 裸 <source>:<providerId>,保留溯源
+    routeId: text("route_id"),
+    routeName: text("route_name"),
+    requestPath: text("request_path"), // 如 /v1/chat/completions
+    stream: boolean("stream").notNull().default(false), // 是否流式
+    httpStatus: integer("http_status"), // HTTP 状态码(区别于枚举 status)
+    errorCode: text("error_code").notNull(), // 错误码(generation_failed/routing_error/...)
+    errorMessage: text("error_message"), // 错误信息(脱敏后)
+    // errorPhase 本期 Phase 2 暂不计算,留 null;Phase 3 由 error-classify 填充。
+    errorPhase: text("error_phase"), // 生命周期阶段(routing/upstream/network/internal/auth/request)
+    errorType: text("error_type"), // 具体类型
+    promptTokens: integer("prompt_tokens").notNull().default(0), // 失败前已计 token(可能 0)
+    completionTokens: integer("completion_tokens").notNull().default(0),
+    latencyMs: integer("latency_ms"), // 端到端耗时
+    firstTokenLatencyMs: integer("first_token_latency_ms"), // 失败前是否产出首 token
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("ops_error_logs_user_idx").on(t.userId),
+    index("ops_error_logs_created_idx").on(t.createdAt),
+    index("ops_error_logs_error_code_idx").on(t.errorCode),
+    index("ops_error_logs_http_status_idx").on(t.httpStatus),
+    index("ops_error_logs_provider_ref_idx").on(t.providerRef),
+    index("ops_error_logs_source_idx").on(t.source),
   ],
 );
 
@@ -801,4 +850,5 @@ export type {
   AccessScope,
   BindingScope,
   MessageStatus,
+  ErrorPhase,
 } from "@/db/types";

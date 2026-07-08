@@ -78,3 +78,6 @@ export type ProviderProtocol =
 export type AccessScope = "public" | "internal";
 export type BindingScope = "global" | "byo";
 export type MessageStatus = "pending" | "streaming" | "success" | "interrupted";
+/** 错误请求的生命周期阶段(ops_error_logs.errorPhase,双 dialect 均以 text 存储)。 */
+export type ErrorPhase =
+  | "routing" | "upstream" | "network" | "internal" | "auth" | "request";

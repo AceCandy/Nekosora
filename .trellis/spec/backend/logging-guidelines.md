@@ -1,51 +1,134 @@
 # Logging Guidelines
 
-> How logging is done in this project.
+> Nekusora 网关调用日志架构契约。权威实现：`src/lib/usage.ts`、`src/lib/stream.ts`、`src/lib/error-classify.ts`、`src/db/schema/{pg,sqlite}.ts`。
 
 ---
 
 ## Overview
 
-<!--
-Document your project's logging conventions here.
+两类日志：
 
-Questions to answer:
-- What logging library do you use?
-- What are the log levels and when to use each?
-- What should be logged?
-- What should NOT be logged (PII, secrets)?
--->
+1. **运行时日志**：`console.*`（开发）+ prom-client `/metrics`（运维）。轻量、不持久化业务上下文。
+2. **网关调用日志**：落库持久化，供 admin/panel 用量与错误分析。**本文聚焦此类。**
 
-(To be filled by the team)
+网关调用日志采用**物理双表**，参考 sub2api 的分离思路：
 
----
-
-## Log Levels
-
-<!-- When to use each level: debug, info, warn, error -->
-
-(To be filled by the team)
+| 表 | 存什么 | 写入条件 |
+|----|--------|----------|
+| `usage_logs` | 成功且计费的调用（chat + gateway） | `status === "success"` |
+| `ops_error_logs` | 失败 / 中断的调用（high-write） | `status === "failed" \| "interrupted"` |
 
 ---
 
-## Structured Logging
+## 分流契约（logUsage）
 
-<!-- Log format, required fields -->
+`logUsage(params)`（`src/lib/usage.ts`）是唯一写入入口，**按 `status` 自动路由到两表**，调用方不感知表结构：
 
-(To be filled by the team)
+```
+success            → insert usage_logs   (含 TTFT/providerName/routeId/routeName/upstreamModel)
+failed/interrupted → insert ops_error_logs
+```
+
+**硬规则**：
+
+- 写入**永不阻断主流程**：整段 `try/catch`，失败只 `console.error`。
+- `errorCode` 列 NOT NULL，写入时 `?? "unknown"` 兜底；`userId` 空串收敛 `null`（FK 安全）。
+- Prometheus `observeRequest` 埋点不变（source/model/status/latency/tokens）。
 
 ---
 
-## What to Log
+## 必填 / 关键字段
 
-<!-- Important events to log -->
+**`usage_logs`**（成功用量，新增列均 nullable 兼容历史）：
 
-(To be filled by the team)
+- `firstTokenLatencyMs` — TTFT
+- `providerName` — 可读服务商名快照（替代裸 `providerRef` 展示）
+- `routeId` / `routeName` — 命中路由溯源
+- `upstreamModel` — 真实上游模型名（区别于对外 `model`）
+
+**`ops_error_logs`**（错误请求）：`requestId`(runId) / source / 身份(user/key) / model / 路由信息 / `requestPath` / `stream` / `httpStatus` / `errorCode` / `errorMessage` / `errorPhase` / `errorType` / token / `latencyMs` / `firstTokenLatencyMs`。索引：userId / createdAt / errorCode / httpStatus / providerRef / source。
+
+---
+
+## TTFT 采样（first token latency）
+
+- **流式 `streamChat`**：`streamWithRoute` 在首个 `text-delta` / `reasoning-delta` 时回写共享 `timing.firstTokenAt`（`if undefined` 守卫，**first-token-wins across failover**）；`finally` 计算 `firstTokenLatencyMs = firstTokenAt - startedAt`。
+- **非流式 `generateChat`**：`undefined`（一次性返回，无首 token 概念）。
+- 路由解析失败 / 全路由失败：`null`。
+
+---
+
+## 可读 Provider / Route（写入快照）
+
+`global_routes` / `user_routes` **无 `name` 列**，可读信息来源：
+
+- `providerName` ← `global_providers.name` / `user_providers.name`，在 `toResolvedProvider` 注入 `ResolvedProvider.name`，logUsage 时快照。
+- `routeName = ${providerName} · ${upstreamModelName}`（组合展示名）。
+- `routeId` ← route 原始 id（`ResolvedRoute.routeId`）。
+- `providerRef`（`<source>:<providerId>`）两表都保留，用于溯源；**前端优先展示 `providerName`，缺失降级到 `providerRef` 或 `-`**。
+
+日志是历史记录 → 写入时**快照**，provider 改名不影响历史行。
+
+---
+
+## 错误分类（error-classify.ts）
+
+`classifyError({ errorCode?, httpStatus?, errorMessage? }) → { phase, category }`，单一来源：
+
+- **优先级**：errorCode 精确匹配 > httpStatus > errorMessage 关键字 > 兜底 `internal/other`。
+- **`errorPhase`**（生命周期）：`routing` / `upstream` / `network` / `internal` / `auth` / `request`。
+- **`category`**（粗分类，前端 i18n key `admin.usage.errors.categories.*`）：`auth` / `service_unavailable` / `upstream` / `internal` / `rate_limit` / `quota` / `invalid_request` / `other`。
+
+**硬规则**：新增 `ErrorCode`（`src/lib/errors.ts`）或 RoutingError 短码时，**必须同步补 `classifyError` 映射 + 单测**，否则落到兜底分类。
+
+---
+
+## 错误落库边界（避免双写）
+
+| 错误发生点 | 谁写 ops_error_logs |
+|------------|---------------------|
+| `streamChat`/`generateChat` **内部**（路由解析失败、生成失败） | `stream.ts` 的 `finally` |
+| `route.ts` **层**（调 streamChat/adapter **之前**：auth / json / missing-field / RoutingError） | `route.ts` 自己（`logRouteError`） |
+
+**边界**：`route.ts` 只写 pre-streamChat 错误，**不重复写** stream 内部错误（stream.ts 独占 chat 写入；多模态 adapter 自身不写日志）。
+
+stream 层写的 failed 行 `httpStatus` / `requestPath` 留 null（无 HTTP 上下文）；route 层错误补全这两字段。
 
 ---
 
 ## What NOT to Log
 
-<!-- Sensitive data, PII, secrets -->
+- ❌ 完整 request body / response body（错误表只存脱敏摘要 / requestPath）。
+- ❌ 凭证、Authorization header、api key 明文。
+- ❌ 用户端（panel）错误视图的敏感字段——**数据层脱敏**（见下）。
 
-(To be filled by the team)
+---
+
+## 用户端脱敏（panel，数据层非 UI）
+
+panel `page.tsx` 在**服务端**构建 `clientRows` 时直接置空敏感字段，浏览器网络请求 / React props 都拿不到：
+
+| 下发（白名单） | 置空 |
+|----------------|------|
+| id / createdAt / model / httpStatus / latencyMs / `category`（服务端派生） | errorMessage / errorCode / errorPhase / providerName / providerRef / routeName / upstreamModel / requestPath / source / tokens / firstTokenLatencyMs |
+
+`category` 在服务端用完整线索算好后，原始 `errorMessage` 立即丢弃。**不是 UI 隐藏，是数据不下发。**
+
+---
+
+## 查询层
+
+- `src/lib/repositories/error-log-repository.ts`：`listErrorLogs({ page, pageSize, userId?, filters? })` / `getErrorLog(id, userId?)`。**userId 传入即强制 `where`**（panel 防越权），admin 不传看全部。
+- `src/lib/usage-aggregate.ts` `listUsageLogs`：用量明细分页 + 筛选。
+- 聚合（`getTimeSeries` / `getModelBreakdown` / `getSourceBreakdown`）只查 `usage_logs` → 失败不进 → **自然只统计成功**，无需改。
+- AUTH 噪声：`ops_error_logs` 默认 `excludeErrorPhase: "auth"`（扫描流量放大），用户可显式显示。
+
+---
+
+## Common Mistakes
+
+- **在调用点手写 insert usage_logs/ops_error_logs** → 必须走 `logUsage`，由它按 status 分流。
+- **route.ts 重复写 stream 内部错误** → 只写 pre-streamChat 错误，避免双写。
+- **新增 ErrorCode 没补 `classifyError` 映射** → 错误落到兜底 `internal/other`，分类失真。
+- **panel 错误视图用 UI 隐藏敏感字段** → 必须服务端置空（数据层脱敏），否则网络请求仍泄露。
+- **`logUsage` 抛错阻断主流程** → 永不抛错，失败只 `console.error`。

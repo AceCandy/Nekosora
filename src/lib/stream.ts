@@ -17,6 +17,7 @@ import { buildLanguageModelWithKey } from "@/lib/providers/registry";
 import { orderedWeightedKeys } from "@/lib/providers/keys";
 import { recordSuccess, recordFailure } from "@/lib/circuit-breaker";
 import { logUsage } from "@/lib/usage";
+import { classifyError } from "@/lib/error-classify";
 import { buildReasoningProviderOptions } from "@/lib/reasoning";
 import type {
   CallContext,
@@ -63,6 +64,9 @@ export async function* streamChat(
   const startedAt = Date.now();
   let finalUsage: IRUsage = {};
   let usedRoute: ResolvedRoute | undefined;
+  // 首 token 时刻(TTFT)。用 mutable 对象传给 streamWithRoute,使其能在收到首个
+  // text-delta / reasoning-delta 时回写;finally 据此计算 firstTokenLatencyMs。
+  const timing: { firstTokenAt?: number } = {};
 
   // 活跃流式连接计数(metrics)。惰性加载,metrics 不可用时降级为 no-op。
   let releaseStream: () => void = () => {};
@@ -79,14 +83,16 @@ export async function* streamChat(
   try {
     routes = await resolveRoutes(ctx, request.model);
   } catch (err) {
-    yield {
-      type: "error",
-      error: err instanceof Error ? err.message : "路由解析失败",
-      code: err instanceof RoutingError ? err.code : "routing_error",
-    };
+    const errCode = err instanceof RoutingError ? err.code : "routing_error";
+    const errMsg = err instanceof Error ? err.message : "路由解析失败";
+    yield { type: "error", error: errMsg, code: errCode };
     await logUsage({
       ctx, runId, model: request.model, usage: {},
-      latencyMs: Date.now() - startedAt, status: "failed", errorCode: "routing_error",
+      latencyMs: Date.now() - startedAt, status: "failed", errorCode: errCode,
+      errorMessage: errMsg,
+      errorPhase: classifyError({ errorCode: errCode }).phase,
+      errorType: errCode,
+      stream: true,
     });
     return;
   }
@@ -106,7 +112,7 @@ export async function* streamChat(
       for (let k = 0; k < keySeq.length; k++) {
         const tryKey = keySeq[k].key;
         try {
-          for await (const ev of streamWithRoute(route, request, tryKey)) {
+          for await (const ev of streamWithRoute(route, request, tryKey, timing)) {
             yield ev;
             if (ev.type === "finish") finalUsage = ev.usage;
           }
@@ -147,6 +153,18 @@ export async function* streamChat(
     }
   } finally {
     releaseStream();
+    // 首 token 延迟(TTFT):仅有首 token 产出时才有值;路由解析失败 / 全路由失败 / 未产出首 token → undefined。
+    const firstTokenLatencyMs =
+      timing.firstTokenAt !== undefined ? timing.firstTokenAt - startedAt : undefined;
+    // 失败时的错误文案/分类(成功路径不传错误字段)。
+    const failedErrorCode = succeeded ? undefined : "generation_failed";
+    const failedErrMsg = succeeded
+      ? undefined
+      : lastError instanceof Error
+        ? lastError.message
+        : lastError
+          ? String(lastError)
+          : undefined;
     // try/finally 兜底:无论成功/失败/中断,都记录一条用量。
     await logUsage({
       ctx,
@@ -156,7 +174,21 @@ export async function* streamChat(
       usage: finalUsage,
       latencyMs: Date.now() - startedAt,
       status: succeeded ? "success" : "failed",
-      errorCode: succeeded ? undefined : "generation_failed",
+      errorCode: failedErrorCode,
+      errorMessage: failedErrMsg,
+      errorPhase: failedErrorCode
+        ? classifyError({ errorCode: failedErrorCode }).phase
+        : undefined,
+      errorType: failedErrorCode,
+      // 路由可读信息快照(provider 改名不影响历史行)。
+      providerName: usedRoute?.provider.name,
+      routeId: usedRoute?.routeId,
+      routeName: usedRoute
+        ? `${usedRoute.provider.name} · ${usedRoute.upstreamModelName}`
+        : undefined,
+      upstreamModel: usedRoute?.upstreamModelName,
+      firstTokenLatencyMs,
+      stream: true,
     });
   }
 }
@@ -190,6 +222,8 @@ async function* streamWithRoute(
   route: ResolvedRoute,
   request: IRRequest,
   apiKey: string,
+  /** 首 token 计时载体(mutable,由调用方持有;首个文本/推理增量时回写 firstTokenAt)。 */
+  timing: { firstTokenAt?: number },
 ): AsyncGenerator<StreamEvent, void, unknown> {
   const model = buildLanguageModelWithKey(route, apiKey); // 失败则抛出,交由上层故障转移
   const { system, messages } = separateSystem(request);
@@ -212,9 +246,13 @@ async function* streamWithRoute(
   for await (const part of result.stream) {
     switch (part.type) {
       case "text-delta":
+        // 首 token 采样:仅首次 text-delta 时记录(后续 delta 不覆盖)。
+        if (timing.firstTokenAt === undefined) timing.firstTokenAt = Date.now();
         yield { type: "text-delta", text: part.text };
         break;
       case "reasoning-delta":
+        // 首 token 采样:推理增量也算首 token(部分模型先吐 reasoning 再吐正文)。
+        if (timing.firstTokenAt === undefined) timing.firstTokenAt = Date.now();
         // 推理增量(如 deepseek-r1/Claude thinking)透传给 UI。
         yield { type: "reasoning-delta", text: part.text };
         break;
@@ -284,11 +322,17 @@ export async function generateChat(opts: StreamChatOptions): Promise<GenerateCha
   try {
     routes = await resolveRoutes(ctx, request.model);
   } catch (err) {
+    const errCode = err instanceof RoutingError ? err.code : "routing_error";
+    const errMsg = err instanceof Error ? err.message : "路由解析失败";
     await logUsage({
       ctx, runId, model: request.model, usage: {},
-      latencyMs: Date.now() - startedAt, status: "failed", errorCode: "routing_error",
+      latencyMs: Date.now() - startedAt, status: "failed", errorCode: errCode,
+      errorMessage: errMsg,
+      errorPhase: classifyError({ errorCode: errCode }).phase,
+      errorType: errCode,
+      stream: false,
     });
-    return { text: "", error: err instanceof Error ? err.message : "路由解析失败" };
+    return { text: "", error: errMsg };
   }
 
   let lastError: unknown = null;
@@ -351,6 +395,14 @@ export async function generateChat(opts: StreamChatOptions): Promise<GenerateCha
     return { text, usage: finalUsage };
   } finally {
     releaseStream();
+    const failedErrorCode = succeeded ? undefined : "generation_failed";
+    const failedErrMsg = succeeded
+      ? undefined
+      : lastError instanceof Error
+        ? lastError.message
+        : lastError
+          ? String(lastError)
+          : undefined;
     await logUsage({
       ctx,
       runId,
@@ -359,7 +411,22 @@ export async function generateChat(opts: StreamChatOptions): Promise<GenerateCha
       usage: finalUsage,
       latencyMs: Date.now() - startedAt,
       status: succeeded ? "success" : "failed",
-      errorCode: succeeded ? undefined : "generation_failed",
+      errorCode: failedErrorCode,
+      errorMessage: failedErrMsg,
+      errorPhase: failedErrorCode
+        ? classifyError({ errorCode: failedErrorCode }).phase
+        : undefined,
+      errorType: failedErrorCode,
+      // 路由可读信息快照。
+      providerName: usedRoute?.provider.name,
+      routeId: usedRoute?.routeId,
+      routeName: usedRoute
+        ? `${usedRoute.provider.name} · ${usedRoute.upstreamModelName}`
+        : undefined,
+      upstreamModel: usedRoute?.upstreamModelName,
+      // 非流式 generateText 一次性返回,无首 token 概念,TTFT 恒为 undefined。
+      firstTokenLatencyMs: undefined,
+      stream: false,
     });
   }
 }

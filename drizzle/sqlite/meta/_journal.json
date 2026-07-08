@@ -36,6 +36,13 @@
       "when": 1783413372715,
       "tag": "0004_user_models_nullable_legacy",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1783524018490,
+      "tag": "0005_dusty_zodiak",
+      "breakpoints": true
     }
   ]
 }

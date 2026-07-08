@@ -21,6 +21,14 @@ export interface TranscribeOptions {
 export interface TranscribeResult {
   text: string;
   providerRef?: string;
+  /** 可读服务商名快照(用量日志展示)。 */
+  providerName?: string;
+  /** 命中路由 id 溯源。 */
+  routeId?: string;
+  /** 组合路由展示名(providerName · upstreamModelName)。 */
+  routeName?: string;
+  /** 真实上游模型名。 */
+  upstreamModel?: string;
 }
 
 /** 通过路由链转写音频。 */
@@ -51,7 +59,14 @@ export async function transcribeViaRoute(
     },
   });
 
-  return { text: result.text, providerRef: `${route.source}:${route.provider.id}` };
+  return {
+    text: result.text,
+    providerRef: `${route.source}:${route.provider.id}`,
+    providerName: route.provider.name,
+    routeId: route.routeId,
+    routeName: `${route.provider.name} · ${route.upstreamModelName}`,
+    upstreamModel: route.upstreamModelName,
+  };
 }
 
 export { RoutingError };

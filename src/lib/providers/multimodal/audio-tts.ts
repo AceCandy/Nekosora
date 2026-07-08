@@ -20,6 +20,14 @@ export interface SynthesizeResult {
   audioBuffer: Buffer;
   mime: string;
   providerRef?: string;
+  /** 可读服务商名快照(用量日志展示)。 */
+  providerName?: string;
+  /** 命中路由 id 溯源。 */
+  routeId?: string;
+  /** 组合路由展示名(providerName · upstreamModelName)。 */
+  routeName?: string;
+  /** 真实上游模型名。 */
+  upstreamModel?: string;
 }
 
 const FORMAT_MIME: Record<string, string> = {
@@ -62,6 +70,10 @@ export async function synthesizeViaRoute(
     audioBuffer: Buffer.from(u8),
     mime: FORMAT_MIME[format] ?? "audio/mpeg",
     providerRef: `${route.source}:${route.provider.id}`,
+    providerName: route.provider.name,
+    routeId: route.routeId,
+    routeName: `${route.provider.name} · ${route.upstreamModelName}`,
+    upstreamModel: route.upstreamModelName,
   };
 }
 

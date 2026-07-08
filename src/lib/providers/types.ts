@@ -12,6 +12,8 @@ import type { WeightedKey } from "./keys";
 /** 上游 provider 的运行时配置(从数据库解密后得到)。 */
 export interface ResolvedProvider {
   id: string;
+  /** 可读名称(用于日志快照,provider 改名不影响历史行)。 */
+  name: string;
   protocol: ProviderProtocol;
   baseUrl: string;
   /** 本轮选中的 api key(仅运行时持有,不落库、不打日志)。 */
@@ -36,6 +38,8 @@ export interface ResolvedRoute {
   weight: number;
   /** 来源标记,便于用量归属与日志。 */
   source: "global" | "byo";
+  /** 命中的路由 id(用量/错误日志溯源)。 */
+  routeId: string;
   /** 全局模型 id(用量记录用)。 */
   globalModelId?: string;
   /** 用户模型 id。 */

@@ -145,6 +145,7 @@ async function probeModelAvailability(opts: {
     protocol,
     provider: {
       id: "__probe__",
+      name: "__probe__",
       protocol,
       baseUrl,
       apiKey,
@@ -154,6 +155,7 @@ async function probeModelAvailability(opts: {
     priority: 0,
     weight: 1,
     source: "global",
+    routeId: "__probe__",
   };
   const startedAt = Date.now();
   try {

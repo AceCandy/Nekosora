@@ -37,6 +37,7 @@ function toResolvedProvider(row: any, keyField: string): ResolvedProvider {
   const keys = resolveProviderKeys(row[keyField]);
   return {
     id: row.id,
+    name: row.name,
     protocol: row.protocol,
     baseUrl: row.baseUrl,
     keys,
@@ -124,6 +125,7 @@ async function resolveGlobalRoutes(
       priority: row.route.priority as number,
       weight: row.route.weight as number,
       source: "global" as const,
+      routeId: row.route.id as string,
       globalModelId: globalModel.id,
       capabilities: globalModel.capabilities,
     }),
@@ -161,6 +163,7 @@ async function resolveByoRoute(
       priority: row.route.priority as number,
       weight: row.route.weight as number,
       source: "byo" as const,
+      routeId: row.route.id as string,
       userModelId: userModel.id,
       capabilities: userModel.capabilities,
     }),

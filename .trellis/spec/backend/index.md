@@ -19,7 +19,7 @@ Nekusora 是 Next.js 全栈 TypeScript 项目,无独立后端进程(除 `src/wor
 | [Error Handling](./error-handling.md) | 统一 API 错误契约、ErrorCode、i18n、工具函数 | Filled |
 | [Auth Guidelines](./auth-guidelines.md) | Better Auth 配置、Origin 信任模型、dev 局域网联调 | Filled |
 | [Quality Guidelines](./quality-guidelines.md) | Code standards, forbidden patterns | To fill |
-| [Logging Guidelines](./logging-guidelines.md) | Structured logging, log levels | To fill |
+| [Logging Guidelines](./logging-guidelines.md) | 网关调用日志双表模型、logUsage 分流、TTFT、错误分类、数据层脱敏 | Filled |
 | [Chat Generation Params](./chat-generation-params.md) | 会话级生成参数端到端契约 + reasoning providerOptions 映射 | Filled |
 | [Provider Probe](./provider-probe.md) | key 连通性探测契约(/models 鉴权判定 + anthropic 混搭兼容) | Filled |
 | [Gateway Routing](./gateway-routing.md) | resolveRoutes 决策树、global/byo 同构、熔断、密钥列名差异 | Filled |

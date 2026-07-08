@@ -1,0 +1,5 @@
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"lint/typecheck/test 门槛、必需/禁止模式、review checklist"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"核对双 dialect schema 对齐、迁移一致性"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"核对错误码契约 / errorPhase 分类一致性"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"核对 DTO 与用户端脱敏白名单的类型安全"}
+{"file":".trellis/spec/backend/gateway-routing.md","reason":"核对透传链路不破坏路由决策与熔断"}

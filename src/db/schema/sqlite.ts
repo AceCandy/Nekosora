@@ -731,12 +731,57 @@ export const usageLogs = sqliteTable(
     reasoningTokens: integer("reasoning_tokens").notNull().default(0),
     latencyMs: integer("latency_ms"),
     status: text("status").notNull().default("success"),
+    // —— 网关日志重构:成功计费补充字段(均 nullable,兼容历史行) ——
+    firstTokenLatencyMs: integer("first_token_latency_ms"), // 首 token 延迟(TTFT)
+    providerName: text("provider_name"), // 可读服务商名快照(替代裸 providerRef 展示)
+    routeId: text("route_id"), // 命中路由 id 溯源
+    routeName: text("route_name"), // 组合展示名(providerName · upstreamModel)
+    upstreamModel: text("upstream_model"), // 真实上游模型名(区别于对外 model)
     createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),
   },
   (t) => [
     index("usage_logs_user_idx").on(t.userId),
     index("usage_logs_created_idx").on(t.createdAt),
     index("usage_logs_model_idx").on(t.model),
+  ],
+);
+
+// 网关调用日志重构:失败 / 中断请求独立存表(物理双表)。与 pg.ts 同构。
+export const opsErrorLogs = sqliteTable(
+  "ops_error_logs",
+  {
+    id: text("id").primaryKey().default(uuid),
+    requestId: text("request_id").notNull(),
+    source: text("source").notNull(),
+    userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
+    apiKeyId: text("api_key_id").references(() => apiKeys.id, { onDelete: "set null" }),
+    keyKind: text("key_kind"),
+    model: text("model").notNull(),
+    upstreamModel: text("upstream_model"),
+    providerName: text("provider_name"),
+    providerRef: text("provider_ref"),
+    routeId: text("route_id"),
+    routeName: text("route_name"),
+    requestPath: text("request_path"),
+    stream: integer("stream", { mode: "boolean" }).notNull().default(false),
+    httpStatus: integer("http_status"),
+    errorCode: text("error_code").notNull(),
+    errorMessage: text("error_message"),
+    errorPhase: text("error_phase"),
+    errorType: text("error_type"),
+    promptTokens: integer("prompt_tokens").notNull().default(0),
+    completionTokens: integer("completion_tokens").notNull().default(0),
+    latencyMs: integer("latency_ms"),
+    firstTokenLatencyMs: integer("first_token_latency_ms"),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),
+  },
+  (t) => [
+    index("ops_error_logs_user_idx").on(t.userId),
+    index("ops_error_logs_created_idx").on(t.createdAt),
+    index("ops_error_logs_error_code_idx").on(t.errorCode),
+    index("ops_error_logs_http_status_idx").on(t.httpStatus),
+    index("ops_error_logs_provider_ref_idx").on(t.providerRef),
+    index("ops_error_logs_source_idx").on(t.source),
   ],
 );
 
@@ -755,4 +800,5 @@ export type {
   AccessScope,
   BindingScope,
   MessageStatus,
+  ErrorPhase,
 } from "@/db/types";

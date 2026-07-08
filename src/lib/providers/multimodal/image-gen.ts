@@ -34,6 +34,14 @@ export interface ImageGenResult {
   images: GeneratedImage[];
   /** 图像生成无 token 计费概念,usage 为空(计费按张,后续 Billing 补)。 */
   providerRef?: string;
+  /** 可读服务商名快照(用量日志展示)。 */
+  providerName?: string;
+  /** 命中路由 id 溯源。 */
+  routeId?: string;
+  /** 组合路由展示名(providerName · upstreamModelName)。 */
+  routeName?: string;
+  /** 真实上游模型名。 */
+  upstreamModel?: string;
 }
 
 /**
@@ -72,7 +80,14 @@ export async function generateImageViaRoute(
     }
   }
 
-  return { images, providerRef: `${route.source}:${route.provider.id}` };
+  return {
+    images,
+    providerRef: `${route.source}:${route.provider.id}`,
+    providerName: route.provider.name,
+    routeId: route.routeId,
+    routeName: `${route.provider.name} · ${route.upstreamModelName}`,
+    upstreamModel: route.upstreamModelName,
+  };
 }
 
 /** 从 ResolvedRoute 提取 OpenAI 兼容配置。 */
