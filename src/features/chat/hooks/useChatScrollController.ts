@@ -1,8 +1,10 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-/** 距离底部多少像素内仍视为"贴底"。 */
+/** 距离底部多少像素内仍视为"贴底"(用于自动跟随)。 */
 const BOTTOM_THRESHOLD = 24;
+/** 距底部不超过视口高度的此比例时,视为「在最新附近」,回到最新按钮隐藏。 */
+const NEAR_BOTTOM_RATIO = 1 / 3;
 /** 回到底部动画的固定时长(比原生 smooth 短,手感更跟手)。 */
 const SCROLL_DURATION = 280;
 
@@ -35,15 +37,23 @@ function smoothScrollToBottom(el: HTMLElement) {
  * - forceFollow() 用于「用户主动发送消息」场景:无视当前是否贴底,强制滚到底并恢复跟随。
  * - scrollToBottom() 平滑回到底部并恢复跟随。
  *
- * 注意:打开历史会话时初始 isAtBottom=true,跟随 effect 会瞬时把视图滚到底,
- * 使 onScroll 首次触发时即处于贴底态,不会误显「跳到最新」按钮。
+ * 两套贴底阈值:
+ * - 跟随(窄,BOTTOM_THRESHOLD):内部 ref 驱动自动跟随——用户稍微上滑即停跟随;不对外
+ *   暴露 state,避免无消费者时的冗余重渲染。
+ * - isNearBottom(宽,NEAR_BOTTOM_RATIO × 视口高):对外 state,供「回到最新」按钮显隐——
+ *   距底 ≤ 1/3 屏视为在最新附近、按钮隐藏,避免必须几乎贴底按钮才消失。
+ *
+ * 两者在 onScroll 与消息变化后(延迟一帧重算)同步更新,校正流式状态转换
+ * (流结束、底部缓冲 h-32→h-0、虚拟滚动动态测量)未触发滚动事件时的状态残留。
  */
 export function useChatScrollController<T>(messages: T[]) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
-  const [isAtBottom, setIsAtBottom] = useState(true);
-  // 用 ref 存最新值,供 messages 变化的 effect 读取,避免闭包陈旧。
+  // 跟随用贴底 ref(窄阈值),仅供内部 effect 读取。
   const isAtBottomRef = useRef(true);
+  // 「在最新附近」(宽阈值):对外 state,供回到最新按钮显隐。
+  const [isNearBottom, setIsNearBottom] = useState(true);
+  const isNearBottomRef = useRef(true);
 
   const measureBottom = useCallback(() => {
     const el = scrollRef.current;
@@ -51,11 +61,18 @@ export function useChatScrollController<T>(messages: T[]) {
     return el.scrollHeight - el.scrollTop - el.clientHeight < BOTTOM_THRESHOLD;
   }, []);
 
+  const measureNearBottom = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return true;
+    return el.scrollHeight - el.scrollTop - el.clientHeight <= el.clientHeight * NEAR_BOTTOM_RATIO;
+  }, []);
+
   const handleScroll = useCallback(() => {
-    const atBottom = measureBottom();
-    isAtBottomRef.current = atBottom;
-    setIsAtBottom(atBottom);
-  }, [measureBottom]);
+    isAtBottomRef.current = measureBottom();
+    const nearBottom = measureNearBottom();
+    isNearBottomRef.current = nearBottom;
+    setIsNearBottom(nearBottom);
+  }, [measureBottom, measureNearBottom]);
 
   // 仅在贴底时跟随到底。流式高频触发用 auto(瞬时),避免和 smooth 抢帧;
   // 挂载时同样瞬时滚到底,确保历史会话打开即处于贴底态。
@@ -63,11 +80,53 @@ export function useChatScrollController<T>(messages: T[]) {
     if (isAtBottomRef.current) {
       endRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
     }
-  }, [messages]);
+    // 消息变化后重算贴底/附近状态(延迟一帧等虚拟滚动测量稳定),
+    // 校正未触发滚动事件时状态残留导致的按钮误显。
+    const raf = requestAnimationFrame(() => {
+      isAtBottomRef.current = measureBottom();
+      const nearBottom = measureNearBottom();
+      isNearBottomRef.current = nearBottom;
+      setIsNearBottom(nearBottom);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [messages, measureBottom, measureNearBottom]);
+
+  // 历史会话挂载:虚拟滚动 measureElement 初始估计(estimateSize)不准,单次定位时
+  // getTotalSize 尚未收敛会把视口停在内容中部。挂载后用 rAF 持续把容器拉到底,直到
+  // scrollHeight 连续多帧不变或超时收敛。注意:此处不读 isAtBottomRef——它会被上面的
+  // 消息变化 effect 在测量未完成时误判为 false,导致循环空转不贴底。初始加载就是要到底,
+  // 故无条件贴底,收敛后再把贴底态写回。
+  // 仅组件挂载时跑一次;会话切换令组件重挂会重跑,流式追加不触发本 effect。
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    let raf = 0;
+    let lastH = -1;
+    let stable = 0;
+    let deadline = 0;
+    const tick = (ts: number) => {
+      if (!deadline) deadline = ts + 600;
+      el.scrollTop = el.scrollHeight;
+      const h = el.scrollHeight;
+      if (h === lastH) stable += 1;
+      else { lastH = h; stable = 0; }
+      if (stable < 4 && ts < deadline) {
+        raf = requestAnimationFrame(tick);
+      } else {
+        isAtBottomRef.current = true;
+        isNearBottomRef.current = true;
+        setIsNearBottom(true);
+      }
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+    // 仅挂载跑一次,覆盖虚拟滚动初始测量收敛
+  }, []);
 
   const scrollToBottom = useCallback(() => {
     isAtBottomRef.current = true;
-    setIsAtBottom(true);
+    isNearBottomRef.current = true;
+    setIsNearBottom(true);
     const el = scrollRef.current;
     if (el) smoothScrollToBottom(el);
     else endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -76,11 +135,12 @@ export function useChatScrollController<T>(messages: T[]) {
   /** 用户主动发送消息时调用:强制滚到底并恢复跟随。 */
   const forceFollow = useCallback(() => {
     isAtBottomRef.current = true;
-    setIsAtBottom(true);
+    isNearBottomRef.current = true;
+    setIsNearBottom(true);
     const el = scrollRef.current;
     if (el) smoothScrollToBottom(el);
     else endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, []);
 
-  return { scrollRef, endRef, isAtBottom, onScroll: handleScroll, scrollToBottom, forceFollow };
+  return { scrollRef, endRef, isNearBottom, onScroll: handleScroll, scrollToBottom, forceFollow };
 }

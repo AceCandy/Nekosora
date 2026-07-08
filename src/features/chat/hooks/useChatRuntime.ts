@@ -6,10 +6,6 @@ import { useShallow } from "zustand/react/shallow";
 import { useChatStreamStore, NEW_CONVERSATION_KEY, type SendOptions } from "@/features/chat/store/chatStreamStore";
 import type { ChatMessage } from "@/features/chat/model/types";
 
-// 稳定的空消息数组:selector 在会话无数据时返回它(而非每次新建 [] 字面量),
-// 避免 zustand 因引用变化误判、触发 React 无限重渲染。
-const EMPTY_MESSAGES: ChatMessage[] = [];
-
 interface UseChatRuntimeOptions {
   /** 当前会话 ID(来自路由;新会话为 null/undefined)。 */
   conversationId?: string | null;
@@ -48,8 +44,11 @@ export function useChatRuntime({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
-  // 订阅该会话切片(messages / streaming)
-  const messages = useChatStreamStore((s) => s.runtimes[key]?.messages ?? EMPTY_MESSAGES);
+  // 订阅该会话切片(messages / streaming)。
+  // messages:store 无该会话数据时(SSR / 首次加载尚未 hydrate)回落到 SSR 初始消息,
+  // 避免刷新历史会话时先闪空态(欢迎页)、mount hydrate 后才出消息。
+  const storeMessages = useChatStreamStore((s) => s.runtimes[key]?.messages);
+  const messages = storeMessages ?? initialMessages;
   const streaming = useChatStreamStore((s) => s.runtimes[key]?.streaming ?? false);
 
   // 前台会话的生成状态变化时刷新侧栏。开始时 refresh(此时 DB generating 已被

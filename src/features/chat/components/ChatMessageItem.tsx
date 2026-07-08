@@ -112,11 +112,32 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
   const isReasoningActive = hasReasoning && isStreaming && isLast && !content;
   // 流式思考时把单行文本横向滚到最右,使最新吐字始终可见
   const reasoningScrollRef = useRef<HTMLSpanElement>(null);
+
+  // 思考块触发区容器(含浮层):用于「点击外部收起」判定
+  const reasoningRef = useRef<HTMLDivElement>(null);
+  // hover 进/出延迟计时(0.5s):避免鼠标划过误触展开,也给鼠标移动留过渡时间
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearHoverTimer = () => {
+    if (hoverTimerRef.current) { clearTimeout(hoverTimerRef.current); hoverTimerRef.current = null; }
+  };
   useEffect(() => {
     if (reasoningScrollRef.current) {
       reasoningScrollRef.current.scrollLeft = reasoningScrollRef.current.scrollWidth;
     }
   }, [reasoning]);
+
+  // 思考块展开时,点击触发区(含浮层)以外的任意位置即收起
+  useEffect(() => {
+    if (!reasoningPanelOpen) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (reasoningRef.current && !reasoningRef.current.contains(e.target as Node)) {
+        clearHoverTimer();
+        setReasoningPanelOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [reasoningPanelOpen]);
 
   const handleCopy = async () => {
     if (!content) return;
@@ -221,16 +242,27 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
             renderStyleClass && `rs-${renderStyleClass}`,
           )}>
             {hasReasoning && (
-              <div className="flex items-center gap-1.5 mb-2 max-w-[75ch]">
-                {/* 思考单行:未吐字显「思考中」,吐字时一行横向滚动,完成后收成「已思考X秒」。悬停看全文 */}
-                {/* hover 触发区为图标 + 文字标签 + 吐字滚动; 箭头置于触发区外,不参与触发 */}
+              <div className="mb-2 max-w-[75ch]">
+                {/* 思考单行:未吐字显「思考中」,吐字时一行截断,完成后收成「已思考X秒」。点击看全文 */}
+                {/* 触发区只包内容(不撑满整行),箭头紧跟文字;点击展开/收起,hover 仅作视觉反馈 */}
                 <div
+                  ref={reasoningRef}
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={reasoningPanelOpen}
+                  onClick={() => { clearHoverTimer(); setReasoningPanelOpen((v) => !v); }}
+                  onMouseEnter={() => { clearHoverTimer(); hoverTimerRef.current = setTimeout(() => setReasoningPanelOpen(true), 500); }}
+                  onMouseLeave={() => { clearHoverTimer(); hoverTimerRef.current = setTimeout(() => setReasoningPanelOpen(false), 500); }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setReasoningPanelOpen((v) => !v);
+                    }
+                  }}
                   className={clsx(
-                    "relative flex items-center gap-1.5 flex-1 min-w-0 rounded-md px-2.5 py-1 text-[11px] font-mono select-none text-neutral-400 dark:text-neutral-500 transition-colors hover:bg-neutral-50/70 dark:hover:bg-[#0d0f14]/20",
+                    "relative inline-flex items-center gap-1.5 max-w-full rounded-md px-2.5 py-1 text-[11px] font-mono select-none text-neutral-400 dark:text-neutral-500 transition-colors hover:bg-neutral-50/70 dark:hover:bg-[#0d0f14]/20 cursor-pointer",
                     reasoningPanelOpen && "bg-neutral-50/70 dark:bg-[#0d0f14]/20",
                   )}
-                  onMouseEnter={() => setReasoningPanelOpen(true)}
-                  onMouseLeave={() => setReasoningPanelOpen(false)}
                 >
                   {isReasoningActive ? (
                     <Loader2 className="w-3 h-3 shrink-0 animate-spin text-sora-blue/70" aria-hidden="true" />
@@ -240,26 +272,31 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
                   <span className="shrink-0">
                     {reasoningDone ? t("thoughtFor", { seconds: elapsed }) : t("thinking")}
                   </span>
-                  {/* 吐字区域:单行横向滚动,溢出省略,弱化 */}
+                  {/* 吐字区域:单行,溢出截断,弱化 */}
                   {isReasoningActive && reasoning && (
                     <span
                       ref={reasoningScrollRef}
-                      className="flex-1 min-w-0 overflow-x-hidden whitespace-nowrap text-neutral-400/70 dark:text-neutral-600"
+                      className="min-w-0 max-w-[44ch] overflow-x-hidden whitespace-nowrap text-neutral-400/70 dark:text-neutral-600"
                     >
                       {reasoning}
                     </span>
                   )}
+                  {/* 箭头:紧跟文字,随触发区一起点击切换;展开时旋转 90° */}
+                  <ChevronRight
+                    className={clsx("w-3 h-3 shrink-0 opacity-40 transition-transform duration-200", reasoningPanelOpen && "rotate-90")}
+                    aria-hidden="true"
+                  />
 
-                  {/* 思考全文弹窗:悬停触发区时展开,紧贴下方避免 hover 断链,宽度对齐触发区,弱化样式 */}
+                  {/* 思考全文弹窗:点击触发区展开,紧贴下方,弱化样式;淡入 + 下滑 + 微缩放动效 */}
                   {reasoningPanelOpen && (
-                    <div className="absolute z-40 left-0 top-full w-full max-h-[50vh] overflow-y-auto rounded-lg border border-morning-mist dark:border-deep-space/60 bg-white dark:bg-space-ink p-3 shadow-sm">
+                    <div className="absolute z-40 left-0 top-full mt-1 w-max max-w-[min(75ch,90vw)] max-h-[50vh] overflow-y-auto rounded-lg border border-morning-mist dark:border-deep-space/60 bg-white dark:bg-space-ink p-3 shadow-sm animate-in fade-in slide-in-from-top-1 zoom-in-95 duration-150">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-[11px] font-mono text-neutral-400 dark:text-neutral-500">
                           {reasoningDone ? t("thoughtFor", { seconds: elapsed }) : t("thinking")}
                         </span>
                         <button
                           type="button"
-                          onClick={() => setReasoningPanelOpen(false)}
+                          onClick={(e) => { e.stopPropagation(); setReasoningPanelOpen(false); }}
                           className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 cursor-pointer"
                           aria-label="关闭"
                         >
@@ -272,8 +309,6 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
                     </div>
                   )}
                 </div>
-                {/* 箭头:在 hover 触发区外,仅指示展开状态 */}
-                <ChevronRight className={clsx("w-3 h-3 shrink-0 opacity-40 transition-transform", reasoningPanelOpen && "rotate-90")} aria-hidden="true" />
               </div>
             )}
             {toolCalls && toolCalls.length > 0 && (
@@ -332,7 +367,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
           </div>)
         )}
 
-        {role === "assistant" && publicId && !isStreaming && (
+        {role === "assistant" && publicId && !(isStreaming && isLast) && (
           <div className="flex items-center gap-3 flex-wrap">
             {versionInfo && versionInfo.total > 1 && onSwitchVersion && (
               <div className="inline-flex items-center gap-1 text-[11px] font-semibold text-neutral-400">
@@ -370,6 +405,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
               )}
               <span>{copied ? t("copied") : t("copy")}</span>
             </button>
+            {!isStreaming && (
             <div className="relative">
               <button
                 onClick={() => {
@@ -410,7 +446,8 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
                 </>
               )}
             </div>
-            {content && status === "interrupted" && (
+            )}
+            {!isStreaming && content && status === "interrupted" && (
               <button
                 type="button"
                 onClick={() => onContinue?.(publicId)}

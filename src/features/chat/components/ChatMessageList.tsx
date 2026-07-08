@@ -21,7 +21,8 @@ interface ChatMessageListProps {
   scrollRef: RefObject<HTMLDivElement | null>;
   /** 底部锚点 ref（流式时撑高 h-32 作为缓冲与滚动锚）。 */
   messagesEndRef: RefObject<HTMLDivElement | null>;
-  isAtBottom: boolean;
+  /** 距底 ≤ 1/3 视口高视为「在最新附近」;回到最新按钮据此显隐。 */
+  isNearBottom: boolean;
   onScroll: () => void;
   scrollToBottom: () => void;
   /** 当前模型名（传给 ChatMessageItem 供 regenerate/edit 使用）。 */
@@ -63,7 +64,7 @@ export function ChatMessageList({
   streaming,
   scrollRef,
   messagesEndRef,
-  isAtBottom,
+  isNearBottom,
   onScroll,
   scrollToBottom,
   model,
@@ -117,6 +118,14 @@ export function ChatMessageList({
     overscan: 4,
   });
 
+  // 当前视口顶部对应的 msg index(首个底边越过 scrollTop 的可见项),供对话大纲高亮「当前轮次」
+  const visItems = rowVirtualizer.getVirtualItems();
+  let activeMessageIndex = -1;
+  if (visItems.length > 0) {
+    const top = scrollRef.current?.scrollTop ?? 0;
+    activeMessageIndex = visItems.find((vi) => vi.start + vi.size >= top)?.index ?? visItems[visItems.length - 1].index;
+  }
+
   return (
     // 相对外层 relative 容器,让对话大纲/回到最新按钮锚定在消息区(而非含输入框的主区)
     <div className="relative flex-1 min-h-0">
@@ -165,12 +174,12 @@ export function ChatMessageList({
             })}
           </div>
         )}
-        {/* 底部留白缓冲:仅在流式生成时留白,让生成中的内容停在视口中部偏上;同时作为滚动锚点 */}
-        <div ref={messagesEndRef} className={streaming ? "h-32" : "h-0"} />
+        {/* 底部留白缓冲:仅流式生成时撑高约 2/3 屏,让生成内容停在视口上部、下方留白;同时作为滚动锚点 */}
+        <div ref={messagesEndRef} className={streaming ? "h-2/3" : "h-0"} />
       </div>
 
       {/* 对话大纲:贴消息区右边缘(滚动条左侧),hover 整列弹出完整轮次列表 */}
-      <ChatOutline messages={messages} streaming={streaming} />
+      <ChatOutline messages={messages} streaming={streaming} activeMessageIndex={activeMessageIndex} />
 
       {/* 删除二次确认:删除用户消息会连带其 AI 回复及之后整段子树 */}
       <ConfirmDialog
@@ -261,8 +270,8 @@ export function ChatMessageList({
         </div>
       )}
 
-      {/* 跳到最新:用户上滑离开底部时浮出,贴消息区底部内侧,点击回到底部并恢复跟随 */}
-      {!isAtBottom && (
+      {/* 跳到最新:上滑超过 1/3 视口高时浮出;在最新附近(≤1/3 屏)隐藏 */}
+      {!isNearBottom && (
         <button
           type="button"
           onClick={scrollToBottom}

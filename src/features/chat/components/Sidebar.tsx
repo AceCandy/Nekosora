@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState, useTransition, useEffect, useRef } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { searchMessages } from "@/features/chat/actions/conversations";
 import { Plus, Settings2, MessageSquare, LogOut, Menu, X, Search, Pin, Archive, Trash2, ImageIcon, Loader2 } from "lucide-react";
@@ -133,9 +133,19 @@ export default function Sidebar({
 
   // 后台会话完成蓝点:轮询各会话 generating 状态,记录上一轮「生成中」的集合;
   // 当某会话从「生成中」变为「已完成」且不是当前会话,标记蓝点;点击该会话项清除。
+  const router = useRouter();
   const prevGeneratingRef = useRef<Set<string> | null>(null);
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
+  // 仅当存在后台生成中会话时才轮询(检测其完成 → 蓝点);无任何生成会话时完全静默,
+  // 避免空闲态每 6s 空打 server action。hasGenerating 来自 SSR 会话列表,
+  // 当前会话开始/结束生成时由 useChatRuntime 的 refresh 同步驱动此开关。
+  const hasGenerating = conversations.some((c) => c.generating);
   useEffect(() => {
+    if (!hasGenerating) {
+      // 无生成中会话:重置基线,不启动轮询
+      prevGeneratingRef.current = null;
+      return;
+    }
     let cancelled = false;
     const poll = async () => {
       try {
@@ -158,6 +168,11 @@ export default function Sidebar({
           }
         }
         prevGeneratingRef.current = nowGenerating;
+        // 本轮查询反映出生成状态变化(有会话刚完成,或已无任何生成中会话):
+        // 刷新 SSR 同步 generating 字段,使 hasGenerating 收敛、轮询自然停止,
+        // 并让侧栏转圈及时消失。
+        const changed = prev !== null && [...prev].some((id) => !nowGenerating.has(id));
+        if (nowGenerating.size === 0 || changed) router.refresh();
       } catch {
         /* 轮询失败静默,下轮重试 */
       }
@@ -169,7 +184,7 @@ export default function Sidebar({
       clearInterval(timer);
     };
     // activeConvId 进依赖:切换会话时立即重算(避免刚完成的当前会话残留蓝点)
-  }, [activeConvId, getGeneratingStatusesAction]);
+  }, [hasGenerating, activeConvId, getGeneratingStatusesAction, router]);
 
   // 全文搜索:query 非空时防抖(300ms)调 searchMessages 跨会话搜消息内容
   useEffect(() => {

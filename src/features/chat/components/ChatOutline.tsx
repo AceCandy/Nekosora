@@ -28,16 +28,29 @@ interface ChatOutlineProps {
   messages: ChatMessage[];
   /** 是否正在流式生成(用于高亮最后一轮)。 */
   streaming: boolean;
+  /** 当前视口顶部对应的 msg index,-1 表示未知;用于高亮「当前轮次」。 */
+  activeMessageIndex: number;
 }
 
 /**
  * 对话大纲:贴滚动区右边缘(滚动条左侧)的一列短横线,排布密集。
  * 鼠标 hover 到整列区域即弹出完整轮次列表(每项显示用户原话),点击列表项跳转到对应消息。
  */
-export function ChatOutline({ messages, streaming }: ChatOutlineProps) {
+export function ChatOutline({ messages, streaming, activeMessageIndex }: ChatOutlineProps) {
   const turns = useMemo(() => buildTurns(messages), [messages]);
   const [hovered, setHovered] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 当前视口顶部 msg 落在哪一轮(向后找最近的 user 消息轮次),-1 表示无定位
+  const activeTurnIdx = useMemo(() => {
+    if (activeMessageIndex < 0 || turns.length === 0) return -1;
+    let idx = -1;
+    for (let i = 0; i < turns.length; i++) {
+      if (turns[i].userIndex <= activeMessageIndex) idx = i;
+      else break;
+    }
+    return idx;
+  }, [turns, activeMessageIndex]);
 
   if (turns.length === 0) return null;
 
@@ -73,7 +86,12 @@ export function ChatOutline({ messages, streaming }: ChatOutlineProps) {
                 <button
                   type="button"
                   onClick={() => handleJump(turn.userIndex)}
-                  className="w-full text-left rounded-md px-2 py-1.5 text-xs text-neutral-600 dark:text-neutral-300 hover:bg-sora-blue/[0.06] dark:hover:bg-sora-blue/[0.08] transition-colors line-clamp-2"
+                  className={clsx(
+                    "w-full text-left rounded-md px-2 py-1.5 text-xs transition-colors line-clamp-1",
+                    i === activeTurnIdx
+                      ? "bg-sora-blue/[0.10] text-neutral-800 dark:text-white font-medium"
+                      : "text-neutral-600 dark:text-neutral-300 hover:bg-sora-blue/[0.06] dark:hover:bg-sora-blue/[0.08]",
+                  )}
                 >
                   <span className="text-neutral-400 dark:text-neutral-500 mr-1.5 tabular-nums">{i + 1}.</span>
                   {turn.preview || "(空消息)"}
@@ -92,6 +110,7 @@ export function ChatOutline({ messages, streaming }: ChatOutlineProps) {
         {turns.map((turn, i) => {
           const isLast = i === turns.length - 1;
           const isGenerating = isLast && streaming;
+          const isActive = i === activeTurnIdx;
           return (
             <span
               key={turn.userIndex}
@@ -99,9 +118,11 @@ export function ChatOutline({ messages, streaming }: ChatOutlineProps) {
                 "block h-[3px] rounded-full transition-all duration-200",
                 isGenerating
                   ? "w-6 bg-sora-blue"
-                  : hovered
-                    ? "w-6 bg-sora-blue/60"
-                    : "w-5 bg-neutral-300 dark:bg-neutral-600",
+                  : isActive
+                    ? "w-6 bg-sora-blue/70"
+                    : hovered
+                      ? "w-6 bg-sora-blue/60"
+                      : "w-5 bg-neutral-300 dark:bg-neutral-600",
               )}
             />
           );
