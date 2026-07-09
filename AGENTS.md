@@ -20,6 +20,14 @@ Managed by Trellis. Edits outside this block are preserved; edits inside may be 
 
 <!-- TRELLIS:END -->
 
+# CodeGraph
+本项目已初始化 CodeGraph。分析代码结构、调用链、影响范围、模块关系时，优先使用 CodeGraph MCP 工具。
+
+优先顺序：
+1. 先用 `codegraph_explore` 理解相关功能、符号和调用链。
+2. CodeGraph 结果不足时，再用 `rg` 精确搜索。
+3. 不要对整个 `node_modules`、`dist`、`build` 目录做全量递归 grep。
+
 ## 补充逻辑
 - 日常不需要扫描docs/cankao这个目录下的代码,这里面是参考的开源项目
 - 如果涉及到用户要求参考对应项目的逻辑的时候,优先看这个文件下的项目代码
