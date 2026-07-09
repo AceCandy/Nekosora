@@ -5,6 +5,8 @@ import {
   useEffect,
   useRef,
   useState,
+  useId,
+  useMemo,
   createContext,
   useContext,
   Children,
@@ -14,7 +16,7 @@ import {
   type ReactNode,
 } from "react";
 import { clsx } from "clsx";
-import { Check, Copy, Eye } from "lucide-react";
+import { Check, Copy, Eye, Code } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Streamdown, type AllowedTags } from "streamdown";
 import {
@@ -33,6 +35,7 @@ import { resolvePreviewableKind, type PreviewableKind } from "@/lib/artifacts/pr
 import { resolveStructuredKind } from "@/lib/artifacts/structured";
 import { copyToClipboard } from "@/shared/lib/clipboard";
 import { StructuredInlineView } from "@/shared/components/structured-blocks";
+import { MermaidDiagram } from "@/shared/components/mermaid/MermaidDiagram";
 import { MARKDOWN_CONTROLS } from "./markdownControls";
 
 interface MarkdownProps {
@@ -189,6 +192,12 @@ function MarkdownCodeBlock({
     return <StructuredInlineView kind={structuredKind} raw={code} isStreaming={isStreaming} />;
   }
 
+  // mermaid:默认内联渲染成图(流式中显示源码),点按在 图/源码 间切换;
+  // 取代旧的"源码 + 打开右侧面板预览"。svg/html 仍走下方预览链路。
+  if (kind === "mermaid" && code.trim()) {
+    return <MermaidInlineBlock code={code} isStreaming={isStreaming} />;
+  }
+
   // 以下:非结构化源码 / html-svg-mermaid 预览。
   const canPreview = Boolean(kind && onPreview && code.trim());
 
@@ -238,6 +247,76 @@ function MarkdownCodeBlock({
 }
 
 /**
+ * Mermaid 内联块:默认渲染成图,流式中或用户切换时显示源码。
+ *
+ * 与 html/svg 不同,mermaid"看渲染结果才有意义",故正文直接出图而非只给源码;
+ * 右上角按钮在「代码」(源码)与「预览」(图表)间切换。流式中图不完整会解析失败,
+ * 故流式期间强制显示源码,流结束后自动转为图。外层带边框容器图/源码共用,切换无布局跳动。
+ */
+function MermaidInlineBlock({ code, isStreaming }: { code: string; isStreaming: boolean }) {
+  const t = useTranslations("artifacts");
+  // 唯一 id:mermaid.render 内部据此建 DOM 节点,实例间不可重复(否则渲染冲突)。
+  const reactId = useId();
+  const id = useMemo(() => "m" + reactId.replace(/[^a-zA-Z0-9]/g, ""), [reactId]);
+  const [view, setView] = useState<"diagram" | "source">("diagram");
+  // 流式中强制源码(图不完整会解析失败);流结束后回到用户选择(默认 diagram)。
+  const showSource = isStreaming || view === "source";
+  const [copied, setCopied] = useState(false);
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current); }, []);
+
+  async function handleCopy() {
+    const ok = await copyToClipboard(code);
+    if (!ok) return;
+    setCopied(true);
+    if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+    copiedTimerRef.current = setTimeout(() => setCopied(false), 1400);
+  }
+
+  return (
+    <div className="group relative my-2">
+      <div className="absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded-md bg-white/80 dark:bg-space-ink/80 px-1 py-1 backdrop-blur-sm opacity-0 transition-opacity group-hover:opacity-100 [@media(pointer:coarse)]:opacity-100">
+        <button
+          type="button"
+          onClick={() => setView((v) => (v === "diagram" ? "source" : "diagram"))}
+          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-950/5 hover:text-neutral-800 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-white focus-visible:outline focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
+          title={showSource ? t("preview") : t("code")}
+          aria-label={showSource ? t("preview") : t("code")}
+        >
+          {showSource ? (
+            <Eye className="w-3.5 h-3.5" aria-hidden="true" />
+          ) : (
+            <Code className="w-3.5 h-3.5" aria-hidden="true" />
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-950/5 hover:text-neutral-800 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-white focus-visible:outline focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
+          title={copied ? t("copied") : t("copy")}
+          aria-label={copied ? t("copied") : t("copy")}
+        >
+          {copied ? (
+            <Check className="w-3.5 h-3.5 text-green-500" aria-hidden="true" />
+          ) : (
+            <Copy className="w-3.5 h-3.5" aria-hidden="true" />
+          )}
+        </button>
+      </div>
+      <div className="overflow-x-auto rounded-lg border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink p-3">
+        {showSource ? (
+          <pre className="text-xs leading-relaxed font-mono text-neutral-700 dark:text-neutral-300 whitespace-pre">
+            <code>{code}</code>
+          </pre>
+        ) : (
+          <MermaidDiagram id={id} content={code} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
  * 流式友好的 Markdown 渲染组件(streamdown 封装)。
  *
  * 相比 react-markdown 的优势:
@@ -264,6 +343,8 @@ function MarkdownImpl({ content, isStreaming, renderer = "streamdown", className
         {segments.map((seg, i) =>
           seg.type === "structured" ? (
             <StructuredInlineView key={i} kind={seg.kind} raw={seg.raw} />
+          ) : seg.type === "mermaid" ? (
+            <MermaidInlineBlock key={i} code={seg.raw} isStreaming={false} />
           ) : (
             <div key={i} dangerouslySetInnerHTML={{ __html: parseMarkdown(seg.text) }} />
           ),

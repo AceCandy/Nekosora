@@ -7,11 +7,13 @@
  */
 
 import { resolveStructuredKind } from "@/lib/artifacts/structured";
+import { resolvePreviewableKind } from "@/lib/artifacts/previewable";
 import type { StructuredKind } from "@/shared/components/structured-blocks/schema";
 
-/** 混合渲染分段:结构化代码块(chart/metric/table)与普通 markdown 文本分别处理。 */
+/** 混合渲染分段:结构化块(chart/metric/table)、mermaid 图与普通 markdown 文本分别处理。 */
 export type StructuredSegment =
   | { type: "structured"; kind: StructuredKind; raw: string }
+  | { type: "mermaid"; raw: string }
   | { type: "markdown"; text: string };
 
 /**
@@ -42,12 +44,18 @@ export function splitStructuredSegments(input: string): StructuredSegment[] {
         codeLang = trimmed.slice(3).trim();
         codeBuffer = [];
       } else {
+        const raw = codeBuffer.join("\n");
         const kind = resolveStructuredKind(codeLang);
         if (kind) {
           flushMarkdown();
-          segments.push({ type: "structured", kind, raw: codeBuffer.join("\n") });
+          segments.push({ type: "structured", kind, raw });
+        } else if (resolvePreviewableKind(codeLang, raw) === "mermaid") {
+          // mermaid 块:custom 渲染器路径不走 MarkdownCodeBlock,在此单独切出,
+          // 交由 MermaidInlineBlock 内联渲染(与默认渲染器一致),否则会退化成纯源码。
+          flushMarkdown();
+          segments.push({ type: "mermaid", raw });
         } else {
-          // 非结构化代码块原样归入 markdown 段,由 parseMarkdown 渲染为 pre/code。
+          // 其余非结构化代码块原样归入 markdown 段,由 parseMarkdown 渲染为 pre/code。
           markdown.push("```" + codeLang);
           markdown.push(...codeBuffer);
           markdown.push("```");

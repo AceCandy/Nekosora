@@ -8,6 +8,7 @@ import { prism as lightStyle } from "react-syntax-highlighter/dist/esm/styles/pr
 import { X, Copy, Download, Check } from "lucide-react";
 import { clsx } from "clsx";
 import { HtmlPreviewFrame } from "./HtmlPreviewFrame";
+import { MermaidDiagram } from "@/shared/components/mermaid/MermaidDiagram";
 
 export interface Artifact {
   id: string;
@@ -25,32 +26,6 @@ const SyntaxHighlighter = dynamic(
     loading: () => <pre className="text-xs p-4 animate-pulse text-neutral-400 font-mono">Loading code highlighter...</pre>,
   }
 );
-
-/** Mermaid 图表渲染(独立组件,隔离动态 import + 异步 state)。 */
-function MermaidDiagram({ id, content }: { id: string; content: string }) {
-  const t = useTranslations("artifacts");
-  const [svg, setSvg] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const mermaid = (await import("mermaid")).default;
-        mermaid.initialize({ startOnLoad: false, theme: "neutral" });
-        const { svg: rendered } = await mermaid.render(`m-${id}`, content);
-        if (!cancelled) setSvg(rendered);
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "render_failed");
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [id, content]);
-
-  if (error) return <div className="text-xs text-neutral-450 dark:text-neutral-500 p-3">{t("mermaidFailed")} {error}</div>;
-  if (!svg) return <div className="text-xs text-neutral-450 dark:text-neutral-500 animate-pulse">{t("rendering")}</div>;
-  return <div className="flex items-center justify-center min-h-full" dangerouslySetInnerHTML={{ __html: svg }} />;
-}
 
 export function ArtifactPanel({
   artifact,
