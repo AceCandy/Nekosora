@@ -99,20 +99,19 @@ stream 层写的 failed 行 `httpStatus` / `requestPath` 留 null（无 HTTP 上
 ## What NOT to Log
 
 - ❌ 完整 request body / response body（错误表只存脱敏摘要 / requestPath）。
-- ❌ 凭证、Authorization header、api key 明文。
-- ❌ 用户端（panel）错误视图的敏感字段——**数据层脱敏**（见下）。
+- ❌ 凭证、Authorization header、api key 明文（上游 key 只存脱敏快照 `upstreamKeyMasked`）。
 
 ---
 
-## 用户端脱敏（panel，数据层非 UI）
+## 用户端隔离（panel）
 
-panel `page.tsx` 在**服务端**构建 `clientRows` 时直接置空敏感字段，浏览器网络请求 / React props 都拿不到：
+panel **不做字段级脱敏**——错误日志均为用户自己调用产生，全字段可见（含 errorMessage/provider/上游 key 快照），便于用户定位自己的错误。防越权靠查询层强制 userId 隔离：
 
-| 下发（白名单） | 置空 |
-|----------------|------|
-| id / createdAt / model / httpStatus / latencyMs / `category`（服务端派生） | errorMessage / errorCode / errorPhase / providerName / providerRef / routeName / upstreamModel / requestPath / source / tokens / firstTokenLatencyMs |
+- `listErrorLogs({ userId })` / `getErrorLog(id, userId)`：userId 传入即强制 `where user_id = ?`，panel 只能查到自己的行。
+- panel `page.tsx` 调用时必传 `userId = session.id`；admin 不传看全部。
+- panel 与 admin 共用 `ErrorLogsTable` / `ErrorDetailDrawer`，仅 panel 不渲染用户列/用户筛选（variant=panel）。
 
-`category` 在服务端用完整线索算好后，原始 `errorMessage` 立即丢弃。**不是 UI 隐藏，是数据不下发。**
+> 历史：曾对 panel 做字段级脱敏（服务端置空 errorMessage/provider 等白名单外字段），后发现用户看自己的错误需要全字段，改为 userId 隔离 + 全字段下发。
 
 ---
 
@@ -130,5 +129,5 @@ panel `page.tsx` 在**服务端**构建 `clientRows` 时直接置空敏感字段
 - **在调用点手写 insert usage_logs/ops_error_logs** → 必须走 `logUsage`，由它按 status 分流。
 - **route.ts 重复写 stream 内部错误** → 只写 pre-streamChat 错误，避免双写。
 - **新增 ErrorCode 没补 `classifyError` 映射** → 错误落到兜底 `internal/other`，分类失真。
-- **panel 错误视图用 UI 隐藏敏感字段** → 必须服务端置空（数据层脱敏），否则网络请求仍泄露。
+- **panel 防越权靠字段置空** → 靠查询层 `userId` 强制 where（`listErrorLogs` / `getErrorLog`）；字段级脱敏会让用户无法定位自己的错误。
 - **`logUsage` 抛错阻断主流程** → 永不抛错，失败只 `console.error`。

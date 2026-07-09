@@ -1,4 +1,4 @@
-import { sql, eq } from "drizzle-orm";
+import { sql, eq, and } from "drizzle-orm";
 import { getTranslations } from "next-intl/server";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { requireSession } from "@/lib/session";
@@ -7,39 +7,22 @@ import {
   getModelBreakdown,
   getSourceBreakdown,
   listUsageLogs,
-  type TimeRange,
   type UsageLogFilters,
 } from "@/lib/usage-aggregate";
 import { listErrorLogs, type ErrorLogFilters } from "@/lib/repositories/error-log-repository";
 import { classifyError } from "@/lib/error-classify";
 import { UsageDashboard } from "@/app/(dash)/admin/usage/UsageDashboard";
+import { CollapsibleStats } from "@/app/(dash)/admin/usage/CollapsibleStats";
 import { UsageTabs } from "@/app/(dash)/admin/usage/UsageTabs";
-import {
-  UsageLogsTable,
-  type UsageLogClientRow,
-} from "@/app/(dash)/admin/usage/UsageLogsTable";
-import {
-  ErrorLogsTable,
-  type ErrorLogClientRow,
-} from "@/app/(dash)/admin/usage/ErrorLogsTable";
+import { UsageLogsTable, type UsageLogClientRow } from "@/app/(dash)/admin/usage/UsageLogsTable";
+import { type UsageFilterValues } from "@/app/(dash)/admin/usage/UsageFilterBar";
+import { ErrorLogsTable, type ErrorLogClientRow } from "@/app/(dash)/admin/usage/ErrorLogsTable";
+import { type ErrorFilterValues } from "@/app/(dash)/admin/usage/ErrorFilterBar";
+import { strParam, parseTimeRange } from "@/app/(dash)/admin/usage/time-range";
 
 export const dynamic = "force-dynamic";
 
-const VALID_RANGES: TimeRange[] = ["24h", "7d", "30d"];
 const PAGE_SIZE = 20;
-
-function strParam(v: string | string[] | undefined): string | undefined {
-  return Array.isArray(v) ? v[0] : v;
-}
-
-function rangeToStart(rp: string | undefined): Date | undefined {
-  if (rp === "") return undefined;
-  const now = Date.now();
-  if (rp === "24h") return new Date(now - 24 * 3600_000);
-  if (rp === "7d") return new Date(now - 168 * 3600_000);
-  if (rp === "30d") return new Date(now - 720 * 3600_000);
-  return new Date(now - 168 * 3600_000);
-}
 
 export default async function PanelUsagePage({
   searchParams,
@@ -55,52 +38,14 @@ export default async function PanelUsagePage({
   const sp = await searchParams;
   const tabParam = strParam(sp.tab);
   const tab: "usage" | "errors" = tabParam === "errors" ? "errors" : "usage";
-  const rangeParam = strParam(sp.range);
-  const range: TimeRange = VALID_RANGES.includes(rangeParam as TimeRange)
-    ? (rangeParam as TimeRange)
-    : "7d";
   const page = Math.max(1, Number(strParam(sp.page) ?? "1") || 1);
+  const timeRange = parseTimeRange(sp);
 
-  return (
-    <div className="space-y-8 max-w-5xl">
-      <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-white">{tn("myUsage")}</h1>
-
-      <UsageTabs current={tab} basePath="/panel/usage" range={range} />
-
-      {tab === "usage" ? (
-        await renderPanelUsageTab({ userId: user.id, range, rangeParam, page, sp, db, s })
-      ) : (
-        await renderPanelErrorsTab({ userId: user.id, rangeParam, page, sp })
-      )}
-    </div>
-  );
-}
-
-// ===========================================================================
-// usage Tab:个人图表 + 用量明细(userId 隔离)
-// ===========================================================================
-async function renderPanelUsageTab({
-  userId,
-  range,
-  rangeParam,
-  page,
-  sp,
-  db,
-  s,
-}: {
-  userId: string;
-  range: TimeRange;
-  rangeParam: string | undefined;
-  page: number;
-  sp: Record<string, string | string[] | undefined>;
-  db: Awaited<ReturnType<typeof getDb>>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  s: any;
-}) {
+  // 统计区(跨 tab 共享;按 userId 隔离)。
   const [series, byModel, bySource, totals] = await Promise.all([
-    getTimeSeries(range, userId),
-    getModelBreakdown(range, userId),
-    getSourceBreakdown(range, userId),
+    getTimeSeries(timeRange.chartRange, user.id),
+    getModelBreakdown(timeRange.chartRange, user.id),
+    getSourceBreakdown(timeRange.chartRange, user.id),
     db
       .select({
         calls: sql<number>`count(*)`,
@@ -108,17 +53,76 @@ async function renderPanelUsageTab({
         completionTokens: sql<number>`coalesce(sum(${s.usageLogs.completionTokens}),0)`,
       })
       .from(s.usageLogs)
-      .where(eq(s.usageLogs.userId, userId)),
+      .where(eq(s.usageLogs.userId, user.id)),
   ]);
 
+  return (
+    <div className="space-y-8">
+      <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-white">{tn("myUsage")}</h1>
+
+      <CollapsibleStats>
+        <UsageDashboard
+          totals={{
+            calls: Number(totals[0]?.calls ?? 0),
+            promptTokens: Number(totals[0]?.promptTokens ?? 0),
+            completionTokens: Number(totals[0]?.completionTokens ?? 0),
+          }}
+          series={series}
+          byModel={byModel}
+          bySource={bySource}
+        />
+      </CollapsibleStats>
+
+      <UsageTabs current={tab} basePath="/panel/usage" range={timeRange.range} />
+
+      {tab === "usage" ? (
+        await renderPanelUsageTab({ userId: user.id, sp, page, timeRange, db, s })
+      ) : (
+        await renderPanelErrorsTab({ userId: user.id, sp, page, timeRange, db, s })
+      )}
+    </div>
+  );
+}
+
+// ===========================================================================
+// usage Tab:用量明细(userId 隔离 + UsageFilterBar typeahead + 执行链路列)
+// ===========================================================================
+async function renderPanelUsageTab({
+  userId,
+  sp,
+  page,
+  timeRange,
+  db,
+  s,
+}: {
+  userId: string;
+  sp: Record<string, string | string[] | undefined>;
+  page: number;
+  timeRange: ReturnType<typeof parseTimeRange>;
+  db: Awaited<ReturnType<typeof getDb>>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  s: any;
+}) {
+  const keyParam = strParam(sp.key);
   const filters: UsageLogFilters = {
     model: strParam(sp.model),
     providerName: strParam(sp.provider),
-    routeName: strParam(sp.route),
     source: strParam(sp.source),
-    startAt: rangeToStart(rangeParam),
+    apiKeyId: keyParam,
+    upstreamKeyMasked: strParam(sp.upstreamKey),
+    startAt: timeRange.startAt,
+    endAt: timeRange.endAt,
   };
-  const { rows, total } = await listUsageLogs({ page, pageSize: PAGE_SIZE, userId, filters });
+  const [{ rows, total }, keyLabelRow] = await Promise.all([
+    listUsageLogs({ page, pageSize: PAGE_SIZE, userId, filters }),
+    keyParam
+      ? db
+          .select({ name: s.apiKeys.name })
+          .from(s.apiKeys)
+          .where(and(eq(s.apiKeys.id, keyParam), eq(s.apiKeys.userId, userId)))
+          .limit(1)
+      : Promise.resolve([]),
+  ]);
 
   const clientRows: UsageLogClientRow[] = rows.map((r) => ({
     id: r.id,
@@ -133,95 +137,110 @@ async function renderPanelUsageTab({
     cacheReadTokens: r.cacheReadTokens,
     latencyMs: r.latencyMs,
     firstTokenLatencyMs: r.firstTokenLatencyMs,
-    // 用户自己的网关 key 名可下发;上游 key 是管理员配置,对 panel 不下发(数据层脱敏)。
     apiKeyName: r.apiKeyName,
+    // panel:上游 key 是管理员配置,不下发(数据层脱敏);执行链路列不显示上游key。
     upstreamKeyMasked: null,
+    userName: null,
+    userEmail: null,
     createdAt: r.createdAt.toISOString(),
   }));
 
-  const filterValues: Record<string, string> = {
-    model: strParam(sp.model) ?? "",
-    provider: strParam(sp.provider) ?? "",
-    route: strParam(sp.route) ?? "",
+  const filterValues: UsageFilterValues = {
+    range: timeRange.range,
+    start: timeRange.start,
+    end: timeRange.end,
+    user: "",
     source: strParam(sp.source) ?? "",
+    key: keyParam ?? "",
+    provider: strParam(sp.provider) ?? "",
+    model: strParam(sp.model) ?? "",
+    upstreamKey: strParam(sp.upstreamKey) ?? "",
   };
 
+  const labels = { key: (keyLabelRow[0] as { name?: string } | undefined)?.name };
+
   return (
-    <>
-      <UsageDashboard
-        range={range}
-        totals={{
-          calls: Number(totals[0]?.calls ?? 0),
-          promptTokens: Number(totals[0]?.promptTokens ?? 0),
-          completionTokens: Number(totals[0]?.completionTokens ?? 0),
-        }}
-        series={series}
-        byModel={byModel}
-        bySource={bySource}
-      />
-      <UsageLogsTable
-        rows={clientRows}
-        total={total}
-        page={page}
-        pageSize={PAGE_SIZE}
-        filterValues={filterValues}
-        basePath="/panel/usage"
-        preservedParams={{ tab: "usage", range }}
-      />
-    </>
+    <UsageLogsTable
+      rows={clientRows}
+      total={total}
+      page={page}
+      pageSize={PAGE_SIZE}
+      filterValues={filterValues}
+      labels={labels}
+      basePath="/panel/usage"
+      tab="usage"
+      variant="panel"
+    />
   );
 }
 
 // ===========================================================================
-// errors Tab:错误请求(脱敏视图,variant=panel;userId 强制隔离)
+// errors Tab:错误请求(放宽脱敏:自己调用全字段可见;userId 强制隔离;ErrorFilterBar 两排筛选)
 // ===========================================================================
 async function renderPanelErrorsTab({
   userId,
-  rangeParam,
-  page,
   sp,
+  page,
+  timeRange,
+  db,
+  s,
 }: {
   userId: string;
-  rangeParam: string | undefined;
-  page: number;
   sp: Record<string, string | string[] | undefined>;
+  page: number;
+  timeRange: ReturnType<typeof parseTimeRange>;
+  db: Awaited<ReturnType<typeof getDb>>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  s: any;
 }) {
+  const keyParam = strParam(sp.key);
   const showAuth = strParam(sp.showAuth) === "1";
   const phaseParam = strParam(sp.phase);
   const httpStatusStr = strParam(sp.httpStatus);
   const filters: ErrorLogFilters = {
     model: strParam(sp.model),
+    providerName: strParam(sp.provider),
+    source: strParam(sp.source),
+    apiKeyId: keyParam,
+    upstreamKeyMasked: strParam(sp.upstreamKey),
     errorPhase: phaseParam || undefined,
     httpStatus: httpStatusStr ? Number(httpStatusStr) || undefined : undefined,
-    startAt: rangeToStart(rangeParam),
+    startAt: timeRange.startAt,
+    endAt: timeRange.endAt,
     excludeErrorPhase: !phaseParam && !showAuth ? "auth" : undefined,
   };
-  const { rows, total } = await listErrorLogs({ page, pageSize: PAGE_SIZE, userId, filters });
-
-  // 脱敏:panel 只下发白名单字段(createdAt/model/httpStatus/latencyMs/category)。
-  // errorMessage / requestPath / provider* / route / upstream / errorCode / errorPhase /
-  // source / tokens / TTFT 等敏感字段一律置空,绝不送达客户端(数据层脱敏,非仅 UI 隐藏)。
-  // category 在服务端用完整线索派生后再丢弃原始敏感字段。
+  const [{ rows, total }, keyLabelRow] = await Promise.all([
+    listErrorLogs({ page, pageSize: PAGE_SIZE, userId, filters }),
+    keyParam
+      ? db
+          .select({ name: s.apiKeys.name })
+          .from(s.apiKeys)
+          .where(and(eq(s.apiKeys.id, keyParam), eq(s.apiKeys.userId, userId)))
+          .limit(1)
+      : Promise.resolve([]),
+  ]);
+  // panel 放宽:错误日志均为用户自己调用产生,全字段可见(与 admin 同款);仅无用户列。
   const clientRows: ErrorLogClientRow[] = rows.map((r) => ({
     id: r.id,
-    source: "",
+    source: r.source,
     model: r.model,
-    upstreamModel: null,
-    providerName: null,
-    providerRef: null,
-    routeName: null,
-    requestPath: null,
+    upstreamModel: r.upstreamModel,
+    providerName: r.providerName,
+    providerRef: r.providerRef,
+    routeName: r.routeName,
+    requestPath: r.requestPath,
     httpStatus: r.httpStatus,
-    errorCode: "",
-    errorMessage: null,
-    errorPhase: null,
+    errorCode: r.errorCode,
+    errorMessage: r.errorMessage,
+    errorPhase: r.errorPhase,
     latencyMs: r.latencyMs,
-    firstTokenLatencyMs: null,
-    promptTokens: 0,
-    completionTokens: 0,
-    // panel 错误视图:key 双字段都不下发(数据层脱敏,非仅 UI 隐藏)。
-    apiKeyName: null,
-    upstreamKeyMasked: null,
+    firstTokenLatencyMs: r.firstTokenLatencyMs,
+    promptTokens: r.promptTokens,
+    completionTokens: r.completionTokens,
+    apiKeyName: r.apiKeyName,
+    upstreamKeyMasked: r.upstreamKeyMasked,
+    userName: null,
+    userEmail: null,
     category: classifyError({
       errorCode: r.errorCode,
       httpStatus: r.httpStatus ?? undefined,
@@ -230,12 +249,22 @@ async function renderPanelErrorsTab({
     createdAt: r.createdAt.toISOString(),
   }));
 
-  const filterValues: Record<string, string> = {
-    range: rangeParam ?? "7d",
+  const filterValues: ErrorFilterValues = {
+    range: timeRange.range,
+    start: timeRange.start,
+    end: timeRange.end,
+    user: "",
+    source: strParam(sp.source) ?? "",
+    key: keyParam ?? "",
+    phase: phaseParam ?? "",
+    provider: strParam(sp.provider) ?? "",
     model: strParam(sp.model) ?? "",
+    upstreamKey: strParam(sp.upstreamKey) ?? "",
     httpStatus: httpStatusStr ?? "",
     showAuth: showAuth ? "1" : "",
   };
+
+  const labels = { key: (keyLabelRow[0] as { name?: string } | undefined)?.name };
 
   return (
     <ErrorLogsTable
@@ -244,8 +273,8 @@ async function renderPanelErrorsTab({
       page={page}
       pageSize={PAGE_SIZE}
       filterValues={filterValues}
+      labels={labels}
       basePath="/panel/usage"
-      preservedParams={{ tab: "errors" }}
       variant="panel"
     />
   );

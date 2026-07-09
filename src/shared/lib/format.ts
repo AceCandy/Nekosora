@@ -17,15 +17,10 @@ export function formatDuration(ms: number | null | undefined): string {
 }
 
 /**
- * 时间按固定东八区(Asia/Shanghai)呈现。
+ * 时间呈现:固定 locale(zh-CN) + timeZone(Asia/Shanghai),确保 SSR/client 输出一致(杜绝 hydration)。
  *
- * 固定 locale(zh-CN) + 固定时区,确保 SSR 与 client 输出完全一致——
- * 若用浏览器 locale/timeZone(toLocaleString(undefined)),服务端(Node 默认 en-US)
- * 与客户端(浏览器 zh-CN)格式不同(如 07/09/2026 vs 2026/07/09)会触发 React
- * hydration mismatch。固定后两者恒等,杜绝该报错。NaN 兜底返回原值。
- *
- * 注:真正"跟随浏览器时区"在 SSR 下必然 hydration 冲突,需改 client-only 渲染
- * (SSR 占位、mount 后替换)。当前固定东八区最稳,符合产品主面向国内。
+ * createdAt 为 PG timestamp(with time zone)(drizzle withTimezone),defaultNow() 存 UTC,
+ * pg 驱动读出 epoch 正确;按 Asia/Shanghai 转换即东八展示时间。NaN 兜底返回原值。
  */
 export function formatDateTimeLocal(iso: string): string {
   const d = new Date(iso);

@@ -38,19 +38,19 @@ export const user = pgTable("user", {
   role: text("role").notNull().default("user"), // "user" | "admin"
   banned: boolean("banned").notNull().default(false),
   banReason: text("ban_reason"),
-  banExpires: timestamp("ban_expires"),
+  banExpires: timestamp("ban_expires", { withTimezone: true }),
   // 自定义
   status: text("status").notNull().default("active"), // "active" | "disabled"
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const session = pgTable("session", {
   id: text("id").primaryKey(),
-  expiresAt: timestamp("expires_at").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   token: text("token").notNull().unique(),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   ipAddress: text("ip_address"),
   userAgent: text("user_agent"),
   userId: text("user_id")
@@ -67,22 +67,22 @@ export const account = pgTable("account", {
     .references(() => user.id, { onDelete: "cascade" }),
   accessToken: text("access_token"),
   refreshToken: text("refresh_token"),
-  accessTokenExpiresAt: timestamp("access_token_expires_at"),
-  refreshTokenExpiresAt: timestamp("refresh_token_expires_at"),
+  accessTokenExpiresAt: timestamp("access_token_expires_at", { withTimezone: true }),
+  refreshTokenExpiresAt: timestamp("refresh_token_expires_at", { withTimezone: true }),
   scope: text("scope"),
   idToken: text("id_token"),
   password: text("password"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const verification = pgTable("verification", {
   id: text("id").primaryKey(),
   identifier: text("identifier").notNull(),
   value: text("value").notNull(),
-  expiresAt: timestamp("expires_at").notNull(),
-  createdAt: timestamp("created_at"),
-  updatedAt: timestamp("updated_at"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }),
 });
 
 // ===========================================================================
@@ -106,8 +106,8 @@ export const apiKeys = pgTable(
     keyHash: text("key_hash").notNull(), // sha256(完整 sk 字符串)
     keyPrefix: text("key_prefix").notNull(), // 显示用,如 "sk-abcd…"
     enabled: boolean("enabled").notNull().default(true),
-    lastUsedAt: timestamp("last_used_at"),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("api_keys_user_idx").on(t.userId),
@@ -149,11 +149,11 @@ export const globalProviders = pgTable("global_providers", {
   streamIdleTimeoutMs: integer("stream_idle_timeout_ms"),
   headersJson: jsonb("headers_json").$type<Record<string, string>>(),
   // 最近一次全量密钥检测的聚合健康度(检测所有 key 后回写)。
-  lastHealthCheckedAt: timestamp("last_health_checked_at"),
+  lastHealthCheckedAt: timestamp("last_health_checked_at", { withTimezone: true }),
   lastHealthyKeyCount: integer("last_healthy_key_count"),
   lastTotalKeyCount: integer("last_total_key_count"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const globalModels = pgTable("global_models", {
@@ -168,8 +168,8 @@ export const globalModels = pgTable("global_models", {
   accessScope: accessScope("access_scope").notNull().default("public"),
   enabled: boolean("enabled").notNull().default(true),
   sortOrder: integer("sort_order").notNull().default(0),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const globalRoutes = pgTable(
@@ -187,7 +187,7 @@ export const globalRoutes = pgTable(
     weight: integer("weight").notNull().default(1),
     enabled: boolean("enabled").notNull().default(true),
     headersJson: jsonb("headers_json").$type<Record<string, string>>(),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("global_routes_model_idx").on(t.modelId)],
 );
@@ -207,11 +207,11 @@ export const userProviders = pgTable("user_providers", {
   apiKeyEnc: text("api_key_enc").notNull(), // AES-GCM 加密
   enabled: boolean("enabled").notNull().default(true),
   // 最近一次全量密钥检测的聚合健康度。
-  lastHealthCheckedAt: timestamp("last_health_checked_at"),
+  lastHealthCheckedAt: timestamp("last_health_checked_at", { withTimezone: true }),
   lastHealthyKeyCount: integer("last_healthy_key_count"),
   lastTotalKeyCount: integer("last_total_key_count"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const userModels = pgTable("user_models", {
@@ -233,7 +233,7 @@ export const userModels = pgTable("user_models", {
   systemPrompt: text("system_prompt"),
   description: text("description"),
   enabled: boolean("enabled").notNull().default(true),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 // 个人模型的多路由(镜像 global_routes + userId 隔离)。
@@ -256,7 +256,7 @@ export const userRoutes = pgTable(
     weight: integer("weight").notNull().default(1),
     enabled: boolean("enabled").notNull().default(true),
     headersJson: jsonb("headers_json").$type<Record<string, string>>(),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("user_routes_model_idx").on(t.userModelId)],
 );
@@ -281,7 +281,7 @@ export const keyModelBindings = pgTable(
     userModelId: text("user_model_id").references(() => userModels.id, {
       onDelete: "cascade",
     }),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("key_model_bindings_key_idx").on(t.keyId),
@@ -316,8 +316,8 @@ export const conversations = pgTable(
     archived: boolean("archived").notNull().default(false), // 是否归档
     generating: boolean("generating").notNull().default(false), // 是否正在生成(供侧栏转圈标识;服务端写入)
     contextPolicy: jsonb("context_policy").$type<ContextPolicy>(), // per-conversation 快照
-    createdAt: timestamp("created_at").notNull().defaultNow(),
-    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("conversations_user_idx").on(t.userId)],
 );
@@ -350,8 +350,8 @@ export const messages = pgTable(
     errorCode: text("error_code"),
     errorMessage: text("error_message"),
     processTrace: jsonb("process_trace").$type<ProcessTrace>(),
-    deletedAt: timestamp("deleted_at"), // 软删除时间戳;null 表示未删
-    createdAt: timestamp("created_at").notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }), // 软删除时间戳;null 表示未删
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("messages_conversation_idx").on(t.conversationId),
@@ -374,7 +374,7 @@ export const runs = pgTable("runs", {
   firstTokenLatencyMs: integer("first_token_latency_ms"),
   tokenUsage: jsonb("token_usage").$type<TokenUsage>(),
   status: text("status").notNull().default("running"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const toolCalls = pgTable("tool_calls", {
@@ -389,7 +389,7 @@ export const toolCalls = pgTable("tool_calls", {
   inputJson: jsonb("input_json"),
   outputJson: jsonb("output_json"),
   errorJson: jsonb("error_json"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const conversationProjects = pgTable("conversation_projects", {
@@ -402,7 +402,7 @@ export const conversationProjects = pgTable("conversation_projects", {
   color: text("color"),
   icon: text("icon"),
   sortOrder: integer("sort_order").notNull().default(0),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 // ===========================================================================
@@ -423,10 +423,10 @@ export const mcpServers = pgTable(
     headersJson: jsonb("headers_json").$type<Record<string, string>>(),
     enabled: boolean("enabled").notNull().default(true),
     cachedTools: jsonb("cached_tools").$type<unknown[]>(),
-    lastConnectedAt: timestamp("last_connected_at"),
+    lastConnectedAt: timestamp("last_connected_at", { withTimezone: true }),
     lastError: text("last_error"),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
-    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("mcp_servers_user_idx").on(t.userId), index("mcp_servers_enabled_idx").on(t.enabled)],
 );
@@ -454,7 +454,7 @@ export const artifacts = pgTable(
     content: text("content").notNull(),
     version: integer("version").notNull().default(1),
     parentArtifactId: text("parent_artifact_id"),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("artifacts_msg_idx").on(t.messageId), index("artifacts_conv_idx").on(t.conversationId)],
 );
@@ -470,10 +470,10 @@ export const conversationShares = pgTable("conversation_shares", {
   modelSnapshot: text("model_snapshot"),
   messageIdsJson: jsonb("message_ids_json").$type<string[]>(),
   defaultMessageIdsJson: jsonb("default_message_ids_json").$type<string[]>(),
-  revokedAt: timestamp("revoked_at"),
-  regeneratedAt: timestamp("regenerated_at"),
-  lastAccessedAt: timestamp("last_accessed_at"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  regeneratedAt: timestamp("regenerated_at", { withTimezone: true }),
+  lastAccessedAt: timestamp("last_accessed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 // ===========================================================================
@@ -497,7 +497,7 @@ export const imageJobs = pgTable(
     status: text("status").notNull().default("pending"),
     resultUrls: jsonb("result_urls").$type<string[]>(),
     error: text("error"),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("image_jobs_user_idx").on(t.userId)],
 );
@@ -515,7 +515,7 @@ export const knowledgeBases = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     description: text("description"),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("knowledge_bases_user_idx").on(t.userId)],
 );
@@ -551,7 +551,7 @@ export const fileObjects = pgTable(
     embedError: text("embed_error"),
     pageCount: integer("page_count"),
     chunkCount: integer("chunk_count"),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("file_objects_user_idx").on(t.userId)],
 );
@@ -597,7 +597,7 @@ export const contextSnapshots = pgTable("context_snapshots", {
   summaryTokens: integer("summary_tokens"),
   summaryText: text("summary_text").notNull(),
   strategy: text("strategy").notNull(), // "turn_cap" | "token_cap"
-  createdAt: timestamp("created_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 // ===========================================================================
@@ -623,8 +623,8 @@ export const promptTemplates = pgTable(
     enabled: boolean("enabled").notNull().default(true),
     sortOrder: integer("sort_order").notNull().default(0),
     useCount: integer("use_count").notNull().default(0),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
-    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("prompt_templates_scope_idx").on(t.scope)],
 );
@@ -656,8 +656,8 @@ export const instructionCards = pgTable(
     enabled: boolean("enabled").notNull().default(true),
     sortOrder: integer("sort_order").notNull().default(0),
     useCount: integer("use_count").notNull().default(0),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
-    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("instruction_cards_scope_idx").on(t.scope),
@@ -679,8 +679,8 @@ export const outputModes = pgTable(
     icon: text("icon"), // 图标名(lucide,可选)
     enabled: boolean("enabled").notNull().default(true),
     sortOrder: integer("sort_order").notNull().default(0),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
-    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("output_modes_enabled_idx").on(t.enabled)],
 );
@@ -703,8 +703,8 @@ export const renderStyles = pgTable(
     builtin: boolean("builtin").notNull().default(false), // 系统内置(不可删,遵守 DESIGN)
     enabled: boolean("enabled").notNull().default(true),
     sortOrder: integer("sort_order").notNull().default(0),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
-    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("render_styles_enabled_idx").on(t.enabled),
@@ -723,7 +723,7 @@ export const userMemories = pgTable(
     source: text("source").notNull().default("manual"), // "manual" | "ai"(记忆来源)
     content: text("content").notNull(),
     embedding: vector("embedding", { dimensions: 1536 }),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("user_memories_user_idx").on(t.userId)],
 );
@@ -739,7 +739,7 @@ export const systemSettings = pgTable(
     namespace: text("namespace").notNull(),
     key: text("key").notNull(),
     value: text("value").notNull(),
-    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("system_settings_unique_idx").on(t.namespace, t.key)],
 );
@@ -753,7 +753,7 @@ export const userSettings = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     key: text("key").notNull(),
     value: text("value").notNull(),
-    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("user_settings_unique_idx").on(t.userId, t.key)],
 );
@@ -785,7 +785,7 @@ export const usageLogs = pgTable(
     upstreamModel: text("upstream_model"), // 真实上游模型名(区别于对外 model)
     // 命中上游 key 的脱敏快照(前3后3,中间 *;运行时从明文算,绝不存明文)。
     upstreamKeyMasked: text("upstream_key_masked"),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("usage_logs_user_idx").on(t.userId),
@@ -827,7 +827,7 @@ export const opsErrorLogs = pgTable(
     completionTokens: integer("completion_tokens").notNull().default(0),
     latencyMs: integer("latency_ms"), // 端到端耗时
     firstTokenLatencyMs: integer("first_token_latency_ms"), // 失败前是否产出首 token
-    createdAt: timestamp("created_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("ops_error_logs_user_idx").on(t.userId),

@@ -4,7 +4,7 @@
  * dialect 差异(PG date_trunc / SQLite strftime)在此封装,业务层不感知。
  * 时间桶粒度:hour(24h 范围)/ day(7d/30d 范围)。
  */
-import { sql, and, gte, eq, desc, lte, type SQL } from "drizzle-orm";
+import { sql, and, gte, eq, desc, lte, isNotNull, ilike, like, or, type SQL } from "drizzle-orm";
 import { getDb, getSchema, isPg } from "@/lib/infra/db";
 
 export type TimeRange = "24h" | "7d" | "30d";
@@ -162,6 +162,10 @@ export interface UsageLogRow {
   apiKeyName: string | null;
   /** 命中上游 key 的脱敏快照(前3后3,中间 *)。 */
   upstreamKeyMasked: string | null;
+  /** 用户名(LEFT JOIN user.name;admin 用户列展示)。 */
+  userName: string | null;
+  /** 用户邮箱(LEFT JOIN user.email;admin 用户列展示)。 */
+  userEmail: string | null;
   createdAt: Date;
 }
 
@@ -171,6 +175,12 @@ export interface UsageLogFilters {
   providerName?: string;
   routeName?: string;
   source?: string;
+  /** admin 筛选用(区别于 opts.userId 的 panel 隔离语义)。 */
+  userId?: string;
+  /** 命中的对外网关 key id(密钥筛选)。 */
+  apiKeyId?: string;
+  /** 命中的上游 key 脱敏快照(上游key 筛选)。 */
+  upstreamKeyMasked?: string;
   startAt?: Date;
   endAt?: Date;
 }
@@ -201,6 +211,9 @@ function buildUsageWhere(opts: ListUsageLogsOptions): SQL | undefined {
     if (f.providerName) conds.push(eq(t.providerName, f.providerName));
     if (f.routeName) conds.push(eq(t.routeName, f.routeName));
     if (f.source) conds.push(eq(t.source, f.source));
+    if (f.userId) conds.push(eq(t.userId, f.userId));
+    if (f.apiKeyId) conds.push(eq(t.apiKeyId, f.apiKeyId));
+    if (f.upstreamKeyMasked) conds.push(eq(t.upstreamKeyMasked, f.upstreamKeyMasked));
     if (f.startAt) conds.push(gte(t.createdAt, f.startAt));
     if (f.endAt) conds.push(lte(t.createdAt, f.endAt));
   }
@@ -208,8 +221,11 @@ function buildUsageWhere(opts: ListUsageLogsOptions): SQL | undefined {
 }
 
 /** 把 drizzle 原始行收敛为 UsageLogRow DTO。apiKeyName 来自 LEFT JOIN apiKeys。 */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function toUsageRow(r: any, apiKeyName: string | null = null): UsageLogRow {
+function toUsageRow(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  r: any,
+  meta: { apiKeyName?: string | null; userName?: string | null; userEmail?: string | null } = {},
+): UsageLogRow {
   return {
     id: String(r.id),
     source: String(r.source),
@@ -230,8 +246,10 @@ function toUsageRow(r: any, apiKeyName: string | null = null): UsageLogRow {
     routeId: r.routeId ?? null,
     routeName: r.routeName ?? null,
     upstreamModel: r.upstreamModel ?? null,
-    apiKeyName,
+    apiKeyName: meta.apiKeyName ?? null,
     upstreamKeyMasked: r.upstreamKeyMasked ?? null,
+    userName: meta.userName ?? null,
+    userEmail: meta.userEmail ?? null,
     createdAt: r.createdAt instanceof Date ? r.createdAt : new Date(r.createdAt),
   };
 }
@@ -252,12 +270,13 @@ export async function listUsageLogs(
   const pageSize = Math.max(1, opts.pageSize);
   const offset = (page - 1) * pageSize;
 
-  // LEFT JOIN apiKeys 取对外网关 key 的 name;cacheReadTokens 已在 usage_logs 列中。
+  // LEFT JOIN apiKeys(对外网关 key 名)+ user(用户名/邮箱,admin 用户列展示)。
   const [rowsRaw, countRows] = await Promise.all([
     db
-      .select({ row: t, apiKeyName: s.apiKeys.name })
+      .select({ row: t, apiKeyName: s.apiKeys.name, userName: s.user.name, userEmail: s.user.email })
       .from(t)
       .leftJoin(s.apiKeys, eq(t.apiKeyId, s.apiKeys.id))
+      .leftJoin(s.user, eq(t.userId, s.user.id))
       .where(where)
       .orderBy(desc(t.createdAt))
       .limit(pageSize)
@@ -266,8 +285,167 @@ export async function listUsageLogs(
   ]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const rows = (rowsRaw as any[]).map(({ row, apiKeyName }) =>
-    toUsageRow(row, apiKeyName ?? null),
+  const rows = (rowsRaw as any[]).map(({ row, apiKeyName, userName, userEmail }) =>
+    toUsageRow(row, { apiKeyName, userName, userEmail }),
   );
   return { rows, total: Number(countRows[0]?.count ?? 0) };
+}
+
+// ===========================================================================
+// 筛选候选项拉取(R2):distinct model/providerName/routeName + 用户(admin)。
+// userId 传入(panel)→ 仅该用户自己的候选 + users 空(panel 无用户筛选);
+// userId 不传(admin)→ 全量候选 + users(distinct userId JOIN user)。
+// ===========================================================================
+
+/** 筛选下拉候选项(模型/服务商/路由/用户)。 */
+export interface UsageFilterOptions {
+  models: string[];
+  providers: string[];
+  routes: string[];
+  /** 有日志记录的用户(admin 用户筛选下拉;panel 返回空)。 */
+  users: { id: string; name: string; email: string }[];
+}
+
+/**
+ * 拉取筛选下拉候选项(distinct,限 100)。
+ * - models: distinct model(notNull)
+ * - providers/routes: distinct providerName/routeName(可空,过滤 null)
+ * - users: distinct userId JOIN user(仅 admin;panel 传 userId → 返回 [])
+ */
+export async function listUsageFilterOptions(userId?: string): Promise<UsageFilterOptions> {
+  const db = await getDb();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const s = getSchema() as any;
+  const t = s.usageLogs;
+  const userCond = userId ? eq(t.userId, userId) : undefined;
+
+  const [modelRows, providerRows, routeRows] = await Promise.all([
+    db.selectDistinct({ v: t.model }).from(t).where(userCond).orderBy(t.model).limit(100),
+    db
+      .selectDistinct({ v: t.providerName })
+      .from(t)
+      .where(and(userCond, isNotNull(t.providerName)))
+      .orderBy(t.providerName)
+      .limit(100),
+    db
+      .selectDistinct({ v: t.routeName })
+      .from(t)
+      .where(and(userCond, isNotNull(t.routeName)))
+      .orderBy(t.routeName)
+      .limit(100),
+  ]);
+
+  // users 仅 admin(panel 传 userId → 空,无需查)。
+  const userRows = userId
+    ? []
+    : await db
+        .selectDistinct({ id: t.userId, name: s.user.name, email: s.user.email })
+        .from(t)
+        .leftJoin(s.user, eq(t.userId, s.user.id))
+        .where(isNotNull(t.userId))
+        .limit(100);
+
+  const users = (userRows as { id: string | null; name: string | null; email: string | null }[])
+    .filter((u) => u.id)
+    .map((u) => ({ id: String(u.id), name: String(u.name ?? ""), email: String(u.email ?? "") }));
+  return {
+    models: (modelRows as { v: string | null }[]).map((r) => String(r.v ?? "")).filter(Boolean),
+    providers: (providerRows as { v: string | null }[]).map((r) => (r.v ? String(r.v) : "")).filter(Boolean),
+    routes: (routeRows as { v: string | null }[]).map((r) => (r.v ? String(r.v) : "")).filter(Boolean),
+    users,
+  };
+}
+
+// ===========================================================================
+// typeahead 候选搜索(迭代 v2):Combobox 输入时调用,支持级联 filter。
+// distinct + 大小写不敏感 LIKE + 按 userId/providerName 过滤。限 30。
+// ===========================================================================
+
+export type UsageCandidateType = "users" | "keys" | "providers" | "models" | "upstreamKeys";
+
+export interface UsageCandidate {
+  id: string;
+  label: string;
+  sub?: string;
+}
+
+export interface SearchUsageCandidatesOpts {
+  type: UsageCandidateType;
+  q?: string;
+  /** 级联:已选用户(panel 固定自己;admin 可跨用户)。 */
+  userId?: string;
+  /** 级联:已选服务商(模型/上游key 按 userId+providerName 过滤)。 */
+  providerName?: string;
+  limit?: number;
+}
+
+/** 大小写不敏感 LIKE(pg ilike / sqlite like 默认 ASCII 不敏感)。 */
+function iLike(col: SQL, q: string): SQL {
+  return isPg ? ilike(col, `%${q}%`) : like(col, `%${q}%`);
+}
+
+/**
+ * typeahead 候选搜索。按 type 返回不同维度候选,支持关键词 q 模糊 + 级联 filter。
+ * - users(admin):distinct userId JOIN user,q 匹配 name/email
+ * - keys:distinct apiKeyId JOIN apiKeys,q 匹配 name,按 userId 过滤
+ * - providers:distinct providerName,q like,按 userId 过滤
+ * - models:distinct model,q like,按 userId+providerName 过滤
+ * - upstreamKeys:distinct upstreamKeyMasked,q like,按 userId+providerName 过滤
+ */
+export async function searchUsageCandidates(opts: SearchUsageCandidatesOpts): Promise<UsageCandidate[]> {
+  const db = await getDb();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const s = getSchema() as any;
+  const t = s.usageLogs;
+  const limit = Math.min(opts.limit ?? 30, 50);
+  const q = opts.q?.trim();
+  const userCond = opts.userId ? eq(t.userId, opts.userId) : undefined;
+  const providerCond = opts.providerName ? eq(t.providerName, opts.providerName) : undefined;
+
+  if (opts.type === "users") {
+    const rows = (await db
+      .selectDistinct({ id: t.userId, name: s.user.name, email: s.user.email })
+      .from(t)
+      .leftJoin(s.user, eq(t.userId, s.user.id))
+      .where(and(isNotNull(t.userId), q ? or(iLike(s.user.name, q), iLike(s.user.email, q)) : undefined))
+      .limit(limit)) as { id: string | null; name: string | null; email: string | null }[];
+    return rows
+      .filter((u) => u.id)
+      .map((u) => ({ id: String(u.id), label: String(u.name || u.email || u.id), sub: u.email ?? undefined }));
+  }
+  if (opts.type === "keys") {
+    const rows = (await db
+      .selectDistinct({ id: t.apiKeyId, name: s.apiKeys.name })
+      .from(t)
+      .leftJoin(s.apiKeys, eq(t.apiKeyId, s.apiKeys.id))
+      .where(and(isNotNull(t.apiKeyId), userCond, q ? iLike(s.apiKeys.name, q) : undefined))
+      .limit(limit)) as { id: string | null; name: string | null }[];
+    return rows.filter((r) => r.id).map((r) => ({ id: String(r.id), label: String(r.name ?? r.id) }));
+  }
+  if (opts.type === "providers") {
+    const rows = (await db
+      .selectDistinct({ v: t.providerName })
+      .from(t)
+      .where(and(isNotNull(t.providerName), userCond, q ? iLike(t.providerName, q) : undefined))
+      .orderBy(t.providerName)
+      .limit(limit)) as { v: string | null }[];
+    return rows.map((r) => r.v).filter(Boolean).map((v) => ({ id: v as string, label: v as string }));
+  }
+  if (opts.type === "models") {
+    const rows = (await db
+      .selectDistinct({ v: t.model })
+      .from(t)
+      .where(and(userCond, providerCond, q ? iLike(t.model, q) : undefined))
+      .orderBy(t.model)
+      .limit(limit)) as { v: string | null }[];
+    return rows.map((r) => r.v).filter(Boolean).map((v) => ({ id: v as string, label: v as string }));
+  }
+  // upstreamKeys
+  const rows = (await db
+    .selectDistinct({ v: t.upstreamKeyMasked })
+    .from(t)
+    .where(and(isNotNull(t.upstreamKeyMasked), userCond, providerCond, q ? iLike(t.upstreamKeyMasked, q) : undefined))
+    .orderBy(t.upstreamKeyMasked)
+    .limit(limit)) as { v: string | null }[];
+  return rows.map((r) => r.v).filter(Boolean).map((v) => ({ id: v as string, label: v as string }));
 }

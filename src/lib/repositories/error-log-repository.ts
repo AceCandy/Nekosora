@@ -6,8 +6,8 @@
  *   - admin 后台:不传 userId(看全部)
  *   - panel 用户端:必传 userId(只看自己的)
  */
-import { eq, and, gte, lte, desc, sql, type SQL } from "drizzle-orm";
-import { getDb, getSchema } from "@/lib/infra/db";
+import { eq, and, gte, lte, desc, sql, isNotNull, ilike, like, or, type SQL } from "drizzle-orm";
+import { getDb, getSchema, isPg } from "@/lib/infra/db";
 
 /** 错误请求明细行(DTO,服务边界收敛成显式类型供前端消费)。 */
 export interface ErrorLogRow {
@@ -38,6 +38,10 @@ export interface ErrorLogRow {
   apiKeyName: string | null;
   /** 命中上游 key 的脱敏快照(前3后3,中间 *)。 */
   upstreamKeyMasked: string | null;
+  /** 用户名(LEFT JOIN user.name;admin 用户列展示)。 */
+  userName: string | null;
+  /** 用户邮箱(LEFT JOIN user.email;admin 用户列展示)。 */
+  userEmail: string | null;
   createdAt: Date;
 }
 
@@ -55,6 +59,12 @@ export interface ErrorLogFilters {
   httpStatus?: number;
   /** 调用来源(chat / gateway)。 */
   source?: string;
+  /** admin 筛选用(区别于 opts.userId 的 panel 隔离语义)。 */
+  userId?: string;
+  /** 命中的对外网关 key id(密钥筛选)。 */
+  apiKeyId?: string;
+  /** 命中的上游 key 脱敏快照(上游key 筛选)。 */
+  upstreamKeyMasked?: string;
   /** 起始时间(含,>= createdAt)。 */
   startAt?: Date;
   /** 截止时间(含,<= createdAt)。 */
@@ -94,6 +104,9 @@ function buildWhere(opts: ListErrorLogsOptions): SQL | undefined {
     else if (f.excludeErrorPhase) conds.push(sql`(${t.errorPhase} is null or ${t.errorPhase} != ${f.excludeErrorPhase})`);
     if (f.httpStatus !== undefined) conds.push(eq(t.httpStatus, f.httpStatus));
     if (f.source) conds.push(eq(t.source, f.source));
+    if (f.userId) conds.push(eq(t.userId, f.userId));
+    if (f.apiKeyId) conds.push(eq(t.apiKeyId, f.apiKeyId));
+    if (f.upstreamKeyMasked) conds.push(eq(t.upstreamKeyMasked, f.upstreamKeyMasked));
     if (f.startAt) conds.push(gte(t.createdAt, f.startAt));
     if (f.endAt) conds.push(lte(t.createdAt, f.endAt));
   }
@@ -101,8 +114,11 @@ function buildWhere(opts: ListErrorLogsOptions): SQL | undefined {
 }
 
 /** 把 drizzle 原始行收敛为 ErrorLogRow DTO。apiKeyName 来自 LEFT JOIN apiKeys。 */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function toRow(r: any, apiKeyName: string | null = null): ErrorLogRow {
+function toRow(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  r: any,
+  meta: { apiKeyName?: string | null; userName?: string | null; userEmail?: string | null } = {},
+): ErrorLogRow {
   return {
     id: String(r.id),
     requestId: String(r.requestId),
@@ -127,8 +143,10 @@ function toRow(r: any, apiKeyName: string | null = null): ErrorLogRow {
     completionTokens: Number(r.completionTokens ?? 0),
     latencyMs: r.latencyMs ?? null,
     firstTokenLatencyMs: r.firstTokenLatencyMs ?? null,
-    apiKeyName,
+    apiKeyName: meta.apiKeyName ?? null,
     upstreamKeyMasked: r.upstreamKeyMasked ?? null,
+    userName: meta.userName ?? null,
+    userEmail: meta.userEmail ?? null,
     createdAt: r.createdAt instanceof Date ? r.createdAt : new Date(r.createdAt),
   };
 }
@@ -149,12 +167,13 @@ export async function listErrorLogs(
   const pageSize = Math.max(1, opts.pageSize);
   const offset = (page - 1) * pageSize;
 
-  // LEFT JOIN apiKeys 取对外网关 key 的 name(apiKeyId 为 null 时得 null,正常)。
+  // LEFT JOIN apiKeys(对外网关 key 名)+ user(用户名/邮箱,admin 用户列展示)。
   const [rowsRaw, countRows] = await Promise.all([
     db
-      .select({ row: t, apiKeyName: s.apiKeys.name })
+      .select({ row: t, apiKeyName: s.apiKeys.name, userName: s.user.name, userEmail: s.user.email })
       .from(t)
       .leftJoin(s.apiKeys, eq(t.apiKeyId, s.apiKeys.id))
+      .leftJoin(s.user, eq(t.userId, s.user.id))
       .where(where)
       .orderBy(desc(t.createdAt))
       .limit(pageSize)
@@ -166,8 +185,8 @@ export async function listErrorLogs(
   ]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const rows = (rowsRaw as any[]).map(({ row, apiKeyName }) =>
-    toRow(row, apiKeyName ?? null),
+  const rows = (rowsRaw as any[]).map(({ row, apiKeyName, userName, userEmail }) =>
+    toRow(row, { apiKeyName, userName, userEmail }),
   );
   return { rows, total: Number(countRows[0]?.count ?? 0) };
 }
@@ -187,13 +206,108 @@ export async function getErrorLog(
   const conds: SQL[] = [eq(t.id, id)];
   if (userId) conds.push(eq(t.userId, userId));
   const [rowRaw] = await db
-    .select({ row: t, apiKeyName: s.apiKeys.name })
+    .select({ row: t, apiKeyName: s.apiKeys.name, userName: s.user.name, userEmail: s.user.email })
     .from(t)
     .leftJoin(s.apiKeys, eq(t.apiKeyId, s.apiKeys.id))
+    .leftJoin(s.user, eq(t.userId, s.user.id))
     .where(and(...conds))
     .limit(1);
   if (!rowRaw) return null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { row, apiKeyName } = rowRaw as any;
-  return toRow(row, apiKeyName ?? null);
+  const { row, apiKeyName, userName, userEmail } = rowRaw as any;
+  return toRow(row, { apiKeyName, userName, userEmail });
+}
+
+// ===========================================================================
+// typeahead 候选搜索(迭代 v2):错误表 Combobox 输入时调用,支持级联 filter。
+// distinct + 大小写不敏感 LIKE + 按 userId/providerName 过滤。限 30。
+// ===========================================================================
+
+export type ErrorCandidateType = "users" | "keys" | "providers" | "models" | "upstreamKeys";
+
+export interface ErrorCandidate {
+  id: string;
+  label: string;
+  sub?: string;
+}
+
+export interface SearchErrorCandidatesOpts {
+  type: ErrorCandidateType;
+  q?: string;
+  /** 级联:已选用户(panel 固定自己;admin 可跨用户)。 */
+  userId?: string;
+  /** 级联:已选服务商。 */
+  providerName?: string;
+  limit?: number;
+}
+
+/** 大小写不敏感 LIKE(pg ilike / sqlite like 默认 ASCII 不敏感)。 */
+function iLike(col: SQL, q: string): SQL {
+  return isPg ? ilike(col, `%${q}%`) : like(col, `%${q}%`);
+}
+
+/**
+ * 错误表 typeahead 候选搜索。语义同 searchUsageCandidates,作用于 ops_error_logs。
+ * - users(admin):distinct userId JOIN user,q 匹配 name/email
+ * - keys:distinct apiKeyId JOIN apiKeys,按 userId 过滤
+ * - providers:distinct providerName,按 userId 过滤
+ * - models:distinct model,按 userId+providerName 过滤
+ * - upstreamKeys:distinct upstreamKeyMasked,按 userId+providerName 过滤
+ */
+export async function searchErrorCandidates(opts: SearchErrorCandidatesOpts): Promise<ErrorCandidate[]> {
+  const db = await getDb();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const s = getSchema() as any;
+  const t = s.opsErrorLogs;
+  const limit = Math.min(opts.limit ?? 30, 50);
+  const q = opts.q?.trim();
+  const userCond = opts.userId ? eq(t.userId, opts.userId) : undefined;
+  const providerCond = opts.providerName ? eq(t.providerName, opts.providerName) : undefined;
+
+  if (opts.type === "users") {
+    const rows = (await db
+      .selectDistinct({ id: t.userId, name: s.user.name, email: s.user.email })
+      .from(t)
+      .leftJoin(s.user, eq(t.userId, s.user.id))
+      .where(and(isNotNull(t.userId), q ? or(iLike(s.user.name, q), iLike(s.user.email, q)) : undefined))
+      .limit(limit)) as { id: string | null; name: string | null; email: string | null }[];
+    return rows
+      .filter((u) => u.id)
+      .map((u) => ({ id: String(u.id), label: String(u.name || u.email || u.id), sub: u.email ?? undefined }));
+  }
+  if (opts.type === "keys") {
+    const rows = (await db
+      .selectDistinct({ id: t.apiKeyId, name: s.apiKeys.name })
+      .from(t)
+      .leftJoin(s.apiKeys, eq(t.apiKeyId, s.apiKeys.id))
+      .where(and(isNotNull(t.apiKeyId), userCond, q ? iLike(s.apiKeys.name, q) : undefined))
+      .limit(limit)) as { id: string | null; name: string | null }[];
+    return rows.filter((r) => r.id).map((r) => ({ id: String(r.id), label: String(r.name ?? r.id) }));
+  }
+  if (opts.type === "providers") {
+    const rows = (await db
+      .selectDistinct({ v: t.providerName })
+      .from(t)
+      .where(and(isNotNull(t.providerName), userCond, q ? iLike(t.providerName, q) : undefined))
+      .orderBy(t.providerName)
+      .limit(limit)) as { v: string | null }[];
+    return rows.map((r) => r.v).filter(Boolean).map((v) => ({ id: v as string, label: v as string }));
+  }
+  if (opts.type === "models") {
+    const rows = (await db
+      .selectDistinct({ v: t.model })
+      .from(t)
+      .where(and(isNotNull(t.model), userCond, providerCond, q ? iLike(t.model, q) : undefined))
+      .orderBy(t.model)
+      .limit(limit)) as { v: string | null }[];
+    return rows.map((r) => r.v).filter(Boolean).map((v) => ({ id: v as string, label: v as string }));
+  }
+  // upstreamKeys
+  const rows = (await db
+    .selectDistinct({ v: t.upstreamKeyMasked })
+    .from(t)
+    .where(and(isNotNull(t.upstreamKeyMasked), userCond, providerCond, q ? iLike(t.upstreamKeyMasked, q) : undefined))
+    .orderBy(t.upstreamKeyMasked)
+    .limit(limit)) as { v: string | null }[];
+  return rows.map((r) => r.v).filter(Boolean).map((v) => ({ id: v as string, label: v as string }));
 }

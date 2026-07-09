@@ -103,6 +103,13 @@ Correct —— 补种用 `INSERT ... SELECT ... WHERE NOT EXISTS` 按业务键�
 Wrong —— 在 SQLite 上手写 `ALTER TABLE ... ALTER COLUMN`:SQLite 不支持,迁移失败。
 Correct —— 让 drizzle-kit 生成表重建,校验全列 INSERT 与 FK 重建。
 
+## Timestamps（时区）
+
+- **PG 时间戳必须用 `timestamp({ withTimezone: true })`**（即 `timestamptz`）。`timestamp`（without tz）+ 服务器非 UTC 时区 → DB 存 wall time、pg 驱动按 UTC 解释 → epoch 偏移（东八服务器 +8h），破坏时间筛选与展示。
+- **SQLite 用 `integer("...", { mode: "timestamp" })`**（存 epoch，无时区问题）。
+- 双 schema 同构：PG `timestamptz` ↔ SQLite `integer timestamp`，语义一致（都存绝对时刻）。
+- 前端展示固定 `timeZone: "Asia/Shanghai"`（`formatDateTimeLocal`），SSR/client 一致防 hydration。
+
 ## Naming Conventions
 
 - 表名:snake_case 复数(`api_keys`, `global_providers`)或 Better Auth 约定的单数(`user`, `session`)。

@@ -20,7 +20,7 @@ export function UsageTabs({ current, basePath, range }: UsageTabsProps) {
   const t = useTranslations("admin.usage");
   const buildHref = (tab: "usage" | "errors") => {
     const params = new URLSearchParams();
-    if (range) params.set("range", range);
+    if (range !== undefined) params.set("range", range);
     params.set("tab", tab);
     return `${basePath}?${params.toString()}`;
   };

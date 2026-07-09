@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { sql, eq } from "drizzle-orm";
 import { getTranslations } from "next-intl/server";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { requireAdmin } from "@/lib/session";
@@ -7,35 +7,22 @@ import {
   getModelBreakdown,
   getSourceBreakdown,
   listUsageLogs,
-  type TimeRange,
   type UsageLogFilters,
 } from "@/lib/usage-aggregate";
 import { listErrorLogs, type ErrorLogFilters } from "@/lib/repositories/error-log-repository";
 import { classifyError } from "@/lib/error-classify";
 import { UsageDashboard } from "./UsageDashboard";
+import { CollapsibleStats } from "./CollapsibleStats";
 import { UsageTabs } from "./UsageTabs";
 import { UsageLogsTable, type UsageLogClientRow } from "./UsageLogsTable";
+import { type UsageFilterValues } from "./UsageFilterBar";
 import { ErrorLogsTable, type ErrorLogClientRow } from "./ErrorLogsTable";
+import { type ErrorFilterValues } from "./ErrorFilterBar";
+import { strParam, parseTimeRange } from "./time-range";
 
 export const dynamic = "force-dynamic";
 
-const VALID_RANGES: TimeRange[] = ["24h", "7d", "30d"];
 const PAGE_SIZE = 20;
-
-/** searchParams 值归一化为 string | undefined。 */
-function strParam(v: string | string[] | undefined): string | undefined {
-  return Array.isArray(v) ? v[0] : v;
-}
-
-/** range → startAt;空串表示显式「全部」(不限时间)。 */
-function rangeToStart(rp: string | undefined): Date | undefined {
-  if (rp === "") return undefined;
-  const now = Date.now();
-  if (rp === "24h") return new Date(now - 24 * 3600_000);
-  if (rp === "7d") return new Date(now - 168 * 3600_000);
-  if (rp === "30d") return new Date(now - 720 * 3600_000);
-  return new Date(now - 168 * 3600_000); // 缺省/非法 → 7d
-}
 
 export default async function UsagePage({
   searchParams,
@@ -51,50 +38,14 @@ export default async function UsagePage({
   const sp = await searchParams;
   const tabParam = strParam(sp.tab);
   const tab: "usage" | "errors" = tabParam === "errors" ? "errors" : "usage";
-  const rangeParam = strParam(sp.range);
-  const range: TimeRange = VALID_RANGES.includes(rangeParam as TimeRange)
-    ? (rangeParam as TimeRange)
-    : "7d";
   const page = Math.max(1, Number(strParam(sp.page) ?? "1") || 1);
+  const timeRange = parseTimeRange(sp);
 
-  return (
-    <div className="space-y-8">
-      <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-white">{tn("usage")}</h1>
-
-      <UsageTabs current={tab} basePath="/admin/usage" range={range} />
-
-      {tab === "usage" ? (
-        await renderUsageTab({ range, rangeParam, page, sp, db, s })
-      ) : (
-        await renderErrorsTab({ rangeParam, page, sp })
-      )}
-    </div>
-  );
-}
-
-// ===========================================================================
-// usage Tab:总量卡片 + 图表 + 用量明细分页表(成功计费)
-// ===========================================================================
-async function renderUsageTab({
-  range,
-  rangeParam,
-  page,
-  sp,
-  db,
-  s,
-}: {
-  range: TimeRange;
-  rangeParam: string | undefined;
-  page: number;
-  sp: Record<string, string | string[] | undefined>;
-  db: Awaited<ReturnType<typeof getDb>>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  s: any;
-}) {
+  // 统计区(跨 tab 共享)用 chartRange。
   const [series, byModel, bySource, totals] = await Promise.all([
-    getTimeSeries(range),
-    getModelBreakdown(range),
-    getSourceBreakdown(range),
+    getTimeSeries(timeRange.chartRange),
+    getModelBreakdown(timeRange.chartRange),
+    getSourceBreakdown(timeRange.chartRange),
     db.select({
       calls: sql<number>`count(*)`,
       promptTokens: sql<number>`coalesce(sum(${s.usageLogs.promptTokens}),0)`,
@@ -102,14 +53,73 @@ async function renderUsageTab({
     }).from(s.usageLogs),
   ]);
 
+  return (
+    <div className="space-y-8">
+      <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-white">{tn("usage")}</h1>
+
+      <CollapsibleStats>
+        <UsageDashboard
+          totals={{
+            calls: Number(totals[0]?.calls ?? 0),
+            promptTokens: Number(totals[0]?.promptTokens ?? 0),
+            completionTokens: Number(totals[0]?.completionTokens ?? 0),
+          }}
+          series={series}
+          byModel={byModel}
+          bySource={bySource}
+        />
+      </CollapsibleStats>
+
+      <UsageTabs current={tab} basePath="/admin/usage" range={timeRange.range} />
+
+      {tab === "usage" ? (
+        await renderUsageTab({ sp, page, timeRange, db, s })
+      ) : (
+        await renderErrorsTab({ sp, page, timeRange, db, s })
+      )}
+    </div>
+  );
+}
+
+// ===========================================================================
+// usage Tab:用量明细(UsageFilterBar typeahead + 执行链路列)
+// ===========================================================================
+async function renderUsageTab({
+  sp,
+  page,
+  timeRange,
+  db,
+  s,
+}: {
+  sp: Record<string, string | string[] | undefined>;
+  page: number;
+  timeRange: ReturnType<typeof parseTimeRange>;
+  db: Awaited<ReturnType<typeof getDb>>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  s: any;
+}) {
+  const userParam = strParam(sp.user);
+  const keyParam = strParam(sp.key);
   const filters: UsageLogFilters = {
     model: strParam(sp.model),
     providerName: strParam(sp.provider),
-    routeName: strParam(sp.route),
     source: strParam(sp.source),
-    startAt: rangeToStart(rangeParam),
+    userId: userParam,
+    apiKeyId: keyParam,
+    upstreamKeyMasked: strParam(sp.upstreamKey),
+    startAt: timeRange.startAt,
+    endAt: timeRange.endAt,
   };
-  const { rows, total } = await listUsageLogs({ page, pageSize: PAGE_SIZE, filters });
+
+  const [{ rows, total }, userLabelRow, keyLabelRow] = await Promise.all([
+    listUsageLogs({ page, pageSize: PAGE_SIZE, filters }),
+    userParam
+      ? db.select({ name: s.user.name }).from(s.user).where(eq(s.user.id, userParam)).limit(1)
+      : Promise.resolve([]),
+    keyParam
+      ? db.select({ name: s.apiKeys.name }).from(s.apiKeys).where(eq(s.apiKeys.id, keyParam)).limit(1)
+      : Promise.resolve([]),
+  ]);
 
   const clientRows: UsageLogClientRow[] = rows.map((r) => ({
     id: r.id,
@@ -126,68 +136,87 @@ async function renderUsageTab({
     firstTokenLatencyMs: r.firstTokenLatencyMs,
     apiKeyName: r.apiKeyName,
     upstreamKeyMasked: r.upstreamKeyMasked,
+    userName: r.userName,
+    userEmail: r.userEmail,
     createdAt: r.createdAt.toISOString(),
   }));
 
-  const filterValues: Record<string, string> = {
-    model: strParam(sp.model) ?? "",
-    provider: strParam(sp.provider) ?? "",
-    route: strParam(sp.route) ?? "",
+  const filterValues: UsageFilterValues = {
+    range: timeRange.range,
+    start: timeRange.start,
+    end: timeRange.end,
+    user: userParam ?? "",
     source: strParam(sp.source) ?? "",
+    key: keyParam ?? "",
+    provider: strParam(sp.provider) ?? "",
+    model: strParam(sp.model) ?? "",
+    upstreamKey: strParam(sp.upstreamKey) ?? "",
+  };
+
+  const labels = {
+    user: (userLabelRow[0] as { name?: string } | undefined)?.name,
+    key: (keyLabelRow[0] as { name?: string } | undefined)?.name,
   };
 
   return (
-    <>
-      <UsageDashboard
-        range={range}
-        totals={{
-          calls: Number(totals[0]?.calls ?? 0),
-          promptTokens: Number(totals[0]?.promptTokens ?? 0),
-          completionTokens: Number(totals[0]?.completionTokens ?? 0),
-        }}
-        series={series}
-        byModel={byModel}
-        bySource={bySource}
-      />
-      <UsageLogsTable
-        rows={clientRows}
-        total={total}
-        page={page}
-        pageSize={PAGE_SIZE}
-        filterValues={filterValues}
-        basePath="/admin/usage"
-        preservedParams={{ tab: "usage", range }}
-      />
-    </>
+    <UsageLogsTable
+      rows={clientRows}
+      total={total}
+      page={page}
+      pageSize={PAGE_SIZE}
+      filterValues={filterValues}
+      labels={labels}
+      basePath="/admin/usage"
+      tab="usage"
+    />
   );
 }
 
 // ===========================================================================
-// errors Tab:错误请求分页表(ops_error_logs)
+// errors Tab:错误请求(ErrorFilterBar 两排 typeahead + 执行链路列;时间与 usage 共享 parseTimeRange)
 // ===========================================================================
 async function renderErrorsTab({
-  rangeParam,
-  page,
   sp,
+  page,
+  timeRange,
+  db,
+  s,
 }: {
-  rangeParam: string | undefined;
-  page: number;
   sp: Record<string, string | string[] | undefined>;
+  page: number;
+  timeRange: ReturnType<typeof parseTimeRange>;
+  db: Awaited<ReturnType<typeof getDb>>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  s: any;
 }) {
+  const userParam = strParam(sp.user);
+  const keyParam = strParam(sp.key);
   const showAuth = strParam(sp.showAuth) === "1";
   const phaseParam = strParam(sp.phase);
   const httpStatusStr = strParam(sp.httpStatus);
   const filters: ErrorLogFilters = {
     model: strParam(sp.model),
     providerName: strParam(sp.provider),
+    source: strParam(sp.source),
+    userId: userParam,
+    apiKeyId: keyParam,
+    upstreamKeyMasked: strParam(sp.upstreamKey),
     errorPhase: phaseParam || undefined,
     httpStatus: httpStatusStr ? Number(httpStatusStr) || undefined : undefined,
-    source: strParam(sp.source),
-    startAt: rangeToStart(rangeParam),
-    // 默认隐藏 auth 噪声(扫描流量放大),除非用户显式选了 phase=auth 或勾选「包含鉴权错误」
+    startAt: timeRange.startAt,
+    endAt: timeRange.endAt,
     excludeErrorPhase: !phaseParam && !showAuth ? "auth" : undefined,
   };
-  const { rows, total } = await listErrorLogs({ page, pageSize: PAGE_SIZE, filters });
+
+  const [{ rows, total }, userLabelRow, keyLabelRow] = await Promise.all([
+    listErrorLogs({ page, pageSize: PAGE_SIZE, filters }),
+    userParam
+      ? db.select({ name: s.user.name }).from(s.user).where(eq(s.user.id, userParam)).limit(1)
+      : Promise.resolve([]),
+    keyParam
+      ? db.select({ name: s.apiKeys.name }).from(s.apiKeys).where(eq(s.apiKeys.id, keyParam)).limit(1)
+      : Promise.resolve([]),
+  ]);
 
   const clientRows: ErrorLogClientRow[] = rows.map((r) => ({
     id: r.id,
@@ -208,6 +237,8 @@ async function renderErrorsTab({
     completionTokens: r.completionTokens,
     apiKeyName: r.apiKeyName,
     upstreamKeyMasked: r.upstreamKeyMasked,
+    userName: r.userName,
+    userEmail: r.userEmail,
     category: classifyError({
       errorCode: r.errorCode,
       httpStatus: r.httpStatus ?? undefined,
@@ -216,14 +247,24 @@ async function renderErrorsTab({
     createdAt: r.createdAt.toISOString(),
   }));
 
-  const filterValues: Record<string, string> = {
-    range: rangeParam ?? "7d",
-    phase: phaseParam ?? "",
-    model: strParam(sp.model) ?? "",
-    provider: strParam(sp.provider) ?? "",
-    httpStatus: httpStatusStr ?? "",
+  const filterValues: ErrorFilterValues = {
+    range: timeRange.range,
+    start: timeRange.start,
+    end: timeRange.end,
+    user: userParam ?? "",
     source: strParam(sp.source) ?? "",
+    key: keyParam ?? "",
+    phase: phaseParam ?? "",
+    provider: strParam(sp.provider) ?? "",
+    model: strParam(sp.model) ?? "",
+    upstreamKey: strParam(sp.upstreamKey) ?? "",
+    httpStatus: httpStatusStr ?? "",
     showAuth: showAuth ? "1" : "",
+  };
+
+  const labels = {
+    user: (userLabelRow[0] as { name?: string } | undefined)?.name,
+    key: (keyLabelRow[0] as { name?: string } | undefined)?.name,
   };
 
   return (
@@ -233,8 +274,8 @@ async function renderErrorsTab({
       page={page}
       pageSize={PAGE_SIZE}
       filterValues={filterValues}
+      labels={labels}
       basePath="/admin/usage"
-      preservedParams={{ tab: "errors" }}
       variant="admin"
     />
   );

@@ -2,10 +2,8 @@
 /**
  * 错误请求详情抽屉(Client Component)—— 复用 shared/ui/Modal。
  *
- * variant:
- *   - admin:展示全部字段(errorCode/errorMessage/requestPath/provider/route/upstream/...)
- *   - panel:脱敏视图,只露白名单字段(时间/模型/分类/HTTP/耗时),不含 errorMessage
- *     全文、provider、route、requestPath、上游 endpoint 等敏感信息。
+ * 展示全部字段(errorCode/errorMessage/requestPath/provider/route/upstream/tokens/...)。
+ * panel 与 admin 同款(panel 数据均为用户自己调用产生,可见)。
  *
  * 分类(category)由 error-classify 在前端按需派生,对应 admin.usage.errors.categories.*。
  */
@@ -20,7 +18,6 @@ interface ErrorDetailDrawerProps {
   row: ErrorLogClientRow | null;
   open: boolean;
   onClose: () => void;
-  variant: "admin" | "panel";
 }
 
 /** 分类对应的 badge 颜色(低饱和)。 */
@@ -42,15 +39,15 @@ function categoryVariant(c: ErrorCategory): "primary" | "warning" | "danger" | "
   }
 }
 
-export function ErrorDetailDrawer({ row, open, onClose, variant }: ErrorDetailDrawerProps) {
+export function ErrorDetailDrawer({ row, open, onClose }: ErrorDetailDrawerProps) {
   const t = useTranslations("admin.usage");
   if (!row) return null;
 
   const category = row.category;
   const phaseLabel = row.errorPhase ? t(`errors.phases.${row.errorPhase}` as const) : "-";
 
-  // 通用字段行(admin / panel 共享)。
-  const commonRows: { label: string; value: string }[] = [
+  // 基础字段行。
+  const baseRows: { label: string; value: string }[] = [
     { label: t("errors.detailCreatedAt"), value: formatDateTimeLocal(row.createdAt) },
     { label: t("errors.detailModel"), value: row.model },
     { label: t("errors.detailCategory"), value: t(`errors.categories.${category}` as const) },
@@ -58,8 +55,8 @@ export function ErrorDetailDrawer({ row, open, onClose, variant }: ErrorDetailDr
     { label: t("errors.detailLatency"), value: formatDuration(row.latencyMs) },
   ];
 
-  // admin 专属(含敏感信息:errorMessage/provider/route/requestPath/上游/tokens/TTFT)。
-  const adminRows: { label: string; value: string }[] = [
+  // 扩展字段(errorCode/phase/source/key/upstream/provider/route/requestPath/TTFT/tokens)。
+  const extraRows: { label: string; value: string }[] = [
     { label: t("errors.detailErrorCode"), value: row.errorCode },
     { label: t("errors.detailPhase"), value: phaseLabel },
     { label: t("errors.detailSource"), value: t(`sources.${row.source}` as const) },
@@ -74,7 +71,7 @@ export function ErrorDetailDrawer({ row, open, onClose, variant }: ErrorDetailDr
     { label: t("errors.detailCompletionTokens"), value: String(row.completionTokens) },
   ];
 
-  const rows = variant === "panel" ? commonRows : [...commonRows, ...adminRows];
+  const rows = [...baseRows, ...extraRows];
 
   return (
     <Modal open={open} onClose={onClose} title={t("errors.detailTitle")} dialogClassName="m-auto w-[min(640px,92vw)] rounded-lg border border-morning-mist bg-nebula-white p-0 text-space-ink shadow-xl backdrop:bg-black/40 dark:border-deep-space dark:bg-twilight-obsidian dark:text-nebula-silver">
@@ -102,8 +99,8 @@ export function ErrorDetailDrawer({ row, open, onClose, variant }: ErrorDetailDr
           ))}
         </dl>
 
-        {/* errorMessage 仅 admin 展示,且为长文块 */}
-        {variant === "admin" && row.errorMessage && (
+        {/* errorMessage 长文块 */}
+        {row.errorMessage && (
           <div className="space-y-1.5">
             <div className="text-[10px] uppercase tracking-wider text-neutral-400 dark:text-neutral-500 font-semibold">
               {t("errors.detailErrorMessage")}
