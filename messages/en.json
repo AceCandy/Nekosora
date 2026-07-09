@@ -433,6 +433,7 @@
       "rangeYesterday": "Yesterday",
       "rangeCustom": "Custom",
       "sources": { "chat": "Chat", "gateway": "Gateway" },
+      "taskKinds": { "title": "Title", "memory": "Memory", "compact": "Summary" },
       "tabs": { "usage": "Usage logs", "errors": "Error requests" },
       "statsOverview": "Usage overview",
       "pagination": {
@@ -451,7 +452,8 @@
         "phase": "Error phase",
         "httpStatus": "HTTP status",
         "range": "Time range",
-        "showAuth": "Include auth errors"
+        "showAuth": "Include auth errors",
+        "refresh": "Refresh"
       },
       "errors": {
         "empty": "No error requests",

@@ -236,6 +236,7 @@ async function llmSummarize(msgs: CompactionMessage[], lite: boolean): Promise<s
   const ctx = { userId: "system", keyKind: null as null, source: "chat" as const };
   for await (const ev of streamChat({
     ctx,
+    taskKind: "compact",
     request: {
       model: target.name,
       messages: [

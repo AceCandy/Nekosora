@@ -82,7 +82,7 @@ export async function maybeGenerateTitle(
 
   let result;
   try {
-    result = await generateChat({ ctx, request });
+    result = await generateChat({ ctx, request, taskKind: "title" });
   } catch {
     return; // 生成失败,保留 fallback
   }

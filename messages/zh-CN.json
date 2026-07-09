@@ -433,6 +433,7 @@
       "rangeYesterday": "昨天",
       "rangeCustom": "自定义",
       "sources": { "chat": "聊天", "gateway": "网关" },
+      "taskKinds": { "title": "标题", "memory": "记忆", "compact": "摘要" },
       "tabs": { "usage": "用量明细", "errors": "错误请求" },
       "statsOverview": "用量总览",
       "pagination": {
@@ -451,7 +452,8 @@
         "httpStatus": "HTTP 状态",
         "range": "时间范围",
         "showAuth": "包含鉴权错误",
-        "upstreamKey": "上游 Key"
+        "upstreamKey": "上游 Key",
+        "refresh": "刷新"
       },
       "errors": {
         "empty": "暂无错误请求",

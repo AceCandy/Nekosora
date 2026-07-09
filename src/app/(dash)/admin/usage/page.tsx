@@ -138,6 +138,7 @@ async function renderUsageTab({
     upstreamKeyMasked: r.upstreamKeyMasked,
     userName: r.userName,
     userEmail: r.userEmail,
+    taskKind: r.taskKind,
     createdAt: r.createdAt.toISOString(),
   }));
 
@@ -239,6 +240,7 @@ async function renderErrorsTab({
     upstreamKeyMasked: r.upstreamKeyMasked,
     userName: r.userName,
     userEmail: r.userEmail,
+    taskKind: r.taskKind,
     category: classifyError({
       errorCode: r.errorCode,
       httpStatus: r.httpStatus ?? undefined,

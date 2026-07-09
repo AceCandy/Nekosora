@@ -142,6 +142,7 @@ async function renderPanelUsageTab({
     upstreamKeyMasked: null,
     userName: null,
     userEmail: null,
+    taskKind: r.taskKind,
     createdAt: r.createdAt.toISOString(),
   }));
 
@@ -241,6 +242,7 @@ async function renderPanelErrorsTab({
     upstreamKeyMasked: r.upstreamKeyMasked,
     userName: null,
     userEmail: null,
+    taskKind: r.taskKind,
     category: classifyError({
       errorCode: r.errorCode,
       httpStatus: r.httpStatus ?? undefined,

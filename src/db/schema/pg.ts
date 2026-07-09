@@ -785,6 +785,8 @@ export const usageLogs = pgTable(
     upstreamModel: text("upstream_model"), // 真实上游模型名(区别于对外 model)
     // 命中上游 key 的脱敏快照(前3后3,中间 *;运行时从明文算,绝不存明文)。
     upstreamKeyMasked: text("upstream_key_masked"),
+    /** 副任务类型(null=主回复/网关请求;title/memory/compact=后台副任务,用于区分双日志)。 */
+    taskKind: text("task_kind"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -827,6 +829,8 @@ export const opsErrorLogs = pgTable(
     completionTokens: integer("completion_tokens").notNull().default(0),
     latencyMs: integer("latency_ms"), // 端到端耗时
     firstTokenLatencyMs: integer("first_token_latency_ms"), // 失败前是否产出首 token
+    /** 副任务类型(null=主回复/网关请求;title/memory/compact=后台副任务)。 */
+    taskKind: text("task_kind"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

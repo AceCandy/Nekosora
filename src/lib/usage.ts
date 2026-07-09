@@ -45,6 +45,8 @@ export interface LogUsageParams {
   errorType?: string;
   /** 命中上游 key 的脱敏快照(前3后3,中间 *;运行时从明文算,绝不存明文)。 */
   upstreamKeyMasked?: string | null;
+  /** 副任务类型(null=主回复/网关请求;title/memory/compact=后台副任务)。 */
+  taskKind?: string;
 }
 
 /**
@@ -90,6 +92,7 @@ export async function logUsage(params: LogUsageParams): Promise<void> {
         routeName: params.routeName ?? null,
         upstreamModel: params.upstreamModel ?? null,
         upstreamKeyMasked: params.upstreamKeyMasked ?? null,
+        taskKind: params.taskKind ?? null,
       });
     } else {
       // 失败 / 中断 → ops_error_logs(本 Phase 能拿到的先写,缺失的留 null)。
@@ -118,6 +121,7 @@ export async function logUsage(params: LogUsageParams): Promise<void> {
         completionTokens: params.usage.outputTokens ?? 0,
         latencyMs: params.latencyMs,
         firstTokenLatencyMs: params.firstTokenLatencyMs ?? null,
+        taskKind: params.taskKind ?? null,
       });
     }
 

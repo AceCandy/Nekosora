@@ -33,6 +33,8 @@ export interface StreamChatOptions {
   request: IRRequest;
   /** 标识一次生成(WebChat 传入 message 的 run_id;网关自动生成)。 */
   runId?: string;
+  /** 副任务类型(title/memory/compact);主回复 / 网关请求不传 → null。 */
+  taskKind?: string;
 }
 
 /** 判断错误是否值得路由级故障转移(连接/5xx/限流类),而非确定性失败。 */
@@ -50,6 +52,21 @@ export function isKeyAuthError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
   return /invalid_api_key|authentication|incorrect.*api.*key|401|403/i.test(msg);
 }
+
+/**
+ * stream 内部短码 → HTTP 状态码(失败落库 httpStatus 用)。
+ * 与 error-classify 的短码收录对齐;不动 errorCode 字面值(保护历史数据 + 分类)。
+ * 路由层失败兜底 503,生成失败 502,未知兜底 500。
+ */
+const SHORT_HTTP_STATUS: Record<string, number> = {
+  generation_failed: 502,
+  routing_error: 503,
+  model_not_found: 404,
+  model_not_available: 404,
+  model_not_bound: 403,
+  no_route: 503,
+  capability_not_supported: 400,
+};
 
 /**
  * 执行一次流式生成。async generator,产出 StreamEvent。
@@ -92,7 +109,9 @@ export async function* streamChat(
       errorMessage: errMsg,
       errorPhase: classifyError({ errorCode: errCode }).phase,
       errorType: errCode,
+      httpStatus: SHORT_HTTP_STATUS[errCode] ?? 503,
       stream: true,
+      taskKind: opts.taskKind,
       upstreamKeyMasked: maskKey(usedRoute?.provider.apiKey),
     });
     return;
@@ -189,7 +208,9 @@ export async function* streamChat(
         : undefined,
       upstreamModel: usedRoute?.upstreamModelName,
       firstTokenLatencyMs,
+      httpStatus: failedErrorCode ? (SHORT_HTTP_STATUS[failedErrorCode] ?? 500) : undefined,
       stream: true,
+      taskKind: opts.taskKind,
       upstreamKeyMasked: maskKey(usedRoute?.provider.apiKey),
     });
   }
@@ -332,7 +353,9 @@ export async function generateChat(opts: StreamChatOptions): Promise<GenerateCha
       errorMessage: errMsg,
       errorPhase: classifyError({ errorCode: errCode }).phase,
       errorType: errCode,
+      httpStatus: SHORT_HTTP_STATUS[errCode] ?? 503,
       stream: false,
+      taskKind: opts.taskKind,
       upstreamKeyMasked: maskKey(usedRoute?.provider.apiKey),
     });
     return { text: "", error: errMsg };
@@ -429,7 +452,9 @@ export async function generateChat(opts: StreamChatOptions): Promise<GenerateCha
       upstreamModel: usedRoute?.upstreamModelName,
       // 非流式 generateText 一次性返回,无首 token 概念,TTFT 恒为 undefined。
       firstTokenLatencyMs: undefined,
+      httpStatus: failedErrorCode ? (SHORT_HTTP_STATUS[failedErrorCode] ?? 500) : undefined,
       stream: false,
+      taskKind: opts.taskKind,
       upstreamKeyMasked: maskKey(usedRoute?.provider.apiKey),
     });
   }

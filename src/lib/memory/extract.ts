@@ -57,7 +57,7 @@ export async function extractMemories(
 
   let raw = "";
   try {
-    for await (const ev of streamChat({ ctx, request })) {
+    for await (const ev of streamChat({ ctx, request, taskKind: "memory" })) {
       if (ev.type === "text-delta") raw += ev.text;
       if (ev.type === "error") return; // 提取失败静默跳过
     }

@@ -739,6 +739,8 @@ export const usageLogs = sqliteTable(
     upstreamModel: text("upstream_model"), // 真实上游模型名(区别于对外 model)
     // 命中上游 key 的脱敏快照(前3后3,中间 *;运行时从明文算,绝不存明文)。
     upstreamKeyMasked: text("upstream_key_masked"),
+    /** 副任务类型(null=主回复/网关请求;title/memory/compact=后台副任务,用于区分双日志)。 */
+    taskKind: text("task_kind"),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),
   },
   (t) => [
@@ -777,6 +779,8 @@ export const opsErrorLogs = sqliteTable(
     completionTokens: integer("completion_tokens").notNull().default(0),
     latencyMs: integer("latency_ms"),
     firstTokenLatencyMs: integer("first_token_latency_ms"),
+    /** 副任务类型(null=主回复/网关请求;title/memory/compact=后台副任务)。 */
+    taskKind: text("task_kind"),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),
   },
   (t) => [

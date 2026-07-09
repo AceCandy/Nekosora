@@ -6,7 +6,7 @@
  *   - admin:含用户列 + 用户筛选(可跨用户)。
  *   - panel:锁定当前用户(无用户列/用户筛选),其余列与 admin 一致(自己调用可见全字段)。
  * 列布局:时间 / 用户(admin) / 来源 / 执行链路(服务商·模型↳上游·上游key) /
- * key(对外密钥) / 阶段 / 分类 / HTTP / 耗时 / 详情。
+ * key(对外密钥) / 阶段 / 分类 / HTTP / 耗时(整行点击进详情)。
  * 筛选栏 ErrorFilterBar(两排 typeahead + 级联)。点击行打开 ErrorDetailDrawer。
  *
  * 错误分类(category)由服务端预先派生(error-classify)后随行下发,客户端直接用 i18n 渲染。
@@ -50,6 +50,8 @@ export interface ErrorLogClientRow {
   userName: string | null;
   /** 用户邮箱(LEFT JOIN user.email;仅 admin 列展示)。 */
   userEmail: string | null;
+  /** 副任务类型(null=主回复/网关请求;title/memory/compact=后台副任务)。 */
+  taskKind: string | null;
   /** 粗分类(服务端派生,前端 i18n key 后缀)。 */
   category: ErrorCategory;
   createdAt: string;
@@ -127,13 +129,12 @@ export function ErrorLogsTable({
                 <th className="text-left px-4 py-3">{t("errors.detailCategory")}</th>
                 <th className="text-right px-4 py-3">{t("errors.detailHttpStatus")}</th>
                 <th className="text-right px-4 py-3">{t("thLatency")}</th>
-                <th className="text-right px-4 py-3">{t("errors.viewDetail")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={variant === "admin" ? 10 : 9} className="px-4 py-10 text-center text-neutral-400 dark:text-neutral-500">
+                  <td colSpan={variant === "admin" ? 9 : 8} className="px-4 py-10 text-center text-neutral-400 dark:text-neutral-500">
                     {t("errors.empty")}
                   </td>
                 </tr>
@@ -158,7 +159,14 @@ export function ErrorLogsTable({
                       </td>
                     )}
                     <td className="px-4 py-3 font-mono text-neutral-700 dark:text-neutral-300">
-                      {t(`sources.${r.source}` as const)}
+                      <span className="inline-flex items-center gap-1.5">
+                        {t(`sources.${r.source}` as const)}
+                        {r.taskKind && (
+                          <Badge variant="neutral" className="rounded-full font-sans text-[10px] font-normal">
+                            {t(`taskKinds.${r.taskKind}` as const)}
+                          </Badge>
+                        )}
+                      </span>
                     </td>
                     {/* 执行链路:服务商 · 模型(↳上游) · 脱敏上游key */}
                     <td className="px-4 py-3 max-w-[240px]">
@@ -200,18 +208,6 @@ export function ErrorLogsTable({
                     </td>
                     <td className="px-4 py-3 text-right font-mono text-neutral-500 dark:text-neutral-400">
                       {formatDuration(r.latencyMs)}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedId(r.id);
-                        }}
-                        className="text-xs text-sora-blue hover:underline"
-                      >
-                        {t("errors.viewDetail")}
-                      </button>
                     </td>
                   </tr>
                 );

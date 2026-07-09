@@ -11,6 +11,7 @@ import { Info } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Pagination } from "@/shared/ui/Pagination";
 import { Popover } from "@/shared/ui/Popover";
+import Badge from "@/shared/ui/Badge";
 import { formatDateTimeLocal, formatDuration } from "@/shared/lib/format";
 import { UsageFilterBar, type UsageFilterValues } from "./UsageFilterBar";
 
@@ -37,6 +38,8 @@ export interface UsageLogClientRow {
   userName: string | null;
   /** 用户邮箱(LEFT JOIN user.email;仅 admin 列展示)。 */
   userEmail: string | null;
+  /** 副任务类型(null=主回复/网关请求;title/memory/compact=后台副任务)。 */
+  taskKind: string | null;
   createdAt: string;
 }
 
@@ -125,7 +128,14 @@ export function UsageLogsTable({
                       </td>
                     )}
                     <td className="px-4 py-3 font-mono text-neutral-700 dark:text-neutral-300">
-                      {t(`sources.${r.source}` as const)}
+                      <span className="inline-flex items-center gap-1.5">
+                        {t(`sources.${r.source}` as const)}
+                        {r.taskKind && (
+                          <Badge variant="neutral" className="rounded-full font-sans text-[10px] font-normal">
+                            {t(`taskKinds.${r.taskKind}` as const)}
+                          </Badge>
+                        )}
+                      </span>
                     </td>
                     {/* 执行链路列:服务商 · 请求模型(↳上游模型) · 脱敏上游key */}
                     <td className="px-4 py-3 max-w-[240px]">

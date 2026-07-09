@@ -57,6 +57,13 @@
       "when": 1783581665712,
       "tag": "0007_fixed_kid_colt",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1783592878577,
+      "tag": "0008_tense_tana_nile",
+      "breakpoints": true
     }
   ]
 }

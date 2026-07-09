@@ -166,6 +166,8 @@ export interface UsageLogRow {
   userName: string | null;
   /** 用户邮箱(LEFT JOIN user.email;admin 用户列展示)。 */
   userEmail: string | null;
+  /** 副任务类型(null=主回复/网关请求;title/memory/compact=后台副任务)。 */
+  taskKind: string | null;
   createdAt: Date;
 }
 
@@ -250,6 +252,7 @@ function toUsageRow(
     upstreamKeyMasked: r.upstreamKeyMasked ?? null,
     userName: meta.userName ?? null,
     userEmail: meta.userEmail ?? null,
+    taskKind: r.taskKind ?? null,
     createdAt: r.createdAt instanceof Date ? r.createdAt : new Date(r.createdAt),
   };
 }

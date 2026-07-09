@@ -92,7 +92,23 @@ failed/interrupted → insert ops_error_logs
 
 **边界**：`route.ts` 只写 pre-streamChat 错误，**不重复写** stream 内部错误（stream.ts 独占 chat 写入；多模态 adapter 自身不写日志）。
 
-stream 层写的 failed 行 `httpStatus` / `requestPath` 留 null（无 HTTP 上下文）；route 层错误补全这两字段。
+stream 层 failed 行 `httpStatus` 由 `SHORT_HTTP_STATUS`（stream 内部短码→HTTP 映射，**不动 errorCode 字面值**）补全；`requestPath` 留 null。route 层错误补全两字段。
+
+---
+
+## 副任务区分（task_kind）
+
+`usage_logs` / `ops_error_logs` 均有 `task_kind`（nullable text）。**主回复 / 网关请求 = `null`；后台副任务传值**：
+
+| 副任务 | 入口 | task_kind |
+|---|---|---|
+| 会话标题生成 | `conversation-title` → `generateChat` | `title` |
+| 记忆抽取 | `memory/extract` → `streamChat` | `memory` |
+| 摘要压缩 | `compact` → `streamChat` | `compact` |
+
+**硬规则**：副任务复用 `streamChat`/`generateChat`（其 `finally` 各写一条日志），**必须在调用时透传 `taskKind`**，否则与主回复混在 `source=chat`，造成「一请求多日志」。主回复（`/api/chat`）、网关（`/v1/chat/completions`）、多模态 adapter 不传 → `null`。
+
+> 聚合统计（`getTimeSeries` 等）目前**不按 task_kind 过滤**，副任务 token 仍计入总量；如需排除，聚合 SQL 加 `where task_kind is null`。
 
 ---
 
@@ -131,3 +147,4 @@ panel **不做字段级脱敏**——错误日志均为用户自己调用产生�
 - **新增 ErrorCode 没补 `classifyError` 映射** → 错误落到兜底 `internal/other`，分类失真。
 - **panel 防越权靠字段置空** → 靠查询层 `userId` 强制 where（`listErrorLogs` / `getErrorLog`）；字段级脱敏会让用户无法定位自己的错误。
 - **`logUsage` 抛错阻断主流程** → 永不抛错，失败只 `console.error`。
+- **副任务调 streamChat/generateChat 不传 `taskKind`** → 与主回复混在 source=chat，用量明细出现「一请求多日志」；标题/记忆/压缩必须透传。

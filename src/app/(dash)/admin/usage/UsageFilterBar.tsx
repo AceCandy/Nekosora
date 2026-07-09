@@ -9,6 +9,7 @@
  * 选定即 router.push 刷新(级联下级清空,重置 page=1)。
  * typeahead 候选由 server action 异步加载(Combobox debounce 调用)。
  */
+import { RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Combobox, type ComboOption } from "@/shared/ui/Combobox";
@@ -93,6 +94,14 @@ export function UsageFilterBar({ variant, values, labels, basePath, tab }: Usage
       {/* 第一排:时间范围(独占一行) */}
       <div className="flex flex-wrap items-end gap-3">
         <DateRangePicker range={values.range} start={values.start} end={values.end} onChange={onTimeChange} />
+        <button
+          type="button"
+          onClick={() => router.refresh()}
+          className="ml-auto inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#12141a] text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 transition-colors"
+        >
+          <RefreshCw className="size-3" />
+          {t("filters.refresh")}
+        </button>
       </div>
       {/* 第二排:用户(admin) / 来源 / 密钥 */}
       <div className="flex flex-wrap items-end gap-3">
