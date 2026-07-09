@@ -54,6 +54,10 @@ export function buildLanguageModelWithKey(
         baseURL: baseUrl,
         apiKey,
         headers: commonHeaders,
+        // 显式要求流式响应在末尾返回 usage。部分 OpenAI 兼容上游严格遵循规范,
+        // 仅当请求带 stream_options.include_usage 时才返回 token 计数,
+        // 否则流式不返回 usage,导致用量统计为 0。
+        includeUsage: true,
       });
       return providerInstance.chatModel(upstreamModelName);
     }

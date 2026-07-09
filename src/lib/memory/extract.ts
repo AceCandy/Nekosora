@@ -51,7 +51,7 @@ export async function extractMemories(
   const ctx = { userId, keyKind: null as null, source: "chat" as const };
   const request: IRRequest = {
     model: model || EXTRACT_MODEL_FALLBACK,
-    messages: [{ role: "system", content: prompt }],
+    messages: [{ role: "user", content: prompt }],
     stream: true,
   };
 
