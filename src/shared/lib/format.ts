@@ -17,15 +17,21 @@ export function formatDuration(ms: number | null | undefined): string {
 }
 
 /**
- * 时间按浏览器时区呈现(修复日志时间显示成 UTC 的问题)。
+ * 时间按固定东八区(Asia/Shanghai)呈现。
  *
- * 传入 ISO 字符串(带 Z 的 UTC instant),用 toLocaleString 走浏览器本地时区,
- * 固定年月日 + 时分组件、24 小时制。NaN 兜底返回原值。
+ * 固定 locale(zh-CN) + 固定时区,确保 SSR 与 client 输出完全一致——
+ * 若用浏览器 locale/timeZone(toLocaleString(undefined)),服务端(Node 默认 en-US)
+ * 与客户端(浏览器 zh-CN)格式不同(如 07/09/2026 vs 2026/07/09)会触发 React
+ * hydration mismatch。固定后两者恒等,杜绝该报错。NaN 兜底返回原值。
+ *
+ * 注:真正"跟随浏览器时区"在 SSR 下必然 hydration 冲突,需改 client-only 渲染
+ * (SSR 占位、mount 后替换)。当前固定东八区最稳,符合产品主面向国内。
  */
 export function formatDateTimeLocal(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString(undefined, {
+  return d.toLocaleString("zh-CN", {
+    timeZone: "Asia/Shanghai",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
