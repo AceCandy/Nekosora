@@ -54,6 +54,8 @@ export function useChatScrollController<T>(messages: T[]) {
   // 「在最新附近」(宽阈值):对外 state,供回到最新按钮显隐。
   const [isNearBottom, setIsNearBottom] = useState(true);
   const isNearBottomRef = useRef(true);
+  /** 挂载贴底收敛后才置 true,供消息区淡入显形(hide-until-settled);会话切换重挂时重置为 false。 */
+  const [ready, setReady] = useState(false);
 
   const measureBottom = useCallback(() => {
     const el = scrollRef.current;
@@ -91,36 +93,43 @@ export function useChatScrollController<T>(messages: T[]) {
     return () => cancelAnimationFrame(raf);
   }, [messages, measureBottom, measureNearBottom]);
 
-  // 历史会话挂载:虚拟滚动 measureElement 初始估计(estimateSize)不准,单次定位时
-  // getTotalSize 尚未收敛会把视口停在内容中部。挂载后用 rAF 持续把容器拉到底,直到
-  // scrollHeight 连续多帧不变或超时收敛。注意:此处不读 isAtBottomRef——它会被上面的
-  // 消息变化 effect 在测量未完成时误判为 false,导致循环空转不贴底。初始加载就是要到底,
-  // 故无条件贴底,收敛后再把贴底态写回。
-  // 仅组件挂载时跑一次;会话切换令组件重挂会重跑,流式追加不触发本 effect。
+  // 历史会话挂载:虚拟滚动 measureElement 的 estimateSize 是粗估,真实高度要在挂载后逐条测出。
+  // 若可见状态下贴底,用户会看到「估算底部 → 真实底部」的测量追赶滚动(体感差)。解法
+  // hide-until-settled:外层消息区在 ready 前保持 opacity-0,本循环在不可见态持续贴底,直到
+  // scrollHeight 连续稳定(测量收敛)再 setReady(true) 触发淡入显形——用户看到的是直接出现
+  // 在底部 + 淡入,无任何滚动动作。不读 isAtBottomRef:它会被上面消息变化 effect 在测量未完成
+  // 时误判为 false,导致循环空转不贴底;初始加载无条件贴底,收敛后再写回贴底态。
+  // 仅组件挂载时跑一次;会话切换令组件重挂重跑(ready 重置为 false,重新隐藏→稳定→显形)。
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     let raf = 0;
     let lastH = -1;
     let stable = 0;
+    let start = 0;
     let deadline = 0;
+    const finish = () => {
+      isAtBottomRef.current = true;
+      isNearBottomRef.current = true;
+      setIsNearBottom(true);
+      setReady(true);
+    };
     const tick = (ts: number) => {
-      if (!deadline) deadline = ts + 600;
+      if (!start) { start = ts; deadline = ts + 600; }
       el.scrollTop = el.scrollHeight;
       const h = el.scrollHeight;
       if (h === lastH) stable += 1;
       else { lastH = h; stable = 0; }
-      if (stable < 4 && ts < deadline) {
+      // 连续稳定且度过最小期(让首波测量落地)即收敛;超时强制收敛显形,避免长会话久等。
+      const settled = stable >= 6 && ts - start >= 120;
+      if (!settled && ts < deadline) {
         raf = requestAnimationFrame(tick);
       } else {
-        isAtBottomRef.current = true;
-        isNearBottomRef.current = true;
-        setIsNearBottom(true);
+        finish();
       }
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-    // 仅挂载跑一次,覆盖虚拟滚动初始测量收敛
   }, []);
 
   const scrollToBottom = useCallback(() => {
@@ -142,5 +151,5 @@ export function useChatScrollController<T>(messages: T[]) {
     else endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, []);
 
-  return { scrollRef, endRef, isNearBottom, onScroll: handleScroll, scrollToBottom, forceFollow };
+  return { scrollRef, endRef, isNearBottom, ready, onScroll: handleScroll, scrollToBottom, forceFollow };
 }

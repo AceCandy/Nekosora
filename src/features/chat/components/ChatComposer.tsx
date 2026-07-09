@@ -101,7 +101,7 @@ export default function ChatComposer({
     initialMessages,
     uploadAttachments: uploadPending,
   });
-  const { scrollRef, endRef: messagesEndRef, isNearBottom, onScroll, scrollToBottom, forceFollow } = useChatScrollController(runtime.messages);
+  const { scrollRef, endRef: messagesEndRef, isNearBottom, ready, onScroll, scrollToBottom, forceFollow } = useChatScrollController(runtime.messages);
 
   // 输入文本 + 图片附件的 token 估算(图片固定 255/张);非图片文件由后端解析,前端不计入
   const inputTokens = useMemo(() => {
@@ -294,6 +294,7 @@ export default function ChatComposer({
           scrollRef={scrollRef}
           messagesEndRef={messagesEndRef}
           isNearBottom={isNearBottom}
+          ready={ready}
           onScroll={onScroll}
           scrollToBottom={scrollToBottom}
           model={model}

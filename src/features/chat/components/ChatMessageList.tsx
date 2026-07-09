@@ -23,6 +23,8 @@ interface ChatMessageListProps {
   messagesEndRef: RefObject<HTMLDivElement | null>;
   /** 距底 ≤ 1/3 视口高视为「在最新附近」;回到最新按钮据此显隐。 */
   isNearBottom: boolean;
+  /** 挂载贴底收敛前为 false(消息区 opacity-0 隐藏测量追赶),收敛后 true 触发淡入显形。 */
+  ready: boolean;
   onScroll: () => void;
   scrollToBottom: () => void;
   /** 当前模型名（传给 ChatMessageItem 供 regenerate/edit 使用）。 */
@@ -65,6 +67,7 @@ export function ChatMessageList({
   scrollRef,
   messagesEndRef,
   isNearBottom,
+  ready,
   onScroll,
   scrollToBottom,
   model,
@@ -127,8 +130,9 @@ export function ChatMessageList({
   }
 
   return (
-    // 相对外层 relative 容器,让对话大纲/回到最新按钮锚定在消息区(而非含输入框的主区)
-    <div className="relative flex-1 min-h-0 animate-in fade-in slide-in-from-bottom-2 duration-200">
+    // 相对外层 relative 容器,让对话大纲/回到最新按钮锚定在消息区(而非含输入框的主区)。
+    // ready(hide-until-settled):贴底未收敛前 opacity-0 隐藏测量追赶,收敛后挂 animate-in 淡入显形。
+    <div className={clsx("relative flex-1 min-h-0", ready ? "animate-in fade-in slide-in-from-bottom-2 duration-200" : "opacity-0")}>
       <div ref={scrollRef} onScroll={onScroll} className="h-full overflow-y-auto px-6 py-8 md:py-12">
         {messages.length === 0 ? (
           <div className="max-w-4xl mx-auto">
