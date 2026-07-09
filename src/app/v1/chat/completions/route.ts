@@ -102,7 +102,7 @@ function streamResponse(
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
 
       try {
-        for await (const ev of streamChat({ ctx, request })) {
+        for await (const ev of streamChat({ ctx, request, cacheKey: ctx.apiKeyId ?? undefined })) {
           if (abortController.signal.aborted) break;
           switch (ev.type) {
             case "text-delta":

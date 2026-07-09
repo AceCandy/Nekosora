@@ -27,6 +27,8 @@ export function buildLanguageModel(route: ResolvedRoute): LanguageModel {
 export function buildLanguageModelWithKey(
   route: ResolvedRoute,
   apiKey: string,
+  /** 会话级 cache key;openai-compatible 时注入 session affinity header,缺省不注入。 */
+  cacheKey?: string,
 ): LanguageModel {
   const { protocol, provider, upstreamModelName } = route;
   const { baseUrl, headers } = provider;
@@ -49,11 +51,17 @@ export function buildLanguageModelWithKey(
       // 第三方 OpenAI 兼容上游(SiliconFlow/DeepSeek/Qwen/自建 vLLM 等):
       // 用 compatible provider,system 消息保持 role:"system",避免被转成
       // developer role 而被这些上游以 400 拒收。
+      // session affinity header:cacheKey 存在时注入,让 serverless 上游(Fireworks 等)
+      // 把同会话请求路由到同一 replica 提升 prompt cache 命中(复刻 pi sendSessionAffinityHeaders)。
+      // provider 实例每请求新建,故可静态合并(无需动态函数)。
+      const sessionHeaders: Record<string, string> = cacheKey
+        ? { session_id: cacheKey, "x-client-request-id": cacheKey, "x-session-affinity": cacheKey }
+        : {};
       const providerInstance = createOpenAICompatible({
         name: provider.id,
         baseURL: baseUrl,
         apiKey,
-        headers: commonHeaders,
+        headers: { ...commonHeaders, ...sessionHeaders },
         // 显式要求流式响应在末尾返回 usage。部分 OpenAI 兼容上游严格遵循规范,
         // 仅当请求带 stream_options.include_usage 时才返回 token 计数,
         // 否则流式不返回 usage,导致用量统计为 0。

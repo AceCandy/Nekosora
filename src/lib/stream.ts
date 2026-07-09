@@ -35,6 +35,8 @@ export interface StreamChatOptions {
   runId?: string;
   /** 副任务类型(title/memory/compact);主回复 / 网关请求不传 → null。 */
   taskKind?: string;
+  /** 会话级 cache key(chat=conversationId / 网关=apiKeyId);用于注入 prompt 缓存控制,缺省不注入。 */
+  cacheKey?: string;
 }
 
 /** 判断错误是否值得路由级故障转移(连接/5xx/限流类),而非确定性失败。 */
@@ -132,7 +134,7 @@ export async function* streamChat(
       for (let k = 0; k < keySeq.length; k++) {
         const tryKey = keySeq[k].key;
         try {
-          for await (const ev of streamWithRoute(route, request, tryKey, timing)) {
+          for await (const ev of streamWithRoute(route, request, tryKey, timing, opts.cacheKey)) {
             yield ev;
             if (ev.type === "finish") finalUsage = ev.usage;
           }
@@ -247,20 +249,44 @@ async function* streamWithRoute(
   apiKey: string,
   /** 首 token 计时载体(mutable,由调用方持有;首个文本/推理增量时回写 firstTokenAt)。 */
   timing: { firstTokenAt?: number },
+  /** 会话级 cache key(chat=conversationId / 网关=apiKeyId);缺省不注入缓存控制。 */
+  cacheKey?: string,
 ): AsyncGenerator<StreamEvent, void, unknown> {
-  const model = buildLanguageModelWithKey(route, apiKey); // 失败则抛出,交由上层故障转移
+  const model = buildLanguageModelWithKey(route, apiKey, cacheKey); // 失败则抛出,交由上层故障转移
   const { system, messages } = separateSystem(request);
+
+  // 按 protocol 注入 prompt 缓存控制(复刻 pi 兜底策略):
+  //  - anthropic:system + 末条消息打 cache_control 断点(上游靠显式断点缓存)
+  //  - openai:promptCacheKey(prompt_cache_key)辅助路由命中
+  //  - openai-compatible:session affinity header 在 registry 注入,此处不处理
+  const wantsCache = !!cacheKey;
+  const isAnthropic = route.protocol === "anthropic";
+  const breakpoint = { type: "ephemeral" as const };
+  const instructionsParam =
+    isAnthropic && system && wantsCache
+      ? { role: "system" as const, content: system, providerOptions: { anthropic: { cacheControl: breakpoint } } }
+      : system;
+  const messagesParam =
+    isAnthropic && wantsCache && messages.length > 0
+      ? messages.map((m, i) =>
+          i === messages.length - 1 ? { ...m, providerOptions: { anthropic: { cacheControl: breakpoint } } } : m,
+        )
+      : messages;
+  const cacheProviderOptions = route.protocol === "openai" && cacheKey ? { openai: { promptCacheKey: cacheKey } } : {};
 
   const result = streamText({
     model,
-    instructions: system,
-    messages: messages as never,
+    instructions: instructionsParam as never,
+    messages: messagesParam as never,
     temperature: request.temperature,
     maxOutputTokens: request.max_tokens,
     topP: request.top_p,
-    // 推理级别 → 各供应商 providerOptions(off/不支持则不传,等价普通对话)。
+    // 推理级别 + 缓存控制合并到 providerOptions(off/不支持则不传,等价普通对话)。
     // AI SDK SharedV4ProviderOptions 类型摩擦,沿用本文件 messages/tools 的 as never 处理。
-    providerOptions: buildReasoningProviderOptions(route.protocol, route.capabilities, request.reasoning) as never,
+    providerOptions: {
+      ...buildReasoningProviderOptions(route.protocol, route.capabilities, request.reasoning),
+      ...cacheProviderOptions,
+    } as never,
     // P1-A:工具(MCP)透传给上游模型。tools 格式已是 OpenAI function-calling 兼容。
     tools: request.tools as unknown as Parameters<typeof streamText>[0]["tools"],
   });

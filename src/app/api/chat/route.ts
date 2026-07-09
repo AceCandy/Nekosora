@@ -244,8 +244,8 @@ export async function POST(req: NextRequest) {
         const mcpServers = await resolveMcpServers(ctx).catch(() => []);
         const hasTools = mcpServers.some((sv) => sv.tools.length > 0);
         const gen = hasTools
-          ? streamChatWithTools({ ctx, request: irRequest, mcpServers })
-          : streamChat({ ctx, request: irRequest });
+          ? streamChatWithTools({ ctx, request: irRequest, mcpServers, cacheKey: body.conversationId })
+          : streamChat({ ctx, request: irRequest, cacheKey: body.conversationId });
         for await (const ev of gen) {
           if (ev.type === "text-delta") {
             assistantText += ev.text;
