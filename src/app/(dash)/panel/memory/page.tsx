@@ -18,6 +18,13 @@ export default async function MemoryPage() {
     await updateMemory(user.id, memoryId, content);
   }
 
+  // 删除记忆的 server action:deleteMemory 是 service 层普通函数(非 "use server"),
+  // 不能直接 .bind 传给 <form action>,需在此内联包装,与 handleUpdateMemory 同模式。
+  async function handleDeleteMemory(memoryId: string) {
+    "use server";
+    await deleteMemory(user.id, memoryId);
+  }
+
   return (
     <div className="space-y-6 max-w-3xl">
       <div>
@@ -99,7 +106,7 @@ export default async function MemoryPage() {
                       </details>
                     </td>
                     <td className="p-3.5 text-right">
-                      <form action={deleteMemory.bind(null, user.id, m.id)} className="inline">
+                      <form action={handleDeleteMemory.bind(null, m.id)} className="inline">
                         <button
                           type="submit"
                           className="inline-flex items-center justify-center p-2 rounded text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
