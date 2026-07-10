@@ -63,6 +63,9 @@ export function MermaidDiagram({ id, content }: { id: string; content: string })
         const mermaid = (await import("mermaid")).default;
         mermaid.initialize({
           startOnLoad: false,
+          // 渲染失败时不画 mermaid 自带的错误 SVG(会以「Syntax error in text /
+          // mermaid version x.x.x」残留在 body 末尾),改由下方 catch 统一提示。
+          suppressErrorRendering: true,
           look: "neo",
           theme: "base",
           themeVariables: {
