@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "lint/typecheck/test 门槛、必需/禁止模式,验收前核对"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "校验 reorder 事务、双 dialect 一致、查询 orderBy 兜底"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "拖动跨 前端→server action→service→DB→revalidate→用户端下拉,核对数据流一致"}

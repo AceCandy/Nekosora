@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Server/Client 边界、UI 原语(Button/StatusDot)与样式 token 约定,前端 DnD 改动遵循"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "DB 行收敛到 DTO、ModelItem 补字段时的类型边界约定"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Drizzle 双 dialect、查询/事务模式,reorder 全表重写需用 db.transaction"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "三处 DnD 接入高度相似,评估是否抽公共 sortable hook(默认不重构,重复可接受)"}
