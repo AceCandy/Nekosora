@@ -5,6 +5,7 @@ import {
   updateMyModel,
   deleteMyModel,
   toggleMyModel,
+  reorderMyModels,
   createMyRoute,
   updateMyRoute,
   deleteMyRoute,
@@ -35,6 +36,7 @@ export default async function MyModelsPage() {
     systemPrompt: ((r.model as Record<string, unknown>).systemPrompt as string) ?? null,
     description: ((r.model as Record<string, unknown>).description as string) ?? null,
     capabilities: ((r.model as Record<string, unknown>).capabilities as ModelCapabilities) ?? null,
+    sortOrder: (r.model as Record<string, unknown>).sortOrder as number,
   }));
 
   // byo 路由外键是 userModelId(对应 global 的 modelId),映射到 RouteItem.modelId。
@@ -112,6 +114,7 @@ export default async function MyModelsPage() {
           toggleRouteActions={toggleRouteActions}
           fetchModelsAction={listMyUpstreamModels}
           testRouteActions={testRouteActions}
+          reorderAction={reorderMyModels}
         />
       )}
     </div>

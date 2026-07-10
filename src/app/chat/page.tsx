@@ -16,13 +16,15 @@ export default async function ChatPage() {
     listEnabledRenderStyles().catch(() => []),
   ]);
   const models: ModelOption[] = [
-    ...globals.map((m: Record<string, unknown>) => ({
-      name: m.name as string,
-      displayName: (m.displayName as string | undefined) ?? undefined,
-    })),
     ...byos.map((r: Record<string, unknown>) => ({
       name: (r.model as Record<string, unknown>).name as string,
       displayName: (r.model as Record<string, unknown>).displayName as string | undefined,
+      source: "byo" as const,
+    })),
+    ...globals.map((m: Record<string, unknown>) => ({
+      name: m.name as string,
+      displayName: (m.displayName as string | undefined) ?? undefined,
+      source: "global" as const,
     })),
   ];
   const knowledgeBases = (kbs as { id: string; name: string; fileCount: number }[]).map((kb) => ({

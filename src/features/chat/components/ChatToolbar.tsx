@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Loader2, Sparkles, Globe, Library, Wand2, Palette, X, Paperclip, SlidersHorizontal, Brain } from "lucide-react";
+import { Loader2, Sparkles, Globe, Library, Wand2, Palette, X, Paperclip, SlidersHorizontal, Brain, Cpu, ChevronDown } from "lucide-react";
 import { clsx } from "clsx";
 import { OptionPicker, type OptionItem } from "@/shared/ui/OptionPicker";
 import type { ReasoningLevel, ModelCapabilities } from "@/db/types";
@@ -31,10 +31,13 @@ function multiTriggerClass(hasSelected: boolean): string {
 }
 
 export interface ChatToolbarProps {
-  // 模型选择
+  // 模型选择（单选，必选不可清空，click 展开 + 向上弹出）
   models: ModelOption[];
   model: string;
   onModelChange: (name: string) => void;
+  modelPickerOpen: boolean;
+  onModelPickerToggle: () => void;
+  onModelPickerClose: () => void;
 
   // 已上传附件(仅展示 chip)
   attached: UploadFileItem[];
@@ -57,7 +60,7 @@ export interface ChatToolbarProps {
   onKbPickerClose: () => void;
   onKbToggle: (id: string) => void;
 
-  // 输出方式（单选可清除）
+  // 输出模式（单选可清除）
   outputModes: OutputModeOption[];
   outputModeId: string | null;
   outputModePickerOpen: boolean;
@@ -96,7 +99,7 @@ export interface ChatToolbarProps {
 export function ChatToolbar(props: ChatToolbarProps) {
   const t = useTranslations("chat");
   const {
-    models, model, onModelChange,
+    models, model, onModelChange, modelPickerOpen, onModelPickerToggle, onModelPickerClose,
     attached, onRemoveAttachment, onPreviewFile,
     cards, selectedCardIds, cardPickerOpen, onCardPickerToggle, onCardPickerClose, onCardToggle,
     knowledgeBases, selectedKbIds, kbPickerOpen, onKbPickerToggle, onKbPickerClose, onKbToggle,
@@ -112,19 +115,43 @@ export function ChatToolbar(props: ChatToolbarProps) {
 
   return (
     <div className="flex items-center gap-2 mb-2 flex-wrap">
-      {/* 模型选择（原生 select，结构与 listbox 不同，保持原生） */}
-      <select
-        value={model}
-        onChange={(e) => onModelChange(e.target.value)}
-        className="rounded-md border border-morning-mist dark:border-deep-space bg-white dark:bg-space-ink px-3 py-1.5 text-xs font-semibold text-neutral-700 dark:text-neutral-200 focus:outline-none focus:border-sora-blue dark:focus:border-sora-blue transition-colors cursor-pointer"
-        aria-label="选择对话模型"
-      >
-        {models.map((m) => (
-          <option key={m.name} value={m.name}>
-            {m.displayName ?? m.name}
-          </option>
-        ))}
-      </select>
+      {/* 模型选择（单选，必选不可清空，click 展开 + 向上弹出） */}
+      <OptionPicker
+        open={modelPickerOpen}
+        onClose={onModelPickerClose}
+        options={models.map((m): OptionItem => ({
+          id: m.name,
+          label: m.displayName ?? m.name,
+          badge: m.source === "global" ? t("globalLabel") : undefined,
+          badgeVariant: m.source === "global" ? "primary" : undefined,
+        }))}
+        selectedIds={model ? [model] : []}
+        mode="single"
+        onToggle={onModelChange}
+        side="top"
+        trigger={
+          <button
+            type="button"
+            onClick={onModelPickerToggle}
+            className={clsx(
+              "inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-semibold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer",
+              model ? SINGLE_TRIGGER_ACTIVE : SINGLE_TRIGGER_IDLE,
+            )}
+            title={t("selectModel")}
+            aria-haspopup="listbox"
+            aria-expanded={modelPickerOpen}
+            aria-label={t("selectModel")}
+          >
+            <Cpu className="w-3.5 h-3.5" aria-hidden="true" />
+            <span className="max-w-[140px] truncate">
+              {model
+                ? (models.find((m) => m.name === model)?.displayName ?? model)
+                : t("selectModel")}
+            </span>
+            <ChevronDown className="w-3 h-3 opacity-50" aria-hidden="true" />
+          </button>
+        }
+      />
 
       {/* 文件上传已改为粘贴/拖拽接入,工具栏不再显示上传按钮 */}
 
@@ -198,7 +225,7 @@ export function ChatToolbar(props: ChatToolbarProps) {
         />
       )}
 
-      {/* 输出方式（单选可清除，hover 展开 + 向上弹出） */}
+      {/* 输出模式（单选可清除，hover 展开 + 向上弹出） */}
       {outputModes.length > 0 && (
         <OptionPicker
           open={outputModePickerOpen}

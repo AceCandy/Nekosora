@@ -233,6 +233,8 @@ export const userModels = pgTable("user_models", {
   systemPrompt: text("system_prompt"),
   description: text("description"),
   enabled: boolean("enabled").notNull().default(true),
+  // 拖动排序(per-user 隔离,新建默认末尾)。对齐 globalModels.sortOrder 语义。
+  sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -308,7 +310,7 @@ export const conversations = pgTable(
     title: text("title").notNull().default("新会话"),
     projectId: text("project_id"),
     modelName: text("model_name"), // 记录使用的对外模型名
-    outputModeId: text("output_mode_id"), // 当前会话的输出方式(管理员预设的 prompt 模板)
+    outputModeId: text("output_mode_id"), // 当前会话的输出模式(管理员预设的 prompt 模板)
     renderStyleId: text("render_style_id"), // 当前会话的输出样式(管理员预设的渲染 CSS)
     webSearch: boolean("web_search").notNull().default(false), // 当前会话是否启用联网搜索
     composerState: jsonb("composer_state").$type<import("@/db/types").ComposerState>(), // 指令卡 / 知识库等数组型会话状态
@@ -666,7 +668,7 @@ export const instructionCards = pgTable(
 );
 
 // ===========================================================================
-// 输出方式(管理员预设的会话级输出模式,如「HTML 渲染」「简洁输出」)
+// 输出模式(管理员预设的会话级输出模式,如「HTML 渲染」「简洁输出」)
 // ===========================================================================
 
 export const outputModes = pgTable(

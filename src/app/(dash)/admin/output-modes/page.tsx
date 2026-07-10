@@ -1,5 +1,5 @@
 /**
- * 输出方式管理页(管理员)—— /admin/output-modes
+ * 输出模式管理页(管理员)—— /admin/output-modes
  *
  * 管理员预设会话级输出模式(如「HTML 渲染」「简洁输出」),每种含一段 systemPrompt。
  * 用户在 chat 工具栏选用后,该 prompt 注入会话引导模型输出风格。
@@ -11,6 +11,7 @@ import {
   createOutputMode,
   updateOutputMode,
   deleteOutputMode,
+  reorderOutputModes as reorderOutputModesService,
 } from "@/lib/output-modes/service";
 import { Sparkles } from "lucide-react";
 import OutputModesManager from "@/features/output-modes/OutputModesManager";
@@ -57,14 +58,12 @@ export default async function AdminOutputModesPage() {
     const systemPrompt = String(formData.get("system_prompt") ?? "").trim();
     const description = String(formData.get("description") ?? "").trim();
     const enabled = formData.get("enabled") === "on";
-    const sortOrder = Number(formData.get("sort_order") ?? 0);
     if (!name || !systemPrompt) return;
     await updateOutputMode(id, {
       name,
       systemPrompt,
       description: description || null,
       enabled,
-      sortOrder: Number.isFinite(sortOrder) ? sortOrder : 0,
     });
     revalidatePath("/admin/output-modes");
   }
@@ -78,6 +77,13 @@ export default async function AdminOutputModesPage() {
   async function handleDelete(id: string) {
     "use server";
     await deleteOutputMode(id);
+    revalidatePath("/admin/output-modes");
+  }
+
+  /** 拖动重排:按拖动后的完整顺序重写 sortOrder,revalidate 后顺序刷新即落库。 */
+  async function reorderOutputModes(orderedIds: string[]) {
+    "use server";
+    await reorderOutputModesService(orderedIds);
     revalidatePath("/admin/output-modes");
   }
 
@@ -107,6 +113,7 @@ export default async function AdminOutputModesPage() {
         updateActions={updateActions}
         toggleActions={toggleActions}
         deleteActions={deleteActions}
+        reorderAction={reorderOutputModes}
       />
     </div>
   );

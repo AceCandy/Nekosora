@@ -103,6 +103,7 @@
     "uploadAttachment": "Upload attachment",
     "instructionCard": "Instruction card",
     "selectModel": "Select model",
+    "globalLabel": "Global",
     "routeTrace": "Route trace",
     "contextCount": "messages in context",
     "tokensUsed": "tokens used",
@@ -537,20 +538,19 @@
       "fieldIcon": "Icon (from Lucide set)",
       "fieldDesc": "Description",
       "fieldPrompt": "System Prompt Instruction",
-      "fieldSortOrder": "Sort Order",
       "fieldEnabled": "Enable this output mode",
       "colName": "Name",
       "colIcon": "Icon",
       "colDesc": "Description",
       "colPrompt": "System Prompt Instruction",
-      "colSortOrder": "Sort Order",
       "colStatus": "Status",
       "colActions": "Actions",
       "deleteTitle": "Delete Output Mode",
       "deleteConfirm": "Are you sure you want to delete \"{name}\"?",
       "deleteWarning": "This action is irreversible and will permanently delete this output mode from the database.",
       "deleteButton": "Delete",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "dragHandle": "Drag to sort"
     },
     "renderStyles": {
       "desc": "Preset session-level Markdown render styles. Pure presentation-layer beautification, does not affect model output. Users pick one in the chat toolbar and AI answers render with the chosen style.",
@@ -581,19 +581,18 @@
       "fieldIcon": "Icon (from Lucide set)",
       "fieldDesc": "Description",
       "fieldCss": "CSS",
-      "fieldSortOrder": "Sort Order",
       "fieldEnabled": "Enable this render style",
       "colName": "Name",
       "colCssClass": "CSS Slug",
       "colDesc": "Description",
-      "colSortOrder": "Sort Order",
       "colStatus": "Status",
       "colActions": "Actions",
       "deleteTitle": "Delete Render Style",
       "deleteConfirm": "Are you sure you want to delete \"{name}\"?",
       "deleteWarning": "This action is irreversible. Conversations using this style will fall back to the default rendering.",
       "deleteButton": "Delete",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "dragHandle": "Drag to sort"
     }
   },
   "errors": {
@@ -620,6 +619,7 @@
   "models": {
     "configuredCount": "Configured models: {count}",
     "addModel": "Add model",
+    "dragHandle": "Drag to sort",
     "colExternalName": "Public name",
     "colDisplayName": "Display name",
     "colVendor": "Vendor",

@@ -91,15 +91,6 @@ export default function RenderStyleFormDialog({
               placeholder={t("descPlaceholder")}
             />
           </label>
-          <label className="block">
-            <span className={labelCls}>{t("fieldSortOrder")}</span>
-            <Input
-              name="sort_order"
-              type="number"
-              defaultValue={initial?.sortOrder ?? 0}
-              placeholder="0"
-            />
-          </label>
           {isEdit && (
             <label className="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-400 pt-6 cursor-pointer select-none">
               <input

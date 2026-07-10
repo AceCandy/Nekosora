@@ -6,6 +6,7 @@ import { Sparkles, RefreshCw, Loader2, User, Pencil, X, Check, Wrench, CheckCirc
 import { clsx } from "clsx";
 import { Markdown } from "@/shared/components/markdown/Markdown";
 import { ErrorBoundary } from "@/shared/components/ErrorBoundary";
+import { Badge } from "@/shared/ui/Badge";
 import type { ChatMessage, ModelOption } from "@/features/chat/model/types";
 import type { Artifact } from "@/features/artifacts/ArtifactPanel";
 
@@ -433,13 +434,16 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
                           setRegenOpen(false);
                         }}
                         className={clsx(
-                          "block w-full text-left px-3 py-1.5 text-xs cursor-pointer transition-colors",
+                          "flex items-center gap-1.5 w-full text-left px-3 py-1.5 text-xs cursor-pointer transition-colors",
                           m.name === model
                             ? "text-sora-blue font-semibold"
                             : "text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900",
                         )}
                       >
-                        {m.displayName ?? m.name}
+                        <span className="truncate">{m.displayName ?? m.name}</span>
+                        {m.source === "global" && (
+                          <Badge variant="primary" className="py-0 leading-none shrink-0">{t("globalLabel")}</Badge>
+                        )}
                       </button>
                     ))}
                   </div>

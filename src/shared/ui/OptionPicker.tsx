@@ -3,6 +3,7 @@
 import React from "react";
 import { clsx } from "clsx";
 import { Popover, usePopoverClose } from "@/shared/ui/Popover";
+import { Badge } from "@/shared/ui/Badge";
 
 /** 单个可选项：id 是稳定标识，label 为主文本，其余为可选展示。 */
 export interface OptionItem {
@@ -11,6 +12,8 @@ export interface OptionItem {
   description?: string | null;
   /** 行项右侧的副标签（如指令卡触发词 /foo、知识库文件数）。 */
   badge?: string;
+  /** 副标签的有色徽章变体；不传时沿用灰色文字（指令卡/知识库的默认行为）。 */
+  badgeVariant?: "primary" | "warning" | "success" | "danger" | "neutral";
 }
 
 export interface OptionPickerProps {
@@ -91,8 +94,18 @@ function OptionList({
               {isSelected ? "✓" : "○"}
             </span>
             <span className="min-w-0">
-              <span className="font-semibold block truncate">{opt.label}</span>
-              {opt.badge && <span className="text-[10px] text-neutral-400 font-mono">{opt.badge}</span>}
+              {opt.badge && opt.badgeVariant ? (
+                // 有色 Badge:label 与 Badge 同行(标签紧贴名字,与重生成列表一致)
+                <span className="flex items-center gap-1.5">
+                  <span className="font-semibold truncate">{opt.label}</span>
+                  <Badge variant={opt.badgeVariant} className="shrink-0 py-0 leading-none">{opt.badge}</Badge>
+                </span>
+              ) : (
+                <>
+                  <span className="font-semibold block truncate">{opt.label}</span>
+                  {opt.badge && <span className="text-[10px] text-neutral-400 font-mono">{opt.badge}</span>}
+                </>
+              )}
               {opt.description && (
                 <span className="text-[10px] text-neutral-400 block truncate">{opt.description}</span>
               )}

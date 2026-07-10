@@ -42,15 +42,17 @@ export default async function ChatConversationPage({
   const msgs = branch.messages;
   const versionMap = branch.versionMap as Record<string, { current: number; total: number }>;
   const models: ModelOption[] = [
-    ...globals.map((m: Record<string, unknown>) => ({
-      name: m.name as string,
-      displayName: (m.displayName as string | undefined) ?? undefined,
-      capabilities: (m.capabilities as ModelCapabilities | undefined) ?? undefined,
-    })),
     ...byos.map((r: Record<string, unknown>) => ({
       name: (r.model as Record<string, unknown>).name as string,
       displayName: (r.model as Record<string, unknown>).displayName as string | undefined,
       capabilities: ((r.model as Record<string, unknown>).capabilities as ModelCapabilities | undefined) ?? undefined,
+      source: "byo" as const,
+    })),
+    ...globals.map((m: Record<string, unknown>) => ({
+      name: m.name as string,
+      displayName: (m.displayName as string | undefined) ?? undefined,
+      capabilities: (m.capabilities as ModelCapabilities | undefined) ?? undefined,
+      source: "global" as const,
     })),
   ];
 

@@ -54,6 +54,8 @@ export interface ModelOption {
   name: string;
   displayName?: string;
   capabilities?: ModelCapabilities;
+  /** 模型来源:全局模型标记后供 UI 显示小标签;个人模型不标记。 */
+  source?: "global" | "byo";
 }
 
 /** 指令卡选项(精简版,供 chat 选择器用)。 */
@@ -71,7 +73,7 @@ export interface KnowledgeBaseOption {
   fileCount: number;
 }
 
-/** 输出方式选项(管理员预设的会话级输出模式)。 */
+/** 输出模式选项(管理员预设的会话级输出模式)。 */
 export interface OutputModeOption {
   id: string;
   name: string;

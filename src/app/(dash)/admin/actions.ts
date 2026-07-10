@@ -1,5 +1,5 @@
 "use server";
-import { eq } from "drizzle-orm";
+import { eq, asc, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { encryptKeyBundle, parseKeyBundle } from "@/lib/providers/keys";
@@ -210,7 +210,11 @@ export async function testRoute(routeId: string): Promise<ProbeResult> {
 export async function listModels() {
   await requireAdmin();
   const db = await getDb();
-  return db.select().from(S().globalModels).orderBy(S().globalModels.sortOrder);
+  // sortOrder 为主排序,createdAt 兜底消除「全部为 0」时的无序,与另两处列表对齐。
+  return db
+    .select()
+    .from(S().globalModels)
+    .orderBy(asc(S().globalModels.sortOrder), asc(S().globalModels.createdAt));
 }
 
 export async function listRoutes() {
@@ -235,6 +239,11 @@ export async function createModel(formData: FormData) {
   } catch {
     /* ignore */
   }
+  // 新建模型默认放末尾(sortOrder = 当前 max + 1,空表时从 0 起)。
+  const [maxRow] = await db
+    .select({ maxSort: sql<number>`coalesce(max(${S().globalModels.sortOrder}), -1)` })
+    .from(S().globalModels);
+  const nextSort = (maxRow?.maxSort ?? -1) + 1;
   await db.insert(S().globalModels).values({
     name: String(formData.get("name") ?? ""),
     displayName: String(formData.get("displayName") ?? ""),
@@ -244,6 +253,7 @@ export async function createModel(formData: FormData) {
     enabled: true,
     systemPrompt: String(formData.get("systemPrompt") ?? "") || null,
     description: String(formData.get("description") ?? "") || null,
+    sortOrder: nextSort,
   });
   revalidatePath("/admin", "layout");
 }
@@ -301,6 +311,22 @@ export async function deleteModel(id: string) {
   const db = await getDb();
   // globalRoutes 对 globalModels 有 onDelete: cascade,路由会自动级联删除。
   await db.delete(S().globalModels).where(eq(S().globalModels.id, id));
+  revalidatePath("/admin", "layout");
+}
+
+/**
+ * 拖动重排:按拖动后的完整顺序全表重写 sortOrder 为连续整数 0,1,2…
+ * 单事务包裹,中途失败整体回滚。id 不存在自然跳过(update 0 行),不抛错。
+ */
+export async function reorderModels(orderedIds: string[]) {
+  await requireAdmin();
+  const db = await getDb();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await db.transaction(async (tx: any) => {
+    for (let i = 0; i < orderedIds.length; i++) {
+      await tx.update(S().globalModels).set({ sortOrder: i }).where(eq(S().globalModels.id, orderedIds[i]));
+    }
+  });
   revalidatePath("/admin", "layout");
 }
 

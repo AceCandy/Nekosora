@@ -64,6 +64,13 @@
       "when": 1783592878577,
       "tag": "0008_tense_tana_nile",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1783653692183,
+      "tag": "0009_wandering_scarlet_spider",
+      "breakpoints": true
     }
   ]
 }

@@ -205,6 +205,8 @@ export const userModels = sqliteTable("user_models", {
   systemPrompt: text("system_prompt"),
   description: text("description"),
   enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  // 拖动排序(per-user 隔离,新建默认末尾)。对齐 globalModels.sortOrder 语义。
+  sortOrder: integer("sort_order").notNull().default(0),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),
 });
 
@@ -623,7 +625,7 @@ export const instructionCards = sqliteTable(
 );
 
 // ===========================================================================
-// 输出方式(管理员预设的会话级输出模式)
+// 输出模式(管理员预设的会话级输出模式)
 // ===========================================================================
 
 export const outputModes = sqliteTable(

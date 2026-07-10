@@ -5,7 +5,7 @@
  * rs-{cssClass} 类,CSS 经聊天页聚合注入后作用于渲染。纯渲染层,不影响模型输出。
  * 全局配置(管理员域),所有用户共享;用户在 chat 工具栏选用,写入 conversations.renderStyleId。
  */
-import { eq, asc } from "drizzle-orm";
+import { eq, asc, sql } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { requireSession, requireAdmin } from "@/lib/session";
 
@@ -82,7 +82,7 @@ async function assertCssClassUnique(cssClass: string, excludeId?: string): Promi
   if (clash) throw new Error("cssClass 已存在,请换一个标识");
 }
 
-/** 管理员:创建输出样式。 */
+/** 管理员:创建输出样式。新建项默认放末尾(sortOrder = 当前 max + 1)。 */
 export async function createRenderStyle(input: {
   name: string;
   description?: string;
@@ -95,6 +95,11 @@ export async function createRenderStyle(input: {
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
+  // 查当前最大 sortOrder,新项排在末尾(空表时从 0 起)。
+  const [maxRow] = await db
+    .select({ maxSort: sql<number>`coalesce(max(${s.renderStyles.sortOrder}), -1)` })
+    .from(s.renderStyles);
+  const nextSort = (maxRow?.maxSort ?? -1) + 1;
   const [row] = await db
     .insert(s.renderStyles)
     .values({
@@ -103,9 +108,27 @@ export async function createRenderStyle(input: {
       cssClass: input.cssClass,
       css: input.css,
       icon: input.icon ?? null,
+      sortOrder: nextSort,
     })
     .returning();
   return row as RenderStyle;
+}
+
+/**
+ * 管理员:按拖动后的 id 顺序全表重写 sortOrder 为连续整数 0,1,2…
+ * 单事务包裹,中途失败整体回滚。id 不存在自然跳过(update 0 行),不抛错。
+ */
+export async function reorderRenderStyles(orderedIds: string[]): Promise<void> {
+  await requireAdmin();
+  const db = await getDb();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const s = getSchema() as any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await db.transaction(async (tx: any) => {
+    for (let i = 0; i < orderedIds.length; i++) {
+      await tx.update(s.renderStyles).set({ sortOrder: i }).where(eq(s.renderStyles.id, orderedIds[i]));
+    }
+  });
 }
 
 /** 管理员:更新输出样式。 */

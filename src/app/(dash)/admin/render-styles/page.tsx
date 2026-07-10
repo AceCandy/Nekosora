@@ -12,6 +12,7 @@ import {
   createRenderStyle,
   updateRenderStyle,
   deleteRenderStyle,
+  reorderRenderStyles as reorderRenderStylesService,
 } from "@/lib/render-styles/service";
 import { Palette } from "lucide-react";
 import RenderStylesManager from "@/features/render-styles/RenderStylesManager";
@@ -60,14 +61,12 @@ export default async function AdminRenderStylesPage() {
     const css = String(formData.get("css") ?? "").trim();
     const description = String(formData.get("description") ?? "").trim();
     const enabled = formData.get("enabled") === "on";
-    const sortOrder = Number(formData.get("sort_order") ?? 0);
     if (!name || !css) return;
     await updateRenderStyle(id, {
       name,
       css,
       description: description || null,
       enabled,
-      sortOrder: Number.isFinite(sortOrder) ? sortOrder : 0,
     });
     revalidatePath("/admin/render-styles");
   }
@@ -81,6 +80,13 @@ export default async function AdminRenderStylesPage() {
   async function handleDelete(id: string) {
     "use server";
     await deleteRenderStyle(id);
+    revalidatePath("/admin/render-styles");
+  }
+
+  /** 拖动重排:按拖动后的完整顺序重写 sortOrder,revalidate 后顺序刷新即落库。 */
+  async function reorderRenderStyles(orderedIds: string[]) {
+    "use server";
+    await reorderRenderStylesService(orderedIds);
     revalidatePath("/admin/render-styles");
   }
 
@@ -110,6 +116,7 @@ export default async function AdminRenderStylesPage() {
         updateActions={updateActions}
         toggleActions={toggleActions}
         deleteActions={deleteActions}
+        reorderAction={reorderRenderStyles}
       />
     </div>
   );

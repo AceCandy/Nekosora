@@ -24,9 +24,9 @@ interface ChatComposerProps {
   cards?: CardOption[];
   /** 可用的知识库(空数组则不显示选择器)。 */
   knowledgeBases?: KnowledgeBaseOption[];
-  /** 可用的输出方式(空数组则不显示选择器)。 */
+  /** 可用的输出模式(空数组则不显示选择器)。 */
   outputModes?: OutputModeOption[];
-  /** 当前会话已选的输出方式 ID(undefined=新会话未选)。 */
+  /** 当前会话已选的输出模式 ID(undefined=新会话未选)。 */
   initialOutputModeId?: string | null;
   /** 可用的输出样式(空数组则不显示选择器)。 */
   renderStyles?: RenderStyleOption[];
@@ -44,7 +44,7 @@ interface ChatComposerProps {
   initialModelParams?: { temperature?: number | null; topP?: number | null; maxTokens?: number | null };
   /** 当前会话推理级别(回填;off=关闭)。 */
   initialReasoning?: ReasoningLevel;
-  /** 当前会话 ID(切换输出方式时持久化用;新会话无)。 */
+  /** 当前会话 ID(切换输出模式时持久化用;新会话无)。 */
   conversationId?: string;
   initialMessages?: ChatMessage[];
 }
@@ -76,6 +76,7 @@ export default function ChatComposer({
 }: ChatComposerProps) {
   const t = useTranslations("chat");
   const [model, setModel] = useState(initialModelName && models.some((m) => m.name === initialModelName) ? initialModelName : (models[0]?.name ?? ""));
+  const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [input, setInput] = useState("");
   const [activeArtifact, setActiveArtifact] = useState<Artifact | null>(null);
   const [previewFile, setPreviewFile] = useState<PreviewableFile | null>(null);
@@ -319,6 +320,9 @@ export default function ChatComposer({
               models={models}
               model={model}
               onModelChange={handleModelChange}
+              modelPickerOpen={modelPickerOpen}
+              onModelPickerToggle={() => setModelPickerOpen((v) => !v)}
+              onModelPickerClose={() => setModelPickerOpen(false)}
               attached={attached}
               onRemoveAttachment={removeAttachment}
               onPreviewFile={setPreviewFile}

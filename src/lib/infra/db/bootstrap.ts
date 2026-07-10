@@ -336,9 +336,11 @@ async function ensureBuiltinRenderStyles(
     for (const p of presets) {
       const [existing] = await db.select({ id: t.id }).from(t).where(eq(t.cssClass, p.cssClass)).limit(1);
       if (existing) {
+        // update 分支不再覆盖 sortOrder,保留用户拖动后的顺序(重启不回弹)。
+        // 仅刷新 name/description/icon/css/renderer,cssClass 与 builtin 标记永不改。
         await db
           .update(t)
-          .set({ name: p.name, description: p.description, icon: p.icon, css: p.css, renderer: p.renderer, sortOrder: p.sortOrder, updatedAt: new Date() })
+          .set({ name: p.name, description: p.description, icon: p.icon, css: p.css, renderer: p.renderer, updatedAt: new Date() })
           .where(eq(t.id, existing.id));
       } else {
         await db.insert(t).values({

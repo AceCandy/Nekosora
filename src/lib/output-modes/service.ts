@@ -1,10 +1,10 @@
 /**
- * 输出方式服务 —— 管理员预设的会话级输出模式(如「HTML 渲染」「简洁输出」)。
+ * 输出模式服务 —— 管理员预设的会话级输出模式(如「HTML 渲染」「简洁输出」)。
  *
  * 每个方式含一段 systemPrompt,选定后注入会话,引导模型按特定格式/风格回答。
  * 全局配置(管理员域),所有用户共享;用户在 chat 工具栏选用,写入 conversations.outputModeId。
  */
-import { eq, asc } from "drizzle-orm";
+import { eq, asc, sql } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { requireSession, requireAdmin } from "@/lib/session";
 
@@ -18,7 +18,7 @@ export interface OutputMode {
   sortOrder: number;
 }
 
-/** 管理员:列出全部输出方式(含禁用)。 */
+/** 管理员:列出全部输出模式(含禁用)。 */
 export async function listAllOutputModes(): Promise<OutputMode[]> {
   await requireAdmin();
   const db = await getDb();
@@ -31,7 +31,7 @@ export async function listAllOutputModes(): Promise<OutputMode[]> {
   return rows as OutputMode[];
 }
 
-/** 用户:列出启用的输出方式(供 chat 工具栏选择)。 */
+/** 用户:列出启用的输出模式(供 chat 工具栏选择)。 */
 export async function listEnabledOutputModes(): Promise<OutputMode[]> {
   await requireSession();
   const db = await getDb();
@@ -53,7 +53,7 @@ export async function listEnabledOutputModes(): Promise<OutputMode[]> {
   return rows as OutputMode[];
 }
 
-/** 读取单个输出方式(用于 chat route 注入)。不鉴权(内部调用,route 已鉴权)。 */
+/** 读取单个输出模式(用于 chat route 注入)。不鉴权(内部调用,route 已鉴权)。 */
 export async function getOutputMode(id: string): Promise<OutputMode | null> {
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -62,7 +62,7 @@ export async function getOutputMode(id: string): Promise<OutputMode | null> {
   return (row as OutputMode | undefined) ?? null;
 }
 
-/** 管理员:创建输出方式。 */
+/** 管理员:创建输出模式。新建项默认放末尾(sortOrder = 当前 max + 1)。 */
 export async function createOutputMode(input: {
   name: string;
   description?: string;
@@ -73,6 +73,11 @@ export async function createOutputMode(input: {
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
+  // 查当前最大 sortOrder,新项排在末尾(空表时从 0 起)。
+  const [maxRow] = await db
+    .select({ maxSort: sql<number>`coalesce(max(${s.outputModes.sortOrder}), -1)` })
+    .from(s.outputModes);
+  const nextSort = (maxRow?.maxSort ?? -1) + 1;
   const [row] = await db
     .insert(s.outputModes)
     .values({
@@ -80,12 +85,30 @@ export async function createOutputMode(input: {
       description: input.description ?? null,
       systemPrompt: input.systemPrompt,
       icon: input.icon ?? null,
+      sortOrder: nextSort,
     })
     .returning();
   return row as OutputMode;
 }
 
-/** 管理员:更新输出方式。 */
+/**
+ * 管理员:按拖动后的 id 顺序全表重写 sortOrder 为连续整数 0,1,2…
+ * 单事务包裹,中途失败整体回滚(避免半成品状态)。id 不存在自然跳过(update 0 行),不抛错。
+ */
+export async function reorderOutputModes(orderedIds: string[]): Promise<void> {
+  await requireAdmin();
+  const db = await getDb();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const s = getSchema() as any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await db.transaction(async (tx: any) => {
+    for (let i = 0; i < orderedIds.length; i++) {
+      await tx.update(s.outputModes).set({ sortOrder: i }).where(eq(s.outputModes.id, orderedIds[i]));
+    }
+  });
+}
+
+/** 管理员:更新输出模式。 */
 export async function updateOutputMode(
   id: string,
   patch: Partial<Pick<OutputMode, "name" | "description" | "systemPrompt" | "icon" | "enabled" | "sortOrder">>,
@@ -97,7 +120,7 @@ export async function updateOutputMode(
   await db.update(s.outputModes).set({ ...patch, updatedAt: new Date() }).where(eq(s.outputModes.id, id));
 }
 
-/** 管理员:删除输出方式。 */
+/** 管理员:删除输出模式。 */
 export async function deleteOutputMode(id: string): Promise<void> {
   await requireAdmin();
   const db = await getDb();

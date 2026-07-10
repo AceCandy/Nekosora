@@ -12,6 +12,7 @@ import {
   toggleRoute,
   listUpstreamModels,
   testRoute,
+  reorderModels,
 } from "../actions";
 import ModelsManager, {
   type ModelItem,
@@ -40,6 +41,7 @@ export default async function ModelsPage() {
     systemPrompt: (m.systemPrompt as string) ?? null,
     description: (m.description as string) ?? null,
     capabilities: (m.capabilities as ModelCapabilities) ?? null,
+    sortOrder: m.sortOrder as number,
   }));
 
   const routeItems: RouteItem[] = routes.map((r: Record<string, unknown>) => ({
@@ -104,6 +106,7 @@ export default async function ModelsPage() {
         toggleRouteActions={toggleRouteActions}
         fetchModelsAction={listUpstreamModels}
         testRouteActions={testRouteActions}
+        reorderAction={reorderModels}
       />
     </div>
   );

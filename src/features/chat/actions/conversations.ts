@@ -1,5 +1,5 @@
 "use server";
-import { eq, and, desc, isNull, like } from "drizzle-orm";
+import { eq, and, desc, isNull, like, asc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { requireSession } from "@/lib/session";
@@ -22,7 +22,8 @@ export async function getVisibleModels() {
       .select({ model: S().userModels, providerName: S().userProviders.name })
       .from(S().userModels)
       .innerJoin(S().userProviders, eq(S().userModels.providerId, S().userProviders.id))
-      .where(and(eq(S().userModels.userId, user.id), eq(S().userModels.enabled, true))),
+      .where(and(eq(S().userModels.userId, user.id), eq(S().userModels.enabled, true)))
+      .orderBy(asc(S().userModels.sortOrder), asc(S().userModels.createdAt)),
   ]);
   return { globals: globals as Record<string, unknown>[], byos: byos as Record<string, unknown>[] };
 }
@@ -78,7 +79,7 @@ export async function getGeneratingStatuses() {
   return rows as { id: string; generating: boolean }[];
 }
 
-/** 新会话首次发送时携带的输入区状态(已选输出方式 / 输出样式 / 联网 / 指令卡 / 知识库)。 */
+/** 新会话首次发送时携带的输入区状态(已选输出模式 / 输出样式 / 联网 / 指令卡 / 知识库)。 */
 export interface CreateConversationOptions {
   outputModeId?: string | null;
   renderStyleId?: string | null;
@@ -162,7 +163,7 @@ async function assertConversationOwner(conversationId: string, userId: string) {
   return !!conv && conv.userId === userId;
 }
 
-/** 设置会话的输出方式(null 表示清除,回到普通对话)。 */
+/** 设置会话的输出模式(null 表示清除,回到普通对话)。 */
 export async function setConversationOutputMode(conversationId: string, outputModeId: string | null) {
   const user = await requireSession();
   if (!(await assertConversationOwner(conversationId, user.id))) throw new Error("无权操作");
@@ -304,7 +305,7 @@ function makeSnippet(text: string, keyword: string): string {
   return (start > 0 ? "…" : "") + text.slice(start, end) + (end < text.length ? "…" : "");
 }
 
-/** 一次性读回会话的输入区状态(模型 / 输出方式 / 输出样式 / 联网 / 指令卡 / 知识库),供 SSR 回填。 */
+/** 一次性读回会话的输入区状态(模型 / 输出模式 / 输出样式 / 联网 / 指令卡 / 知识库),供 SSR 回填。 */
 export async function getConversationComposerState(
   conversationId: string,
 ): Promise<ConversationComposerState> {

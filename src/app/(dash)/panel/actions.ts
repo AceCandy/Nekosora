@@ -1,5 +1,5 @@
 "use server";
-import { eq, and } from "drizzle-orm";
+import { eq, and, asc, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { encryptKeyBundle, parseKeyBundle, pickWeightedKey } from "@/lib/providers/keys";
@@ -259,7 +259,11 @@ export async function getMyModels() {
   const user = await requireSession();
   const db = await getDb();
   const [models, routes] = await Promise.all([
-    db.select().from(S().userModels).where(eq(S().userModels.userId, user.id)),
+    db
+      .select()
+      .from(S().userModels)
+      .where(eq(S().userModels.userId, user.id))
+      .orderBy(asc(S().userModels.sortOrder), asc(S().userModels.createdAt)),
     db
       .select({ route: S().userRoutes, providerName: S().userProviders.name })
       .from(S().userRoutes)
@@ -290,6 +294,12 @@ export async function createMyModel(formData: FormData) {
   } catch {
     /* ignore */
   }
+  // 新建模型默认放末尾(per-user:只查当前用户的 max(sortOrder),空表时从 0 起)。
+  const [maxRow] = await db
+    .select({ maxSort: sql<number>`coalesce(max(${S().userModels.sortOrder}), -1)` })
+    .from(S().userModels)
+    .where(eq(S().userModels.userId, user.id));
+  const nextSort = (maxRow?.maxSort ?? -1) + 1;
   await db.insert(S().userModels).values({
     userId: user.id,
     name: String(formData.get("name") ?? ""),
@@ -299,6 +309,29 @@ export async function createMyModel(formData: FormData) {
     description: String(formData.get("description") ?? "") || null,
     capabilities,
     enabled: true,
+    sortOrder: nextSort,
+  });
+  revalidatePath("/panel", "layout");
+}
+
+/**
+ * 拖动重排:按拖动后的完整顺序重写当前用户的 sortOrder 为连续整数 0,1,2…
+ * 安全关键:每条 update 必须带 userId 条件,防止用户改到他人模型顺序。
+ * 单事务包裹,中途失败整体回滚。id 不存在或不属于该用户自然跳过(update 0 行)。
+ */
+export async function reorderMyModels(orderedIds: string[]) {
+  const user = await requireSession();
+  const db = await getDb();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await db.transaction(async (tx: any) => {
+    for (let i = 0; i < orderedIds.length; i++) {
+      await tx
+        .update(S().userModels)
+        .set({ sortOrder: i })
+        .where(
+          and(eq(S().userModels.id, orderedIds[i]), eq(S().userModels.userId, user.id)),
+        );
+    }
   });
   revalidatePath("/panel", "layout");
 }
