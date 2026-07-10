@@ -101,130 +101,80 @@ export const apiKeys = sqliteTable(
 // 全局 Provider / 模型(四表路由器)
 // ===========================================================================
 
-export const globalProviders = sqliteTable("global_providers", {
-  id: text("id").primaryKey().default(uuid),
-  name: text("name").notNull(),
-  protocol: text("protocol").notNull(),
-  baseUrl: text("base_url").notNull(),
-  apiKeysEnc: text("api_keys_enc").notNull(),
-  keyStrategy: text("key_strategy").notNull().default("round_robin"),
-  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
-  priority: integer("priority").notNull().default(0),
-  connectTimeoutMs: integer("connect_timeout_ms"),
-  readTimeoutMs: integer("read_timeout_ms"),
-  streamIdleTimeoutMs: integer("stream_idle_timeout_ms"),
-  headersJson: text("headers_json", { mode: "json" }).$type<Record<string, string>>(),
-  // 最近一次全量密钥检测的聚合健康度(检测所有 key 后回写)。
-  lastHealthCheckedAt: integer("last_health_checked_at", { mode: "timestamp" }),
-  lastHealthyKeyCount: integer("last_healthy_key_count"),
-  lastTotalKeyCount: integer("last_total_key_count"),
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),
-  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(now),
-});
-
-export const globalModels = sqliteTable("global_models", {
-  id: text("id").primaryKey().default(uuid),
-  name: text("name").notNull().unique(),
-  displayName: text("display_name").notNull(),
-  vendor: text("vendor"),
-  icon: text("icon"),
-  capabilities: text("capabilities", { mode: "json" })
-    .$type<import("@/db/types").ModelCapabilities>()
-    .notNull()
-    .default({}),
-  systemPrompt: text("system_prompt"),
-  description: text("description"),
-  accessScope: text("access_scope").notNull().default("public"),
-  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
-  sortOrder: integer("sort_order").notNull().default(0),
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),
-  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(now),
-});
-
-export const globalRoutes = sqliteTable(
-  "global_routes",
+export const providers = sqliteTable(
+  "providers",
   {
     id: text("id").primaryKey().default(uuid),
-    modelId: text("model_id")
-      .notNull()
-      .references(() => globalModels.id, { onDelete: "cascade" }),
-    providerId: text("provider_id")
-      .notNull()
-      .references(() => globalProviders.id, { onDelete: "cascade" }),
-    upstreamModelName: text("upstream_model_name").notNull(),
-    priority: integer("priority").notNull().default(0),
-    weight: integer("weight").notNull().default(1),
-    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
-    headersJson: text("headers_json", { mode: "json" }).$type<Record<string, string>>(),
-    createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),
-  },
-  (t) => [index("global_routes_model_idx").on(t.modelId)],
-);
-
-// ===========================================================================
-// 用户 BYO
-// ===========================================================================
-
-export const userProviders = sqliteTable("user_providers", {
-  id: text("id").primaryKey().default(uuid),
-  userId: text("user_id")
-    .notNull()
-    .references(() => user.id, { onDelete: "cascade" }),
-  name: text("name").notNull(),
-  protocol: text("protocol").notNull(),
-  baseUrl: text("base_url").notNull(),
-  apiKeyEnc: text("api_key_enc").notNull(),
-  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
-  // 最近一次全量密钥检测的聚合健康度。
-  lastHealthCheckedAt: integer("last_health_checked_at", { mode: "timestamp" }),
-  lastHealthyKeyCount: integer("last_healthy_key_count"),
-  lastTotalKeyCount: integer("last_total_key_count"),
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),
-  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(now),
-});
-
-export const userModels = sqliteTable("user_models", {
-  id: text("id").primaryKey().default(uuid),
-  userId: text("user_id")
-    .notNull()
-    .references(() => user.id, { onDelete: "cascade" }),
-  // providerId/upstreamModelName 标遗留:多路由上线后改由 user_routes 承载。
-  // 列保留+nullable,网关与新建逻辑不再读它们(见 resolveByoRoute / createMyModel)。
-  providerId: text("provider_id").references(() => userProviders.id, {
-    onDelete: "cascade",
-  }),
-  name: text("name").notNull(),
-  upstreamModelName: text("upstream_model_name"),
-  capabilities: text("capabilities", { mode: "json" })
-    .$type<import("@/db/types").ModelCapabilities>()
-    .notNull()
-    .default({}),
-  // 与全局模型对齐的元信息(均可空,旧数据默认 NULL)。
-  displayName: text("display_name"),
-  vendor: text("vendor"),
-  systemPrompt: text("system_prompt"),
-  description: text("description"),
-  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
-  // 拖动排序(per-user 隔离,新建默认末尾)。对齐 globalModels.sortOrder 语义。
-  sortOrder: integer("sort_order").notNull().default(0),
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),
-});
-
-// 个人模型的多路由(镜像 global_routes + userId 隔离)。
-// providerId/upstreamModelName 原先 1:1 直挂在 user_models 上,迁移后改由本表承载多条路由。
-export const userRoutes = sqliteTable(
-  "user_routes",
-  {
-    id: text("id").primaryKey().default(uuid),
-    userId: text("user_id")
+    ownerUserId: text("owner_user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    userModelId: text("user_model_id")
+    name: text("name").notNull(),
+    protocol: text("protocol").notNull(),
+    baseUrl: text("base_url").notNull(),
+    apiKeysEnc: text("api_keys_enc").notNull(),
+    keyStrategy: text("key_strategy").notNull().default("round_robin"),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    priority: integer("priority").notNull().default(0),
+    connectTimeoutMs: integer("connect_timeout_ms"),
+    readTimeoutMs: integer("read_timeout_ms"),
+    streamIdleTimeoutMs: integer("stream_idle_timeout_ms"),
+    headersJson: text("headers_json", { mode: "json" }).$type<Record<string, string>>(),
+    // 最近一次全量密钥检测的聚合健康度(检测所有 key 后回写)。
+    lastHealthCheckedAt: integer("last_health_checked_at", { mode: "timestamp" }),
+    lastHealthyKeyCount: integer("last_healthy_key_count"),
+    lastTotalKeyCount: integer("last_total_key_count"),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(now),
+  },
+  (t) => [
+    index("providers_owner_idx").on(t.ownerUserId),
+    uniqueIndex("providers_owner_name_idx").on(t.ownerUserId, t.name),
+  ],
+);
+
+export const models = sqliteTable(
+  "models",
+  {
+    id: text("id").primaryKey().default(uuid),
+    ownerUserId: text("owner_user_id")
       .notNull()
-      .references(() => userModels.id, { onDelete: "cascade" }),
+      .references(() => user.id, { onDelete: "cascade" }),
+    visibility: text("visibility").notNull().default("private"), // public=admin 发布给所有人 WebChat 可选;private=仅 owner
+    name: text("name").notNull(),
+    displayName: text("display_name"),
+    vendor: text("vendor"),
+    icon: text("icon"),
+    capabilities: text("capabilities", { mode: "json" })
+      .$type<import("@/db/types").ModelCapabilities>()
+      .notNull()
+      .default({}),
+    systemPrompt: text("system_prompt"),
+    description: text("description"),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(now),
+  },
+  (t) => [
+    index("models_owner_idx").on(t.ownerUserId),
+    index("models_visibility_idx").on(t.visibility),
+    uniqueIndex("models_owner_name_idx").on(t.ownerUserId, t.name),
+  ],
+);
+
+export const routes = sqliteTable(
+  "routes",
+  {
+    id: text("id").primaryKey().default(uuid),
+    ownerUserId: text("owner_user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    modelId: text("model_id")
+      .notNull()
+      .references(() => models.id, { onDelete: "cascade" }),
     providerId: text("provider_id")
       .notNull()
-      .references(() => userProviders.id, { onDelete: "cascade" }),
+      .references(() => providers.id, { onDelete: "cascade" }),
     upstreamModelName: text("upstream_model_name").notNull(),
     priority: integer("priority").notNull().default(0),
     weight: integer("weight").notNull().default(1),
@@ -232,11 +182,14 @@ export const userRoutes = sqliteTable(
     headersJson: text("headers_json", { mode: "json" }).$type<Record<string, string>>(),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),
   },
-  (t) => [index("user_routes_model_idx").on(t.userModelId)],
+  (t) => [
+    index("routes_model_idx").on(t.modelId),
+    index("routes_owner_idx").on(t.ownerUserId),
+  ],
 );
 
 // ===========================================================================
-// 子 Key 模型绑定
+// 子 Key 模型绑定(收敛为单 modelId;原 scope+globalModelId+userModelId 已废弃)
 // ===========================================================================
 
 export const keyModelBindings = sqliteTable(
@@ -246,23 +199,14 @@ export const keyModelBindings = sqliteTable(
     keyId: text("key_id")
       .notNull()
       .references(() => apiKeys.id, { onDelete: "cascade" }),
-    scope: text("scope").notNull(), // "global" | "byo"
-    globalModelId: text("global_model_id").references(() => globalModels.id, {
-      onDelete: "cascade",
-    }),
-    userModelId: text("user_model_id").references(() => userModels.id, {
-      onDelete: "cascade",
-    }),
+    modelId: text("model_id")
+      .notNull()
+      .references(() => models.id, { onDelete: "cascade" }),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),
   },
   (t) => [
     index("key_model_bindings_key_idx").on(t.keyId),
-    uniqueIndex("key_model_bindings_unique_idx").on(
-      t.keyId,
-      t.scope,
-      t.globalModelId,
-      t.userModelId,
-    ),
+    uniqueIndex("key_model_bindings_unique_idx").on(t.keyId, t.modelId),
   ],
 );
 
@@ -807,8 +751,6 @@ export type {
   ProcessTrace,
   ApiKeyKind,
   ProviderProtocol,
-  AccessScope,
-  BindingScope,
   MessageStatus,
   ErrorPhase,
 } from "@/db/types";

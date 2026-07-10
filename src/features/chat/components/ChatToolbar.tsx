@@ -110,8 +110,8 @@ export function ChatToolbar(props: ChatToolbarProps) {
     reasoning, onReasoningChange,
   } = props;
 
-  // 当前选中模型的能力位(决定推理控件是否露出 + 档位)。
-  const currentCapabilities = models.find((m) => m.name === model)?.capabilities;
+  // 当前选中模型的能力位(决定推理控件是否露出 + 档位)。model 现为 modelId。
+  const currentCapabilities = models.find((m) => m.modelId === model)?.capabilities;
 
   return (
     <div className="flex items-center gap-2 mb-2 flex-wrap">
@@ -120,7 +120,7 @@ export function ChatToolbar(props: ChatToolbarProps) {
         open={modelPickerOpen}
         onClose={onModelPickerClose}
         options={models.map((m): OptionItem => ({
-          id: m.name,
+          id: m.modelId,
           label: m.displayName ?? m.name,
           badge: m.source === "global" ? t("globalLabel") : undefined,
           badgeVariant: m.source === "global" ? "primary" : undefined,
@@ -145,7 +145,7 @@ export function ChatToolbar(props: ChatToolbarProps) {
             <Cpu className="w-3.5 h-3.5" aria-hidden="true" />
             <span className="max-w-[140px] truncate">
               {model
-                ? (models.find((m) => m.name === model)?.displayName ?? model)
+                ? (models.find((m) => m.modelId === model)?.displayName ?? model)
                 : t("selectModel")}
             </span>
             <ChevronDown className="w-3 h-3 opacity-50" aria-hidden="true" />

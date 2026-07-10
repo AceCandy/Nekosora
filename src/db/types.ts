@@ -75,8 +75,6 @@ export type ProviderProtocol =
   | "openai" | "anthropic" | "gemini" | "openai-compatible"
   // P1-D:非 chat 协议族(图像生成 / 语音转写 / 语音合成,均 OpenAI 兼容格式)
   | "openai-images" | "openai-audio-stt" | "openai-audio-tts";
-export type AccessScope = "public" | "internal";
-export type BindingScope = "global" | "byo";
 export type MessageStatus = "pending" | "streaming" | "success" | "interrupted";
 /** 错误请求的生命周期阶段(ops_error_logs.errorPhase,双 dialect 均以 text 存储)。 */
 export type ErrorPhase =

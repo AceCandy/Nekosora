@@ -18,7 +18,7 @@ export default async function ChatConversationPage({
 }) {
   const { id } = await params;
   void getTranslations("chat"); // 保持命名空间预热,与 chat/page 行为一致
-  const [{ globals, byos }, branch, artifactsMap, cards, kbs, outputModes, renderStyles, composerState] = await Promise.all([
+  const [visibleModels, branch, artifactsMap, cards, kbs, outputModes, renderStyles, composerState] = await Promise.all([
     getVisibleModels(),
     getVisibleBranch(id).catch(() => ({ messages: [], versionMap: {} })),
     getArtifactsByConversation(id).catch(() => ({})),
@@ -41,20 +41,14 @@ export default async function ChatConversationPage({
   ]);
   const msgs = branch.messages;
   const versionMap = branch.versionMap as Record<string, { current: number; total: number }>;
-  const models: ModelOption[] = [
-    ...byos.map((r: Record<string, unknown>) => ({
-      name: (r.model as Record<string, unknown>).name as string,
-      displayName: (r.model as Record<string, unknown>).displayName as string | undefined,
-      capabilities: ((r.model as Record<string, unknown>).capabilities as ModelCapabilities | undefined) ?? undefined,
-      source: "byo" as const,
-    })),
-    ...globals.map((m: Record<string, unknown>) => ({
-      name: m.name as string,
-      displayName: (m.displayName as string | undefined) ?? undefined,
-      capabilities: (m.capabilities as ModelCapabilities | undefined) ?? undefined,
-      source: "global" as const,
-    })),
-  ];
+  // getVisibleModels 已返回扁平数组且 private 排序在前,直接映射为 ModelOption[](带 capabilities)。
+  const models: ModelOption[] = (visibleModels as Record<string, unknown>[]).map((m) => ({
+    modelId: m.id as string,
+    name: m.name as string,
+    displayName: (m.displayName as string | undefined) ?? undefined,
+    capabilities: (m.capabilities as ModelCapabilities | undefined) ?? undefined,
+    source: m.visibility === "public" ? ("global" as const) : ("byo" as const),
+  }));
 
   // Convert messages to ChatComposer format(P1-B:关联 artifacts)
   const artifactsByMsg = artifactsMap as Record<string, { id: string; kind: string; title: string; language: string | null; content: string }[]>;

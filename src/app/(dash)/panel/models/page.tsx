@@ -20,10 +20,13 @@ import ModelsManager, {
 } from "@/features/models/ModelsManager";
 import type { ModelCapabilities } from "@/db/types";
 import { getTranslations } from "next-intl/server";
+import { requireSession } from "@/lib/session";
 
 export default async function MyModelsPage() {
   const t = await getTranslations("panel.models");
   const tn = await getTranslations("nav");
+  const user = await requireSession();
+  const isAdmin = user.role === "admin";
   const [models, providers] = await Promise.all([getMyModels(), getMyProviders()]);
 
   // —— 映射数据形状,适配 ModelsManager ——
@@ -32,6 +35,7 @@ export default async function MyModelsPage() {
     name: (r.model as Record<string, unknown>).name as string,
     displayName: (r.model as Record<string, unknown>).displayName as string,
     vendor: ((r.model as Record<string, unknown>).vendor as string) ?? null,
+    visibility: (r.model as Record<string, unknown>).visibility as string,
     enabled: (r.model as Record<string, unknown>).enabled as boolean,
     systemPrompt: ((r.model as Record<string, unknown>).systemPrompt as string) ?? null,
     description: ((r.model as Record<string, unknown>).description as string) ?? null,
@@ -39,13 +43,13 @@ export default async function MyModelsPage() {
     sortOrder: (r.model as Record<string, unknown>).sortOrder as number,
   }));
 
-  // byo 路由外键是 userModelId(对应 global 的 modelId),映射到 RouteItem.modelId。
+  // 路由外键统一为 modelId(原 byo 的 userModelId 已收敛)。
   const routeItems: RouteItem[] = models.flatMap((r: Record<string, unknown>) =>
     ((r.routes as Record<string, unknown>[]) ?? []).map((rr) => {
       const route = rr.route as Record<string, unknown>;
       return {
         id: route.id as string,
-        modelId: route.userModelId as string,
+        modelId: route.modelId as string,
         providerId: route.providerId as string,
         providerName: rr.providerName as string,
         upstreamModelName: route.upstreamModelName as string,
@@ -61,7 +65,7 @@ export default async function MyModelsPage() {
     name: p.name as string,
   }));
 
-  // —— 预先 bind 每个 id / userModelId 对应的 action,组成按 id 索引的表 ——
+  // —— 预先 bind 每个 id / modelId 对应的 action,组成按 id 索引的表 ——
   const updateActions = Object.fromEntries(
     modelItems.map((m) => [m.id, updateMyModel.bind(null, m.id)]),
   );
@@ -71,7 +75,7 @@ export default async function MyModelsPage() {
   const toggleActions = Object.fromEntries(
     modelItems.map((m) => [m.id, toggleMyModel.bind(null, m.id, !m.enabled)]),
   );
-  // 路由:createMyRoute 按 userModelId bind(每模型一个新增入口,含尚无路由的模型)
+  // 路由:createMyRoute 按 modelId bind(每模型一个新增入口,含尚无路由的模型)
   const createRouteActions = Object.fromEntries(
     modelItems.map((m) => [m.id, createMyRoute.bind(null, m.id)]),
   );
@@ -100,7 +104,7 @@ export default async function MyModelsPage() {
         <p className="text-sm text-amber-600">{t("needProvider")}</p>
       ) : (
         <ModelsManager
-          variant="byo"
+          isAdmin={isAdmin}
           models={modelItems}
           routes={routeItems}
           providers={providerOptions}

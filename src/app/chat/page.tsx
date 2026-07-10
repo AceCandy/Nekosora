@@ -8,25 +8,20 @@ import ChatComposer, { type ModelOption } from "@/features/chat/components/ChatC
 
 export default async function ChatPage() {
   void getTranslations("chat");
-  const [{ globals, byos }, cards, kbs, outputModes, renderStyles] = await Promise.all([
+  const [visibleModels, cards, kbs, outputModes, renderStyles] = await Promise.all([
     getVisibleModels(),
     listMyCards(),
     listKnowledgeBases().catch(() => []),
     listEnabledOutputModes().catch(() => []),
     listEnabledRenderStyles().catch(() => []),
   ]);
-  const models: ModelOption[] = [
-    ...byos.map((r: Record<string, unknown>) => ({
-      name: (r.model as Record<string, unknown>).name as string,
-      displayName: (r.model as Record<string, unknown>).displayName as string | undefined,
-      source: "byo" as const,
-    })),
-    ...globals.map((m: Record<string, unknown>) => ({
-      name: m.name as string,
-      displayName: (m.displayName as string | undefined) ?? undefined,
-      source: "global" as const,
-    })),
-  ];
+  // getVisibleModels 已返回扁平数组且 private 排序在前,直接映射为 ModelOption[]。
+  const models: ModelOption[] = (visibleModels as Record<string, unknown>[]).map((m) => ({
+    modelId: m.id as string,
+    name: m.name as string,
+    displayName: (m.displayName as string | undefined) ?? undefined,
+    source: m.visibility === "public" ? ("global" as const) : ("byo" as const),
+  }));
   const knowledgeBases = (kbs as { id: string; name: string; fileCount: number }[]).map((kb) => ({
     id: kb.id,
     name: kb.name,

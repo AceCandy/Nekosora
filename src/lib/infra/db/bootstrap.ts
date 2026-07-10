@@ -99,10 +99,9 @@ export async function runMigrations(db: unknown, isPg: boolean): Promise<void> {
 }
 
 const PG_BASELINE_TYPES = [
-  "access_scope",
   "api_key_kind",
-  "binding_scope",
   "message_status",
+  "model_visibility",
   "provider_protocol",
 ] as const;
 
@@ -116,9 +115,6 @@ const PG_BASELINE_TABLES = [
   "conversations",
   "file_chunks",
   "file_objects",
-  "global_models",
-  "global_providers",
-  "global_routes",
   "image_jobs",
   "instruction_cards",
   "key_model_bindings",
@@ -135,8 +131,9 @@ const PG_BASELINE_TABLES = [
   "usage_logs",
   "user",
   "user_memories",
-  "user_models",
-  "user_providers",
+  "models",
+  "providers",
+  "routes",
   "user_settings",
   "verification",
 ] as const;

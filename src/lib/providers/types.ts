@@ -36,14 +36,12 @@ export interface ResolvedRoute {
   /** 该路由的优先级(用于分组);weight 用于组内加权。 */
   priority: number;
   weight: number;
-  /** 来源标记,便于用量归属与日志。 */
+  /** 来源标记,便于用量归属与日志。语义基于模型 visibility:public→"global"、private→"byo"。 */
   source: "global" | "byo";
   /** 命中的路由 id(用量/错误日志溯源)。 */
   routeId: string;
-  /** 全局模型 id(用量记录用)。 */
-  globalModelId?: string;
-  /** 用户模型 id。 */
-  userModelId?: string;
+  /** 命中的模型 id(用量记录用)。 */
+  modelId?: string;
   capabilities?: ModelCapabilities;
 }
 

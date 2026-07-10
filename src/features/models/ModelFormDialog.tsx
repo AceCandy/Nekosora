@@ -6,20 +6,12 @@ import type { FormDataSerializableAction } from "@/features/providers/types";
 import Modal from "@/shared/ui/Modal";
 import CapabilitiesEditor from "@/features/models/CapabilitiesEditor";
 
-export interface GlobalModelInitial {
+export interface ModelInitial {
   name?: string;
   displayName?: string;
   vendor?: string;
-  accessScope?: "public" | "internal";
-  systemPrompt?: string;
-  description?: string;
-  capabilities?: ModelCapabilities;
-}
-
-export interface ByoModelInitial {
-  name?: string;
-  displayName?: string;
-  vendor?: string;
+  /** 可见性:public=发布到全局(仅 admin 可设);private=仅自己可见。 */
+  visibility?: "public" | "private";
   systemPrompt?: string;
   description?: string;
   capabilities?: ModelCapabilities;
@@ -30,8 +22,9 @@ interface ModelFormDialogProps {
   onClose: () => void;
   mode: "add" | "edit";
   action: FormDataSerializableAction;
-  variant: "global" | "byo";
-  initial?: GlobalModelInitial | ByoModelInitial;
+  /** admin 可见「发布到全局」(visibility) 选择器;普通用户恒 private,不渲染该字段。 */
+  isAdmin?: boolean;
+  initial?: ModelInitial;
 }
 
 const labelCls = "block text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-1";
@@ -43,17 +36,12 @@ export default function ModelFormDialog({
   onClose,
   mode,
   action,
-  variant,
+  isAdmin = false,
   initial,
 }: ModelFormDialogProps) {
   const t = useTranslations("models");
   const isEdit = mode === "edit";
-  const isAdmin = variant === "global";
-
-  const gi = isAdmin ? (initial as GlobalModelInitial | undefined) : undefined;
-  const bi = !isAdmin ? (initial as ByoModelInitial | undefined) : undefined;
-  // byo 与 global 共享除 accessScope 外的全部字段,统一从 ini 取值。
-  const ini = gi ?? bi;
+  const ini = initial;
 
   const [formKey, setFormKey] = useState(0);
 
@@ -62,10 +50,7 @@ export default function ModelFormDialog({
     setFormKey((k) => k + 1);
   };
 
-  const title =
-    isAdmin
-      ? isEdit ? t("editGlobalModel") : t("addGlobalModel")
-      : isEdit ? t("editByoModel") : t("addByoModel");
+  const title = isEdit ? t("editModel") : t("addModel");
 
   return (
     <Modal open={open} onClose={handleClose} title={title}>
@@ -116,14 +101,14 @@ export default function ModelFormDialog({
 
           {isAdmin && (
             <label className="block">
-              <span className={labelCls}>{t("accessScopeLabel")}</span>
+              <span className={labelCls}>{t("visibilityLabel")}</span>
               <select
-                name="accessScope"
-                defaultValue={gi?.accessScope ?? "public"}
+                name="visibility"
+                defaultValue={ini?.visibility ?? "private"}
                 className={inputCls}
               >
-                <option value="public">{t("scopePublicOption")}</option>
-                <option value="internal">{t("scopeInternalOption")}</option>
+                <option value="private">{t("visibilityPrivateOption")}</option>
+                <option value="public">{t("visibilityPublicOption")}</option>
               </select>
             </label>
           )}

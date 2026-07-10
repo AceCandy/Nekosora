@@ -1,7 +1,8 @@
 /**
  * 图像生成适配器 —— P1-D。
  *
- * 复用四表路由器(resolveRoutesByCapability 拿路由链),调用 AI SDK v5 的 generateImage。
+ * 复用路由器拿路由链:WebChat 传 modelId 走 resolveRoutesById(public ∪ owner 可见),
+ * 网关缺省 modelId 走 resolveRoutes(owner-only);再调 AI SDK v5 的 generateImage。
  * OpenAI Images API 兼容(DALL-E / gpt-image-1);其他 OpenAI 兼容上游同理。
  *
  * response_format:
@@ -13,7 +14,7 @@
 import { generateImage as generateImage } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import type { CallContext, ResolvedRoute } from "@/lib/providers/types";
-import { resolveRoutesByCapability, RoutingError } from "@/lib/routing";
+import { resolveRoutes, resolveRoutesById, RoutingError } from "@/lib/routing";
 import { maskKey } from "@/lib/usage";
 
 export interface ImageGenOptions {
@@ -49,14 +50,25 @@ export interface ImageGenResult {
 
 /**
  * 通过路由链生成图像。
+ *
+ * @param modelId 模型 id。WebChat 传 → 走 resolveRoutesById(public ∪ owner 可见,避免 public/private 同名歧义);
+ *               网关缺省 → 走 resolveRoutes(by name,owner-only)。
  * @throws RoutingError(capability_not_supported / no_route / model_not_found)
  */
 export async function generateImageViaRoute(
   ctx: CallContext,
   modelName: string,
   opts: ImageGenOptions,
+  modelId?: string,
 ): Promise<ImageGenResult> {
-  const routes = await resolveRoutesByCapability(ctx, modelName, "imageGeneration");
+  const routes = modelId
+    ? await resolveRoutesById(ctx, modelId)
+    : await resolveRoutes(ctx, modelName);
+  // 校验模型具备图像生成能力。
+  const caps = routes[0]?.capabilities;
+  if (!caps || !caps.imageGeneration) {
+    throw new RoutingError("capability_not_supported", `模型 ${modelName} 不支持能力 imageGeneration`);
+  }
   const route = routes[0];
   const { baseURL, apiKey, headers } = buildOpenAICompatConfig(route);
 

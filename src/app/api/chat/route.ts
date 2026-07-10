@@ -35,6 +35,8 @@ export async function POST(req: NextRequest) {
   let body: {
     conversationId: string;
     model: string;
+    /** 模型 id(WebChat byId 路由解析;缺省则回退 by name)。 */
+    modelId?: string;
     messages: IRRequest["messages"];
     fileIds?: string[];
     // 分支支持:可选指定父消息/源消息的 publicId(retry/edit 时)
@@ -169,6 +171,7 @@ export async function POST(req: NextRequest) {
     conv: { outputModeId: conv.outputModeId },
     userContent,
     model: body.model,
+    modelId: body.modelId,
     messages: body.messages,
     fileIds: body.fileIds,
     knowledgeBaseIds: body.knowledgeBaseIds,
@@ -244,8 +247,8 @@ export async function POST(req: NextRequest) {
         const mcpServers = await resolveMcpServers(ctx).catch(() => []);
         const hasTools = mcpServers.some((sv) => sv.tools.length > 0);
         const gen = hasTools
-          ? streamChatWithTools({ ctx, request: irRequest, mcpServers, cacheKey: body.conversationId })
-          : streamChat({ ctx, request: irRequest, cacheKey: body.conversationId });
+          ? streamChatWithTools({ ctx, request: irRequest, mcpServers, cacheKey: body.conversationId, modelId: body.modelId })
+          : streamChat({ ctx, request: irRequest, cacheKey: body.conversationId, modelId: body.modelId });
         for await (const ev of gen) {
           if (ev.type === "text-delta") {
             assistantText += ev.text;

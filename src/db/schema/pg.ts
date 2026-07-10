@@ -133,126 +133,79 @@ export const providerProtocol = pgEnum("provider_protocol", [
   "openai-audio-stt",
   "openai-audio-tts",
 ]);
-export const accessScope = pgEnum("access_scope", ["public", "internal"]);
+export const modelVisibility = pgEnum("model_visibility", ["public", "private"]);
 
-export const globalProviders = pgTable("global_providers", {
-  id: text("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull(),
-  protocol: providerProtocol("protocol").notNull(),
-  baseUrl: text("base_url").notNull(),
-  apiKeysEnc: text("api_keys_enc").notNull(), // AES-GCM 加密的密钥 bundle JSON
-  keyStrategy: text("key_strategy").notNull().default("round_robin"),
-  enabled: boolean("enabled").notNull().default(true),
-  priority: integer("priority").notNull().default(0),
-  connectTimeoutMs: integer("connect_timeout_ms"),
-  readTimeoutMs: integer("read_timeout_ms"),
-  streamIdleTimeoutMs: integer("stream_idle_timeout_ms"),
-  headersJson: jsonb("headers_json").$type<Record<string, string>>(),
-  // 最近一次全量密钥检测的聚合健康度(检测所有 key 后回写)。
-  lastHealthCheckedAt: timestamp("last_health_checked_at", { withTimezone: true }),
-  lastHealthyKeyCount: integer("last_healthy_key_count"),
-  lastTotalKeyCount: integer("last_total_key_count"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
-export const globalModels = pgTable("global_models", {
-  id: text("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull().unique(), // 对外模型名(用户/调用方看到)
-  displayName: text("display_name").notNull(),
-  vendor: text("vendor"),
-  icon: text("icon"),
-  capabilities: jsonb("capabilities").$type<ModelCapabilities>().notNull().default({}),
-  systemPrompt: text("system_prompt"),
-  description: text("description"),
-  accessScope: accessScope("access_scope").notNull().default("public"),
-  enabled: boolean("enabled").notNull().default(true),
-  sortOrder: integer("sort_order").notNull().default(0),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
-export const globalRoutes = pgTable(
-  "global_routes",
+export const providers = pgTable(
+  "providers",
   {
     id: text("id").primaryKey().default(sql`gen_random_uuid()`),
-    modelId: text("model_id")
-      .notNull()
-      .references(() => globalModels.id, { onDelete: "cascade" }),
-    providerId: text("provider_id")
-      .notNull()
-      .references(() => globalProviders.id, { onDelete: "cascade" }),
-    upstreamModelName: text("upstream_model_name").notNull(),
-    priority: integer("priority").notNull().default(0),
-    weight: integer("weight").notNull().default(1),
-    enabled: boolean("enabled").notNull().default(true),
-    headersJson: jsonb("headers_json").$type<Record<string, string>>(),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [index("global_routes_model_idx").on(t.modelId)],
-);
-
-// ===========================================================================
-// 用户 BYO Provider / 模型(用户私有域)
-// ===========================================================================
-
-export const userProviders = pgTable("user_providers", {
-  id: text("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: text("user_id")
-    .notNull()
-    .references(() => user.id, { onDelete: "cascade" }),
-  name: text("name").notNull(),
-  protocol: providerProtocol("protocol").notNull(),
-  baseUrl: text("base_url").notNull(),
-  apiKeyEnc: text("api_key_enc").notNull(), // AES-GCM 加密
-  enabled: boolean("enabled").notNull().default(true),
-  // 最近一次全量密钥检测的聚合健康度。
-  lastHealthCheckedAt: timestamp("last_health_checked_at", { withTimezone: true }),
-  lastHealthyKeyCount: integer("last_healthy_key_count"),
-  lastTotalKeyCount: integer("last_total_key_count"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
-export const userModels = pgTable("user_models", {
-  id: text("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: text("user_id")
-    .notNull()
-    .references(() => user.id, { onDelete: "cascade" }),
-  // providerId/upstreamModelName 标遗留:多路由上线后改由 user_routes 承载。
-  // 列保留+nullable,网关与新建逻辑不再读它们(见 resolveByoRoute / createMyModel)。
-  providerId: text("provider_id").references(() => userProviders.id, {
-    onDelete: "cascade",
-  }),
-  name: text("name").notNull(), // 用户自定义对外模型名
-  upstreamModelName: text("upstream_model_name"),
-  capabilities: jsonb("capabilities").$type<ModelCapabilities>().notNull().default({}),
-  // 与全局模型对齐的元信息(均可空,旧数据默认 NULL)。
-  displayName: text("display_name"),
-  vendor: text("vendor"),
-  systemPrompt: text("system_prompt"),
-  description: text("description"),
-  enabled: boolean("enabled").notNull().default(true),
-  // 拖动排序(per-user 隔离,新建默认末尾)。对齐 globalModels.sortOrder 语义。
-  sortOrder: integer("sort_order").notNull().default(0),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
-// 个人模型的多路由(镜像 global_routes + userId 隔离)。
-// providerId/upstreamModelName 原先 1:1 直挂在 user_models 上,迁移后改由本表承载多条路由。
-export const userRoutes = pgTable(
-  "user_routes",
-  {
-    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
-    userId: text("user_id")
+    ownerUserId: text("owner_user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    userModelId: text("user_model_id")
+    name: text("name").notNull(),
+    protocol: providerProtocol("protocol").notNull(),
+    baseUrl: text("base_url").notNull(),
+    apiKeysEnc: text("api_keys_enc").notNull(), // AES-GCM 加密的密钥 bundle JSON
+    keyStrategy: text("key_strategy").notNull().default("round_robin"),
+    enabled: boolean("enabled").notNull().default(true),
+    priority: integer("priority").notNull().default(0),
+    connectTimeoutMs: integer("connect_timeout_ms"),
+    readTimeoutMs: integer("read_timeout_ms"),
+    streamIdleTimeoutMs: integer("stream_idle_timeout_ms"),
+    headersJson: jsonb("headers_json").$type<Record<string, string>>(),
+    // 最近一次全量密钥检测的聚合健康度(检测所有 key 后回写)。
+    lastHealthCheckedAt: timestamp("last_health_checked_at", { withTimezone: true }),
+    lastHealthyKeyCount: integer("last_healthy_key_count"),
+    lastTotalKeyCount: integer("last_total_key_count"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("providers_owner_idx").on(t.ownerUserId),
+    uniqueIndex("providers_owner_name_idx").on(t.ownerUserId, t.name),
+  ],
+);
+
+export const models = pgTable(
+  "models",
+  {
+    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
+    ownerUserId: text("owner_user_id")
       .notNull()
-      .references(() => userModels.id, { onDelete: "cascade" }),
+      .references(() => user.id, { onDelete: "cascade" }),
+    visibility: modelVisibility("visibility").notNull().default("private"), // public=admin 发布给所有人 WebChat 可选;private=仅 owner
+    name: text("name").notNull(), // 对外模型名(用户/调用方看到)
+    displayName: text("display_name"),
+    vendor: text("vendor"),
+    icon: text("icon"),
+    capabilities: jsonb("capabilities").$type<ModelCapabilities>().notNull().default({}),
+    systemPrompt: text("system_prompt"),
+    description: text("description"),
+    enabled: boolean("enabled").notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("models_owner_idx").on(t.ownerUserId),
+    index("models_visibility_idx").on(t.visibility),
+    uniqueIndex("models_owner_name_idx").on(t.ownerUserId, t.name),
+  ],
+);
+
+export const routes = pgTable(
+  "routes",
+  {
+    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
+    ownerUserId: text("owner_user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    modelId: text("model_id")
+      .notNull()
+      .references(() => models.id, { onDelete: "cascade" }),
     providerId: text("provider_id")
       .notNull()
-      .references(() => userProviders.id, { onDelete: "cascade" }),
+      .references(() => providers.id, { onDelete: "cascade" }),
     upstreamModelName: text("upstream_model_name").notNull(),
     priority: integer("priority").notNull().default(0),
     weight: integer("weight").notNull().default(1),
@@ -260,14 +213,15 @@ export const userRoutes = pgTable(
     headersJson: jsonb("headers_json").$type<Record<string, string>>(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("user_routes_model_idx").on(t.userModelId)],
+  (t) => [
+    index("routes_model_idx").on(t.modelId),
+    index("routes_owner_idx").on(t.ownerUserId),
+  ],
 );
 
 // ===========================================================================
-// 子 Key 模型绑定(双来源 union:全局模型 ∪ 用户 BYO 模型)
+// 子 Key 模型绑定(收敛为单 modelId;原 scope+globalModelId+userModelId 已废弃)
 // ===========================================================================
-
-export const bindingScope = pgEnum("binding_scope", ["global", "byo"]);
 
 export const keyModelBindings = pgTable(
   "key_model_bindings",
@@ -276,23 +230,14 @@ export const keyModelBindings = pgTable(
     keyId: text("key_id")
       .notNull()
       .references(() => apiKeys.id, { onDelete: "cascade" }),
-    scope: bindingScope("scope").notNull(),
-    globalModelId: text("global_model_id").references(() => globalModels.id, {
-      onDelete: "cascade",
-    }),
-    userModelId: text("user_model_id").references(() => userModels.id, {
-      onDelete: "cascade",
-    }),
+    modelId: text("model_id")
+      .notNull()
+      .references(() => models.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("key_model_bindings_key_idx").on(t.keyId),
-    uniqueIndex("key_model_bindings_unique_idx").on(
-      t.keyId,
-      t.scope,
-      t.globalModelId,
-      t.userModelId,
-    ),
+    uniqueIndex("key_model_bindings_unique_idx").on(t.keyId, t.modelId),
   ],
 );
 
@@ -857,8 +802,6 @@ export type {
   ProcessTrace,
   ApiKeyKind,
   ProviderProtocol,
-  AccessScope,
-  BindingScope,
   MessageStatus,
   ErrorPhase,
 } from "@/db/types";

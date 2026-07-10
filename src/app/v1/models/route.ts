@@ -1,6 +1,6 @@
 /**
  * OpenAI 兼容端点 —— GET /v1/models
- * 返回该 key 可用的模型列表(全局 public ∪ 子 key 绑定的)。
+ * 返回该 key 可用的模型列表(网关 owner-only:主 key 列调用者自己的全部 enabled 模型;子 key 仅列绑定的)。
  */
 import { NextRequest, NextResponse } from "next/server";
 import { eq, and } from "drizzle-orm";
@@ -34,43 +34,30 @@ export async function GET(req: NextRequest) {
     models.push({ id, object: "model", created: Math.floor(Date.now() / 1000), owned_by: ownedBy });
   };
 
-  // 子 key:仅返回绑定的模型。
+  // 网关语义 owner-only:public 对网关不可见,只列调用者自己创建的模型。
   if (ctx.keyKind === "sub") {
+    // 子 key:仅返回绑定的模型(收敛后 keyModelBindings 单 modelId)。
     const bindings = await db
       .select()
       .from(s.keyModelBindings)
       .where(eq(s.keyModelBindings.keyId, record.id));
 
     for (const b of bindings) {
-      if (b.scope === "global" && b.globalModelId) {
-        const [m] = await db
-          .select()
-          .from(s.globalModels)
-          .where(and(eq(s.globalModels.id, b.globalModelId), eq(s.globalModels.enabled, true)))
-          .limit(1);
-        if (m) add(m.name, m.vendor ?? "nekusora");
-      } else if (b.scope === "byo" && b.userModelId) {
-        const [m] = await db
-          .select()
-          .from(s.userModels)
-          .where(and(eq(s.userModels.id, b.userModelId), eq(s.userModels.enabled, true)))
-          .limit(1);
-        if (m) add(m.name, "user");
-      }
+      if (!b.modelId) continue;
+      const [m] = await db
+        .select()
+        .from(s.models)
+        .where(and(eq(s.models.id, b.modelId), eq(s.models.enabled, true)))
+        .limit(1);
+      if (m) add(m.name, m.vendor ?? "nekusora");
     }
   } else {
-    // 主 key:全局 public & enabled ∪ 该用户的 BYO 模型。
-    const globals = await db
+    // 主 key:owner 自己的全部 enabled 模型(public + private)。
+    const myModels = await db
       .select()
-      .from(s.globalModels)
-      .where(and(eq(s.globalModels.accessScope, "public"), eq(s.globalModels.enabled, true)));
-    for (const m of globals) add(m.name, m.vendor ?? "nekusora");
-
-    const byos = await db
-      .select()
-      .from(s.userModels)
-      .where(and(eq(s.userModels.userId, ctx.userId), eq(s.userModels.enabled, true)));
-    for (const m of byos) add(m.name, "user");
+      .from(s.models)
+      .where(and(eq(s.models.ownerUserId, ctx.userId), eq(s.models.enabled, true)));
+    for (const m of myModels) add(m.name, m.vendor ?? "nekusora");
   }
 
   return NextResponse.json({ object: "list", data: models });

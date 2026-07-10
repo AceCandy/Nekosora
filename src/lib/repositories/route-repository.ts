@@ -14,30 +14,25 @@ import type { CallContext } from "@/lib/providers/types";
 type Row = Record<string, any>;
 
 export interface RouteRepository {
-  /** 查找已启用的全局模型(by name)。 */
-  findEnabledGlobalModel(modelName: string): Promise<Row | null>;
+  /** 按 id 查找已启用模型(单条,无歧义)。 */
+  findEnabledModelById(modelId: string): Promise<Row | null>;
 
-  /** 查找已启用的用户 BYO 模型(by name + userId)。 */
-  findEnabledUserModel(modelName: string, userId: string): Promise<Row | null>;
+  /** 按 name + ownerUserId 查找已启用模型(网关 owner-only 路径)。 */
+  findEnabledModelByNameForOwner(
+    modelName: string,
+    userId: string,
+  ): Promise<Row | null>;
 
-  /** 查找 sub key 绑定的全局/用户模型 ID 集合(用于绑定校验)。 */
-  findKeyModelBindings(keyId: string): Promise<{
-    globalModelIds: Set<string>;
-    userModelIds: Set<string>;
-  }>;
-
-  /** 查找全局模型的路由链(join providers,按 priority 升序)。 */
-  findEnabledGlobalRoutes(
+  /** 查找模型的路由链(join providers,按 priority 升序)。 */
+  findEnabledRoutes(
     modelId: string,
   ): Promise<Array<{ route: Row; provider: Row }>>;
 
-  /** 查找 BYO 模型对应的已启用 provider。 */
-  findEnabledUserProvider(providerId: string): Promise<Row | null>;
+  /** 按 id 查找已启用 provider。 */
+  findEnabledProvider(providerId: string): Promise<Row | null>;
 
-  /** 查找 BYO 模型的路由链(join user_providers,按 priority 升序)。 */
-  findEnabledUserRoutes(
-    userModelId: string,
-  ): Promise<Array<{ route: Row; provider: Row }>>;
+  /** 查找 sub key 绑定的模型 ID 集合(用于绑定校验)。 */
+  findKeyModelBindings(keyId: string): Promise<{ modelIds: Set<string> }>;
 }
 
 // ===== Drizzle 默认实现 =====
@@ -46,40 +41,75 @@ import { eq, and, asc } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
 
 export class DrizzleRouteRepository implements RouteRepository {
-  async findEnabledGlobalModel(modelName: string): Promise<Row | null> {
+  async findEnabledModelById(modelId: string): Promise<Row | null> {
     const db = await getDb();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const s = getSchema() as any;
     const [row] = await db
       .select()
-      .from(s.globalModels)
-      .where(and(eq(s.globalModels.name, modelName), eq(s.globalModels.enabled, true)))
+      .from(s.models)
+      .where(and(eq(s.models.id, modelId), eq(s.models.enabled, true)))
       .limit(1);
     return row ?? null;
   }
 
-  async findEnabledUserModel(modelName: string, userId: string): Promise<Row | null> {
+  async findEnabledModelByNameForOwner(
+    modelName: string,
+    userId: string,
+  ): Promise<Row | null> {
     const db = await getDb();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const s = getSchema() as any;
     const [row] = await db
       .select()
-      .from(s.userModels)
+      .from(s.models)
       .where(
         and(
-          eq(s.userModels.name, modelName),
-          eq(s.userModels.userId, userId),
-          eq(s.userModels.enabled, true),
+          eq(s.models.name, modelName),
+          eq(s.models.ownerUserId, userId),
+          eq(s.models.enabled, true),
         ),
       )
       .limit(1);
     return row ?? null;
   }
 
-  async findKeyModelBindings(keyId: string): Promise<{
-    globalModelIds: Set<string>;
-    userModelIds: Set<string>;
-  }> {
+  async findEnabledRoutes(
+    modelId: string,
+  ): Promise<Array<{ route: Row; provider: Row }>> {
+    const db = await getDb();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const s = getSchema() as any;
+    return db
+      .select({
+        route: s.routes,
+        provider: s.providers,
+      })
+      .from(s.routes)
+      .innerJoin(s.providers, eq(s.routes.providerId, s.providers.id))
+      .where(
+        and(
+          eq(s.routes.modelId, modelId),
+          eq(s.routes.enabled, true),
+          eq(s.providers.enabled, true),
+        ),
+      )
+      .orderBy(asc(s.routes.priority));
+  }
+
+  async findEnabledProvider(providerId: string): Promise<Row | null> {
+    const db = await getDb();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const s = getSchema() as any;
+    const [row] = await db
+      .select()
+      .from(s.providers)
+      .where(and(eq(s.providers.id, providerId), eq(s.providers.enabled, true)))
+      .limit(1);
+    return row ?? null;
+  }
+
+  async findKeyModelBindings(keyId: string): Promise<{ modelIds: Set<string> }> {
     const db = await getDb();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const s = getSchema() as any;
@@ -88,87 +118,10 @@ export class DrizzleRouteRepository implements RouteRepository {
       .from(s.keyModelBindings)
       .where(eq(s.keyModelBindings.keyId, keyId));
     return {
-      // 注意:scope 值沿用历史命名 —— "global"(全局模型)和 "byo"(用户模型)。
-      globalModelIds: new Set(
-        bindings
-          .filter((b: Row) => b.scope === "global" && b.globalModelId)
-          .map((b: Row) => b.globalModelId),
-      ),
-      userModelIds: new Set(
-        bindings
-          .filter((b: Row) => b.scope === "byo" && b.userModelId)
-          .map((b: Row) => b.userModelId),
+      modelIds: new Set(
+        bindings.filter((b: Row) => b.modelId).map((b: Row) => b.modelId),
       ),
     };
-  }
-
-  async findEnabledGlobalRoutes(
-    modelId: string,
-  ): Promise<Array<{ route: Row; provider: Row }>> {
-    const db = await getDb();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const s = getSchema() as any;
-    return db
-      .select({
-        route: s.globalRoutes,
-        provider: s.globalProviders,
-      })
-      .from(s.globalRoutes)
-      .innerJoin(
-        s.globalProviders,
-        eq(s.globalRoutes.providerId, s.globalProviders.id),
-      )
-      .where(
-        and(
-          eq(s.globalRoutes.modelId, modelId),
-          eq(s.globalRoutes.enabled, true),
-          eq(s.globalProviders.enabled, true),
-        ),
-      )
-      .orderBy(asc(s.globalRoutes.priority));
-  }
-
-  async findEnabledUserProvider(providerId: string): Promise<Row | null> {
-    const db = await getDb();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const s = getSchema() as any;
-    const [row] = await db
-      .select()
-      .from(s.userProviders)
-      .where(
-        and(
-          eq(s.userProviders.id, providerId),
-          eq(s.userProviders.enabled, true),
-        ),
-      )
-      .limit(1);
-    return row ?? null;
-  }
-
-  async findEnabledUserRoutes(
-    userModelId: string,
-  ): Promise<Array<{ route: Row; provider: Row }>> {
-    const db = await getDb();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const s = getSchema() as any;
-    return db
-      .select({
-        route: s.userRoutes,
-        provider: s.userProviders,
-      })
-      .from(s.userRoutes)
-      .innerJoin(
-        s.userProviders,
-        eq(s.userRoutes.providerId, s.userProviders.id),
-      )
-      .where(
-        and(
-          eq(s.userRoutes.userModelId, userModelId),
-          eq(s.userRoutes.enabled, true),
-          eq(s.userProviders.enabled, true),
-        ),
-      )
-      .orderBy(asc(s.userRoutes.priority));
   }
 }
 

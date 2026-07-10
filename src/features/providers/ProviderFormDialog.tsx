@@ -22,6 +22,7 @@ interface ProviderFormDialogProps {
     name?: string;
     protocol?: string;
     baseUrl?: string;
+    keyStrategy?: string;
     keys?: EditorRow[];
   };
 }
@@ -110,6 +111,18 @@ export default function ProviderFormDialog({
               ))}
             </Select>
           </label>
+          <label className="block col-span-2">
+            <span className={labelCls}>{t("fieldKeyStrategy")}</span>
+            <Select
+              name="keyStrategy"
+              defaultValue={initial?.keyStrategy ?? "round_robin"}
+              className="w-full"
+            >
+              <option value="round_robin">{t("keyStrategyRoundRobin")}</option>
+              <option value="weighted">{t("keyStrategyWeighted")}</option>
+            </Select>
+          </label>
+
           <label className="block col-span-2">
             <span className={labelCls}>{t("fieldBaseUrl")}</span>
             <Input

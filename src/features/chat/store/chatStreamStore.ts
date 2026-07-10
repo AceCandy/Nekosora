@@ -17,7 +17,10 @@ interface ConversationRuntime {
 }
 
 export interface SendOptions {
+  /** 对外模型名(子任务/用量日志/会话持久化沿用 name)。 */
   model: string;
+  /** 模型 id(WebChat 发消息走 resolveRoutesById,避免 public/private 同名歧义)。 */
+  modelId: string;
   instructionCardIds?: string[];
   webSearch?: boolean;
   knowledgeBaseIds?: string[];
@@ -46,10 +49,10 @@ interface ChatStreamState {
       onConversationCreated?: (newConvId: string) => void;
     },
   ) => Promise<void>;
-  regenerate: (key: string, assistantPublicId: string, model: string) => Promise<void>;
-  editAndResend: (key: string, userPublicId: string, newContent: string, model: string) => Promise<void>;
+  regenerate: (key: string, assistantPublicId: string, model: string, modelId: string) => Promise<void>;
+  editAndResend: (key: string, userPublicId: string, newContent: string, model: string, modelId: string) => Promise<void>;
   deleteMessage: (key: string, publicId: string) => Promise<void>;
-  continueGeneration: (key: string, assistantPublicId: string, model: string) => Promise<void>;
+  continueGeneration: (key: string, assistantPublicId: string, model: string, modelId: string) => Promise<void>;
   switchVersion: (key: string, publicId: string, direction: "prev" | "next") => Promise<void>;
   refreshVersionInfo: (key: string, publicId: string) => Promise<void>;
   stopGeneration: (key: string) => void;
@@ -216,6 +219,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
         body: JSON.stringify({
           conversationId: resolvedConvId,
           model: opts.model,
+          modelId: opts.modelId,
           messages: nextMessages.map((m) => ({ role: m.role, content: m.content })),
           fileIds,
           parentPublicId,
@@ -285,7 +289,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
     }
   },
 
-  regenerate: async (key, assistantPublicId, model) => {
+  regenerate: async (key, assistantPublicId, model, modelId) => {
     const rt = getRuntime(get(), key);
     if (key === NEW_CONVERSATION_KEY || rt.streaming || !assistantPublicId) return;
     set((s) => patchRuntime(s, key, (r) => ({ ...r, streaming: true })));
@@ -311,6 +315,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
         body: JSON.stringify({
           conversationId: key,
           model,
+          modelId,
           messages: result.messages.map((m) => ({ role: m.role, content: m.content })),
           userPublicId: result.parentPublicId,
           sourcePublicId: assistantPublicId,
@@ -350,7 +355,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
     }
   },
 
-  editAndResend: async (key, userPublicId, newContent, model) => {
+  editAndResend: async (key, userPublicId, newContent, model, modelId) => {
     const rt = getRuntime(get(), key);
     if (key === NEW_CONVERSATION_KEY || rt.streaming || !userPublicId || !newContent.trim()) return;
     set((s) => patchRuntime(s, key, (r) => ({ ...r, streaming: true })));
@@ -380,6 +385,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
         body: JSON.stringify({
           conversationId: key,
           model,
+          modelId,
           messages: result.messages.map((m) => ({ role: m.role, content: m.content })),
           userPublicId,
           branchReason: "edit",
@@ -425,7 +431,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
     }
   },
 
-  continueGeneration: async (key, assistantPublicId, model) => {
+  continueGeneration: async (key, assistantPublicId, model, modelId) => {
     const rt = getRuntime(get(), key);
     if (key === NEW_CONVERSATION_KEY || rt.streaming || !assistantPublicId) return;
     const assistantIdx = rt.messages.findIndex((x) => x.publicId === assistantPublicId);
@@ -442,6 +448,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
         body: JSON.stringify({
           conversationId: key,
           model,
+          modelId,
           messages: result.messages.map((m) => ({ role: m.role, content: m.content })),
           continueFromPublicId: assistantPublicId,
         }),

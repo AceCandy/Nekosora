@@ -22,7 +22,7 @@ Nekusora 是 Next.js 全栈 TypeScript 项目,无独立后端进程(除 `src/wor
 | [Logging Guidelines](./logging-guidelines.md) | 网关调用日志双表模型、logUsage 分流、TTFT、错误分类、数据层脱敏 | Filled |
 | [Chat Generation Params](./chat-generation-params.md) | 会话级生成参数端到端契约 + reasoning providerOptions 映射 | Filled |
 | [Provider Probe](./provider-probe.md) | key 连通性探测契约(/models 鉴权判定 + anthropic 混搭兼容) | Filled |
-| [Gateway Routing](./gateway-routing.md) | resolveRoutes 决策树、global/byo 同构、熔断、密钥列名差异 | Filled |
+| [Gateway Routing](./gateway-routing.md) | 统一资源模型、resolveRoutes/resolveRoutesById 决策树、可见性四套场景、熔断 | Filled |
 | [Prompt Caching](./prompt-caching.md) | 命中前提、AI SDK 边界、按 protocol 注入缓存控制(复刻 pi) | Filled |
 
 ---

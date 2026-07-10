@@ -18,6 +18,8 @@ export interface ProviderItem {
   protocol: string;
   baseUrl: string;
   enabled: boolean;
+  /** 密钥轮询策略(编辑时回显)。 */
+  keyStrategy?: string;
   /** 回显的明文 key(编辑时用)。 */
   keys: EditorRow[];
   /** 落库的最近一次健康检测结果(列表回显)。 */
@@ -204,6 +206,7 @@ export default function ProvidersManager({
             name: editing.name,
             protocol: editing.protocol,
             baseUrl: editing.baseUrl,
+            keyStrategy: editing.keyStrategy,
             keys: editing.keys,
           }}
         />

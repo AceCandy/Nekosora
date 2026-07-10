@@ -216,13 +216,13 @@ async function llmSummarize(msgs: CompactionMessage[], lite: boolean): Promise<s
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
+  // 原系统任务专用 internal 语义砍掉,改读 visibility=public && enabled。
   const [model] = await db
     .select()
-    .from(s.globalModels)
-    .where(and(eq(s.globalModels.accessScope, "internal"), eq(s.globalModels.enabled, true)))
+    .from(s.models)
+    .where(and(eq(s.models.visibility, "public"), eq(s.models.enabled, true)))
     .limit(1);
-  // 没有 internal 模型 → 取第一个 public 模型
-  const target = model ?? (await db.select().from(s.globalModels).where(eq(s.globalModels.enabled, true)).limit(1))[0];
+  const target = model;
   if (!target) throw new Error("无可用模型做摘要");
 
   const prompt = lite

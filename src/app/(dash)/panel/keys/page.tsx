@@ -26,16 +26,12 @@ export default async function KeysPage() {
           bindings: bindings.map((b: {
             id: string;
             keyId: string;
-            scope: string;
-            globalModelId: string | null;
-            userModelId: string | null;
+            modelId: string;
             createdAt: Date | string | null;
           }) => ({
             id: b.id,
             keyId: b.keyId,
-            scope: b.scope as "global" | "byo",
-            globalModelId: b.globalModelId,
-            userModelId: b.userModelId,
+            modelId: b.modelId,
             createdAt: b.createdAt
           }))
         };
@@ -60,9 +56,9 @@ export default async function KeysPage() {
     return disableKey(keyId);
   }
 
-  async function handleBindModel(keyId: string, scope: "global" | "byo", modelId: string) {
+  async function handleBindModel(keyId: string, modelId: string) {
     "use server";
-    return bindModel(keyId, scope, modelId);
+    return bindModel(keyId, modelId);
   }
 
   async function handleUnbindBinding(bindingId: string) {

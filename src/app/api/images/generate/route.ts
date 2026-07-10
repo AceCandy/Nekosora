@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "未登录" }, { status: 401 });
   }
 
-  let body: { model: string; prompt: string; n?: number; size?: string };
+  let body: { model: string; modelId?: string; prompt: string; n?: number; size?: string };
   try {
     body = await req.json();
   } catch {
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
       n: Math.min(Math.max(body.n ?? 1, 1), 4),
       size: body.size as "256x256" | "512x512" | "1024x1024" | "1792x1024" | "1024x1792" | undefined,
       responseFormat: "url",
-    });
+    }, body.modelId);
 
     // 把生成图存入 StorageDriver,收集 url
     const storage = await getStorage();

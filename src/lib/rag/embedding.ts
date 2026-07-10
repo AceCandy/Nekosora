@@ -1,7 +1,7 @@
 /**
  * Embedding 辅助 —— 解析一个 embedding 模型配置并产出向量。
  *
- * 约定:管理员在 global_providers 里配一个 protocol=openai 的上游,
+ * 约定:管理员在 providers 里配一个 protocol=openai 的上游,
  * 并在 system_settings(namespace="rag", key="embedding_provider_id"/"embedding_model")指定。
  * 若未配置则抛错(调用方应捕获并降级为 unavailable)。
  *
@@ -54,7 +54,7 @@ async function loadConfig(): Promise<EmbeddingConfig | null> {
     return null;
   }
 
-  const [provider] = await db.select().from(s.globalProviders).where(eq(s.globalProviders.id, providerId)).limit(1);
+  const [provider] = await db.select().from(s.providers).where(eq(s.providers.id, providerId)).limit(1);
   if (!provider) {
     _configError = `embedding provider ${providerId} 不存在`;
     return null;

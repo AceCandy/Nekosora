@@ -82,13 +82,14 @@ export function useChatRuntime({
     () =>
       (
         text: string,
-        model: string,
+        modelName: string,
+        modelId: string,
         instructionCardIds?: string[],
         webSearch?: boolean,
         knowledgeBaseIds?: string[],
         createOptions?: { outputModeId?: string | null; renderStyleId?: string | null },
       ) => {
-        const opts: SendOptions = { model, instructionCardIds, webSearch, knowledgeBaseIds, createOptions };
+        const opts: SendOptions = { model: modelName, modelId, instructionCardIds, webSearch, knowledgeBaseIds, createOptions };
         void actions.send(key, text, opts, {
           uploadAttachments,
           onTitleUpdated: () => router.refresh(),
@@ -100,15 +101,15 @@ export function useChatRuntime({
   );
 
   const regenerate = useMemo(
-    () => (assistantPublicId: string, model: string) => {
-      void actions.regenerate(key, assistantPublicId, model);
+    () => (assistantPublicId: string, modelName: string, modelId: string) => {
+      void actions.regenerate(key, assistantPublicId, modelName, modelId);
     },
     [actions, key],
   );
 
   const editAndResend = useMemo(
-    () => (userPublicId: string, newContent: string, model: string) => {
-      void actions.editAndResend(key, userPublicId, newContent, model);
+    () => (userPublicId: string, newContent: string, modelName: string, modelId: string) => {
+      void actions.editAndResend(key, userPublicId, newContent, modelName, modelId);
     },
     [actions, key],
   );
@@ -121,8 +122,8 @@ export function useChatRuntime({
   );
 
   const continueGeneration = useMemo(
-    () => (assistantPublicId: string, model: string) => {
-      void actions.continueGeneration(key, assistantPublicId, model);
+    () => (assistantPublicId: string, modelName: string, modelId: string) => {
+      void actions.continueGeneration(key, assistantPublicId, modelName, modelId);
     },
     [actions, key],
   );

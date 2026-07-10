@@ -75,7 +75,17 @@ export default function ChatComposer({
   initialMessages = [],
 }: ChatComposerProps) {
   const t = useTranslations("chat");
-  const [model, setModel] = useState(initialModelName && models.some((m) => m.name === initialModelName) ? initialModelName : (models[0]?.name ?? ""));
+  // model 状态持有 modelId(选项唯一 id,配合 byId 路由解析)。
+  // initialModelName 是会话回填的模型名(按 name 存库),映射回 modelId;重名时取首个(private 在前)。
+  const [model, setModel] = useState(() => {
+    if (initialModelName) {
+      const found = models.find((m) => m.name === initialModelName)?.modelId;
+      if (found) return found;
+    }
+    return models[0]?.modelId ?? "";
+  });
+  // 当前选中模型对外名(发消息/持久化仍需 name;子任务与用量日志沿用 name)。
+  const modelName = models.find((m) => m.modelId === model)?.name ?? "";
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [input, setInput] = useState("");
   const [activeArtifact, setActiveArtifact] = useState<Artifact | null>(null);
@@ -123,7 +133,7 @@ export default function ChatComposer({
   }, [runtime.streaming]);
 
   const handleSend = () => {
-    runtime.send(input, model, selectedCardIds, webSearch, selectedKbIds, { outputModeId, renderStyleId });
+    runtime.send(input, modelName, model, selectedCardIds, webSearch, selectedKbIds, { outputModeId, renderStyleId });
     setInput("");
     // 用户主动发送:强制滚到底,确保自己的发言可见
     requestAnimationFrame(() => forceFollow());
@@ -140,7 +150,7 @@ export default function ChatComposer({
   };
   // 选中文本「追问」:以选中文本为新问题直接发送(继续当前会话,不走分支)
   const handleSelectionAsk = (text: string) => {
-    runtime.send(text, model, selectedCardIds, webSearch, selectedKbIds, { outputModeId, renderStyleId });
+    runtime.send(text, modelName, model, selectedCardIds, webSearch, selectedKbIds, { outputModeId, renderStyleId });
     requestAnimationFrame(() => forceFollow());
   };
 
@@ -224,8 +234,10 @@ export default function ChatComposer({
     setModel(next);
     const convId = runtime.conversationId ?? initialConvId;
     if (convId) {
+      // 会话仍按 name 存库(share 快照等沿用 name);next 是 modelId,反查 name。
+      const name = models.find((m) => m.modelId === next)?.name ?? next;
       startModeTransition(async () => {
-        try { await setConversationModel(convId, next); }
+        try { await setConversationModel(convId, name); }
         catch (err) { console.error("set model failed:", err); }
       });
     }
@@ -301,12 +313,18 @@ export default function ChatComposer({
           model={model}
           renderStyleClass={activeRenderStyleClass}
           renderStyleRenderer={activeRenderStyleRenderer}
-          onRegenerate={runtime.regenerate}
-          onEdit={runtime.editAndResend}
+          onRegenerate={(publicId, modelId) => {
+            const name = models.find((m) => m.modelId === modelId)?.name ?? modelId;
+            runtime.regenerate(publicId, name, modelId);
+          }}
+          onEdit={(publicId, newContent, modelId) => {
+            const name = models.find((m) => m.modelId === modelId)?.name ?? modelId;
+            runtime.editAndResend(publicId, newContent, name, modelId);
+          }}
           onSwitchVersion={runtime.switchVersion}
           onOpenArtifact={setActiveArtifact}
           onDelete={runtime.deleteMessage}
-          onContinue={(id) => runtime.continueGeneration(id, model)}
+          onContinue={(id) => runtime.continueGeneration(id, modelName, model)}
           models={models}
           onPickSample={handlePickSample}
           onQuote={handleSelectionQuote}

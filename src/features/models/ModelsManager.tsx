@@ -19,8 +19,7 @@ import { CSS } from "@dnd-kit/utilities";
 import type { ModelCapabilities } from "@/db/types";
 import type { FormDataSerializableAction } from "@/features/providers/types";
 import ModelFormDialog, {
-  type GlobalModelInitial,
-  type ByoModelInitial,
+  type ModelInitial,
 } from "@/features/models/ModelFormDialog";
 import RouteFormDialog from "@/features/models/RouteFormDialog";
 import RouteTestButton, { type RouteTestAction } from "@/features/models/RouteTestButton";
@@ -40,7 +39,7 @@ export interface ModelItem {
   name: string;
   displayName?: string;
   vendor?: string | null;
-  accessScope?: string;
+  visibility?: string;
   enabled: boolean;
   systemPrompt?: string | null;
   description?: string | null;
@@ -67,7 +66,8 @@ export interface ProviderOption {
 }
 
 interface ModelsManagerProps {
-  variant: "global" | "byo";
+  /** admin 可见 visibility 列 + 「发布到全局」开关;普通用户恒 private,不显示该列。 */
+  isAdmin?: boolean;
   models: ModelItem[];
   routes?: RouteItem[];
   providers?: ProviderOption[];
@@ -89,7 +89,7 @@ interface ModelsManagerProps {
 }
 
 export default function ModelsManager({
-  variant,
+  isAdmin = false,
   models,
   routes,
   providers,
@@ -106,10 +106,9 @@ export default function ModelsManager({
   reorderAction,
 }: ModelsManagerProps) {
   const t = useTranslations("models");
-  const isAdmin = variant === "global";
-  // 个人模型私有(userId 隔离),不存在 public/internal 范围;仅全局模型有 accessScope 列。
-  const hasAccessScope = isAdmin;
-  // 全局模型与个人模型均可拖动(需 reorderAction + sortOrder 链路)。
+  // visibility 列仅 admin 可见;普通用户模型恒 private,不显示该列。
+  const showVisibility = isAdmin;
+  // 所有模型均可拖动(需 reorderAction + sortOrder 链路)。
   const reorderable = Boolean(reorderAction);
   const [addOpen, setAddOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -141,8 +140,8 @@ export default function ModelsManager({
   const routeEditing = routes?.find((r) => r.id === routeEditId) ?? null;
   const routeDeleting = routes?.find((r) => r.id === routeDeleteId) ?? null;
 
-  // 列数:基础列(accessScope ? 7 : 6)+ 拖动手柄列(可拖动时 +1)。空态 / 展开行 colSpan 用此值。
-  const colCount = (hasAccessScope ? 7 : 6) + (reorderable ? 1 : 0);
+  // 列数:基础列(showVisibility ? 7 : 6)+ 拖动手柄列(可拖动时 +1)。空态 / 展开行 colSpan 用此值。
+  const colCount = (showVisibility ? 7 : 6) + (reorderable ? 1 : 0);
 
   function handleDragEnd(event: DragEndEvent) {
     if (!reorderAction) return;
@@ -171,7 +170,7 @@ export default function ModelsManager({
             <th className="p-3.5 font-medium">{t("colExternalName")}</th>
             <th className="p-3.5 font-medium">{t("colDisplayName")}</th>
             <th className="p-3.5 font-medium">{t("colVendor")}</th>
-            {hasAccessScope && <th className="p-3.5 font-medium">{t("colAccessScope")}</th>}
+            {showVisibility && <th className="p-3.5 font-medium">{t("colVisibility")}</th>}
             <th className="p-3.5 font-medium text-center">{t("colRouteCount")}</th>
             <th className="p-3.5 font-medium">{t("colStatus")}</th>
             <th className="p-3.5 font-medium text-right">{t("colActions")}</th>
@@ -197,7 +196,7 @@ export default function ModelsManager({
                     key={m.id}
                     model={m}
                     routes={modelRoutes}
-                    hasAccessScope={hasAccessScope}
+                    hasVisibility={showVisibility}
                     routeCount={modelRoutes.length}
                     expanded={expanded}
                     colSpan={colCount}
@@ -224,7 +223,7 @@ export default function ModelsManager({
                   <tr className="hover:bg-neutral-50/50 dark:hover:bg-neutral-900/10 transition-colors duration-150">
                     <ModelRowCells
                       model={m}
-                      hasAccessScope={hasAccessScope}
+                      hasVisibility={showVisibility}
                       routeCount={modelRoutes.length}
                       expanded={expanded}
                       onToggleExpand={() => setExpandedModel(expanded ? null : m.id)}
@@ -283,7 +282,7 @@ export default function ModelsManager({
         open={addOpen}
         onClose={() => setAddOpen(false)}
         mode="add"
-        variant={variant}
+        isAdmin={isAdmin}
         action={createAction}
       />
       {editing && (
@@ -291,28 +290,17 @@ export default function ModelsManager({
           open={true}
           onClose={() => setEditId(null)}
           mode="edit"
-          variant={variant}
+          isAdmin={isAdmin}
           action={updateActions[editing.id]}
-          initial={
-            isAdmin
-              ? ({
-                  name: editing.name,
-                  displayName: editing.displayName,
-                  vendor: editing.vendor ?? "",
-                  accessScope: editing.accessScope as "public" | "internal",
-                  systemPrompt: editing.systemPrompt ?? "",
-                  description: editing.description ?? "",
-                  capabilities: editing.capabilities ?? {},
-                } satisfies GlobalModelInitial)
-              : ({
-                  name: editing.name,
-                  displayName: editing.displayName,
-                  vendor: editing.vendor ?? "",
-                  systemPrompt: editing.systemPrompt ?? "",
-                  description: editing.description ?? "",
-                  capabilities: editing.capabilities ?? {},
-                } satisfies ByoModelInitial)
-          }
+          initial={{
+            name: editing.name,
+            displayName: editing.displayName,
+            vendor: editing.vendor ?? "",
+            visibility: editing.visibility as "public" | "private",
+            systemPrompt: editing.systemPrompt ?? "",
+            description: editing.description ?? "",
+            capabilities: editing.capabilities ?? {},
+          } satisfies ModelInitial}
         />
       )}
 
@@ -354,7 +342,7 @@ export default function ModelsManager({
               <div>
                 {t("deleteModelConfirm", { name: deleting.name })}
                 <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1 leading-normal">
-                  {isAdmin ? t("deleteGlobalWarning") : t("deleteByoWarning")}
+                  {t("deleteModelWarning")}
                 </p>
               </div>
             </div>
@@ -390,10 +378,10 @@ export default function ModelsManager({
   );
 }
 
-/** 模型主行的内容单元格(名称/显示名/厂商/范围/路由数/状态/操作)。拖动手柄由外层行组件提供。 */
+/** 模型主行的内容单元格(名称/显示名/厂商/可见性/路由数/状态/操作)。拖动手柄由外层行组件提供。 */
 function ModelRowCells({
   model,
-  hasAccessScope,
+  hasVisibility,
   routeCount,
   expanded,
   onToggleExpand,
@@ -402,7 +390,7 @@ function ModelRowCells({
   toggleAction,
 }: {
   model: ModelItem;
-  hasAccessScope: boolean;
+  hasVisibility: boolean;
   routeCount: number;
   expanded: boolean;
   onToggleExpand: () => void;
@@ -428,10 +416,10 @@ function ModelRowCells({
           "-"
         )}
       </td>
-      {hasAccessScope && (
+      {hasVisibility && (
         <td className="p-3.5 text-xs">
-          <Badge variant={model.accessScope === "public" ? "success" : "warning"}>
-            {model.accessScope === "public" ? t("scopePublic") : t("scopeInternal")}
+          <Badge variant={model.visibility === "public" ? "success" : "warning"}>
+            {model.visibility === "public" ? t("visibilityPublic") : t("visibilityPrivate")}
           </Badge>
         </td>
       )}
@@ -552,7 +540,7 @@ function RouteExpandRow({
 function SortableModelRow({
   model,
   routes,
-  hasAccessScope,
+  hasVisibility,
   routeCount,
   expanded,
   colSpan,
@@ -569,7 +557,7 @@ function SortableModelRow({
 }: {
   model: ModelItem;
   routes: RouteItem[];
-  hasAccessScope: boolean;
+  hasVisibility: boolean;
   routeCount: number;
   expanded: boolean;
   colSpan: number;
@@ -613,7 +601,7 @@ function SortableModelRow({
         </td>
         <ModelRowCells
           model={model}
-          hasAccessScope={hasAccessScope}
+          hasVisibility={hasVisibility}
           routeCount={routeCount}
           expanded={expanded}
           onToggleExpand={onToggleExpand}

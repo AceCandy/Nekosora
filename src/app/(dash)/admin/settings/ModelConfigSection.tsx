@@ -1,9 +1,10 @@
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { getSettings, upsertSettings } from "@/lib/system-settings/service";
 import { resetEmbeddingConfig } from "@/lib/rag/embedding";
 import { clearWebSearchConfigCache } from "@/lib/web-search/registry";
 import { resetTitleModelConfig } from "@/lib/conversation-title/service";
+import { requireAdmin } from "@/lib/session";
 
 /**
  * 模型配置区 —— embedding / 联网搜索 / 标题生成的系统级配置。
@@ -35,14 +36,16 @@ export default async function ModelConfigSection({
     noProviders: string;
   };
 }) {
+  const admin = await requireAdmin();
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
+  // providers 无 visibility,恒 per-user:仅 owner 自己的 enabled provider。
   const providers = await db
-    .select({ id: s.globalProviders.id, name: s.globalProviders.name })
-    .from(s.globalProviders)
-    .where(eq(s.globalProviders.enabled, true))
-    .orderBy(s.globalProviders.createdAt);
+    .select({ id: s.providers.id, name: s.providers.name })
+    .from(s.providers)
+    .where(and(eq(s.providers.enabled, true), eq(s.providers.ownerUserId, admin.id)))
+    .orderBy(s.providers.createdAt);
 
   const rag = await getSettings("rag");
   const ws = await getSettings("web_search");

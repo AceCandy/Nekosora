@@ -1,20 +1,23 @@
 /**
- * 模型路由 —— 解析"对外模型名 → 可调用的上游路由链"。
+ * 模型路由 —— 解析"对外模型 → 可调用的上游路由链"。
+ *
+ * 统一资源模型后,providers/models/routes 合并为三张表,用 ownerUserId + visibility 表达
+ * 归属与可见性。两条解析入口:
+ *   - resolveRoutes(ctx, modelName):网关路径,by name + owner-only(只调自己创建的模型)。
+ *   - resolveRoutesById(ctx, modelId):WebChat 路径,by id + 可见性(public ∪ owner)。
  *
  * 核心逻辑:
- *   1. 判断模型属于全局(global_models)还是 BYO(user_models)
- *   2. 全局模型:查 global_routes(可能多条,按 priority 分组,组内按 weight 加权)
- *      → 每条 route 关联 global_providers(含 base_url + 加密 key)
- *   3. BYO 模型:查 user_models + user_providers
- *   4. 鉴权:主 key / WebChat 用户 → 全部可见集;子 key → 仅绑定集
- *   5. 返回有序路由链(优先级升序,组内按权重分布);调用方按序尝试,失败故障转移
+ *   1. 定位模型(网关 by name+owner;WebChat by id + 可见性校验)
+ *   2. 查 routes(join providers,可能多条,按 priority 分组,组内按 weight 加权)
+ *   3. 鉴权:主 key / WebChat 用户 → 全部可见集;子 key → 仅绑定集
+ *   4. 返回有序路由链(优先级升序,组内按权重分布);调用方按序尝试,失败故障转移
  *
  * 加密 provider key 在此解密(仅运行时持有)。
  *
  * P1-D 扩展:resolveRoutesByCapability —— 按 ModelCapabilities 字段(imageGeneration /
  * audioTranscription / audioSynthesis)解析路由,供图像/语音端点复用路由链与故障转移。
  */
-import { eq, and, asc } from "drizzle-orm";
+import { eq, and, or } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { parseKeyBundle, pickWeightedKey } from "@/lib/providers/keys";
 import { isProviderAllowed } from "@/lib/circuit-breaker";
@@ -31,10 +34,10 @@ function resolveProviderKeys(encBundle: string) {
   return parseKeyBundle(encBundle);
 }
 
-/** 把 provider 行(global/user)规整为运行时 ResolvedProvider。 */
+/** 把 provider 行规整为运行时 ResolvedProvider。密钥列统一为 apiKeysEnc。 */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function toResolvedProvider(row: any, keyField: string): ResolvedProvider {
-  const keys = resolveProviderKeys(row[keyField]);
+function toResolvedProvider(row: any): ResolvedProvider {
+  const keys = resolveProviderKeys(row.apiKeysEnc);
   return {
     id: row.id,
     name: row.name,
@@ -49,7 +52,9 @@ function toResolvedProvider(row: any, keyField: string): ResolvedProvider {
 }
 
 /**
- * 解析模型名 → 有序路由链。
+ * 网关路径:按对外模型名解析路由链(owner-only)。
+ *
+ * 网关只能调调用者自己创建的模型(by name + ownerUserId),public 对网关不可见。
  *
  * @returns 路由链(至少 1 条);找不到抛错。
  *          顺序:priority 升序,同 priority 内按 weight 加权随机。
@@ -61,111 +66,92 @@ export async function resolveRoutes(
 ): Promise<ResolvedRoute[]> {
   const repo = getRouteRepository();
 
-  // --- 1. 判断是否为子 key,以及绑定约束 ---
-  let allowedGlobalModelIds: Set<string> | null = null; // null = 不限
-  let allowedUserModelIds: Set<string> | null = null;
-
+  // --- 子 key 绑定约束(null = 不限) ---
+  let allowedModelIds: Set<string> | null = null;
   if (ctx.keyKind === "sub" && ctx.apiKeyId) {
     const bindings = await repo.findKeyModelBindings(ctx.apiKeyId);
-    allowedGlobalModelIds = bindings.globalModelIds;
-    allowedUserModelIds = bindings.userModelIds;
+    allowedModelIds = bindings.modelIds;
   }
 
-  // --- 2. 尝试全局模型 ---
-  const globalModel = await repo.findEnabledGlobalModel(modelName);
-
-  if (globalModel) {
-    // access_scope=internal 的模型不对外开放(仅系统任务用)。
-    if (globalModel.accessScope === "internal" && ctx.source === "gateway") {
-      throw new RoutingError("model_not_available", `模型 ${modelName} 不可用`);
-    }
-    // 子 key 校验绑定
-    if (allowedGlobalModelIds !== null && !allowedGlobalModelIds.has(globalModel.id)) {
-      throw new RoutingError("model_not_bound", `模型 ${modelName} 未绑定到该 key`);
-    }
-    return resolveGlobalRoutes(globalModel);
+  // --- 网关 owner-only:by name + ownerUserId ---
+  const model = await repo.findEnabledModelByNameForOwner(modelName, ctx.userId);
+  if (!model) {
+    throw new RoutingError("model_not_found", `模型 ${modelName} 不存在或未启用`);
   }
 
-  // --- 3. 尝试用户 BYO 模型(仅该用户的) ---
-  const userModel = await repo.findEnabledUserModel(modelName, ctx.userId);
-
-  if (userModel) {
-    if (allowedUserModelIds !== null && !allowedUserModelIds.has(userModel.id)) {
-      throw new RoutingError("model_not_bound", `模型 ${modelName} 未绑定到该 key`);
-    }
-    return resolveByoRoute(userModel);
+  if (allowedModelIds !== null && !allowedModelIds.has(model.id)) {
+    throw new RoutingError("model_not_bound", `模型 ${modelName} 未绑定到该 key`);
   }
 
-  throw new RoutingError(
-    "model_not_found",
-    `模型 ${modelName} 不存在或未启用`,
-  );
-}
-
-/** 全局模型 → 路由链(多条 global_routes 按 priority/weight)。 */
-async function resolveGlobalRoutes(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  globalModel: any,
-): Promise<ResolvedRoute[]> {
-  const repo = getRouteRepository();
-
-  const routes = await repo.findEnabledGlobalRoutes(globalModel.id);
-
-  if (routes.length === 0) {
-    throw new RoutingError("no_route", `模型 ${globalModel.name} 没有可用路由`);
-  }
-
-  const resolved: ResolvedRoute[] = routes.map(
-    (row: { route: Record<string, unknown>; provider: Record<string, unknown> }) => ({
-      modelName: globalModel.name,
-      upstreamModelName: row.route.upstreamModelName as string,
-      // 协议归属 provider,路由不再单独存(与 BYO 路径一致)。
-      protocol: row.provider.protocol as ResolvedRoute["protocol"],
-      provider: toResolvedProvider(row.provider, "apiKeysEnc"),
-      priority: row.route.priority as number,
-      weight: row.route.weight as number,
-      source: "global" as const,
-      routeId: row.route.id as string,
-      globalModelId: globalModel.id,
-      capabilities: globalModel.capabilities,
-    }),
-  );
-
-  return filterByCircuitBreaker(orderRoutes(resolved));
+  return resolveModelRoutes(model);
 }
 
 /**
- * BYO 模型 → 多路由链(与全局分支同构)。
+ * WebChat 路径:按 modelId 解析路由链(可见性校验)。
  *
- * 查 user_routes(join user_providers)→ 映射 ResolvedRoute[] →
- * orderRoutes(priority/weight)+ filterByCircuitBreaker(熔断过滤)。
- * 与 resolveGlobalRoutes 的差异仅在:source="byo"、密钥列名 apiKeyEnc
- * (比全局 apiKeysEnc 少一个 s)、id 字段 userModelId。
+ * 可见 = visibility=public ∪ (private && owner=自己);不满足则 model_not_found
+ * (不泄露存在性)。WebChat 传 modelId 而非 name,避免 public/private 同名歧义。
  */
-async function resolveByoRoute(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  userModel: any,
+export async function resolveRoutesById(
+  ctx: CallContext,
+  modelId: string,
 ): Promise<ResolvedRoute[]> {
   const repo = getRouteRepository();
 
-  const routes = await repo.findEnabledUserRoutes(userModel.id);
+  // --- 子 key 绑定约束(null = 不限) ---
+  let allowedModelIds: Set<string> | null = null;
+  if (ctx.keyKind === "sub" && ctx.apiKeyId) {
+    const bindings = await repo.findKeyModelBindings(ctx.apiKeyId);
+    allowedModelIds = bindings.modelIds;
+  }
+
+  const model = await repo.findEnabledModelById(modelId);
+  if (!model) {
+    throw new RoutingError("model_not_found", `模型 ${modelId} 不存在或未启用`);
+  }
+
+  // 可见性:public 或 owner=自己,否则视为不存在。
+  if (model.visibility !== "public" && model.ownerUserId !== ctx.userId) {
+    throw new RoutingError("model_not_found", `模型 ${modelId} 不存在或未启用`);
+  }
+
+  if (allowedModelIds !== null && !allowedModelIds.has(model.id)) {
+    throw new RoutingError("model_not_bound", `模型 ${model.name} 未绑定到该 key`);
+  }
+
+  return resolveModelRoutes(model);
+}
+
+/** 模型 → 有序路由链(查 routes join providers,按 priority/weight)。 */
+async function resolveModelRoutes(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  model: any,
+): Promise<ResolvedRoute[]> {
+  const repo = getRouteRepository();
+
+  const routes = await repo.findEnabledRoutes(model.id);
 
   if (routes.length === 0) {
-    throw new RoutingError("no_route", `模型 ${userModel.name} 没有可用路由`);
+    throw new RoutingError("no_route", `模型 ${model.name} 没有可用路由`);
   }
+
+  // source 语义基于 visibility:public→"global"、private→"byo"(供 usage 日志/前端 badge 复用)。
+  const source: ResolvedRoute["source"] =
+    model.visibility === "public" ? "global" : "byo";
 
   const resolved: ResolvedRoute[] = routes.map(
     (row: { route: Record<string, unknown>; provider: Record<string, unknown> }) => ({
-      modelName: userModel.name,
+      modelName: model.name,
       upstreamModelName: row.route.upstreamModelName as string,
+      // 协议归属 provider,路由不再单独存。
       protocol: row.provider.protocol as ResolvedRoute["protocol"],
-      provider: toResolvedProvider(row.provider, "apiKeyEnc"),
+      provider: toResolvedProvider(row.provider),
       priority: row.route.priority as number,
       weight: row.route.weight as number,
-      source: "byo" as const,
+      source,
       routeId: row.route.id as string,
-      userModelId: userModel.id,
-      capabilities: userModel.capabilities,
+      modelId: model.id,
+      capabilities: model.capabilities,
     }),
   );
 
@@ -253,7 +239,7 @@ export async function resolveRoutesByCapability(
   capability: keyof ModelCapabilities,
 ): Promise<ResolvedRoute[]> {
   const routes = await resolveRoutes(ctx, modelName);
-  // capabilities 在 resolveGlobalRoutes/resolveByoRoute 时已填入 route[0]。
+  // capabilities 在 resolveModelRoutes 时已填入 route[0]。
   const caps = routes[0]?.capabilities;
   if (!caps || !caps[capability]) {
     throw new RoutingError(
@@ -266,52 +252,33 @@ export async function resolveRoutesByCapability(
 
 /**
  * 列出具备某能力的全部对外模型名(供 /v1/models 类端点过滤展示)。
- * 仅返回全局 + 当前用户 BYO 中具备该能力的启用模型。
+ * 返回 public 模型 ∪ 调用者自己的 private 模型,source 基于 visibility。
  */
 export async function listModelsByCapability(
   ctx: CallContext,
   capability: keyof ModelCapabilities,
 ): Promise<{ name: string; source: "global" | "byo" }[]> {
   const db = await getDb();
-  const schema = getSchema();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const s = schema as any;
+  const s = getSchema() as any;
 
-  const out: { name: string; source: "global" | "byo" }[] = [];
-
-  // 全局模型:capabilities 是 JSON 列,用 like 做能力存在性过滤(dialect 通用)。
+  // capabilities 是 JSON 列,用 like 做能力存在性过滤(dialect 通用)。
   // SQLite/PG 的 jsonb/text 都支持字符串 like。
-  const globalRows = await db
-    .select({ name: s.globalModels.name })
-    .from(s.globalModels)
+  const rows = await db
+    .select({ name: s.models.name, visibility: s.models.visibility })
+    .from(s.models)
     .where(
       and(
-        eq(s.globalModels.enabled, true),
+        eq(s.models.enabled, true),
+        or(eq(s.models.visibility, "public"), eq(s.models.ownerUserId, ctx.userId)),
         // 能力键存在于 JSON 中且为 true。简化:like 匹配 `"imageGeneration":true`。
-        // 不同 dialect 的 JSON 序列化格式可能略有差异,这里宽松匹配键名+true。
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (s.globalModels.capabilities as any).like(`%"${capability}":true%`),
+        (s.models.capabilities as any).like(`%"${capability}":true%`),
       ),
     );
-  for (const r of globalRows) {
-    out.push({ name: r.name, source: "global" });
-  }
 
-  // 用户 BYO 模型
-  const userRows = await db
-    .select({ name: s.userModels.name })
-    .from(s.userModels)
-    .where(
-      and(
-        eq(s.userModels.userId, ctx.userId),
-        eq(s.userModels.enabled, true),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (s.userModels.capabilities as any).like(`%"${capability}":true%`),
-      ),
-    );
-  for (const r of userRows) {
-    out.push({ name: r.name, source: "byo" });
-  }
-
-  return out;
+  return rows.map((r: { name: string; visibility: string }) => ({
+    name: r.name,
+    source: r.visibility === "public" ? ("global" as const) : ("byo" as const),
+  }));
 }

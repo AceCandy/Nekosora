@@ -11,9 +11,8 @@ import Badge from "@/shared/ui/Badge";
 export interface KeyModelBindingRecord {
   id: string;
   keyId: string;
-  scope: "global" | "byo";
-  globalModelId: string | null;
-  userModelId: string | null;
+  /** 收敛后绑定只存 modelId(原 scope+globalModelId+userModelId 已废弃)。 */
+  modelId: string;
   createdAt: Date | string | null;
 }
 
@@ -43,7 +42,7 @@ interface KeysManagerProps {
   ensureMasterAction: () => Promise<{ key: string | null; error: string | null }>;
   newSubKeyAction: (name: string) => Promise<string>;
   disableKeyAction: (keyId: string) => Promise<void>;
-  bindModelAction: (keyId: string, scope: "global" | "byo", modelId: string) => Promise<void>;
+  bindModelAction: (keyId: string, modelId: string) => Promise<void>;
   unbindBindingAction: (bindingId: string) => Promise<void>;
 }
 
@@ -119,16 +118,12 @@ export default function KeysManager({
   const handleBindModel = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedSubKeyId || !selectedModelVal) return;
-    const [scope, modelId] = selectedModelVal.split(":");
-    if (scope !== "global" && scope !== "byo") return;
-
     const keyId = selectedSubKeyId;
-    const s = scope as "global" | "byo";
-    const mId = modelId;
+    const modelId = selectedModelVal;
 
     setSelectedModelVal("");
     startTransition(async () => {
-      await bindModelAction(keyId, s, mId);
+      await bindModelAction(keyId, modelId);
     });
   };
 
@@ -138,13 +133,13 @@ export default function KeysManager({
     });
   };
 
-  const getModelName = (scope: string, id: string | null) => {
+  const getModelName = (id: string | null) => {
     if (!id) return "-";
-    if (scope === "global") {
-      return bindable.globals.find((m) => m.id === id)?.name || id;
-    } else {
-      return bindable.byos.find((m) => m.id === id)?.name || id;
-    }
+    return (
+      bindable.globals.find((m) => m.id === id)?.name ||
+      bindable.byos.find((m) => m.id === id)?.name ||
+      id
+    );
   };
 
   return (
@@ -341,14 +336,14 @@ export default function KeysManager({
                   <span className="text-xs text-neutral-400">{t("noBindings")}</span>
                 ) : (
                   selectedSubKey.bindings.map((b) => {
-                    const scope = b.scope as "global" | "byo";
-                    const modelId = scope === "global" ? b.globalModelId : b.userModelId;
-                    const modelName = getModelName(scope, modelId);
+                    const inGlobals = bindable.globals.some((m) => m.id === b.modelId);
+                    const modelName = getModelName(b.modelId);
+                    const scope = inGlobals ? "global" : "byo";
 
                     return (
                       <Badge
                         key={b.id}
-                        variant={scope === "global" ? "primary" : "warning"}
+                        variant={inGlobals ? "primary" : "warning"}
                         className="rounded-full px-2.5 py-1 text-xs hover:border-red-500/30 hover:bg-red-500/[0.04] cursor-pointer"
                       >
                         <span className="opacity-70 text-[10px] font-mono tracking-wider font-semibold uppercase mr-1">{scope}</span>
@@ -382,7 +377,7 @@ export default function KeysManager({
                   {bindable.globals.length > 0 && (
                     <optgroup label={t("globalModels")} className="font-semibold text-xs text-neutral-400">
                       {bindable.globals.map((m) => (
-                        <option key={m.id} value={`global:${m.id}`}>
+                        <option key={m.id} value={m.id}>
                           {m.name}
                         </option>
                       ))}
@@ -392,7 +387,7 @@ export default function KeysManager({
                   {bindable.byos.length > 0 && (
                     <optgroup label={t("byoModels")} className="font-semibold text-xs text-neutral-400">
                       {bindable.byos.map((m) => (
-                        <option key={m.id} value={`byo:${m.id}`}>
+                        <option key={m.id} value={m.id}>
                           {m.name}
                         </option>
                       ))}

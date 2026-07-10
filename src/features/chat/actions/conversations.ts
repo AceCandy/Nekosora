@@ -1,5 +1,5 @@
 "use server";
-import { eq, and, desc, isNull, like, asc } from "drizzle-orm";
+import { eq, and, or, desc, isNull, like, asc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { requireSession } from "@/lib/session";
@@ -8,46 +8,49 @@ import type { ReasoningLevel } from "@/db/types";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const S = () => getSchema() as any;
 
-/** 列出当前用户可见模型(全局 public ∪ 我的 BYO)。 */
+/**
+ * 列出当前用户可见模型:visibility=public ∪ (private && owner=自己),且 enabled。
+ * 返回扁平 models 数组(带 id/ownerUserId/visibility/name/displayName/capabilities,供阶段3 前端用)。
+ * private 排序在前(方言无关:JS 层稳定排序,组内保持 sortOrder)。
+ */
 export async function getVisibleModels() {
   const user = await requireSession();
   const db = await getDb();
-  const [globals, byos] = await Promise.all([
-    db
-      .select()
-      .from(S().globalModels)
-      .where(and(eq(S().globalModels.accessScope, "public"), eq(S().globalModels.enabled, true)))
-      .orderBy(S().globalModels.sortOrder),
-    db
-      .select({ model: S().userModels, providerName: S().userProviders.name })
-      .from(S().userModels)
-      .innerJoin(S().userProviders, eq(S().userModels.providerId, S().userProviders.id))
-      .where(and(eq(S().userModels.userId, user.id), eq(S().userModels.enabled, true)))
-      .orderBy(asc(S().userModels.sortOrder), asc(S().userModels.createdAt)),
-  ]);
-  return { globals: globals as Record<string, unknown>[], byos: byos as Record<string, unknown>[] };
+  const rows = await db
+    .select()
+    .from(S().models)
+    .where(
+      and(
+        or(eq(S().models.visibility, "public"), eq(S().models.ownerUserId, user.id)),
+        eq(S().models.enabled, true),
+      ),
+    )
+    .orderBy(asc(S().models.sortOrder), asc(S().models.createdAt));
+  // private 排在前(public 在后)
+  rows.sort(
+    (a: { visibility: string }, b: { visibility: string }) =>
+      (a.visibility === "private" ? 0 : 1) - (b.visibility === "private" ? 0 : 1),
+  );
+  return rows;
 }
 
-/** 列出支持图像生成的可见模型(global public ∪ BYO,按 capabilities.imageGeneration 过滤)。 */
+/** 列出支持图像生成的可见模型(public ∪ 我的 private),按 capabilities.imageGeneration 过滤。 */
 export async function getImageModels() {
   const user = await requireSession();
   const db = await getDb();
-  const [globals, byos] = await Promise.all([
-    db
-      .select({ name: S().globalModels.name, displayName: S().globalModels.displayName, capabilities: S().globalModels.capabilities })
-      .from(S().globalModels)
-      .where(and(eq(S().globalModels.accessScope, "public"), eq(S().globalModels.enabled, true)))
-      .orderBy(S().globalModels.sortOrder),
-    db
-      .select({ name: S().userModels.name, capabilities: S().userModels.capabilities })
-      .from(S().userModels)
-      .where(eq(S().userModels.userId, user.id)),
-  ]);
-  const hasImg = (caps: unknown) => Boolean((caps as { imageGeneration?: boolean } | null)?.imageGeneration);
-  return {
-    globals: (globals as Record<string, unknown>[]).filter((m) => hasImg(m.capabilities)),
-    byos: (byos as Record<string, unknown>[]).filter((m) => hasImg(m.capabilities)),
-  };
+  const rows = await db
+    .select()
+    .from(S().models)
+    .where(
+      and(
+        or(eq(S().models.visibility, "public"), eq(S().models.ownerUserId, user.id)),
+        eq(S().models.enabled, true),
+      ),
+    )
+    .orderBy(asc(S().models.sortOrder), asc(S().models.createdAt));
+  const hasImg = (caps: unknown) =>
+    Boolean((caps as { imageGeneration?: boolean } | null)?.imageGeneration);
+  return rows.filter((m: Record<string, unknown>) => hasImg(m.capabilities));
 }
 
 /** 列出当前用户的会话(含置顶/归档/更新时间,供前端分组)。 */

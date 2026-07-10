@@ -36,7 +36,7 @@ export default async function ModelsPage() {
     name: m.name as string,
     displayName: m.displayName as string,
     vendor: (m.vendor as string) ?? null,
-    accessScope: m.accessScope as string,
+    visibility: m.visibility as string,
     enabled: m.enabled as boolean,
     systemPrompt: (m.systemPrompt as string) ?? null,
     description: (m.description as string) ?? null,
@@ -92,7 +92,7 @@ export default async function ModelsPage() {
     <div className="space-y-8">
       <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-white">{tn("globalModels")}</h1>
       <ModelsManager
-        variant="global"
+        isAdmin
         models={modelItems}
         routes={routeItems}
         providers={providerOptions}

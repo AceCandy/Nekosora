@@ -26,10 +26,9 @@ afterEach(async () => {
 });
 
 const PG_BASELINE_TYPES = [
-  "access_scope",
   "api_key_kind",
-  "binding_scope",
   "message_status",
+  "model_visibility",
   "provider_protocol",
 ];
 
@@ -43,18 +42,18 @@ const PG_BASELINE_TABLES = [
   "conversations",
   "file_chunks",
   "file_objects",
-  "global_models",
-  "global_providers",
-  "global_routes",
   "image_jobs",
   "instruction_cards",
   "key_model_bindings",
   "knowledge_bases",
   "mcp_servers",
   "messages",
+  "models",
   "output_modes",
   "prompt_templates",
+  "providers",
   "render_styles",
+  "routes",
   "runs",
   "session",
   "system_settings",
@@ -62,8 +61,6 @@ const PG_BASELINE_TABLES = [
   "usage_logs",
   "user",
   "user_memories",
-  "user_models",
-  "user_providers",
   "user_settings",
   "verification",
 ];

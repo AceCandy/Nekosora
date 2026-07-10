@@ -427,15 +427,15 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
                   <div className="absolute bottom-full mb-2 right-0 z-40 w-48 max-h-60 overflow-y-auto rounded-lg border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink py-1 shadow-md">
                     {models.map((m) => (
                       <button
-                        key={m.name}
+                        key={m.modelId}
                         type="button"
                         onClick={() => {
-                          onRegenerate(publicId, m.name);
+                          onRegenerate(publicId, m.modelId);
                           setRegenOpen(false);
                         }}
                         className={clsx(
                           "flex items-center gap-1.5 w-full text-left px-3 py-1.5 text-xs cursor-pointer transition-colors",
-                          m.name === model
+                          m.modelId === model
                             ? "text-sora-blue font-semibold"
                             : "text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900",
                         )}

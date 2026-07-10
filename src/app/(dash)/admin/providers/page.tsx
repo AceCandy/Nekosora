@@ -12,13 +12,7 @@ import { getTranslations } from "next-intl/server";
 import ProvidersManager, {
   type ProviderItem,
 } from "@/features/providers/ProvidersManager";
-
-const PROTOCOLS = [
-  { value: "openai", label: "openai" },
-  { value: "anthropic", label: "anthropic" },
-  { value: "gemini", label: "gemini" },
-  { value: "openai-compatible", label: "openai-compatible" },
-];
+import { PROVIDER_PROTOCOLS } from "@/features/providers/protocols";
 
 export default async function ProvidersPage() {
   const tn = await getTranslations("nav");
@@ -30,6 +24,7 @@ export default async function ProvidersPage() {
     protocol: p.protocol as string,
     baseUrl: p.baseUrl as string,
     enabled: p.enabled as boolean,
+    keyStrategy: p.keyStrategy as string,
     keys: revealKeyBundle(p.apiKeysEnc as string).map((k) => ({
       key: k.key,
       weight: String(k.weight),
@@ -61,7 +56,7 @@ export default async function ProvidersPage() {
         <h1 className="text-xl font-bold mb-4">{tn("globalProviders")}</h1>
         <ProvidersManager
           providers={providers}
-          protocols={PROTOCOLS}
+          protocols={PROVIDER_PROTOCOLS}
           createAction={createProvider}
           updateActions={updateActions}
           toggleActions={toggleActions}

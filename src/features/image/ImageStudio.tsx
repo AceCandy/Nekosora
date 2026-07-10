@@ -6,6 +6,8 @@ import { ImageIcon, Loader2, Sparkles, Download } from "lucide-react";
 import { clsx } from "clsx";
 
 interface ImageModel {
+  /** 模型 id(选项唯一标识,WebChat byId 路由解析,避免 public/private 同名歧义)。 */
+  modelId: string;
   name: string;
   displayName?: string;
 }
@@ -26,7 +28,9 @@ const SIZES = ["1024x1024", "1792x1024", "1024x1792"] as const;
 
 export default function ImageStudio({ models }: { models: ImageModel[] }) {
   const t = useTranslations("image");
-  const [model, setModel] = useState(models[0]?.name ?? "");
+  // model 状态持有 modelId(配合 byId 路由解析);modelName 反查用于 image_jobs 记录。
+  const [model, setModel] = useState(models[0]?.modelId ?? "");
+  const modelName = models.find((m) => m.modelId === model)?.name ?? "";
   const [prompt, setPrompt] = useState("");
   const [n, setN] = useState(1);
   const [size, setSize] = useState<string>("1024x1024");
@@ -75,7 +79,7 @@ export default function ImageStudio({ models }: { models: ImageModel[] }) {
       const res = await fetch("/api/images/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model, prompt: prompt.trim(), n, size }),
+        body: JSON.stringify({ model: modelName, modelId: model, prompt: prompt.trim(), n, size }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "生成失败");
@@ -111,7 +115,7 @@ export default function ImageStudio({ models }: { models: ImageModel[] }) {
             className="w-full rounded-md border border-morning-mist dark:border-deep-space bg-white dark:bg-space-ink px-3 py-2 text-sm text-neutral-700 dark:text-neutral-200 focus:outline-none focus:border-sora-blue cursor-pointer"
           >
             {models.map((m) => (
-              <option key={m.name} value={m.name}>
+              <option key={m.modelId} value={m.modelId}>
                 {m.displayName ?? m.name}
               </option>
             ))}

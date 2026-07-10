@@ -127,10 +127,11 @@ async function handleToolCall(
       const db = await getDb();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const s = getSchema() as any;
+      // 网关语义 owner-only:只列调用者自己创建的 enabled 模型。
       const models = await db
-        .select({ name: s.globalModels.name, display: s.globalModels.displayName })
-        .from(s.globalModels)
-        .where(and(eq(s.globalModels.enabled, true), eq(s.globalModels.accessScope, "public")));
+        .select({ name: s.models.name, display: s.models.displayName })
+        .from(s.models)
+        .where(and(eq(s.models.enabled, true), eq(s.models.ownerUserId, ctx.userId)));
       const text = models
         .map((m: { name: string; display: string }) => `- ${m.name} (${m.display})`)
         .join("\n");

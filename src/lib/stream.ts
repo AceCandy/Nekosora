@@ -12,7 +12,7 @@
  * 借鉴 DEEIX:run_id 标识一次生成;用量含 cache 拆分。
  */
 import { streamText, generateText } from "ai";
-import { resolveRoutes, RoutingError } from "@/lib/routing";
+import { resolveRoutes, resolveRoutesById, RoutingError } from "@/lib/routing";
 import { buildLanguageModelWithKey } from "@/lib/providers/registry";
 import { orderedWeightedKeys } from "@/lib/providers/keys";
 import { recordSuccess, recordFailure } from "@/lib/circuit-breaker";
@@ -37,6 +37,11 @@ export interface StreamChatOptions {
   taskKind?: string;
   /** 会话级 cache key(chat=conversationId / 网关=apiKeyId);用于注入 prompt 缓存控制,缺省不注入。 */
   cacheKey?: string;
+  /**
+   * 模型 id(WebChat byId 路由解析)。提供时走 resolveRoutesById(public ∪ owner 可见),
+   * 避免 public/private 同名歧义;缺省回退 resolveRoutes(by name,网关/副任务沿用)。
+   */
+  modelId?: string;
 }
 
 /** 判断错误是否值得路由级故障转移(连接/5xx/限流类),而非确定性失败。 */
@@ -97,10 +102,12 @@ export async function* streamChat(
     /* metrics 不可用,忽略 */
   }
 
-  // 1. 解析路由链
+  // 1. 解析路由链(WebChat 传 modelId → byId;网关/副任务缺省 → by name)。
   let routes: ResolvedRoute[];
   try {
-    routes = await resolveRoutes(ctx, request.model);
+    routes = opts.modelId
+      ? await resolveRoutesById(ctx, opts.modelId)
+      : await resolveRoutes(ctx, request.model);
   } catch (err) {
     const errCode = err instanceof RoutingError ? err.code : "routing_error";
     const errMsg = err instanceof Error ? err.message : "路由解析失败";
@@ -534,6 +541,7 @@ export async function* streamChatWithTools(
       ctx: opts.ctx,
       runId: opts.runId,
       request: { ...opts.request, messages, tools },
+      modelId: opts.modelId,
     })) {
       if (ev.type === "tool-call") {
         pendingToolCalls.push({

@@ -27,17 +27,17 @@ const myConfigGroup: NavGroup = {
   ],
 };
 
-/** 全局管理(仅 admin 可见,跳转到 /admin 路由)。 */
+/**
+ * 全局管理(仅 admin 可见,跳转到 /admin 路由)。
+ * 资源项(providers/models/templates/usage)已并入 myConfigGroup(/panel/*),
+ * 此处仅保留纯系统管理页。
+ */
 const globalManagementGroup: NavGroup = {
   titleKey: "sectionGlobalManagement",
   items: [
-    { href: "/admin/providers", labelKey: "globalProviders" },
-    { href: "/admin/models", labelKey: "globalModels" },
-    { href: "/admin/templates", labelKey: "globalTemplates" },
     { href: "/admin/output-modes", labelKey: "outputModes" },
     { href: "/admin/render-styles", labelKey: "renderStyles" },
     { href: "/admin/users", labelKey: "users" },
-    { href: "/admin/usage", labelKey: "usage" },
     { href: "/admin/operations", labelKey: "operations" },
     { href: "/admin/settings", labelKey: "settings" },
   ],

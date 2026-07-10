@@ -12,13 +12,7 @@ import { revealKeyBundle } from "@/lib/providers/keys";
 import ProvidersManager, {
   type ProviderItem,
 } from "@/features/providers/ProvidersManager";
-
-const PROTOCOLS = [
-  { value: "openai", label: "openai" },
-  { value: "anthropic", label: "anthropic" },
-  { value: "gemini", label: "gemini" },
-  { value: "openai-compatible", label: "openai-compatible" },
-];
+import { PROVIDER_PROTOCOLS } from "@/features/providers/protocols";
 
 export default async function MyProvidersPage() {
   const t = await getTranslations("panel.providers");
@@ -31,7 +25,8 @@ export default async function MyProvidersPage() {
     protocol: p.protocol as string,
     baseUrl: p.baseUrl as string,
     enabled: p.enabled as boolean,
-    keys: revealKeyBundle(p.apiKeyEnc as string).map((k) => ({
+    keyStrategy: p.keyStrategy as string,
+    keys: revealKeyBundle(p.apiKeysEnc as string).map((k) => ({
       key: k.key,
       weight: String(k.weight),
     })),
@@ -65,7 +60,7 @@ export default async function MyProvidersPage() {
       </div>
       <ProvidersManager
         providers={providers}
-        protocols={PROTOCOLS}
+        protocols={PROVIDER_PROTOCOLS}
         createAction={createMyProvider}
         updateActions={updateActions}
           toggleActions={toggleActions}

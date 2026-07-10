@@ -49,12 +49,14 @@ export interface UploadFileItem {
   previewUrl?: string; // 本地预览(URL.createObjectURL),仅图片
 }
 
-/** 模型选项:name 是对外稳定 ID,displayName 是 UI 渲染名。 */
+/** 模型选项:modelId 是选项唯一 id(用于 byId 路由解析),name 是对外模型名,displayName 是 UI 渲染名。 */
 export interface ModelOption {
+  /** 模型 id(选项唯一标识,WebChat 发消息以此走 resolveRoutesById,避免 public/private 同名歧义)。 */
+  modelId: string;
   name: string;
   displayName?: string;
   capabilities?: ModelCapabilities;
-  /** 模型来源:全局模型标记后供 UI 显示小标签;个人模型不标记。 */
+  /** 模型来源:语义基于 visibility(public→"global"、private→"byo"),供 UI 显示小标签。 */
   source?: "global" | "byo";
 }
 

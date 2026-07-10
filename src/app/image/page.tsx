@@ -4,14 +4,14 @@ import ImageStudio from "@/features/image/ImageStudio";
 
 export default async function ImagePage() {
   const t = await getTranslations("image");
-  const { globals, byos } = await getImageModels();
-  const models = [
-    ...globals.map((m: Record<string, unknown>) => ({
-      name: m.name as string,
-      displayName: (m.displayName as string | undefined) ?? undefined,
-    })),
-    ...byos.map((m: Record<string, unknown>) => ({ name: m.name as string })),
-  ];
+  // getImageModels 已返回扁平数组且 private 排序在前,直接映射为 ImageModel[]。
+  // modelId 用于 WebChat byId 路由解析(避免 public/private 同名歧义)。
+  const imageModels = await getImageModels();
+  const models = (imageModels as Record<string, unknown>[]).map((m) => ({
+    modelId: m.id as string,
+    name: m.name as string,
+    displayName: (m.displayName as string | undefined) ?? undefined,
+  }));
 
   return (
     <div className="flex-1 flex flex-col min-w-0 h-full p-6 md:p-8">

@@ -7,7 +7,7 @@
  * 设计:纯输入→输出,与流式执行(段 B/C,在 route.ts 的 ReadableStream 内)无耦合,
  * 是 route.ts 唯一干净的拆分边界。失败兜底策略与原内联实现逐行对齐。
  */
-import { eq, and, inArray, isNull } from "drizzle-orm";
+import { eq, and, or, inArray, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import type { IRRequest } from "@/lib/providers/types";
 import type { ProcessTrace } from "@/db/types";
@@ -36,6 +36,8 @@ export interface PrepareContextInput {
   userContent: string;
   /** 目标模型名(来自请求体 body.model)。 */
   model: string;
+  /** 目标模型 id(WebChat byId;vision 校验优先用 id 避免重名歧义)。 */
+  modelId?: string;
   /** 原始 messages(会被 RAG / vision 改写)。 */
   messages: IRRequest["messages"];
   /** 附件 fileIds。 */
@@ -73,7 +75,7 @@ export async function prepareChatContext(
   input: PrepareContextInput,
 ): Promise<PrepareContextResult | { error: NextResponse }> {
   const {
-    userId, conversationId, conv, userContent, model, messages,
+    userId, conversationId, conv, userContent, model, modelId, messages,
     fileIds: bodyFileIds, knowledgeBaseIds, webSearch: webSearchOn,
     templateId, templateVars, instructionCardIds,
     db, schema: s,
@@ -102,11 +104,31 @@ export async function prepareChatContext(
   }
 
   if (imageFileIds.length > 0) {
-    const [modelRow] = await db
-      .select()
-      .from(s.globalModels)
-      .where(and(eq(s.globalModels.name, model), eq(s.globalModels.enabled, true)))
-      .limit(1);
+    // WebChat 可见性:public ∪ (private && owner=自己)。
+    // 优先 by id(无重名歧义);缺省回退 by name。
+    const [modelRow] = modelId
+      ? await db
+          .select()
+          .from(s.models)
+          .where(
+            and(
+              eq(s.models.id, modelId),
+              eq(s.models.enabled, true),
+              or(eq(s.models.visibility, "public"), eq(s.models.ownerUserId, userId)),
+            ),
+          )
+          .limit(1)
+      : await db
+          .select()
+          .from(s.models)
+          .where(
+            and(
+              eq(s.models.name, model),
+              eq(s.models.enabled, true),
+              or(eq(s.models.visibility, "public"), eq(s.models.ownerUserId, userId)),
+            ),
+          )
+          .limit(1);
     const caps = modelRow?.capabilities as { vision?: boolean } | undefined;
     if (!caps?.vision) {
       return {

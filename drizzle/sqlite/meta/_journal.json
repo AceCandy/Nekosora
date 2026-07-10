@@ -57,6 +57,13 @@
       "when": 1783653692910,
       "tag": "0007_nostalgic_rafael_vega",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1783653693000,
+      "tag": "0008_unify_resource_model",
+      "breakpoints": true
     }
   ]
 }
