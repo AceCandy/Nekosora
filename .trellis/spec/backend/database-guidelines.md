@@ -17,6 +17,11 @@
 - `getSchema()` 同步访问已加载 schema(必须先 `await getDb()`)。
 - 查询用 drizzle 的 `eq/and/inArray` 等,跨 dialect 通用。
 
+## Transactions
+
+- PostgreSQL Drizzle transaction callbacks may be `async`; better-sqlite3 transaction callbacks must be synchronous. Returning a Promise from SQLite throws `Transaction function cannot return a promise` after any synchronous statements have already run.
+- A dual-dialect write action must not unconditionally use `await db.transaction(async (tx) => ...)`. For a multi-statement atomic write, branch on `isPg`: use awaited query builders in the PostgreSQL transaction and synchronous `.run()` calls in the SQLite transaction.
+
 ## Migrations
 
 - PG:`pnpm db:generate:pg` 生成 → `pnpm db:migrate:pg` 应用。
@@ -115,6 +120,13 @@ Correct —— 让 drizzle-kit 生成表重建,校验全列 INSERT 与 FK 重建
 - 表名:snake_case 复数(`api_keys`, `global_providers`)或 Better Auth 约定的单数(`user`, `session`)。
 - 列名:snake_case(`created_at`, `user_id`)。
 - 索引:`{表}_{字段}_idx`;唯一索引:`{表}_{字段}_unique_idx`。
+
+## Model Catalog
+
+- `model_catalog` 是模型类型、能力和默认参数的唯一事实来源；`models.catalog_id` 使用 `ON DELETE RESTRICT` 引用目录。
+- `models` 不保存 `vendor` 或能力 JSON 副本。业务查询需要能力时 join `model_catalog`，可以继续向上层 DTO 投影为 `capabilities`。
+- 创建模型时显式目录选择优先，否则只按规范化标准名与显式 aliases 精确匹配；通用模板不能自动匹配。
+- 流式与非流式兼容性属于具体 route 的探测结果，不进入模型目录。
 
 ## Common Mistakes
 

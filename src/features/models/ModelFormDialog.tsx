@@ -1,20 +1,18 @@
 "use client";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import type { ModelCapabilities } from "@/db/types";
 import type { FormDataSerializableAction } from "@/features/providers/types";
 import Modal from "@/shared/ui/Modal";
-import CapabilitiesEditor from "@/features/models/CapabilitiesEditor";
+import type { ModelCatalogOption } from "@/features/models/ModelsManager";
 
 export interface ModelInitial {
   name?: string;
   displayName?: string;
-  vendor?: string;
+  catalogId?: string;
   /** 可见性:public=发布到全局(仅 admin 可设);private=仅自己可见。 */
   visibility?: "public" | "private";
   systemPrompt?: string;
   description?: string;
-  capabilities?: ModelCapabilities;
 }
 
 interface ModelFormDialogProps {
@@ -24,7 +22,10 @@ interface ModelFormDialogProps {
   action: FormDataSerializableAction;
   /** admin 可见「发布到全局」(visibility) 选择器;普通用户恒 private,不渲染该字段。 */
   isAdmin?: boolean;
+  /** 可见性已由列表中的专用发布控件管理时,编辑模式不再渲染该字段。 */
+  visibilityManagedInList?: boolean;
   initial?: ModelInitial;
+  catalog: ModelCatalogOption[];
 }
 
 const labelCls = "block text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-1";
@@ -37,7 +38,9 @@ export default function ModelFormDialog({
   mode,
   action,
   isAdmin = false,
+  visibilityManagedInList = false,
   initial,
+  catalog,
 }: ModelFormDialogProps) {
   const t = useTranslations("models");
   const isEdit = mode === "edit";
@@ -89,17 +92,21 @@ export default function ModelFormDialog({
 
           <label className="block">
             <span className={labelCls}>
-              {t("colVendor")} <span className="text-[10px] font-normal text-neutral-400">{t("vendorHint")}</span>
+              {t("catalogLabel")}
             </span>
-            <input
-              name="vendor"
-              defaultValue={ini?.vendor ?? ""}
+            <select
+              name="catalogId"
+              defaultValue={ini?.catalogId ?? ""}
               className={inputCls}
-              placeholder="openai"
-            />
+            >
+              <option value="">{t("catalogAutoMatch")}</option>
+              {catalog.map((entry) => (
+                <option key={entry.id} value={entry.id}>{entry.name}</option>
+              ))}
+            </select>
           </label>
 
-          {isAdmin && (
+          {isAdmin && (!isEdit || !visibilityManagedInList) && (
             <label className="block">
               <span className={labelCls}>{t("visibilityLabel")}</span>
               <select
@@ -137,11 +144,6 @@ export default function ModelFormDialog({
             placeholder={t("descriptionPlaceholder")}
           />
         </label>
-
-        <div className="block pt-1">
-          <span className={labelCls}>{t("capabilitiesLabel")}</span>
-          <CapabilitiesEditor initial={ini?.capabilities} />
-        </div>
 
         <div className="flex justify-end gap-2.5 pt-3 border-t border-neutral-100 dark:border-neutral-800/80">
           <button

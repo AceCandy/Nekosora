@@ -15,7 +15,7 @@
 onDragEnd(arrayMove)
   → useOptimistic reducer 按新 id 顺序重排(立即渲染)
   → startTransition(async () => { setOptimistic(newIds); await reorderAction(newIds); })
-        → service: db.transaction 内按 index 重写 sortOrder=0,1,2…
+        → service:按 dialect 的 transaction 内按 index 重写 sortOrder=0,1,2…
         → revalidatePath
   → server 重渲染 → useOptimistic 自动对齐真实数据(顺序一致)
 ```
@@ -26,6 +26,22 @@ onDragEnd(arrayMove)
 - 顶层:`<DndContext sensors={[PointerSensor({ activationConstraint: { distance: 5 } })]} collisionDetection={closestCenter} onDragEnd>` 包住 `<SortableContext items={rows.map(r=>r.id)} strategy={verticalListSortingStrategy}>`。
 - 行:`useSortable({id})` 的 `setNodeRef`/`transform`/`style`/`listeners`/`attributes` 绑到 `<tr>`;最前列放 `GripVertical` 手柄(`<button {...attributes} {...listeners}>`,`cursor-grab`)。`transform` 用 `CSS.Transform.toString(transform)`(@dnd-kit/utilities)套到 `style`。
 - `useOptimistic(rows, (state, orderedIds) => orderedIds.map(id => map.get(id)).filter(Boolean))`。
+
+## SSR hydration: DndContext 必须传稳定 id
+
+`@dnd-kit` 未传 `id` 时会以模块级计数生成 `DndDescribedBy-<n>`。Node SSR 进程已处理过的请求会推进计数，而浏览器首次 hydration 从不同计数开始，导致拖拽手柄的 `aria-describedby` 不一致。
+
+服务端渲染的每个 `<DndContext>` 必须传入**页面内唯一且确定**的 `id`；同页存在多个排序域时，id 要反映域名：
+
+```tsx
+// 错误: SSR 与客户端会依赖不同的模块级计数
+<DndContext sensors={sensors} onDragEnd={onDragEnd} />
+
+// 正确: dnd-kit 直接使用该固定值作为 aria-describedby
+<DndContext id={`models-${visibility}-sortable`} sensors={sensors} onDragEnd={onDragEnd} />
+```
+
+模型的私有和公开分组分别使用 `models-private-sortable`、`models-public-sortable`；单一排序表也要使用类似 `models-sortable` 的固定 id。验证时以实际 Next 页面加载检查浏览器控制台无 hydration warning，并确认每个手柄的 `aria-describedby` 是预期固定值。
 
 ## ⚠️ 关键契约:落库必须 `await`(最常见的坑)
 
@@ -56,17 +72,26 @@ startTransition(() => {
 ```ts
 async function reorderXxx(orderedIds: string[]): Promise<void> {
   await requireAdmin(); // 或 requireSession(个人模型)
-  await db.transaction(async (tx) => {
-    for (let i = 0; i < orderedIds.length; i++) {
-      await tx.update(t).set({ sortOrder: i }).where(eq(t.id, orderedIds[i]));
-    }
-  });
+  if (isPg) {
+    await db.transaction(async (tx) => {
+      for (let i = 0; i < orderedIds.length; i++) {
+        await tx.update(t).set({ sortOrder: i }).where(eq(t.id, orderedIds[i]));
+      }
+    });
+  } else {
+    db.transaction((tx) => {
+      for (let i = 0; i < orderedIds.length; i++) {
+        tx.update(t).set({ sortOrder: i }).where(eq(t.id, orderedIds[i])).run();
+      }
+    });
+  }
   revalidatePath("/...");
 }
 ```
 
 - **全表重写连续整数**(0,1,2…)——简单、幂等、无空洞。表数据量小(几十),逐条 update 可接受。
 - **单事务**包裹,中途失败整体回滚(避免半成品状态)。
+- **SQLite 事务必须同步**:better-sqlite3 不接受 `async` transaction callback;SQLite 分支只在回调中使用 `.run()`，不可 `await`。否则会在语句已执行后抛 `Transaction function cannot return a promise`。
 - **id 不存在自然跳过**:`update ... where id=?` 影响 0 行,不抛错(拖动时客户端传的 id 可能过期)。
 - **per-user / per-scope 隔离**:个人模型 reorder 每条 update 必须带 `and(eq(id, orderedIds[i]), eq(userId, user.id))`,防止越权改他人顺序。
 - **不新增 REST `/api`**:沿用 server action + `revalidatePath` 模式。

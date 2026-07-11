@@ -17,8 +17,9 @@ export async function getVisibleModels() {
   const user = await requireSession();
   const db = await getDb();
   const rows = await db
-    .select()
+    .select({ model: S().models, capabilities: S().modelCatalog.capabilities })
     .from(S().models)
+    .innerJoin(S().modelCatalog, eq(S().models.catalogId, S().modelCatalog.id))
     .where(
       and(
         or(eq(S().models.visibility, "public"), eq(S().models.ownerUserId, user.id)),
@@ -27,11 +28,15 @@ export async function getVisibleModels() {
     )
     .orderBy(asc(S().models.sortOrder), asc(S().models.createdAt));
   // private 排在前(public 在后)
-  rows.sort(
-    (a: { visibility: string }, b: { visibility: string }) =>
+  const models = rows.map((row: { model: Record<string, unknown>; capabilities: unknown }) => ({
+    ...row.model,
+    capabilities: row.capabilities,
+  }));
+  models.sort(
+    (a: { visibility: unknown }, b: { visibility: unknown }) =>
       (a.visibility === "private" ? 0 : 1) - (b.visibility === "private" ? 0 : 1),
   );
-  return rows;
+  return models;
 }
 
 /** 列出支持图像生成的可见模型(public ∪ 我的 private),按 capabilities.imageGeneration 过滤。 */
@@ -39,8 +44,9 @@ export async function getImageModels() {
   const user = await requireSession();
   const db = await getDb();
   const rows = await db
-    .select()
+    .select({ model: S().models, capabilities: S().modelCatalog.capabilities })
     .from(S().models)
+    .innerJoin(S().modelCatalog, eq(S().models.catalogId, S().modelCatalog.id))
     .where(
       and(
         or(eq(S().models.visibility, "public"), eq(S().models.ownerUserId, user.id)),
@@ -50,7 +56,12 @@ export async function getImageModels() {
     .orderBy(asc(S().models.sortOrder), asc(S().models.createdAt));
   const hasImg = (caps: unknown) =>
     Boolean((caps as { imageGeneration?: boolean } | null)?.imageGeneration);
-  return rows.filter((m: Record<string, unknown>) => hasImg(m.capabilities));
+  return rows
+    .filter((row: { capabilities: unknown }) => hasImg(row.capabilities))
+    .map((row: { model: Record<string, unknown>; capabilities: unknown }) => ({
+      ...row.model,
+      capabilities: row.capabilities,
+    }));
 }
 
 /** 列出当前用户的会话(含置顶/归档/更新时间,供前端分组)。 */

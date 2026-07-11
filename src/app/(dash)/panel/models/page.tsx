@@ -6,12 +6,14 @@ import {
   deleteMyModel,
   toggleMyModel,
   reorderMyModels,
+  setMyModelVisibility,
   createMyRoute,
   updateMyRoute,
   deleteMyRoute,
   toggleMyRoute,
   listMyUpstreamModels,
   testMyRoute,
+  listModelCatalog,
 } from "../actions";
 import ModelsManager, {
   type ModelItem,
@@ -27,14 +29,19 @@ export default async function MyModelsPage() {
   const tn = await getTranslations("nav");
   const user = await requireSession();
   const isAdmin = user.role === "admin";
-  const [models, providers] = await Promise.all([getMyModels(), getMyProviders()]);
+  const [models, providers, catalog] = await Promise.all([
+    getMyModels(),
+    getMyProviders(),
+    listModelCatalog(),
+  ]);
 
   // —— 映射数据形状,适配 ModelsManager ——
   const modelItems: ModelItem[] = models.map((r: Record<string, unknown>) => ({
     id: (r.model as Record<string, unknown>).id as string,
     name: (r.model as Record<string, unknown>).name as string,
     displayName: (r.model as Record<string, unknown>).displayName as string,
-    vendor: ((r.model as Record<string, unknown>).vendor as string) ?? null,
+    catalogId: (r.model as Record<string, unknown>).catalogId as string,
+    catalogName: (((r.model as Record<string, unknown>).catalog as Record<string, unknown>).name as string),
     visibility: (r.model as Record<string, unknown>).visibility as string,
     enabled: (r.model as Record<string, unknown>).enabled as boolean,
     systemPrompt: ((r.model as Record<string, unknown>).systemPrompt as string) ?? null,
@@ -91,6 +98,15 @@ export default async function MyModelsPage() {
   const testRouteActions = Object.fromEntries(
     routeItems.map((r) => [r.id, testMyRoute.bind(null, r.id)]),
   );
+  const visibilityActions = Object.fromEntries(
+    modelItems.map((m) => [
+      m.id,
+      {
+        publish: setMyModelVisibility.bind(null, m.id, "public"),
+        makePrivate: setMyModelVisibility.bind(null, m.id, "private"),
+      },
+    ]),
+  );
 
   return (
     <div className="space-y-8">
@@ -108,6 +124,12 @@ export default async function MyModelsPage() {
           models={modelItems}
           routes={routeItems}
           providers={providerOptions}
+          catalog={catalog.map((entry: Record<string, unknown>) => ({
+            id: entry.id as string,
+            name: entry.name as string,
+            modelType: entry.modelType as string,
+            capabilities: (entry.capabilities as ModelCapabilities) ?? {},
+          }))}
           createAction={createMyModel}
           updateActions={updateActions}
           deleteActions={deleteActions}
@@ -118,7 +140,9 @@ export default async function MyModelsPage() {
           toggleRouteActions={toggleRouteActions}
           fetchModelsAction={listMyUpstreamModels}
           testRouteActions={testRouteActions}
-          reorderAction={reorderMyModels}
+          reorderAction={reorderMyModels.bind(null, "private")}
+          groupedReorderAction={isAdmin ? reorderMyModels : undefined}
+          visibilityActions={isAdmin ? visibilityActions : undefined}
         />
       )}
     </div>

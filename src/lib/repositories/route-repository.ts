@@ -46,11 +46,12 @@ export class DrizzleRouteRepository implements RouteRepository {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const s = getSchema() as any;
     const [row] = await db
-      .select()
+      .select({ model: s.models, capabilities: s.modelCatalog.capabilities })
       .from(s.models)
+      .innerJoin(s.modelCatalog, eq(s.models.catalogId, s.modelCatalog.id))
       .where(and(eq(s.models.id, modelId), eq(s.models.enabled, true)))
       .limit(1);
-    return row ?? null;
+    return row ? { ...row.model, capabilities: row.capabilities } : null;
   }
 
   async findEnabledModelByNameForOwner(
@@ -61,8 +62,9 @@ export class DrizzleRouteRepository implements RouteRepository {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const s = getSchema() as any;
     const [row] = await db
-      .select()
+      .select({ model: s.models, capabilities: s.modelCatalog.capabilities })
       .from(s.models)
+      .innerJoin(s.modelCatalog, eq(s.models.catalogId, s.modelCatalog.id))
       .where(
         and(
           eq(s.models.name, modelName),
@@ -71,7 +73,7 @@ export class DrizzleRouteRepository implements RouteRepository {
         ),
       )
       .limit(1);
-    return row ?? null;
+    return row ? { ...row.model, capabilities: row.capabilities } : null;
   }
 
   async findEnabledRoutes(

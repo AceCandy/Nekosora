@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `user_single_admin_unique_idx` ON `user` (`role`) WHERE "user"."role" = 'admin';

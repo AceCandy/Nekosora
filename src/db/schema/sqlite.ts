@@ -5,6 +5,7 @@
  */
 import { sqliteTable, text, integer, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
+import type { ModelCapabilities, ModelDefaultParams, ModelType } from "@/db/types";
 
 const now = sql`(unixepoch())`;
 const uuid = sql`(lower(hex(randomblob(16))))`;
@@ -13,20 +14,27 @@ const uuid = sql`(lower(hex(randomblob(16))))`;
 // Better Auth 认证表(与 pg.ts 同构)
 // ===========================================================================
 
-export const user = sqliteTable("user", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  email: text("email").notNull().unique(),
-  emailVerified: integer("email_verified", { mode: "boolean" }).notNull().default(false),
-  image: text("image"),
-  role: text("role").notNull().default("user"),
-  banned: integer("banned", { mode: "boolean" }).notNull().default(false),
-  banReason: text("ban_reason"),
-  banExpires: integer("ban_expires", { mode: "timestamp" }),
-  status: text("status").notNull().default("active"),
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),
-  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(now),
-});
+export const user = sqliteTable(
+  "user",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    email: text("email").notNull().unique(),
+    emailVerified: integer("email_verified", { mode: "boolean" }).notNull().default(false),
+    image: text("image"),
+    role: text("role").notNull().default("user"),
+    banned: integer("banned", { mode: "boolean" }).notNull().default(false),
+    banReason: text("ban_reason"),
+    banExpires: integer("ban_expires", { mode: "timestamp" }),
+    status: text("status").notNull().default("active"),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(now),
+  },
+  (t) => [
+    // 仅 admin 行进入索引,从数据库层确保全局只有一个管理员。
+    uniqueIndex("user_single_admin_unique_idx").on(t.role).where(sql`${t.role} = 'admin'`),
+  ],
+);
 
 export const session = sqliteTable("session", {
   id: text("id").primaryKey(),
@@ -132,6 +140,29 @@ export const providers = sqliteTable(
   ],
 );
 
+export const modelCatalog = sqliteTable(
+  "model_catalog",
+  {
+    id: text("id").primaryKey().default(uuid),
+    name: text("name").notNull(),
+    canonicalModelId: text("canonical_model_id").notNull(),
+    aliases: text("aliases", { mode: "json" }).$type<string[]>().notNull().default([]),
+    modelType: text("model_type").$type<ModelType>().notNull(),
+    capabilities: text("capabilities", { mode: "json" }).$type<ModelCapabilities>().notNull().default({}),
+    defaultParams: text("default_params", { mode: "json" }).$type<ModelDefaultParams>().notNull().default({}),
+    contextWindow: integer("context_window"),
+    maxOutputTokens: integer("max_output_tokens"),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(now),
+  },
+  (t) => [
+    uniqueIndex("model_catalog_canonical_model_id_unique_idx").on(t.canonicalModelId),
+    index("model_catalog_enabled_sort_idx").on(t.enabled, t.sortOrder),
+  ],
+);
+
 export const models = sqliteTable(
   "models",
   {
@@ -142,12 +173,10 @@ export const models = sqliteTable(
     visibility: text("visibility").notNull().default("private"), // public=admin 发布给所有人 WebChat 可选;private=仅 owner
     name: text("name").notNull(),
     displayName: text("display_name"),
-    vendor: text("vendor"),
-    icon: text("icon"),
-    capabilities: text("capabilities", { mode: "json" })
-      .$type<import("@/db/types").ModelCapabilities>()
+    catalogId: text("catalog_id")
       .notNull()
-      .default({}),
+      .references(() => modelCatalog.id, { onDelete: "restrict" }),
+    icon: text("icon"),
     systemPrompt: text("system_prompt"),
     description: text("description"),
     enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
@@ -158,6 +187,7 @@ export const models = sqliteTable(
   (t) => [
     index("models_owner_idx").on(t.ownerUserId),
     index("models_visibility_idx").on(t.visibility),
+    index("models_catalog_idx").on(t.catalogId),
     uniqueIndex("models_owner_name_idx").on(t.ownerUserId, t.name),
   ],
 );
@@ -283,7 +313,6 @@ export const runs = sqliteTable("runs", {
   upstreamId: text("upstream_id"),
   platformModelName: text("platform_model_name"),
   routedBindingCode: text("routed_binding_code"),
-  modelVendor: text("model_vendor"),
   firstTokenLatencyMs: integer("first_token_latency_ms"),
   tokenUsage: text("token_usage", { mode: "json" })
     .$type<import("@/db/types").TokenUsage>(),

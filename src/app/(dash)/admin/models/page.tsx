@@ -19,7 +19,6 @@ import ModelsManager, {
   type RouteItem,
   type ProviderOption,
 } from "@/features/models/ModelsManager";
-import type { ModelCapabilities } from "@/db/types";
 import { getTranslations } from "next-intl/server";
 
 export default async function ModelsPage() {
@@ -35,12 +34,12 @@ export default async function ModelsPage() {
     id: m.id as string,
     name: m.name as string,
     displayName: m.displayName as string,
-    vendor: (m.vendor as string) ?? null,
+    catalogId: m.catalogId as string,
+    catalogName: ((m.catalog as Record<string, unknown>)?.name as string) ?? "-",
     visibility: m.visibility as string,
     enabled: m.enabled as boolean,
     systemPrompt: (m.systemPrompt as string) ?? null,
     description: (m.description as string) ?? null,
-    capabilities: (m.capabilities as ModelCapabilities) ?? null,
     sortOrder: m.sortOrder as number,
   }));
 

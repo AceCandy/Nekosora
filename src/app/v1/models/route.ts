@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
         .from(s.models)
         .where(and(eq(s.models.id, b.modelId), eq(s.models.enabled, true)))
         .limit(1);
-      if (m) add(m.name, m.vendor ?? "nekusora");
+      if (m) add(m.name);
     }
   } else {
     // 主 key:owner 自己的全部 enabled 模型(public + private)。
@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
       .select()
       .from(s.models)
       .where(and(eq(s.models.ownerUserId, ctx.userId), eq(s.models.enabled, true)));
-    for (const m of myModels) add(m.name, m.vendor ?? "nekusora");
+    for (const m of myModels) add(m.name);
   }
 
   return NextResponse.json({ object: "list", data: models });

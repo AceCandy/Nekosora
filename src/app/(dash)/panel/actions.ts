@@ -1,13 +1,14 @@
 "use server";
 import { eq, ne, and, asc, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { getDb, getSchema } from "@/lib/infra/db";
+import { getDb, getSchema, isPg } from "@/lib/infra/db";
 import { encryptKeyBundle, parseKeyBundle, pickWeightedKey } from "@/lib/providers/keys";
 import type { WeightedKey } from "@/lib/providers/keys";
 import { probeProviderKey, fetchUpstreamModels, type ProbeResult, type UpstreamModel } from "@/lib/providers/probe";
 import { recordSuccess, recordFailure } from "@/lib/circuit-breaker";
 import type { ProviderProtocol } from "@/db/types";
 import { requireSession } from "@/lib/session";
+import { findCatalogMatch } from "@/lib/model-catalog";
 import {
   createMasterKey,
   createSubKey,
@@ -258,8 +259,9 @@ export async function getMyModels() {
   const db = await getDb();
   const [models, routes] = await Promise.all([
     db
-      .select()
+      .select({ model: S().models, catalog: S().modelCatalog })
       .from(S().models)
+      .innerJoin(S().modelCatalog, eq(S().models.catalogId, S().modelCatalog.id))
       .where(eq(S().models.ownerUserId, user.id))
       .orderBy(asc(S().models.sortOrder), asc(S().models.createdAt)),
     db
@@ -276,22 +278,53 @@ export async function getMyModels() {
     arr.push(r);
     routesByModel.set(key, arr);
   }
-  return models.map((m: Record<string, unknown>) => ({
-    model: m,
-    routes: routesByModel.get((m.id as string) ?? "") ?? [],
-  }));
+  return models.map((row: Record<string, unknown>) => {
+    const model = row.model as Record<string, unknown>;
+    const catalog = row.catalog as Record<string, unknown>;
+    return {
+      model: { ...model, capabilities: catalog.capabilities, catalog },
+      routes: routesByModel.get((model.id as string) ?? "") ?? [],
+    };
+  });
+}
+
+export async function listModelCatalog() {
+  await requireSession();
+  const db = await getDb();
+  return db
+    .select()
+    .from(S().modelCatalog)
+    .where(eq(S().modelCatalog.enabled, true))
+    .orderBy(asc(S().modelCatalog.sortOrder), asc(S().modelCatalog.name));
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function resolveCatalogId(db: any, name: string, requestedId: string): Promise<string> {
+  const catalogs = await db
+    .select()
+    .from(S().modelCatalog)
+    .where(eq(S().modelCatalog.enabled, true));
+  if (requestedId) {
+    const selected = catalogs.find((entry: { id: string }) => entry.id === requestedId);
+    if (!selected) throw new Error("模型模板不存在或已禁用");
+    return selected.id as string;
+  }
+  const matched = findCatalogMatch(
+    catalogs.map((entry: Record<string, unknown>) => ({
+      ...entry,
+      id: entry.id as string,
+      canonicalModelId: entry.canonicalModelId as string,
+      aliases: (entry.aliases as string[] | null) ?? [],
+    })),
+    name,
+  );
+  if (!matched) throw new Error("未匹配到模型模板，请先选择模板");
+  return matched.id;
 }
 
 export async function createMyModel(formData: FormData) {
   const user = await requireSession();
   const db = await getDb();
-  const capsRaw = String(formData.get("capabilities") ?? "{}");
-  let capabilities = {};
-  try {
-    capabilities = JSON.parse(capsRaw);
-  } catch {
-    /* ignore */
-  }
   // 普通用户强制 private;admin 可选 public(发布到全局)。
   const visibility: "public" | "private" =
     user.role === "admin"
@@ -299,46 +332,83 @@ export async function createMyModel(formData: FormData) {
         ? "public"
         : "private"
       : "private";
-  // 新建模型默认放末尾(per-owner:只查当前用户的 max(sortOrder),空表时从 0 起)。
+  const name = String(formData.get("name") ?? "");
+  const catalogId = await resolveCatalogId(db, name, String(formData.get("catalogId") ?? ""));
+  if (visibility === "public") {
+    const [dup] = await db
+      .select({ id: S().models.id })
+      .from(S().models)
+      .where(and(eq(S().models.visibility, "public"), eq(S().models.name, name)))
+      .limit(1);
+    if (dup) throw new Error("已存在同名 public 模型");
+  }
+  // 新建模型追加到所属排序分组末尾。
   const [maxRow] = await db
     .select({ maxSort: sql<number>`coalesce(max(${S().models.sortOrder}), -1)` })
     .from(S().models)
-    .where(eq(S().models.ownerUserId, user.id));
+    .where(
+      and(
+        eq(S().models.ownerUserId, user.id),
+        eq(S().models.visibility, visibility),
+      ),
+    );
   const nextSort = (maxRow?.maxSort ?? -1) + 1;
   await db.insert(S().models).values({
     ownerUserId: user.id,
     visibility,
-    name: String(formData.get("name") ?? ""),
+    name,
     displayName: String(formData.get("displayName") ?? "") || null,
-    vendor: String(formData.get("vendor") ?? "") || null,
+    catalogId,
     systemPrompt: String(formData.get("systemPrompt") ?? "") || null,
     description: String(formData.get("description") ?? "") || null,
-    capabilities,
     enabled: true,
     sortOrder: nextSort,
   });
   revalidatePath("/panel", "layout");
 }
 
-/**
- * 拖动重排:按拖动后的完整顺序重写当前用户的 sortOrder 为连续整数 0,1,2…
- * 安全关键:每条 update 必须带 ownerUserId 条件,防止用户改到他人模型顺序。
- * 单事务包裹,中途失败整体回滚。id 不存在或不属于该用户自然跳过(update 0 行)。
- */
-export async function reorderMyModels(orderedIds: string[]) {
+/** 按可见性分组重排当前用户模型,每组写入连续 sortOrder。 */
+export async function reorderMyModels(
+  visibility: "public" | "private",
+  orderedIds: string[],
+) {
   const user = await requireSession();
   const db = await getDb();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await db.transaction(async (tx: any) => {
-    for (let i = 0; i < orderedIds.length; i++) {
-      await tx
-        .update(S().models)
-        .set({ sortOrder: i })
-        .where(
-          and(eq(S().models.id, orderedIds[i]), eq(S().models.ownerUserId, user.id)),
-        );
-    }
-  });
+  if (isPg) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await db.transaction(async (tx: any) => {
+      for (let i = 0; i < orderedIds.length; i++) {
+        await tx
+          .update(S().models)
+          .set({ sortOrder: i })
+          .where(
+            and(
+              eq(S().models.id, orderedIds[i]),
+              eq(S().models.ownerUserId, user.id),
+              eq(S().models.visibility, visibility),
+            ),
+          );
+      }
+    });
+  } else {
+    // better-sqlite3 的 transaction 回调必须同步执行。
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    db.transaction((tx: any) => {
+      for (let i = 0; i < orderedIds.length; i++) {
+        tx
+          .update(S().models)
+          .set({ sortOrder: i })
+          .where(
+            and(
+              eq(S().models.id, orderedIds[i]),
+              eq(S().models.ownerUserId, user.id),
+              eq(S().models.visibility, visibility),
+            ),
+          )
+          .run();
+      }
+    });
+  }
   revalidatePath("/panel", "layout");
 }
 
@@ -346,38 +416,24 @@ export async function reorderMyModels(orderedIds: string[]) {
 export async function updateMyModel(id: string, formData: FormData) {
   const user = await requireSession();
   const db = await getDb();
-  const capsRaw = String(formData.get("capabilities") ?? "{}");
-  let capabilities = {};
-  try {
-    capabilities = JSON.parse(capsRaw);
-  } catch {
-    /* ignore */
-  }
+  const name = String(formData.get("name") ?? "");
+  const catalogId = await resolveCatalogId(db, name, String(formData.get("catalogId") ?? ""));
   const patch: Record<string, unknown> = {
-    name: String(formData.get("name") ?? ""),
+    name,
     displayName: String(formData.get("displayName") ?? "") || null,
-    vendor: String(formData.get("vendor") ?? "") || null,
+    catalogId,
     systemPrompt: String(formData.get("systemPrompt") ?? "") || null,
     description: String(formData.get("description") ?? "") || null,
-    capabilities,
     updatedAt: new Date(),
   };
-  // 仅 admin 可改 visibility(发布/取消发布);普通用户忽略。
-  if (user.role === "admin") {
-    const visRaw = String(formData.get("visibility") ?? formData.get("accessScope") ?? "");
-    if (visRaw) {
-      patch.visibility = visRaw === "public" || visRaw === "internal" ? "public" : "private";
-    }
-  }
-  // public 模型 name 全局唯一:发布(public)或改名时校验,避免多 admin 同名 public 冲突。
+  // public 模型改名仍需全局唯一;可见性仅由 setMyModelVisibility 修改。
   const [existing] = await db
     .select({ visibility: S().models.visibility })
     .from(S().models)
     .where(and(eq(S().models.id, id), eq(S().models.ownerUserId, user.id)))
     .limit(1);
   if (!existing) throw new Error("模型不存在或无权操作");
-  const finalVisibility = (patch.visibility as string | undefined) ?? existing.visibility;
-  if (finalVisibility === "public") {
+  if (existing.visibility === "public") {
     const [dup] = await db
       .select({ id: S().models.id })
       .from(S().models)
@@ -394,6 +450,50 @@ export async function updateMyModel(id: string, formData: FormData) {
   await db
     .update(S().models)
     .set(patch)
+    .where(and(eq(S().models.id, id), eq(S().models.ownerUserId, user.id)));
+  revalidatePath("/panel", "layout");
+}
+
+/** 管理员切换模型可见性,并将模型追加到目标分组末尾。 */
+export async function setMyModelVisibility(id: string, visibility: "public" | "private") {
+  const user = await requireSession();
+  if (user.role !== "admin") throw new Error("无权发布模型");
+  const db = await getDb();
+  const [existing] = await db
+    .select({ name: S().models.name, visibility: S().models.visibility })
+    .from(S().models)
+    .where(and(eq(S().models.id, id), eq(S().models.ownerUserId, user.id)))
+    .limit(1);
+  if (!existing) throw new Error("模型不存在或无权操作");
+  if (existing.visibility === visibility) return;
+
+  if (visibility === "public") {
+    const [dup] = await db
+      .select({ id: S().models.id })
+      .from(S().models)
+      .where(
+        and(
+          eq(S().models.visibility, "public"),
+          eq(S().models.name, existing.name),
+          ne(S().models.id, id),
+        ),
+      )
+      .limit(1);
+    if (dup) throw new Error("已存在同名 public 模型");
+  }
+
+  const [maxRow] = await db
+    .select({ maxSort: sql<number>`coalesce(max(${S().models.sortOrder}), -1)` })
+    .from(S().models)
+    .where(
+      and(
+        eq(S().models.ownerUserId, user.id),
+        eq(S().models.visibility, visibility),
+      ),
+    );
+  await db
+    .update(S().models)
+    .set({ visibility, sortOrder: (maxRow?.maxSort ?? -1) + 1 })
     .where(and(eq(S().models.id, id), eq(S().models.ownerUserId, user.id)));
   revalidatePath("/panel", "layout");
 }

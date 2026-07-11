@@ -262,22 +262,26 @@ export async function listModelsByCapability(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
 
-  // capabilities 是 JSON 列,用 like 做能力存在性过滤(dialect 通用)。
+  // capabilities 位于模型目录 JSON 列,用 like 做能力存在性过滤(dialect 通用)。
   // SQLite/PG 的 jsonb/text 都支持字符串 like。
   const rows = await db
-    .select({ name: s.models.name, visibility: s.models.visibility })
+    .select({
+      name: s.models.name,
+      visibility: s.models.visibility,
+      capabilities: s.modelCatalog.capabilities,
+    })
     .from(s.models)
+    .innerJoin(s.modelCatalog, eq(s.models.catalogId, s.modelCatalog.id))
     .where(
       and(
         eq(s.models.enabled, true),
         or(eq(s.models.visibility, "public"), eq(s.models.ownerUserId, ctx.userId)),
-        // 能力键存在于 JSON 中且为 true。简化:like 匹配 `"imageGeneration":true`。
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (s.models.capabilities as any).like(`%"${capability}":true%`),
       ),
     );
 
-  return rows.map((r: { name: string; visibility: string }) => ({
+  return rows
+    .filter((r: { capabilities: ModelCapabilities }) => Boolean(r.capabilities?.[capability]))
+    .map((r: { name: string; visibility: string }) => ({
     name: r.name,
     source: r.visibility === "public" ? ("global" as const) : ("byo" as const),
   }));

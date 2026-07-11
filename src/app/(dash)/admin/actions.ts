@@ -264,11 +264,17 @@ export async function listModels() {
   const admin = await requireAdmin();
   const db = await getDb();
   // admin 可见:public ∪ (private && owner=自己)。
-  return db
-    .select()
+  const rows = await db
+    .select({ model: S().models, catalog: S().modelCatalog })
     .from(S().models)
+    .innerJoin(S().modelCatalog, eq(S().models.catalogId, S().modelCatalog.id))
     .where(or(eq(S().models.visibility, "public"), eq(S().models.ownerUserId, admin.id)))
     .orderBy(asc(S().models.sortOrder), asc(S().models.createdAt));
+  return rows.map((row: Record<string, unknown>) => {
+    const model = row.model as Record<string, unknown>;
+    const catalog = row.catalog as Record<string, unknown>;
+    return { ...model, catalog, capabilities: catalog.capabilities };
+  });
 }
 
 export async function listRoutes() {
@@ -289,13 +295,6 @@ export async function listRoutes() {
 export async function createModel(formData: FormData) {
   const admin = await requireAdmin();
   const db = await getDb();
-  const capsRaw = String(formData.get("capabilities") ?? "{}");
-  let capabilities = {};
-  try {
-    capabilities = JSON.parse(capsRaw);
-  } catch {
-    /* ignore */
-  }
   const name = String(formData.get("name") ?? "");
   const visibility = resolveVisibility(formData);
   // public 模型 name 全局唯一(应用层校验,避免多 admin 建同名 public)。
@@ -318,8 +317,7 @@ export async function createModel(formData: FormData) {
     visibility,
     name,
     displayName: String(formData.get("displayName") ?? "") || null,
-    vendor: String(formData.get("vendor") ?? "") || null,
-    capabilities,
+    catalogId: String(formData.get("catalogId") ?? ""),
     enabled: true,
     systemPrompt: String(formData.get("systemPrompt") ?? "") || null,
     description: String(formData.get("description") ?? "") || null,
@@ -352,25 +350,17 @@ export async function createRoute(modelIdOrFormData: string | FormData, formData
   revalidatePath("/admin", "layout");
 }
 
-/** 更新模型(支持改全部展示/能力字段)。 */
+/** 更新模型。能力由所选模型模板实时提供。 */
 export async function updateModel(id: string, formData: FormData) {
   const admin = await requireAdmin();
   const db = await getDb();
   const existing = await assertModelManageable(db, id, admin.id);
-  const capsRaw = String(formData.get("capabilities") ?? "{}");
-  let capabilities = {};
-  try {
-    capabilities = JSON.parse(capsRaw);
-  } catch {
-    /* ignore */
-  }
   const patch: Record<string, unknown> = {
     name: String(formData.get("name") ?? ""),
     displayName: String(formData.get("displayName") ?? "") || null,
-    vendor: String(formData.get("vendor") ?? "") || null,
+    catalogId: String(formData.get("catalogId") ?? ""),
     systemPrompt: String(formData.get("systemPrompt") ?? "") || null,
     description: String(formData.get("description") ?? "") || null,
-    capabilities,
     updatedAt: new Date(),
   };
   // visibility 仅在显式提供时更新(发布开关,阶段4 UI)

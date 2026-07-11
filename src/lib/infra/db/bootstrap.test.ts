@@ -118,6 +118,15 @@ describe("bootstrapDatabase", () => {
       role: "admin",
       status: "active",
     });
+
+    await expect(
+      db.insert(schema.user).values({
+        id: "second-admin",
+        name: "Second Admin",
+        email: "second-admin@nekusora.local",
+        role: "admin",
+      }),
+    ).rejects.toThrow();
   });
 });
 

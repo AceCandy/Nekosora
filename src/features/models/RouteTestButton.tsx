@@ -68,8 +68,8 @@ function ResultBadge({ result }: { result: ProbeResult }) {
   const t = useTranslations("models");
   if (result.ok) {
     return (
-      <Badge variant="success" title={result.error}>
-        {t("keyValid")}{result.latencyMs != null ? ` ${result.latencyMs}ms` : ""}
+      <Badge variant="success" title={result.nonStreamError}>
+        {t("keyValid")}{result.mode === "stream" ? ` · ${t("streamOnly")}` : ""}{result.latencyMs != null ? ` ${result.latencyMs}ms` : ""}
       </Badge>
     );
   }

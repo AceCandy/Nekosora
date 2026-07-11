@@ -18,7 +18,8 @@
   - `401/403` → `auth` 失败(key 无效/无权限)
   - `5xx` → `unknown` 失败(上游异常,不误导成密钥错)
   - 其余(2xx/3xx/400/404)→ 连通。`/models` 端点缺失(404)或格式不规范(400)不阻塞 key 判定(对齐 AQBot: valid key → 200/400, invalid → 401/403)。
-- **传 upstreamModelName(测具体模型可用性)** → 极小 `generateText`(`maxOutputTokens:1`),验证 模型 + key + 协议构建 全链路。对应全局 `testRoute(routeId)` 与个人 BYO `testMyRoute(routeId)`(BYO 已统一为多路由,按路由测;原按 modelId 的 `testMyModel` 已移除)。
+- **传 upstreamModelName(测具体模型可用性)** → 先用极小 `generateText`(`maxOutputTokens:1`)测非流式；非流式出现非鉴权、非网络失败时再用 `streamText` 完整消费流复核。任一模式成功即路由可用，结果用 `mode` 标明通过方式并保留 `nonStreamError`。鉴权或网络失败不重复请求。
+- 流式兼容性属于 route/provider 组合，不写入模型目录。禁止从模型名推断 stream 支持，也禁止把所有模型强制改为流式测试。
 
 ### 4. 为什么验证 key 不发生成请求
 聚合中转站(`/models` 列表第一个常是 voice/image 等非 chat 模型)发 chat 会触发计费或 `model_not_found`,把有效 key 误判成无效(实测 zen-ai.top:`/models` 第一个是 `advanced-voice`,发 chat 撞 quota 403)。`/models` 同样走协议鉴权头,401/403 即 key 问题,足以判定连通性且不产生计费、不依赖具体模型。

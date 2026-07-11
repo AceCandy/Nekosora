@@ -19,6 +19,8 @@ import {
 import { sql } from "drizzle-orm";
 import type {
   ModelCapabilities,
+  ModelDefaultParams,
+  ModelType,
   ContextPolicy,
   TokenUsage,
   ProcessTrace,
@@ -28,22 +30,29 @@ import type {
 // Better Auth 认证表(admin 插件 + 自定义 status)
 // ===========================================================================
 
-export const user = pgTable("user", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  email: text("email").notNull().unique(),
-  emailVerified: boolean("email_verified").notNull().default(false),
-  image: text("image"),
-  // admin 插件
-  role: text("role").notNull().default("user"), // "user" | "admin"
-  banned: boolean("banned").notNull().default(false),
-  banReason: text("ban_reason"),
-  banExpires: timestamp("ban_expires", { withTimezone: true }),
-  // 自定义
-  status: text("status").notNull().default("active"), // "active" | "disabled"
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+export const user = pgTable(
+  "user",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    email: text("email").notNull().unique(),
+    emailVerified: boolean("email_verified").notNull().default(false),
+    image: text("image"),
+    // admin 插件
+    role: text("role").notNull().default("user"), // "user" | "admin"
+    banned: boolean("banned").notNull().default(false),
+    banReason: text("ban_reason"),
+    banExpires: timestamp("ban_expires", { withTimezone: true }),
+    // 自定义
+    status: text("status").notNull().default("active"), // "active" | "disabled"
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // 仅 admin 行进入索引,从数据库层确保全局只有一个管理员。
+    uniqueIndex("user_single_admin_unique_idx").on(t.role).where(sql`${t.role} = 'admin'`),
+  ],
+);
 
 export const session = pgTable("session", {
   id: text("id").primaryKey(),
@@ -135,6 +144,29 @@ export const providerProtocol = pgEnum("provider_protocol", [
 ]);
 export const modelVisibility = pgEnum("model_visibility", ["public", "private"]);
 
+export const modelCatalog = pgTable(
+  "model_catalog",
+  {
+    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
+    name: text("name").notNull(),
+    canonicalModelId: text("canonical_model_id").notNull(),
+    aliases: jsonb("aliases").$type<string[]>().notNull().default([]),
+    modelType: text("model_type").$type<ModelType>().notNull(),
+    capabilities: jsonb("capabilities").$type<ModelCapabilities>().notNull().default({}),
+    defaultParams: jsonb("default_params").$type<ModelDefaultParams>().notNull().default({}),
+    contextWindow: integer("context_window"),
+    maxOutputTokens: integer("max_output_tokens"),
+    enabled: boolean("enabled").notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("model_catalog_canonical_model_id_unique_idx").on(t.canonicalModelId),
+    index("model_catalog_enabled_sort_idx").on(t.enabled, t.sortOrder),
+  ],
+);
+
 export const providers = pgTable(
   "providers",
   {
@@ -176,9 +208,10 @@ export const models = pgTable(
     visibility: modelVisibility("visibility").notNull().default("private"), // public=admin 发布给所有人 WebChat 可选;private=仅 owner
     name: text("name").notNull(), // 对外模型名(用户/调用方看到)
     displayName: text("display_name"),
-    vendor: text("vendor"),
+    catalogId: text("catalog_id")
+      .notNull()
+      .references(() => modelCatalog.id, { onDelete: "restrict" }),
     icon: text("icon"),
-    capabilities: jsonb("capabilities").$type<ModelCapabilities>().notNull().default({}),
     systemPrompt: text("system_prompt"),
     description: text("description"),
     enabled: boolean("enabled").notNull().default(true),
@@ -189,6 +222,7 @@ export const models = pgTable(
   (t) => [
     index("models_owner_idx").on(t.ownerUserId),
     index("models_visibility_idx").on(t.visibility),
+    index("models_catalog_idx").on(t.catalogId),
     uniqueIndex("models_owner_name_idx").on(t.ownerUserId, t.name),
   ],
 );
@@ -317,7 +351,6 @@ export const runs = pgTable("runs", {
   upstreamId: text("upstream_id"),
   platformModelName: text("platform_model_name"),
   routedBindingCode: text("routed_binding_code"),
-  modelVendor: text("model_vendor"),
   firstTokenLatencyMs: integer("first_token_latency_ms"),
   tokenUsage: jsonb("token_usage").$type<TokenUsage>(),
   status: text("status").notNull().default("running"),

@@ -18,7 +18,7 @@
  *   - anthropic:    x-api-key + anthropic-version,GET {base}/models
  *   - gemini:       key 在 query param,GET {base}/models?key=...
  */
-import { generateText } from "ai";
+import { generateText, streamText } from "ai";
 import { buildLanguageModelWithKey } from "@/lib/providers/registry";
 import { isKeyAuthError } from "@/lib/stream";
 import type { ResolvedRoute } from "@/lib/providers/types";
@@ -33,6 +33,8 @@ export interface ProbeResult {
   error?: string;
   /** 失败分类,便于 UI 给出针对性提示。 */
   errorKind?: "auth" | "network" | "unknown";
+  mode?: "non-stream" | "stream";
+  nonStreamError?: string;
 }
 
 /** 拉取到的上游模型条目(统一为 OpenAI 风格的 id)。 */
@@ -158,14 +160,14 @@ async function probeModelAvailability(opts: {
     routeId: "__probe__",
   };
   const startedAt = Date.now();
+  const model = buildLanguageModelWithKey(route, apiKey);
   try {
-    const model = buildLanguageModelWithKey(route, apiKey);
     await generateText({
       model,
       prompt: "hi",
       maxOutputTokens: 1,
     });
-    return { ok: true, latencyMs: Date.now() - startedAt };
+    return { ok: true, latencyMs: Date.now() - startedAt, mode: "non-stream" };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     const errorKind: ProbeResult["errorKind"] = isKeyAuthError(err)
@@ -173,12 +175,33 @@ async function probeModelAvailability(opts: {
       : isNetworkError(err)
         ? "network"
         : "unknown";
-    return {
-      ok: false,
-      latencyMs: Date.now() - startedAt,
-      error: msg,
-      errorKind,
-    };
+    if (errorKind === "auth" || errorKind === "network") {
+      return { ok: false, latencyMs: Date.now() - startedAt, error: msg, errorKind };
+    }
+    try {
+      let streamError: unknown;
+      const result = streamText({ model, prompt: "hi", maxOutputTokens: 8 });
+      await result.consumeStream({ onError: (error) => { streamError = error; } });
+      if (streamError) throw streamError;
+      return {
+        ok: true,
+        latencyMs: Date.now() - startedAt,
+        mode: "stream",
+        nonStreamError: msg,
+      };
+    } catch (streamErr) {
+      const streamMsg = streamErr instanceof Error ? streamErr.message : String(streamErr);
+      return {
+        ok: false,
+        latencyMs: Date.now() - startedAt,
+        error: `非流式: ${msg}; 流式: ${streamMsg}`,
+        errorKind: isKeyAuthError(streamErr)
+          ? "auth"
+          : isNetworkError(streamErr)
+            ? "network"
+            : "unknown",
+      };
+    }
   }
 }
 

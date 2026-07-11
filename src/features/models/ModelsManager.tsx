@@ -38,7 +38,8 @@ export interface ModelItem {
   id: string;
   name: string;
   displayName?: string;
-  vendor?: string | null;
+  catalogId: string;
+  catalogName: string;
   visibility?: string;
   enabled: boolean;
   systemPrompt?: string | null;
@@ -65,12 +66,20 @@ export interface ProviderOption {
   name: string;
 }
 
+type ModelVisibility = "public" | "private";
+
+export interface ModelVisibilityActions {
+  publish: FormDataSerializableAction;
+  makePrivate: FormDataSerializableAction;
+}
+
 interface ModelsManagerProps {
   /** admin 可见 visibility 列 + 「发布到全局」开关;普通用户恒 private,不显示该列。 */
   isAdmin?: boolean;
   models: ModelItem[];
   routes?: RouteItem[];
   providers?: ProviderOption[];
+  catalog?: ModelCatalogOption[];
 
   createAction: FormDataSerializableAction;
   updateActions: Record<string, FormDataSerializableAction>;
@@ -86,6 +95,17 @@ interface ModelsManagerProps {
   testRouteActions?: Record<string, RouteTestAction>;
   /** 拖动重排 action(全局/个人模型均可传入);不传则表格不启用拖动。 */
   reorderAction?: (orderedIds: string[]) => void | Promise<void>;
+  /** 管理员按可见性分组重排的 action。 */
+  groupedReorderAction?: (visibility: ModelVisibility, orderedIds: string[]) => void | Promise<void>;
+  /** 管理员列表中的发布/收回 action(按模型 id 索引)。 */
+  visibilityActions?: Record<string, ModelVisibilityActions>;
+}
+
+export interface ModelCatalogOption {
+  id: string;
+  name: string;
+  modelType: string;
+  capabilities: ModelCapabilities;
 }
 
 export default function ModelsManager({
@@ -93,6 +113,7 @@ export default function ModelsManager({
   models,
   routes,
   providers,
+  catalog = [],
   createAction,
   updateActions,
   deleteActions,
@@ -104,15 +125,18 @@ export default function ModelsManager({
   fetchModelsAction,
   testRouteActions,
   reorderAction,
+  groupedReorderAction,
+  visibilityActions,
 }: ModelsManagerProps) {
   const t = useTranslations("models");
   // visibility 列仅 admin 可见;普通用户模型恒 private,不显示该列。
   const showVisibility = isAdmin;
-  // 所有模型均可拖动(需 reorderAction + sortOrder 链路)。
-  const reorderable = Boolean(reorderAction);
+  const groupedReorderable = isAdmin && Boolean(groupedReorderAction);
+  const reorderable = Boolean(reorderAction || groupedReorderAction);
   const [addOpen, setAddOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [publishId, setPublishId] = useState<string | null>(null);
   const [expandedModel, setExpandedModel] = useState<string | null>(null);
 
   const [routeAddModelId, setRouteAddModelId] = useState<string | null>(null);
@@ -120,14 +144,19 @@ export default function ModelsManager({
   const [routeDeleteId, setRouteDeleteId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
-  // 乐观顺序:拖动时立即按新 id 顺序重排渲染,revalidate 后自动对齐真实数据(顺序一致)。
+  // 乐观顺序:分组拖动只重排所属可见性分组,revalidate 后自动对齐真实数据。
   const [optimisticModels, setOptimisticModels] = useOptimistic(
     models,
-    (state, orderedIds: string[]) => {
+    (state, update: { orderedIds: string[]; visibility?: ModelVisibility }) => {
       const map = new Map(state.map((m) => [m.id, m]));
-      return orderedIds
+      const ordered = update.orderedIds
         .map((id) => map.get(id))
         .filter((m): m is ModelItem => Boolean(m));
+      if (!update.visibility) return ordered;
+      const other = state.filter(
+        (model) => (model.visibility === "public" ? "public" : "private") !== update.visibility,
+      );
+      return update.visibility === "private" ? [...ordered, ...other] : [...other, ...ordered];
     },
   );
 
@@ -137,17 +166,22 @@ export default function ModelsManager({
 
   const editing = optimisticModels.find((m) => m.id === editId) ?? null;
   const deleting = optimisticModels.find((m) => m.id === deleteId) ?? null;
+  const publishing = optimisticModels.find((m) => m.id === publishId) ?? null;
   const routeEditing = routes?.find((r) => r.id === routeEditId) ?? null;
   const routeDeleting = routes?.find((r) => r.id === routeDeleteId) ?? null;
 
   // 列数:基础列(showVisibility ? 7 : 6)+ 拖动手柄列(可拖动时 +1)。空态 / 展开行 colSpan 用此值。
   const colCount = (showVisibility ? 7 : 6) + (reorderable ? 1 : 0);
 
-  function handleDragEnd(event: DragEndEvent) {
-    if (!reorderAction) return;
+  function handleDragEnd(
+    event: DragEndEvent,
+    groupModels: ModelItem[],
+    visibility?: ModelVisibility,
+  ) {
+    if (visibility ? !groupedReorderAction : !reorderAction) return;
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const ids = optimisticModels.map((m) => m.id);
+    const ids = groupModels.map((m) => m.id);
     const oldIndex = ids.indexOf(String(active.id));
     const newIndex = ids.indexOf(String(over.id));
     if (oldIndex === -1 || newIndex === -1) return;
@@ -156,102 +190,117 @@ export default function ModelsManager({
     // 乐观态持续到 revalidate 送回真实数据(顺序一致),避免「新序→旧序→新序」闪动。
     // 与本仓所有 startTransition(async () => await ...Action()) 约定一致。
     startTransition(async () => {
-      setOptimisticModels(newIds);
-      await reorderAction(newIds);
+      setOptimisticModels({ orderedIds: newIds, visibility });
+      if (visibility) await groupedReorderAction!(visibility, newIds);
+      else await reorderAction!(newIds);
     });
   }
 
-  const tableEl = (
-    <div className="rounded-lg border border-morning-mist dark:border-deep-space bg-nebula-white dark:bg-twilight-obsidian overflow-hidden transition-colors duration-150">
-      <table className="w-full text-sm border-collapse text-left">
-        <thead className="bg-neutral-50/70 dark:bg-neutral-900/50 border-b border-morning-mist dark:border-deep-space text-neutral-500 dark:text-neutral-400 font-mono text-xs uppercase">
-          <tr>
-            {reorderable && <th className="p-3.5 w-8" />}
-            <th className="p-3.5 font-medium">{t("colExternalName")}</th>
-            <th className="p-3.5 font-medium">{t("colDisplayName")}</th>
-            <th className="p-3.5 font-medium">{t("colVendor")}</th>
-            {showVisibility && <th className="p-3.5 font-medium">{t("colVisibility")}</th>}
-            <th className="p-3.5 font-medium text-center">{t("colRouteCount")}</th>
-            <th className="p-3.5 font-medium">{t("colStatus")}</th>
-            <th className="p-3.5 font-medium text-right">{t("colActions")}</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800/60">
-          {optimisticModels.length === 0 ? (
+  function renderTable(groupModels: ModelItem[], visibility?: ModelVisibility) {
+    const tableReorderable = Boolean(visibility ? groupedReorderAction : reorderAction);
+    const table = (
+      <div className="rounded-lg border border-morning-mist dark:border-deep-space bg-nebula-white dark:bg-twilight-obsidian overflow-hidden transition-colors duration-150">
+        <table className="w-full text-sm border-collapse text-left">
+          <thead className="bg-neutral-50/70 dark:bg-neutral-900/50 border-b border-morning-mist dark:border-deep-space text-neutral-500 dark:text-neutral-400 font-mono text-xs uppercase">
             <tr>
-              <td
-                colSpan={colCount}
-                className="p-10 text-center text-xs text-neutral-400 dark:text-neutral-500"
-              >
-                {t("emptyState")}
-              </td>
+              {reorderable && <th className="p-3.5 w-8" />}
+              <th className="p-3.5 font-medium">{t("colExternalName")}</th>
+              <th className="p-3.5 font-medium">{t("colDisplayName")}</th>
+              <th className="p-3.5 font-medium">{t("catalogLabel")}</th>
+              {showVisibility && <th className="p-3.5 font-medium">{t("colVisibility")}</th>}
+              <th className="p-3.5 font-medium text-center">{t("colRouteCount")}</th>
+              <th className="p-3.5 font-medium">{t("colStatus")}</th>
+              <th className="p-3.5 font-medium text-right">{t("colActions")}</th>
             </tr>
-          ) : reorderable ? (
-            <SortableContext items={optimisticModels.map((m) => m.id)} strategy={verticalListSortingStrategy}>
-              {optimisticModels.map((m) => {
-                const modelRoutes = routes?.filter((r) => r.modelId === m.id) ?? [];
-                const expanded = expandedModel === m.id;
-                return (
-                  <SortableModelRow
-                    key={m.id}
-                    model={m}
-                    routes={modelRoutes}
-                    hasVisibility={showVisibility}
-                    routeCount={modelRoutes.length}
-                    expanded={expanded}
-                    colSpan={colCount}
-                    onToggleExpand={() => setExpandedModel(expanded ? null : m.id)}
-                    onEdit={() => setEditId(m.id)}
-                    onDelete={() => setDeleteId(m.id)}
-                    toggleAction={toggleActions[m.id]}
-                    onAddRoute={() => setRouteAddModelId(m.id)}
-                    onEditRoute={(rid) => setRouteEditId(rid)}
-                    onDeleteRoute={(rid) => setRouteDeleteId(rid)}
-                    routeToggleActions={toggleRouteActions}
-                    testRouteActions={testRouteActions}
-                    fetchModelsAction={fetchModelsAction}
-                  />
-                );
-              })}
-            </SortableContext>
-          ) : (
-            optimisticModels.map((m) => {
-              const modelRoutes = routes?.filter((r) => r.modelId === m.id) ?? [];
-              const expanded = expandedModel === m.id;
-              return (
-                <Fragment key={m.id}>
-                  <tr className="hover:bg-neutral-50/50 dark:hover:bg-neutral-900/10 transition-colors duration-150">
-                    <ModelRowCells
+          </thead>
+          <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800/60">
+            {groupModels.length === 0 ? (
+              <tr>
+                <td colSpan={colCount} className="p-10 text-center text-xs text-neutral-400 dark:text-neutral-500">
+                  {visibility ? t("emptyGroup") : t("emptyState")}
+                </td>
+              </tr>
+            ) : tableReorderable ? (
+              <SortableContext items={groupModels.map((m) => m.id)} strategy={verticalListSortingStrategy}>
+                {groupModels.map((m) => {
+                  const modelRoutes = routes?.filter((r) => r.modelId === m.id) ?? [];
+                  const expanded = expandedModel === m.id;
+                  return (
+                    <SortableModelRow
+                      key={m.id}
                       model={m}
+                      routes={modelRoutes}
                       hasVisibility={showVisibility}
+                      visibilityAction={visibilityActions?.[m.id]}
                       routeCount={modelRoutes.length}
                       expanded={expanded}
+                      colSpan={colCount}
                       onToggleExpand={() => setExpandedModel(expanded ? null : m.id)}
+                      onPublish={() => setPublishId(m.id)}
                       onEdit={() => setEditId(m.id)}
                       onDelete={() => setDeleteId(m.id)}
                       toggleAction={toggleActions[m.id]}
-                    />
-                  </tr>
-                  {expanded && (
-                    <RouteExpandRow
-                      colSpan={colCount}
-                      routes={modelRoutes}
-                      onAdd={() => setRouteAddModelId(m.id)}
-                      onEdit={(rid) => setRouteEditId(rid)}
-                      onDelete={(rid) => setRouteDeleteId(rid)}
-                      toggleActions={toggleRouteActions}
-                      testActions={testRouteActions}
+                      onAddRoute={() => setRouteAddModelId(m.id)}
+                      onEditRoute={(rid) => setRouteEditId(rid)}
+                      onDeleteRoute={(rid) => setRouteDeleteId(rid)}
+                      routeToggleActions={toggleRouteActions}
+                      testRouteActions={testRouteActions}
                       fetchModelsAction={fetchModelsAction}
                     />
-                  )}
-                </Fragment>
-              );
-            })
-          )}
-        </tbody>
-      </table>
-    </div>
-  );
+                  );
+                })}
+              </SortableContext>
+            ) : (
+              groupModels.map((m) => {
+                const modelRoutes = routes?.filter((r) => r.modelId === m.id) ?? [];
+                const expanded = expandedModel === m.id;
+                return (
+                  <Fragment key={m.id}>
+                    <tr className="hover:bg-neutral-50/50 dark:hover:bg-neutral-900/10 transition-colors duration-150">
+                      <ModelRowCells
+                        model={m}
+                        hasVisibility={showVisibility}
+                        visibilityAction={visibilityActions?.[m.id]}
+                        routeCount={modelRoutes.length}
+                        expanded={expanded}
+                        onToggleExpand={() => setExpandedModel(expanded ? null : m.id)}
+                        onPublish={() => setPublishId(m.id)}
+                        onEdit={() => setEditId(m.id)}
+                        onDelete={() => setDeleteId(m.id)}
+                        toggleAction={toggleActions[m.id]}
+                      />
+                    </tr>
+                    {expanded && (
+                      <RouteExpandRow
+                        colSpan={colCount}
+                        routes={modelRoutes}
+                        onAdd={() => setRouteAddModelId(m.id)}
+                        onEdit={(rid) => setRouteEditId(rid)}
+                        onDelete={(rid) => setRouteDeleteId(rid)}
+                        toggleActions={toggleRouteActions}
+                        testActions={testRouteActions}
+                        fetchModelsAction={fetchModelsAction}
+                      />
+                    )}
+                  </Fragment>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    );
+    return tableReorderable ? (
+      <DndContext
+        id={visibility ? `models-${visibility}-sortable` : "models-sortable"}
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={(event) => handleDragEnd(event, groupModels, visibility)}
+      >
+        {table}
+      </DndContext>
+    ) : table;
+  }
 
   return (
     <div className="space-y-4">
@@ -270,12 +319,23 @@ export default function ModelsManager({
         </Button>
       </div>
 
-      {reorderable ? (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          {tableEl}
-        </DndContext>
+      {groupedReorderable ? (
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h2 className="text-sm font-semibold text-neutral-800 dark:text-neutral-200">
+              {t("privateGroup")}
+            </h2>
+            {renderTable(optimisticModels.filter((model) => model.visibility !== "public"), "private")}
+          </section>
+          <section className="space-y-2">
+            <h2 className="text-sm font-semibold text-neutral-800 dark:text-neutral-200">
+              {t("publicGroup")}
+            </h2>
+            {renderTable(optimisticModels.filter((model) => model.visibility === "public"), "public")}
+          </section>
+        </div>
       ) : (
-        tableEl
+        renderTable(optimisticModels)
       )}
 
       <ModelFormDialog
@@ -284,6 +344,7 @@ export default function ModelsManager({
         mode="add"
         isAdmin={isAdmin}
         action={createAction}
+        catalog={catalog}
       />
       {editing && (
         <ModelFormDialog
@@ -291,16 +352,17 @@ export default function ModelsManager({
           onClose={() => setEditId(null)}
           mode="edit"
           isAdmin={isAdmin}
+          visibilityManagedInList={Boolean(visibilityActions)}
           action={updateActions[editing.id]}
           initial={{
             name: editing.name,
             displayName: editing.displayName,
-            vendor: editing.vendor ?? "",
+            catalogId: editing.catalogId,
             visibility: editing.visibility as "public" | "private",
             systemPrompt: editing.systemPrompt ?? "",
             description: editing.description ?? "",
-            capabilities: editing.capabilities ?? {},
           } satisfies ModelInitial}
+          catalog={catalog}
         />
       )}
 
@@ -353,6 +415,18 @@ export default function ModelsManager({
         />
       )}
 
+      {publishing && visibilityActions?.[publishing.id] && (
+        <ConfirmDialog
+          open={true}
+          onClose={() => setPublishId(null)}
+          title={t("publishModelTitle")}
+          message={t("publishModelConfirm", { name: publishing.name })}
+          confirmLabel={t("confirmPublish")}
+          danger={false}
+          action={visibilityActions[publishing.id].publish}
+        />
+      )}
+
       {routeDeleting && deleteRouteActions?.[routeDeleting.id] && (
         <ConfirmDialog
           open={true}
@@ -378,22 +452,26 @@ export default function ModelsManager({
   );
 }
 
-/** 模型主行的内容单元格(名称/显示名/厂商/可见性/路由数/状态/操作)。拖动手柄由外层行组件提供。 */
+/** 模型主行的内容单元格。拖动手柄由外层行组件提供。 */
 function ModelRowCells({
   model,
   hasVisibility,
+  visibilityAction,
   routeCount,
   expanded,
   onToggleExpand,
+  onPublish,
   onEdit,
   onDelete,
   toggleAction,
 }: {
   model: ModelItem;
   hasVisibility: boolean;
+  visibilityAction?: ModelVisibilityActions;
   routeCount: number;
   expanded: boolean;
   onToggleExpand: () => void;
+  onPublish: () => void;
   onEdit: () => void;
   onDelete: () => void;
   toggleAction: FormDataSerializableAction;
@@ -407,20 +485,45 @@ function ModelRowCells({
       <td className="p-3.5 text-xs text-neutral-600 dark:text-neutral-300">
         {model.displayName ?? "-"}
       </td>
-      <td className="p-3.5 text-xs">
-        {model.vendor ? (
-          <Badge variant="neutral" className="font-mono text-[10px]">
-            {model.vendor}
-          </Badge>
-        ) : (
-          "-"
-        )}
+      <td className="p-3.5 text-xs text-neutral-600 dark:text-neutral-300">
+        {model.catalogName}
       </td>
       {hasVisibility && (
         <td className="p-3.5 text-xs">
-          <Badge variant={model.visibility === "public" ? "success" : "warning"}>
-            {model.visibility === "public" ? t("visibilityPublic") : t("visibilityPrivate")}
-          </Badge>
+          {visibilityAction ? (
+            model.visibility === "public" ? (
+              <form action={visibilityAction.makePrivate} className="inline-flex rounded-md border border-morning-mist dark:border-deep-space overflow-hidden" aria-label={t("visibilityLabel")}>
+                <button
+                  type="submit"
+                  className="px-2.5 py-1.5 text-[11px] font-medium text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sora-blue"
+                  title={t("makePrivate")}
+                >
+                  {t("visibilityPrivate")}
+                </button>
+                <span className="px-2.5 py-1.5 text-[11px] font-semibold bg-sora-blue text-white" aria-current="true">
+                  {t("visibilityPublic")}
+                </span>
+              </form>
+            ) : (
+              <div className="inline-flex rounded-md border border-morning-mist dark:border-deep-space overflow-hidden" aria-label={t("visibilityLabel")}>
+                <span className="px-2.5 py-1.5 text-[11px] font-semibold bg-neutral-800 text-white dark:bg-neutral-100 dark:text-neutral-900" aria-current="true">
+                  {t("visibilityPrivate")}
+                </span>
+                <button
+                  type="button"
+                  onClick={onPublish}
+                  className="px-2.5 py-1.5 text-[11px] font-medium text-neutral-500 hover:bg-blue-50 hover:text-sora-blue dark:text-neutral-400 dark:hover:bg-blue-950/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sora-blue"
+                  title={t("publishModel")}
+                >
+                  {t("visibilityPublic")}
+                </button>
+              </div>
+            )
+          ) : (
+            <Badge variant={model.visibility === "public" ? "success" : "warning"}>
+              {model.visibility === "public" ? t("visibilityPublic") : t("visibilityPrivate")}
+            </Badge>
+          )}
         </td>
       )}
       <td className="p-3.5 text-center font-mono text-xs">
@@ -541,10 +644,12 @@ function SortableModelRow({
   model,
   routes,
   hasVisibility,
+  visibilityAction,
   routeCount,
   expanded,
   colSpan,
   onToggleExpand,
+  onPublish,
   onEdit,
   onDelete,
   toggleAction,
@@ -558,10 +663,12 @@ function SortableModelRow({
   model: ModelItem;
   routes: RouteItem[];
   hasVisibility: boolean;
+  visibilityAction?: ModelVisibilityActions;
   routeCount: number;
   expanded: boolean;
   colSpan: number;
   onToggleExpand: () => void;
+  onPublish: () => void;
   onEdit: () => void;
   onDelete: () => void;
   toggleAction: FormDataSerializableAction;
@@ -602,9 +709,11 @@ function SortableModelRow({
         <ModelRowCells
           model={model}
           hasVisibility={hasVisibility}
+          visibilityAction={visibilityAction}
           routeCount={routeCount}
           expanded={expanded}
           onToggleExpand={onToggleExpand}
+          onPublish={onPublish}
           onEdit={onEdit}
           onDelete={onDelete}
           toggleAction={toggleAction}

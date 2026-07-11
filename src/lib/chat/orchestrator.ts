@@ -108,8 +108,9 @@ export async function prepareChatContext(
     // 优先 by id(无重名歧义);缺省回退 by name。
     const [modelRow] = modelId
       ? await db
-          .select()
+          .select({ capabilities: s.modelCatalog.capabilities })
           .from(s.models)
+          .innerJoin(s.modelCatalog, eq(s.models.catalogId, s.modelCatalog.id))
           .where(
             and(
               eq(s.models.id, modelId),
@@ -119,8 +120,9 @@ export async function prepareChatContext(
           )
           .limit(1)
       : await db
-          .select()
+          .select({ capabilities: s.modelCatalog.capabilities })
           .from(s.models)
+          .innerJoin(s.modelCatalog, eq(s.models.catalogId, s.modelCatalog.id))
           .where(
             and(
               eq(s.models.name, model),

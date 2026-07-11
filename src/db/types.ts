@@ -11,7 +11,6 @@ export type ReasoningLevel = "off" | ThinkingLevel;
 export type ThinkingLevelMap = Partial<Record<ThinkingLevel, string | null>>;
 
 export interface ModelCapabilities {
-  stream?: boolean;
   tools?: boolean;
   vision?: boolean;
   systemPrompt?: boolean;
@@ -24,6 +23,15 @@ export interface ModelCapabilities {
   audioTranscription?: boolean;
   /** P1-D:文字转语音(TTS 兼容)。 */
   audioSynthesis?: boolean;
+}
+
+export type ModelType = "chat" | "image" | "embedding" | "rerank" | "audio";
+
+export interface ModelDefaultParams {
+  temperature?: number | null;
+  topP?: number | null;
+  maxOutputTokens?: number | null;
+  reasoningProfile?: string | null;
 }
 
 export interface ContextPolicy {
