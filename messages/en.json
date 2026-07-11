@@ -656,6 +656,7 @@
     "catalogLabel": "Model template",
     "catalogAutoMatch": "Auto-match (select one if no match)",
     "catalogPreview": "Preview",
+    "catalogMatchFailedHint": "No matching model template. Pick one from the dropdown before creating.",
     "catalogDetail": {
       "capabilities": "Capabilities",
       "reasoning": "Reasoning",

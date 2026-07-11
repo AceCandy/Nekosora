@@ -656,6 +656,7 @@
     "catalogLabel": "模型模板",
     "catalogAutoMatch": "自动匹配（匹配不到时请选择）",
     "catalogPreview": "预览",
+    "catalogMatchFailedHint": "未匹配到模型模板，请在左侧下拉手动选择模板后再创建。",
     "catalogDetail": {
       "capabilities": "能力",
       "reasoning": "推理",

@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import type { FormDataSerializableAction } from "@/features/providers/types";
 import Modal from "@/shared/ui/Modal";
@@ -54,11 +54,15 @@ export default function ModelFormDialog({
   // catalog 选择需受控:预览按钮据此定位当前模板详情。提交仍读 formData。
   const [catalogId, setCatalogId] = useState(ini?.catalogId ?? "");
   const [previewOpen, setPreviewOpen] = useState(false);
+  // 原生 form action 抛错会被框架吞掉、前端无反馈;此处捕获后保留弹窗并在模板位置提示。
+  const [catalogError, setCatalogError] = useState(false);
+  const [pending, startTransition] = useTransition();
   const previewCatalog = catalog.find((c) => c.id === catalogId);
 
   const handleClose = () => {
     onClose();
     setFormKey((k) => k + 1);
+    setCatalogError(false);
   };
 
   const title = isEdit ? t("editModel") : t("addModel");
@@ -67,8 +71,21 @@ export default function ModelFormDialog({
     <Modal open={open} onClose={handleClose} title={title}>
       <form
         key={formKey}
-        action={action}
-        onSubmit={() => setTimeout(handleClose, 0)}
+        onSubmit={(e) => {
+          e.preventDefault();
+          // 同步读取 formData:异步回调里 currentTarget 已被清空。
+          const fd = new FormData(e.currentTarget);
+          setCatalogError(false);
+          startTransition(async () => {
+            try {
+              await action(fd);
+              handleClose();
+            } catch {
+              // server action 抛错(如模板未匹配):保留弹窗,在模板选择处提示。
+              setCatalogError(true);
+            }
+          });
+        }}
         className="space-y-5"
       >
         <div className="grid grid-cols-2 gap-4">
@@ -133,6 +150,11 @@ export default function ModelFormDialog({
                 {previewCatalog && <CatalogDetailCard catalog={previewCatalog} />}
               </Popover>
             </div>
+            {catalogError && (
+              <p className="mt-1.5 text-xs leading-normal text-red-600 dark:text-red-400">
+                {t("catalogMatchFailedHint")}
+              </p>
+            )}
           </label>
 
           {isAdmin && (!isEdit || !visibilityManagedInList) && (
@@ -186,6 +208,8 @@ export default function ModelFormDialog({
           <Button
             type="submit"
             variant="contrast"
+            loading={pending}
+            disabled={pending}
             className="px-4 py-2 text-xs font-semibold"
           >
             {isEdit ? t("save") : t("create")}
