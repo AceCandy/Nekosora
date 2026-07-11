@@ -6,7 +6,7 @@ import type { ChatMessage } from "@/features/chat/model/types";
 
 /** 一轮对话:user 消息及其在扁平列表中的下标。 */
 interface OutlineTurn {
-  /** 该轮 user 消息在扁平 messages 数组中的下标,用作跳转 DOM 锚点 msg-{index}。 */
+  /** 该轮 user 消息在扁平 messages 数组中的下标,供虚拟列表 scrollToIndex 跳转。 */
   userIndex: number;
   /** 用户原话,用于预览。 */
   preview: string;
@@ -30,13 +30,15 @@ interface ChatOutlineProps {
   streaming: boolean;
   /** 当前视口顶部对应的 msg index,-1 表示未知;用于高亮「当前轮次」。 */
   activeMessageIndex: number;
+  /** 点击某轮时上报其 userIndex,由持有虚拟列表的父组件 scrollToIndex 跳转。 */
+  onJump?: (userIndex: number) => void;
 }
 
 /**
  * 对话大纲:贴滚动区右边缘(滚动条左侧)的一列短横线,排布密集。
  * 鼠标 hover 到整列区域即弹出完整轮次列表(每项显示用户原话),点击列表项跳转到对应消息。
  */
-export function ChatOutline({ messages, streaming, activeMessageIndex }: ChatOutlineProps) {
+export function ChatOutline({ messages, streaming, activeMessageIndex, onJump }: ChatOutlineProps) {
   const turns = useMemo(() => buildTurns(messages), [messages]);
   const [hovered, setHovered] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -55,8 +57,7 @@ export function ChatOutline({ messages, streaming, activeMessageIndex }: ChatOut
   if (turns.length === 0) return null;
 
   const handleJump = (userIndex: number) => {
-    const el = document.getElementById(`msg-${userIndex}`);
-    el?.scrollIntoView({ behavior: "smooth", block: "start" });
+    onJump?.(userIndex);
     setHovered(false);
   };
 

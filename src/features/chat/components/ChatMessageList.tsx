@@ -183,7 +183,12 @@ export function ChatMessageList({
       </div>
 
       {/* 对话大纲:贴消息区右边缘(滚动条左侧),hover 整列弹出完整轮次列表 */}
-      <ChatOutline messages={messages} streaming={streaming} activeMessageIndex={activeMessageIndex} />
+      <ChatOutline
+        messages={messages}
+        streaming={streaming}
+        activeMessageIndex={activeMessageIndex}
+        onJump={(idx) => rowVirtualizer.scrollToIndex(idx, { align: "start", behavior: "smooth" })}
+      />
 
       {/* 删除二次确认:删除用户消息会连带其 AI 回复及之后整段子树 */}
       <ConfirmDialog
