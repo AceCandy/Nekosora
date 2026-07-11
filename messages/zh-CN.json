@@ -154,10 +154,14 @@
     "maxTokens": "最大 token",
     "resetDefaults": "恢复默认",
     "reasoning": "推理",
+    "reasoningFixed": "推理: 固定开启",
     "reasoningOff": "推理: 关",
+    "reasoningMinimal": "推理: 最小",
     "reasoningLow": "推理: 低",
     "reasoningMedium": "推理: 中",
-    "reasoningHigh": "推理: 高"
+    "reasoningHigh": "推理: 高",
+    "reasoningXHigh": "推理: 超高",
+    "reasoningMax": "推理: 最大"
   },
   "panel": {
     "title": "控制面板",

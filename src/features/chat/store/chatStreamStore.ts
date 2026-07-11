@@ -5,6 +5,7 @@ import { createConversation, type CreateConversationOptions } from "@/features/c
 import { retryFromMessage, editMessage, getMessageSiblings, softDeleteMessage, continueMessage } from "@/features/chat/actions/branch";
 import { consumeChatSSE, handleStreamError } from "@/features/chat/model/sse";
 import type { ChatMessage, ToolCallRecord } from "@/features/chat/model/types";
+import type { ReasoningLevel } from "@/db/types";
 
 /** 新会话(尚无会话 id)在 store 内使用的隔离键。 */
 export const NEW_CONVERSATION_KEY = "__new__";
@@ -24,7 +25,7 @@ export interface SendOptions {
   instructionCardIds?: string[];
   webSearch?: boolean;
   knowledgeBaseIds?: string[];
-  createOptions?: { outputModeId?: string | null; renderStyleId?: string | null };
+  createOptions?: { outputModeId?: string | null; renderStyleId?: string | null; reasoning?: ReasoningLevel };
 }
 
 interface ChatStreamState {
@@ -183,6 +184,9 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
           webSearch: opts.webSearch,
           cardIds: opts.instructionCardIds,
           kbIds: opts.knowledgeBaseIds,
+          reasoningByModelId: opts.createOptions?.reasoning
+            ? { [opts.modelId]: opts.createOptions.reasoning }
+            : undefined,
         };
         resolvedConvId = await createConversation(opts.model, createOpts);
         newConvId = resolvedConvId;

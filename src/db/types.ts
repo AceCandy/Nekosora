@@ -3,18 +3,37 @@
  * 业务代码统一从 schema 取用。与具体列类型解耦。
  */
 
-/** 推理强度档位(对齐 pi ThinkingLevel 子集,预留 minimal/xhigh 扩展)。 */
-export type ThinkingLevel = "low" | "medium" | "high";
+/** 推理强度档位,与 pi 的完整 ThinkingLevel 对齐。 */
+export type ThinkingLevel = "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 /** 含「关闭」:off=不传 reasoning 参数,回归普通对话。 */
 export type ReasoningLevel = "off" | ThinkingLevel;
-/** per-model 级别→供应商值(字符串,语义随 protocol:openai=effort、anthropic/gemini=token 数)。null/缺省=该档不支持。 */
-export type ThinkingLevelMap = Partial<Record<ThinkingLevel, string | null>>;
+/** per-model 级别→供应商值。null=明确不支持;缺省=使用该格式默认值(xhigh/max 除外)。 */
+export type ThinkingLevelMap = Partial<Record<ReasoningLevel, string | null>>;
+export type ThinkingFormat =
+  | "fixed"
+  | "openai"
+  | "anthropic"
+  | "anthropic-adaptive"
+  | "google"
+  | "openrouter"
+  | "deepseek"
+  | "together"
+  | "zai"
+  | "qwen"
+  | "qwen-chat-template"
+  | "agnes"
+  | "string-thinking"
+  | "ant-ling";
 
 export interface ModelCapabilities {
   tools?: boolean;
   vision?: boolean;
   systemPrompt?: boolean;
   reasoning?: boolean;
+  /** 兼容接口是否接受独立 reasoning_effort;toggle-only 模型保持 false/缺省。 */
+  reasoningEffort?: boolean;
+  /** 模型官方思考参数编码;同一目录模型的全部路由共用。 */
+  thinkingFormat?: ThinkingFormat;
   /** per-model 推理级别映射;缺省按 protocol 默认。仅 reasoning=true 时有意义。 */
   thinkingLevelMap?: ThinkingLevelMap;
   /** P1-D:图像生成(DALL-E / gpt-image 兼容)。 */
@@ -46,8 +65,8 @@ export interface ContextPolicy {
 export interface ComposerState {
   cardIds?: string[];
   kbIds?: string[];
-  /** 推理级别(off/low/medium/high);缺省=off。 */
-  reasoning?: ReasoningLevel;
+  /** 当前会话按具体模型保存推理级别;缺省按模型能力选择默认档。 */
+  reasoningByModelId?: Record<string, ReasoningLevel>;
 }
 
 export interface TokenUsage {

@@ -100,6 +100,7 @@ export interface CreateConversationOptions {
   webSearch?: boolean;
   cardIds?: string[];
   kbIds?: string[];
+  reasoningByModelId?: Record<string, ReasoningLevel>;
 }
 
 /** 创建新会话(可选带入首次发送时的输入区状态)。 */
@@ -115,8 +116,8 @@ export async function createConversation(modelName?: string, options?: CreateCon
       outputModeId: options?.outputModeId ?? null,
       renderStyleId: options?.renderStyleId ?? null,
       webSearch: options?.webSearch ?? false,
-      composerState: options && (options.cardIds?.length || options.kbIds?.length)
-        ? { cardIds: options.cardIds, kbIds: options.kbIds }
+      composerState: options && (options.cardIds?.length || options.kbIds?.length || options.reasoningByModelId)
+        ? { cardIds: options.cardIds, kbIds: options.kbIds, reasoningByModelId: options.reasoningByModelId }
         : null,
     })
     .returning({ id: S().conversations.id });
@@ -163,7 +164,7 @@ export interface ConversationComposerState {
   temperature?: number | null;
   topP?: number | null;
   maxTokens?: number | null;
-  reasoning?: ReasoningLevel | null;
+  reasoningByModelId: Record<string, ReasoningLevel>;
 }
 
 /** 校验当前用户对会话的属主关系,返回是否通过。 */
@@ -229,9 +230,15 @@ export async function setConversationComposerState(
   const user = await requireSession();
   if (!(await assertConversationOwner(conversationId, user.id))) throw new Error("无权操作");
   const db = await getDb();
+  const [conv] = await db
+    .select({ composerState: S().conversations.composerState })
+    .from(S().conversations)
+    .where(eq(S().conversations.id, conversationId))
+    .limit(1);
+  const prev = (conv?.composerState as Record<string, unknown> | null) ?? {};
   await db
     .update(S().conversations)
-    .set({ composerState: state })
+    .set({ composerState: { ...prev, ...state } })
     .where(eq(S().conversations.id, conversationId));
 }
 
@@ -241,7 +248,7 @@ export async function setConversationComposerState(
  */
 export async function setConversationModelParams(
   conversationId: string,
-  params: { temperature?: number | null; topP?: number | null; maxTokens?: number | null; reasoning?: ReasoningLevel | null },
+  params: { temperature?: number | null; topP?: number | null; maxTokens?: number | null },
 ) {
   const user = await requireSession();
   if (!(await assertConversationOwner(conversationId, user.id))) throw new Error("无权操作");
@@ -260,6 +267,31 @@ export async function setConversationModelParams(
   await db
     .update(S().conversations)
     .set({ composerState: next })
+    .where(eq(S().conversations.id, conversationId));
+}
+
+/** 保存当前会话中某个具体模型的推理档位。 */
+export async function setConversationModelReasoning(
+  conversationId: string,
+  modelId: string,
+  reasoning: ReasoningLevel,
+) {
+  const user = await requireSession();
+  if (!(await assertConversationOwner(conversationId, user.id))) throw new Error("无权操作");
+  const db = await getDb();
+  const [conv] = await db
+    .select({ composerState: S().conversations.composerState })
+    .from(S().conversations)
+    .where(eq(S().conversations.id, conversationId))
+    .limit(1);
+  const prev = (conv?.composerState as Record<string, unknown> | null) ?? {};
+  const reasoningByModelId = {
+    ...((prev.reasoningByModelId as Record<string, ReasoningLevel> | undefined) ?? {}),
+    [modelId]: reasoning,
+  };
+  await db
+    .update(S().conversations)
+    .set({ composerState: { ...prev, reasoningByModelId } })
     .where(eq(S().conversations.id, conversationId));
 }
 
@@ -338,9 +370,9 @@ export async function getConversationComposerState(
     .where(eq(S().conversations.id, conversationId))
     .limit(1);
   if (!conv || conv.userId !== user.id) {
-    return { modelName: null, outputModeId: null, renderStyleId: null, webSearch: false, cardIds: [], kbIds: [], temperature: null, topP: null, maxTokens: null, reasoning: null };
+    return { modelName: null, outputModeId: null, renderStyleId: null, webSearch: false, cardIds: [], kbIds: [], temperature: null, topP: null, maxTokens: null, reasoningByModelId: {} };
   }
-  const composer = (conv.composerState as { cardIds?: string[]; kbIds?: string[]; temperature?: number; topP?: number; maxTokens?: number; reasoning?: ReasoningLevel } | null) ?? {};
+  const composer = (conv.composerState as { cardIds?: string[]; kbIds?: string[]; temperature?: number; topP?: number; maxTokens?: number; reasoningByModelId?: Record<string, ReasoningLevel> } | null) ?? {};
   return {
     modelName: (conv.modelName as string | null) ?? null,
     outputModeId: (conv.outputModeId as string | null) ?? null,
@@ -351,7 +383,7 @@ export async function getConversationComposerState(
     temperature: typeof composer.temperature === "number" ? composer.temperature : null,
     topP: typeof composer.topP === "number" ? composer.topP : null,
     maxTokens: typeof composer.maxTokens === "number" ? composer.maxTokens : null,
-    reasoning: composer.reasoning ?? null,
+    reasoningByModelId: composer.reasoningByModelId ?? {},
   };
 }
 

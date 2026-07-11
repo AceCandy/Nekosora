@@ -17,6 +17,8 @@ import { createGoogle } from "@ai-sdk/google";
 import type { LanguageModel } from "ai";
 import type { ResolvedRoute } from "./types";
 import type { ProviderProtocol } from "@/db/types";
+import type { ReasoningLevel } from "@/db/types";
+import { applyReasoningToCompatibleBody } from "@/lib/reasoning";
 
 /** 从 ResolvedRoute 构造 AI SDK LanguageModel(V4,兼容 ai@7)。 */
 export function buildLanguageModel(route: ResolvedRoute): LanguageModel {
@@ -29,6 +31,7 @@ export function buildLanguageModelWithKey(
   apiKey: string,
   /** 会话级 cache key;openai-compatible 时注入 session affinity header,缺省不注入。 */
   cacheKey?: string,
+  reasoning?: ReasoningLevel,
 ): LanguageModel {
   const { protocol, provider, upstreamModelName } = route;
   const { baseUrl, headers } = provider;
@@ -66,6 +69,7 @@ export function buildLanguageModelWithKey(
         // 仅当请求带 stream_options.include_usage 时才返回 token 计数,
         // 否则流式不返回 usage,导致用量统计为 0。
         includeUsage: true,
+        transformRequestBody: (body) => applyReasoningToCompatibleBody(body, route.capabilities, reasoning),
       });
       return providerInstance.chatModel(upstreamModelName);
     }

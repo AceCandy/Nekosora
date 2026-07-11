@@ -11,10 +11,11 @@ import { useChatScrollController } from "@/features/chat/hooks/useChatScrollCont
 import { ChatMessageList } from "@/features/chat/components/ChatMessageList";
 import { ChatToolbar } from "@/features/chat/components/ChatToolbar";
 import { ChatInputBox } from "@/features/chat/components/ChatInputBox";
-import { setConversationOutputMode, setConversationRenderStyle, setConversationModel, setConversationWebSearch, setConversationComposerState, setConversationModelParams } from "@/features/chat/actions/conversations";
+import { setConversationOutputMode, setConversationRenderStyle, setConversationModel, setConversationWebSearch, setConversationComposerState, setConversationModelParams, setConversationModelReasoning } from "@/features/chat/actions/conversations";
 import { estimateTokens } from "@/lib/tokens";
 import type { ChatMessage, ModelOption, CardOption, KnowledgeBaseOption, OutputModeOption, RenderStyleOption } from "@/features/chat/model/types";
 import type { ReasoningLevel } from "@/db/types";
+import { resolveReasoningForModel } from "@/lib/reasoning";
 
 export type { ChatMessage, ModelOption, CardOption, KnowledgeBaseOption, OutputModeOption, RenderStyleOption } from "@/features/chat/model/types";
 
@@ -42,8 +43,8 @@ interface ChatComposerProps {
   initialKbIds?: string[];
   /** 当前会话模型参数(回填)。 */
   initialModelParams?: { temperature?: number | null; topP?: number | null; maxTokens?: number | null };
-  /** 当前会话推理级别(回填;off=关闭)。 */
-  initialReasoning?: ReasoningLevel;
+  /** 当前会话按模型保存的推理级别。 */
+  initialReasoningByModelId?: Record<string, ReasoningLevel>;
   /** 当前会话 ID(切换输出模式时持久化用;新会话无)。 */
   conversationId?: string;
   initialMessages?: ChatMessage[];
@@ -70,7 +71,7 @@ export default function ChatComposer({
   initialCardIds = [],
   initialKbIds = [],
   initialModelParams,
-  initialReasoning,
+  initialReasoningByModelId = {},
   conversationId: initialConvId,
   initialMessages = [],
 }: ChatComposerProps) {
@@ -133,7 +134,7 @@ export default function ChatComposer({
   }, [runtime.streaming]);
 
   const handleSend = () => {
-    runtime.send(input, modelName, model, selectedCardIds, webSearch, selectedKbIds, { outputModeId, renderStyleId });
+    runtime.send(input, modelName, model, selectedCardIds, webSearch, selectedKbIds, { outputModeId, renderStyleId, reasoning });
     setInput("");
     // 用户主动发送:强制滚到底,确保自己的发言可见
     requestAnimationFrame(() => forceFollow());
@@ -150,7 +151,7 @@ export default function ChatComposer({
   };
   // 选中文本「追问」:以选中文本为新问题直接发送(继续当前会话,不走分支)
   const handleSelectionAsk = (text: string) => {
-    runtime.send(text, modelName, model, selectedCardIds, webSearch, selectedKbIds, { outputModeId, renderStyleId });
+    runtime.send(text, modelName, model, selectedCardIds, webSearch, selectedKbIds, { outputModeId, renderStyleId, reasoning });
     requestAnimationFrame(() => forceFollow());
   };
 
@@ -185,14 +186,16 @@ export default function ChatComposer({
     }
   };
 
-  // 推理级别(off/low/medium/high):会话级持久化,off=删除键(等价关闭)。
-  const [reasoning, setReasoning] = useState<ReasoningLevel>(initialReasoning ?? "off");
+  // 推理级别按「会话 + 具体模型」持久化,切换模型时恢复各自档位。
+  const [reasoningByModelId, setReasoningByModelId] = useState(initialReasoningByModelId);
+  const currentCapabilities = models.find((item) => item.modelId === model)?.capabilities;
+  const reasoning = resolveReasoningForModel(currentCapabilities, model, reasoningByModelId);
   const handleReasoningChange = (next: ReasoningLevel) => {
-    setReasoning(next);
+    setReasoningByModelId((prev) => ({ ...prev, [model]: next }));
     const convId = runtime.conversationId ?? initialConvId;
     if (convId) {
       startModeTransition(async () => {
-        try { await setConversationModelParams(convId, { reasoning: next === "off" ? null : next }); }
+        try { await setConversationModelReasoning(convId, model, next); }
         catch (err) { console.error("set reasoning failed:", err); }
       });
     }

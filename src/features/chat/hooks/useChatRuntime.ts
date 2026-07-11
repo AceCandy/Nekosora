@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useShallow } from "zustand/react/shallow";
 import { useChatStreamStore, NEW_CONVERSATION_KEY, type SendOptions } from "@/features/chat/store/chatStreamStore";
 import type { ChatMessage } from "@/features/chat/model/types";
+import type { ReasoningLevel } from "@/db/types";
 
 interface UseChatRuntimeOptions {
   /** 当前会话 ID(来自路由;新会话为 null/undefined)。 */
@@ -87,7 +88,7 @@ export function useChatRuntime({
         instructionCardIds?: string[],
         webSearch?: boolean,
         knowledgeBaseIds?: string[],
-        createOptions?: { outputModeId?: string | null; renderStyleId?: string | null },
+        createOptions?: { outputModeId?: string | null; renderStyleId?: string | null; reasoning?: ReasoningLevel },
       ) => {
         const opts: SendOptions = { model: modelName, modelId, instructionCardIds, webSearch, knowledgeBaseIds, createOptions };
         void actions.send(key, text, opts, {

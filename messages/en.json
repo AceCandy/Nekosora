@@ -154,10 +154,14 @@
     "maxTokens": "Max tokens",
     "resetDefaults": "Reset to defaults",
     "reasoning": "Reasoning",
+    "reasoningFixed": "Reasoning: Always on",
     "reasoningOff": "Reasoning: Off",
+    "reasoningMinimal": "Reasoning: Minimal",
     "reasoningLow": "Reasoning: Low",
     "reasoningMedium": "Reasoning: Medium",
-    "reasoningHigh": "Reasoning: High"
+    "reasoningHigh": "Reasoning: High",
+    "reasoningXHigh": "Reasoning: Extra high",
+    "reasoningMax": "Reasoning: Maximum"
   },
   "panel": {
     "title": "Dashboard",

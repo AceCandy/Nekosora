@@ -113,6 +113,34 @@
       "when": 1783762141011,
       "tag": "0015_expand_model_catalog",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1783770000000,
+      "tag": "0016_current_model_catalog",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1783770000002,
+      "tag": "0017_gemini_thinking_levels",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1783770000004,
+      "tag": "0018_reasoning_effort_support",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1783770000006,
+      "tag": "0019_agnes_flash_models",
+      "breakpoints": true
     }
   ]
 }

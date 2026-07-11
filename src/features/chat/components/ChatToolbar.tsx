@@ -15,6 +15,7 @@ import type {
 } from "@/features/chat/model/types";
 import type { UploadFileItem } from "@/features/chat/model/types";
 import type { PreviewableFile } from "@/shared/components/file-preview/FilePreviewModal";
+import { getSupportedReasoningLevels } from "@/lib/reasoning";
 
 /** 单选 picker 的统一触发器样式（与原 output mode / render style 一致）。 */
 const SINGLE_TRIGGER_ACTIVE = "border-transparent bg-sora-blue/[0.04] text-sora-blue hover:bg-sora-blue/[0.08]";
@@ -453,18 +454,20 @@ function ReasoningPicker({
   const t = useTranslations("chat");
   const [open, setOpen] = useState(false);
   if (!capabilities?.reasoning) return null;
-  // 支持档位:无 map → 全档;有 map → 非 null 的档(undefined=回退默认,也算支持)
-  const map = capabilities.thinkingLevelMap;
-  const levels = (["low", "medium", "high"] as const).filter((lvl) => !map || map[lvl] !== null);
+  const levels = getSupportedReasoningLevels(capabilities);
+  if (levels.length === 0 || (levels.length === 1 && levels[0] === "off")) return null;
+  const fixed = levels.length === 1;
   const active = value !== "off";
-  const labelKey = value === "off" ? "reasoningOff" : value === "low" ? "reasoningLow" : value === "medium" ? "reasoningMedium" : "reasoningHigh";
+  const labelKey = reasoningLabelKey(value, fixed);
   return (
     <div className="relative">
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => { if (!fixed) setOpen((v) => !v); }}
+        disabled={fixed}
         className={clsx(
-          "inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-semibold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer",
+          "inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-semibold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue",
+          fixed ? "cursor-default opacity-80" : "cursor-pointer",
           active
             ? "border-sora-blue/30 bg-sora-blue/[0.04] text-sora-blue"
             : "border-morning-mist dark:border-deep-space bg-white dark:bg-space-ink text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900",
@@ -481,8 +484,8 @@ function ReasoningPicker({
         <>
           <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
           <div className="absolute bottom-full mb-2 right-0 z-40 w-40 rounded-lg border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink p-1.5 shadow-md">
-            {(["off", ...levels] as ReasoningLevel[]).map((lvl) => {
-              const key = lvl === "off" ? "reasoningOff" : lvl === "low" ? "reasoningLow" : lvl === "medium" ? "reasoningMedium" : "reasoningHigh";
+            {levels.map((lvl) => {
+              const key = reasoningLabelKey(lvl, false);
               const selected = value === lvl;
               return (
                 <button
@@ -503,6 +506,19 @@ function ReasoningPicker({
       )}
     </div>
   );
+}
+
+function reasoningLabelKey(level: ReasoningLevel, fixed: boolean) {
+  if (fixed) return "reasoningFixed";
+  switch (level) {
+    case "off": return "reasoningOff";
+    case "minimal": return "reasoningMinimal";
+    case "low": return "reasoningLow";
+    case "medium": return "reasoningMedium";
+    case "high": return "reasoningHigh";
+    case "xhigh": return "reasoningXHigh";
+    case "max": return "reasoningMax";
+  }
 }
 
 function ParamInput({

@@ -187,11 +187,13 @@ export async function POST(req: NextRequest) {
   const { irRequest, trace, searchBundle, ragStatus, compaction } = prepared;
 
   // 会话级模型参数(用户在 toolbar 设置)覆盖默认值;未设置则沿用 prepareChatContext 的默认
-  const composerParams = (conv.composerState as { temperature?: number; topP?: number; maxTokens?: number; reasoning?: ReasoningLevel } | null) ?? {};
+  const composerParams = (conv.composerState as { temperature?: number; topP?: number; maxTokens?: number; reasoningByModelId?: Record<string, ReasoningLevel> } | null) ?? {};
   if (typeof composerParams.temperature === "number") irRequest.temperature = composerParams.temperature;
   if (typeof composerParams.topP === "number") irRequest.top_p = composerParams.topP;
   if (typeof composerParams.maxTokens === "number") irRequest.max_tokens = composerParams.maxTokens;
-  if (composerParams.reasoning) irRequest.reasoning = composerParams.reasoning;
+  if (body.modelId && composerParams.reasoningByModelId?.[body.modelId]) {
+    irRequest.reasoning = composerParams.reasoningByModelId[body.modelId];
+  }
 
   const ctx = { userId: user.id, keyKind: null as null, source: "chat" as const };
 

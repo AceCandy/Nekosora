@@ -36,7 +36,7 @@ export default async function ChatConversationPage({
       temperature: null,
       topP: null,
       maxTokens: null,
-      reasoning: null,
+      reasoningByModelId: {},
     })),
   ]);
   const msgs = branch.messages;
@@ -120,7 +120,7 @@ export default async function ChatConversationPage({
           initialCardIds={composerState.cardIds}
           initialKbIds={composerState.kbIds}
           initialModelParams={{ temperature: composerState.temperature, topP: composerState.topP, maxTokens: composerState.maxTokens }}
-          initialReasoning={composerState.reasoning ?? undefined}
+          initialReasoningByModelId={composerState.reasoningByModelId}
           conversationId={id}
           initialMessages={initialMessages}
         />

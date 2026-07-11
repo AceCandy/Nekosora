@@ -25,6 +25,17 @@ Managed by Trellis. Edits outside this block are preserved; edits inside may be 
 - 如果涉及到用户要求参考对应项目的逻辑的时候,优先看这个文件下的项目代码
 - 扫描代码的codeGraph使用参考 @CODEGRAPH.md
 
+## 模型目录维护
+- `model_catalog` 是模型类型、能力、思考格式和档位映射的唯一事实来源；新增模型不得在前端或路由层另写一份能力判断。
+- 只收录当前主流型号。模型 ID、别名、输入能力和推理能力优先核对官方资料；思考档位与兼容格式可参考 `docs/cankao/pi/packages/ai`，不能仅凭模型名或厂商猜测。
+- 推理档位与 pi 对齐：`off`、`minimal`、`low`、`medium`、`high`、`xhigh`、`max`。`thinkingLevelMap` 中 `null` 表示明确不支持，字符串表示供应商值，缺省表示使用该格式默认值；`xhigh` 和 `max` 只有显式配置才可用。
+- `thinkingFormat` 描述模型官方请求语义，而不是 Provider URL：`openai`、`anthropic`、`anthropic-adaptive`、`google`、`openrouter`、`deepseek`、`together`、`zai`、`qwen`、`qwen-chat-template`、`agnes`、`string-thinking`、`ant-ling` 或 `fixed`。同一目录模型的多条上游路由必须使用相同模型语义。
+- `reasoningEffort` 只在模型官方兼容接口确实接受独立强度字段时设为 `true`；仅支持启停的模型不能发送 `reasoning_effort`。
+- `fixed` 用于支持推理但不公开强度控制的模型：只保留一个非 `off` 档位，Chat 显示固定开启且不可关闭，运行时不向上游伪造控制参数。
+- Chat 必须从目录动态生成档位：不支持推理则隐藏；只支持开关则只显示 `off` 和唯一开启档；不能关闭则默认最低可用档；支持多少档就显示多少档。会话状态按具体 `modelId` 保存，不能保存成会话全局单值。
+- 请求了已失效或不支持的档位时，按 pi 逻辑夹到最近可用档。默认优先 `off`，不支持 `off` 时选择最低可用档。
+- 目录数据变更必须同时提供 PostgreSQL 与 SQLite 等价迁移、同步 Drizzle journal/snapshot，并补模型匹配、档位与请求体翻译测试。
+
 ## Design Context
 
 本项目 **Nekusora (星枢)** 是一套融合了聊天工作台与高可用 API 模型网关的混合型全栈平台。
@@ -38,4 +49,3 @@ Managed by Trellis. Edits outside this block are preserved; edits inside may be 
   2. **温和对话与精密控制的双面平衡** (聊天侧温和治愈，管理网关侧莫兰迪灰调严谨专业)。
   3. **克制与纯粹** (严禁侧边彩色粗条、Eyebrow 眉标等 AI 模板痕迹，静止状态无投影)。
 - **设计规范**: 详细设计参数与约定见根目录 [DESIGN.md](file:///Users/mac/Documents/workspace/test/Nekusora/DESIGN.md)。
-

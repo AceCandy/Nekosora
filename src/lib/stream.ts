@@ -18,7 +18,7 @@ import { orderedWeightedKeys } from "@/lib/providers/keys";
 import { recordSuccess, recordFailure } from "@/lib/circuit-breaker";
 import { logUsage, maskKey } from "@/lib/usage";
 import { classifyError } from "@/lib/error-classify";
-import { buildReasoningProviderOptions } from "@/lib/reasoning";
+import { buildReasoningProviderOptions, getDefaultReasoningLevel } from "@/lib/reasoning";
 import type {
   CallContext,
   IRRequest,
@@ -259,7 +259,8 @@ async function* streamWithRoute(
   /** 会话级 cache key(chat=conversationId / 网关=apiKeyId);缺省不注入缓存控制。 */
   cacheKey?: string,
 ): AsyncGenerator<StreamEvent, void, unknown> {
-  const model = buildLanguageModelWithKey(route, apiKey, cacheKey); // 失败则抛出,交由上层故障转移
+  const reasoning = request.reasoning ?? getDefaultReasoningLevel(route.capabilities);
+  const model = buildLanguageModelWithKey(route, apiKey, cacheKey, reasoning); // 失败则抛出,交由上层故障转移
   const { system, messages } = separateSystem(request);
 
   // 按 protocol 注入 prompt 缓存控制(复刻 pi 兜底策略):
@@ -291,7 +292,9 @@ async function* streamWithRoute(
     // 推理级别 + 缓存控制合并到 providerOptions(off/不支持则不传,等价普通对话)。
     // AI SDK SharedV4ProviderOptions 类型摩擦,沿用本文件 messages/tools 的 as never 处理。
     providerOptions: {
-      ...buildReasoningProviderOptions(route.protocol, route.capabilities, request.reasoning),
+      ...(route.protocol === "openai-compatible"
+        ? undefined
+        : buildReasoningProviderOptions(route.protocol, route.capabilities, reasoning)),
       ...cacheProviderOptions,
     } as never,
     // P1-A:工具(MCP)透传给上游模型。tools 格式已是 OpenAI function-calling 兼容。
