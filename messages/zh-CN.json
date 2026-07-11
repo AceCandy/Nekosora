@@ -253,7 +253,12 @@
       "healthDuplicateBadge": "重复",
       "healthStaleBadge": "陈旧",
       "healthDuplicateHint": "与同分类下其他记忆高度相似,建议合并或删除其一",
-      "healthStaleHint": "超过 30 天未被召回命中,可能已过时"
+      "healthStaleHint": "超过 30 天未被召回命中,可能已过时",
+      "createdAt": "创建时间",
+      "clearAll": "全部清空",
+      "clearScope": "清空此分类",
+      "disclosureLabel": "何时使用",
+      "scopeCount": "{count} 条"
     },
     "cards": {
       "title": "指令卡",

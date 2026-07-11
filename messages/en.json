@@ -253,7 +253,12 @@
       "healthDuplicateBadge": "dup",
       "healthStaleBadge": "stale",
       "healthDuplicateHint": "Highly similar to another memory in the same scope; consider merging or deleting one",
-      "healthStaleHint": "Not recalled in over 30 days; may be outdated"
+      "healthStaleHint": "Not recalled in over 30 days; may be outdated",
+      "createdAt": "Created",
+      "clearAll": "Clear all",
+      "clearScope": "Clear scope",
+      "disclosureLabel": "When to use",
+      "scopeCount": "{count} items"
     },
     "cards": {
       "title": "Instruction Cards",

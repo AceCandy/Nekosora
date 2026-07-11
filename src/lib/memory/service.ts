@@ -27,6 +27,7 @@ export interface UserMemory {
   disclosure?: string | null;
   priority?: number;
   lastAccessedAt?: Date | null;
+  createdAt?: Date | null;
 }
 
 /** scope → 默认 priority(design §1:preference=0/profile=1/project=2)。 */
@@ -71,6 +72,7 @@ export async function getMemories(userId: string): Promise<UserMemory[]> {
           disclosure: s.userMemories.disclosure,
           priority: s.userMemories.priority,
           lastAccessedAt: s.userMemories.lastAccessedAt,
+          createdAt: s.userMemories.createdAt,
         })
         .from(s.userMemories)
         .where(eq(s.userMemories.userId, userId));
@@ -121,6 +123,19 @@ export async function deleteMemory(userId: string, memoryId: string): Promise<vo
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
   await db.delete(s.userMemories).where(and(eq(s.userMemories.id, memoryId), eq(s.userMemories.userId, userId)));
+  await invalidateMemoryCache(userId);
+}
+
+/** 清空记忆:scope 缺省清空全部,传 scope 只清该分类。 */
+export async function clearMemories(userId: string, scope?: MemoryScope): Promise<void> {
+  const db = await getDb();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const s = getSchema() as any;
+  if (scope) {
+    await db.delete(s.userMemories).where(and(eq(s.userMemories.userId, userId), eq(s.userMemories.scope, scope)));
+  } else {
+    await db.delete(s.userMemories).where(eq(s.userMemories.userId, userId));
+  }
   await invalidateMemoryCache(userId);
 }
 

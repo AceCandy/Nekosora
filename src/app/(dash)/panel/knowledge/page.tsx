@@ -48,7 +48,7 @@ export default async function KnowledgePage() {
   }
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-6">
       <div>
         <h1 className="text-xl font-bold mb-1 flex items-center gap-2">
           <Library className="w-5 h-5 text-sora-blue" />
