@@ -1,7 +1,8 @@
 import { getTranslations } from "next-intl/server";
 import { getMemories, addMemory, deleteMemory, updateMemory } from "@/lib/memory/service";
+import { getMemoryDiagnostics } from "@/lib/memory/recall";
 import { requireSession } from "@/lib/session";
-import { Trash2, Plus, BrainCircuit } from "lucide-react";
+import { Trash2, Plus, BrainCircuit, AlertTriangle } from "lucide-react";
 import { clsx } from "clsx";
 
 export default async function MemoryPage() {
@@ -9,6 +10,10 @@ export default async function MemoryPage() {
   const t = await getTranslations("panel.memory");
   const tn = await getTranslations("nav");
   const memories = await getMemories(user.id);
+  const diagnostics = await getMemoryDiagnostics(user.id).catch(() => ({
+    duplicateIds: new Set<string>(),
+    staleIds: new Set<string>(),
+  }));
 
   // 编辑记忆的 server action(从 formData 取 content)
   async function handleUpdateMemory(memoryId: string, formData: FormData) {
@@ -36,6 +41,30 @@ export default async function MemoryPage() {
           {t("desc")}
         </p>
       </div>
+
+      {(diagnostics.duplicateIds.size > 0 || diagnostics.staleIds.size > 0) && (
+        <div className="rounded-lg border border-amber-200 dark:border-amber-900/40 bg-amber-50/50 dark:bg-amber-950/10 p-4 max-w-3xl">
+          <h3 className="text-sm font-bold text-neutral-800 dark:text-white flex items-center gap-1.5">
+            <AlertTriangle className="w-4 h-4 text-amber-500" />
+            <span>{t("healthTitle")}</span>
+          </h3>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
+            {t("healthDesc")}
+          </p>
+          <div className="flex flex-wrap gap-4 mt-2 text-xs">
+            {diagnostics.duplicateIds.size > 0 && (
+              <span className="text-amber-700 dark:text-amber-400">
+                {t("healthDuplicate", { count: diagnostics.duplicateIds.size })}
+              </span>
+            )}
+            {diagnostics.staleIds.size > 0 && (
+              <span className="text-neutral-500 dark:text-neutral-400">
+                {t("healthStale", { count: diagnostics.staleIds.size })}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-10 gap-8 items-start">
         {/* Left Table (6 lg cols) */}
@@ -74,7 +103,7 @@ export default async function MemoryPage() {
                               : "bg-neutral-100 dark:bg-neutral-800 border-neutral-250 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400"
                           )}
                         >
-                          {m.scope === "preference" ? t("scopePreference") : m.scope === "profile" ? t("scopeProfile") : t("scopeCustom")}
+                          {m.scope === "preference" ? t("scopePreference") : m.scope === "profile" ? t("scopeProfile") : t("scopeProject")}
                         </span>
                         <span
                           className={clsx(
@@ -87,6 +116,22 @@ export default async function MemoryPage() {
                         >
                           {m.source === "ai" ? "AI" : t("sourceManual")}
                         </span>
+                        {diagnostics.duplicateIds.has(m.id) && (
+                          <span
+                            className="rounded-full px-1.5 py-0.5 text-[9px] font-medium border bg-amber-500/[0.03] border-amber-500/20 text-amber-600 dark:text-amber-400"
+                            title={t("healthDuplicateHint")}
+                          >
+                            {t("healthDuplicateBadge")}
+                          </span>
+                        )}
+                        {diagnostics.staleIds.has(m.id) && (
+                          <span
+                            className="rounded-full px-1.5 py-0.5 text-[9px] font-medium border bg-neutral-100 dark:bg-neutral-800 border-neutral-250 dark:border-neutral-700 text-neutral-500 dark:text-neutral-400"
+                            title={t("healthStaleHint")}
+                          >
+                            {t("healthStaleBadge")}
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="p-3.5 text-xs text-neutral-700 dark:text-neutral-300 leading-relaxed max-w-[250px] break-words">
@@ -137,7 +182,7 @@ export default async function MemoryPage() {
               "use server";
               await addMemory(
                 user.id,
-                formData.get("scope") as "preference" | "profile" | "custom",
+                formData.get("scope") as "preference" | "profile" | "project",
                 String(formData.get("content") ?? ""),
               );
             }}
@@ -153,7 +198,7 @@ export default async function MemoryPage() {
               >
                 <option value="preference">{t("scopePreferenceOpt")}</option>
                 <option value="profile">{t("scopeProfileOpt")}</option>
-                <option value="custom">{t("scopeCustomOpt")}</option>
+                <option value="project">{t("scopeProjectOpt")}</option>
               </select>
             </label>
 
@@ -183,6 +228,7 @@ export default async function MemoryPage() {
             <p className="font-semibold text-neutral-500 dark:text-neutral-400">{t("guideTitle")}</p>
             <p>{t("guide1")}</p>
             <p>{t("guide2")}</p>
+            <p>{t("guide3")}</p>
           </div>
         </div>
       </div>

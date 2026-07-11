@@ -225,22 +225,31 @@
       "empty": "No memories yet. Add your first one in the form on the right.",
       "scopePreference": "Preference",
       "scopeProfile": "Profile",
-      "scopeCustom": "Custom",
+      "scopeProject": "In Progress",
       "deleteTitle": "Delete memory",
       "addTitle": "Add new memory",
       "scopeLabel": "Memory scope",
       "scopePreferenceOpt": "preference (user prefs - injected into preference slot, max 400 chars)",
       "scopeProfileOpt": "profile (user profile - auto-injected as background)",
-      "scopeCustomOpt": "custom (custom tags - free-form retrieval)",
+      "scopeProjectOpt": "project (in-progress items - semantic recall, expires after 1 week unused)",
       "contentLabel": "Memory content",
       "contentPlaceholder": "e.g. I prefer concise answers, line-break long formulas, and reply in Chinese.",
       "addBtn": "Add memory entry",
       "guideTitle": "💡 Guidelines:",
       "guide1": "1. preference: store model tone/style/language prefs. Always injected at the top of context.",
-      "guide2": "2. profile / custom: record job, tech stack, project descriptions and other profile info.",
+      "guide2": "2. profile: record job, tech stack and other identity facts. Auto-injected as background.",
+      "guide3": "3. project: record projects, tasks, plans in progress. Semantically recalled by current topic, expires after 1 week unused.",
       "sourceAi": "AI extracted",
       "sourceManual": "Manual",
-      "save": "Save"
+      "save": "Save",
+      "healthTitle": "Memory health check",
+      "healthDesc": "Read-only markers, nothing is auto-deleted. Review the flagged items in the table and remove manually.",
+      "healthDuplicate": "{count} suspected duplicate",
+      "healthStale": "{count} stale",
+      "healthDuplicateBadge": "dup",
+      "healthStaleBadge": "stale",
+      "healthDuplicateHint": "Highly similar to another memory in the same scope; consider merging or deleting one",
+      "healthStaleHint": "Not recalled in over 30 days; may be outdated"
     },
     "cards": {
       "title": "Instruction Cards",
@@ -363,7 +372,10 @@
       "configSave": "Save",
       "configSaved": "Saved",
       "configSelectProvider": "Select provider…",
-      "configNoProviders": "No enabled providers. Add one in Global Providers first."
+      "configNoProviders": "No enabled providers. Add one in Global Providers first.",
+      "compactTaskTitle": "Compaction model",
+      "compactTaskModel": "Model name",
+      "compactTaskHint": "Used for long-conversation context compaction (chains on previous summary). Falls back to the first available model if empty. Resolved by name via gateway routing."
     },
     "models": {
       "title": "Global Models"
@@ -433,9 +445,19 @@
       "rangeToday": "Today",
       "rangeYesterday": "Yesterday",
       "rangeCustom": "Custom",
-      "sources": { "chat": "Chat", "gateway": "Gateway" },
-      "taskKinds": { "title": "Title", "memory": "Memory", "compact": "Summary" },
-      "tabs": { "usage": "Usage logs", "errors": "Error requests" },
+      "sources": {
+        "chat": "Chat",
+        "gateway": "Gateway"
+      },
+      "taskKinds": {
+        "title": "Title",
+        "memory": "Memory",
+        "compact": "Summary"
+      },
+      "tabs": {
+        "usage": "Usage logs",
+        "errors": "Error requests"
+      },
       "statsOverview": "Usage overview",
       "pagination": {
         "prev": "Prev",

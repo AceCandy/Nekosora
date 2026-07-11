@@ -225,22 +225,31 @@
       "empty": "暂无记忆，请在右侧表单添加第一条长期记忆。",
       "scopePreference": "偏好",
       "scopeProfile": "画像",
-      "scopeCustom": "自定义",
+      "scopeProject": "在做的事",
       "deleteTitle": "删除记忆",
       "addTitle": "添加新记忆",
       "scopeLabel": "记忆分类",
       "scopePreferenceOpt": "preference · 用户偏好(注入偏好槽,限 400 字)",
       "scopeProfileOpt": "profile · 用户画像(自动注入背景)",
-      "scopeCustomOpt": "custom · 自定义标签(自由流式检索)",
+      "scopeProjectOpt": "project · 在做的事(语义召回,1 周未用自动过期)",
       "contentLabel": "记忆内容",
       "contentPlaceholder": "例如: 我喜欢更简洁的回答，遇到长公式时请换行，交流时用中文回复。",
       "addBtn": "添加记忆条目",
       "guideTitle": "💡 写入指南：",
       "guide1": "1. preference：适合存储模型语气风格、语言喜好等，系统会常驻注入上下文首位。",
-      "guide2": "2. profile / custom：适合记录工作岗位、技术栈背景、项目描述等个人画像信息。",
+      "guide2": "2. profile：适合记录工作岗位、技术栈背景等身份事实，系统自动注入背景。",
+      "guide3": "3. project：适合记录正在做的项目、任务、计划，按当前话题语义召回，1 周未命中自动过期。",
       "sourceAi": "AI 提取",
       "sourceManual": "手动",
-      "save": "保存"
+      "save": "保存",
+      "healthTitle": "记忆健康检查",
+      "healthDesc": "以下为只读标记,不会自动删除。请在表格中对照标记手动清理(复用删除按钮)。",
+      "healthDuplicate": "{count} 条疑似重复",
+      "healthStale": "{count} 条陈旧未命中",
+      "healthDuplicateBadge": "重复",
+      "healthStaleBadge": "陈旧",
+      "healthDuplicateHint": "与同分类下其他记忆高度相似,建议合并或删除其一",
+      "healthStaleHint": "超过 30 天未被召回命中,可能已过时"
     },
     "cards": {
       "title": "指令卡",
@@ -363,7 +372,10 @@
       "configSave": "保存",
       "configSaved": "已保存",
       "configSelectProvider": "选择渠道…",
-      "configNoProviders": "尚无可用上游渠道,请先在「全局渠道」添加。"
+      "configNoProviders": "尚无可用上游渠道,请先在「全局渠道」添加。",
+      "compactTaskTitle": "摘要生成模型",
+      "compactTaskModel": "模型名",
+      "compactTaskHint": "用于长会话上下文压缩摘要(链式合并旧摘要)。留空则回退到第一个可用模型。按模型名经网关路由解析。"
     },
     "models": {
       "title": "全局模型管理"
@@ -433,9 +445,19 @@
       "rangeToday": "今天",
       "rangeYesterday": "昨天",
       "rangeCustom": "自定义",
-      "sources": { "chat": "聊天", "gateway": "网关" },
-      "taskKinds": { "title": "标题", "memory": "记忆", "compact": "摘要" },
-      "tabs": { "usage": "用量明细", "errors": "错误请求" },
+      "sources": {
+        "chat": "聊天",
+        "gateway": "网关"
+      },
+      "taskKinds": {
+        "title": "标题",
+        "memory": "记忆",
+        "compact": "摘要"
+      },
+      "tabs": {
+        "usage": "用量明细",
+        "errors": "错误请求"
+      },
       "statsOverview": "用量总览",
       "pagination": {
         "prev": "上一页",

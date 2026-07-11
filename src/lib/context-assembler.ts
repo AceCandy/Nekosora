@@ -12,13 +12,15 @@
  */
 import type { CompactionResult } from "@/lib/compact/service";
 import type { UserMemory } from "@/lib/memory/service";
-import { buildPreferencePrompt, buildProfilePrompt } from "@/lib/memory/service";
+import { buildPreferencePrompt, buildProfilePrompt, buildProjectPrompt } from "@/lib/memory/service";
 
 export interface AssembleInput {
   /** 用户原始消息(含历史)。 */
   messages: { role: string; content: string | unknown[] }[];
-  /** 用户长期记忆。 */
+  /** 用户长期记忆(preference + profile 恒定注入)。 */
   memories: UserMemory[];
+  /** 召回的 project 记忆(语义/关键词召回,独立 slot)。 */
+  recalledMemories?: UserMemory[];
   /** 压缩结果(可能 null)。 */
   compaction: CompactionResult | null;
   /** 文件上下文(RAG 注入的 system 块,可能已含在前置 system)。 */
@@ -64,10 +66,16 @@ export function assembleContext(input: AssembleInput): { role: string; content: 
     slots.push(`[用户偏好]\n${pref}`);
   }
 
-  // Slot 5:用户画像
+  // Slot 5:用户画像(恒定注入)
   const profile = buildProfilePrompt(input.memories);
   if (profile) {
     slots.push(`[用户画像]\n${profile}`);
+  }
+
+  // Slot 6:project 记忆(召回注入,与当前 query 相关的正在进行的事)
+  const project = buildProjectPrompt(input.recalledMemories ?? []);
+  if (project) {
+    slots.push(`[相关记忆]\n${project}`);
   }
 
   // 组装:合并所有非空 slot 为一个 system 消息,替换/前置

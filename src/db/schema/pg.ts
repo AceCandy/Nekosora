@@ -666,10 +666,13 @@ export const userMemories = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    scope: text("scope").notNull(), // "preference" | "profile" | "custom"
+    scope: text("scope").notNull(), // "preference" | "profile" | "project"(原 custom 已迁移为 project)
     source: text("source").notNull().default("manual"), // "manual" | "ai"(记忆来源)
     content: text("content").notNull(),
-    embedding: vector("embedding", { dimensions: 1536 }),
+    disclosure: text("disclosure"), // 「何时该用这条记忆」(抽取时 LLM 生成);旧记忆为 NULL
+    priority: integer("priority").notNull().default(0), // 重要性;scope 默认映射 preference=0/profile=1/project=2
+    embedding: vector("embedding", { dimensions: 1536 }), // 融合向量 embed(content + " " + disclosure)
+    lastAccessedAt: timestamp("last_accessed_at", { withTimezone: true }), // 召回命中时刷新;project 过期判断依据
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("user_memories_user_idx").on(t.userId)],

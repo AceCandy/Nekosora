@@ -1,20 +1,22 @@
 /**
- * 长期记忆服务 —— 跨会话的用户偏好/画像记忆。
+ * 长期记忆服务 —— 跨会话的用户偏好/画像/项目记忆。
  *
- * 借鉴 DEEIX-Chat:
- *   - scope:preference(注入 SlotPreference,cap 400 字)/ profile / custom(相关性 top-N)
- *   - 读时缓存(避免每条消息查库)
- *   - 语义召回(复用 embedding)可选,200ms 超时优雅跳过
+ * 三分类(design §1):
+ *   - preference:用户偏好(恒定注入,cap 400 字)
+ *   - profile:用户身份/事实(恒定注入,top N)
+ *   - project:在做的事(召回注入,1 周过期硬删)
  *
- * 简化版:不做语义召回(复用 RAG infra 留作扩展),按 scope 直接取。
+ * 读时缓存(60s),写入后主动失效(design §6)。
  */
-import { eq, and } from "drizzle-orm";
-import { getDb, getSchema } from "@/lib/infra/db";
-import { cacheWrap } from "@/lib/infra/cache";
+import { eq, and, sql } from "drizzle-orm";
+import { getDb, getSchema, isPg } from "@/lib/infra/db";
+import { cacheWrap, cacheDel } from "@/lib/infra/cache";
 
 const PREFERENCE_CAP_CHARS = 400;
+const PROJECT_EXPIRE_DAYS = 7;
+const PROJECT_EXPIRE_SECONDS = PROJECT_EXPIRE_DAYS * 86400;
 
-export type MemoryScope = "preference" | "profile" | "custom";
+export type MemoryScope = "preference" | "profile" | "project";
 export type MemorySource = "manual" | "ai";
 
 export interface UserMemory {
@@ -22,10 +24,38 @@ export interface UserMemory {
   scope: MemoryScope;
   content: string;
   source: MemorySource;
+  disclosure?: string | null;
+  priority?: number;
+  lastAccessedAt?: Date | null;
 }
 
-/** 读取用户全部记忆(带 60s 缓存)。 */
+/** scope → 默认 priority(design §1:preference=0/profile=1/project=2)。 */
+export function defaultPriorityForScope(scope: MemoryScope): number {
+  return scope === "profile" ? 1 : scope === "project" ? 2 : 0;
+}
+
+/**
+ * 清理过期的 project 记忆(1 周未访问硬删)。
+ * 在 getMemories / extractMemories 入口懒触发(design §2)。
+ */
+export async function purgeExpiredProjectMemories(userId: string): Promise<void> {
+  const db = await getDb();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const s = getSchema() as any;
+  if (isPg) {
+    await db.execute(
+      sql`DELETE FROM ${s.userMemories} WHERE ${s.userMemories.userId} = ${userId} AND ${s.userMemories.scope} = 'project' AND ${s.userMemories.lastAccessedAt} < NOW() - INTERVAL '7 days'`,
+    );
+  } else {
+    await db.execute(
+      sql`DELETE FROM ${s.userMemories} WHERE ${s.userMemories.userId} = ${userId} AND ${s.userMemories.scope} = 'project' AND ${s.userMemories.lastAccessedAt} < unixepoch() - ${PROJECT_EXPIRE_SECONDS}`,
+    );
+  }
+}
+
+/** 读取用户全部记忆(带 60s 缓存)。入口触发 project 过期懒清理。 */
 export async function getMemories(userId: string): Promise<UserMemory[]> {
+  await purgeExpiredProjectMemories(userId).catch(() => {});
   return cacheWrap(
     `memories:${userId}`,
     async () => {
@@ -33,7 +63,15 @@ export async function getMemories(userId: string): Promise<UserMemory[]> {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const s = getSchema() as any;
       const rows = await db
-        .select({ id: s.userMemories.id, scope: s.userMemories.scope, content: s.userMemories.content, source: s.userMemories.source })
+        .select({
+          id: s.userMemories.id,
+          scope: s.userMemories.scope,
+          content: s.userMemories.content,
+          source: s.userMemories.source,
+          disclosure: s.userMemories.disclosure,
+          priority: s.userMemories.priority,
+          lastAccessedAt: s.userMemories.lastAccessedAt,
+        })
         .from(s.userMemories)
         .where(eq(s.userMemories.userId, userId));
       return rows as UserMemory[];
@@ -47,10 +85,18 @@ export async function addMemory(userId: string, scope: MemoryScope, content: str
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
-  await db.insert(s.userMemories).values({ userId, scope, content, source: "manual" });
+  await db.insert(s.userMemories).values({
+    userId,
+    scope,
+    content,
+    source: "manual",
+    priority: defaultPriorityForScope(scope),
+    lastAccessedAt: new Date(),
+  });
+  await invalidateMemoryCache(userId);
 }
 
-/** 更新记忆内容(重新生成 embedding)。 */
+/** 更新记忆内容(重新生成 embedding,刷新 lastAccessedAt)。 */
 export async function updateMemory(userId: string, memoryId: string, content: string): Promise<void> {
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -64,8 +110,9 @@ export async function updateMemory(userId: string, memoryId: string, content: st
   }
   await db
     .update(s.userMemories)
-    .set({ content, embedding })
+    .set({ content, embedding, lastAccessedAt: new Date() })
     .where(and(eq(s.userMemories.id, memoryId), eq(s.userMemories.userId, userId)));
+  await invalidateMemoryCache(userId);
 }
 
 /** 删除记忆。 */
@@ -74,6 +121,12 @@ export async function deleteMemory(userId: string, memoryId: string): Promise<vo
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
   await db.delete(s.userMemories).where(and(eq(s.userMemories.id, memoryId), eq(s.userMemories.userId, userId)));
+  await invalidateMemoryCache(userId);
+}
+
+/** 使记忆缓存失效(增删改 + 抽取后调用)。 */
+export async function invalidateMemoryCache(userId: string): Promise<void> {
+  await cacheDel(`memories:${userId}`).catch(() => {});
 }
 
 /** 构造 preference 槽位文本(cap 400 字)。 */
@@ -84,9 +137,15 @@ export function buildPreferencePrompt(memories: UserMemory[]): string {
   return joined.slice(0, PREFERENCE_CAP_CHARS);
 }
 
-/** 构造 profile/custom 槽位文本(按给定条数限制)。 */
+/** 构造 profile 槽位文本(恒定注入,限量 top N)。 */
 export function buildProfilePrompt(memories: UserMemory[], maxItems = 5): string {
-  const items = memories.filter((m) => m.scope === "profile" || m.scope === "custom").slice(0, maxItems);
+  const items = memories.filter((m) => m.scope === "profile").slice(0, maxItems);
   if (items.length === 0) return "";
   return items.map((m) => `- ${m.content}`).join("\n");
+}
+
+/** 构造 project 召回槽位文本(按给定条数限制)。 */
+export function buildProjectPrompt(memories: UserMemory[], maxItems = 5): string {
+  if (memories.length === 0) return "";
+  return memories.slice(0, maxItems).map((m) => `- ${m.content}`).join("\n");
 }

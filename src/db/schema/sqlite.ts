@@ -621,10 +621,13 @@ export const userMemories = sqliteTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    scope: text("scope").notNull(),
+    scope: text("scope").notNull(), // "preference" | "profile" | "project"(原 custom 已迁移为 project)
     source: text("source").notNull().default("manual"), // "manual" | "ai"
     content: text("content").notNull(),
-    embedding: text("embedding", { mode: "json" }).$type<number[]>(),
+    disclosure: text("disclosure"), // 「何时该用这条记忆」(抽取时 LLM 生成);旧记忆为 NULL
+    priority: integer("priority").notNull().default(0), // 重要性;scope 默认映射 preference=0/profile=1/project=2
+    embedding: text("embedding", { mode: "json" }).$type<number[]>(), // 融合向量 embed(content + " " + disclosure)
+    lastAccessedAt: integer("last_accessed_at", { mode: "timestamp" }), // 召回命中时刷新;project 过期判断依据
     createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),
   },
   (t) => [index("user_memories_user_idx").on(t.userId)],

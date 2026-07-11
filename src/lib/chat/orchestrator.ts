@@ -174,17 +174,13 @@ export async function prepareChatContext(
   }
 
   // ===== 长期记忆 + 上下文压缩 =====
+  // preference + profile 恒定注入(getMemories 全量);project 走召回(语义+关键词兜底)
   const allMemories = await getMemories(userId).catch(() => []);
-  let memories = allMemories;
+  let recalledMemories: typeof allMemories = [];
   try {
-    const recalled = await recallMemories(userId, userContent);
-    if (recalled.length > 0) {
-      // preference 仍走全量;profile/custom 用召回结果替换
-      const prefs = allMemories.filter((m: { scope: string }) => m.scope === "preference");
-      memories = [...prefs, ...recalled];
-    }
+    recalledMemories = await recallMemories(userId, userContent);
   } catch {
-    /* 召回失败回退全量 */
+    /* 召回失败:project 不注入,不影响恒定注入 */
   }
 
   // 读取已有消息(沿当前分支),供压缩的 CoveragePathHash
@@ -259,7 +255,8 @@ export async function prepareChatContext(
   // ===== 槽位组装 =====
   const assembled = assembleContext({
     messages: effectiveMessages as { role: string; content: string | unknown[] }[],
-    memories,
+    memories: allMemories,
+    recalledMemories,
     compaction,
     fileContext: null, // RAG 已在上一步直接注入到 messages
     templateSystemPrompt: mergedSystemPrompt,

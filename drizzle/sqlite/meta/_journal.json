@@ -64,6 +64,13 @@
       "when": 1783653693000,
       "tag": "0008_unify_resource_model",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1783708039738,
+      "tag": "0009_memory_enhancement",
+      "breakpoints": true
     }
   ]
 }

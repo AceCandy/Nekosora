@@ -4,6 +4,7 @@ import { getSettings, upsertSettings } from "@/lib/system-settings/service";
 import { resetEmbeddingConfig } from "@/lib/rag/embedding";
 import { clearWebSearchConfigCache } from "@/lib/web-search/registry";
 import { resetTitleModelConfig } from "@/lib/conversation-title/service";
+import { resetCompactModelConfig } from "@/lib/compact/service";
 import { requireAdmin } from "@/lib/session";
 
 /**
@@ -30,6 +31,9 @@ export default async function ModelConfigSection({
     titleTaskTitle: string;
     titleTaskModel: string;
     titleTaskHint: string;
+    compactTaskTitle: string;
+    compactTaskModel: string;
+    compactTaskHint: string;
     save: string;
     saved: string;
     selectProvider: string;
@@ -80,6 +84,13 @@ export default async function ModelConfigSection({
     const model = String(formData.get("model") ?? "").trim();
     await upsertSettings("task", { title_model: model });
     resetTitleModelConfig();
+  }
+
+  async function saveCompactModel(formData: FormData) {
+    "use server";
+    const model = String(formData.get("model") ?? "").trim();
+    await upsertSettings("task", { compact_model: model });
+    resetCompactModelConfig();
   }
 
   return (
@@ -178,6 +189,24 @@ export default async function ModelConfigSection({
             className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-3 py-2 text-sm font-mono focus:outline-none focus:border-sora-blue"
           />
           <p className="text-[11px] text-neutral-400">{labels.titleTaskHint}</p>
+        </div>
+        <button type="submit" className="rounded-md bg-sora-blue hover:bg-sora-blue-hover text-white px-4 py-2 text-sm font-semibold cursor-pointer">
+          {labels.save}
+        </button>
+      </form>
+
+      {/* 摘要生成模型配置 */}
+      <form action={saveCompactModel} className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] p-5 space-y-3">
+        <h3 className="text-sm font-bold text-neutral-800 dark:text-white">{labels.compactTaskTitle}</h3>
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-neutral-500">{labels.compactTaskModel}</label>
+          <input
+            name="model"
+            defaultValue={task.compact_model ?? ""}
+            placeholder="gpt-4o-mini"
+            className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-3 py-2 text-sm font-mono focus:outline-none focus:border-sora-blue"
+          />
+          <p className="text-[11px] text-neutral-400">{labels.compactTaskHint}</p>
         </div>
         <button type="submit" className="rounded-md bg-sora-blue hover:bg-sora-blue-hover text-white px-4 py-2 text-sm font-semibold cursor-pointer">
           {labels.save}
