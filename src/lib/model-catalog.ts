@@ -22,14 +22,18 @@ export function findCatalogMatch<T extends CatalogMatchEntry>(
 
 /**
  * 显示名为空时的回退优先级:显示名 → 目录名 → 对外模型名。
+ * 通用模板(__generic_*)的目录名是泛称(如"通用对话模型"),不适合做显示名,
+ * 此时跳过目录名直接用对外模型名。
  * 供 server action 在写入 displayName 时统一兜底。
  */
 export function pickDisplayName(
   rawDisplayName: string,
   catalogName: string | undefined | null,
   fallbackName: string,
+  catalogCanonicalId?: string | null,
 ): string {
   const trimmed = rawDisplayName.trim();
   if (trimmed) return trimmed;
+  if (catalogCanonicalId?.startsWith("__generic_")) return fallbackName;
   return catalogName || fallbackName;
 }

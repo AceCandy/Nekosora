@@ -306,7 +306,11 @@ export async function listModelCatalog() {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function resolveCatalogId(db: any, name: string, requestedId: string): Promise<{ id: string; name: string }> {
+async function resolveCatalogId(
+  db: any,
+  name: string,
+  requestedId: string,
+): Promise<{ id: string; name: string; canonicalModelId: string }> {
   const catalogs = await db
     .select()
     .from(S().modelCatalog)
@@ -314,7 +318,11 @@ async function resolveCatalogId(db: any, name: string, requestedId: string): Pro
   if (requestedId) {
     const selected = catalogs.find((entry: { id: string }) => entry.id === requestedId);
     if (!selected) throw new Error("模型模板不存在或已禁用");
-    return { id: selected.id as string, name: selected.name as string };
+    return {
+      id: selected.id as string,
+      name: selected.name as string,
+      canonicalModelId: selected.canonicalModelId as string,
+    };
   }
   const matched = findCatalogMatch(
     catalogs.map((entry: Record<string, unknown>) => ({
@@ -327,7 +335,11 @@ async function resolveCatalogId(db: any, name: string, requestedId: string): Pro
     name,
   );
   if (!matched) throw new Error("未匹配到模型模板，请先选择模板");
-  return { id: matched.id, name: (matched as unknown as { name: string }).name };
+  return {
+    id: matched.id,
+    name: (matched as unknown as { name: string }).name,
+    canonicalModelId: matched.canonicalModelId,
+  };
 }
 
 export async function createMyModel(formData: FormData) {
@@ -365,7 +377,12 @@ export async function createMyModel(formData: FormData) {
     ownerUserId: user.id,
     visibility,
     name,
-    displayName: pickDisplayName(String(formData.get("displayName") ?? ""), catalog.name, name),
+    displayName: pickDisplayName(
+      String(formData.get("displayName") ?? ""),
+      catalog.name,
+      name,
+      catalog.canonicalModelId,
+    ),
     catalogId: catalog.id,
     systemPrompt: String(formData.get("systemPrompt") ?? "") || null,
     description: String(formData.get("description") ?? "") || null,
@@ -428,7 +445,12 @@ export async function updateMyModel(id: string, formData: FormData) {
   const catalog = await resolveCatalogId(db, name, String(formData.get("catalogId") ?? ""));
   const patch: Record<string, unknown> = {
     name,
-    displayName: pickDisplayName(String(formData.get("displayName") ?? ""), catalog.name, name),
+    displayName: pickDisplayName(
+      String(formData.get("displayName") ?? ""),
+      catalog.name,
+      name,
+      catalog.canonicalModelId,
+    ),
     catalogId: catalog.id,
     systemPrompt: String(formData.get("systemPrompt") ?? "") || null,
     description: String(formData.get("description") ?? "") || null,

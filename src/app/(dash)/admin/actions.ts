@@ -268,19 +268,21 @@ export async function testRoute(routeId: string): Promise<ProbeResult> {
 
 // ===================== Models =====================
 
-/** 显示名留空时回退:匹配到的目录名(catalogId 命中时)→ 对外模型名。admin 侧 catalogId 为表单原值。 */
+/** 显示名留空时回退:目录名 → 对外模型名;通用模板(__generic_*)跳过目录名直接用对外名。admin 侧 catalogId 为表单原值。 */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function resolveDisplayName(db: any, rawDisplayName: string, catalogId: string, fallbackName: string): Promise<string> {
   let catalogName: string | undefined;
+  let catalogCanonicalId: string | undefined;
   if (catalogId) {
     const [catalog] = await db
-      .select({ name: S().modelCatalog.name })
+      .select({ name: S().modelCatalog.name, canonicalModelId: S().modelCatalog.canonicalModelId })
       .from(S().modelCatalog)
       .where(eq(S().modelCatalog.id, catalogId))
       .limit(1);
     catalogName = catalog?.name as string | undefined;
+    catalogCanonicalId = catalog?.canonicalModelId as string | undefined;
   }
-  return pickDisplayName(rawDisplayName, catalogName, fallbackName);
+  return pickDisplayName(rawDisplayName, catalogName, fallbackName, catalogCanonicalId);
 }
 
 export async function listModels() {
