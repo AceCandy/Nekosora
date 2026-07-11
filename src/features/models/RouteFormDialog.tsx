@@ -56,7 +56,8 @@ export default function RouteFormDialog({
   const upstreamInputRef = useRef<HTMLInputElement>(null);
   // upstreamModelName 受控:兼容手填、拉取器 ref 写回(经 input 事件同步)与下面的自动匹配填充。
   const [upstreamModelName, setUpstreamModelName] = useState(initial?.upstreamModelName ?? "");
-  // 新增模式下选好 provider 后,自动拉取上游列表并匹配与当前模型同名的条目填入;每个 provider 只触发一次。
+  // 新增模式下选好 provider 后,自动拉取上游列表匹配当前模型名填入;每个 provider 只触发一次。
+  // 匹配顺序:完全相等优先;否则按去掉命名空间前缀(org/model→model)匹配,仅唯一命中才填。
   const matchedProviders = useRef<Set<string>>(new Set());
   const [, startMatchTransition] = useTransition();
   useEffect(() => {
@@ -66,8 +67,18 @@ export default function RouteFormDialog({
     startMatchTransition(async () => {
       try {
         const list = await fetchModelsAction(providerId);
-        const hit = list.find((m) => m.id === modelName);
-        if (hit) setUpstreamModelName(hit.id);
+        // 1) 完全相等优先
+        const exact = list.find((m) => m.id === modelName);
+        if (exact) {
+          setUpstreamModelName(exact.id);
+          return;
+        }
+        // 2) 否则去掉命名空间前缀(org/model → model)再匹配;
+        //    仅当唯一命中才自动填,避免 a/x 与 b/x 这类多组织同名歧义;
+        //    填入上游完整 id(含前缀),那才是上游真正识别的模型名。
+        const tail = (s: string) => s.slice(s.lastIndexOf("/") + 1);
+        const fuzzy = list.filter((m) => tail(m.id) === tail(modelName));
+        if (fuzzy.length === 1) setUpstreamModelName(fuzzy[0].id);
       } catch {
         // 拉取失败静默:不覆盖,留给用户手填或点拉取按钮。
       }
