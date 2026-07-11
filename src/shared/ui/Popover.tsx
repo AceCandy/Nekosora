@@ -4,10 +4,10 @@ import React, { createContext, useCallback, useContext, useRef, useState } from 
 import { clsx } from "clsx";
 
 export interface PopoverProps {
-  /** 受控显隐状态：由外部持有，内部只负责渲染与 click-outside。 */
-  open: boolean;
-  /** 关闭回调（点击遮罩时触发）。 */
-  onClose: () => void;
+  /** 受控显隐状态:click 模式由外部持有;openOnHover 模式可省略(内部 hovered 控制)。 */
+  open?: boolean;
+  /** 关闭回调(点击遮罩时触发);openOnHover 模式可省略。 */
+  onClose?: () => void;
   /** 触发器：由外部渲染并自行控制 open（本组件不做事件绑定）。 */
   trigger: React.ReactNode;
   /** 浮层内容。 */
@@ -68,10 +68,10 @@ export function Popover({
     closeTimer.current = setTimeout(() => setHovered(false), 150);
   };
 
-  const effectiveOpen = openOnHover ? hovered : open;
+  const effectiveOpen = openOnHover ? hovered : (open ?? false);
   const close = useCallback(() => {
     if (openOnHover) setHovered(false);
-    else onClose();
+    else onClose?.();
   }, [openOnHover, onClose]);
 
   const ctx = close;

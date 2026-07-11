@@ -3,7 +3,10 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import type { FormDataSerializableAction } from "@/features/providers/types";
 import Modal from "@/shared/ui/Modal";
+import Popover from "@/shared/ui/Popover";
 import type { ModelCatalogOption } from "@/features/models/ModelsManager";
+import CatalogDetailCard from "@/features/models/CatalogDetailCard";
+import { Eye } from "lucide-react";
 
 export interface ModelInitial {
   name?: string;
@@ -47,6 +50,10 @@ export default function ModelFormDialog({
   const ini = initial;
 
   const [formKey, setFormKey] = useState(0);
+  // catalog 选择需受控:预览按钮据此定位当前模板详情。提交仍读 formData。
+  const [catalogId, setCatalogId] = useState(ini?.catalogId ?? "");
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const previewCatalog = catalog.find((c) => c.id === catalogId);
 
   const handleClose = () => {
     onClose();
@@ -83,7 +90,6 @@ export default function ModelFormDialog({
             </span>
             <input
               name="displayName"
-              required={isAdmin}
               defaultValue={ini?.displayName ?? ""}
               className={inputCls}
               placeholder="GPT-4o"
@@ -91,19 +97,41 @@ export default function ModelFormDialog({
           </label>
 
           <label className="block">
-            <span className={labelCls}>
-              {t("catalogLabel")}
-            </span>
-            <select
-              name="catalogId"
-              defaultValue={ini?.catalogId ?? ""}
-              className={inputCls}
-            >
-              <option value="">{t("catalogAutoMatch")}</option>
-              {catalog.map((entry) => (
-                <option key={entry.id} value={entry.id}>{entry.name}</option>
-              ))}
-            </select>
+            <span className={labelCls}>{t("catalogLabel")}</span>
+            <div className="flex items-start gap-2">
+              <select
+                name="catalogId"
+                value={catalogId}
+                onChange={(e) => setCatalogId(e.target.value)}
+                className={`${inputCls} flex-1 min-w-0`}
+              >
+                <option value="">{t("catalogAutoMatch")}</option>
+                {catalog.map((entry) => (
+                  <option key={entry.id} value={entry.id}>{entry.name}</option>
+                ))}
+              </select>
+              <Popover
+                open={previewOpen}
+                onClose={() => setPreviewOpen(false)}
+                side="bottom"
+                align="right"
+                panelClassName="p-3"
+                trigger={
+                  <button
+                    type="button"
+                    disabled={!previewCatalog}
+                    onClick={() => setPreviewOpen(true)}
+                    title={t("catalogPreview")}
+                    className="mt-1 inline-flex shrink-0 items-center gap-1 rounded-md border border-neutral-200 dark:border-neutral-800 px-2.5 py-2 text-xs font-medium text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800/50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <Eye className="h-3.5 w-3.5" />
+                    {t("catalogPreview")}
+                  </button>
+                }
+              >
+                {previewCatalog && <CatalogDetailCard catalog={previewCatalog} />}
+              </Popover>
+            </div>
           </label>
 
           {isAdmin && (!isEdit || !visibilityManagedInList) && (

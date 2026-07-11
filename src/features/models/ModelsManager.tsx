@@ -26,6 +26,8 @@ import RouteTestButton, { type RouteTestAction } from "@/features/models/RouteTe
 import ModelSyncChecker, { type SyncStatus } from "@/features/models/ModelSyncChecker";
 import type { FetchModelsAction } from "@/features/models/UpstreamModelPicker";
 import ConfirmDialog from "@/shared/ui/ConfirmDialog";
+import Popover from "@/shared/ui/Popover";
+import CatalogDetailCard from "@/features/models/CatalogDetailCard";
 import { Plus, Edit2, Play, Square, Trash2, ShieldAlert, GitCommit, ChevronDown, ChevronUp, GripVertical } from "lucide-react";
 import { clsx } from "clsx";
 import { Button } from "@/shared/ui/Button";
@@ -229,6 +231,7 @@ export default function ModelsManager({
                     <SortableModelRow
                       key={m.id}
                       model={m}
+                      catalogOption={catalog.find((opt) => opt.id === m.catalogId)}
                       routes={modelRoutes}
                       hasVisibility={showVisibility}
                       visibilityAction={visibilityActions?.[m.id]}
@@ -259,6 +262,7 @@ export default function ModelsManager({
                     <tr className="hover:bg-neutral-50/50 dark:hover:bg-neutral-900/10 transition-colors duration-150">
                       <ModelRowCells
                         model={m}
+                        catalogOption={catalog.find((opt) => opt.id === m.catalogId)}
                         hasVisibility={showVisibility}
                         visibilityAction={visibilityActions?.[m.id]}
                         routeCount={modelRoutes.length}
@@ -455,6 +459,7 @@ export default function ModelsManager({
 /** 模型主行的内容单元格。拖动手柄由外层行组件提供。 */
 function ModelRowCells({
   model,
+  catalogOption,
   hasVisibility,
   visibilityAction,
   routeCount,
@@ -466,6 +471,7 @@ function ModelRowCells({
   toggleAction,
 }: {
   model: ModelItem;
+  catalogOption?: ModelCatalogOption;
   hasVisibility: boolean;
   visibilityAction?: ModelVisibilityActions;
   routeCount: number;
@@ -485,8 +491,23 @@ function ModelRowCells({
       <td className="p-3.5 text-xs text-neutral-600 dark:text-neutral-300">
         {model.displayName ?? "-"}
       </td>
-      <td className="p-3.5 text-xs text-neutral-600 dark:text-neutral-300">
-        {model.catalogName}
+      <td className="p-3.5 text-xs">
+        {catalogOption ? (
+          <Popover
+            openOnHover
+            side="bottom"
+            panelClassName="p-3"
+            trigger={
+              <Badge variant="primary" className="cursor-default">
+                {model.catalogName}
+              </Badge>
+            }
+          >
+            <CatalogDetailCard catalog={catalogOption} />
+          </Popover>
+        ) : (
+          <span className="text-neutral-500 dark:text-neutral-400">{model.catalogName}</span>
+        )}
       </td>
       {hasVisibility && (
         <td className="p-3.5 text-xs">
@@ -642,6 +663,7 @@ function RouteExpandRow({
  */
 function SortableModelRow({
   model,
+  catalogOption,
   routes,
   hasVisibility,
   visibilityAction,
@@ -661,6 +683,7 @@ function SortableModelRow({
   fetchModelsAction,
 }: {
   model: ModelItem;
+  catalogOption?: ModelCatalogOption;
   routes: RouteItem[];
   hasVisibility: boolean;
   visibilityAction?: ModelVisibilityActions;
@@ -708,6 +731,7 @@ function SortableModelRow({
         </td>
         <ModelRowCells
           model={model}
+          catalogOption={catalogOption}
           hasVisibility={hasVisibility}
           visibilityAction={visibilityAction}
           routeCount={routeCount}

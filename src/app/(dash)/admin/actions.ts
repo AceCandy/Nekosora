@@ -9,6 +9,7 @@ import { recordSuccess, recordFailure } from "@/lib/circuit-breaker";
 import { pickWeightedKey } from "@/lib/providers/keys";
 import type { ProviderProtocol } from "@/db/types";
 import { requireAdmin } from "@/lib/session";
+import { pickDisplayName } from "@/lib/model-catalog";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const S = () => getSchema() as any;
@@ -260,6 +261,21 @@ export async function testRoute(routeId: string): Promise<ProbeResult> {
 
 // ===================== Models =====================
 
+/** 显示名留空时回退:匹配到的目录名(catalogId 命中时)→ 对外模型名。admin 侧 catalogId 为表单原值。 */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function resolveDisplayName(db: any, rawDisplayName: string, catalogId: string, fallbackName: string): Promise<string> {
+  let catalogName: string | undefined;
+  if (catalogId) {
+    const [catalog] = await db
+      .select({ name: S().modelCatalog.name })
+      .from(S().modelCatalog)
+      .where(eq(S().modelCatalog.id, catalogId))
+      .limit(1);
+    catalogName = catalog?.name as string | undefined;
+  }
+  return pickDisplayName(rawDisplayName, catalogName, fallbackName);
+}
+
 export async function listModels() {
   const admin = await requireAdmin();
   const db = await getDb();
@@ -297,6 +313,8 @@ export async function createModel(formData: FormData) {
   const db = await getDb();
   const name = String(formData.get("name") ?? "");
   const visibility = resolveVisibility(formData);
+  const catalogId = String(formData.get("catalogId") ?? "");
+  const displayName = await resolveDisplayName(db, String(formData.get("displayName") ?? ""), catalogId, name);
   // public 模型 name 全局唯一(应用层校验,避免多 admin 建同名 public)。
   if (visibility === "public") {
     const [dup] = await db
@@ -316,8 +334,8 @@ export async function createModel(formData: FormData) {
     ownerUserId: admin.id,
     visibility,
     name,
-    displayName: String(formData.get("displayName") ?? "") || null,
-    catalogId: String(formData.get("catalogId") ?? ""),
+    displayName,
+    catalogId,
     enabled: true,
     systemPrompt: String(formData.get("systemPrompt") ?? "") || null,
     description: String(formData.get("description") ?? "") || null,
@@ -355,10 +373,13 @@ export async function updateModel(id: string, formData: FormData) {
   const admin = await requireAdmin();
   const db = await getDb();
   const existing = await assertModelManageable(db, id, admin.id);
+  const name = String(formData.get("name") ?? "");
+  const catalogId = String(formData.get("catalogId") ?? "");
+  const displayName = await resolveDisplayName(db, String(formData.get("displayName") ?? ""), catalogId, name);
   const patch: Record<string, unknown> = {
-    name: String(formData.get("name") ?? ""),
-    displayName: String(formData.get("displayName") ?? "") || null,
-    catalogId: String(formData.get("catalogId") ?? ""),
+    name,
+    displayName,
+    catalogId,
     systemPrompt: String(formData.get("systemPrompt") ?? "") || null,
     description: String(formData.get("description") ?? "") || null,
     updatedAt: new Date(),

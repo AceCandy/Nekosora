@@ -8,7 +8,7 @@ import { probeProviderKey, fetchUpstreamModels, type ProbeResult, type UpstreamM
 import { recordSuccess, recordFailure } from "@/lib/circuit-breaker";
 import type { ProviderProtocol } from "@/db/types";
 import { requireSession } from "@/lib/session";
-import { findCatalogMatch } from "@/lib/model-catalog";
+import { findCatalogMatch, pickDisplayName } from "@/lib/model-catalog";
 import {
   createMasterKey,
   createSubKey,
@@ -299,7 +299,7 @@ export async function listModelCatalog() {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function resolveCatalogId(db: any, name: string, requestedId: string): Promise<string> {
+async function resolveCatalogId(db: any, name: string, requestedId: string): Promise<{ id: string; name: string }> {
   const catalogs = await db
     .select()
     .from(S().modelCatalog)
@@ -307,19 +307,20 @@ async function resolveCatalogId(db: any, name: string, requestedId: string): Pro
   if (requestedId) {
     const selected = catalogs.find((entry: { id: string }) => entry.id === requestedId);
     if (!selected) throw new Error("模型模板不存在或已禁用");
-    return selected.id as string;
+    return { id: selected.id as string, name: selected.name as string };
   }
   const matched = findCatalogMatch(
     catalogs.map((entry: Record<string, unknown>) => ({
       ...entry,
       id: entry.id as string,
+      name: entry.name as string,
       canonicalModelId: entry.canonicalModelId as string,
       aliases: (entry.aliases as string[] | null) ?? [],
     })),
     name,
   );
   if (!matched) throw new Error("未匹配到模型模板，请先选择模板");
-  return matched.id;
+  return { id: matched.id, name: (matched as unknown as { name: string }).name };
 }
 
 export async function createMyModel(formData: FormData) {
@@ -333,7 +334,7 @@ export async function createMyModel(formData: FormData) {
         : "private"
       : "private";
   const name = String(formData.get("name") ?? "");
-  const catalogId = await resolveCatalogId(db, name, String(formData.get("catalogId") ?? ""));
+  const catalog = await resolveCatalogId(db, name, String(formData.get("catalogId") ?? ""));
   if (visibility === "public") {
     const [dup] = await db
       .select({ id: S().models.id })
@@ -357,8 +358,8 @@ export async function createMyModel(formData: FormData) {
     ownerUserId: user.id,
     visibility,
     name,
-    displayName: String(formData.get("displayName") ?? "") || null,
-    catalogId,
+    displayName: pickDisplayName(String(formData.get("displayName") ?? ""), catalog.name, name),
+    catalogId: catalog.id,
     systemPrompt: String(formData.get("systemPrompt") ?? "") || null,
     description: String(formData.get("description") ?? "") || null,
     enabled: true,
@@ -417,11 +418,11 @@ export async function updateMyModel(id: string, formData: FormData) {
   const user = await requireSession();
   const db = await getDb();
   const name = String(formData.get("name") ?? "");
-  const catalogId = await resolveCatalogId(db, name, String(formData.get("catalogId") ?? ""));
+  const catalog = await resolveCatalogId(db, name, String(formData.get("catalogId") ?? ""));
   const patch: Record<string, unknown> = {
     name,
-    displayName: String(formData.get("displayName") ?? "") || null,
-    catalogId,
+    displayName: pickDisplayName(String(formData.get("displayName") ?? ""), catalog.name, name),
+    catalogId: catalog.id,
     systemPrompt: String(formData.get("systemPrompt") ?? "") || null,
     description: String(formData.get("description") ?? "") || null,
     updatedAt: new Date(),
