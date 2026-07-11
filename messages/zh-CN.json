@@ -677,6 +677,8 @@
     "colRouteCount": "路由数",
     "colUpstreamName": "上游名",
     "colStatus": "状态",
+    "statusEnabled": "已启用",
+    "statusDisabled": "已禁用",
     "colActions": "操作",
     "emptyState": "暂无模型，点击右上方按钮添加。",
     "visibilityPublic": "全局公开",

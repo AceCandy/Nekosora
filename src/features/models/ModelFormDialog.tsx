@@ -4,6 +4,7 @@ import { useTranslations } from "next-intl";
 import type { FormDataSerializableAction } from "@/features/providers/types";
 import Modal from "@/shared/ui/Modal";
 import Popover from "@/shared/ui/Popover";
+import { Button } from "@/shared/ui/Button";
 import type { ModelCatalogOption } from "@/features/models/ModelsManager";
 import CatalogDetailCard from "@/features/models/CatalogDetailCard";
 import { Eye } from "lucide-react";
@@ -33,7 +34,7 @@ interface ModelFormDialogProps {
 
 const labelCls = "block text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-1";
 const inputCls =
-  "mt-1 w-full rounded-md border border-neutral-200 dark:border-neutral-800 px-3.5 py-2 text-sm bg-white dark:bg-[#0f121a] focus:outline-none focus:border-blue-500 dark:focus:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500/20 transition-all duration-150 text-neutral-800 dark:text-neutral-200";
+  "mt-1 w-full rounded-md border border-morning-mist dark:border-deep-space px-3.5 py-2 text-sm bg-white dark:bg-[#0f121a] focus:outline-none focus:border-sora-blue dark:focus:border-sora-blue focus-visible:ring-2 focus-visible:ring-sora-blue/20 transition-colors duration-150 text-space-ink dark:text-nebula-silver";
 
 export default function ModelFormDialog({
   open,
@@ -157,7 +158,7 @@ export default function ModelFormDialog({
             name="systemPrompt"
             rows={3}
             defaultValue={ini?.systemPrompt ?? ""}
-            className="mt-1 w-full rounded-md border border-neutral-200 dark:border-neutral-800 px-3.5 py-2 text-sm bg-white dark:bg-[#0f121a] focus:outline-none focus:border-blue-500 dark:focus:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500/20 transition-all duration-150 resize-none text-neutral-800 dark:text-neutral-200"
+            className="mt-1 w-full rounded-md border border-morning-mist dark:border-deep-space px-3.5 py-2 text-sm bg-white dark:bg-[#0f121a] focus:outline-none focus:border-sora-blue dark:focus:border-sora-blue focus-visible:ring-2 focus-visible:ring-sora-blue/20 transition-colors duration-150 resize-none text-space-ink dark:text-nebula-silver"
             placeholder={t("systemPromptPlaceholder")}
           />
         </label>
@@ -174,19 +175,21 @@ export default function ModelFormDialog({
         </label>
 
         <div className="flex justify-end gap-2.5 pt-3 border-t border-neutral-100 dark:border-neutral-800/80">
-          <button
+          <Button
             type="button"
+            variant="secondary"
             onClick={handleClose}
-            className="rounded-md border border-neutral-200 dark:border-neutral-800 px-4 py-2 text-xs font-semibold text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors"
+            className="px-4 py-2 text-xs font-semibold"
           >
             {t("cancel")}
-          </button>
-          <button
+          </Button>
+          <Button
             type="submit"
-            className="rounded-md bg-neutral-900 hover:bg-neutral-800 dark:bg-white dark:text-black dark:hover:bg-neutral-100 px-4 py-2 text-xs font-semibold text-white transition-colors shadow-none"
+            variant="contrast"
+            className="px-4 py-2 text-xs font-semibold"
           >
             {isEdit ? t("save") : t("create")}
-          </button>
+          </Button>
         </div>
       </form>
     </Modal>

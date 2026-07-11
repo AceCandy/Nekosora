@@ -677,6 +677,8 @@
     "colRouteCount": "Routes",
     "colUpstreamName": "Upstream name",
     "colStatus": "Status",
+    "statusEnabled": "Enabled",
+    "statusDisabled": "Disabled",
     "colActions": "Actions",
     "emptyState": "No models yet. Click the button above to add one.",
     "visibilityPublic": "Public",

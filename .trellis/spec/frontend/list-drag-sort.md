@@ -23,9 +23,22 @@ onDragEnd(arrayMove)
 ## 前端模式(@dnd-kit)
 
 - **`useSortable` 必须在独立行组件内调用**,不能在 `.map` 回调里(违反 hooks 规则)。抽 `SortableXxxRow` 同文件内子组件。
-- 顶层:`<DndContext sensors={[PointerSensor({ activationConstraint: { distance: 5 } })]} collisionDetection={closestCenter} onDragEnd>` 包住 `<SortableContext items={rows.map(r=>r.id)} strategy={verticalListSortingStrategy}>`。
+- 顶层:`<DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd>` 包住 `<SortableContext items={rows.map(r=>r.id)} strategy={verticalListSortingStrategy}>`,`sensors = useSensors(useSensor(KeyboardSensor), useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))`(两个都要,见下节)。
 - 行:`useSortable({id})` 的 `setNodeRef`/`transform`/`style`/`listeners`/`attributes` 绑到 `<tr>`;最前列放 `GripVertical` 手柄(`<button {...attributes} {...listeners}>`,`cursor-grab`)。`transform` 用 `CSS.Transform.toString(transform)`(@dnd-kit/utilities)套到 `style`。
 - `useOptimistic(rows, (state, orderedIds) => orderedIds.map(id => map.get(id)).filter(Boolean))`。
+
+## 键盘可达性:同时注册 KeyboardSensor
+
+仅注册 `PointerSensor` 时,键盘用户无法重排(违反 WCAG 2.1.1 键盘可达)。dnd-kit 必须同时注册 `KeyboardSensor`:聚焦拖动手柄后 Space 拾起、方向键移动、再次 Space 落下。手柄 `<button>` 已有 `aria-label` 并展开 `{...listeners}`,无需额外接线。
+
+```tsx
+const sensors = useSensors(
+  useSensor(KeyboardSensor),
+  useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+);
+```
+
+垂直列表用 dnd-kit 默认 keyboard coordinate getter 即可(↑/↓ 上下)。验证:Tab 到手柄 → Space 拾起 → ↑/↓ 移动 → Space 落下,顺序正确落库。
 
 ## SSR hydration: DndContext 必须传稳定 id
 

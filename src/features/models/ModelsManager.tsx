@@ -5,6 +5,7 @@ import {
   DndContext,
   closestCenter,
   PointerSensor,
+  KeyboardSensor,
   useSensor,
   useSensors,
   type DragEndEvent,
@@ -162,7 +163,10 @@ export default function ModelsManager({
     },
   );
 
+  // PointerSensor 服鼠标/触控；KeyboardSensor 让键盘用户聚焦拖动手柄后用
+  // Space 拾起、方向键移动、再次 Space 落下，补齐排序的可达性路径。
   const sensors = useSensors(
+    useSensor(KeyboardSensor),
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   );
 
@@ -201,8 +205,8 @@ export default function ModelsManager({
   function renderTable(groupModels: ModelItem[], visibility?: ModelVisibility) {
     const tableReorderable = Boolean(visibility ? groupedReorderAction : reorderAction);
     const table = (
-      <div className="rounded-lg border border-morning-mist dark:border-deep-space bg-nebula-white dark:bg-twilight-obsidian overflow-hidden transition-colors duration-150">
-        <table className="w-full text-sm border-collapse text-left">
+      <div className="rounded-lg border border-morning-mist dark:border-deep-space bg-nebula-white dark:bg-twilight-obsidian overflow-x-auto transition-colors duration-150">
+        <table className="w-full min-w-[680px] text-sm border-collapse text-left">
           <thead className="bg-neutral-50/70 dark:bg-neutral-900/50 border-b border-morning-mist dark:border-deep-space text-neutral-500 dark:text-neutral-400 font-mono text-xs uppercase">
             <tr>
               {reorderable && <th className="p-3.5 w-8" />}
@@ -218,7 +222,7 @@ export default function ModelsManager({
           <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800/60">
             {groupModels.length === 0 ? (
               <tr>
-                <td colSpan={colCount} className="p-10 text-center text-xs text-neutral-400 dark:text-neutral-500">
+                <td colSpan={colCount} className="p-10 text-center text-xs text-neutral-500">
                   {visibility ? t("emptyGroup") : t("emptyState")}
                 </td>
               </tr>
@@ -309,7 +313,7 @@ export default function ModelsManager({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-mono text-neutral-400 dark:text-neutral-500 uppercase tracking-wider">
+        <span className="text-xs font-mono text-neutral-500 uppercase tracking-wider">
           {t("configuredCount", { count: optimisticModels.length })}
         </span>
         <Button
@@ -407,7 +411,7 @@ export default function ModelsManager({
               <ShieldAlert className="w-5 h-5 text-red-500 shrink-0" />
               <div>
                 {t("deleteModelConfirm", { name: deleting.name })}
-                <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1 leading-normal">
+                <p className="text-xs text-neutral-500 mt-1 leading-normal">
                   {t("deleteModelWarning")}
                 </p>
               </div>
@@ -441,7 +445,7 @@ export default function ModelsManager({
               <ShieldAlert className="w-5 h-5 text-red-500 shrink-0" />
               <div>
                 {t("deleteRouteConfirm", { name: routeDeleting.providerName })}
-                <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1 leading-normal font-mono">
+                <p className="text-xs text-neutral-500 mt-1 leading-normal font-mono">
                   {t("upstreamModelLabel", { name: routeDeleting.upstreamModelName })}
                 </p>
               </div>
@@ -486,10 +490,14 @@ function ModelRowCells({
   return (
     <>
       <td className="p-3.5 font-mono text-xs font-semibold text-neutral-800 dark:text-neutral-200">
-        {model.name}
+        <span className="block max-w-[14rem] truncate" title={model.name}>
+          {model.name}
+        </span>
       </td>
       <td className="p-3.5 text-xs text-neutral-600 dark:text-neutral-300">
-        {model.displayName ?? "-"}
+        <span className="block max-w-[12rem] truncate" title={model.displayName ?? undefined}>
+          {model.displayName ?? "-"}
+        </span>
       </td>
       <td className="p-3.5 text-xs">
         {catalogOption ? (
@@ -498,8 +506,8 @@ function ModelRowCells({
             side="bottom"
             panelClassName="p-3"
             trigger={
-              <Badge variant="primary" className="cursor-default">
-                {model.catalogName}
+              <Badge variant="primary" className="cursor-default max-w-[10rem] min-w-0" title={model.catalogName}>
+                <span className="truncate">{model.catalogName}</span>
               </Badge>
             }
           >
@@ -526,14 +534,14 @@ function ModelRowCells({
                 </span>
               </form>
             ) : (
-              <div className="inline-flex rounded-md border border-morning-mist dark:border-deep-space overflow-hidden" aria-label={t("visibilityLabel")}>
+              <div role="group" className="inline-flex rounded-md border border-morning-mist dark:border-deep-space overflow-hidden" aria-label={t("visibilityLabel")}>
                 <span className="px-2.5 py-1.5 text-[11px] font-semibold bg-neutral-800 text-white dark:bg-neutral-100 dark:text-neutral-900" aria-current="true">
                   {t("visibilityPrivate")}
                 </span>
                 <button
                   type="button"
                   onClick={onPublish}
-                  className="px-2.5 py-1.5 text-[11px] font-medium text-neutral-500 hover:bg-blue-50 hover:text-sora-blue dark:text-neutral-400 dark:hover:bg-blue-950/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sora-blue"
+                  className="px-2.5 py-1.5 text-[11px] font-medium text-neutral-500 hover:bg-sora-blue/10 hover:text-sora-blue dark:text-neutral-400 dark:hover:bg-sora-blue/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sora-blue"
                   title={t("publishModel")}
                 >
                   {t("visibilityPublic")}
@@ -551,7 +559,7 @@ function ModelRowCells({
         {routeCount}
       </td>
       <td className="p-3.5">
-        <StatusDot enabled={model.enabled} />
+        <StatusDot enabled={model.enabled} enabledLabel={t("statusEnabled")} disabledLabel={t("statusDisabled")} />
       </td>
       <td className="p-3.5 text-right space-x-1 whitespace-nowrap">
         <Button
@@ -561,7 +569,7 @@ function ModelRowCells({
           className={clsx(
             expanded
               ? "text-neutral-800 dark:text-white bg-neutral-100 dark:bg-neutral-800"
-              : "text-sora-blue hover:bg-blue-50 dark:hover:bg-blue-950/20"
+              : "text-sora-blue hover:bg-sora-blue/10 dark:hover:bg-sora-blue/10"
           )}
           title={t("configureRoutes")}
         >
@@ -722,7 +730,7 @@ function SortableModelRow({
           <button
             type="button"
             aria-label={t("dragHandle")}
-            className="cursor-grab active:cursor-grabbing inline-flex items-center justify-center text-neutral-400 hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300"
+            className="cursor-grab active:cursor-grabbing inline-flex items-center justify-center text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
             {...attributes}
             {...listeners}
           >
@@ -812,12 +820,12 @@ function RouteListPanel({
       </div>
 
       {routes.length === 0 ? (
-        <p className="text-xs text-neutral-400 dark:text-neutral-500 py-3 text-center border border-dashed border-neutral-200 dark:border-neutral-800 rounded">
+        <p className="text-xs text-neutral-500 py-3 text-center border border-dashed border-neutral-200 dark:border-neutral-800 rounded">
           {t("noRoutesHint")}
         </p>
       ) : (
-        <div className="rounded-md border border-morning-mist dark:border-deep-space overflow-hidden bg-nebula-white dark:bg-twilight-obsidian">
-          <table className="w-full text-xs text-left">
+        <div className="rounded-md border border-morning-mist dark:border-deep-space overflow-x-auto bg-nebula-white dark:bg-twilight-obsidian">
+          <table className="w-full min-w-[560px] text-xs text-left">
             <thead className="bg-neutral-50 dark:bg-neutral-900 text-neutral-500 dark:text-neutral-400 font-mono text-[10px] uppercase border-b border-morning-mist dark:border-deep-space">
               <tr>
                 <th className="p-2.5 font-medium">{t("colUpstreamProvider")}</th>
@@ -849,7 +857,7 @@ function RouteListPanel({
                   <td className="p-2.5 text-center font-mono text-[11px] font-semibold">{r.priority}</td>
                   <td className="p-2.5 text-center font-mono text-[11px] font-semibold">{r.weight}</td>
                   <td className="p-2.5">
-                    <StatusDot enabled={r.enabled} />
+                    <StatusDot enabled={r.enabled} enabledLabel={t("statusEnabled")} disabledLabel={t("statusDisabled")} />
                   </td>
                   <td className="p-2.5 text-right space-x-1 whitespace-nowrap">
                     {testActions?.[r.id] && (
@@ -905,7 +913,7 @@ function RouteListPanel({
           </table>
         </div>
       )}
-      <p className="text-[11px] text-neutral-400">
+      <p className="text-[11px] text-neutral-500">
         {t("priorityWeightTip")}
       </p>
     </div>
