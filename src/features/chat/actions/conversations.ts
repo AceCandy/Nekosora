@@ -1,5 +1,5 @@
 "use server";
-import { eq, and, or, desc, isNull, like, asc } from "drizzle-orm";
+import { eq, and, or, desc, isNull, like, asc, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { requireSession } from "@/lib/session";
@@ -9,7 +9,34 @@ import type { ReasoningLevel } from "@/db/types";
 const S = () => getSchema() as any;
 
 /**
- * 列出当前用户可见模型:visibility=public ∪ (private && owner=自己),且 enabled。
+ * 过滤掉没有可用路由的模型:无路由或路由全部禁用的模型在 chat 不可用,不应展示。
+ * 只看 modelId 下是否存在 enabled 路由——public 模型路由由 admin 建,private 模型
+ * 路由 owner 即模型 owner,可见性已由模型层过滤,故不再限定 route owner。
+ */
+async function filterRoutable<T extends { id: string }>(
+  db: Awaited<ReturnType<typeof getDb>>,
+  models: T[],
+): Promise<T[]> {
+  if (models.length === 0) return models;
+  const routed = await db
+    .select({ modelId: S().routes.modelId })
+    .from(S().routes)
+    .where(
+      and(
+        eq(S().routes.enabled, true),
+        inArray(
+          S().routes.modelId,
+          models.map((m) => m.id),
+        ),
+      ),
+    );
+  const routedIds = new Set(routed.map((r: { modelId: string }) => r.modelId));
+  return models.filter((m) => routedIds.has(m.id));
+}
+
+/**
+ * 列出当前用户可见模型:visibility=public ∪ (private && owner=自己),且 enabled,
+ * 且至少有一条启用路由(无路由或全禁用的模型不可用,不展示)。
  * 返回扁平 models 数组(带 id/ownerUserId/visibility/name/displayName/capabilities,供阶段3 前端用)。
  * private 排序在前(方言无关:JS 层稳定排序,组内保持 sortOrder)。
  */
@@ -36,7 +63,7 @@ export async function getVisibleModels() {
     (a: { visibility: unknown }, b: { visibility: unknown }) =>
       (a.visibility === "private" ? 0 : 1) - (b.visibility === "private" ? 0 : 1),
   );
-  return models;
+  return filterRoutable(db, models);
 }
 
 /** 列出支持图像生成的可见模型(public ∪ 我的 private),按 capabilities.imageGeneration 过滤。 */
@@ -56,12 +83,13 @@ export async function getImageModels() {
     .orderBy(asc(S().models.sortOrder), asc(S().models.createdAt));
   const hasImg = (caps: unknown) =>
     Boolean((caps as { imageGeneration?: boolean } | null)?.imageGeneration);
-  return rows
+  const imgModels = rows
     .filter((row: { capabilities: unknown }) => hasImg(row.capabilities))
     .map((row: { model: Record<string, unknown>; capabilities: unknown }) => ({
       ...row.model,
       capabilities: row.capabilities,
     }));
+  return filterRoutable(db, imgModels);
 }
 
 /** 列出当前用户的会话(含置顶/归档/更新时间,供前端分组)。 */
