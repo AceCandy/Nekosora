@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-06-18T15:10:00Z",
+  "generatedAt": "2026-07-12T00:00:00Z",
   "title": "Design System: Nekusora",
   "extensions": {
     "colorMeta": {
@@ -49,6 +49,21 @@
           "oklch(99% 0.003 250)"
         ]
       },
+      "neutral-fg": {
+        "role": "neutral",
+        "displayName": "Space Ink",
+        "canonical": "oklch(12% 0.012 260)",
+        "tonalRamp": [
+          "oklch(12% 0.012 260)",
+          "oklch(20% 0.012 260)",
+          "oklch(32% 0.012 260)",
+          "oklch(45% 0.012 260)",
+          "oklch(60% 0.012 260)",
+          "oklch(75% 0.012 260)",
+          "oklch(90% 0.008 260)",
+          "oklch(96% 0.005 260)"
+        ]
+      },
       "dark-bg": {
         "role": "neutral",
         "displayName": "Twilight Obsidian",
@@ -63,42 +78,87 @@
           "oklch(90% 0.008 260)",
           "oklch(97% 0.005 260)"
         ]
+      },
+      "dark-fg": {
+        "role": "neutral",
+        "displayName": "Nebula Silver",
+        "canonical": "oklch(96% 0.005 250)",
+        "tonalRamp": [
+          "oklch(15% 0.005 250)",
+          "oklch(30% 0.005 250)",
+          "oklch(45% 0.005 250)",
+          "oklch(65% 0.005 250)",
+          "oklch(80% 0.005 250)",
+          "oklch(90% 0.005 250)",
+          "oklch(94% 0.005 250)",
+          "oklch(96% 0.005 250)"
+        ]
+      },
+      "border-light": {
+        "role": "neutral",
+        "displayName": "Morning Mist",
+        "canonical": "oklch(92% 0.01 250)",
+        "tonalRamp": [
+          "oklch(15% 0.01 250)",
+          "oklch(30% 0.01 250)",
+          "oklch(45% 0.01 250)",
+          "oklch(65% 0.01 250)",
+          "oklch(80% 0.01 250)",
+          "oklch(88% 0.01 250)",
+          "oklch(92% 0.01 250)",
+          "oklch(96% 0.006 250)"
+        ]
+      },
+      "border-dark": {
+        "role": "neutral",
+        "displayName": "Deep Space",
+        "canonical": "oklch(25% 0.02 250)",
+        "tonalRamp": [
+          "oklch(15% 0.02 250)",
+          "oklch(25% 0.02 250)",
+          "oklch(35% 0.02 250)",
+          "oklch(50% 0.02 250)",
+          "oklch(65% 0.02 250)",
+          "oklch(80% 0.015 250)",
+          "oklch(90% 0.01 250)",
+          "oklch(96% 0.005 250)"
+        ]
       }
     },
     "typographyMeta": {
       "display": {
         "displayName": "Display",
-        "purpose": "用于品牌首页大标题"
+        "purpose": "首页大标题与关键登录界面的品牌首提（Semi-bold 32px / 1.25）。"
       },
       "body": {
         "displayName": "Body",
-        "purpose": "用于聊天消息正文与说明段落"
+        "purpose": "对话消息正文与详细描述（Regular 14px / 1.5，段落限宽 65–75ch）。"
       }
     },
     "shadows": [
       {
         "name": "orbital-hover",
         "value": "0 4px 12px rgba(0, 0, 0, 0.05)",
-        "purpose": "按钮 Hover 态及轻量卡片的悬浮效果"
+        "purpose": "按钮 Hover 态及次级悬浮卡片的边缘缓释。"
       },
       {
         "name": "pivot-modal",
         "value": "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)",
-        "purpose": "顶层弹窗（Modal）的沉降阴影"
+        "purpose": "原生 <dialog> (Modal) 激活时的顶层沉降阴影。"
       }
     ],
     "motion": [
       {
         "name": "standard-ease",
         "value": "cubic-bezier(0.4, 0, 0.2, 1)",
-        "purpose": "系统交互状态切换的默认过渡函数"
+        "purpose": "系统交互状态切换的默认过渡函数（150–200ms）。"
       }
     ],
     "breakpoints": [
-      {
-        "name": "mobile-max",
-        "value": "640px"
-      }
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" }
     ]
   },
   "components": [
@@ -106,66 +166,140 @@
       "name": "Primary Button",
       "kind": "button",
       "refersTo": "button-primary",
-      "description": "主要操作按钮，例如发送消息或保存配置。",
+      "description": "主要操作按钮，例如发送消息、保存配置。Sora Blue 实底，静止无投影。",
       "html": "<button class=\"ds-btn-primary\">发送消息</button>",
-      "css": ".ds-btn-primary { background: #3b82f6; color: #fcfdff; padding: 8px 16px; border-radius: 6px; font-size: 14px; font-weight: 500; border: none; cursor: pointer; transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1); } .ds-btn-primary:hover { background: #2563eb; box-shadow: 0 4px 12px rgba(0,0,0,0.05); } .ds-btn-primary:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }"
+      "css": ".ds-btn-primary { background: #3b82f6; color: #fcfdff; padding: 8px 16px; border-radius: 6px; font-size: 14px; font-weight: 500; line-height: 1.5; border: none; cursor: pointer; transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1); } .ds-btn-primary:hover { background: #2563eb; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); } .ds-btn-primary:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }"
     },
     {
       "name": "Secondary Button",
       "kind": "button",
       "refersTo": "button-secondary",
-      "description": "次要操作按钮，例如取消操作或辅助选项。",
+      "description": "次要操作按钮，例如取消、辅助选项。冷调边框 + 纯白底。",
       "html": "<button class=\"ds-btn-secondary\">取消</button>",
-      "css": ".ds-btn-secondary { background: #fcfdff; color: #0f121a; padding: 8px 16px; border-radius: 6px; font-size: 14px; font-weight: 500; border: 1px solid #e2e8f0; cursor: pointer; transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1); } .ds-btn-secondary:hover { background: #f1f3f7; } .ds-btn-secondary:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }"
+      "css": ".ds-btn-secondary { background: #fcfdff; color: #0f121a; padding: 8px 16px; border-radius: 6px; font-size: 14px; font-weight: 500; line-height: 1.5; border: 1px solid #e2e8f0; cursor: pointer; transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1); } .ds-btn-secondary:hover { background: #fafafa; } .ds-btn-secondary:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "表格行内动作按钮（编辑 / 删除等），透明底，仅 Hover 出浅灰底。",
+      "html": "<button class=\"ds-btn-ghost\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" style=\"display:inline-block;vertical-align:middle;margin-right:6px\"><path d=\"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7\"/><path d=\"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z\"/></svg>编辑</button>",
+      "css": ".ds-btn-ghost { background: transparent; color: #404040; padding: 6px 10px; border-radius: 6px; font-size: 12px; font-weight: 500; border: none; cursor: pointer; display: inline-flex; align-items: center; transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1); } .ds-btn-ghost:hover { background: #f5f5f5; } .ds-btn-ghost:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input-text",
+      "description": "表单输入域。1px 冷调边框，聚焦时边框转 Sora Blue 并叠加轻量焦点环，无外发光。",
+      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"gpt-4o\" />",
+      "css": ".ds-input { width: 100%; background: #ffffff; color: #0f121a; padding: 8px 14px; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 14px; line-height: 1.5; transition: border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1); } .ds-input::placeholder { color: #737373; } .ds-input:focus { outline: none; border-color: #3b82f6; } .ds-input:focus-visible { box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2); }"
+    },
+    {
+      "name": "Badge",
+      "kind": "chip",
+      "refersTo": "badge",
+      "description": "能力 / 状态标签。极低饱和底色 + 同色细边框 + 同色文字，克制不抢主色。",
+      "html": "<span class=\"ds-badge\">工具</span>",
+      "css": ".ds-badge { display: inline-flex; align-items: center; background: rgba(59, 130, 246, 0.03); color: #3b82f6; padding: 1px 6px; border-radius: 4px; border: 1px solid rgba(59, 130, 246, 0.2); font-size: 10px; font-weight: 600; line-height: 1.5; }"
+    },
+    {
+      "name": "Status Dot",
+      "kind": "custom",
+      "refersTo": "status-dot",
+      "description": "启用 / 禁用状态指示。颜色 + 文字双编码，非纯颜色。绿色为启用、灰色为禁用。",
+      "html": "<span class=\"ds-status\"><span class=\"ds-status-dot\"></span>已启用</span>",
+      "css": ".ds-status { display: inline-flex; align-items: center; gap: 6px; color: #16a34a; font-size: 12px; font-weight: 600; } .ds-status-dot { width: 6px; height: 6px; border-radius: 9999px; background: #16a34a; }"
+    },
+    {
+      "name": "Sidebar Navigation",
+      "kind": "nav",
+      "refersTo": "sidebar-nav",
+      "description": "配置后台侧栏。极薄分隔线划分视口；激活项用 Sora Blue 文字 + 8% 同色底，Hover 仅微弱灰度过渡。",
+      "html": "<aside class=\"ds-nav\"><a class=\"ds-nav-brand\">Nekusora</a><nav><a class=\"ds-nav-item is-active\">模型</a><a class=\"ds-nav-item\">路由</a><a class=\"ds-nav-item\">密钥</a></nav></aside>",
+      "css": ".ds-nav { width: 224px; border-right: 1px solid #e2e8f0; padding: 16px; box-sizing: border-box; } .ds-nav-brand { display: block; font-size: 18px; font-weight: 700; letter-spacing: -0.02em; color: #0f121a; text-decoration: none; padding: 8px 12px; } .ds-nav-item { display: block; padding: 8px 12px; margin-top: 2px; border-radius: 6px; font-size: 14px; font-weight: 500; color: #525252; text-decoration: none; transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1); } .ds-nav-item:hover { background: #fafafa; color: #171717; } .ds-nav-item.is-active { color: #3b82f6; background: rgba(59, 130, 246, 0.08); }"
+    },
+    {
+      "name": "Card / Container",
+      "kind": "card",
+      "refersTo": "card-container",
+      "description": "通用配置面板卡片。静止无投影，仅靠 1px 冷调边框与底色层次区分深度（零影子规则）。",
+      "html": "<div class=\"ds-card\">星枢天流的容器在静止状态下无投影，仅靠 1px 冷调边框与底色层次区分深度。</div>",
+      "css": ".ds-card { background: #fcfdff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 24px; font-size: 14px; line-height: 1.5; color: #0f121a; }"
+    },
+    {
+      "name": "Combobox",
+      "kind": "custom",
+      "refersTo": "combobox",
+      "description": "可搜索下拉（typeahead）。触发器为细边框胶囊，面板内嵌搜索框 + 候选列表；选中项以 Sora Blue 6% 底 + 同色文字高亮。",
+      "html": "<div class=\"ds-combo\"><button class=\"ds-combo-trigger\"><span>nekusora</span><svg width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" style=\"margin-left:6px;opacity:0.6\"><path d=\"m6 9 6 6 6-6\"/></svg></button><div class=\"ds-combo-panel\"><div class=\"ds-combo-option is-active\">OpenAI</div><div class=\"ds-combo-option\">Anthropic</div><div class=\"ds-combo-option\">Google</div></div></div>",
+      "css": ".ds-combo { position: relative; width: 176px; } .ds-combo-trigger { display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%; padding: 6px 10px; font-size: 12px; color: #404040; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; cursor: pointer; transition: border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1); } .ds-combo-trigger:hover { border-color: #d4d4d4; } .ds-combo-panel { margin-top: 4px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); padding: 6px; } .ds-combo-option { padding: 6px 8px; font-size: 12px; color: #404040; border-radius: 4px; cursor: pointer; } .ds-combo-option:hover { background: #fafafa; } .ds-combo-option.is-active { background: rgba(59, 130, 246, 0.06); color: #3b82f6; }"
+    },
+    {
+      "name": "Option Picker",
+      "kind": "custom",
+      "refersTo": "option-picker",
+      "description": "listbox 风格选择器（单选/多选）。项左侧 ✓/○ 反映选中态，选中项 Sora Blue 6% 底高亮，未选中项 Hover 浅灰。收敛聊天工具栏的触发器+选项列表结构。",
+      "html": "<div class=\"ds-optionpicker\"><button class=\"ds-option is-active\"><span class=\"ds-option-mark\">✓</span><span class=\"ds-option-label\">对话</span></button><button class=\"ds-option\"><span class=\"ds-option-mark\">○</span><span class=\"ds-option-label\">图像</span></button><button class=\"ds-option\"><span class=\"ds-option-mark\">○</span><span class=\"ds-option-label\">向量</span></button></div>",
+      "css": ".ds-optionpicker { width: 256px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); padding: 6px; } .ds-option { display: flex; align-items: flex-start; gap: 8px; width: 100%; text-align: left; padding: 6px 8px; font-size: 12px; border: none; background: transparent; border-radius: 4px; color: #404040; cursor: pointer; transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1); } .ds-option:hover { background: #fafafa; } .ds-option.is-active { background: rgba(59, 130, 246, 0.06); color: #3b82f6; } .ds-option-mark { margin-top: 2px; font-size: 12px; } .ds-option:not(.is-active) .ds-option-mark { opacity: 0.3; } .ds-option-label { font-weight: 600; }"
+    },
+    {
+      "name": "Pagination",
+      "kind": "custom",
+      "refersTo": "pagination",
+      "description": "纯链接分页器（Server/Client 通用）。莫兰迪中性细边框按钮，Hover 转 Sora Blue 文字与边框；禁用态降透明并去边框。左侧等宽小字汇总。",
+      "html": "<div class=\"ds-pager\"><span class=\"ds-pager-summary\">共 128 条</span><div class=\"ds-pager-btns\"><a class=\"ds-pager-btn is-disabled\">上一页</a><a class=\"ds-pager-btn\">下一页</a></div></div>",
+      "css": ".ds-pager { display: flex; align-items: center; justify-content: space-between; padding-top: 12px; } .ds-pager-summary { font-size: 11px; color: #a3a3a3; font-family: ui-monospace, monospace; } .ds-pager-btns { display: flex; align-items: center; gap: 8px; } .ds-pager-btn { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 500; border: 1px solid #e2e8f0; background: #fcfdff; color: #404040; text-decoration: none; transition: color 0.15s, border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1); } .ds-pager-btn:hover { color: #3b82f6; border-color: rgba(59, 130, 246, 0.4); } .ds-pager-btn.is-disabled { opacity: 0.4; cursor: not-allowed; border-color: transparent; color: #a3a3a3; }"
     },
     {
       "name": "Dialog Modal",
       "kind": "custom",
       "refersTo": "dialog-modal",
-      "description": "轻量对话弹窗，基于原生 <dialog> 实现。",
+      "description": "轻量对话弹窗，基于原生 <dialog> + showModal()。顶层沉降阴影，遮罩 40% 黑。",
       "html": "<div class=\"ds-dialog-overlay\"><div class=\"ds-dialog\"><header class=\"ds-dialog-header\"><h2 class=\"ds-dialog-title\">弹窗标题</h2><button class=\"ds-dialog-close\">✕</button></header><div class=\"ds-dialog-body\">弹窗正文内容。星枢天流系统强调纯文本的呼吸感排版。</div><footer class=\"ds-dialog-footer\"><button class=\"ds-btn-secondary\">取消</button><button class=\"ds-btn-primary\">确定</button></footer></div></div>",
-      "css": ".ds-dialog-overlay { display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.4); padding: 16px; position: fixed; inset: 0; z-index: 100; } .ds-dialog { background: #fcfdff; border: 1px solid #e2e8f0; border-radius: 8px; width: 100%; max-width: 640px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1); overflow: hidden; display: flex; flex-col; } .ds-dialog-header { display: flex; align-items: center; justify-content: space-between; border-b: 1px solid #e2e8f0; padding: 12px 20px; } .ds-dialog-title { font-size: 16px; font-weight: 600; color: #0f121a; margin: 0; } .ds-dialog-close { background: none; border: none; color: #94a3b8; font-size: 16px; cursor: pointer; } .ds-dialog-close:hover { color: #475569; } .ds-dialog-body { padding: 16px 20px; font-size: 14px; line-height: 1.5; color: #475569; } .ds-dialog-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-t: 1px solid #e2e8f0; } .ds-btn-primary { background: #3b82f6; color: #fcfdff; padding: 8px 16px; border-radius: 6px; font-size: 14px; font-weight: 500; border: none; cursor: pointer; } .ds-btn-secondary { background: #fcfdff; color: #0f121a; padding: 8px 16px; border-radius: 6px; font-size: 14px; font-weight: 500; border: 1px solid #e2e8f0; cursor: pointer; }"
+      "css": ".ds-dialog-overlay { display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.4); padding: 16px; position: fixed; inset: 0; z-index: 100; } .ds-dialog { background: #fcfdff; border: 1px solid #e2e8f0; border-radius: 8px; width: 100%; max-width: 640px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1); overflow: hidden; display: flex; flex-direction: column; } .ds-dialog-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e2e8f0; padding: 12px 20px; } .ds-dialog-title { font-size: 16px; font-weight: 600; color: #0f121a; margin: 0; } .ds-dialog-close { background: none; border: none; color: #94a3b8; font-size: 16px; cursor: pointer; } .ds-dialog-close:hover { color: #475569; } .ds-dialog-body { padding: 16px 20px; font-size: 14px; line-height: 1.5; color: #475569; } .ds-dialog-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid #e2e8f0; } .ds-btn-primary { background: #3b82f6; color: #fcfdff; padding: 8px 16px; border-radius: 6px; font-size: 14px; font-weight: 500; border: none; cursor: pointer; } .ds-btn-secondary { background: #fcfdff; color: #0f121a; padding: 8px 16px; border-radius: 6px; font-size: 14px; font-weight: 500; border: 1px solid #e2e8f0; cursor: pointer; }"
     }
   ],
   "narrative": {
     "northStar": "星枢天流 (The Astral Skyline)",
-    "overview": "星枢天流设计系统是为 Nekusora (星枢) 打造的专业视觉系统。它融合了「猫与天空」的温和治愈感，与「高可用网关」的精密工程质感。聊天体验开阔、宁静；网关控制侧提供星图般精密、高效的严谨交互。",
+    "overview": "星枢天流设计系统是为 Nekusora (星枢) 打造的专业视觉系统。它融合了「猫与天空」的温和治愈感，与「高可用网关」的精密工程质感。聊天体验开阔、宁静；网关控制侧提供星图般精密、高效的严谨交互。系统坚决排斥公式化的 AI 模板痕迹——拒绝泛滥的奶油色/暖沙色、无逻辑的毛玻璃卡片和多余的彩色饰条。",
     "keyCharacteristics": [
-      "暮色微澜与星云纯白：冷调夜空背景底色",
-      "治愈般的轻柔交互：无感投影与超薄分隔线",
+      "暮色微澜与星云纯白：底色微注 0.005 冷色相（蓝/紫）的冷调夜空",
+      "治愈般的轻柔交互：无感投影与超薄分隔线，工具消失于任务",
       "双面性格的秩序：温和流式聊天与严谨莫兰迪网关配置"
     ],
     "rules": [
       {
         "name": "天空罕有原则",
-        "body": "主彩色 Sora Blue 在页面中的出现面积必须控制在 10% 以内。",
+        "body": "主彩色 Sora Blue 在页面中的出现面积必须控制在 10% 以内，其稀有度保证它作为核心行为指引的不可忽视性。",
         "section": "colors"
       },
       {
         "name": "莫兰迪中性规则",
-        "body": "在配置页中，所有次级色板均采用莫兰迪中性色，严禁使用高饱和度纯色。",
+        "body": "在管理控制面板与配置页中，所有次级色板均采用莫兰迪中性色（高灰度、低饱和度），严禁直接使用高饱和度纯色。",
         "section": "colors"
       },
       {
         "name": "克制缩放规则",
-        "body": "所有字号大小在不同视口下均使用固定的 rem 比例，不使用 clamp() 自动缩放。",
+        "body": "作为功能性 Product 界面，所有字号在不同视口下均使用固定的 rem 比例，绝不使用 clamp() 自动缩放。",
         "section": "typography"
       },
       {
         "name": "零影子规则",
-        "body": "除非在悬浮、弹出层或 hover 响应中，否则卡片及容器在静止状态下一律无投影。",
+        "body": "除非在弹出层（Modal）、下拉框、或 hover 交互响应中，否则卡片、输入框及布局容器在静止状态下投影一律为 none。",
         "section": "elevation"
       }
     ],
     "dos": [
-      "Do 对所有的正文消息段落严格应用 max-w-[75ch] 的宽度限制",
-      "Do 对所有的输入域以及主操作按钮显式声明 :focus-visible 轮廓环",
-      "Do 确保暗色文字 (Nebula Silver) 和亮色文字 (Space Ink) 拥有 >= 4.5:1 的高对比度"
+      "Do 对所有正文消息段落严格应用 max-w-[75ch] 的宽度限制",
+      "Do 对所有输入域及主操作按钮显式声明 :focus-visible 轮廓环",
+      "Do 确保暗色文字 (Nebula Silver) 与亮色文字 (Space Ink) 在各自背景上拥有 >= 4.5:1 的高对比度"
     ],
     "donts": [
-      "Don't 使用奶油色、暖沙色背景等带有泛滥 AI 生成痕迹的暖灰色",
-      "Don't 在任何 Card、Modal 或 Callout 容器上使用粗边框或彩色侧边单侧边框",
-      "Don't 滥用毛玻璃背景 (backdrop-filter)"
+      "Don't 使用奶油色、暖沙色背景 (#faf7f2 / --paper) 等带有泛滥 AI 生成痕迹的暖灰色作为默认基调",
+      "Don't 在任何 Card、Modal 或 Callout 容器上使用粗边框或彩色单侧边框 (如 border-left-4)",
+      "Don't 在非交互元素上添加投影；静止卡片绝不同时使用 1px 边框与大模糊投影",
+      "Don't 滥用毛玻璃背景 (backdrop-filter)，除 Modal 蒙层与全局浮动顶栏外严禁使用",
+      "Don't 在页面各区域主标题上方堆砌大写、宽字距的迷你英文标签 (SECTION / ABOUT 眉标)"
     ]
   }
 }
