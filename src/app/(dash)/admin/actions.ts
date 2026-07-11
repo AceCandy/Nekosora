@@ -5,6 +5,7 @@ import { getDb, getSchema } from "@/lib/infra/db";
 import { encryptKeyBundle, parseKeyBundle } from "@/lib/providers/keys";
 import type { WeightedKey } from "@/lib/providers/keys";
 import { probeProviderKey, fetchUpstreamModels, type ProbeResult, type UpstreamModel } from "@/lib/providers/probe";
+import { normalizeBaseUrl } from "@/lib/providers/defaults";
 import { recordSuccess, recordFailure } from "@/lib/circuit-breaker";
 import { pickWeightedKey } from "@/lib/providers/keys";
 import type { ProviderProtocol } from "@/db/types";
@@ -96,7 +97,10 @@ export async function createProvider(formData: FormData) {
     ownerUserId: admin.id,
     name: String(formData.get("name") ?? ""),
     protocol: String(formData.get("protocol") ?? "openai"),
-    baseUrl: String(formData.get("baseUrl") ?? ""),
+    baseUrl: normalizeBaseUrl(
+      String(formData.get("protocol") ?? "openai") as ProviderProtocol,
+      String(formData.get("baseUrl") ?? ""),
+    ),
     apiKeysEnc,
     keyStrategy: String(formData.get("keyStrategy") ?? "round_robin"),
     enabled: true,
@@ -112,7 +116,10 @@ export async function updateProvider(id: string, formData: FormData) {
   const patch: Record<string, unknown> = {
     name: String(formData.get("name") ?? ""),
     protocol: String(formData.get("protocol") ?? "openai"),
-    baseUrl: String(formData.get("baseUrl") ?? ""),
+    baseUrl: normalizeBaseUrl(
+      String(formData.get("protocol") ?? "openai") as ProviderProtocol,
+      String(formData.get("baseUrl") ?? ""),
+    ),
     updatedAt: new Date(),
   };
   const keys = collectKeys(formData);

@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import type { FormDataSerializableAction } from "@/features/providers/types";
 import Modal from "@/shared/ui/Modal";
@@ -21,6 +21,8 @@ interface RouteFormDialogProps {
   providers: { id: string; name: string }[];
   /** 拉取上游模型列表的 action(按 providerId)。不传则不显示拉取按钮。 */
   fetchModelsAction?: FetchModelsAction;
+  /** 当前模型对外名;新增模式下选好 provider 后据此在上游列表里匹配同名自动填充。 */
+  modelName?: string;
   initial?: RouteInitial;
 }
 
@@ -43,6 +45,7 @@ export default function RouteFormDialog({
   action,
   providers,
   fetchModelsAction,
+  modelName,
   initial,
 }: RouteFormDialogProps) {
   const t = useTranslations("models");
@@ -51,6 +54,25 @@ export default function RouteFormDialog({
   // provider 选择需受控,以便拉取按钮据此请求对应上游。
   const [providerId, setProviderId] = useState(initial?.providerId ?? "");
   const upstreamInputRef = useRef<HTMLInputElement>(null);
+  // upstreamModelName 受控:兼容手填、拉取器 ref 写回(经 input 事件同步)与下面的自动匹配填充。
+  const [upstreamModelName, setUpstreamModelName] = useState(initial?.upstreamModelName ?? "");
+  // 新增模式下选好 provider 后,自动拉取上游列表并匹配与当前模型同名的条目填入;每个 provider 只触发一次。
+  const matchedProviders = useRef<Set<string>>(new Set());
+  const [, startMatchTransition] = useTransition();
+  useEffect(() => {
+    if (isEdit || !providerId || !fetchModelsAction || !modelName) return;
+    if (matchedProviders.current.has(providerId)) return;
+    matchedProviders.current.add(providerId);
+    startMatchTransition(async () => {
+      try {
+        const list = await fetchModelsAction(providerId);
+        const hit = list.find((m) => m.id === modelName);
+        if (hit) setUpstreamModelName(hit.id);
+      } catch {
+        // 拉取失败静默:不覆盖,留给用户手填或点拉取按钮。
+      }
+    });
+  }, [providerId, fetchModelsAction, modelName, isEdit, startMatchTransition]);
 
   const handleClose = () => {
     onClose();
@@ -94,7 +116,8 @@ export default function RouteFormDialog({
               ref={upstreamInputRef}
               name="upstreamModelName"
               required
-              defaultValue={initial?.upstreamModelName ?? ""}
+              value={upstreamModelName}
+              onChange={(e) => setUpstreamModelName(e.target.value)}
               className={inputCls}
               placeholder="gpt-4o-2024-08-06"
             />

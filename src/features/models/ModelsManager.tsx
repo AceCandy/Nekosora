@@ -382,6 +382,7 @@ export default function ModelsManager({
           action={createRouteActions[routeAddModelId]}
           providers={providers ?? []}
           fetchModelsAction={fetchModelsAction}
+          modelName={optimisticModels.find((m) => m.id === routeAddModelId)?.name}
         />
       )}
       {routeEditing && updateRouteActions?.[routeEditing.id] && (

@@ -5,6 +5,7 @@ import { getDb, getSchema, isPg } from "@/lib/infra/db";
 import { encryptKeyBundle, parseKeyBundle, pickWeightedKey } from "@/lib/providers/keys";
 import type { WeightedKey } from "@/lib/providers/keys";
 import { probeProviderKey, fetchUpstreamModels, type ProbeResult, type UpstreamModel } from "@/lib/providers/probe";
+import { normalizeBaseUrl } from "@/lib/providers/defaults";
 import { recordSuccess, recordFailure } from "@/lib/circuit-breaker";
 import type { ProviderProtocol } from "@/db/types";
 import { requireSession } from "@/lib/session";
@@ -112,7 +113,10 @@ export async function createMyProvider(formData: FormData) {
     ownerUserId: user.id,
     name: String(formData.get("name") ?? ""),
     protocol: String(formData.get("protocol") ?? "openai"),
-    baseUrl: String(formData.get("baseUrl") ?? ""),
+    baseUrl: normalizeBaseUrl(
+      String(formData.get("protocol") ?? "openai") as ProviderProtocol,
+      String(formData.get("baseUrl") ?? ""),
+    ),
     apiKeysEnc: encryptKeyBundle(keys),
     keyStrategy: String(formData.get("keyStrategy") ?? "round_robin"),
     enabled: true,
@@ -234,7 +238,10 @@ export async function updateMyProvider(id: string, formData: FormData) {
   const patch: Record<string, unknown> = {
     name: String(formData.get("name") ?? ""),
     protocol: String(formData.get("protocol") ?? "openai"),
-    baseUrl: String(formData.get("baseUrl") ?? ""),
+    baseUrl: normalizeBaseUrl(
+      String(formData.get("protocol") ?? "openai") as ProviderProtocol,
+      String(formData.get("baseUrl") ?? ""),
+    ),
     updatedAt: new Date(),
   };
   if (keys.length > 0) {

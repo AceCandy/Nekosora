@@ -36,3 +36,17 @@ export function resolveModelsUrl(protocol: ProviderProtocol, baseUrl: string): s
   const path = DEFAULT_MODELS_PATH[protocol] ?? "/models";
   return `${base}${path}`;
 }
+
+/**
+ * 规范化 provider 接口地址:openai-compatible 协议下若缺少版本前缀,
+ * 在保存时自动补 /v1;其他协议原样返回。
+ *
+ * 用户填 openai-compatible 上游时常漏 /v1,导致 /models、/chat/completions
+ * 落到错误路径。保存瞬间补全,列表/详情展示的就是入库后的最终地址。
+ */
+export function normalizeBaseUrl(protocol: ProviderProtocol, baseUrl: string): string {
+  if (protocol !== "openai-compatible") return baseUrl;
+  const trimmed = baseUrl.trim().replace(/\/+$/, "");
+  if (/\/v\d+$/.test(trimmed)) return trimmed;
+  return `${trimmed}/v1`;
+}
