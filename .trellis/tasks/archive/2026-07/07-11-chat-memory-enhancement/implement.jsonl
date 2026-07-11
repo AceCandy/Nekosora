@@ -1,0 +1,3 @@
+{"file": "docs/memory-system-audit.md", "reason": "记忆系统现状 + 缺陷清单 + 可借鉴机制，本次改造的直接依据"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Drizzle 双 dialect 迁移规范，阶段 0 schema 变更遵守"}
+{"file": ".trellis/spec/backend/gateway-routing.md", "reason": "网关路由契约，确认本次不动网关、不破坏 resolveRoutes/resolveRoutesById"}
