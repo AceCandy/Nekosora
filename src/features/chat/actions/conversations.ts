@@ -1,5 +1,5 @@
 "use server";
-import { eq, and, or, desc, isNull, like, asc, inArray } from "drizzle-orm";
+import { eq, and, or, desc, isNull, like, asc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { requireSession } from "@/lib/session";
@@ -9,29 +9,19 @@ import type { ReasoningLevel } from "@/db/types";
 const S = () => getSchema() as any;
 
 /**
- * 过滤掉没有可用路由的模型:无路由或路由全部禁用的模型在 chat 不可用,不应展示。
- * 只看 modelId 下是否存在 enabled 路由——public 模型路由由 admin 建,private 模型
- * 路由 owner 即模型 owner,可见性已由模型层过滤,故不再限定 route owner。
+ * 有启用路由的 modelId 集合(CTE,跨 PG/SQLite 方言稳定)。
+ * innerJoin 它既保证模型至少有一条可用路由,又使每模型只匹配一行(无需再去重)。
  */
-async function filterRoutable<T extends { id: string }>(
-  db: Awaited<ReturnType<typeof getDb>>,
-  models: T[],
-): Promise<T[]> {
-  if (models.length === 0) return models;
-  const routed = await db
-    .select({ modelId: S().routes.modelId })
-    .from(S().routes)
-    .where(
-      and(
-        eq(S().routes.enabled, true),
-        inArray(
-          S().routes.modelId,
-          models.map((m) => m.id),
-        ),
-      ),
+function routedModelIds(db: Awaited<ReturnType<typeof getDb>>) {
+  return db
+    .$with("routed_ids")
+    .as(
+      db
+        .select({ modelId: S().routes.modelId })
+        .from(S().routes)
+        .where(eq(S().routes.enabled, true))
+        .groupBy(S().routes.modelId),
     );
-  const routedIds = new Set(routed.map((r: { modelId: string }) => r.modelId));
-  return models.filter((m) => routedIds.has(m.id));
 }
 
 /**
@@ -43,10 +33,13 @@ async function filterRoutable<T extends { id: string }>(
 export async function getVisibleModels() {
   const user = await requireSession();
   const db = await getDb();
+  const routedIds = routedModelIds(db);
   const rows = await db
+    .with(routedIds)
     .select({ model: S().models, capabilities: S().modelCatalog.capabilities })
     .from(S().models)
     .innerJoin(S().modelCatalog, eq(S().models.catalogId, S().modelCatalog.id))
+    .innerJoin(routedIds, eq(routedIds.modelId, S().models.id))
     .where(
       and(
         or(eq(S().models.visibility, "public"), eq(S().models.ownerUserId, user.id)),
@@ -63,17 +56,23 @@ export async function getVisibleModels() {
     (a: { visibility: unknown }, b: { visibility: unknown }) =>
       (a.visibility === "private" ? 0 : 1) - (b.visibility === "private" ? 0 : 1),
   );
-  return filterRoutable(db, models);
+  return models;
 }
 
-/** 列出支持图像生成的可见模型(public ∪ 我的 private),按 capabilities.imageGeneration 过滤。 */
+/**
+ * 列出支持图像生成的可见模型(public ∪ 我的 private),按 capabilities.imageGeneration 过滤,
+ * 且至少有一条启用路由(无路由或全禁用的模型不可用,不展示)。
+ */
 export async function getImageModels() {
   const user = await requireSession();
   const db = await getDb();
+  const routedIds = routedModelIds(db);
   const rows = await db
+    .with(routedIds)
     .select({ model: S().models, capabilities: S().modelCatalog.capabilities })
     .from(S().models)
     .innerJoin(S().modelCatalog, eq(S().models.catalogId, S().modelCatalog.id))
+    .innerJoin(routedIds, eq(routedIds.modelId, S().models.id))
     .where(
       and(
         or(eq(S().models.visibility, "public"), eq(S().models.ownerUserId, user.id)),
@@ -83,13 +82,12 @@ export async function getImageModels() {
     .orderBy(asc(S().models.sortOrder), asc(S().models.createdAt));
   const hasImg = (caps: unknown) =>
     Boolean((caps as { imageGeneration?: boolean } | null)?.imageGeneration);
-  const imgModels = rows
+  return rows
     .filter((row: { capabilities: unknown }) => hasImg(row.capabilities))
     .map((row: { model: Record<string, unknown>; capabilities: unknown }) => ({
       ...row.model,
       capabilities: row.capabilities,
     }));
-  return filterRoutable(db, imgModels);
 }
 
 /** 列出当前用户的会话(含置顶/归档/更新时间,供前端分组)。 */

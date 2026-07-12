@@ -6,6 +6,7 @@
  */
 import { eq, and, inArray } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
+import { cacheWrap, cacheDel } from "@/lib/infra/cache";
 import { requireSession } from "@/lib/session";
 
 export interface KnowledgeBase {
@@ -15,26 +16,31 @@ export interface KnowledgeBase {
   fileCount: number;
 }
 
-/** 列出当前用户的知识库(含文件数)。 */
+/** 当前用户知识库列表的缓存键(per-user;用户写操作主动失效,TTL 兜底)。 */
+const kbsKey = (userId: string) => `chat:kbs:${userId}`;
+
+/** 列出当前用户的知识库(含文件数)。带 per-user 缓存。 */
 export async function listKnowledgeBases(): Promise<KnowledgeBase[]> {
   const user = await requireSession();
-  const db = await getDb();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const s = getSchema() as any;
-  const kbs = await db
-    .select()
-    .from(s.knowledgeBases)
-    .where(eq(s.knowledgeBases.userId, user.id));
-  // 逐个统计文件数(知识库数量通常不大)
-  const result: KnowledgeBase[] = [];
-  for (const kb of kbs as { id: string; name: string; description: string | null }[]) {
-    const files = await db
-      .select({ id: s.fileObjects.id })
-      .from(s.fileObjects)
-      .where(eq(s.fileObjects.knowledgeBaseId, kb.id));
-    result.push({ id: kb.id, name: kb.name, description: kb.description, fileCount: files.length });
-  }
-  return result;
+  return cacheWrap(kbsKey(user.id), async () => {
+    const db = await getDb();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const s = getSchema() as any;
+    const kbs = await db
+      .select()
+      .from(s.knowledgeBases)
+      .where(eq(s.knowledgeBases.userId, user.id));
+    // 逐个统计文件数(知识库数量通常不大)
+    const result: KnowledgeBase[] = [];
+    for (const kb of kbs as { id: string; name: string; description: string | null }[]) {
+      const files = await db
+        .select({ id: s.fileObjects.id })
+        .from(s.fileObjects)
+        .where(eq(s.fileObjects.knowledgeBaseId, kb.id));
+      result.push({ id: kb.id, name: kb.name, description: kb.description, fileCount: files.length });
+    }
+    return result;
+  });
 }
 
 /** 创建知识库。 */
@@ -47,6 +53,7 @@ export async function createKnowledgeBase(name: string, description?: string): P
     .insert(s.knowledgeBases)
     .values({ userId: user.id, name, description: description ?? null })
     .returning({ id: s.knowledgeBases.id });
+  await cacheDel(kbsKey(user.id)).catch(() => {});
   return row.id as string;
 }
 
@@ -65,6 +72,7 @@ export async function deleteKnowledgeBase(id: string): Promise<void> {
   // 解除文件关联
   await db.update(s.fileObjects).set({ knowledgeBaseId: null }).where(eq(s.fileObjects.knowledgeBaseId, id));
   await db.delete(s.knowledgeBases).where(eq(s.knowledgeBases.id, id));
+  await cacheDel(kbsKey(user.id)).catch(() => {});
 }
 
 /** 把文件加入知识库。 */
@@ -80,6 +88,7 @@ export async function attachFileToKnowledgeBase(kbId: string, fileId: string): P
     .limit(1);
   if (!kb || kb.userId !== user.id) throw new Error("无权操作");
   await db.update(s.fileObjects).set({ knowledgeBaseId: kbId }).where(and(eq(s.fileObjects.id, fileId), eq(s.fileObjects.userId, user.id)));
+  await cacheDel(kbsKey(user.id)).catch(() => {});
 }
 
 /**

@@ -7,7 +7,11 @@
  */
 import { eq, asc, sql } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
+import { cacheWrap, cacheDel } from "@/lib/infra/cache";
 import { requireSession, requireAdmin } from "@/lib/session";
+
+/** chat 工具栏读取的启用输出样式缓存键(全局共享;admin 写操作主动失效,TTL 兜底)。 */
+const ENABLED_RENDER_STYLES_KEY = "chat:render-styles:enabled";
 
 export interface RenderStyle {
   id: string;
@@ -35,29 +39,31 @@ export async function listAllRenderStyles(): Promise<RenderStyle[]> {
   return rows as RenderStyle[];
 }
 
-/** 用户:列出启用的输出样式(供 chat 工具栏选择)。 */
+/** 用户:列出启用的输出样式(供 chat 工具栏选择)。全局共享,带缓存。 */
 export async function listEnabledRenderStyles(): Promise<RenderStyle[]> {
   await requireSession();
-  const db = await getDb();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const s = getSchema() as any;
-  const rows = await db
-    .select({
-      id: s.renderStyles.id,
-      name: s.renderStyles.name,
-      description: s.renderStyles.description,
-      cssClass: s.renderStyles.cssClass,
-      css: s.renderStyles.css,
-      icon: s.renderStyles.icon,
-      renderer: s.renderStyles.renderer,
-      builtin: s.renderStyles.builtin,
-      enabled: s.renderStyles.enabled,
-      sortOrder: s.renderStyles.sortOrder,
-    })
-    .from(s.renderStyles)
-    .where(eq(s.renderStyles.enabled, true))
-    .orderBy(asc(s.renderStyles.sortOrder), asc(s.renderStyles.createdAt));
-  return rows as RenderStyle[];
+  return cacheWrap(ENABLED_RENDER_STYLES_KEY, async () => {
+    const db = await getDb();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const s = getSchema() as any;
+    const rows = await db
+      .select({
+        id: s.renderStyles.id,
+        name: s.renderStyles.name,
+        description: s.renderStyles.description,
+        cssClass: s.renderStyles.cssClass,
+        css: s.renderStyles.css,
+        icon: s.renderStyles.icon,
+        renderer: s.renderStyles.renderer,
+        builtin: s.renderStyles.builtin,
+        enabled: s.renderStyles.enabled,
+        sortOrder: s.renderStyles.sortOrder,
+      })
+      .from(s.renderStyles)
+      .where(eq(s.renderStyles.enabled, true))
+      .orderBy(asc(s.renderStyles.sortOrder), asc(s.renderStyles.createdAt));
+    return rows as RenderStyle[];
+  });
 }
 
 /** 读取单个输出样式(用于聊天页聚合注入 CSS)。不鉴权(内部调用,layout 已在受保护路由下)。 */
@@ -111,6 +117,7 @@ export async function createRenderStyle(input: {
       sortOrder: nextSort,
     })
     .returning();
+  await cacheDel(ENABLED_RENDER_STYLES_KEY).catch(() => {});
   return row as RenderStyle;
 }
 
@@ -129,6 +136,7 @@ export async function reorderRenderStyles(orderedIds: string[]): Promise<void> {
       await tx.update(s.renderStyles).set({ sortOrder: i }).where(eq(s.renderStyles.id, orderedIds[i]));
     }
   });
+  await cacheDel(ENABLED_RENDER_STYLES_KEY).catch(() => {});
 }
 
 /** 管理员:更新输出样式。 */
@@ -143,6 +151,7 @@ export async function updateRenderStyle(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
   await db.update(s.renderStyles).set({ ...patch, updatedAt: new Date() }).where(eq(s.renderStyles.id, id));
+  await cacheDel(ENABLED_RENDER_STYLES_KEY).catch(() => {});
 }
 
 /** 管理员:删除输出样式。内置预设禁止删除。 */
@@ -154,4 +163,5 @@ export async function deleteRenderStyle(id: string): Promise<void> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
   await db.delete(s.renderStyles).where(eq(s.renderStyles.id, id));
+  await cacheDel(ENABLED_RENDER_STYLES_KEY).catch(() => {});
 }

@@ -6,7 +6,11 @@
  */
 import { eq, asc, sql } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
+import { cacheWrap, cacheDel } from "@/lib/infra/cache";
 import { requireSession, requireAdmin } from "@/lib/session";
+
+/** chat 工具栏读取的启用输出模式缓存键(全局共享;admin 写操作主动失效,TTL 兜底)。 */
+const ENABLED_OUTPUT_MODES_KEY = "chat:output-modes:enabled";
 
 export interface OutputMode {
   id: string;
@@ -31,26 +35,28 @@ export async function listAllOutputModes(): Promise<OutputMode[]> {
   return rows as OutputMode[];
 }
 
-/** 用户:列出启用的输出模式(供 chat 工具栏选择)。 */
+/** 用户:列出启用的输出模式(供 chat 工具栏选择)。全局共享,带缓存。 */
 export async function listEnabledOutputModes(): Promise<OutputMode[]> {
   await requireSession();
-  const db = await getDb();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const s = getSchema() as any;
-  const rows = await db
-    .select({
-      id: s.outputModes.id,
-      name: s.outputModes.name,
-      description: s.outputModes.description,
-      systemPrompt: s.outputModes.systemPrompt,
-      icon: s.outputModes.icon,
-      enabled: s.outputModes.enabled,
-      sortOrder: s.outputModes.sortOrder,
-    })
-    .from(s.outputModes)
-    .where(eq(s.outputModes.enabled, true))
-    .orderBy(asc(s.outputModes.sortOrder), asc(s.outputModes.createdAt));
-  return rows as OutputMode[];
+  return cacheWrap(ENABLED_OUTPUT_MODES_KEY, async () => {
+    const db = await getDb();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const s = getSchema() as any;
+    const rows = await db
+      .select({
+        id: s.outputModes.id,
+        name: s.outputModes.name,
+        description: s.outputModes.description,
+        systemPrompt: s.outputModes.systemPrompt,
+        icon: s.outputModes.icon,
+        enabled: s.outputModes.enabled,
+        sortOrder: s.outputModes.sortOrder,
+      })
+      .from(s.outputModes)
+      .where(eq(s.outputModes.enabled, true))
+      .orderBy(asc(s.outputModes.sortOrder), asc(s.outputModes.createdAt));
+    return rows as OutputMode[];
+  });
 }
 
 /** 读取单个输出模式(用于 chat route 注入)。不鉴权(内部调用,route 已鉴权)。 */
@@ -88,6 +94,7 @@ export async function createOutputMode(input: {
       sortOrder: nextSort,
     })
     .returning();
+  await cacheDel(ENABLED_OUTPUT_MODES_KEY).catch(() => {});
   return row as OutputMode;
 }
 
@@ -106,6 +113,7 @@ export async function reorderOutputModes(orderedIds: string[]): Promise<void> {
       await tx.update(s.outputModes).set({ sortOrder: i }).where(eq(s.outputModes.id, orderedIds[i]));
     }
   });
+  await cacheDel(ENABLED_OUTPUT_MODES_KEY).catch(() => {});
 }
 
 /** 管理员:更新输出模式。 */
@@ -118,6 +126,7 @@ export async function updateOutputMode(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
   await db.update(s.outputModes).set({ ...patch, updatedAt: new Date() }).where(eq(s.outputModes.id, id));
+  await cacheDel(ENABLED_OUTPUT_MODES_KEY).catch(() => {});
 }
 
 /** 管理员:删除输出模式。 */
@@ -127,4 +136,5 @@ export async function deleteOutputMode(id: string): Promise<void> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
   await db.delete(s.outputModes).where(eq(s.outputModes.id, id));
+  await cacheDel(ENABLED_OUTPUT_MODES_KEY).catch(() => {});
 }

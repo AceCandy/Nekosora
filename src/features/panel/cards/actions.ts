@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/session";
+import { cacheWrap, cacheDel } from "@/lib/infra/cache";
 import {
   listCards,
   createCard,
@@ -18,9 +19,12 @@ import {
  * 成功后 revalidatePath 刷新面板列表。
  */
 
+/** 当前用户指令卡列表的缓存键(per-user;用户写操作主动失效,TTL 兜底)。 */
+const cardsKey = (userId: string) => `chat:cards:${userId}`;
+
 export async function listMyCards(): Promise<InstructionCard[]> {
   const user = await requireSession();
-  return listCards(user.id);
+  return cacheWrap(cardsKey(user.id), () => listCards(user.id));
 }
 
 export async function createMyCard(input: {
@@ -32,6 +36,7 @@ export async function createMyCard(input: {
 }): Promise<InstructionCard> {
   const user = await requireSession();
   const card = await createCard(user.id, input);
+  await cacheDel(cardsKey(user.id)).catch(() => {});
   revalidatePath("/panel/cards");
   return card;
 }
@@ -44,6 +49,7 @@ export async function updateMyCard(
 ): Promise<InstructionCard> {
   const user = await requireSession();
   const card = await updateCard(user.id, id, patch);
+  await cacheDel(cardsKey(user.id)).catch(() => {});
   revalidatePath("/panel/cards");
   return card;
 }
@@ -51,5 +57,6 @@ export async function updateMyCard(
 export async function deleteMyCard(id: string): Promise<void> {
   const user = await requireSession();
   await deleteCard(user.id, id);
+  await cacheDel(cardsKey(user.id)).catch(() => {});
   revalidatePath("/panel/cards");
 }
