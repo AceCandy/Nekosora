@@ -40,13 +40,7 @@ export default function CardsManager({ initialCards }: { initialCards: Instructi
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-bold text-neutral-900 dark:text-white">{t("title")}</h1>
-          <p className="text-xs text-neutral-500 mt-0.5">
-            {t("desc")}
-          </p>
-        </div>
+      <div className="flex justify-end">
         <Button onClick={() => setCreating(true)} disabled={pending}>
           <Plus className="w-4 h-4 mr-1" />
           {t("create")}
