@@ -18,6 +18,7 @@ import { Select } from "@/shared/ui/Select";
 import { DateRangePicker } from "./DateRangePicker";
 import { searchErrorCandidatesAction } from "./actions";
 import { searchPanelErrorCandidatesAction } from "@/app/(dash)/panel/usage/actions";
+import { ALL_USERS } from "./time-range";
 
 export interface ErrorFilterValues {
   range: string;
@@ -56,7 +57,11 @@ export function ErrorFilterBar({ variant, values, labels, basePath }: ErrorFilte
   const userIdFilter = variant === "admin" ? values.user : undefined;
 
   // users 候选仅 admin 渲染(panel 固定自己),故 loadUsers 固定走 admin action。
-  const loadUsers = (q: string) => searchErrorCandidatesAction({ type: "users", q });
+  // admin 用户 Combobox 顶部固定「全部用户」选项,选中后 user=__all__(查全部用户)。
+  const loadUsers = async (q: string) => {
+    const results = await searchErrorCandidatesAction({ type: "users", q });
+    return [{ id: ALL_USERS, label: t("allUsers") }, ...results];
+  };
   const loadKeys = (q: string) => searchAction({ type: "keys", q, userId: userIdFilter }) as Promise<ComboOption[]>;
   const loadProviders = (q: string) =>
     searchAction({ type: "providers", q, userId: userIdFilter }) as Promise<ComboOption[]>;

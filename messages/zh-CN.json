@@ -406,6 +406,8 @@
     },
     "usage": {
       "title": "用量统计",
+      "desc": "查询网关调用用量与错误请求,支持按时间、用户、模型等维度筛选。管理员默认查看自己,可切换查看全部用户。",
+      "allUsers": "全部用户",
       "totalRequests": "总请求数",
       "totalTokens": "总 Token 数",
       "successRate": "成功率",
