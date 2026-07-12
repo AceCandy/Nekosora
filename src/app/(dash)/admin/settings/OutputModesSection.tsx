@@ -1,11 +1,10 @@
 /**
- * 输出模式管理页(管理员)—— /admin/output-modes
+ * 系统设置「输出模式」Tab —— 搬自原 /admin/output-modes 独立页。
  *
- * 管理员预设会话级输出模式(如「HTML 渲染」「简洁输出」),每种含一段 systemPrompt。
- * 用户在 chat 工具栏选用后,该 prompt 注入会话引导模型输出风格。
+ * 数据获取 + server action + Manager 渲染集中于此;revalidate 指向 /admin/settings。
+ * 鉴权依赖 service 层(create/update/... 内部 requireAdmin)+ /admin layout 守卫。
  */
-import { getTranslations } from "next-intl/server";
-import { requireAdmin } from "@/lib/session";
+import { revalidatePath } from "next/cache";
 import {
   listAllOutputModes,
   createOutputMode,
@@ -13,20 +12,11 @@ import {
   deleteOutputMode,
   reorderOutputModes as reorderOutputModesService,
 } from "@/lib/output-modes/service";
-import { Sparkles } from "lucide-react";
 import OutputModesManager from "@/features/output-modes/OutputModesManager";
-import { PageHeader } from "@/shared/components/PageHeader";
-import { revalidatePath } from "next/cache";
 
-export const dynamic = "force-dynamic";
-
-export default async function AdminOutputModesPage() {
-  await requireAdmin();
-  const t = await getTranslations("admin.outputModes");
-  const tn = await getTranslations("nav");
+export default async function OutputModesSection() {
   const modes = await listAllOutputModes();
 
-  // 映射数据结构
   const managerModes = modes.map((m) => ({
     id: m.id,
     name: m.name,
@@ -44,13 +34,8 @@ export default async function AdminOutputModesPage() {
     const description = String(formData.get("description") ?? "").trim() || undefined;
     const icon = String(formData.get("icon") ?? "").trim() || undefined;
     if (!name || !systemPrompt) return;
-    await createOutputMode({
-      name,
-      description,
-      systemPrompt,
-      icon,
-    });
-    revalidatePath("/admin/output-modes");
+    await createOutputMode({ name, description, systemPrompt, icon });
+    revalidatePath("/admin/settings");
   }
 
   async function handleUpdate(id: string, formData: FormData) {
@@ -66,50 +51,46 @@ export default async function AdminOutputModesPage() {
       description: description || null,
       enabled,
     });
-    revalidatePath("/admin/output-modes");
+    revalidatePath("/admin/settings");
   }
 
   async function handleToggle(id: string, currentEnabled: boolean) {
     "use server";
     await updateOutputMode(id, { enabled: !currentEnabled });
-    revalidatePath("/admin/output-modes");
+    revalidatePath("/admin/settings");
   }
 
   async function handleDelete(id: string) {
     "use server";
     await deleteOutputMode(id);
-    revalidatePath("/admin/output-modes");
+    revalidatePath("/admin/settings");
   }
 
   /** 拖动重排:按拖动后的完整顺序重写 sortOrder,revalidate 后顺序刷新即落库。 */
   async function reorderOutputModes(orderedIds: string[]) {
     "use server";
     await reorderOutputModesService(orderedIds);
-    revalidatePath("/admin/output-modes");
+    revalidatePath("/admin/settings");
   }
 
   const updateActions = Object.fromEntries(
-    managerModes.map((m) => [m.id, handleUpdate.bind(null, m.id)])
+    managerModes.map((m) => [m.id, handleUpdate.bind(null, m.id)]),
   );
   const toggleActions = Object.fromEntries(
-    managerModes.map((m) => [m.id, handleToggle.bind(null, m.id, m.enabled)])
+    managerModes.map((m) => [m.id, handleToggle.bind(null, m.id, m.enabled)]),
   );
   const deleteActions = Object.fromEntries(
-    managerModes.map((m) => [m.id, handleDelete.bind(null, m.id)])
+    managerModes.map((m) => [m.id, handleDelete.bind(null, m.id)]),
   );
 
   return (
-    <div className="space-y-8">
-      <PageHeader icon={Sparkles} title={tn("outputModes")} desc={t("desc")} />
-
-      <OutputModesManager
-        modes={managerModes}
-        createAction={handleCreate}
-        updateActions={updateActions}
-        toggleActions={toggleActions}
-        deleteActions={deleteActions}
-        reorderAction={reorderOutputModes}
-      />
-    </div>
+    <OutputModesManager
+      modes={managerModes}
+      createAction={handleCreate}
+      updateActions={updateActions}
+      toggleActions={toggleActions}
+      deleteActions={deleteActions}
+      reorderAction={reorderOutputModes}
+    />
   );
 }

@@ -144,7 +144,7 @@ export async function extractMemories(
 }
 
 /** 构造提取 prompt。 */
-function buildExtractPrompt(transcript: string): string {
+export function buildExtractPrompt(transcript: string): string {
   return `你是一个记忆提取助手。从以下对话中提取值得长期记住的用户偏好、身份事实或正在进行的事。
 只输出 JSON 数组,每项形如:
 {"content":"...","disclosure":"...","scope":"preference|profile|project","priority":0,"confidence":"explicit|weak"}
@@ -152,13 +152,14 @@ function buildExtractPrompt(transcript: string): string {
 字段说明:
 - content:    值得记住的稳定事实/偏好(简明陈述)
 - disclosure: 何时该想起这条记忆(自然语言,如"讨论代码风格时"、"提到项目技术栈时")
-- scope:      preference(用户偏好:语言、风格、格式等)/ profile(身份事实:职业、领域、技能等)/ project(在做的事:项目、任务、计划等)
+- scope:      preference(用户偏好:语言、代码风格等与回答呈现无关的稳定偏好)/ profile(身份事实:职业、领域、技能等)/ project(在做的事:项目、任务、计划等)
 - priority:   重要性 0-3(0 最低),不确定时按 scope 默认:preference=0/profile=1/project=2
 - confidence: explicit(用户明确陈述或变更的事实) / weak(模糊、推测、临时的话)
 
 规则:
 - confidence=explicit:用户直接说"我喜欢...""我是...""我正在做..."
 - confidence=weak:推测("也许""可能")、临时情绪、未确认的猜测
+- 不要提取关于「回答呈现」的偏好(回答格式如 markdown/纯文本/HTML/表格、回答风格如简洁/详细/分点、排版渲染如字体/配色/样式)。这些由系统设置的「输出模式」「输出样式」管理,不属于长期记忆范畴
 - 如果没有值得提取的内容,输出 []
 - 不要输出任何解释
 

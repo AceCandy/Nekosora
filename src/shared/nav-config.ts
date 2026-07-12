@@ -35,8 +35,6 @@ const myConfigGroup: NavGroup = {
 const globalManagementGroup: NavGroup = {
   titleKey: "sectionGlobalManagement",
   items: [
-    { href: "/admin/output-modes", labelKey: "outputModes" },
-    { href: "/admin/render-styles", labelKey: "renderStyles" },
     { href: "/admin/users", labelKey: "users" },
     { href: "/admin/operations", labelKey: "operations" },
     { href: "/admin/settings", labelKey: "settings" },

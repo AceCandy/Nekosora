@@ -365,6 +365,11 @@
     },
     "settings": {
       "desc": "Manage system-level model configuration for embedding, web search, title generation, and other auxiliary tasks. Changes take effect immediately after saving.",
+      "tabs": {
+        "model": "Model configuration",
+        "outputModes": "Output modes",
+        "renderStyles": "Render styles"
+      },
       "configTitle": "Model configuration",
       "configDesc": "Configure embedding (memory recall / RAG) and web search providers and keys. Takes effect immediately after saving.",
       "embeddingTitle": "Embedding model",
@@ -568,6 +573,7 @@
       "enabled": "Enabled",
       "delete": "Delete",
       "save": "Save",
+      "edit": "Edit",
       "configuredCount": "Configured output modes: {count}",
       "addBtn": "Add Output Mode",
       "editTitle": "Edit Output Mode",

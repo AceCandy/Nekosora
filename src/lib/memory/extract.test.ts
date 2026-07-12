@@ -166,7 +166,7 @@ vi.mock("@/lib/stream", () => ({
   }),
 }));
 
-import { parseExtracted, extractMemories } from "./extract";
+import { parseExtracted, extractMemories, buildExtractPrompt } from "./extract";
 import { purgeExpiredProjectMemories } from "./service";
 
 beforeEach(() => {
@@ -391,5 +391,20 @@ describe("purgeExpiredProjectMemories", () => {
     await extractMemories("u1", "conv1", TURNS, "test-model");
 
     expect(mockData.store).toHaveLength(0); // 过期记忆被清理
+  });
+});
+
+describe("buildExtractPrompt 排除输出呈现偏好", () => {
+  it("prompt 含排除回答呈现偏好的规则,并提及输出模式/输出样式", () => {
+    const prompt = buildExtractPrompt("用户: 测试\n助手: 好");
+    expect(prompt).toContain("回答呈现");
+    expect(prompt).toContain("输出模式");
+    expect(prompt).toContain("输出样式");
+  });
+
+  it("preference 定义收敛为与回答呈现无关的偏好", () => {
+    const prompt = buildExtractPrompt("用户: 测试\n助手: 好");
+    expect(prompt).toContain("与回答呈现无关");
+    expect(prompt).not.toContain("语言、风格、格式等");
   });
 });

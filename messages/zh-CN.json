@@ -365,6 +365,11 @@
     },
     "settings": {
       "desc": "管理 embedding、联网搜索、标题生成等辅助任务的系统级模型配置。保存后即时生效。",
+      "tabs": {
+        "model": "模型配置",
+        "outputModes": "输出模式",
+        "renderStyles": "输出样式"
+      },
       "configTitle": "模型配置",
       "configDesc": "配置 embedding(记忆召回/RAG)与联网搜索所需的模型和密钥。保存后即时生效。",
       "embeddingTitle": "Embedding 模型",
@@ -568,6 +573,7 @@
       "enabled": "启用",
       "delete": "删除",
       "save": "保存",
+      "edit": "编辑",
       "configuredCount": "已配置输出模式: {count}",
       "addBtn": "添加输出模式",
       "editTitle": "编辑输出模式",

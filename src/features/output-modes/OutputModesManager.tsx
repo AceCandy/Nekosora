@@ -244,10 +244,10 @@ function SortableOutputModeRow({
           size="sm"
           onClick={() => onEdit(mode.id)}
           className="text-neutral-750 hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-white"
-          title={t("save")}
+          title={t("edit")}
         >
           <Edit2 className="w-3.5 h-3.5" />
-          <span>{t("save")}</span>
+          <span>{t("edit")}</span>
         </Button>
 
         <form action={toggleAction} className="inline">
