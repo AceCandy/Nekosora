@@ -8,6 +8,8 @@ import { desc } from "drizzle-orm";
 import { getTranslations } from "next-intl/server";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { requireAdmin } from "@/lib/session";
+import { FileText } from "lucide-react";
+import { PageHeader } from "@/shared/components/PageHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +28,7 @@ export default async function AdminTemplatesPage() {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-white">{tn("globalTemplates")}</h1>
+      <PageHeader icon={FileText} title={tn("globalTemplates")} desc={t("desc")} />
 
       <div className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] overflow-hidden shadow-none">
         <div className="overflow-x-auto">

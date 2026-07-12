@@ -13,6 +13,7 @@ import { getMemoryDiagnostics } from "@/lib/memory/recall";
 import { requireSession } from "@/lib/session";
 import { Trash2, Plus, BrainCircuit, AlertTriangle, Eraser } from "lucide-react";
 import { clsx } from "clsx";
+import { PageHeader } from "@/shared/components/PageHeader";
 
 const SCOPE_ORDER: MemoryScope[] = ["preference", "profile", "project"];
 
@@ -62,13 +63,7 @@ export default async function MemoryPage() {
     <div className="space-y-6">
       {/* 标题 + 全部清空 */}
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-bold mb-1 flex items-center gap-2">
-            <BrainCircuit className="w-5 h-5 text-blue-500" />
-            <span>{tn("memory")}</span>
-          </h1>
-          <p className="text-sm text-neutral-500">{t("desc")}</p>
-        </div>
+        <PageHeader icon={BrainCircuit} title={tn("memory")} desc={t("desc")} />
         {memories.length > 0 && (
           <form
             action={async () => {

@@ -305,8 +305,8 @@ export async function listModelCatalog() {
     .orderBy(asc(S().modelCatalog.sortOrder), asc(S().modelCatalog.name));
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function resolveCatalogId(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: any,
   name: string,
   requestedId: string,

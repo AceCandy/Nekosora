@@ -12,6 +12,8 @@ import { getDb, getSchema } from "@/lib/infra/db";
 import { requireAdmin } from "@/lib/session";
 import { getEnvInfo } from "@/lib/infra/env";
 import { metricsOutput } from "@/lib/infra/metrics";
+import { Activity } from "lucide-react";
+import { PageHeader } from "@/shared/components/PageHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -58,10 +60,7 @@ export default async function OperationsPage() {
 
   return (
     <div className="space-y-10">
-      <div>
-        <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-white">{tn("operations")}</h1>
-        <p className="mt-1 text-sm text-neutral-500">{t("desc")}</p>
-      </div>
+      <PageHeader icon={Activity} title={tn("operations")} desc={t("desc")} />
 
       {/* 实时指标卡片 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

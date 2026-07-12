@@ -48,18 +48,18 @@
     "models": "Models",
     "templates": "Prompt Templates",
     "cards": "Instruction Cards",
-    "memory": "Memory Archive",
+    "memory": "Memory",
     "operations": "Operations",
-    "users": "Users",
+    "users": "Accounts",
     "usage": "Gateway Usage",
     "globalProviders": "Global Providers",
     "globalModels": "Models & Routing",
     "globalTemplates": "Global Templates",
     "sectionMyConfig": "My Config",
     "sectionGlobalManagement": "Global Management",
-    "settings": "Settings",
+    "settings": "System Settings",
     "logout": "Log out",
-    "myUsage": "My usage",
+    "myUsage": "Usage",
     "image": "Image",
     "knowledge": "Knowledge",
     "outputModes": "Output modes",
@@ -306,6 +306,7 @@
     "title": "Admin",
     "users": {
       "title": "User Management",
+      "desc": "View and manage all registered users; adjust roles and enabled status.",
       "create": "Create user",
       "email": "Email",
       "role": "Role",
@@ -387,13 +388,16 @@
       "compactTaskHint": "Used for long-conversation context compaction (chains on previous summary). Falls back to the first available model if empty. Resolved by name via gateway routing."
     },
     "models": {
-      "title": "Global Models"
+      "title": "Global Models",
+      "desc": "Manage global public models and routes available to all users."
     },
     "providers": {
-      "title": "Global Providers"
+      "title": "Global Providers",
+      "desc": "Manage global upstream providers and credentials used by model routing."
     },
     "templates": {
       "title": "Global Prompt Templates",
+      "desc": "View and manage all templates (builtin / shared / private); toggle and delete.",
       "thName": "Name",
       "thCategory": "Category",
       "thScope": "Scope",

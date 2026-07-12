@@ -43,23 +43,23 @@
     "chat": "聊天",
     "panel": "控制面板",
     "admin": "管理后台",
-    "keys": "API 密钥管理",
-    "providers": "上游服务商",
-    "models": "模型代理",
-    "templates": "Prompt 模板",
+    "keys": "密钥管理",
+    "providers": "服务商管理",
+    "models": "模型管理",
+    "templates": "提示词模板",
     "cards": "指令卡",
-    "memory": "长期记忆归档",
+    "memory": "长期记忆",
     "operations": "运维监控",
-    "users": "用户账号管理",
+    "users": "账号管理",
     "usage": "网关调用用量",
     "globalProviders": "全局服务商",
     "globalModels": "对外模型与路由",
     "globalTemplates": "全局模板",
     "sectionMyConfig": "我的配置",
     "sectionGlobalManagement": "全局管理",
-    "settings": "设置",
+    "settings": "系统设置",
     "logout": "退出登录",
-    "myUsage": "我的用量",
+    "myUsage": "用量查询",
     "image": "图像",
     "knowledge": "知识库",
     "outputModes": "输出模式",
@@ -306,6 +306,7 @@
     "title": "管理后台",
     "users": {
       "title": "用户管理",
+      "desc": "查看与管理所有注册用户,可调整角色与启用状态。",
       "create": "创建用户",
       "email": "邮箱",
       "role": "角色",
@@ -387,13 +388,16 @@
       "compactTaskHint": "用于长会话上下文压缩摘要(链式合并旧摘要)。留空则回退到第一个可用模型。按模型名经网关路由解析。"
     },
     "models": {
-      "title": "全局模型管理"
+      "title": "全局模型管理",
+      "desc": "管理全局对外模型与路由,供所有用户使用。"
     },
     "providers": {
-      "title": "全局服务商管理"
+      "title": "全局服务商管理",
+      "desc": "管理全局上游服务商与凭据,供模型路由调用。"
     },
     "templates": {
       "title": "全局提示词模板",
+      "desc": "查看与管理全部模板(builtin / shared / private),支持启停与删除。",
       "thName": "名称",
       "thCategory": "分类",
       "thScope": "范围",

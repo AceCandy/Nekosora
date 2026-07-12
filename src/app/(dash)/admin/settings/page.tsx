@@ -7,6 +7,8 @@
 import { getTranslations } from "next-intl/server";
 import { requireAdmin } from "@/lib/session";
 import ModelConfigSection from "./ModelConfigSection";
+import { Settings } from "lucide-react";
+import { PageHeader } from "@/shared/components/PageHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -16,10 +18,7 @@ export default async function SettingsPage() {
 
   return (
     <div className="space-y-10">
-      <div>
-        <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-white">{tn("settings")}</h1>
-        <p className="mt-1 text-sm text-neutral-500">{t("desc")}</p>
-      </div>
+      <PageHeader icon={Settings} title={tn("settings")} desc={t("desc")} />
 
       <ModelConfigSection
         labels={{

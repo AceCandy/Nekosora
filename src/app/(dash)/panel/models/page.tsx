@@ -23,6 +23,8 @@ import ModelsManager, {
 import type { ModelCapabilities } from "@/db/types";
 import { getTranslations } from "next-intl/server";
 import { requireSession } from "@/lib/session";
+import { Boxes } from "lucide-react";
+import { PageHeader } from "@/shared/components/PageHeader";
 
 export default async function MyModelsPage() {
   const t = await getTranslations("panel.models");
@@ -110,12 +112,7 @@ export default async function MyModelsPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-xl font-bold mb-2">{tn("models")}</h1>
-        <p className="text-sm text-neutral-500">
-          {t("desc")}
-        </p>
-      </div>
+      <PageHeader icon={Boxes} title={tn("models")} desc={t("desc")} />
       {providers.length === 0 ? (
         <p className="text-sm text-amber-600">{t("needProvider")}</p>
       ) : (

@@ -15,6 +15,7 @@ import {
 } from "@/lib/output-modes/service";
 import { Sparkles } from "lucide-react";
 import OutputModesManager from "@/features/output-modes/OutputModesManager";
+import { PageHeader } from "@/shared/components/PageHeader";
 import { revalidatePath } from "next/cache";
 
 export const dynamic = "force-dynamic";
@@ -99,13 +100,7 @@ export default async function AdminOutputModesPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-white flex items-center gap-2">
-          <Sparkles className="w-5 h-5 text-sora-blue" />
-          <span>{tn("outputModes")}</span>
-        </h1>
-        <p className="mt-1 text-sm text-neutral-500">{t("desc")}</p>
-      </div>
+      <PageHeader icon={Sparkles} title={tn("outputModes")} desc={t("desc")} />
 
       <OutputModesManager
         modes={managerModes}

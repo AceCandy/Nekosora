@@ -49,7 +49,7 @@ export default async function AppShell({
   const t = await getTranslations("nav");
 
   return (
-    <div className="flex min-h-screen bg-[#fcfdff] text-[#0f121a] transition-colors duration-200 dark:bg-[#0d0f14] dark:text-[#f1f3f7]">
+    <div className="flex h-screen bg-[#fcfdff] text-[#0f121a] transition-colors duration-200 dark:bg-[#0d0f14] dark:text-[#f1f3f7]">
       <aside className="flex w-56 flex-col justify-between border-r border-morning-mist p-4 dark:border-deep-space">
         <div className="space-y-6">
           <div className="px-3 py-2">

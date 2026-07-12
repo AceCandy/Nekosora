@@ -3,6 +3,8 @@ import { getTranslations } from "next-intl/server";
 import { Button } from "@/shared/ui/Button";
 import Badge from "@/shared/ui/Badge";
 import StatusDot from "@/shared/ui/StatusDot";
+import { Users } from "lucide-react";
+import { PageHeader } from "@/shared/components/PageHeader";
 
 export default async function UsersPage() {
   const users = await listUsers();
@@ -11,7 +13,7 @@ export default async function UsersPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-white">{tn("users")}</h1>
+      <PageHeader icon={Users} title={tn("users")} desc={t("desc")} />
 
       <div className="rounded-lg border border-morning-mist bg-nebula-white dark:border-deep-space dark:bg-twilight-obsidian overflow-hidden shadow-none transition-all duration-200">
         <div className="overflow-x-auto">

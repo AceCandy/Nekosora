@@ -10,6 +10,8 @@ import {
   unbindBinding,
 } from "../actions";
 import KeysManager, { type ApiKeyRecord, type BindableModels } from "./KeysManager";
+import { Key } from "lucide-react";
+import { PageHeader } from "@/shared/components/PageHeader";
 
 export default async function KeysPage() {
   const t = await getTranslations("panel.keys");
@@ -68,12 +70,7 @@ export default async function KeysPage() {
 
   return (
     <div className="space-y-6 max-w-6xl">
-      <div>
-        <h1 className="text-xl font-bold mb-1">{tn("keys")}</h1>
-        <p className="text-sm text-neutral-500">
-          {t("desc")}
-        </p>
-      </div>
+      <PageHeader icon={Key} title={tn("keys")} desc={t("desc")} />
 
       <KeysManager
         keys={augmentedKeys as ApiKeyRecord[]}

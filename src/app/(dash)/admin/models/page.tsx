@@ -20,9 +20,12 @@ import ModelsManager, {
   type ProviderOption,
 } from "@/features/models/ModelsManager";
 import { getTranslations } from "next-intl/server";
+import { Boxes } from "lucide-react";
+import { PageHeader } from "@/shared/components/PageHeader";
 
 export default async function ModelsPage() {
   const tn = await getTranslations("nav");
+  const t = await getTranslations("admin.models");
   const [models, providers, routes] = await Promise.all([
     listModels(),
     listProviders(),
@@ -89,7 +92,7 @@ export default async function ModelsPage() {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-white">{tn("globalModels")}</h1>
+      <PageHeader icon={Boxes} title={tn("globalModels")} desc={t("desc")} />
       <ModelsManager
         isAdmin
         models={modelItems}

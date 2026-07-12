@@ -13,9 +13,12 @@ import ProvidersManager, {
   type ProviderItem,
 } from "@/features/providers/ProvidersManager";
 import { PROVIDER_PROTOCOLS } from "@/features/providers/protocols";
+import { Server } from "lucide-react";
+import { PageHeader } from "@/shared/components/PageHeader";
 
 export default async function ProvidersPage() {
   const tn = await getTranslations("nav");
+  const t = await getTranslations("admin.providers");
   const rows = await listProviders();
 
   const providers: ProviderItem[] = rows.map((p: Record<string, unknown>) => ({
@@ -52,8 +55,8 @@ export default async function ProvidersPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-xl font-bold mb-4">{tn("globalProviders")}</h1>
+      <div className="space-y-4">
+        <PageHeader icon={Server} title={tn("globalProviders")} desc={t("desc")} />
         <ProvidersManager
           providers={providers}
           protocols={PROVIDER_PROTOCOLS}

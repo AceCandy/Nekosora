@@ -8,6 +8,8 @@ import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 import { requireSession } from "@/lib/session";
 import { listTemplates } from "@/lib/templates/service";
+import { FileText } from "lucide-react";
+import { PageHeader } from "@/shared/components/PageHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -28,12 +30,7 @@ export default async function PanelTemplatesPage() {
 
   return (
     <div className="space-y-8 max-w-4xl">
-      <div>
-        <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-white">{tn("templates")}</h1>
-        <p className="mt-1 text-sm text-neutral-500">
-          {tt("desc")}
-        </p>
-      </div>
+      <PageHeader icon={FileText} title={tn("templates")} desc={tt("desc")} />
 
       {templates.length === 0 && (
         <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#12141a] p-10 text-center shadow-none">

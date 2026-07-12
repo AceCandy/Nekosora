@@ -1,0 +1,29 @@
+{
+  "id": "config-panel-ux-revamp",
+  "name": "config-panel-ux-revamp",
+  "title": "后台配置页 UX 整改：限高一屏/用量查询合一/tab重命名/标题统一",
+  "description": "",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "AceCandy",
+  "assignee": "AceCandy",
+  "createdAt": "2026-07-12",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "07-12-usage-page-unify",
+    "07-12-shell-layout-page-header"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

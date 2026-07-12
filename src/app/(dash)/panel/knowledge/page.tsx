@@ -10,6 +10,7 @@ import {
 } from "@/lib/knowledge-base/service";
 import { Library, Trash2 } from "lucide-react";
 import KnowledgeDebug from "./KnowledgeDebug";
+import { PageHeader } from "@/shared/components/PageHeader";
 
 export default async function KnowledgePage() {
   const user = await requireSession();
@@ -49,13 +50,7 @@ export default async function KnowledgePage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold mb-1 flex items-center gap-2">
-          <Library className="w-5 h-5 text-sora-blue" />
-          <span>{tn("knowledge")}</span>
-        </h1>
-        <p className="text-sm text-neutral-500">{t("desc")}</p>
-      </div>
+      <PageHeader icon={Library} title={tn("knowledge")} desc={t("desc")} />
 
       {/* 新建知识库 */}
       <form action={handleCreate} className="rounded-lg border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#0d0f14] p-4 space-y-3">

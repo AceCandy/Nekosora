@@ -13,6 +13,8 @@ import ProvidersManager, {
   type ProviderItem,
 } from "@/features/providers/ProvidersManager";
 import { PROVIDER_PROTOCOLS } from "@/features/providers/protocols";
+import { Server } from "lucide-react";
+import { PageHeader } from "@/shared/components/PageHeader";
 
 export default async function MyProvidersPage() {
   const t = await getTranslations("panel.providers");
@@ -52,12 +54,7 @@ export default async function MyProvidersPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-bold mb-2">{tn("providers")}</h1>
-        <p className="text-sm text-neutral-500">
-          {t("desc")}
-        </p>
-      </div>
+      <PageHeader icon={Server} title={tn("providers")} desc={t("desc")} />
       <ProvidersManager
         providers={providers}
         protocols={PROVIDER_PROTOCOLS}

@@ -16,6 +16,7 @@ import {
 } from "@/lib/render-styles/service";
 import { Palette } from "lucide-react";
 import RenderStylesManager from "@/features/render-styles/RenderStylesManager";
+import { PageHeader } from "@/shared/components/PageHeader";
 import { revalidatePath } from "next/cache";
 
 export const dynamic = "force-dynamic";
@@ -102,13 +103,7 @@ export default async function AdminRenderStylesPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-white flex items-center gap-2">
-          <Palette className="w-5 h-5 text-sora-blue" />
-          <span>{tn("renderStyles")}</span>
-        </h1>
-        <p className="mt-1 text-sm text-neutral-500">{t("desc")}</p>
-      </div>
+      <PageHeader icon={Palette} title={tn("renderStyles")} desc={t("desc")} />
 
       <RenderStylesManager
         styles={managerStyles}
