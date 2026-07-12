@@ -1,16 +1,12 @@
 /**
- * 向量检索 dialect 适配 —— pgvector(PostgreSQL)或 sqlite-vec(SQLite)降级。
+ * 向量工具 —— pgvector(PostgreSQL)序列化与距离↔相似度转换。
  *
  * 本文件提供:
  *   - 维度常量与向量工具(序列化、距离↔相似度转换)
  *   - 生成 embedding 的入口(委托给 AI SDK embedding provider)
- *   - 检索 SQL 片段的 dialect 差异封装(阶段 2 schema 完成后由 repository 调用)
  *
  * PG:  file_chunks.embedding 类型为 vector(1536),用 `<=>`(余弦距离)算子。
- * SQLite: 加载 sqlite-vec 扩展,vec0 虚拟表,vec_distance_cosine。
  */
-import { isPg } from "@/lib/infra/db";
-
 export const EMBEDDING_DIM = 1536; // OpenAI text-embedding-3-small 维度
 
 export type Vector = number[];
@@ -20,13 +16,8 @@ export function toPgVector(v: Vector): string {
   return `[${v.join(",")}]`;
 }
 
-/** sqlite-vec 以 JSON 数组字符串或 BLOB 传递;此处用 JSON 字符串。 */
-export function toSqliteVec(v: Vector): string {
-  return JSON.stringify(v);
-}
-
 export function serialize(v: Vector): string {
-  return isPg ? toPgVector(v) : toSqliteVec(v);
+  return toPgVector(v);
 }
 
 /** 余弦距离 [0,2] → 相似度 [0,1]:similarity = 1 - distance/2。 */

@@ -85,26 +85,18 @@ startTransition(() => {
 ```ts
 async function reorderXxx(orderedIds: string[]): Promise<void> {
   await requireAdmin(); // 或 requireSession(个人模型)
-  if (isPg) {
-    await db.transaction(async (tx) => {
-      for (let i = 0; i < orderedIds.length; i++) {
-        await tx.update(t).set({ sortOrder: i }).where(eq(t.id, orderedIds[i]));
-      }
-    });
-  } else {
-    db.transaction((tx) => {
-      for (let i = 0; i < orderedIds.length; i++) {
-        tx.update(t).set({ sortOrder: i }).where(eq(t.id, orderedIds[i])).run();
-      }
-    });
-  }
+  await db.transaction(async (tx) => {
+    for (let i = 0; i < orderedIds.length; i++) {
+      await tx.update(t).set({ sortOrder: i }).where(eq(t.id, orderedIds[i]));
+    }
+  });
   revalidatePath("/...");
 }
 ```
 
 - **全表重写连续整数**(0,1,2…)——简单、幂等、无空洞。表数据量小(几十),逐条 update 可接受。
 - **单事务**包裹,中途失败整体回滚(避免半成品状态)。
-- **SQLite 事务必须同步**:better-sqlite3 不接受 `async` transaction callback;SQLite 分支只在回调中使用 `.run()`，不可 `await`。否则会在语句已执行后抛 `Transaction function cannot return a promise`。
+- **事务 callback 可 async**:PostgreSQL drizzle transaction 接受 `async` callback,内部用 `await tx.update(...)`。
 - **id 不存在自然跳过**:`update ... where id=?` 影响 0 行,不抛错(拖动时客户端传的 id 可能过期)。
 - **per-user / per-scope 隔离**:个人模型 reorder 每条 update 必须带 `and(eq(id, orderedIds[i]), eq(userId, user.id))`,防止越权改他人顺序。
 - **不新增 REST `/api`**:沿用 server action + `revalidatePath` 模式。

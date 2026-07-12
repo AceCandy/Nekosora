@@ -16,9 +16,7 @@
     "test:watch": "vitest",
     "check": "pnpm lint && pnpm typecheck",
     "db:generate:pg": "drizzle-kit generate --config=drizzle.pg.config.ts",
-    "db:generate:sqlite": "drizzle-kit generate --config=drizzle.sqlite.config.ts",
     "db:migrate:pg": "drizzle-kit migrate --config=drizzle.pg.config.ts",
-    "db:push:sqlite": "drizzle-kit push --config=drizzle.sqlite.config.ts",
     "db:studio:pg": "drizzle-kit studio --config=drizzle.pg.config.ts",
     "auth:generate": "better-auth-cli generate --config=src/auth.ts",
     "auth:migrate": "better-auth-cli migrate --config=src/auth.ts",
@@ -42,7 +40,6 @@
     "@tanstack/react-virtual": "^3.14.5",
     "ai": "^7.0.15",
     "better-auth": "^1.2.0",
-    "better-sqlite3": "^11.7.0",
     "cache-manager": "^6.0.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
@@ -72,7 +69,6 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
     "@tailwindcss/postcss": "^4.0.0",
-    "@types/better-sqlite3": "^7.6.0",
     "@types/node": "^22.10.0",
     "@types/pg": "^8.11.0",
     "@types/react": "^19.0.0",
@@ -92,7 +88,6 @@
   "packageManager": "pnpm@10.22.0",
   "pnpm": {
     "onlyBuiltDependencies": [
-      "better-sqlite3",
       "esbuild",
       "sharp",
       "unrs-resolver",

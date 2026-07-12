@@ -9,7 +9,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-3b82f6.svg)](./LICENSE)
 [![Next.js](https://img.shields.io/badge/Next.js%2015-App%20Router-000000.svg)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178c6.svg)](https://www.typescriptlang.org/)
-[![Drizzle ORM](https://img.shields.io/badge/Drizzle%20ORM-PG%20%2F%20SQLite-d6f334.svg)](https://orm.drizzle.team/)
+[![Drizzle ORM](https://img.shields.io/badge/Drizzle%20ORM-PostgreSQL-d6f334.svg)](https://orm.drizzle.team/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-f59e0b.svg)](.)
 
 **设计主线 · 星枢天流 (The Astral Skyline)** — 暮色微澜黑与星云纯白
@@ -39,7 +39,7 @@ Nekusora(星枢,取自 Neku 猫 / Sora 天空)把两件事揉进了同一个产�
 - **会话分享**:生成只读分享链接(`/share/:id`)
 - **多模态**:图片输入、文件上传与解析
 - **记忆 (Memory)**:长期用户画像与偏好记忆
-- **RAG**:基于 pgvector / sqlite-vec 的检索增强
+- **RAG**:基于 pgvector 的检索增强
 - **Prompt 模板**:可复用的对话模板库
 
 ### OpenAI 兼容 API 网关
@@ -57,9 +57,9 @@ Nekusora(星枢,取自 Neku 猫 / Sora 天空)把两件事揉进了同一个产�
 - **双来源模型**:子 key 可绑定「全局模型」(管理员配) ∪ 「用户 BYO 模型」(用户自配 provider)
 
 ### 降级基建(零依赖可启动)
-- **数据库**:PostgreSQL(+pgvector)↔ SQLite(+sqlite-vec)自动降级
+- **数据库**:PostgreSQL(+pgvector)
 - **缓存**:Redis ↔ 进程内内存 LRU 自动降级
-- **队列**:pg-boss(PG 模式)/ no-op(SQLite 模式)
+- **队列**:pg-boss(PostgreSQL)
 - **对象存储**:S3 / R2 / Minio ↔ 本地磁盘自动降级
 
 ### 管理
@@ -73,12 +73,12 @@ Nekusora(星枢,取自 Neku 猫 / Sora 天空)把两件事揉进了同一个产�
 | 层 | 选型 |
 |---|---|
 | 框架 | Next.js 15 App Router + TypeScript + Turbopack |
-| ORM | Drizzle ORM(PostgreSQL / SQLite 双 dialect) |
+| ORM | Drizzle ORM(PostgreSQL) |
 | 缓存 | cache-manager v6 + Keyv + Redis |
 | 队列 | pg-boss(PostgreSQL) |
 | 认证 | Better Auth + admin 插件 + Drizzle 适配器 |
 | AI | Vercel AI SDK v5(`@ai-sdk/openai` / `anthropic` / `google`) |
-| 向量 | pgvector(PG)/ sqlite-vec(SQLite) |
+| 向量 | pgvector(PostgreSQL) |
 | 协议 | MCP SDK(`@modelcontextprotocol/sdk`) |
 | 监控 | prom-client + `/metrics` 端点 |
 | UI | TailwindCSS v4 + shadcn/ui + Radix |
@@ -88,11 +88,11 @@ Nekusora(星枢,取自 Neku 猫 / Sora 天空)把两件事揉进了同一个产�
 
 ## 🚀 快速开始
 
-### 零依赖本地开发(默认 SQLite + 内存缓存)
+### 本地开发(PostgreSQL + 内存缓存)
 
 ```bash
 pnpm install
-pnpm db:push:sqlite          # 建表(SQLite 模式,一次性)
+docker compose up -d          # 起 PostgreSQL(+ Redis 可选)
 pnpm dev                      # 启动 http://localhost:3000
 ```
 
@@ -137,9 +137,9 @@ resp = client.chat.completions.create(
 
 ```bash
 docker compose up -d           # 启动 pg + redis
-# 取消 .env.local 中 DATABASE_URL / REDIS_URL 注释,设 DB_DIALECT=pg
+# 在 .env.local 中配置 DATABASE_URL / REDIS_URL
 pnpm dev                       # 主进程(首次启动自动建表 + 建管理员)
-pnpm worker                    # 另开终端:文件处理队列(PG 模式)
+pnpm worker                    # 另开终端:文件处理队列(pg-boss)
 ```
 
 ---
@@ -150,9 +150,7 @@ pnpm worker                    # 另开终端:文件处理队列(PG 模式)
 
 | 变量 | 说明 | 默认 |
 |---|---|---|
-| `DATABASE_URL` | PostgreSQL 连接串;留空走 SQLite | - |
-| `DB_DIALECT` | `pg` / `sqlite`;留空按 DATABASE_URL 自动判断 | 自动 |
-| `SQLITE_PATH` | SQLite 文件路径(仅 sqlite 模式) | `./data/local.db` |
+| `DATABASE_URL` | PostgreSQL 连接串 | 必填 |
 | `REDIS_URL` | Redis 连接串;留空走内存 | - |
 | `DATA_ENCRYPTION_KEY` | AES-256-GCM 主密钥(64 位 hex) | 必填 |
 | `BETTER_AUTH_SECRET` | 认证密钥 | 必填 |
@@ -174,7 +172,7 @@ docker run -p 3000:3000 \
   nekusora
 ```
 
-SQLite 模式挂载 `/app/data` 卷即可持久化。
+PostgreSQL 数据由外部 PG 管理(docker compose 的 pgdata 卷持久化)。
 
 ---
 
@@ -208,14 +206,14 @@ src/
     keys.ts                主/子密钥签发与校验
     tokens.ts              CJK token 估算 + 上下文裁剪
     multimodal/            多模态输入处理
-    rag/                   检索增强(pgvector / sqlite-vec)
+    rag/                   检索增强(pgvector)
     memory/                长期记忆
     mcp/                   MCP 适配
     templates/             Prompt 模板
     artifacts/             Artifacts 渲染
     infra/                 db/cache/queue/crypto/vector/storage 降级基建
   db/
-    schema/{pg,sqlite}.ts  Drizzle 双 dialect schema
+    schema/pg.ts            Drizzle schema
 ```
 
 ---

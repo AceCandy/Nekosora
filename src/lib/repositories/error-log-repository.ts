@@ -1,13 +1,13 @@
 /**
  * ErrorLogRepository —— ops_error_logs 的查询访问层。
  *
- * 双 dialect 兼容(pg / sqlite),业务层(admin / panel 前端 + server actions)统一调用。
+ * 业务层(admin / panel 前端 + server actions)统一调用。
  * 鉴权隔离:任何按 userId 过滤的查询,userId 必填且强制 where,防越权。
  *   - admin 后台:不传 userId(看全部)
  *   - panel 用户端:必传 userId(只看自己的)
  */
-import { eq, and, gte, lte, desc, sql, isNotNull, ilike, like, or, type SQL } from "drizzle-orm";
-import { getDb, getSchema, isPg } from "@/lib/infra/db";
+import { eq, and, gte, lte, desc, sql, isNotNull, ilike, or, type SQL } from "drizzle-orm";
+import { getDb, getSchema } from "@/lib/infra/db";
 
 /** 错误请求明细行(DTO,服务边界收敛成显式类型供前端消费)。 */
 export interface ErrorLogRow {
@@ -244,9 +244,9 @@ export interface SearchErrorCandidatesOpts {
   limit?: number;
 }
 
-/** 大小写不敏感 LIKE(pg ilike / sqlite like 默认 ASCII 不敏感)。 */
+/** 大小写不敏感 LIKE。 */
 function iLike(col: SQL, q: string): SQL {
-  return isPg ? ilike(col, `%${q}%`) : like(col, `%${q}%`);
+  return ilike(col, `%${q}%`);
 }
 
 /**

@@ -79,9 +79,16 @@ vi.mock("@/lib/infra/db", () => {
           }
         },
       }),
-      execute: async (sqlObj: { strings?: string[] }) => {
-        const sqlText = sqlObj.strings?.join("") ?? "";
-        if (sqlText.includes("DELETE") && sqlText.includes("project")) {
+      execute: async (sqlObj: { strings?: string[]; values?: unknown[] }) => {
+        const strings = sqlObj.strings ?? [];
+        const values = sqlObj.values ?? [];
+        let text = "";
+        for (let i = 0; i < strings.length; i++) {
+          text += strings[i];
+          if (i < values.length) text += String(values[i]);
+        }
+        // DELETE:project 过期清理
+        if (text.includes("DELETE") && text.includes("project")) {
           const now = Date.now();
           for (let i = mockData.store.length - 1; i >= 0; i--) {
             const r = mockData.store[i];
@@ -91,6 +98,43 @@ vi.mock("@/lib/infra/db", () => {
               }
             }
           }
+          return { rows: [] };
+        }
+        // SELECT:pg 向量检索(<=> ),内存模拟(distanceToSimilarity 还原为原始余弦相似度)
+        if (text.includes("<=>") || /distance/i.test(text)) {
+          const embVal = values.find((v) => typeof v === "string" && /^\[[\d.,\s-]*\]$/.test(v));
+          const q: number[] = embVal
+            ? String(embVal).replace(/[\[\]]/g, "").split(",").map(Number)
+            : [];
+          let scope: string | null = null;
+          for (const s of ["preference", "profile", "project"]) {
+            if (text.includes(`scope = ${s}`) || text.includes(`scope = '${s}'`)) { scope = s; break; }
+          }
+          const checkRecent = /lastaccessedat\s*>/i.test(text);
+          const now = Date.now();
+          const distOf = (emb: unknown) => {
+            const e = Array.isArray(emb) ? (emb as number[]) : typeof emb === "string" ? (JSON.parse(emb) as number[]) : [];
+            const len = Math.min(e.length, q.length);
+            let dot = 0, na = 0, nb = 0;
+            for (let i = 0; i < len; i++) { dot += e[i] * q[i]; na += e[i] * e[i]; nb += q[i] * q[i]; }
+            const cos = na && nb ? dot / (Math.sqrt(na) * Math.sqrt(nb)) : 0;
+            return 2 * (1 - cos); // distanceToSimilarity(此值) = cos,对齐原内存余弦语义
+          };
+          const rows = mockData.store.filter((r) => {
+            if (!r.embedding) return false;
+            if (scope && r.scope !== scope) return false;
+            if (checkRecent && r.lastAccessedAt && now - (r.lastAccessedAt as Date).getTime() > 7 * 86400 * 1000) return false;
+            return true;
+          });
+          rows.sort((a, b) => distOf(a.embedding) - distOf(b.embedding));
+          const limitMatch = text.match(/LIMIT\s+(\d+)/i);
+          const limit = limitMatch ? Number(limitMatch[1]) : rows.length;
+          return {
+            rows: rows.slice(0, limit).map((r) => ({
+              id: r.id, scope: r.scope, content: r.content, source: r.source,
+              disclosure: r.disclosure, distance: distOf(r.embedding),
+            })),
+          };
         }
         return { rows: [] };
       },

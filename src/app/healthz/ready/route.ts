@@ -7,7 +7,7 @@
  * 检查项有超时保护(单项 2s),避免探针阻塞。
  */
 import { NextResponse } from "next/server";
-import { getDb, getSchema, isPg } from "@/lib/infra/db";
+import { getDb, getSchema } from "@/lib/infra/db";
 import { getStorage } from "@/lib/infra/storage";
 import { queueAvailable } from "@/lib/infra/queue";
 import { getEnvInfo } from "@/lib/infra/env";
@@ -32,7 +32,7 @@ export async function GET() {
       try {
         const db = await getDb();
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (db as any).execute(isPg ? "select 1" : "select 1");
+        await (db as any).execute("select 1");
         return "ok";
       } catch {
         return "error";
@@ -78,7 +78,6 @@ export async function GET() {
     {
       status: ready ? "ready" : "unready",
       checks,
-      dialect: env.dbDialect,
       ts: Date.now(),
     },
     { status: ready ? 200 : 503 },

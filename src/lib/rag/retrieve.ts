@@ -1,9 +1,9 @@
 /**
- * RAG 检索服务 —— dialect-aware 向量检索 + 文档序重排 + token 预算打包。
+ * RAG 检索服务 —— 内存余弦向量检索 + 文档序重排 + token 预算打包。
  *
  * 流程(借鉴 DEEIX-Chat):
  *   1. embedText(query)
- *   2. 向量搜索(PG: pgvector <=> ; SQLite: 内存余弦相似度,因 sqlite-vec 需运行时加载扩展)
+ *   2. 向量搜索(取候选块后在内存算余弦相似度,内部规模够用)
  *   3. 过滤 minSimilarity(默认 0.45)
  *   4. 按文档顺序重排(chunk_index 升序),便于阅读
  *   5. token 预算打包(默认 2000)
@@ -11,8 +11,8 @@
  * RetrieveStatus 驱动上层回退逻辑。
  */
 import { eq, and, inArray } from "drizzle-orm";
-import { getDb, getSchema, isPg } from "@/lib/infra/db";
-import { distanceToSimilarity, DEFAULT_MIN_SIMILARITY, type Vector } from "@/lib/infra/vector";
+import { getDb, getSchema } from "@/lib/infra/db";
+import { DEFAULT_MIN_SIMILARITY, type Vector } from "@/lib/infra/vector";
 import { embedText } from "./embedding";
 import { estimateTokens } from "@/lib/tokens";
 
@@ -193,7 +193,7 @@ async function doRetrieve(
   };
 }
 
-/** 解析存储的 embedding(PG 为 "[0.1,...]" 字符串,SQLite 为 JSON 数组字符串)。 */
+/** 解析存储的 embedding(pgvector 存为 "[0.1,...]" 字符串)。 */
 function parseEmbedding(raw: Vector | string | null): Vector | null {
   if (!raw) return null;
   if (Array.isArray(raw)) return raw;
@@ -220,7 +220,3 @@ function cosineSimilarity(a: Vector, b: Vector): number {
   const cos = dot / (Math.sqrt(na) * Math.sqrt(nb));
   return (cos + 1) / 2; // [-1,1] → [0,1]
 }
-
-// 静默引用以保持 isPg 在将来 PG 原生算子路径可用时不被 tree-shake(当前统一内存计算)。
-void isPg;
-void distanceToSimilarity;

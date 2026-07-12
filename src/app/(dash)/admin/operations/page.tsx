@@ -1,7 +1,7 @@
 /**
  * 运维监控页 —— /admin/operations
  *
- * 展示系统实时信息:DB dialect、存储 driver、Redis、队列、Prometheus 指标快照。
+ * 展示系统实时信息:DB、存储 driver、Redis、队列、Prometheus 指标快照。
  * 数据来源:getEnvInfo() + 内存 metrics(避免复杂查询,纯展示)。
  *
  * 对标 admin 其他页:莫兰迪灰调、shadow-none、border 细线分隔。
@@ -50,13 +50,11 @@ export default async function OperationsPage() {
   // 从 registry 文本输出读活跃流式计数(prom-client v15 get() 为异步,改走 metrics 文本)。
   const activeStreamsValue = await readGauge("nekusora_active_streams");
 
-  // createdAt 在 PG 是 timestamp,SQLite 是 epoch 整数,统一用 now() - 1 hour。
+  // createdAt 为 PG timestamp,统一用 now() - 1 hour。
   const lastHourCalls = await db
     .select({ calls: sql<number>`count(*)` })
     .from(s.usageLogs)
-    .where(sql`${s.usageLogs.createdAt} > ${env.dbDialect === "pg"
-        ? sql`now() - interval '1 hour'`
-        : sql`unixepoch() - 3600`}`);
+    .where(sql`${s.usageLogs.createdAt} > now() - interval '1 hour'`);
 
   return (
     <div className="space-y-10">
@@ -66,7 +64,7 @@ export default async function OperationsPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <InfoCard label={t("metricActiveStreams")} value={String(activeStreamsValue)} hint={t("metricActiveStreamsHint")} />
         <InfoCard label={t("metricLastHourCalls")} value={String(Number(lastHourCalls[0]?.calls ?? 0))} hint={t("metricLastHourCallsHint")} />
-        <InfoCard label={t("metricDb")} value={env.dbDialect.toUpperCase()} hint={env.dbDialect === "pg" ? "PostgreSQL" : "SQLite"} />
+        <InfoCard label={t("metricDb")} value="PostgreSQL" hint="PostgreSQL + pgvector" />
         <InfoCard label={t("metricStorage")} value={env.storageDriver} hint={env.storageDriver === "local" ? t("storageLocal") : t("storageS3")} />
       </div>
 
@@ -75,11 +73,11 @@ export default async function OperationsPage() {
         <h2 className="text-base font-semibold text-neutral-900 dark:text-white">{t("depsTitle")}</h2>
         <div className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] overflow-hidden shadow-none">
           <div className="divide-y divide-neutral-100 dark:divide-neutral-800">
-            <DepRow name={t("metricDb")} value={env.dbDialect === "pg" ? "PostgreSQL + pgvector" : "SQLite + sqlite-vec"} ok />
+            <DepRow name={t("metricDb")} value="PostgreSQL + pgvector" ok />
             <DepRow name={t("depCache")} value={env.hasRedis ? "Redis" : t("depCacheLru")} ok />
             <DepRow
               name={t("depQueue")}
-              value={env.queueAvailable ? "pg-boss(PostgreSQL)" : t("depQueueDisabled")}
+              value="pg-boss (PostgreSQL)"
               ok
             />
             <DepRow

@@ -7,7 +7,7 @@
 ## Overview
 
 - **库**: Better Auth,配置在 `src/auth.ts`,通过 `getAuth()` 惰性初始化(因为 `getDb()` 是 async,而 `drizzleAdapter` 期望同步 db)。
-- **适配器**: drizzle,dual-dialect(`isPg ? "pg" : "sqlite"`),表名沿用 Better Auth 默认(`user`/`session`/`account`/`verification`)。
+- **适配器**: drizzle,provider 固定 `"pg"`,表名沿用 Better Auth 默认(`user`/`session`/`account`/`verification`)。
 - **能力**: `emailAndPassword`(autoSignIn) + `admin` 插件(role/banned 等,本项目额外加了 `status` 列)。
 - **baseURL**: 不在代码里硬编码,由 `BETTER_AUTH_URL` 环境变量推导;默认可信 origin 也由此推导。
 

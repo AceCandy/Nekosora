@@ -1,7 +1,7 @@
 "use server";
 import { eq, ne, and, asc, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { getDb, getSchema, isPg } from "@/lib/infra/db";
+import { getDb, getSchema } from "@/lib/infra/db";
 import { encryptKeyBundle, parseKeyBundle, pickWeightedKey } from "@/lib/providers/keys";
 import type { WeightedKey } from "@/lib/providers/keys";
 import { probeProviderKey, fetchUpstreamModels, type ProbeResult, type UpstreamModel } from "@/lib/providers/probe";
@@ -399,41 +399,21 @@ export async function reorderMyModels(
 ) {
   const user = await requireSession();
   const db = await getDb();
-  if (isPg) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await db.transaction(async (tx: any) => {
-      for (let i = 0; i < orderedIds.length; i++) {
-        await tx
-          .update(S().models)
-          .set({ sortOrder: i })
-          .where(
-            and(
-              eq(S().models.id, orderedIds[i]),
-              eq(S().models.ownerUserId, user.id),
-              eq(S().models.visibility, visibility),
-            ),
-          );
-      }
-    });
-  } else {
-    // better-sqlite3 的 transaction 回调必须同步执行。
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    db.transaction((tx: any) => {
-      for (let i = 0; i < orderedIds.length; i++) {
-        tx
-          .update(S().models)
-          .set({ sortOrder: i })
-          .where(
-            and(
-              eq(S().models.id, orderedIds[i]),
-              eq(S().models.ownerUserId, user.id),
-              eq(S().models.visibility, visibility),
-            ),
-          )
-          .run();
-      }
-    });
-  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await db.transaction(async (tx: any) => {
+    for (let i = 0; i < orderedIds.length; i++) {
+      await tx
+        .update(S().models)
+        .set({ sortOrder: i })
+        .where(
+          and(
+            eq(S().models.id, orderedIds[i]),
+            eq(S().models.ownerUserId, user.id),
+            eq(S().models.visibility, visibility),
+          ),
+        );
+    }
+  });
   revalidatePath("/panel", "layout");
 }
 

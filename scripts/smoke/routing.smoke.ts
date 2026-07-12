@@ -12,8 +12,11 @@ import { resolveRoutes, resolveRoutesById, RoutingError } from "@/lib/routing";
 import type { CallContext } from "@/lib/providers/types";
 
 (process.env as Record<string, string>).NODE_ENV = "development";
-process.env.DB_DIALECT = "sqlite";
-process.env.SQLITE_PATH = "./data/local.db";
+// 依赖 DATABASE_URL(PostgreSQL);运行前需 docker compose up postgres + pnpm db:migrate:pg。
+if (!process.env.DATABASE_URL) {
+  console.error("[smoke] 缺少 DATABASE_URL,无法运行(仅支持 PostgreSQL)。");
+  process.exit(1);
+}
 
 // 三个等价 provider(不同 base_url,模拟多上游负载均衡)。
 const PROVIDERS = [

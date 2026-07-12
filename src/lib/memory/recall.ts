@@ -10,10 +10,9 @@
  * preference/profile 走恒定注入(service.buildPreferencePrompt/buildProfilePrompt),不参与召回。
  *
  * PG: 用 pgvector `<=>` 余弦距离算子(DB 内计算)。
- * SQLite: 取全部记忆的 embedding 在内存算余弦相似度(记忆条数通常很小)。
  */
 import { eq, and, inArray, sql } from "drizzle-orm";
-import { getDb, getSchema, isPg } from "@/lib/infra/db";
+import { getDb, getSchema } from "@/lib/infra/db";
 import { embedText } from "@/lib/rag/embedding";
 import { distanceToSimilarity, DEFAULT_MIN_SIMILARITY, type Vector } from "@/lib/infra/vector";
 import type { MemoryScope, UserMemory } from "./service";
@@ -86,47 +85,22 @@ export async function findSimilarMemory(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
 
-  if (isPg) {
-    const rows = await db.execute(
-      sql`SELECT id, scope, content, source, disclosure,
-          (${s.userMemories.embedding} <=> ${JSON.stringify(embedding)}) AS distance
-          FROM ${s.userMemories}
-          WHERE ${s.userMemories.userId} = ${userId}
-            AND ${s.userMemories.scope} = ${scope}
-            AND ${s.userMemories.embedding} IS NOT NULL
-          ORDER BY distance ASC
-          LIMIT 1`,
-    );
-    const row = (rows.rows ?? rows)[0] as
-      | { id: string; scope: string; content: string; source: string; disclosure: string | null; distance: number }
-      | undefined;
-    if (!row) return null;
-    if (distanceToSimilarity(Number(row.distance)) < threshold) return null;
-    return toUserMemory(row);
-  }
-
-  // SQLite:内存余弦
-  const all = (await db
-    .select({
-      id: s.userMemories.id,
-      scope: s.userMemories.scope,
-      content: s.userMemories.content,
-      source: s.userMemories.source,
-      disclosure: s.userMemories.disclosure,
-      embedding: s.userMemories.embedding,
-    })
-    .from(s.userMemories)
-    .where(and(eq(s.userMemories.userId, userId), eq(s.userMemories.scope, scope)))) as MemoryRow[];
-
-  let best: { row: MemoryRow; sim: number } | null = null;
-  for (const m of all) {
-    if (!m.embedding) continue;
-    const emb = typeof m.embedding === "string" ? (JSON.parse(m.embedding) as Vector) : (m.embedding as Vector);
-    const sim = cosineSimilarity(embedding, emb);
-    if (!best || sim > best.sim) best = { row: m, sim };
-  }
-  if (!best || best.sim < threshold) return null;
-  return toUserMemory(best.row);
+  const rows = await db.execute(
+    sql`SELECT id, scope, content, source, disclosure,
+        (${s.userMemories.embedding} <=> ${JSON.stringify(embedding)}) AS distance
+        FROM ${s.userMemories}
+        WHERE ${s.userMemories.userId} = ${userId}
+          AND ${s.userMemories.scope} = ${scope}
+          AND ${s.userMemories.embedding} IS NOT NULL
+        ORDER BY distance ASC
+        LIMIT 1`,
+  );
+  const row = (rows.rows ?? rows)[0] as
+    | { id: string; scope: string; content: string; source: string; disclosure: string | null; distance: number }
+    | undefined;
+  if (!row) return null;
+  if (distanceToSimilarity(Number(row.distance)) < threshold) return null;
+  return toUserMemory(row);
 }
 
 export interface MemoryDiagnostics {
@@ -188,54 +162,25 @@ export async function getMemoryDiagnostics(userId: string): Promise<MemoryDiagno
 
 // ---- 内部辅助 ----
 
-/** 向量召回(project + 过期过滤)。PG DB 内排序,SQLite 内存余弦。 */
+/** 向量召回(project + 过期过滤)。PG DB 内 `<=>` 排序。 */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function vectorRecall(db: any, s: any, userId: string, queryVec: Vector, topK: number): Promise<UserMemory[]> {
-  if (isPg) {
-    const rows = await db.execute(
-      sql`SELECT id, scope, content, source, disclosure,
-          (${s.userMemories.embedding} <=> ${JSON.stringify(queryVec)}) AS distance
-          FROM ${s.userMemories}
-          WHERE ${s.userMemories.userId} = ${userId}
-            AND ${s.userMemories.scope} = 'project'
-            AND ${s.userMemories.embedding} IS NOT NULL
-            AND ${s.userMemories.lastAccessedAt} > NOW() - INTERVAL '7 days'
-          ORDER BY distance ASC
-          LIMIT ${topK}`,
-    );
-    const matched = (rows.rows ?? rows) as
-      | { id: string; scope: string; content: string; source: string; disclosure: string | null; distance: number }[];
-    return matched
-      .filter((r) => distanceToSimilarity(Number(r.distance)) >= DEFAULT_MIN_SIMILARITY)
-      .map((r) => toUserMemory(r));
-  }
-
-  // SQLite:内存余弦
-  const all = (await db
-    .select({
-      id: s.userMemories.id,
-      scope: s.userMemories.scope,
-      content: s.userMemories.content,
-      source: s.userMemories.source,
-      disclosure: s.userMemories.disclosure,
-      embedding: s.userMemories.embedding,
-      lastAccessedAt: s.userMemories.lastAccessedAt,
-    })
-    .from(s.userMemories)
-    .where(and(eq(s.userMemories.userId, userId), eq(s.userMemories.scope, "project")))) as MemoryRow[];
-
-  const now = Date.now();
-  const scored = all
-    .filter((m) => m.embedding && m.lastAccessedAt && now - m.lastAccessedAt.getTime() < PROJECT_EXPIRE_MS)
-    .map((m) => {
-      const emb = typeof m.embedding === "string" ? (JSON.parse(m.embedding) as Vector) : (m.embedding as Vector);
-      return { row: m, sim: cosineSimilarity(queryVec, emb) };
-    })
-    .filter((x) => x.sim >= DEFAULT_MIN_SIMILARITY)
-    .sort((a, b) => b.sim - a.sim)
-    .slice(0, topK);
-
-  return scored.map((x) => toUserMemory(x.row));
+  const rows = await db.execute(
+    sql`SELECT id, scope, content, source, disclosure,
+        (${s.userMemories.embedding} <=> ${JSON.stringify(queryVec)}) AS distance
+        FROM ${s.userMemories}
+        WHERE ${s.userMemories.userId} = ${userId}
+          AND ${s.userMemories.scope} = 'project'
+          AND ${s.userMemories.embedding} IS NOT NULL
+          AND ${s.userMemories.lastAccessedAt} > NOW() - INTERVAL '7 days'
+        ORDER BY distance ASC
+        LIMIT ${topK}`,
+  );
+  const matched = (rows.rows ?? rows) as
+    | { id: string; scope: string; content: string; source: string; disclosure: string | null; distance: number }[];
+  return matched
+    .filter((r) => distanceToSimilarity(Number(r.distance)) >= DEFAULT_MIN_SIMILARITY)
+    .map((r) => toUserMemory(r));
 }
 
 /** 关键词兜底召回:query 分词命中 content/disclosure。 */
@@ -305,7 +250,7 @@ function tokenize(text: string): string[] {
   return matches ?? [];
 }
 
-/** 把 embedding 列值(PG 字符串 / SQLite 数组)归一化为 Vector。null/非法返回 null。 */
+/** 把 embedding 列值(pgvector 字符串)归一化为 Vector。null/非法返回 null。 */
 function normalizeEmbedding(e: Vector | string | null): Vector | null {
   if (!e) return null;
   if (typeof e === "string") {

@@ -1,6 +1,6 @@
 # Logging Guidelines
 
-> Nekusora 网关调用日志架构契约。权威实现：`src/lib/usage.ts`、`src/lib/stream.ts`、`src/lib/error-classify.ts`、`src/db/schema/{pg,sqlite}.ts`。
+> Nekusora 网关调用日志架构契约。权威实现：`src/lib/usage.ts`、`src/lib/stream.ts`、`src/lib/error-classify.ts`、`src/db/schema/pg.ts`。
 
 ---
 

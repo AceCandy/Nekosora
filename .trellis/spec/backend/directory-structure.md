@@ -31,7 +31,7 @@ src/
     session.ts              会话/鉴权辅助
     auth.ts / auth-client.ts  Better Auth 配置(server / client)
   db/
-    schema/{pg,sqlite}.ts   Drizzle 双 dialect schema(24 表,必须同构)
+    schema/pg.ts            Drizzle schema
     types.ts                dialect 中立领域类型
     seed.ts                 首管理员创建
   instrumentation.ts        进程启动钩子(日志)

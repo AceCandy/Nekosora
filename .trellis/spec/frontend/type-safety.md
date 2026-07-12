@@ -8,7 +8,7 @@
 
 - 类型系统：TypeScript（strict）。Next.js / React 19 类型。
 - 校验库：`zod`（v4）。用于请求体校验、env 解析、外部数据边界。
-- DB 行类型：因 schema 同时支持 pg/sqlite 两种方言、表类型是联合，**统一收敛为 `Record<string, unknown>` / `any`**，在服务边界转成显式 DTO。
+- DB 行类型：因 drizzle 跨表联合时 query builder 类型不互通，**统一收敛为 `Record<string, unknown>` / `any`**，在服务边界转成显式 DTO。
 
 ---
 

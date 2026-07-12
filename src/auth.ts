@@ -1,7 +1,7 @@
 /**
  * Better Auth 配置 —— email+password credentials + admin 插件 + Drizzle 适配器。
  *
- * schema 由本项目的 src/db/schema/{pg,sqlite}.ts 提供(Better Auth 标准 5 张表)。
+ * schema 由本项目的 src/db/schema/pg.ts 提供(Better Auth 标准 5 张表)。
  * admin 插件在 user 表加 role/banned/banReason/banExpires;我们额外加了 status 列。
  *
  * 运行 `pnpm auth:generate` 可让 Better Auth CLI 校验 schema 与本配置一致;
@@ -10,7 +10,7 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { admin } from "better-auth/plugins";
-import { getDb, isPg } from "@/lib/infra/db";
+import { getDb } from "@/lib/infra/db";
 
 // db 实例是 async 的(getDb),但 Better Auth 的 drizzleAdapter 期望同步 db。
 // 我们在 getDb() 完成后构建 auth 实例;为此提供 getAuth() 惰性初始化。
@@ -50,7 +50,7 @@ async function buildAuth(): Promise<AuthInstance> {
   const db = await getDb();
   const instance = betterAuth({
     database: drizzleAdapter(db, {
-      provider: isPg ? "pg" : "sqlite",
+      provider: "pg",
       // 表名与 Better Auth 默认一致(user/session/account/verification),无需传 schema。
     }),
     // 非生产环境追加可信 origin(本机回环 + 私有网段任意端口);生产保持默认(由 BETTER_AUTH_URL 推导)。

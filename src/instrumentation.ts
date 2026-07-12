@@ -25,11 +25,10 @@ export async function register(): Promise<void> {
     return;
   }
 
-  const dialect = process.env.DB_DIALECT ?? (process.env.DATABASE_URL ? "pg" : "sqlite");
   const hasRedis = !!process.env.REDIS_URL;
   console.log(
-    `[instrumentation] Nekusora 启动 | DB=${dialect} | Redis=${hasRedis ? "on" : "off(memory)"} | ` +
-      `Queue=${dialect === "pg" ? "需运行 pnpm worker" : "disabled(sqlite)"}`,
+    `[instrumentation] Nekusora 启动 | DB=pg | Redis=${hasRedis ? "on" : "off(memory)"} | ` +
+      `Queue=需运行 pnpm worker`,
   );
 
   // 防线 2:变量路径 import,阻止 Turbopack 静态预扫描依赖图。

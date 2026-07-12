@@ -15,7 +15,7 @@ Nekusora 是 Next.js 全栈 TypeScript 项目,无独立后端进程(除 `src/wor
 | Guide | Description | Status |
 |-------|-------------|--------|
 | [Directory Structure](./directory-structure.md) | app/lib 分层、infra/providers/rag 等领域 | Filled |
-| [Database Guidelines](./database-guidelines.md) | Drizzle 双 dialect、查询模式、迁移、命名 | Filled |
+| [Database Guidelines](./database-guidelines.md) | Drizzle PostgreSQL-only、动态 import 约束、查询/迁移/命名、向量 mock | Filled |
 | [Error Handling](./error-handling.md) | 统一 API 错误契约、ErrorCode、i18n、工具函数 | Filled |
 | [Auth Guidelines](./auth-guidelines.md) | Better Auth 配置、Origin 信任模型、dev 局域网联调 | Filled |
 | [Quality Guidelines](./quality-guidelines.md) | Code standards, forbidden patterns | To fill |

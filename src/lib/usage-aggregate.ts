@@ -1,11 +1,11 @@
 /**
  * 用量聚合查询 —— 供 admin 图表使用。
  *
- * dialect 差异(PG date_trunc / SQLite strftime)在此封装,业务层不感知。
+ * 时间桶用 PG date_trunc 封装,业务层不感知。
  * 时间桶粒度:hour(24h 范围)/ day(7d/30d 范围)。
  */
-import { sql, and, gte, eq, desc, lte, isNotNull, ilike, like, or, type SQL } from "drizzle-orm";
-import { getDb, getSchema, isPg } from "@/lib/infra/db";
+import { sql, and, gte, eq, desc, lte, isNotNull, ilike, or, type SQL } from "drizzle-orm";
+import { getDb, getSchema } from "@/lib/infra/db";
 
 export type TimeRange = "24h" | "7d" | "30d";
 
@@ -35,18 +35,13 @@ function rangeStart(range: TimeRange): Date {
   return new Date(now - ms * 3600_000);
 }
 
-/** dialect-aware 时间桶表达式(返回列名 "bucket")。 */
+/** PG date_trunc 时间桶表达式(返回列名 "bucket")。 */
 function bucketExpr(range: TimeRange): unknown {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
   const col = s.usageLogs.createdAt;
-  // PG: date_trunc('hour'|'day', ts) —— SQLite: strftime('%Y-%m-%d %H:00'|'%Y-%m-%d', ts, 'unixepoch')
-  if (isPg) {
-    const unit = range === "24h" ? "hour" : "day";
-    return sql`date_trunc(${unit}, ${col})`.as("bucket");
-  }
-  const fmt = range === "24h" ? "%Y-%m-%d %H:00" : "%Y-%m-%d";
-  return sql`strftime(${fmt}, ${col}, 'unixepoch')`.as("bucket");
+  const unit = range === "24h" ? "hour" : "day";
+  return sql`date_trunc(${unit}, ${col})`.as("bucket");
 }
 
 /** 时间序列(按桶聚合 calls + tokens)。可选 userId 限定为某用户。 */
@@ -382,9 +377,9 @@ export interface SearchUsageCandidatesOpts {
   limit?: number;
 }
 
-/** 大小写不敏感 LIKE(pg ilike / sqlite like 默认 ASCII 不敏感)。 */
+/** 大小写不敏感 LIKE。 */
 function iLike(col: SQL, q: string): SQL {
-  return isPg ? ilike(col, `%${q}%`) : like(col, `%${q}%`);
+  return ilike(col, `%${q}%`);
 }
 
 /**

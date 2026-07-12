@@ -2,12 +2,8 @@
  * 环境变量集中校验。启动时调用 validateEnv(),缺关键变量给出清晰错误。
  * 非必填项(降级项)只记录当前模式,不阻断。
  */
-import { dbDialect } from "@/lib/infra/db";
-
 export interface EnvInfo {
-  dbDialect: "pg" | "sqlite";
   hasRedis: boolean;
-  queueAvailable: boolean;
   storageDriver: "local" | "s3" | "r2" | "minio";
   appUrl: string;
   skPrefix: string;
@@ -20,9 +16,7 @@ export function getEnvInfo(): EnvInfo {
   const storageDriver: EnvInfo["storageDriver"] =
     rawStorage === "s3" || rawStorage === "r2" || rawStorage === "minio" ? rawStorage : "local";
   return {
-    dbDialect,
     hasRedis: !!process.env.REDIS_URL,
-    queueAvailable: dbDialect === "pg",
     storageDriver,
     appUrl: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
     skPrefix: process.env.SK_PREFIX ?? "sk-",
@@ -45,10 +39,8 @@ export function validateEnv(): EnvInfo {
   if (!process.env.BETTER_AUTH_SECRET) {
     errors.push("BETTER_AUTH_SECRET 未配置。");
   }
-
-  // PG 模式额外要求
-  if (info.dbDialect === "pg" && !process.env.DATABASE_URL) {
-    errors.push("DB_DIALECT=pg 但未配置 DATABASE_URL。");
+  if (!process.env.DATABASE_URL) {
+    errors.push("DATABASE_URL 未配置(仅支持 PostgreSQL)。");
   }
 
   if (errors.length > 0) {

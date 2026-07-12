@@ -128,10 +128,8 @@ vi.mock("@/lib/infra/db", () => {
         mockData.models.push({ id: `model-${mockData.models.length + 1}`, ...row });
       },
     }),
-    transaction: (callback: (tx: typeof db) => void) => {
-      const result = callback(db);
-      if (result instanceof Promise) throw new TypeError("Transaction function cannot return a promise");
-      return result;
+    transaction: async (callback: (tx: typeof db) => Promise<unknown>) => {
+      return await callback(db);
     },
   };
 

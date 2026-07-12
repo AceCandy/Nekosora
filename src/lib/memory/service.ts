@@ -9,12 +9,10 @@
  * 读时缓存(60s),写入后主动失效(design §6)。
  */
 import { eq, and, sql } from "drizzle-orm";
-import { getDb, getSchema, isPg } from "@/lib/infra/db";
+import { getDb, getSchema } from "@/lib/infra/db";
 import { cacheWrap, cacheDel } from "@/lib/infra/cache";
 
 const PREFERENCE_CAP_CHARS = 400;
-const PROJECT_EXPIRE_DAYS = 7;
-const PROJECT_EXPIRE_SECONDS = PROJECT_EXPIRE_DAYS * 86400;
 
 export type MemoryScope = "preference" | "profile" | "project";
 export type MemorySource = "manual" | "ai";
@@ -43,15 +41,9 @@ export async function purgeExpiredProjectMemories(userId: string): Promise<void>
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
-  if (isPg) {
-    await db.execute(
-      sql`DELETE FROM ${s.userMemories} WHERE ${s.userMemories.userId} = ${userId} AND ${s.userMemories.scope} = 'project' AND ${s.userMemories.lastAccessedAt} < NOW() - INTERVAL '7 days'`,
-    );
-  } else {
-    await db.execute(
-      sql`DELETE FROM ${s.userMemories} WHERE ${s.userMemories.userId} = ${userId} AND ${s.userMemories.scope} = 'project' AND ${s.userMemories.lastAccessedAt} < unixepoch() - ${PROJECT_EXPIRE_SECONDS}`,
-    );
-  }
+  await db.execute(
+    sql`DELETE FROM ${s.userMemories} WHERE ${s.userMemories.userId} = ${userId} AND ${s.userMemories.scope} = 'project' AND ${s.userMemories.lastAccessedAt} < NOW() - INTERVAL '7 days'`,
+  );
 }
 
 /** 读取用户全部记忆(带 60s 缓存)。入口触发 project 过期懒清理。 */

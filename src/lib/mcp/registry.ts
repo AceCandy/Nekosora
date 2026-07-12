@@ -9,14 +9,13 @@
  *
  * 连接管理:
  *   - stdio:每 server 维持一个 Client(子进程),模块级 Map 缓存,idle 后回收。
- *     仅 PG 模式可用(SQLite 单进程禁 spawn)。
  *   - sse/http:短连接(每次 resolve 重连),简单可靠。后续可优化为长连接。
  *
  * 降级:单个 server 连接失败不阻断 —— 用 cachedTools 兜底或跳过。
  * 加密 envEnc 在此解密(仅运行时持有)。
  */
 import { eq, or, isNull, and } from "drizzle-orm";
-import { getDb, getSchema, isPg } from "@/lib/infra/db";
+import { getDb, getSchema } from "@/lib/infra/db";
 import { decrypt } from "@/lib/infra/crypto";
 import type { CallContext } from "@/lib/providers/types";
 import type { IRToolDef } from "@/lib/providers/types";
@@ -48,7 +47,7 @@ export interface McpClientHandle {
   close(): Promise<void>;
 }
 
-/** stdio 连接缓存(模块级,PG 模式才用)。 */
+/** stdio 连接缓存(模块级)。 */
 const stdioPool = new Map<string, { handle: McpClientHandle; lastUsed: number }>();
 
 /**
@@ -103,11 +102,6 @@ export async function resolveMcpServers(ctx: CallContext): Promise<ResolvedMcpSe
 
 /** 带超时连接,超时抛错(上层用 cachedTools 兜底)。 */
 async function connectWithTimeout(row: McpServerRow): Promise<McpClientHandle | null> {
-  // stdio 仅 PG 模式;SQLite 模式跳过。
-  if (row.transport === "stdio" && !isPg) {
-    throw new Error("stdio transport requires PG mode");
-  }
-
   const connector = buildConnector(row);
   return Promise.race([
     connector,

@@ -1,7 +1,6 @@
-# Nekusora 本地开发基础设施。
-# 仅在你想用 PostgreSQL + Redis(而非默认的 SQLite + 内存缓存)时启动:
+# Nekusora 本地开发基础设施(PostgreSQL + Redis)。
 #   docker compose up -d
-# 然后在 .env.local 取消对应 DATABASE_URL / REDIS_URL 的注释。
+# 然后在 .env.local 配置对应 DATABASE_URL / REDIS_URL。
 services:
   postgres:
     image: pgvector/pgvector:pg16

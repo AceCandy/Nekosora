@@ -2,8 +2,7 @@
  * 启动时 bootstrap —— **DB 连接失败即阻断启动**。
  *
  * 设计原则:
- *   - **启动时即建表**:pg 跑 drizzle migrate(消费 `drizzle/pg/*.sql`),
- *     sqlite 跑 drizzle migrate(消费 `drizzle/sqlite/*.sql`)。migrate 幂等,
+ *   - **启动时即建表**:pg 跑 drizzle migrate(消费 `drizzle/pg/*.sql`)。migrate 幂等,
  *     已有表不受影响。建表不再是开发者的显式职责,而是启动流程的一部分。
  *   - **DB 连不上直接阻断**:连通性探测(执行真实查询)失败 → throw,Next instrumentation
  *     失败 → 进程不启动。避免"启动了但运行时才报错"。
@@ -11,7 +10,7 @@
  *     RAG/memory 就不影响核心,所以只 warn 不阻断。
  *   - 首个管理员创建:无用户时用 SEED_ADMIN_* 创建(role=admin)。失败 → 阻断启动。
  *
- * 全程动态 import 驱动,避免 Edge instrumentation 编译时把 pg/better-sqlite3 拉入
+ * 全程动态 import 驱动,避免 Edge instrumentation 编译时把 pg 拉入
  * (util/types 在 Turbopack bundler 下解析失败)。
  *
  * ⚠️ 本文件顶层**不能有任何业务 import**。instrumentation.ts 用动态 import 拉本模块,
@@ -20,19 +19,17 @@
  * 故全部用函数内动态 import,与 src/lib/infra/db/index.ts 的 getDb() 同款模式。
  */
 export async function bootstrapDatabase(): Promise<void> {
-  const { getDb, getSchema, isPg } = await import("@/lib/infra/db");
+  const { getDb, getSchema } = await import("@/lib/infra/db");
   const db = await getDb();
 
   // --- 步骤 1:连通性探测(执行真实查询),失败即阻断 ---
-  await checkConnection(db, isPg);
+  await checkConnection(db);
 
   // --- 步骤 2:PG 迁移里包含 vector 列,扩展必须在 migrate 前尝试创建 ---
-  if (isPg) {
-    await ensurePgvector(db);
-  }
+  await ensurePgvector(db);
 
   // --- 步骤 3:自动建表(幂等 migrate) ---
-  await runMigrations(db, isPg);
+  await runMigrations(db);
 
   // --- 步骤 4:首个管理员(幂等 + 失败阻断) ---
   await ensureFirstAdmin(db, await getSchema());
@@ -51,18 +48,12 @@ export async function bootstrapDatabase(): Promise<void> {
  * 连通性探测:执行一条轻量查询。连不上库 → throw 阻断启动。
  * 不能只靠"import 成功 / 拿到 db 对象"判断,必须实际打到 DB。
  */
-async function checkConnection(db: unknown, isPg: boolean): Promise<void> {
+async function checkConnection(db: unknown): Promise<void> {
   const { sql } = await import("drizzle-orm");
   try {
-    // PG 与 better-sqlite3 的 drizzle 实例可用方法不同,这里按 dialect 走真实轻量查询。
-    if (isPg) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (db as any).execute(sql`select 1`);
-    } else {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (db as any).run(sql`select 1`);
-    }
-    console.log(`[bootstrap] ✅ DB 连接正常(${isPg ? "pg" : "sqlite"})`);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (db as any).execute(sql`select 1`);
+    console.log(`[bootstrap] ✅ DB 连接正常`);
   } catch (e) {
     throw new Error(
       `[bootstrap] DB 连接失败,启动中止:${e instanceof Error ? e.message : e}`,
@@ -72,9 +63,9 @@ async function checkConnection(db: unknown, isPg: boolean): Promise<void> {
 
 /**
  * 自动建表:跑 drizzle migrate,消费已生成的迁移 SQL(幂等)。
- * 迁移产物路径必须与 drizzle.pg.config.ts / drizzle.sqlite.config.ts 的 `out` 一致。
+ * 迁移产物路径必须与 drizzle.pg.config.ts 的 `out` 一致。
  */
-export async function runMigrations(db: unknown, isPg: boolean): Promise<void> {
+export async function runMigrations(db: unknown): Promise<void> {
   // 逃生口:远端表结构已由外部托管(如手工建好 / DBA 维护)时,
   // 设置 BOOTSTRAP_SKIP_MIGRATE=1 跳过本地 migrate,避免迁移产物不一致阻断启动。
   if (process.env.BOOTSTRAP_SKIP_MIGRATE === "1") {
@@ -82,15 +73,10 @@ export async function runMigrations(db: unknown, isPg: boolean): Promise<void> {
     return;
   }
   try {
-    if (isPg) {
-      await adoptExistingPgBaselineIfNeeded(db);
-      const { migrate } = await import("drizzle-orm/node-postgres/migrator");
-      await migrate(db as never, { migrationsFolder: "drizzle/pg" });
-    } else {
-      const { migrate } = await import("drizzle-orm/better-sqlite3/migrator");
-      await migrate(db as never, { migrationsFolder: "drizzle/sqlite" });
-    }
-    console.log(`[bootstrap] ✅ 数据库表已就绪(${isPg ? "pg" : "sqlite"} migrate 完成)`);
+    await adoptExistingPgBaselineIfNeeded(db);
+    const { migrate } = await import("drizzle-orm/node-postgres/migrator");
+    await migrate(db as never, { migrationsFolder: "drizzle/pg" });
+    console.log(`[bootstrap] ✅ 数据库表已就绪(pg migrate 完成)`);
   } catch (e) {
     throw new Error(
       `[bootstrap] 自动建表失败,启动中止:${e instanceof Error ? e.message : e}`,
