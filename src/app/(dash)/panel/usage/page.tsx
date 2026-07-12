@@ -22,7 +22,6 @@ import {
   strParam,
   parseTimeRange,
   resolveEffectiveUserId,
-  ALL_USERS,
 } from "@/app/(dash)/admin/usage/time-range";
 import { PageHeader } from "@/shared/components/PageHeader";
 import { BarChart3 } from "lucide-react";
@@ -33,7 +32,7 @@ const PAGE_SIZE = 20;
 
 /**
  * 用量查询合一入口(/panel/usage):一套页面按权限做数据隔离。
- * - admin:默认查自己,用户筛选可切「全部用户」或指定用户;用户列/上游 key 全字段可见。
+ * - admin:默认查全部,用户筛选可指定某个用户;用户列/上游 key 全字段可见。
  * - 普通用户:强制查自己(忽略 URL user 参数,防越权);隐藏用户筛选,上游 key 在用量明细脱敏。
  */
 export default async function PanelUsagePage({
@@ -55,9 +54,8 @@ export default async function PanelUsagePage({
   const page = Math.max(1, Number(strParam(sp.page) ?? "1") || 1);
   const timeRange = parseTimeRange(sp);
 
-  // 数据隔离收敛点(服务端强制):admin 默认自己 / 指定 / 全部;普通用户强制自己。
+  // 数据隔离收敛点(服务端强制):admin 全部 / 指定;普通用户强制自己。
   const userParam = strParam(sp.user);
-  const queryAllUsers = isAdmin && userParam === ALL_USERS;
   const effectiveUserId = resolveEffectiveUserId({ isAdmin, userParam, selfId: user.id });
 
   // 统计区(跨 tab 共享,按 effectiveUserId 范围)。
@@ -95,8 +93,8 @@ export default async function PanelUsagePage({
       <UsageTabs current={tab} basePath="/panel/usage" range={timeRange.range} />
 
       {tab === "usage"
-        ? await renderUsageTab({ isAdmin, effectiveUserId, selfId: user.id, sp, page, timeRange, db, s, t })
-        : await renderErrorsTab({ isAdmin, effectiveUserId, selfId: user.id, sp, page, timeRange, db, s, t })}
+        ? await renderUsageTab({ isAdmin, effectiveUserId, selfId: user.id, sp, page, timeRange, db, s })
+        : await renderErrorsTab({ isAdmin, effectiveUserId, selfId: user.id, sp, page, timeRange, db, s })}
     </div>
   );
 }
@@ -113,7 +111,6 @@ async function renderUsageTab({
   timeRange,
   db,
   s,
-  t,
 }: {
   isAdmin: boolean;
   effectiveUserId: string | undefined;
@@ -124,10 +121,8 @@ async function renderUsageTab({
   db: Awaited<ReturnType<typeof getDb>>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   s: any;
-  t: Awaited<ReturnType<typeof getTranslations>>;
 }) {
   const userParam = strParam(sp.user);
-  const queryAllUsers = isAdmin && userParam === ALL_USERS;
   const keyParam = strParam(sp.key);
   const filters: UsageLogFilters = {
     model: strParam(sp.model),
@@ -141,7 +136,7 @@ async function renderUsageTab({
 
   const [{ rows, total }, userLabelRow, keyLabelRow] = await Promise.all([
     listUsageLogs({ page, pageSize: PAGE_SIZE, userId: effectiveUserId, filters }),
-    isAdmin && userParam && !queryAllUsers
+    isAdmin && userParam
       ? db.select({ name: s.user.name }).from(s.user).where(eq(s.user.id, userParam)).limit(1)
       : Promise.resolve([]),
     keyParam
@@ -192,7 +187,7 @@ async function renderUsageTab({
   };
 
   const labels = {
-    user: queryAllUsers ? t("allUsers") : (userLabelRow[0] as { name?: string } | undefined)?.name,
+    user: (userLabelRow[0] as { name?: string } | undefined)?.name,
     key: (keyLabelRow[0] as { name?: string } | undefined)?.name,
   };
 
@@ -224,7 +219,6 @@ async function renderErrorsTab({
   timeRange,
   db,
   s,
-  t,
 }: {
   isAdmin: boolean;
   effectiveUserId: string | undefined;
@@ -235,10 +229,8 @@ async function renderErrorsTab({
   db: Awaited<ReturnType<typeof getDb>>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   s: any;
-  t: Awaited<ReturnType<typeof getTranslations>>;
 }) {
   const userParam = strParam(sp.user);
-  const queryAllUsers = isAdmin && userParam === ALL_USERS;
   const keyParam = strParam(sp.key);
   const showAuth = strParam(sp.showAuth) === "1";
   const phaseParam = strParam(sp.phase);
@@ -258,7 +250,7 @@ async function renderErrorsTab({
 
   const [{ rows, total }, userLabelRow, keyLabelRow] = await Promise.all([
     listErrorLogs({ page, pageSize: PAGE_SIZE, userId: effectiveUserId, filters }),
-    isAdmin && userParam && !queryAllUsers
+    isAdmin && userParam
       ? db.select({ name: s.user.name }).from(s.user).where(eq(s.user.id, userParam)).limit(1)
       : Promise.resolve([]),
     keyParam
@@ -321,7 +313,7 @@ async function renderErrorsTab({
   };
 
   const labels = {
-    user: queryAllUsers ? t("allUsers") : (userLabelRow[0] as { name?: string } | undefined)?.name,
+    user: (userLabelRow[0] as { name?: string } | undefined)?.name,
     key: (keyLabelRow[0] as { name?: string } | undefined)?.name,
   };
 
