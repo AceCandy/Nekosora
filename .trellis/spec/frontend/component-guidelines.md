@@ -17,6 +17,15 @@
 - Client Component(如 `ChatComposer.tsx`):`"use client"` → useState/useRef → fetch SSE → 渲染。
 - 表格列表:Server Component 查库 → `.map()` 渲染行;操作用 `<form action={serverAction.bind(null, id)}>`。
 
+## 管理页二级 Tab（同域整合）
+
+多个同域管理页合并进一个设置页时,用二级 tab 而非各自独立路由:
+
+- tab 切换走 URL `?tab=<id>` + 纯 `<Link>`(无 `"use client"`,服务端按 tab 重新取数渲染),与 `UsageTabs` / `SettingsTabs` 一致。`prefetch={false}` 避免预取带参 URL。
+- 每个 tab 的数据获取 + server action 集中在独立 async server component(`XxxSection.tsx`),容器 `page.tsx` 只按 `tab` 渲染对应 section——只查当前 tab 数据。
+- server action 的 `revalidatePath` 指向容器页(如 `/admin/settings`),不是原独立路由。
+- tab 样式:无侧边彩色粗条、无 Eyebrow、静止无投影(遵守 DESIGN)。
+
 ## Props Conventions
 
 - 显式 interface 定义 props,不用 inline 类型。

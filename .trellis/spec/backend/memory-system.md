@@ -29,6 +29,7 @@
   - 不相似 → insert
 - `embedding = embed(content + " " + disclosure)`（融合向量，同时编码「是什么」和「何时用」）。
 - project 过期懒清理：入口 `DELETE WHERE scope='project' AND last_accessed_at < now()-7d`。
+- **抽取范围排除「回答呈现类偏好」**：回答格式(markdown/HTML/表格)、回答风格(简洁/详细)、排版渲染(字体/配色)不进 preference——由系统设置的「输出模式」「输出样式」承担(`src/lib/output-modes`、`src/lib/render-styles`)。preference 只收与回答呈现无关的稳定偏好(语言、代码风格等)。靠 prompt 指令约束,不做关键词硬过滤(避免误伤)。
 
 ---
 
@@ -62,6 +63,7 @@
 - **记忆与消息解耦**：会话删除/重生成不联动删记忆；不记来源消息 id（记忆是用户级，跨会话稳定）。
 - **旧 embedding 清空重建**：迁移时 embedding/disclosure 置 NULL，旧记忆靠关键词兜底，新抽取渐进恢复融合向量。
 - **updateMemory 手动编辑用 content-only embed**（已知遗留）：与融合向量略不一致，低频，靠关键词兜底兜住。
+- **输出呈现偏好不抽取**：preference 不收录「回答怎么呈现」(格式/风格/排版),该域由输出模式/输出样式管;记忆与两者职责不重叠,避免重复注入与冲突。
 
 ---
 
