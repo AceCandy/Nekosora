@@ -1,1 +1,0 @@
-ALTER TABLE "user_models" ADD COLUMN "sort_order" integer DEFAULT 0 NOT NULL;

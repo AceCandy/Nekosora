@@ -32,10 +32,8 @@ describe("model catalog matching", () => {
 });
 
 describe("current mainstream catalog seed", () => {
-  const pgSeed = readFileSync("drizzle/pg/0016_current_model_catalog.sql", "utf8");
-  const pgThinkingPatch = readFileSync("drizzle/pg/0017_gemini_thinking_levels.sql", "utf8");
-  const pgEffortPatch = readFileSync("drizzle/pg/0018_reasoning_effort_support.sql", "utf8");
-  const pgAgnesCatalog = readFileSync("drizzle/pg/0019_agnes_flash_models.sql", "utf8");
+  // squash 后模型目录数据基线统一在 0000_baseline.sql(原 0016-0019 已合并)
+  const pgBaseline = readFileSync("drizzle/pg/0000_baseline.sql", "utf8");
   const requiredModels = [
     "claude-sonnet-5",
     "claude-opus-4-8",
@@ -52,16 +50,16 @@ describe("current mainstream catalog seed", () => {
   ];
 
   it.each(requiredModels)("seeds %s in pg catalog", (modelId) => {
-    expect(pgSeed).toContain(`'${modelId}'`);
+    expect(pgBaseline).toContain(`'${modelId}'`);
   });
 
   it("keeps Composer fixed and GLM model-driven", () => {
-    expect(pgSeed).toContain('"thinkingFormat":"fixed"');
-    expect(pgSeed).toContain('"thinkingFormat":"zai"');
+    expect(pgBaseline).toContain('"thinkingFormat":"fixed"');
+    expect(pgBaseline).toContain('"thinkingFormat":"zai"');
   });
 
   it("maps Gemini 3 named thinking levels in pg", () => {
-    for (const migration of [pgThinkingPatch]) {
+    for (const migration of [pgBaseline]) {
       expect(migration).toContain('"minimal":"MINIMAL"');
       expect(migration).toContain('"high":"HIGH"');
       expect(migration).toContain("gemini-3.5-flash");
@@ -69,7 +67,7 @@ describe("current mainstream catalog seed", () => {
   });
 
   it("distinguishes effort-capable and toggle-only compatible models", () => {
-    for (const migration of [pgEffortPatch]) {
+    for (const migration of [pgBaseline]) {
       expect(migration).toContain("reasoningEffort");
       expect(migration).toContain("glm-5.2");
       expect(migration).toContain("kimi-k2.6");
@@ -77,7 +75,7 @@ describe("current mainstream catalog seed", () => {
   });
 
   it("seeds current Agnes Flash models with verified capabilities", () => {
-    for (const migration of [pgAgnesCatalog]) {
+    for (const migration of [pgBaseline]) {
       expect(migration).toContain("'agnes-1.5-flash'");
       expect(migration).toContain("'agnes-2.0-flash'");
       expect(migration).toContain('"thinkingFormat":"agnes"');
