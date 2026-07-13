@@ -5,6 +5,7 @@ import { listKnowledgeBases } from "@/lib/knowledge-base/service";
 import { listEnabledOutputModes } from "@/lib/output-modes/service";
 import { listEnabledRenderStyles } from "@/lib/render-styles/service";
 import ChatComposer, { type ModelOption } from "@/features/chat/components/ChatComposer";
+import type { ModelCapabilities } from "@/db/types";
 
 export default async function ChatPage() {
   void getTranslations("chat");
@@ -20,6 +21,7 @@ export default async function ChatPage() {
     modelId: m.id as string,
     name: m.name as string,
     displayName: (m.displayName as string | undefined) ?? undefined,
+    capabilities: (m.capabilities as ModelCapabilities | undefined) ?? undefined,
     source: m.visibility === "public" ? ("global" as const) : ("byo" as const),
   }));
   const knowledgeBases = (kbs as { id: string; name: string; fileCount: number }[]).map((kb) => ({

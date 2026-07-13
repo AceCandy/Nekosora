@@ -156,6 +156,27 @@ export function ChatToolbar(props: ChatToolbarProps) {
 
       {/* 文件上传已改为粘贴/拖拽接入,工具栏不再显示上传按钮 */}
 
+      {/* 推理级别(仅可推理模型露出) */}
+      <ReasoningPicker capabilities={currentCapabilities} value={reasoning} onChange={onReasoningChange} />
+
+      {/* 联网搜索 toggle（纯按钮，非 listbox） */}
+      <button
+        type="button"
+        onClick={onWebSearchToggle}
+        className={clsx(
+          "inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-semibold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer",
+          webSearch
+            ? "border-sora-blue/30 bg-sora-blue/[0.04] text-sora-blue"
+            : "border-morning-mist dark:border-deep-space bg-white dark:bg-space-ink text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900",
+        )}
+        title={t("webSearch")}
+        aria-pressed={webSearch}
+        aria-label={t("webSearch")}
+      >
+        <Globe className="w-3.5 h-3.5" aria-hidden="true" />
+        <span>{t("webSearch")}</span>
+      </button>
+
       {/* 指令卡（多选） */}
       {cards.length > 0 && (
         <OptionPicker
@@ -182,24 +203,6 @@ export function ChatToolbar(props: ChatToolbarProps) {
         />
       )}
 
-      {/* 联网搜索 toggle（纯按钮，非 listbox） */}
-      <button
-        type="button"
-        onClick={onWebSearchToggle}
-        className={clsx(
-          "inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-semibold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer",
-          webSearch
-            ? "border-sora-blue/30 bg-sora-blue/[0.04] text-sora-blue"
-            : "border-morning-mist dark:border-deep-space bg-white dark:bg-space-ink text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900",
-        )}
-        title={t("webSearch")}
-        aria-pressed={webSearch}
-        aria-label={t("webSearch")}
-      >
-        <Globe className="w-3.5 h-3.5" aria-hidden="true" />
-        <span>{t("webSearch")}</span>
-      </button>
-
       {/* 知识库（多选） */}
       {knowledgeBases.length > 0 && (
         <OptionPicker
@@ -225,6 +228,9 @@ export function ChatToolbar(props: ChatToolbarProps) {
           }
         />
       )}
+
+      {/* 模型参数(temperature/topP/maxTokens) */}
+      <ModelParamsPicker params={modelParams} onChange={onModelParamsChange} onReset={onModelParamsReset} />
 
       {/* 输出模式（单选可清除，hover 展开 + 向上弹出） */}
       {outputModes.length > 0 && (
@@ -297,12 +303,6 @@ export function ChatToolbar(props: ChatToolbarProps) {
           }
         />
       )}
-
-      {/* 模型参数(temperature/topP/maxTokens) */}
-      <ModelParamsPicker params={modelParams} onChange={onModelParamsChange} onReset={onModelParamsReset} />
-
-      {/* 推理级别(仅可推理模型露出) */}
-      <ReasoningPicker capabilities={currentCapabilities} value={reasoning} onChange={onReasoningChange} />
 
       {/* 已选指令卡 chip */}
       {selectedCardIds.map((id) => {

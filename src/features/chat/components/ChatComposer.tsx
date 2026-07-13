@@ -101,17 +101,20 @@ export default function ChatComposer({
   const [renderStyleId, setRenderStyleId] = useState<string | null>(initialRenderStyleId);
   const [renderStylePickerOpen, setRenderStylePickerOpen] = useState(false);
   const [, startModeTransition] = useTransition();
+  // 活动会话 id:历史会话来自路由参数;新会话建会后由 useChatRuntime 回写,使订阅键与持久化目标跟随切换。
+  const [activeConvId, setActiveConvId] = useState<string | undefined>(initialConvId);
 
   const {
     attached,
     handleUpload,
     removeAttachment,
     uploadPending,
-  } = useChatAttachments(initialConvId ?? null);
+  } = useChatAttachments(activeConvId ?? null);
   const runtime = useChatRuntime({
-    conversationId: initialConvId ?? null,
+    conversationId: activeConvId ?? null,
     initialMessages,
     uploadAttachments: uploadPending,
+    onConversationCreated: setActiveConvId,
   });
   const { scrollRef, endRef: messagesEndRef, isNearBottom, ready, onScroll, scrollToBottom, forceFollow } = useChatScrollController(runtime.messages);
 
@@ -167,7 +170,7 @@ export default function ChatComposer({
       topP: p.topP !== undefined ? p.topP : prev.topP,
       maxTokens: p.maxTokens !== undefined ? p.maxTokens : prev.maxTokens,
     }));
-    const convId = runtime.conversationId ?? initialConvId;
+    const convId = activeConvId;
     if (convId) {
       startModeTransition(async () => {
         try { await setConversationModelParams(convId, p); }
@@ -177,7 +180,7 @@ export default function ChatComposer({
   };
   const handleModelParamsReset = () => {
     setModelParams({ temperature: null, topP: null, maxTokens: null });
-    const convId = runtime.conversationId ?? initialConvId;
+    const convId = activeConvId;
     if (convId) {
       startModeTransition(async () => {
         try { await setConversationModelParams(convId, { temperature: null, topP: null, maxTokens: null }); }
@@ -192,7 +195,7 @@ export default function ChatComposer({
   const reasoning = resolveReasoningForModel(currentCapabilities, model, reasoningByModelId);
   const handleReasoningChange = (next: ReasoningLevel) => {
     setReasoningByModelId((prev) => ({ ...prev, [model]: next }));
-    const convId = runtime.conversationId ?? initialConvId;
+    const convId = activeConvId;
     if (convId) {
       startModeTransition(async () => {
         try { await setConversationModelReasoning(convId, model, next); }
@@ -212,7 +215,7 @@ export default function ChatComposer({
   const handleRenderStyleChange = (id: string) => {
     const next = id || null;
     setRenderStyleId(next);
-    const convId = runtime.conversationId ?? initialConvId;
+    const convId = activeConvId;
     if (convId) {
       startModeTransition(async () => {
         try { await setConversationRenderStyle(convId, next); }
@@ -224,7 +227,7 @@ export default function ChatComposer({
   const handleOutputModeChange = (id: string) => {
     const next = id || null;
     setOutputModeId(next);
-    const convId = runtime.conversationId ?? initialConvId;
+    const convId = activeConvId;
     if (convId) {
       startModeTransition(async () => {
         try { await setConversationOutputMode(convId, next); }
@@ -235,7 +238,7 @@ export default function ChatComposer({
 
   const handleModelChange = (next: string) => {
     setModel(next);
-    const convId = runtime.conversationId ?? initialConvId;
+    const convId = activeConvId;
     if (convId) {
       // 会话仍按 name 存库(share 快照等沿用 name);next 是 modelId,反查 name。
       const name = models.find((m) => m.modelId === next)?.name ?? next;
@@ -249,7 +252,7 @@ export default function ChatComposer({
   const handleWebSearchToggle = () => {
     const next = !webSearch;
     setWebSearch(next);
-    const convId = runtime.conversationId ?? initialConvId;
+    const convId = activeConvId;
     if (convId) {
       startModeTransition(async () => {
         try { await setConversationWebSearch(convId, next); }
@@ -260,7 +263,7 @@ export default function ChatComposer({
 
   // 指令卡 / 知识库变化后,整体写回 composerState(已有会话时)
   const persistComposerState = (nextCards: string[], nextKbs: string[]) => {
-    const convId = runtime.conversationId ?? initialConvId;
+    const convId = activeConvId;
     if (!convId) return;
     startModeTransition(async () => {
       try { await setConversationComposerState(convId, { cardIds: nextCards, kbIds: nextKbs }); }
