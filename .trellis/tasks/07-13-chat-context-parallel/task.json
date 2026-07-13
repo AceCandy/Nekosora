@@ -3,7 +3,7 @@
   "name": "chat-context-parallel",
   "title": "段A上下文准备并行化",
   "description": "prepareChatContext 中无依赖的耗时步(searchWeb/recallMemories/maybeCompact 等)改 Promise.all,降首字延迟。纯代码,保持兜底行为不变。",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,
