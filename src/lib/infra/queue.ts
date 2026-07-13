@@ -32,9 +32,11 @@ async function buildAdapter(): Promise<QueueAdapter> {
   const { default: PgBoss } = (await import(/* @vite-ignore */ bossModule)) as {
     default: new (opts: { connectionString: string; schema: string }) => {
       send: (name: string, data: object, opts?: object) => Promise<string | null>;
+      createQueue: (name: string) => Promise<void>;
       work: (name: string, handler: (jobs: { data: unknown }[]) => Promise<void>) => Promise<string>;
       start: () => Promise<void>;
       stop: () => Promise<void>;
+      on: (event: "error", cb: (err: unknown) => void) => void;
     };
   };
   const url = process.env.DATABASE_URL;
@@ -44,6 +46,10 @@ async function buildAdapter(): Promise<QueueAdapter> {
     connectionString: url,
     schema: "pgboss",
     // 完成任务归档保留时间,默认即可。
+  });
+  // pg-boss 用 EventEmitter 派发错误;不监听会变 ERR_UNHANDLED_ERROR 崩进程。
+  boss.on("error", (err) => {
+    console.error("[queue] pg-boss error:", err);
   });
 
   return {
@@ -56,6 +62,9 @@ async function buildAdapter(): Promise<QueueAdapter> {
       return id ?? "";
     },
     async work(name, handler) {
+      // pg-boss 11:work 前队列必须已存在,否则 fetch 报 "Queue X does not exist"。
+      // 记忆提取等「注册早于首次 send」的队列会因此崩进程,先 ensure 建队列(已存在则幂等)。
+      await boss.createQueue(name);
       // pg-boss 的 handler 接收 job 数组(批量模式);逐个派发。
       await boss.work(name, async (jobs) => {
         for (const job of jobs) {
