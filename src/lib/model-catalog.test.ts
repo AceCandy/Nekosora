@@ -74,6 +74,17 @@ describe("current mainstream catalog seed", () => {
     }
   });
 
+  it("exposes only real GLM 5.2 reasoning levels (low/medium must be null)", () => {
+    // glm-5.2 上游 reasoning_effort 只区分 high/max;low/medium 必须为 null,
+    // 否则 Chat 会显示「低/中」假档位(都塌缩成 high)。
+    const glmLine = pgBaseline.split("\n").find((l) => l.includes("'catalog-glm-5-2'"));
+    expect(glmLine).toBeDefined();
+    expect(glmLine).toContain('"low":null');
+    expect(glmLine).toContain('"medium":null');
+    expect(glmLine).not.toContain('"low":"high"');
+    expect(glmLine).not.toContain('"medium":"high"');
+  });
+
   it("seeds current Agnes Flash models with verified capabilities", () => {
     for (const migration of [pgBaseline]) {
       expect(migration).toContain("'agnes-1.5-flash'");
