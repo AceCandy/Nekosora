@@ -96,6 +96,8 @@ store 的 `migrate(临时key → 真实id)` 先于回写执行，活动 id 一�
 
 **乐观项标题的异步刷新**：新会话乐观项的初始标题是首条消息截断（store 内 `titleFrom`），后端 `/api/chat` 会通过 SSE 推 `title_updated` 帧（fallback + LLM 摘要各一次，帧里带 `title` 和 `conversationId`）。由于新会话场景刻意跳过了 `router.refresh()`（避免跨 segment 重挂），标题刷新必须走 store：在 SSE 回调里接住 `(title, conversationId)`，匹配 `optimisticConversation.id` 后覆盖其 `title`，Sidebar 订阅即异步刷新。**不要在中间层把带参回调降级成无参**（如 `onTitleUpdated: () => hooks?.onTitleUpdated?.()`）——那样会丢掉 SSE 推过来的 title，侧栏会一直停在截断标题、直到下次整页刷新。历史会话无乐观项，仍由上层 `hooks.onTitleUpdated` 的 `router.refresh()` 走 SSR 刷新。
 
+> **Gotcha（Sidebar 合并）**：合并 SSR `conversations` 与乐观项时，若 SSR 已含同 id 会话，**不要整个 `return conversations` 忽略乐观项**。`createConversation` 的 `revalidatePath("/chat","layout")` 会让 SSR 很快带上新会话（此时 DB title 还是 `"新会话"`），而新会话场景跳过了 `router.refresh()`，SSR 不会自动追上 `maybeGenerateTitle` 写入的真实标题。必须用乐观项 title 覆盖 SSR 同 id 会话的 title，否则侧栏停在 `"新会话"`/旧值直到整页刷新。
+
 > **Gotcha**：`usePathname()` **不会**跟随 `window.history.replaceState`（Next 路由状态与原生 history API 不同步）。凡用 `usePathname` 解析当前会话做高亮的 UI（如 `Sidebar`），在乐观建会期间不会立即更新，要等下一次真实路由导航。若需即时跟随，改用由 store 维护的 `activeConversationId` 驱动，而非 `usePathname`。
 
 参考：`docs/cankao/DEEIX-Chat` 的 `use-chat-message-submit.ts` 用同款 `window.history.replaceState` 模式。
