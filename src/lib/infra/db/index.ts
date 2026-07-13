@@ -53,8 +53,14 @@ export function getDb(): Promise<AnyDb> {
     const { default: pg } = await import("pg");
     const url = process.env.DATABASE_URL;
     if (!url) throw new Error("未配置 DATABASE_URL(仅支持 PostgreSQL)。");
+    // 连接池上限:主进程(Next.js)与 worker 各持独立 Pool,总连接 = 各进程 max 之和,
+    // 须低于 PG max_connections 余量(留出 drizzle studio / 运维连接)。按部署规格调 DB_POOL_MAX。
+    const poolMax = Number(process.env.DB_POOL_MAX ?? 20);
+    if (!Number.isInteger(poolMax) || poolMax < 1) {
+      throw new Error("DB_POOL_MAX 非法,期望正整数");
+    }
     const Pool = pg.Pool;
-    _pool = new Pool({ connectionString: url, max: 10 });
+    _pool = new Pool({ connectionString: url, max: poolMax });
     _db = drizzlePg({ client: _pool as never, schema });
     return _db;
   })().catch((e) => {

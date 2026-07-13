@@ -1,0 +1,30 @@
+{
+  "id": "perf-queue-optimization",
+  "name": "perf-queue-optimization",
+  "title": "聊天链路性能与队列化优化",
+  "description": "治理聊天链路三个真瓶颈:DB连接池上限过低、段A上下文准备串行、记忆提取同进程后台跑。parent 负责整体目标与集成验收,具体实现下沉到 child 子任务。",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P1",
+  "creator": "AceCandy",
+  "assignee": "AceCandy",
+  "createdAt": "2026-07-13",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "07-13-db-pool-tuning",
+    "07-13-chat-context-parallel",
+    "07-13-memory-extract-queue"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

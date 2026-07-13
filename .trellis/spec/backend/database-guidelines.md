@@ -7,7 +7,7 @@
 ## Overview
 
 - **ORM**: Drizzle ORM,**仅 PostgreSQL**(+pgvector)。
-- **连接工厂**:`src/lib/infra/db/index.ts` 导出 `getDb / getSchema / closeDb`,惰性初始化 pg 池(`max: 10`)。业务代码统一 `import { getDb, getSchema, closeDb } from "@/lib/infra/db"`,**禁止**直接 import schema 或驱动模块。
+- **连接工厂**:`src/lib/infra/db/index.ts` 导出 `getDb / getSchema / closeDb`,惰性初始化 pg 池(`max` 由 `DB_POOL_MAX` 配置,缺省 20;主进程 Next.js 与 worker 各持独立 pool,总连接 = 各进程 max 之和,须低于 PG `max_connections` 余量)。业务代码统一 `import { getDb, getSchema, closeDb } from "@/lib/infra/db"`,**禁止**直接 import schema 或驱动模块。
 - **Schema 单份**:`src/db/schema/pg.ts`(pg-core)。Better Auth 表由 `src/db/auth-schema.ts`(dialect 中立描述)在 pg.ts 具象化。
 - **迁移单份**:`drizzle/pg/`,启动时 `bootstrapDatabase()` 自动 `migrate({ migrationsFolder: "drizzle/pg" })`。
 - 已移除 SQLite / better-sqlite3 / sqlite-vec 双 dialect 回退(2026-07 收敛)。不再有 `isPg` / `dbDialect` / `DB_DIALECT` / `SQLITE_PATH`。
