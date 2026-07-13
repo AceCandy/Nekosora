@@ -66,3 +66,22 @@ const v = capabilities?.thinkingLevelMap?.[level] ?? DEFAULT_MAP[protocol]?.[lev
 ```
 
 **相关**:`src/lib/reasoning.ts`(`DEFAULT_MAP` + `buildReasoningProviderOptions` + `resolveReasoningLevel`)是推理映射的唯一中枢。
+
+---
+
+## Convention: thinkingFormat 对齐厂商官方文档原文
+
+新增/修正模型 `thinkingFormat` 与 `reasoningEffort` 时,参数名与取值必须以**厂商官方 API 文档原文**为准,不得依赖中转层或聚合层文档。
+
+**What**:
+- 首选 `docs/cankao/pi`(`packages/ai/src/providers/*.models.ts`)对齐:`thinkingFormat`、`supportsReasoningEffort`、`thinkingLevelMap` 均有现成权威值。
+- pi 未收录的模型(如 StepFun step-3.7),**必须查厂商官方文档原文**(`platform.stepfun.com`、`api.xiaomimimo.com` 等),不看阿里云 Model Studio、OpenRouter 转发、HF 讨论等二手/中转描述。
+- 同一模型经不同上游接入,参数语义不同:`enable_thinking` / `reasoning_effort` / `reasoning.effort` 分别对应 DashScope 直连 / OpenAI 系 / OpenRouter。`thinkingFormat` 跟随该模型实际路由的 `protocol` + `base_url`,不按 alias 前缀猜。
+- 推理模型若本质上无法关闭思考(默认总思考),用 `thinkingLevelMap:{off:null,...}` 反映,不向用户暴露假的「关闭」选项;档位按官方实际支持的强度(low/medium/high 等)配置。
+
+**Why**:曾据阿里云 Model Studio 中转层把 step-3.7 配成 `qwen`(发 `enable_thinking`),但 StepFun 官方 `api.stepfun.com` 用 `reasoning_effort`,不认 `enable_thinking`,导致「选关仍思考」。中转层常额外封装参数,与官方原生 API 不一致。
+
+**Wrong**:据 WebSearch 二手结果或中转平台文档配 `thinkingFormat`;按 alias 前缀(`qwen/`、`xiaomi/`)猜接入协议。
+**Correct**:先查 pi;pi 没有则查厂商官方文档原文,确认参数名 + 取值 + 是否可关闭。
+
+**相关**:`AGENTS.md`「模型目录维护」;`src/lib/reasoning.ts` 各 `thinkingFormat` 分支。
