@@ -69,6 +69,15 @@ describe("OpenAI-compatible reasoning body formats", () => {
       .toEqual({ model: "test", reasoning_effort: "high" });
     expect(applyReasoningToCompatibleBody(body, { reasoning: true, thinkingFormat: "openrouter" }, "low"))
       .toEqual({ model: "test", reasoning: { effort: "low" } });
+    // off 档必须显式发 none,否则 OpenRouter 用模型默认(默认开思考) —— step-3.7-flash 回归点
+    expect(applyReasoningToCompatibleBody(body, { reasoning: true, thinkingFormat: "openrouter" }, "off"))
+      .toEqual({ model: "test", reasoning: { effort: "none" } });
+  });
+
+  it("leaves the body untouched when reasoning is on but thinkingFormat is missing", () => {
+    // catalog 漏配 thinkingFormat 时,档位(含 off)是 no-op,上游按默认行为 —— 0020 迁移修复的根因
+    expect(applyReasoningToCompatibleBody(body, { reasoning: true }, "off")).toBe(body);
+    expect(applyReasoningToCompatibleBody(body, { reasoning: true }, "high")).toBe(body);
   });
 
   it("encodes zai, qwen, and chat-template switches", () => {

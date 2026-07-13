@@ -4,7 +4,7 @@
  * 设计:实时埋点(在 stream.ts / usage.ts 调用),/metrics 端点导出。
  * 所有指标带 label,便于按 source/model/status 维度聚合。
  *
- * 在 SQLite 模式同样可用(数据来自内存 counter,不依赖 PG 聚合)。
+ * 数据来自内存 counter,不依赖 PG 聚合。
  * 默认采集 Node.js 默认指标(heap/GC/eventLoop),便于运维诊断。
  */
 import { Registry, Counter, Histogram, Gauge, collectDefaultMetrics } from "prom-client";

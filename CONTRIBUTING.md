@@ -20,8 +20,8 @@ pnpm install   # postinstall 会自动同步 pdfjs cmaps
 cp .env.example .env.local
 # 编辑 .env.local,填入数据库连接、auth secret 等
 
-# 4. 初始化数据库(SQLite 开发模式无需额外服务)
-pnpm db:push:sqlite
+# 4. 初始化数据库(PostgreSQL,需先启动 PG 服务)
+pnpm db:migrate:pg
 pnpm seed
 
 # 5. 启动开发服务器

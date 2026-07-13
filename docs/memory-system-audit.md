@@ -34,7 +34,7 @@
 
 ### 1.2 长期记忆层 `src/lib/memory/`
 
-**数据表 `user_memories`**（`src/db/schema/pg.ts:662`，SQLite 同构 `src/db/schema/sqlite.ts`）：
+**数据表 `user_memories`**（`src/db/schema/pg.ts:662`）：
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
@@ -43,7 +43,7 @@
 | scope | text | `preference` / `profile` / `custom` |
 | source | text | `manual` / `ai` |
 | content | text | 记忆正文 |
-| embedding | vector(1536) | pgvector；SQLite 走内存余弦 |
+| embedding | vector(1536) | pgvector |
 | createdAt | timestamptz | — |
 
 **四个核心模块：**
@@ -51,7 +51,7 @@
 | 模块 | 文件 | 职责 |
 |---|---|---|
 | service | `src/lib/memory/service.ts` | CRUD + 60s 读缓存（`cacheWrap("memories:${userId}")`）+ 槽位文本构造（preference cap 400 字，profile top5） |
-| recall | `src/lib/memory/recall.ts` | 语义召回：PG 用 pgvector `<=>`，SQLite 内存余弦；阈值 `DEFAULT_MIN_SIMILARITY=0.45`；topK=5；只召回 profile/custom |
+| recall | `src/lib/memory/recall.ts` | 语义召回：pgvector `<=>`；阈值 `DEFAULT_MIN_SIMILARITY=0.45`；topK=5；只召回 profile/custom |
 | extract | `src/lib/memory/extract.ts` | 流后异步 LLM 抽取：取最近 6 轮（`RECENT_TURNS=6`），10 分钟频率保护，输出 JSON 数组，每条 embed 写入，最多 5 条，失败静默 |
 | 注入 | `src/lib/context-assembler.ts` | 槽位式：SlotSystem / SlotTemplate / SlotFile / SlotCompaction / SlotPreference / SlotProfile → 合并成一条 system |
 
@@ -105,7 +105,7 @@
 
 ### 2.3 DEEIX-Chat — KV 用户记忆 + 消息语义召回 + 4 级摘要（当前项目直接借鉴源）
 
-- **存储**：`user_memories`（`memory_key` unique, `value`, `scope`, `embedding`）+ `chat_message_chunks`（对话消息分片向量化，用于历史语义召回）+ `context_snapshots`。双向量适配：PG pgvector 内联+ivfflat；SQLite sqlite-vec 独立表。
+- **存储**：`user_memories`（`memory_key` unique, `value`, `scope`, `embedding`）+ `chat_message_chunks`（对话消息分片向量化，用于历史语义召回）+ `context_snapshots`。向量存储：PG pgvector 内联 + ivfflat。
 - **检索**：用户记忆优先向量（topK=5, minSimilarity=0.7），超时/无 embedding **回退关键词匹配**；历史消息 `SearchMessageChunks`（topK=5, 0.75, 200ms 超时）。按 scope 分流：preference 全量，profile/custom 相关性筛选。
 - **注入**：XML 结构化 `<ctx>`（`<sum>/<mems>/<recall>/<rag>/<evs>/<q>`），`ContextArtifact` 统一记录证据引用（`semantic_recall`/`user_memory`/`file_rag_chunk`/`conversation_summary`）可溯源。
 - **压缩**：4 级回退（L3 LLM全量 9 章节 / L2 LLM精简 / L1 增强模板 / L0 空）+ 熔断器 + 5min 自恢复 + `CoveragePathHash`。
@@ -164,7 +164,7 @@
 
 - ✅ 双层架构（长期+短期），骨架完整
 - ✅ **LLM 自动抽取**——三个参考项目都没有，当前项目最超前的点
-- ✅ 向量召回（pgvector + SQLite 双适配）+ preference/profile 分流注入
+- ✅ 向量召回（pgvector）+ preference/profile 分流注入
 - ✅ 压缩快照复用（CoveragePathHash）+ 熔断器——工程鲁棒性已对齐 DEEIX
 - ✅ 用户可手动增删改 + UI
 
@@ -276,7 +276,7 @@ nocturne_memory 的「第一人称主权记忆」哲学与咱们场景**几乎�
 
 | 用途 | 路径 |
 |---|---|
-| 长期记忆表 schema | `src/db/schema/pg.ts:662`（`user_memories`）、`src/db/schema/sqlite.ts` |
+| 长期记忆表 schema | `src/db/schema/pg.ts:662`（`user_memories`） |
 | 压缩快照表 schema | `src/db/schema/pg.ts:528`（`context_snapshots`） |
 | 记忆 CRUD + 槽位构造 | `src/lib/memory/service.ts` |
 | 语义召回 | `src/lib/memory/recall.ts` |

@@ -5,7 +5,7 @@
  *   1. session 鉴权
  *   2. 经 StorageDriver 存储文件(key = {userId}/{fileId}-{filename})
  *   3. 写 file_objects(processing_status=pending,storage_path 存 key)
- *   4. 入队 file-process(PG 模式)/ 同步处理(SQLite 模式)
+ *   4. 入队 file-process(队列可用时)/ 同步处理(队列不可用时 fallback)
  *
  * 返回 fileId,前端把它与消息关联。
  *
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
   if (queue.available) {
     await queue.send("file-process", { fileId, storagePath, mime: file.type });
   } else {
-    // SQLite 模式:同步处理(不阻塞响应过多 —— 简单起见在后台 fire-and-forget)
+    // 队列不可用时:同步处理(不阻塞响应过多 —— 简单起见在后台 fire-and-forget)
     processFile(fileId, storagePath, file.type || "application/octet-stream").catch((e) =>
       console.error("[upload] sync process failed:", e),
     );

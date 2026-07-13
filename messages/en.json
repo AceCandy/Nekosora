@@ -352,7 +352,7 @@
       "depCache": "Cache",
       "depCacheLru": "In-memory LRU (fallback)",
       "depQueue": "Task queue",
-      "depQueueDisabled": "Disabled (SQLite single process)",
+      "depQueueDisabled": "Disabled (pg-boss not ready)",
       "depStorage": "Object storage",
       "depStorageLocal": "Local disk (fallback)",
       "depMetrics": "Metrics endpoint",

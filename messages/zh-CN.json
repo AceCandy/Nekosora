@@ -352,7 +352,7 @@
       "depCache": "缓存",
       "depCacheLru": "内存 LRU(降级)",
       "depQueue": "任务队列",
-      "depQueueDisabled": "禁用(SQLite 单机模式)",
+      "depQueueDisabled": "禁用(pg-boss 未就绪)",
       "depStorage": "对象存储",
       "depStorageLocal": "本地磁盘(降级)",
       "depMetrics": "指标端点",

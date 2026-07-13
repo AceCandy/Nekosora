@@ -1,6 +1,6 @@
 /**
- * 共享领域类型 —— dialect 中立,供 pg.ts / sqlite.ts 同步 re-export,
- * 业务代码统一从 schema 取用。与具体列类型解耦。
+ * 共享领域类型 —— 由 schema/pg.ts re-export,业务代码统一从 schema 取用。
+ * 与具体列类型解耦。
  */
 
 /** 推理强度档位,与 pi 的完整 ThinkingLevel 对齐。 */
@@ -96,7 +96,7 @@ export interface ProcessTrace {
   blocks?: ProcessTraceBlock[];
 }
 
-// 枚举字面量类型(SQLite 用 text 列存储,pg 用 pgEnum)。
+// 枚举字面量类型(pg 用 pgEnum 存储)。
 export type ApiKeyKind = "master" | "sub";
 export type ProviderProtocol =
   | "openai" | "anthropic" | "gemini" | "openai-compatible"

@@ -1,7 +1,7 @@
 /**
  * 文件处理流水线 —— extract → chunk → embed → persist → rag_ready。
  *
- * 被 worker.ts(PG 模式)和 upload 端点(SQLite 同步模式)调用。
+ * 被 worker.ts(队列消费)和 upload 端点(队列不可用时同步 fallback)调用。
  * 每步更新 file_objects 状态,失败时记录 embed_error/rag_reason。
  */
 import { eq } from "drizzle-orm";

@@ -34,7 +34,7 @@ Managed by Trellis. Edits outside this block are preserved; edits inside may be 
 - `fixed` 用于支持推理但不公开强度控制的模型：只保留一个非 `off` 档位，Chat 显示固定开启且不可关闭，运行时不向上游伪造控制参数。
 - Chat 必须从目录动态生成档位：不支持推理则隐藏；只支持开关则只显示 `off` 和唯一开启档；不能关闭则默认最低可用档；支持多少档就显示多少档。会话状态按具体 `modelId` 保存，不能保存成会话全局单值。
 - 请求了已失效或不支持的档位时，按 pi 逻辑夹到最近可用档。默认优先 `off`，不支持 `off` 时选择最低可用档。
-- 目录数据变更必须同时提供 PostgreSQL 与 SQLite 等价迁移、同步 Drizzle journal/snapshot，并补模型匹配、档位与请求体翻译测试。
+- 目录数据变更必须提供 PostgreSQL 迁移、同步 Drizzle journal/snapshot，并补模型匹配、档位与请求体翻译测试。
 
 ## Design Context
 

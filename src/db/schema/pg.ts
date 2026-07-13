@@ -1,7 +1,6 @@
 /**
  * PostgreSQL schema —— Better Auth 认证表 + Nekusora 业务表。
  *
- * 与 ./sqlite.ts 保持表名、字段语义一致,仅列类型与方言差异不同。
  * pgvector 用于向量检索(文件 RAG)。
  */
 import {

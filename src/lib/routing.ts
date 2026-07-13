@@ -262,8 +262,8 @@ export async function listModelsByCapability(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
 
-  // capabilities 位于模型目录 JSON 列,用 like 做能力存在性过滤(dialect 通用)。
-  // SQLite/PG 的 jsonb/text 都支持字符串 like。
+  // capabilities 位于模型目录 JSON 列,用 like 做能力存在性过滤。
+  // PG 的 jsonb 隐式转 text 后支持字符串 like。
   const rows = await db
     .select({
       name: s.models.name,

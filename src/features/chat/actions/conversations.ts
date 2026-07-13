@@ -9,7 +9,7 @@ import type { ReasoningLevel } from "@/db/types";
 const S = () => getSchema() as any;
 
 /**
- * 有启用路由的 modelId 集合(CTE,跨 PG/SQLite 方言稳定)。
+ * 有启用路由的 modelId 集合(CTE)。
  * innerJoin 它既保证模型至少有一条可用路由,又使每模型只匹配一行(无需再去重)。
  */
 function routedModelIds(db: Awaited<ReturnType<typeof getDb>>) {
@@ -322,7 +322,7 @@ export async function setConversationModelReasoning(
 }
 
 /**
- * 全文搜索当前用户会话的消息内容(LIKE,兼容 pg 的 jsonb 隐式转 text 与 sqlite text)。
+ * 全文搜索当前用户会话的消息内容(LIKE,依赖 pg 的 jsonb 隐式转 text)。
  * 排除软删消息,按命中消息时间倒序,最多 50 条,每条返回前后约 30 字符的片段。
  */
 export async function searchMessages(keyword: string): Promise<Array<{

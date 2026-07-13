@@ -1,5 +1,5 @@
 # Nekusora Dockerfile —— 多阶段构建。
-# 默认 PostgreSQL 模式(生产推荐);SQLite 模式挂载 /app/data 卷。
+# 默认 PostgreSQL 模式(生产推荐)。
 # docker build -t nekusora . && docker run -p 3000:3000 -e DATABASE_URL=... nekusora
 
 # ---- 构建阶段 ----
@@ -33,9 +33,9 @@ COPY --from=builder /app/drizzle ./drizzle
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/node_modules ./node_modules
 
-# SQLite 数据卷 + 上传目录
-RUN mkdir -p /app/data /app/uploads && chown -R nextjs:nodejs /app/data /app/uploads
-VOLUME ["/app/data", "/app/uploads"]
+# 上传目录
+RUN mkdir -p /app/uploads && chown -R nextjs:nodejs /app/uploads
+VOLUME ["/app/uploads"]
 
 USER nextjs
 EXPOSE 3000

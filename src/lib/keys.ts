@@ -132,7 +132,7 @@ export async function verifyKey(rawKey: string): Promise<{
   const keyHash = hashSecret(rawKey);
   const prefix = makePrefix(rawKey);
 
-  // 按 prefix 缩小候选(SQLite/PG 都能用)。
+  // 按 prefix 缩小候选范围。
   const candidates = await db
     .select()
     .from(s.apiKeys)

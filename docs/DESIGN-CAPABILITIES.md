@@ -68,7 +68,7 @@
 
 ```typescript
 // 新增表:mcp_servers(管理员配的外部 MCP server,或用户 BYO)
-export const mcpServers = sqliteTable("mcp_servers", {
+export const mcpServers = pgTable("mcp_servers", {
   id: text("id").primaryKey().default(uuid),
   userId: text("user_id").references(() => user.id, { onDelete: "cascade" }), // null=全局
   name: text("name").notNull(),
@@ -197,7 +197,7 @@ export async function* streamChatWithTools(opts): AsyncGenerator<StreamEvent> {
 
 ### 降级策略
 
-- stdio transport 仅 PG 模式可用(SQLite 单进程模式禁止 spawn,避免 worker 缺位)。`resolveMcpServers` 在 SQLite 模式自动过滤掉 stdio server 并 `lastError="stdio_requires_pg"`。
+- stdio transport 可用(PG 模式,由 worker 进程消费 spawn)。
 - 连接失败的单个 server 不阻断整轮:跳过 + `yield { type: "mcp-error", serverId }`,工具清单里去掉它的工具。
 - `cachedTools` 兜底:连接超时(500ms)则用上次缓存工具集,避免每次对话握手。
 
@@ -248,7 +248,7 @@ interface ArtifactRef {
 **新增轻量表 `artifacts`**(单独存,避免消息体膨胀):
 
 ```typescript
-export const artifacts = sqliteTable("artifacts", {
+export const artifacts = pgTable("artifacts", {
   id: text("id").primaryKey().default(uuid),
   messageId: text("message_id").notNull()
     .references(() => messages.id, { onDelete: "cascade" }),
@@ -614,7 +614,7 @@ S3_PUBLIC_BASE_URL=""          # 公网直链前缀(配 CDN 时填);空=走 sign
 
 ```typescript
 // prompt_templates —— 可复用的提示词模板
-export const promptTemplates = sqliteTable("prompt_templates", {
+export const promptTemplates = pgTable("prompt_templates", {
   id: text("id").primaryKey().default(uuid),
   userId: text("user_id").references(() => user.id, { onDelete: "cascade" }), // null=官方内置
   scope: text("scope").notNull(),          // "builtin" | "private" | "shared"
@@ -783,9 +783,9 @@ const activeStreams = new Gauge({ name: "nekusora_active_streams",
 
 ### 降级
 
-- `/metrics` 在 SQLite 模式依然可用(数据来自内存 counter,不依赖 PG 聚合)
-- 图表聚合查询在 SQLite 用 `strftime`,PG 用 `date_trunc` —— dialect 差异已在 `db/index.ts` 隔离,聚合 SQL 用条件分支
-- pg-boss 队列深度仅 PG 模式显示,SQLite 模式显示 "N/A(单进程模式)"
+- `/metrics` 数据来自内存 counter,不依赖 PG 聚合
+- 图表聚合查询用 `date_trunc`(PG)
+- pg-boss 队列深度始终显示(队列基于 PostgreSQL)
 
 ---
 
@@ -822,7 +822,7 @@ const activeStreams = new Gauge({ name: "nekusora_active_streams",
 | P2-B | prompt_templates | — | 低(纯新增) |
 | P2-C | — | — | 无 |
 
-全部为**增量迁移**,无需停机。schema 改完跑 `pnpm db:generate:{pg,sqlite}` + migrate。
+全部为**增量迁移**,无需停机。schema 改完跑 `pnpm db:generate:pg` + migrate。
 
 ### 依赖增量
 

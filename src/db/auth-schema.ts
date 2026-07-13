@@ -1,9 +1,8 @@
 /**
- * Better Auth 表定义 —— dialect 中立(由 schema/pg.ts 与 sqlite.ts 各自 import 并具象化)。
+ * Better Auth 表定义 —— dialect 中立描述(由 schema/pg.ts import 并用 pg-core 具象化)。
  *
  * Better Auth 的 Drizzle 适配器需要这些表;admin 插件在 user 上加 role/banned/banReason/banExpires。
- * 这里用「描述字段」的方式,pg/sqlite 各自的 schema 文件负责用具体列类型实例化,
- * 以避免在同一文件里混用 pg-core 与 sqlite-core。
+ * 这里用「描述字段」的方式,schema/pg.ts 负责用具体列类型实例化。
  */
 
 /** user 表字段语义(admin 插件 + 自定义 status additionalField)。 */
