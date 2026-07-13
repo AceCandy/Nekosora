@@ -115,6 +115,7 @@ export function UsageFilterBar({ variant, values, labels, basePath, tab }: Usage
               onChange={(id) => onUserChange(id)}
               loadOptions={loadUsers}
               placeholder={t("filters.user")}
+              allowClear
               widthClass="w-44"
             />
           </div>

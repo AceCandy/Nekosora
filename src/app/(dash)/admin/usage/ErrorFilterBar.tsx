@@ -133,6 +133,7 @@ export function ErrorFilterBar({ variant, values, labels, basePath }: ErrorFilte
               onChange={(id) => onUserChange(id)}
               loadOptions={loadUsers}
               placeholder={t("filters.user")}
+              allowClear
               widthClass="w-44"
             />
           </div>
