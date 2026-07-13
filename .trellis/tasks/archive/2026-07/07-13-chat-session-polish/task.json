@@ -1,0 +1,30 @@
+{
+  "id": "chat-session-polish",
+  "name": "chat-session-polish",
+  "title": "Chat会话三项改进(工具栏顺序/新会话推理强度/丝滑进会话)",
+  "description": "",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "AceCandy",
+  "assignee": "AceCandy",
+  "createdAt": "2026-07-13",
+  "completedAt": "2026-07-13",
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "07-13-chat-toolbar-reorder",
+    "07-13-chat-new-chat-reasoning",
+    "07-13-chat-smooth-new-conversation"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}
