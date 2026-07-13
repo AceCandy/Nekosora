@@ -85,6 +85,53 @@ describe("current mainstream catalog seed", () => {
     expect(glmLine).not.toContain('"medium":"high"');
   });
 
+  it("exposes MiMo as a deepseek off/high toggle (pi-aligned)", () => {
+    // 小米官方 MiMo 走 OpenAI 兼容端点,思考由 thinking:{type} 控制(pi: thinkingFormat=deepseek)。
+    // 原配置缺 thinkingFormat,applyReasoningToCompatibleBody 早返回,off 不发 disabled → "关闭不生效"。
+    for (const id of ["catalog-mimo-v2-5", "catalog-mimo-v2-5-pro"]) {
+      const line = pgBaseline.split("\n").find((l) => l.includes(`'${id}'`));
+      expect(line).toBeDefined();
+      expect(line).toContain('"thinkingFormat":"deepseek"');
+      expect(line).toContain('"low":null');
+      expect(line).toContain('"medium":null');
+      expect(line).not.toContain('"thinkingFormat":"openrouter"');
+    }
+  });
+
+  it("exposes zai GLM toggle-only models as off/high (pi: no reasoning effort)", () => {
+    // pi 明确 glm-4.7/5-turbo/5.1/5v-turbo 均为 supportsReasoningEffort:false,即 toggle-only
+    // (只发 thinking.type)。缺 map 会显示 5 档假档位,统一收敛为 off/high(glm-5.2 除外,它支持 high/max)。
+    for (const id of ["catalog-glm-4-7", "catalog-glm-5-turbo", "catalog-glm-5-1", "catalog-glm-5v-turbo"]) {
+      const line = pgBaseline.split("\n").find((l) => l.includes(`'${id}'`));
+      expect(line).toBeDefined();
+      expect(line).toContain('"thinkingFormat":"zai"');
+      expect(line).toContain('"low":null');
+      expect(line).toContain('"medium":null');
+    }
+  });
+
+  it("uses qwen format for DashScope Qwen3 toggle models", () => {
+    // qwen3(阿里 DashScope)用顶层 enable_thinking 控制思考开关(toggle-only,可关闭)。
+    for (const id of ["catalog-qwen3-235b-a22b", "catalog-qwen3-32b"]) {
+      const line = pgBaseline.split("\n").find((l) => l.includes(`'${id}'`));
+      expect(line).toBeDefined();
+      expect(line).toContain('"thinkingFormat":"qwen"');
+      expect(line).toContain('"low":null');
+    }
+  });
+
+  it("uses openai reasoning_effort for StepFun (no disable, 3 levels)", () => {
+    // StepFun step-3.7-flash 官方 Chat Completion API 用 reasoning_effort(low/medium/high),
+    // 不支持 enable_thinking 也不支持关闭思考(推理模型默认总思考)→ off:null,只显示三档。
+    const line = pgBaseline.split("\n").find((l) => l.includes("'catalog-step-3-7-flash'"));
+    expect(line).toBeDefined();
+    expect(line).toContain('"thinkingFormat":"openai"');
+    expect(line).toContain('"reasoningEffort":true');
+    expect(line).toContain('"off":null');
+    expect(line).toContain('"low":"low"');
+    expect(line).toContain('"high":"high"');
+  });
+
   it("seeds current Agnes Flash models with verified capabilities", () => {
     for (const migration of [pgBaseline]) {
       expect(migration).toContain("'agnes-1.5-flash'");

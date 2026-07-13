@@ -580,9 +580,9 @@ CREATE UNIQUE INDEX "user_settings_unique_idx" ON "user_settings" USING btree ("
 INSERT INTO "model_catalog" ("id", "name", "canonical_model_id", "aliases", "model_type", "capabilities", "sort_order") VALUES
 ('catalog-gpt-5-chat', 'GPT-5 Chat', 'gpt-5-chat', '["openai/gpt-5-chat"]'::jsonb, 'chat', '{"vision":true,"tools":true,"reasoning":true,"systemPrompt":true}'::jsonb, 20),
 ('catalog-ling-flash-2', 'Ling Flash 2.0', 'ling-flash-2.0', '["inclusionai/ling-flash-2.0"]'::jsonb, 'chat', '{"systemPrompt":true}'::jsonb, 21),
-('catalog-mimo-v2-5', 'MiMo V2.5', 'mimo-v2.5', '["xiaomi/mimo-v2.5"]'::jsonb, 'chat', '{"tools":true,"reasoning":true,"systemPrompt":true}'::jsonb, 22),
-('catalog-mimo-v2-5-pro', 'MiMo V2.5 Pro', 'mimo-v2.5-pro', '["xiaomi/mimo-v2.5-pro"]'::jsonb, 'chat', '{"tools":true,"reasoning":true,"systemPrompt":true}'::jsonb, 23),
-('catalog-step-3-7-flash', 'Step 3.7 Flash', 'step-3.7-flash', '["stepfun/step-3.7-flash"]'::jsonb, 'chat', '{"reasoning":true,"systemPrompt":true}'::jsonb, 24),
+('catalog-mimo-v2-5', 'MiMo V2.5', 'mimo-v2.5', '["xiaomi/mimo-v2.5"]'::jsonb, 'chat', '{"tools":true,"reasoning":true,"systemPrompt":true,"thinkingFormat":"deepseek","thinkingLevelMap":{"minimal":null,"low":null,"medium":null,"high":"high","xhigh":null,"max":null}}'::jsonb, 22),
+('catalog-mimo-v2-5-pro', 'MiMo V2.5 Pro', 'mimo-v2.5-pro', '["xiaomi/mimo-v2.5-pro"]'::jsonb, 'chat', '{"tools":true,"reasoning":true,"systemPrompt":true,"thinkingFormat":"deepseek","thinkingLevelMap":{"minimal":null,"low":null,"medium":null,"high":"high","xhigh":null,"max":null}}'::jsonb, 23),
+('catalog-step-3-7-flash', 'Step 3.7 Flash', 'step-3.7-flash', '["stepfun/step-3.7-flash"]'::jsonb, 'chat', '{"reasoning":true,"systemPrompt":true,"thinkingFormat":"openai","reasoningEffort":true,"thinkingLevelMap":{"off":null,"minimal":null,"low":"low","medium":"medium","high":"high"}}'::jsonb, 24),
 ('catalog-gpt-4-1', 'GPT-4.1', 'gpt-4.1', '["openai/gpt-4.1"]'::jsonb, 'chat', '{"vision":true,"tools":true,"systemPrompt":true}'::jsonb, 30),
 ('catalog-gpt-4-1-mini', 'GPT-4.1 Mini', 'gpt-4.1-mini', '["openai/gpt-4.1-mini"]'::jsonb, 'chat', '{"vision":true,"tools":true,"systemPrompt":true}'::jsonb, 31),
 ('catalog-gpt-4o', 'GPT-4o', 'gpt-4o', '["openai/gpt-4o"]'::jsonb, 'chat', '{"vision":true,"tools":true,"systemPrompt":true}'::jsonb, 32),
@@ -596,8 +596,8 @@ INSERT INTO "model_catalog" ("id", "name", "canonical_model_id", "aliases", "mod
 ('catalog-gemini-2-5-flash', 'Gemini 2.5 Flash', 'gemini-2.5-flash', '["google/gemini-2.5-flash"]'::jsonb, 'chat', '{"vision":true,"tools":true,"reasoning":true,"systemPrompt":true}'::jsonb, 51),
 ('catalog-deepseek-chat', 'DeepSeek Chat', 'deepseek-chat', '["deepseek/deepseek-chat","deepseek-v3"]'::jsonb, 'chat', '{"tools":true,"systemPrompt":true}'::jsonb, 60),
 ('catalog-deepseek-reasoner', 'DeepSeek Reasoner', 'deepseek-reasoner', '["deepseek/deepseek-reasoner","deepseek-r1"]'::jsonb, 'chat', '{"tools":true,"reasoning":true,"systemPrompt":true}'::jsonb, 61),
-('catalog-qwen3-235b-a22b', 'Qwen3 235B A22B', 'qwen3-235b-a22b', '["qwen/qwen3-235b-a22b","qwen3-235b-a22b-instruct-2507"]'::jsonb, 'chat', '{"tools":true,"reasoning":true,"systemPrompt":true}'::jsonb, 70),
-('catalog-qwen3-32b', 'Qwen3 32B', 'qwen3-32b', '["qwen/qwen3-32b"]'::jsonb, 'chat', '{"tools":true,"reasoning":true,"systemPrompt":true}'::jsonb, 71),
+('catalog-qwen3-235b-a22b', 'Qwen3 235B A22B', 'qwen3-235b-a22b', '["qwen/qwen3-235b-a22b","qwen3-235b-a22b-instruct-2507"]'::jsonb, 'chat', '{"tools":true,"reasoning":true,"systemPrompt":true,"thinkingFormat":"qwen","thinkingLevelMap":{"minimal":null,"low":null,"medium":null,"high":"high","xhigh":null,"max":null}}'::jsonb, 70),
+('catalog-qwen3-32b', 'Qwen3 32B', 'qwen3-32b', '["qwen/qwen3-32b"]'::jsonb, 'chat', '{"tools":true,"reasoning":true,"systemPrompt":true,"thinkingFormat":"qwen","thinkingLevelMap":{"minimal":null,"low":null,"medium":null,"high":"high","xhigh":null,"max":null}}'::jsonb, 71),
 ('catalog-qwen2-5-vl-72b', 'Qwen2.5 VL 72B', 'qwen2.5-vl-72b-instruct', '["qwen/qwen2.5-vl-72b-instruct"]'::jsonb, 'chat', '{"vision":true,"tools":true,"systemPrompt":true}'::jsonb, 72),
 ('catalog-glm-4-5', 'GLM 4.5', 'glm-4.5', '["zai/glm-4.5","zhipu/glm-4.5"]'::jsonb, 'chat', '{"tools":true,"reasoning":true,"systemPrompt":true}'::jsonb, 80),
 ('catalog-glm-4-5v', 'GLM 4.5V', 'glm-4.5v', '["zai/glm-4.5v","zhipu/glm-4.5v"]'::jsonb, 'chat', '{"vision":true,"tools":true,"reasoning":true,"systemPrompt":true}'::jsonb, 81),
@@ -654,11 +654,11 @@ INSERT INTO "model_catalog" ("id", "name", "canonical_model_id", "aliases", "mod
 ('catalog-grok-4-3', 'Grok 4.3', 'grok-4.3', '["xai/grok-4.3","x-ai/grok-4.3"]'::jsonb, 'chat', '{"vision":true,"tools":true,"reasoning":true,"systemPrompt":true,"thinkingFormat":"fixed","thinkingLevelMap":{"off":null,"minimal":null,"low":null,"medium":null,"high":"default","xhigh":null,"max":null}}'::jsonb, 72),
 ('catalog-grok-4-5', 'Grok 4.5', 'grok-4.5', '["xai/grok-4.5","x-ai/grok-4.5"]'::jsonb, 'chat', '{"vision":true,"tools":true,"reasoning":true,"systemPrompt":true,"thinkingFormat":"fixed","thinkingLevelMap":{"off":null,"minimal":null,"low":null,"medium":null,"high":"default","xhigh":null,"max":null}}'::jsonb, 73),
 ('catalog-grok-build-0-1', 'Grok Build 0.1', 'grok-build-0.1', '["xai/grok-build-0.1","x-ai/grok-build-0.1"]'::jsonb, 'chat', '{"vision":true,"tools":true,"reasoning":true,"systemPrompt":true,"thinkingFormat":"fixed","thinkingLevelMap":{"off":null,"minimal":null,"low":null,"medium":null,"high":"default","xhigh":null,"max":null}}'::jsonb, 74),
-('catalog-glm-4-7', 'GLM 4.7', 'glm-4.7', '["zai/glm-4.7","zhipu/glm-4.7","volcengine/glm-4.7"]'::jsonb, 'chat', '{"tools":true,"reasoning":true,"systemPrompt":true,"thinkingFormat":"zai"}'::jsonb, 80),
-('catalog-glm-5-turbo', 'GLM 5 Turbo', 'glm-5-turbo', '["zai/glm-5-turbo","zhipu/glm-5-turbo","volcengine/glm-5-turbo"]'::jsonb, 'chat', '{"tools":true,"reasoning":true,"systemPrompt":true,"thinkingFormat":"zai"}'::jsonb, 81),
-('catalog-glm-5-1', 'GLM 5.1', 'glm-5.1', '["zai/glm-5.1","zhipu/glm-5.1","volcengine/glm-5.1"]'::jsonb, 'chat', '{"tools":true,"reasoning":true,"systemPrompt":true,"thinkingFormat":"zai"}'::jsonb, 82),
+('catalog-glm-4-7', 'GLM 4.7', 'glm-4.7', '["zai/glm-4.7","zhipu/glm-4.7","volcengine/glm-4.7"]'::jsonb, 'chat', '{"tools":true,"reasoning":true,"systemPrompt":true,"thinkingFormat":"zai","thinkingLevelMap":{"minimal":null,"low":null,"medium":null,"high":"high","xhigh":null,"max":null}}'::jsonb, 80),
+('catalog-glm-5-turbo', 'GLM 5 Turbo', 'glm-5-turbo', '["zai/glm-5-turbo","zhipu/glm-5-turbo","volcengine/glm-5-turbo"]'::jsonb, 'chat', '{"tools":true,"reasoning":true,"systemPrompt":true,"thinkingFormat":"zai","thinkingLevelMap":{"minimal":null,"low":null,"medium":null,"high":"high","xhigh":null,"max":null}}'::jsonb, 81),
+('catalog-glm-5-1', 'GLM 5.1', 'glm-5.1', '["zai/glm-5.1","zhipu/glm-5.1","volcengine/glm-5.1"]'::jsonb, 'chat', '{"tools":true,"reasoning":true,"systemPrompt":true,"thinkingFormat":"zai","thinkingLevelMap":{"minimal":null,"low":null,"medium":null,"high":"high","xhigh":null,"max":null}}'::jsonb, 82),
 ('catalog-glm-5-2', 'GLM 5.2', 'glm-5.2', '["zai/glm-5.2","zhipu/glm-5.2","volcengine/glm-5.2"]'::jsonb, 'chat', '{"vision":true,"tools":true,"reasoning":true,"systemPrompt":true,"thinkingFormat":"zai","thinkingLevelMap":{"minimal":null,"low":null,"medium":null,"high":"high","max":"max"}}'::jsonb, 83),
-('catalog-glm-5v-turbo', 'GLM 5V Turbo', 'glm-5v-turbo', '["zai/glm-5v-turbo","zhipu/glm-5v-turbo","volcengine/glm-5v-turbo"]'::jsonb, 'chat', '{"vision":true,"tools":true,"reasoning":true,"systemPrompt":true,"thinkingFormat":"zai"}'::jsonb, 84),
+('catalog-glm-5v-turbo', 'GLM 5V Turbo', 'glm-5v-turbo', '["zai/glm-5v-turbo","zhipu/glm-5v-turbo","volcengine/glm-5v-turbo"]'::jsonb, 'chat', '{"vision":true,"tools":true,"reasoning":true,"systemPrompt":true,"thinkingFormat":"zai","thinkingLevelMap":{"minimal":null,"low":null,"medium":null,"high":"high","xhigh":null,"max":null}}'::jsonb, 84),
 ('catalog-kimi-k2-5', 'Kimi K2.5', 'kimi-k2.5', '["moonshot/kimi-k2.5","moonshotai/kimi-k2.5"]'::jsonb, 'chat', '{"vision":true,"tools":true,"reasoning":true,"systemPrompt":true,"thinkingFormat":"deepseek","thinkingLevelMap":{"minimal":null,"low":null,"medium":null,"high":"high","xhigh":null,"max":null}}'::jsonb, 90),
 ('catalog-kimi-k2-6', 'Kimi K2.6', 'kimi-k2.6', '["moonshot/kimi-k2.6","moonshotai/kimi-k2.6"]'::jsonb, 'chat', '{"vision":true,"tools":true,"reasoning":true,"systemPrompt":true,"thinkingFormat":"deepseek","thinkingLevelMap":{"minimal":null,"low":null,"medium":null,"high":"high","xhigh":null,"max":null}}'::jsonb, 91),
 ('catalog-kimi-k2-7-code', 'Kimi K2.7 Code', 'kimi-k2.7-code', '["moonshot/kimi-k2.7-code","moonshotai/kimi-k2.7-code"]'::jsonb, 'chat', '{"vision":true,"tools":true,"reasoning":true,"systemPrompt":true,"thinkingFormat":"fixed","thinkingLevelMap":{"off":null,"minimal":null,"low":null,"medium":null,"high":"default","xhigh":null,"max":null}}'::jsonb, 92),
@@ -745,9 +745,8 @@ ON CONFLICT ("canonical_model_id") DO UPDATE SET
 -- 导致 applyReasoningToCompatibleBody / buildReasoningProviderOptions 早返回,
 -- 推理档位(含 off)完全不向上游发送参数,出现"显示关但仍在思考"。
 -- 按 alias 前缀映射的上游协议,幂等回填 thinkingFormat。仅 PG。
-UPDATE "model_catalog"
-SET "capabilities" = jsonb_set("capabilities", '{thinkingFormat}', '"openrouter"'::jsonb)
-WHERE "canonical_model_id" IN ('step-3.7-flash', 'mimo-v2.5', 'mimo-v2.5-pro', 'qwen3-235b-a22b', 'qwen3-32b');
+-- 原 openrouter 批量回填(step-3.7-flash / qwen3 / mimo)已下沉到各自 INSERT,
+-- 按实际接入改写为厂商原生格式:step/qwen3→qwen(enable_thinking),mimo→deepseek(thinking.type)。
 
 UPDATE "model_catalog"
 SET "capabilities" = jsonb_set("capabilities", '{thinkingFormat}', '"openai"'::jsonb)
