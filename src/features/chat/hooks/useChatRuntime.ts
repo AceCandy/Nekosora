@@ -58,11 +58,15 @@ export function useChatRuntime({
   // 前台会话的生成状态变化时刷新侧栏。开始时 refresh(此时 DB generating 已被
   // /api/chat 置 true),结束时也 refresh(清掉转圈)。仅当前路由对应的会话触发即可:
   // refresh 会重跑共享 layout 的 listConversations,所有会话的 generating 同步更新。
+  // 挂载时判定是否新会话页(initialConvId 为空)。replaceState 后 router.refresh 会跨 segment 重挂,
+  // 故新会话场景跳过 refresh;侧栏高亮/新会话项/generating 改由 chatStreamStore 乐观驱动。
+  const wasNewConversation = useRef(conversationId === null);
   const prevStreamingRef = useRef(streaming);
   useEffect(() => {
     if (prevStreamingRef.current !== streaming) {
       prevStreamingRef.current = streaming;
-      // 流结束时 DB generating 已清,立即刷新;流开始时略延迟等 /api/chat 落库 generating=true
+      if (wasNewConversation.current) return;
+      // 历史会话页:URL 本就是 [id],同 segment refresh 安全,用于刷侧栏 generating。
       const timer = setTimeout(() => router.refresh(), streaming ? 400 : 0);
       return () => clearTimeout(timer);
     }
@@ -96,7 +100,7 @@ export function useChatRuntime({
         const opts: SendOptions = { model: modelName, modelId, instructionCardIds, webSearch, knowledgeBaseIds, createOptions };
         void actions.send(key, text, opts, {
           uploadAttachments,
-          onTitleUpdated: () => router.refresh(),
+          onTitleUpdated: () => { if (!wasNewConversation.current) router.refresh(); },
           // 静默换 URL,不触发 Next.js RSC 导航(避免组件重挂、流式中断);同时通知上层更新活动会话 id。
           onConversationCreated: (newConvId) => {
             window.history.replaceState(null, "", `/chat/${newConvId}`);

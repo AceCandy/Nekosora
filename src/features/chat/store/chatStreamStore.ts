@@ -10,6 +10,13 @@ import type { ReasoningLevel } from "@/db/types";
 /** 新会话(尚无会话 id)在 store 内使用的隔离键。 */
 export const NEW_CONVERSATION_KEY = "__new__";
 
+/** 从首条用户消息派生乐观标题(≤16 字符);后台真实标题写入后由 SSR 覆盖。 */
+function titleFrom(text: string): string {
+  const v = text.trim().replace(/\s+/g, " ").replace(/^[\s"'`“”‘’]+|[\s"'`“”‘’]+$/g, "");
+  if (!v) return "";
+  return Array.from(v).slice(0, 16).join("");
+}
+
 /** 单个会话的运行时状态(消息列表 + 流式标记 + 中断控制器)。 */
 interface ConversationRuntime {
   messages: ChatMessage[];
@@ -31,6 +38,11 @@ export interface SendOptions {
 interface ChatStreamState {
   /** 按 conversationId(或 NEW_CONVERSATION_KEY)隔离的会话运行时。 */
   runtimes: Record<string, ConversationRuntime>;
+
+  /** 当前活跃会话 id(建会写入;Sidebar 高亮用,替代 usePathname 以支持 replaceState 后即时跟随)。 */
+  activeConversationId: string | null;
+  /** 建会乐观会话项(临时标题);Sidebar 合并显示,SSR 带真实数据后清。 */
+  optimisticConversation: { id: string; title: string; createdAt: number } | null;
 
   /** 注入 SSR 初始消息(仅当 store 内尚无该会话数据时)。 */
   hydrate: (key: string, messages: ChatMessage[]) => void;
@@ -76,10 +88,16 @@ function patchRuntime(
 
 export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
   runtimes: {},
+  activeConversationId: null,
+  optimisticConversation: null,
 
   hydrate: (key, messages) => {
     if (get().runtimes[key]) return;
     set((s) => patchRuntime(s, key, () => ({ messages, streaming: false, abortController: null })));
+    // 真实会话 SSR hydrate 时清掉同 id 的乐观项(SSR 已带真实数据,避免侧栏重复)
+    if (key !== NEW_CONVERSATION_KEY && get().optimisticConversation?.id === key) {
+      set({ optimisticConversation: null });
+    }
   },
 
   clear: (key) => {
@@ -190,6 +208,11 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
         };
         resolvedConvId = await createConversation(opts.model, createOpts);
         newConvId = resolvedConvId;
+        // 记录活跃会话 + 乐观会话项(供 Sidebar 立即高亮/插入);新会话场景不走 router.refresh
+        set({
+          activeConversationId: resolvedConvId,
+          optimisticConversation: { id: resolvedConvId, title: titleFrom(text), createdAt: Date.now() },
+        });
         // 将新会话数据从临时键迁移到真实会话 id 键下,后续写操作以新键为准
         get().migrate(NEW_CONVERSATION_KEY, resolvedConvId);
         // 立即切路由:使组件 key 由临时键切到真实会话 id,从而订阅到迁移后的消息。

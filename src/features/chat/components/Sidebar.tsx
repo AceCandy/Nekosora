@@ -7,6 +7,8 @@ import { useTranslations } from "next-intl";
 import { searchMessages } from "@/features/chat/actions/conversations";
 import { Plus, Settings2, MessageSquare, LogOut, Menu, X, Search, Pin, Archive, Trash2, ImageIcon, Loader2 } from "lucide-react";
 import { clsx } from "clsx";
+import { useShallow } from "zustand/react/shallow";
+import { useChatStreamStore } from "@/features/chat/store/chatStreamStore";
 
 interface ConversationItem {
   id: string;
@@ -124,12 +126,20 @@ export default function Sidebar({
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  // 当前路由对应的会话 id(/chat/{id});新对话页 /chat 为 null,不高亮历史项。
+  // 当前路由对应的会话 id(/chat/{id});新对话页 /chat 为 null。
   const pathname = usePathname();
-  const activeConvId = useMemo(() => {
+  const pathConvId = useMemo(() => {
     const m = pathname?.match(/^\/chat\/([^/]+)$/);
     return m ? m[1] : null;
   }, [pathname]);
+  // 订阅 store:进行中的会话(generating 转圈)+ 活跃会话(replaceState 后即时高亮)+ 乐观新会话项。
+  const streamingConvIds = useChatStreamStore(
+    useShallow((s) => Object.entries(s.runtimes).filter(([, r]) => r.streaming).map(([k]) => k)),
+  );
+  const activeConversationId = useChatStreamStore((s) => s.activeConversationId);
+  const optimisticConversation = useChatStreamStore((s) => s.optimisticConversation);
+  // 高亮优先路由解析(导航后即时正确);replaceState 后 Next pathname 暂未更新时回落到 store 活跃 id。
+  const activeConvId = pathConvId ?? activeConversationId;
 
   // 后台会话完成蓝点:轮询各会话 generating 状态,记录上一轮「生成中」的集合;
   // 当某会话从「生成中」变为「已完成」且不是当前会话,标记蓝点;点击该会话项清除。
@@ -236,14 +246,31 @@ export default function Sidebar({
     });
   };
 
+  // 合并乐观新会话项(SSR 尚未带上的建会项),插入列表头;SSR 命中同 id 则去重。
+  const allConversations = useMemo(() => {
+    if (!optimisticConversation) return conversations;
+    if (conversations.some((c) => c.id === optimisticConversation.id)) return conversations;
+    return [
+      {
+        id: optimisticConversation.id,
+        title: optimisticConversation.title || newConversationText,
+        pinned: false,
+        archived: false,
+        generating: false,
+        updatedAt: optimisticConversation.createdAt,
+      },
+      ...conversations,
+    ];
+  }, [conversations, optimisticConversation, newConversationText]);
+
   // 前端过滤:标题搜索 + 归档默认隐藏
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return conversations.filter((c) => {
+    return allConversations.filter((c) => {
       if (!q) return true;
       return c.title.toLowerCase().includes(q);
     });
-  }, [conversations, query]);
+  }, [allConversations, query]);
 
   // 分组:置顶 / 今天 / 昨天 / 更早 / 归档
   const groups = useMemo(() => {
@@ -300,7 +327,7 @@ export default function Sidebar({
         )}
       >
         {c.pinned && <Pin className="w-3 h-3 shrink-0 text-sora-blue" aria-hidden="true" />}
-        {c.generating ? (
+        {(c.generating || streamingConvIds.includes(c.id)) ? (
           <Loader2 className="w-3.5 h-3.5 shrink-0 text-sora-blue animate-spin" aria-hidden="true" />
         ) : justCompleted ? (
           // 后台执行完成、尚未查看的会话:蓝点提示(点击后消失)
