@@ -11,6 +11,7 @@ import { useChatScrollController } from "@/features/chat/hooks/useChatScrollCont
 import { ChatMessageList } from "@/features/chat/components/ChatMessageList";
 import { ChatToolbar } from "@/features/chat/components/ChatToolbar";
 import { ChatInputBox } from "@/features/chat/components/ChatInputBox";
+import ChatHeader from "@/features/chat/components/ChatHeader";
 import { setConversationOutputMode, setConversationRenderStyle, setConversationModel, setConversationWebSearch, setConversationComposerState, setConversationModelParams, setConversationModelReasoning } from "@/features/chat/actions/conversations";
 import { estimateTokens } from "@/lib/tokens";
 import type { ChatMessage, ModelOption, CardOption, KnowledgeBaseOption, OutputModeOption, RenderStyleOption } from "@/features/chat/model/types";
@@ -47,6 +48,8 @@ interface ChatComposerProps {
   initialReasoningByModelId?: Record<string, ReasoningLevel>;
   /** 当前会话 ID(切换输出模式时持久化用;新会话无)。 */
   conversationId?: string;
+  /** 分享当前会话的 server action(由 page 提供,ChatHeader 用)。 */
+  createShareAction: (id: string) => Promise<string>;
   initialMessages?: ChatMessage[];
 }
 
@@ -73,6 +76,7 @@ export default function ChatComposer({
   initialModelParams,
   initialReasoningByModelId = {},
   conversationId: initialConvId,
+  createShareAction,
   initialMessages = [],
 }: ChatComposerProps) {
   const t = useTranslations("chat");
@@ -124,6 +128,12 @@ export default function ChatComposer({
     const imageTokens = attached.filter((a) => a.isImage).length * 255;
     return textTokens + imageTokens;
   }, [input, attached]);
+
+  // 本会话累计发送 token(从各 assistant 消息的 trace 聚合),供 ChatHeader 实时显示。
+  const totalTokens = useMemo(
+    () => runtime.messages.reduce((sum, m) => sum + (m.trace?.sentTokenEstimate ?? 0), 0),
+    [runtime.messages],
+  );
 
   // 流式结束后,刷新有 publicId 的 assistant 消息版本信息(用于版本切换器)
   useEffect(() => {
@@ -307,6 +317,12 @@ export default function ChatComposer({
     <div className="flex-1 flex h-full bg-nebula-white dark:bg-twilight-obsidian transition-colors duration-250">
       {/* 主区:消息 + 输入(可被 artifact 面板挤压) */}
       <div className={clsx("relative flex flex-col h-full min-w-0 flex-1", activeArtifact && "lg:flex-[3] lg:border-r lg:border-morning-mist lg:dark:border-deep-space/80")}>
+        <ChatHeader
+          conversationId={activeConvId}
+          messageCount={runtime.messages.length}
+          totalTokens={totalTokens}
+          createShareAction={createShareAction}
+        />
         <ChatMessageList
           messages={runtime.messages}
           streaming={runtime.streaming}

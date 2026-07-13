@@ -10,7 +10,8 @@ export default function ChatHeader({
   totalTokens,
   createShareAction,
 }: {
-  conversationId: string;
+  /** 当前会话 id;新会话(未建会)为 undefined,分享按钮禁用。 */
+  conversationId?: string;
   messageCount: number;
   /** 本会话累计发送 token(从各 assistant 消息的 trace 聚合)。 */
   totalTokens?: number;
@@ -21,6 +22,7 @@ export default function ChatHeader({
   const [copied, setCopied] = useState(false);
 
   const handleShare = () => {
+    if (!conversationId) return;
     startTransition(async () => {
       try {
         const shareId = await createShareAction(conversationId);
@@ -49,7 +51,7 @@ export default function ChatHeader({
       </div>
       <button
         onClick={handleShare}
-        disabled={isPending}
+        disabled={isPending || !conversationId}
         className="inline-flex items-center gap-1.5 text-xs font-semibold text-sora-blue hover:text-sora-blue-hover transition-colors px-2.5 py-1.5 rounded-md hover:bg-neutral-50 dark:hover:bg-neutral-900/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
         aria-label={t("shareThisConversation")}
       >

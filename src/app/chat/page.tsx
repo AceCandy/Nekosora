@@ -5,6 +5,7 @@ import { listKnowledgeBases } from "@/lib/knowledge-base/service";
 import { listEnabledOutputModes } from "@/lib/output-modes/service";
 import { listEnabledRenderStyles } from "@/lib/render-styles/service";
 import ChatComposer, { type ModelOption } from "@/features/chat/components/ChatComposer";
+import { createShare } from "@/features/chat/actions/share";
 import type { ModelCapabilities } from "@/db/types";
 
 export default async function ChatPage() {
@@ -44,9 +45,14 @@ export default async function ChatPage() {
     icon: s.icon,
   }));
 
+  async function handleCreateShare(convId: string) {
+    "use server";
+    return createShare(convId);
+  }
+
   return (
     <div className="flex-1 flex flex-col min-w-0 h-full">
-      <ChatComposer models={models} cards={cards} knowledgeBases={knowledgeBases} outputModes={modes} renderStyles={styles} />
+      <ChatComposer models={models} cards={cards} knowledgeBases={knowledgeBases} outputModes={modes} renderStyles={styles} createShareAction={handleCreateShare} />
     </div>
   );
 }

@@ -9,7 +9,6 @@ import { listEnabledRenderStyles } from "@/lib/render-styles/service";
 import ChatComposer, { type ModelOption } from "@/features/chat/components/ChatComposer";
 import type { ModelCapabilities } from "@/db/types";
 import type { ChatMessage } from "@/features/chat/model/types";
-import ChatHeader from "@/features/chat/components/ChatHeader";
 
 export default async function ChatConversationPage({
   params,
@@ -65,12 +64,6 @@ export default async function ChatConversationPage({
       | undefined,
   }));
 
-  // 聚合本会话各 assistant 消息实际发送 token(从 processTrace)
-  const totalTokens = (msgs as Record<string, unknown>[]).reduce((sum, m) => {
-    const trace = m.processTrace as { sentTokenEstimate?: number } | undefined;
-    return sum + (trace?.sentTokenEstimate ?? 0);
-  }, 0);
-
   const knowledgeBases = (kbs as { id: string; name: string; fileCount: number }[]).map((kb) => ({
     id: kb.id,
     name: kb.name,
@@ -100,12 +93,6 @@ export default async function ChatConversationPage({
   // 历史会话列表已上移至 chat/layout 的单栏侧栏,此处只渲染会话头部与聊天区。
   return (
     <div className="flex-1 flex flex-col min-w-0 h-full">
-      <ChatHeader
-        conversationId={id}
-        messageCount={initialMessages.length}
-        totalTokens={totalTokens}
-        createShareAction={handleCreateShare}
-      />
       <div className="flex-1 min-h-0">
         <ChatComposer
           models={models}
@@ -122,6 +109,7 @@ export default async function ChatConversationPage({
           initialModelParams={{ temperature: composerState.temperature, topP: composerState.topP, maxTokens: composerState.maxTokens }}
           initialReasoningByModelId={composerState.reasoningByModelId}
           conversationId={id}
+          createShareAction={handleCreateShare}
           initialMessages={initialMessages}
         />
       </div>
