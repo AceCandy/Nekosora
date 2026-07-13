@@ -22,6 +22,7 @@ import {
   strParam,
   parseTimeRange,
   resolveEffectiveUserId,
+  ALL_USERS,
 } from "@/app/(dash)/admin/usage/time-range";
 import { PageHeader } from "@/shared/components/PageHeader";
 import { BarChart3 } from "lucide-react";
@@ -32,7 +33,7 @@ const PAGE_SIZE = 20;
 
 /**
  * 用量查询合一入口(/panel/usage):一套页面按权限做数据隔离。
- * - admin:默认查全部,用户筛选可指定某个用户;用户列/上游 key 全字段可见。
+ * - admin:默认查自己(筛选框回填自己),×清空=查全部,可选指定用户;用户列/上游 key 全字段可见。
  * - 普通用户:强制查自己(忽略 URL user 参数,防越权);隐藏用户筛选,上游 key 在用量明细脱敏。
  */
 export default async function PanelUsagePage({
@@ -54,7 +55,7 @@ export default async function PanelUsagePage({
   const page = Math.max(1, Number(strParam(sp.page) ?? "1") || 1);
   const timeRange = parseTimeRange(sp);
 
-  // 数据隔离收敛点(服务端强制):admin 全部 / 指定;普通用户强制自己。
+  // 数据隔离收敛点(服务端强制):admin 默认自己 / 全部(__all__) / 指定;普通用户强制自己。
   const userParam = strParam(sp.user);
   const effectiveUserId = resolveEffectiveUserId({ isAdmin, userParam, selfId: user.id });
 
@@ -123,6 +124,8 @@ async function renderUsageTab({
   s: any;
 }) {
   const userParam = strParam(sp.user);
+  // Combobox 回填值:全部(__all__)→空(显示 placeholder);否则默认回填自己或指定用户。
+  const displayUserId = !isAdmin ? "" : userParam === ALL_USERS ? "" : userParam || selfId;
   const keyParam = strParam(sp.key);
   const filters: UsageLogFilters = {
     model: strParam(sp.model),
@@ -136,8 +139,8 @@ async function renderUsageTab({
 
   const [{ rows, total }, userLabelRow, keyLabelRow] = await Promise.all([
     listUsageLogs({ page, pageSize: PAGE_SIZE, userId: effectiveUserId, filters }),
-    isAdmin && userParam
-      ? db.select({ name: s.user.name }).from(s.user).where(eq(s.user.id, userParam)).limit(1)
+    isAdmin && displayUserId
+      ? db.select({ name: s.user.name }).from(s.user).where(eq(s.user.id, displayUserId)).limit(1)
       : Promise.resolve([]),
     keyParam
       ? db
@@ -178,7 +181,7 @@ async function renderUsageTab({
     range: timeRange.range,
     start: timeRange.start,
     end: timeRange.end,
-    user: userParam ?? "",
+    user: displayUserId,
     source: strParam(sp.source) ?? "",
     key: keyParam ?? "",
     provider: strParam(sp.provider) ?? "",
@@ -231,6 +234,8 @@ async function renderErrorsTab({
   s: any;
 }) {
   const userParam = strParam(sp.user);
+  // Combobox 回填值:全部(__all__)→空(显示 placeholder);否则默认回填自己或指定用户。
+  const displayUserId = !isAdmin ? "" : userParam === ALL_USERS ? "" : userParam || selfId;
   const keyParam = strParam(sp.key);
   const showAuth = strParam(sp.showAuth) === "1";
   const phaseParam = strParam(sp.phase);
@@ -250,8 +255,8 @@ async function renderErrorsTab({
 
   const [{ rows, total }, userLabelRow, keyLabelRow] = await Promise.all([
     listErrorLogs({ page, pageSize: PAGE_SIZE, userId: effectiveUserId, filters }),
-    isAdmin && userParam
-      ? db.select({ name: s.user.name }).from(s.user).where(eq(s.user.id, userParam)).limit(1)
+    isAdmin && displayUserId
+      ? db.select({ name: s.user.name }).from(s.user).where(eq(s.user.id, displayUserId)).limit(1)
       : Promise.resolve([]),
     keyParam
       ? db
@@ -301,7 +306,7 @@ async function renderErrorsTab({
     range: timeRange.range,
     start: timeRange.start,
     end: timeRange.end,
-    user: userParam ?? "",
+    user: displayUserId,
     source: strParam(sp.source) ?? "",
     key: keyParam ?? "",
     phase: phaseParam ?? "",

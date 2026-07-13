@@ -6,14 +6,18 @@
  */
 import type { TimeRange } from "@/lib/usage-aggregate";
 
+/** admin 用户筛选「全部」内部哨兵(不在下拉显示);×清空时写入,查询不限定 userId。 */
+export const ALL_USERS = "__all__";
+
 export function strParam(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v;
 }
 
 /**
  * 解析用量页的有效 userId(数据隔离收敛点,服务端强制)。
+ * - admin 无 user:默认查自己(selfId),配合筛选框回填自己
+ * - admin + user=__all__:查全部(undefined)
  * - admin + user=<id>:查指定用户
- * - admin 无 user:查全部(undefined)
  * - 普通用户:强制查自己(selfId),忽略 userParam 防越权。
  */
 export function resolveEffectiveUserId(opts: {
@@ -21,7 +25,8 @@ export function resolveEffectiveUserId(opts: {
   userParam?: string;
   selfId: string;
 }): string | undefined {
-  if (opts.isAdmin) return opts.userParam || undefined;
+  if (opts.isAdmin && opts.userParam === ALL_USERS) return undefined;
+  if (opts.isAdmin && opts.userParam) return opts.userParam;
   return opts.selfId;
 }
 

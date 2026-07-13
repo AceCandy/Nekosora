@@ -411,7 +411,7 @@
     },
     "usage": {
       "title": "Usage Statistics",
-      "desc": "Query gateway call usage and error requests; filter by time, user, model and more. Admins see all users by default and can filter to a specific user.",
+      "desc": "Query gateway call usage and error requests; filter by time, user, model and more. Admins see their own usage by default and can clear to view all users or a specific user.",
       "totalRequests": "Total requests",
       "totalTokens": "Total tokens",
       "successRate": "Success rate",

@@ -24,6 +24,12 @@ export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME !== "nodejs") {
     return;
   }
+  // 尽早装上进程级兜底(在 DB bootstrap 之前),防上游 socket 类噪声冲击 Next dev 进程。
+  // 用变量路径 import 阻断 Edge 编译静态预扫描 —— 否则 process.on 会被判为 Edge 不支持而编译失败
+  // (与下方 bootstrap 同一手法;实现见 src/lib/infra/process-guards.ts)。
+  const guardPath = "@/lib/infra/process-guards";
+  const { installGlobalErrorGuards } = await import(guardPath);
+  installGlobalErrorGuards();
 
   const hasRedis = !!process.env.REDIS_URL;
   console.log(

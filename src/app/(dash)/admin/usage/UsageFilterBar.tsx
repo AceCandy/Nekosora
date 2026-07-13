@@ -17,6 +17,7 @@ import { Select } from "@/shared/ui/Select";
 import { DateRangePicker } from "./DateRangePicker";
 import { searchUsageCandidatesAction } from "./actions";
 import { searchPanelUsageCandidatesAction } from "@/app/(dash)/panel/usage/actions";
+import { ALL_USERS } from "./time-range";
 
 export interface UsageFilterValues {
   range: string;
@@ -51,7 +52,7 @@ export function UsageFilterBar({ variant, values, labels, basePath, tab }: Usage
   // admin 用 values.user(可跨用户)作级联 filter;panel action 内部强制自己,不传 userId。
   const userIdFilter = variant === "admin" ? values.user : undefined;
 
-  // admin 空=查全部,选具体用户=查该用户;Combobox 候选即真实用户列表,不再前置「全部用户」。
+  // admin 默认回填自己;×清空=查全部(写 __all__),选具体用户=查该用户。Combobox 候选即真实用户列表,不前置「全部用户」。
   const loadUsers = async (q: string) => searchUsageCandidatesAction({ type: "users", q });
   const loadKeys = (q: string) => searchAction({ type: "keys", q, userId: userIdFilter }) as Promise<ComboOption[]>;
   const loadProviders = (q: string) => searchAction({ type: "providers", q, userId: userIdFilter }) as Promise<ComboOption[]>;
@@ -78,7 +79,8 @@ export function UsageFilterBar({ variant, values, labels, basePath, tab }: Usage
 
   const onTimeChange = (patch: { range?: string; start?: string; end?: string }) =>
     update({ range: patch.range ?? "", start: patch.start ?? "", end: patch.end ?? "" });
-  const onUserChange = (id: string) => update({ user: id, key: "", provider: "", model: "", upstreamKey: "" });
+  // Combobox × 清空回调传空串 → 写入 ALL_USERS 哨兵(查全部),避免清空后又默认回填自己。
+  const onUserChange = (id: string) => update({ user: id || ALL_USERS, key: "", provider: "", model: "", upstreamKey: "" });
   const onKeyChange = (id: string) => update({ key: id });
   const onProviderChange = (id: string) => update({ provider: id, model: "", upstreamKey: "" });
   const onModelChange = (id: string) => update({ model: id });
