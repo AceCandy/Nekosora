@@ -94,6 +94,8 @@ const runtime = useChatRuntime({
 
 store 的 `migrate(临时key → 真实id)` 先于回写执行，活动 id 一切换，订阅正好落在已有数据的真实 key 上——全程无空态、组件不重挂、流式不中断。刷新/直接访问 `/chat/{id}` 仍走 server component 正常加载历史，不受影响。
 
+**乐观项标题的异步刷新**：新会话乐观项的初始标题是首条消息截断（store 内 `titleFrom`），后端 `/api/chat` 会通过 SSE 推 `title_updated` 帧（fallback + LLM 摘要各一次，帧里带 `title` 和 `conversationId`）。由于新会话场景刻意跳过了 `router.refresh()`（避免跨 segment 重挂），标题刷新必须走 store：在 SSE 回调里接住 `(title, conversationId)`，匹配 `optimisticConversation.id` 后覆盖其 `title`，Sidebar 订阅即异步刷新。**不要在中间层把带参回调降级成无参**（如 `onTitleUpdated: () => hooks?.onTitleUpdated?.()`）——那样会丢掉 SSE 推过来的 title，侧栏会一直停在截断标题、直到下次整页刷新。历史会话无乐观项，仍由上层 `hooks.onTitleUpdated` 的 `router.refresh()` 走 SSR 刷新。
+
 > **Gotcha**：`usePathname()` **不会**跟随 `window.history.replaceState`（Next 路由状态与原生 history API 不同步）。凡用 `usePathname` 解析当前会话做高亮的 UI（如 `Sidebar`），在乐观建会期间不会立即更新，要等下一次真实路由导航。若需即时跟随，改用由 store 维护的 `activeConversationId` 驱动，而非 `usePathname`。
 
 参考：`docs/cankao/DEEIX-Chat` 的 `use-chat-message-submit.ts` 用同款 `window.history.replaceState` 模式。
@@ -147,3 +149,4 @@ status: finished ? "success" : "interrupted",
 - **在 store 里存不可序列化的 server-only 对象** → store 是 client 域，只能存纯数据 + `AbortController` 这类浏览器对象。
 - **忘记 `revalidatePath`** → Server Action 写库后页面不刷新。
 - **乐观创建资源后用 `router.replace` 同步 URL** → 触发 RSC 重载 + 组件重挂，新会话发消息时闪欢迎态、打断流式。改用 `window.history.replaceState` 静默换 URL，配合组件持有可变活动 id 切订阅 key（见上「乐观创建资源后的 URL 同步」）。
+- **新会话侧栏标题不刷新** → SSE `title_updated` 帧带了 `title`，但 store 层回调签名写成无参 `() => void` 把 title 丢了；又因新会话跳过 `router.refresh()`，侧栏停在截断标题直到整页刷新。store 回调必须接住 `(title, conversationId)` 并更新 `optimisticConversation.title`（见「乐观创建资源后的 URL 同步 · 乐观项标题的异步刷新」）。

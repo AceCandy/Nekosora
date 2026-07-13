@@ -288,7 +288,16 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
             return { ...r, messages: updated };
           }));
         },
-        onTitleUpdated: () => hooks?.onTitleUpdated?.(),
+        onTitleUpdated: (title, conversationId) => {
+          // 后端推来真实标题(fallback + LLM 摘要各一次):覆盖新会话乐观项的截断标题,
+          // Sidebar 订阅 optimisticConversation 即异步刷新,无需 router.refresh(避免重挂)。
+          // 历史会话标题仍由上层 hooks.onTitleUpdated 的 router.refresh() 走 SSR 刷新。
+          const opt = get().optimisticConversation;
+          if (opt && opt.id === conversationId) {
+            set({ optimisticConversation: { ...opt, title } });
+          }
+          hooks?.onTitleUpdated?.();
+        },
       });
     } catch (err) {
       const activeKey = convId ?? newConvId ?? NEW_CONVERSATION_KEY;
