@@ -66,6 +66,40 @@ const { messages, streaming } = useChatStreamStore(
 
 ---
 
+## 乐观创建资源后的 URL 同步
+
+新会话(或任何「客户端先乐观渲染、再异步创建持久化资源」)场景，资源创建成功后要把 URL 切到真实路径。**必须用 `window.history.replaceState` 静默换 URL，不要用 `router.replace`**。
+
+**为什么不用 `router.replace`**：App Router 的 `router.replace('/chat/{id}')` 会触发目标 server component 重新查库 + 整段组件重挂。新会话发首条消息时，store 已把 optimistic 数据 `migrate` 到真实 key，但旧组件订阅的临时 key 被清空、新组件又要等 server 加载——这段窗口会闪现空态/欢迎态，并打断进行中的流式。
+
+**正确做法**（`useChatRuntime` 为例）：建会后用 History API 静默换 URL，并回调上层切活动 id：
+
+```ts
+onConversationCreated: (newConvId) => {
+  // 静默换 URL，不触发 Next.js RSC 导航(避免组件重挂、流式中断)
+  window.history.replaceState(null, "", `/chat/${newConvId}`);
+  onConversationCreated?.(newConvId);  // 通知上层更新活动 id
+}
+```
+
+配合：调用方(`ChatComposer`)持有可变「活动 id」state，建会会后切换它，使 hook 订阅 key 与持久化目标一起跟随：
+
+```ts
+const [activeConvId, setActiveConvId] = useState(initialConvId);
+const runtime = useChatRuntime({
+  conversationId: activeConvId ?? null,
+  onConversationCreated: setActiveConvId,  // 建会后回写
+});
+```
+
+store 的 `migrate(临时key → 真实id)` 先于回写执行，活动 id 一切换，订阅正好落在已有数据的真实 key 上——全程无空态、组件不重挂、流式不中断。刷新/直接访问 `/chat/{id}` 仍走 server component 正常加载历史，不受影响。
+
+> **Gotcha**：`usePathname()` **不会**跟随 `window.history.replaceState`（Next 路由状态与原生 history API 不同步）。凡用 `usePathname` 解析当前会话做高亮的 UI（如 `Sidebar`），在乐观建会期间不会立即更新，要等下一次真实路由导航。若需即时跟随，改用由 store 维护的 `activeConversationId` 驱动，而非 `usePathname`。
+
+参考：`docs/cankao/DEEIX-Chat` 的 `use-chat-message-submit.ts` 用同款 `window.history.replaceState` 模式。
+
+---
+
 ## Server State
 
 - 读：Server Component 顶层 await service/action，结果序列化后传给 Client Component。
@@ -112,3 +146,4 @@ status: finished ? "success" : "interrupted",
 - **把流式状态放进组件本地 state** → 切路由组件卸载，流式中断。必须进全局 store。
 - **在 store 里存不可序列化的 server-only 对象** → store 是 client 域，只能存纯数据 + `AbortController` 这类浏览器对象。
 - **忘记 `revalidatePath`** → Server Action 写库后页面不刷新。
+- **乐观创建资源后用 `router.replace` 同步 URL** → 触发 RSC 重载 + 组件重挂，新会话发消息时闪欢迎态、打断流式。改用 `window.history.replaceState` 静默换 URL，配合组件持有可变活动 id 切订阅 key（见上「乐观创建资源后的 URL 同步」）。
