@@ -3,7 +3,7 @@
   "name": "memory-extract-queue",
   "title": "记忆提取搬入 pg-boss 队列",
   "description": "extractMemories 从同进程 fire-and-forget 改为入队 pg-boss,worker 增加 memory-extract handler。抗重启、释放主进程。",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

@@ -17,7 +17,7 @@ import { getSession } from "@/lib/session";
 import { streamChat, streamChatWithTools } from "@/lib/stream";
 import { resolveMcpServers } from "@/lib/mcp/registry";
 import { extractArtifacts } from "@/lib/artifacts/extract";
-import { extractMemories } from "@/lib/memory/extract";
+import { getQueue } from "@/lib/infra/queue";
 import { maybeGenerateTitle } from "@/lib/conversation-title/service";
 import { prepareChatContext } from "@/lib/chat/orchestrator";
 import type { IRRequest } from "@/lib/providers/types";
@@ -339,11 +339,20 @@ export async function POST(req: NextRequest) {
           .set({ updatedAt: new Date(), generating: false })
           .where(eq(s.conversations.id, body.conversationId));
 
-        // 异步提取记忆 + 自动生成会话标题(不阻塞响应;失败静默)
+        // 异步提取记忆(入队 pg-boss,由 worker 消费,抗重启)+ 自动生成会话标题(不阻塞响应;失败静默)
         if (assistantText && !isContinue) {
           const recentMessages = [...body.messages, { role: "assistant", content: assistantText }]
             .map((m) => ({ role: m.role, content: typeof m.content === "string" ? m.content : String(m.content ?? "") }));
-          extractMemories(user.id, body.conversationId, recentMessages, body.model).catch(() => {});
+          getQueue()
+            .then((q) =>
+              q.send("memory-extract", {
+                userId: user.id,
+                conversationId: body.conversationId,
+                recentMessages,
+                model: body.model,
+              }),
+            )
+            .catch(() => {});
 
           // 首条 user 消息触发标题自动生成(service 内判断仅默认标题才生成)。
           // 通过 onTitle 回调推送 title_updated 帧(fallback 和最终标题各一次),
