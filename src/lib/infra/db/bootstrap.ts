@@ -389,7 +389,10 @@ column 的 align 可选 left/center/right；emphasis 为 true 时该列加粗。
 \`\`\`
 type 可选 warning/tip/note/error。
 
-代码块内必须是合法 JSON。`;
+代码块内必须是严格合法的 JSON。常见错误(会导致整块无法渲染):
+- 数值不要加引号:value 是数字时写 "value":18039,不要写 "value":"18039"。
+- 字段间的逗号写在引号外:写 "value":18039,"unit":"km",不要写成 "value":"18039,"unit"(逗号被关进引号会让后续字段全部错位)。
+- 一个代码块只产出一个 JSON 根(单个对象或数组),不要把多个对象连写在一起。`;
 
 /**
  * 内置输出模式预设(幂等 upsert,失败不阻断启动)。

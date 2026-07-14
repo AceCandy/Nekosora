@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { jsonrepair } from "jsonrepair";
 
 /**
  * 结构化代码块 schema —— AI 在 ```chart / ```metric / ```table 代码块内输出 JSON，
@@ -78,13 +79,26 @@ const STRUCTURED_SCHEMAS = {
 } as const;
 
 /**
- * 解析结构化代码块内容：JSON.parse + zod 校验。
+ * 宽容 JSON 解析:先用 strict JSON.parse;失败再用 jsonrepair 兜底修复后 parse。
+ * AI 产出的结构化块 JSON 常见格式错误(数字加引号、逗号关进引号、末尾多余逗号、
+ * 单引号、未闭合等),jsonrepair 能修绝大多数;两者都失败时抛错,由调用方决定降级。
+ */
+function looseJsonParse(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return JSON.parse(jsonrepair(text));
+  }
+}
+
+/**
+ * 解析结构化代码块内容：宽容 JSON.parse + zod 校验。
  * 成功返回强类型数据；失败返回降级原因，交由入口回退源码展示。
  */
 export function parseStructured(kind: StructuredKind, raw: string): StructuredParseResult {
   let json: unknown;
   try {
-    json = JSON.parse(raw);
+    json = looseJsonParse(raw);
   } catch {
     return { ok: false, kind, reason: "invalid_json" };
   }
@@ -127,10 +141,10 @@ export function parsePartialMetricItems(raw: string): MetricItem[] {
       depth--;
       if (depth === 0 && elemStart >= 0) {
         try {
-          const parsed = MetricItemSchema.safeParse(JSON.parse(raw.slice(elemStart, i + 1)));
+          const parsed = MetricItemSchema.safeParse(looseJsonParse(raw.slice(elemStart, i + 1)));
           if (parsed.success) items.push(parsed.data);
         } catch {
-          // 切出来的是闭合对象,理论必能 parse;防御性跳过意外
+          // 切出的闭合对象 strict + jsonrepair 都失败时跳过(含坏 JSON 逐项修复)
         }
         elemStart = -1;
       }

@@ -44,6 +44,7 @@
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
     "drizzle-orm": "^0.39.0",
+    "jsonrepair": "^3.15.0",
     "keyv": "^5.3.0",
     "lucide-react": "^0.469.0",
     "mermaid": "^11.15.0",

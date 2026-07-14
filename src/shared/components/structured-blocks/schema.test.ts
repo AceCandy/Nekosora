@@ -13,8 +13,9 @@ describe("parseStructured", () => {
     expect(r.ok).toBe(true);
   });
 
-  it("非法 JSON 返回 invalid_json", () => {
-    const r = parseStructured("chart", "{not json");
+  it("jsonrepair 也修不好的 JSON 返回 invalid_json", () => {
+    // 两个根对象连写:jsonrepair 无法修复(strict 同样失败)
+    const r = parseStructured("chart", '{"a":1}{"b":2}');
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.reason).toBe("invalid_json");
   });
@@ -125,5 +126,58 @@ describe("parseStructured", () => {
     const r = parseStructured("callout", JSON.stringify({ type: "info", body: "x" }));
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.reason).toBe("schema_mismatch");
+  });
+});
+
+// 宽容修复:strict JSON.parse 失败时由 jsonrepair 兜底,覆盖模型常见坏 JSON。
+describe("parseStructured 宽容修复(jsonrepair)", () => {
+  it("数字加引号 + 逗号关进引号(真实坏样本)→ metric 解析成功", () => {
+    // 模型实际产出:value 被引号、逗号被关进引号、下一字段 unit 丢逗号丢引号
+    const raw = `{"label":"海岸线长度","value":"18039,"unit":"km","trend":"flat"}`;
+    const r = parseStructured("metric", raw);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      const item = (r.data as Array<{ value: unknown }>)[0] ?? r.data;
+      expect((item as { value: unknown }).value).toBe("18039");
+    }
+  });
+
+  it("数组里每条都坏 → 全部修复成功", () => {
+    const raw = `[
+      {"label":"内陆河流总长度","value":"211000,"unit":"km","trend":"high"},
+      {"label":"长江长度","value":"6300,"unit":"km","trend":"up"}
+    ]`;
+    const r = parseStructured("metric", raw);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.data).toHaveLength(2);
+  });
+
+  it("末尾多余逗号 → 修复成功", () => {
+    const raw = `{"label":"QPS","value":120,"unit":"/s",}`;
+    const r = parseStructured("metric", raw);
+    expect(r.ok).toBe(true);
+  });
+
+  it("strict 合法时不改变行为(仍成功)", () => {
+    const raw = JSON.stringify({ label: "QPS", value: 120, trend: "up" });
+    const r = parseStructured("metric", raw);
+    expect(r.ok).toBe(true);
+  });
+
+  it("两对象连写(无法修复)→ 仍 invalid_json", () => {
+    const raw = `{"label":"a","value":1}{"label":"b","value":2}`;
+    const r = parseStructured("metric", raw);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe("invalid_json");
+  });
+
+  it("流式增量逐项修复:可切出的项含末尾多余逗号也被救回", () => {
+    // 第一项末尾多余逗号(strict 失败、jsonrepair 可修;引号平衡,扫描器能正确切出)
+    const raw = `[
+      {"label":"周三","value":70,"unit":"%","trend":"high",},
+      {"label":"周二","val`;
+    const items = parsePartialMetricItems(raw);
+    expect(items).toHaveLength(1);
+    expect(items[0].label).toBe("周三");
   });
 });
