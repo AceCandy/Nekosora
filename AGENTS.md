@@ -24,6 +24,7 @@ Managed by Trellis. Edits outside this block are preserved; edits inside may be 
 - 日常不需要扫描docs/cankao这个目录下的代码,这里面是参考的开源项目
 - 如果涉及到用户要求参考对应项目的逻辑的时候,优先看这个文件下的项目代码
 - 扫描代码的codeGraph使用参考 @CODEGRAPH.md
+- 关于模型模版这块的缺失优先从https://pi.dev/models 这个网站进行拉取
 
 ## 模型目录维护
 - `model_catalog` 是模型类型、能力、思考格式和档位映射的唯一事实来源；新增模型不得在前端或路由层另写一份能力判断。
