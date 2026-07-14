@@ -72,3 +72,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 3: 结构化块 JSON 宽容修复(metric 块模型坏 JSON 不再整块降级)
+
+**Date**: 2026-07-14
+**Task**: 结构化块 JSON 宽容修复(metric 块模型坏 JSON 不再整块降级)
+**Branch**: `main`
+
+### Summary
+
+诊断 metric 结构化块频繁降级:用临时 console 日志抓运行时 raw,确认根因是模型产出的 JSON 本身格式错误(数字加引号、逗号被关进引号),非渲染器 bug/非流式任务回归。方案 1+2:parseStructured/parsePartialMetricItems 在 strict 失败时用 jsonrepair 兜底(looseJsonParse helper);bootstrap 结构化输出提示词补反例压低出错率。jsonrepair 实测可修真实坏样本。trellis-check 独立复核通过,全量 259 测试 + typecheck 通过。chat-stream-smooth 任务文件未动,留待其收尾。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `961e218` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

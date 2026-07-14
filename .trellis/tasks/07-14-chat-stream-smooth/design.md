@@ -174,9 +174,24 @@ useEffect(() => {
 - **中断/续写/重生成/编辑重发**：均经 `finally → flushDeltasNow()`，无积压丢失；`streaming` 状态机不变。
 - **SSR hydrate / hide-until-settled**：层3 保留初始收敛逻辑，首次挂载路径不变。
 
+## 层4 · prompt-pin-to-top(发消息时用户消息钉顶)
+
+**调研依据**:[Medium: The scroll problem nobody talks about](https://medium.com/@disgcfrguy/the-scroll-problem-nobody-talks-about-when-building-ai-chat-interface-987c223cafc0)——ChatGPT 在已有对话发新消息时,用户 prompt 钉视口顶部、AI 回复在下方增长、回复超视口后过渡到跟随;配套动态底部 padding(发送时算一次,流式中不重算)。
+
+**问题**:原 `ChatMessageList` 的 `messagesEndRef` 固定 `streaming ? h-2/3 : h-0` 缓冲,是该意图的粗糙固定版——无「钉用户消息在顶」语义、无「回复增长吃掉留白、超视口过渡」逻辑,故回复长了下方仍 2/3 屏空白。
+
+**简化实现**(覆盖 ChatGPT 核心体验):
+- `useChatScrollController` 加 `pinningRef` + `pinToMessageTop(index)`:发消息后 `getElementById(msg-${index}).scrollIntoView({block:"start"})`,置 pinning=true。发送后该消息已在视口内(已渲染),DOM 定位即可,不需 virtualizer。
+- `ChatComposer.handleSend` / `handleSelectionAsk`:发送前记 `userMsgIdx = messages.length`,发送后 rAF 调 `pinToMessageTop(userMsgIdx)`。
+- 跟随 effect:pinning 且 `scrollHeight ≤ clientHeight`(内容未超视口)→ 保持钉顶不贴底;否则退出 pin 转贴底 follow,自然过渡。
+- 缓冲:`h-2/3` → 统一 `h-24`;scrollRef 加 `[overflow-anchor:none]` 避免 pin 时浏览器 anchor 调整导致用户消息漂移。
+
+**与 ChatGPT 完整版差距**(简化,按需增强):不做流式中 pin 的 rAF 持续微调修正(输入框 resize / loading / 字体加载的 layout shift 可能让用户消息轻微漂移)、不做精细过渡动画。`overflow-anchor:none` 已覆盖最主要的 anchor 漂移。
+
 ## 回滚形状
 
 - 层1：还原四处 `onDelta` 为直接 `set`，删合批三函数。
 - 层2：`Markdown.tsx` 删 `animated`/`caret` 传参。
 - 层3：还原 `useChatScrollController` 的 `isAtBottomRef` + `scrollIntoView` effect。
-三层相互独立，可单独回滚。
+- 层4：`handleSend`/`handleSelectionAsk` 还原 `forceFollow()`；`messagesEndRef` 还原 `h-2/3`；删 `pinToMessageTop`/`pinningRef`。
+四层相互独立，可单独回滚。
