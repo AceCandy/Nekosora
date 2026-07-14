@@ -133,7 +133,7 @@ export function ChatMessageList({
     // 相对外层 relative 容器,让对话大纲/回到最新按钮锚定在消息区(而非含输入框的主区)。
     // ready(hide-until-settled):贴底未收敛前 opacity-0 隐藏测量追赶,收敛后挂 animate-in 淡入显形。
     <div className={clsx("relative flex-1 min-h-0", ready ? "animate-in fade-in slide-in-from-bottom-2 duration-200" : "opacity-0")}>
-      <div ref={scrollRef} onScroll={onScroll} className="h-full overflow-y-auto px-6 py-8 md:py-12">
+      <div ref={scrollRef} onScroll={onScroll} className="h-full overflow-y-auto px-6 pt-8 pb-2 md:pt-12 md:pb-3 [overflow-anchor:none]">
         {messages.length === 0 ? (
           <div className="max-w-4xl mx-auto">
             <WelcomeBlock samples={samples} onPickSample={onPickSample} />
@@ -178,8 +178,8 @@ export function ChatMessageList({
             })}
           </div>
         )}
-        {/* 底部留白缓冲:仅流式生成时撑高约 2/3 屏,让生成内容停在视口上部、下方留白;同时作为滚动锚点 */}
-        <div ref={messagesEndRef} className={streaming ? "h-2/3" : "h-0"} />
+        {/* 底部锚点(层3 用 scrollTop=scrollHeight 贴底,不再靠此缓冲撑高);底部呼吸留白由 scrollRef 的 py 提供。prompt-pin 阶段的下方留白由用户消息钉顶 + 回复未长自然产生。 */}
+        <div ref={messagesEndRef} className="h-0" />
       </div>
 
       {/* 对话大纲:贴消息区右边缘(滚动条左侧),hover 整列弹出完整轮次列表 */}

@@ -42,6 +42,12 @@ export interface StreamChatOptions {
    * 避免 public/private 同名歧义;缺省回退 resolveRoutes(by name,网关/副任务沿用)。
    */
   modelId?: string;
+  /**
+   * 中止信号(WebChat 透传客户端断开)。abort 时透传给 streamText,中止上游 fetch,
+   * 避免继续写已关闭 socket 触发 Socket closed unexpectedly → uncaughtException。
+   * 网关 / 副任务不传,行为不变。
+   */
+  abortSignal?: AbortSignal;
 }
 
 /** 判断错误是否值得路由级故障转移(连接/5xx/限流类),而非确定性失败。 */
@@ -58,6 +64,13 @@ export function isFailoverableError(err: unknown): boolean {
 export function isKeyAuthError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
   return /invalid_api_key|authentication|incorrect.*api.*key|401|403/i.test(msg);
+}
+
+/** 判断错误是否是主动中止(abortSignal 触发)。中止不重试 key、不转移路由,用量记 interrupted。 */
+export function isAbortError(err: unknown): boolean {
+  if (err instanceof Error && err.name === "AbortError") return true;
+  const msg = err instanceof Error ? err.message : String(err);
+  return /this operation was aborted|aborted/i.test(msg);
 }
 
 /**
@@ -91,6 +104,8 @@ export async function* streamChat(
   // 首 token 时刻(TTFT)。用 mutable 对象传给 streamWithRoute,使其能在收到首个
   // text-delta / reasoning-delta 时回写;finally 据此计算 firstTokenLatencyMs。
   const timing: { firstTokenAt?: number } = {};
+  // 客户端中止标记:命中则跳过故障转移、不发 error 帧,finally 记 interrupted。
+  let aborted = false;
 
   // 活跃流式连接计数(metrics)。惰性加载,metrics 不可用时降级为 no-op。
   let releaseStream: () => void = () => {};
@@ -141,7 +156,7 @@ export async function* streamChat(
       for (let k = 0; k < keySeq.length; k++) {
         const tryKey = keySeq[k].key;
         try {
-          for await (const ev of streamWithRoute(route, request, tryKey, timing, opts.cacheKey)) {
+          for await (const ev of streamWithRoute(route, request, tryKey, timing, opts.cacheKey, opts.abortSignal)) {
             yield ev;
             if (ev.type === "finish") finalUsage = ev.usage;
           }
@@ -152,6 +167,11 @@ export async function* streamChat(
           break; // 正常完成
         } catch (err) {
           lastError = err;
+          // 客户端中止:不重试 key、不转移路由,直接结束(用量记 interrupted)。
+          if (isAbortError(err)) {
+            aborted = true;
+            break;
+          }
           // 认证/key 类错误:还有备选 key → 换 key 重试(不跨路由)。
           const hasMoreKeys = k < keySeq.length - 1;
           if (isKeyAuthError(err) && hasMoreKeys) {
@@ -165,7 +185,7 @@ export async function* streamChat(
           break;
         }
       }
-      if (succeeded || routeDone) break;
+      if (succeeded || routeDone || aborted) break;
 
       // 路由级故障转移。可转移错误(连接/5xx/限流)→ 上报熔断器,尝试下一条。
       if (i === routes.length - 1 || !isFailoverableError(lastError)) break;
@@ -176,7 +196,7 @@ export async function* streamChat(
       );
     }
 
-    if (!succeeded) {
+    if (!succeeded && !aborted) {
       const errMsg = lastError instanceof Error ? lastError.message : "生成失败";
       yield { type: "error", error: errMsg, code: "generation_failed" };
     }
@@ -185,16 +205,16 @@ export async function* streamChat(
     // 首 token 延迟(TTFT):仅有首 token 产出时才有值;路由解析失败 / 全路由失败 / 未产出首 token → undefined。
     const firstTokenLatencyMs =
       timing.firstTokenAt !== undefined ? timing.firstTokenAt - startedAt : undefined;
-    // 失败时的错误文案/分类(成功路径不传错误字段)。
-    const failedErrorCode = succeeded ? undefined : "generation_failed";
-    const failedErrMsg = succeeded
+    // 失败时的错误文案/分类(成功 / 中止路径不传错误字段)。
+    const failedErrorCode = succeeded || aborted ? undefined : "generation_failed";
+    const failedErrMsg = succeeded || aborted
       ? undefined
       : lastError instanceof Error
         ? lastError.message
         : lastError
           ? String(lastError)
           : undefined;
-    // try/finally 兜底:无论成功/失败/中断,都记录一条用量。
+    // try/finally 兜底:无论成功/失败/中断,都记录一条用量(中止记 interrupted,不计 generation_failed)。
     await logUsage({
       ctx,
       runId,
@@ -202,7 +222,7 @@ export async function* streamChat(
       providerRef: usedRoute ? `${usedRoute.source}:${usedRoute.provider.id}` : undefined,
       usage: finalUsage,
       latencyMs: Date.now() - startedAt,
-      status: succeeded ? "success" : "failed",
+      status: succeeded ? "success" : aborted ? "interrupted" : "failed",
       errorCode: failedErrorCode,
       errorMessage: failedErrMsg,
       errorPhase: failedErrorCode
@@ -258,6 +278,8 @@ async function* streamWithRoute(
   timing: { firstTokenAt?: number },
   /** 会话级 cache key(chat=conversationId / 网关=apiKeyId);缺省不注入缓存控制。 */
   cacheKey?: string,
+  /** 中止信号:透传给 streamText,客户端断开时中止上游 fetch,避免写已关闭 socket。 */
+  abortSignal?: AbortSignal,
 ): AsyncGenerator<StreamEvent, void, unknown> {
   const reasoning = request.reasoning ?? getDefaultReasoningLevel(route.capabilities);
   const model = buildLanguageModelWithKey(route, apiKey, cacheKey, reasoning); // 失败则抛出,交由上层故障转移
@@ -299,6 +321,8 @@ async function* streamWithRoute(
     } as never,
     // P1-A:工具(MCP)透传给上游模型。tools 格式已是 OpenAI function-calling 兼容。
     tools: request.tools as unknown as Parameters<typeof streamText>[0]["tools"],
+    // 客户端断开时中止上游 fetch,避免继续写已关闭 socket → uncaughtException。
+    abortSignal,
   });
 
   // 用 fullStream 捕获 tool-call 增量(若 tools 存在),否则纯文本。
@@ -545,6 +569,7 @@ export async function* streamChatWithTools(
       runId: opts.runId,
       request: { ...opts.request, messages, tools },
       modelId: opts.modelId,
+      abortSignal: opts.abortSignal,
     })) {
       if (ev.type === "tool-call") {
         pendingToolCalls.push({

@@ -20,7 +20,15 @@ function buildCache(): Cache {
 
   if (redisUrl) {
     // 顶层 Redis(命名空间隔离),兜底内存 —— 写扇出,读先 Redis 后内存。
-    stores.push(new Keyv({ store: new KeyvRedis(redisUrl), namespace: "nekusora" }));
+    const redisStore = new KeyvRedis(redisUrl);
+    // ⚠️ @keyv/redis 内部 createClient 未挂 'error' listener:Redis socket 中途断开时
+    // 'error' 事件无 listener 会冒泡成 uncaughtException(SocketClosedUnexpectedlyError),
+    // 反复冲击 dev server 致卡死。补上 listener 降级为 warn;自动重连由 @keyv/redis
+    // 默认 reconnectStrategy 负责。
+    redisStore.client.on("error", (err) => {
+      console.warn("[cache] redis socket error(已降级,自动重连中):", err.message);
+    });
+    stores.push(new Keyv({ store: redisStore, namespace: "nekusora" }));
   }
   // 内存 store 总是存在(无论是否有 Redis,都作为最近的热缓存)。
   stores.push(new Keyv({ namespace: "nekusora:mem" }));

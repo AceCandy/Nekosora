@@ -204,8 +204,27 @@ export async function POST(req: NextRequest) {
   // 提前生成 assistant 消息 publicId:在流首帧回传给前端,使生成期间即可显示操作按钮;
   // finally 落库时复用同一标识。
   const assistantPublicId = isContinue ? body.continueFromPublicId! : crypto.randomUUID();
+  // 客户端断开(刷新 / 关页 / HMR / req.signal abort)→ 中止上游生成,避免继续写已关闭 socket
+  // 触发 Socket closed unexpectedly → uncaughtException 反复冲击 dev server。req.signal 在部分场景
+  // 不可靠,由 ReadableStream.cancel() 兜底,二者都触发同一个 AbortController。
+  const abortCtl = new AbortController();
+  const onRequestAbort = () => abortCtl.abort();
+  if (req.signal.aborted) {
+    abortCtl.abort();
+  } else {
+    req.signal.addEventListener("abort", onRequestAbort, { once: true });
+  }
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
+      // 客户端断开后 controller 处于已关闭态:统一经 safeEnqueue 写入,避免向已关闭流 enqueue 抛错。
+      const safeEnqueue = (chunk: Uint8Array) => {
+        if (abortCtl.signal.aborted) return;
+        try {
+          controller.enqueue(chunk);
+        } catch {
+          /* controller 已随客户端断开关闭,丢弃 */
+        }
+      };
       let assistantText = "";
       let assistantReasoning = "";
       let finished = false; // 正常收到 finish 事件才判 success,否则 interrupted
@@ -249,8 +268,8 @@ export async function POST(req: NextRequest) {
         const mcpServers = await resolveMcpServers(ctx).catch(() => []);
         const hasTools = mcpServers.some((sv) => sv.tools.length > 0);
         const gen = hasTools
-          ? streamChatWithTools({ ctx, request: irRequest, mcpServers, cacheKey: body.conversationId, modelId: body.modelId })
-          : streamChat({ ctx, request: irRequest, cacheKey: body.conversationId, modelId: body.modelId });
+          ? streamChatWithTools({ ctx, request: irRequest, mcpServers, cacheKey: body.conversationId, modelId: body.modelId, abortSignal: abortCtl.signal })
+          : streamChat({ ctx, request: irRequest, cacheKey: body.conversationId, modelId: body.modelId, abortSignal: abortCtl.signal });
         for await (const ev of gen) {
           if (ev.type === "text-delta") {
             assistantText += ev.text;
@@ -271,9 +290,12 @@ export async function POST(req: NextRequest) {
         }
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
       } catch (err) {
-        controller.enqueue(
-          encoder.encode(`data: ${JSON.stringify({ type: "error", error: err instanceof Error ? err.message : "内部错误" })}\n\n`),
-        );
+        // 客户端断开引发的中止不发 error 帧:客户端已不接收,且向已关闭流 enqueue 会抛。
+        if (!abortCtl.signal.aborted) {
+          safeEnqueue(
+            encoder.encode(`data: ${JSON.stringify({ type: "error", error: err instanceof Error ? err.message : "内部错误" })}\n\n`),
+          );
+        }
       } finally {
         if (isContinue && continueAssistantInternalId) {
           // 续写:update 既有 assistant 行,prefix + 新增内容
@@ -359,7 +381,7 @@ export async function POST(req: NextRequest) {
           // 由前端 router.refresh 刷新会话列表。
           try {
             await maybeGenerateTitle(user.id, body.conversationId, userContent, body.model, (title) => {
-              controller.enqueue(
+              safeEnqueue(
                 encoder.encode(
                   `data: ${JSON.stringify({ type: "title_updated", title, conversationId: body.conversationId })}\n\n`,
                 ),
@@ -369,8 +391,17 @@ export async function POST(req: NextRequest) {
             /* 标题生成失败不阻断主流程 */
           }
         }
-        controller.close();
+        req.signal.removeEventListener("abort", onRequestAbort);
+        try {
+          controller.close();
+        } catch {
+          /* 客户端断开已取消流,忽略重复关闭 */
+        }
       }
+    },
+    // 客户端断开时触发:中止上游生成(req.signal 在部分场景不可靠,cancel 兜底)。
+    cancel() {
+      abortCtl.abort();
     },
   });
 

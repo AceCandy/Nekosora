@@ -356,6 +356,11 @@ function MarkdownImpl({ content, isStreaming, renderer = "streamdown", className
   const streamdown = (
     <Streamdown
       mode={isStreaming ? "streaming" : "static"}
+      // 流式启用逐字淡入 + 末尾光标(层2):配合 store 合批(每帧 content 只变一次),
+      // streamdown 对每帧增量逐字 fadeIn,大块/同步到达也呈「流式流出」而非瞬现。
+      // sep/animation 为初值,具体 stagger/duration 手感待实测调。
+      animated={isStreaming ? { animation: "fadeIn", sep: "char", stagger: 30 } : false}
+      caret={isStreaming ? "block" : undefined}
       allowedTags={ALLOWED_HTML_TAGS}
       components={STREAMDOWN_COMPONENTS}
       controls={MARKDOWN_CONTROLS}

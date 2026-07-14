@@ -86,6 +86,68 @@ function patchRuntime(
   return { runtimes: { ...state.runtimes, [key]: patch(current) } };
 }
 
+/** 合批的增量字段:正文 / 思考。 */
+type DeltaField = "content" | "reasoning";
+interface PendingDelta {
+  key: string;
+  idx: number;
+  field: DeltaField;
+  text: string;
+}
+
+/**
+ * 流式 delta 合批缓冲(层1):逐 token 的 delta 先累积于此,rAF 每帧最多 flush 一次,
+ * 避免每个 token 都 [...messages] 整组替换 + set 引发的高频重渲染卡顿。
+ * 按 `${key}:${idx}:${field}` 聚合,天然支持多会话并行流式。
+ */
+const deltaBuffer = new Map<string, PendingDelta>();
+let deltaFlushRaf = 0;
+
+/** 每帧最多一次:把所有积压增量按会话合并,单次 setState 写回各 runtime。 */
+function flushDeltas() {
+  deltaFlushRaf = 0;
+  if (deltaBuffer.size === 0) return;
+  const entries = Array.from(deltaBuffer.values());
+  deltaBuffer.clear();
+  useChatStreamStore.setState((s) => {
+    let runtimes = s.runtimes;
+    let changed = false;
+    for (const d of entries) {
+      const rt = runtimes[d.key];
+      if (!rt || d.idx < 0 || d.idx >= rt.messages.length) continue;
+      const msgs = [...rt.messages];
+      const cur = msgs[d.idx];
+      msgs[d.idx] =
+        d.field === "content"
+          ? { ...cur, content: (cur.content ?? "") + d.text }
+          : { ...cur, reasoning: (cur.reasoning ?? "") + d.text };
+      runtimes = { ...runtimes, [d.key]: { ...rt, messages: msgs } };
+      changed = true;
+    }
+    return changed ? { runtimes } : s;
+  });
+}
+
+/** 累积一条增量并调度下一帧 flush;同帧内多次调用只累积不 set。 */
+function enqueueDelta(key: string, idx: number, field: DeltaField, text: string) {
+  if (!text) return;
+  const bk = `${key}:${idx}:${field}`;
+  const ex = deltaBuffer.get(bk);
+  if (ex) ex.text += text;
+  else deltaBuffer.set(bk, { key, idx, field, text });
+  if (deltaFlushRaf) return;
+  deltaFlushRaf = requestAnimationFrame(flushDeltas);
+}
+
+/** 同步强制 flush:流式结束/中断前调用,避免最后一帧积压丢失。 */
+function flushDeltasNow() {
+  if (deltaFlushRaf) {
+    cancelAnimationFrame(deltaFlushRaf);
+    deltaFlushRaf = 0;
+  }
+  flushDeltas();
+}
+
 export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
   runtimes: {},
   activeConversationId: null,
@@ -135,21 +197,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
     const convId = key === NEW_CONVERSATION_KEY ? null : key;
     let newConvId: string | null = null;
 
-    // 局部消息更新闭包,绑定到动态键(新建会话时键会迁移,SSE 期间统一用真实会话 id)
-    const appendToMessageAt = (k: string, idx: number, t: string) =>
-      set((s) => patchRuntime(s, k, (r) => {
-        if (idx < 0 || idx >= r.messages.length) return r;
-        const copy = [...r.messages];
-        copy[idx] = { ...copy[idx], content: (copy[idx].content ?? "") + t };
-        return { ...r, messages: copy };
-      }));
-    const appendReasoningAt = (k: string, idx: number, t: string) =>
-      set((s) => patchRuntime(s, k, (r) => {
-        if (idx < 0 || idx >= r.messages.length) return r;
-        const copy = [...r.messages];
-        copy[idx] = { ...copy[idx], reasoning: (copy[idx].reasoning ?? "") + t };
-        return { ...r, messages: copy };
-      }));
+    // 正文/思考增量走合批(enqueueDelta),每帧最多落库一次;其余为低频直接 set。
     const setMessageContentAt = (k: string, idx: number, content: string) =>
       set((s) => patchRuntime(s, k, (r) => {
         if (idx < 0 || idx >= r.messages.length) return r;
@@ -260,8 +308,8 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
 
       const activeKey = resolvedConvId!;
       await consumeChatSSE(res.body, {
-        onDelta: (t) => appendToMessageAt(activeKey, assistantIdx, t),
-        onReasoning: (t) => appendReasoningAt(activeKey, assistantIdx, t),
+        onDelta: (t) => enqueueDelta(activeKey, assistantIdx, "content", t),
+        onReasoning: (t) => enqueueDelta(activeKey, assistantIdx, "reasoning", t),
         onToolCall: (name, args) => addToolCallAt(activeKey, assistantIdx, { toolName: name, args, status: "calling" }),
         onToolResult: (name, isError) => finishToolCallAt(activeKey, assistantIdx, name, isError),
         onSearchResult: (results) => setSearchResultsAt(activeKey, assistantIdx, results),
@@ -321,6 +369,8 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
       }
     } finally {
       const finalKey = convId ?? newConvId ?? NEW_CONVERSATION_KEY;
+      // 流式结束前同步 flush 残留 delta,避免最后一帧积压丢失,再置 streaming:false。
+      flushDeltasNow();
       set((s) => patchRuntime(s, finalKey, (r) => ({ ...r, streaming: false, abortController: null })));
     }
   },
@@ -362,18 +412,8 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
       if (!res.ok || !res.body) throw new Error("请求失败");
 
       await consumeChatSSE(res.body, {
-        onDelta: (t) => set((s) => patchRuntime(s, key, (r) => {
-          if (assistantIdx < 0 || assistantIdx >= r.messages.length) return r;
-          const copy = [...r.messages];
-          copy[assistantIdx] = { ...copy[assistantIdx], content: (copy[assistantIdx].content ?? "") + t };
-          return { ...r, messages: copy };
-        })),
-        onReasoning: (t) => set((s) => patchRuntime(s, key, (r) => {
-          if (assistantIdx < 0 || assistantIdx >= r.messages.length) return r;
-          const copy = [...r.messages];
-          copy[assistantIdx] = { ...copy[assistantIdx], reasoning: (copy[assistantIdx].reasoning ?? "") + t };
-          return { ...r, messages: copy };
-        })),
+        onDelta: (t) => enqueueDelta(key, assistantIdx, "content", t),
+        onReasoning: (t) => enqueueDelta(key, assistantIdx, "reasoning", t),
         // 回填后端真实 publicId,覆盖 retryFromMessage 生成的占位 UUID;
         // 否则生成结束后 refreshVersionInfo 拿占位 id 查不到兄弟,版本切换器无法显示。
         onAssistantMessage: (publicId) => set((s) => patchRuntime(s, key, (r) => {
@@ -387,6 +427,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
       const { content } = handleStreamError(err, "网络错误");
       if (!content.includes("[错误]")) console.error("regenerate failed:", err);
     } finally {
+      flushDeltasNow();
       set((s) => patchRuntime(s, key, (r) => ({ ...r, streaming: false, abortController: null })));
     }
   },
@@ -431,23 +472,14 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
       if (!res.ok || !res.body) throw new Error("请求失败");
 
       await consumeChatSSE(res.body, {
-        onDelta: (t) => set((s) => patchRuntime(s, key, (r) => {
-          if (assistantIdx < 0 || assistantIdx >= r.messages.length) return r;
-          const copy = [...r.messages];
-          copy[assistantIdx] = { ...copy[assistantIdx], content: (copy[assistantIdx].content ?? "") + t };
-          return { ...r, messages: copy };
-        })),
-        onReasoning: (t) => set((s) => patchRuntime(s, key, (r) => {
-          if (assistantIdx < 0 || assistantIdx >= r.messages.length) return r;
-          const copy = [...r.messages];
-          copy[assistantIdx] = { ...copy[assistantIdx], reasoning: (copy[assistantIdx].reasoning ?? "") + t };
-          return { ...r, messages: copy };
-        })),
+        onDelta: (t) => enqueueDelta(key, assistantIdx, "content", t),
+        onReasoning: (t) => enqueueDelta(key, assistantIdx, "reasoning", t),
       });
     } catch (err) {
       const { content } = handleStreamError(err, "网络错误");
       if (!content.includes("[错误]")) console.error("editAndResend failed:", err);
     } finally {
+      flushDeltasNow();
       set((s) => patchRuntime(s, key, (r) => ({ ...r, streaming: false, abortController: null })));
     }
   },
@@ -494,18 +526,9 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
 
       // 续写:delta 追加到既有 assistant 消息内容末尾(不清空原内容)
       await consumeChatSSE(res.body, {
-        onDelta: (t) => set((s) => patchRuntime(s, key, (r) => {
-          if (assistantIdx >= r.messages.length || r.messages[assistantIdx].publicId !== assistantPublicId) return r;
-          const copy = [...r.messages];
-          copy[assistantIdx] = { ...copy[assistantIdx], content: (copy[assistantIdx].content ?? "") + t };
-          return { ...r, messages: copy };
-        })),
-        onReasoning: (t) => set((s) => patchRuntime(s, key, (r) => {
-          if (assistantIdx >= r.messages.length || r.messages[assistantIdx].publicId !== assistantPublicId) return r;
-          const copy = [...r.messages];
-          copy[assistantIdx] = { ...copy[assistantIdx], reasoning: (copy[assistantIdx].reasoning ?? "") + t };
-          return { ...r, messages: copy };
-        })),
+        // 续写增量同样走合批:流式期间该 idx 消息 publicId 稳定(switchVersion 被 streaming 阻止),可省 publicId 校验。
+        onDelta: (t) => enqueueDelta(key, assistantIdx, "content", t),
+        onReasoning: (t) => enqueueDelta(key, assistantIdx, "reasoning", t),
       });
       // 续写完整结束:把该 assistant 从 interrupted 转为 success,避免对已补全内容再次续写
       set((s) => patchRuntime(s, key, (r) => ({
@@ -518,6 +541,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
       const { content } = handleStreamError(err, "网络错误");
       if (!content.includes("[错误]")) console.error("continueGeneration failed:", err);
     } finally {
+      flushDeltasNow();
       set((s) => patchRuntime(s, key, (r) => ({ ...r, streaming: false, abortController: null })));
     }
   },

@@ -21,10 +21,31 @@ export function installGlobalErrorGuards(): void {
     return /socket closed unexpectedly|other side closed|UND_ERR_SOCKET|ECONNRESET|ETIMEDOUT|fetch failed/i.test(msg);
   };
 
+  // 把异常的 constructor / code / stack / cause 链打成多行,定位 "Socket closed unexpectedly"
+  // 到底来自哪类对象(Node 内置 undici 通常 code=UND_ERR_SOCKET;AI SDK wrap 后看 cause 链)。
+  // 默认 console.warn(label, err) 在这类 err 上常只显示 [Error: msg] 不带 stack,显式取字段规避。
+  const dumpError = (label: string, err: unknown): void => {
+    if (err instanceof Error) {
+      const e = err as Error & { code?: unknown; cause?: unknown };
+      const parts = [`${label} ${e.constructor.name}: ${e.message}`, `  code=${String(e.code ?? "(none)")}`];
+      if (e.stack) parts.push(`  stack=\n${e.stack}`);
+      let cause = e.cause;
+      for (let i = 0; cause && i < 3; i++) {
+        const c = cause as Error & { code?: unknown; cause?: unknown };
+        parts.push(
+          `  cause[${i}]=${c?.constructor?.name ?? typeof cause}: ${c instanceof Error ? c.message : String(cause)} code=${String(c?.code ?? "(none)")}`,
+        );
+        cause = c?.cause;
+      }
+      console.warn(parts.join("\n"));
+    } else {
+      console.warn(`${label} non-Error(${typeof err}):`, err);
+    }
+  };
+
   process.on("unhandledRejection", (reason) => {
     if (isSocketNoise(reason)) {
-      // 打印完整对象(含 stack),首次复现时可据此确认是否来自 AI SDK 内部派生 promise。
-      console.warn("[兜底] socket 类未捕获 rejection 已降级:", reason);
+      dumpError("[兜底][unhandledRejection] socket 噪声降级:", reason);
       return;
     }
     console.error("[unhandledRejection]", reason);
@@ -32,7 +53,7 @@ export function installGlobalErrorGuards(): void {
 
   process.on("uncaughtException", (err) => {
     if (isSocketNoise(err)) {
-      console.warn("[兜底] socket 类未捕获异常已降级:", err);
+      dumpError("[兜底][uncaughtException] socket 噪声降级:", err);
       return;
     }
     console.error("[uncaughtException]", err);

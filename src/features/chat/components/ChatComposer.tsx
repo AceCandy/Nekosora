@@ -120,7 +120,7 @@ export default function ChatComposer({
     uploadAttachments: uploadPending,
     onConversationCreated: setActiveConvId,
   });
-  const { scrollRef, endRef: messagesEndRef, isNearBottom, ready, onScroll, scrollToBottom, forceFollow } = useChatScrollController(runtime.messages);
+  const { scrollRef, endRef: messagesEndRef, isNearBottom, ready, onScroll, scrollToBottom, pinToMessageTop } = useChatScrollController(runtime.messages, runtime.streaming);
 
   // 输入文本 + 图片附件的 token 估算(图片固定 255/张);非图片文件由后端解析,前端不计入
   const inputTokens = useMemo(() => {
@@ -147,10 +147,11 @@ export default function ChatComposer({
   }, [runtime.streaming]);
 
   const handleSend = () => {
+    const userMsgIdx = runtime.messages.length; // 发送前:user 消息将落入的 index
+    // prompt-pin:先标记待 pin(同步,须在 send 前),send 触发 messages 变化后由跟随 effect 在 DOM 更新后定位到视口中部偏上。
+    pinToMessageTop(userMsgIdx);
     runtime.send(input, modelName, model, selectedCardIds, webSearch, selectedKbIds, { outputModeId, renderStyleId, reasoning });
     setInput("");
-    // 用户主动发送:强制滚到底,确保自己的发言可见
-    requestAnimationFrame(() => forceFollow());
   };
 
   // 空状态示例问题:填入输入框,用户可编辑后发送(不自动发送,保留修改空间)
@@ -164,8 +165,9 @@ export default function ChatComposer({
   };
   // 选中文本「追问」:以选中文本为新问题直接发送(继续当前会话,不走分支)
   const handleSelectionAsk = (text: string) => {
+    const userMsgIdx = runtime.messages.length;
+    pinToMessageTop(userMsgIdx);
     runtime.send(text, modelName, model, selectedCardIds, webSearch, selectedKbIds, { outputModeId, renderStyleId, reasoning });
-    requestAnimationFrame(() => forceFollow());
   };
 
   // 模型参数(temperature/topP/maxTokens):会话级持久化,null 表示用模型默认
