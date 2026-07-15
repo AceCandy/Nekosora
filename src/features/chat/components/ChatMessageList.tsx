@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { useTranslations } from "next-intl";
-import { MessageScroller } from "@shadcn/react/message-scroller";
+import { MessageScroller, useMessageScroller } from "@shadcn/react/message-scroller";
 import { Sparkles, ChevronDown, Copy, Reply, MessagesSquare, Volume2, Square } from "lucide-react";
 import { clsx } from "clsx";
 import { ChatMessageItem } from "@/features/chat/components/ChatMessageItem";
@@ -43,6 +43,79 @@ interface ChatMessageListProps {
 /** 划词朗读使用的固定 id:与消息朗读互斥,同一时刻只朗读一段。 */
 const SELECTION_SPEECH_ID = "selection";
 
+/** 锚定 user 消息到中上部时的顶部留白,与 message-scroller 的 scrollPreviousItemPeek 默认值对齐。 */
+const ANCHOR_SCROLL_MARGIN = 64;
+
+/**
+ * 锚定信号消费者:须渲染在 MessageScroller.Provider 内。target 形如 `msg-{i}#{nonce}`。
+ * - 检测到该轮 assistant 被 regenerate 清空为空占位后,锚定 user 到中上部(align:start + 64px 留白)。
+ * - 一条独立的「到底跟随」规则:user 钉中上部后,监听其下方 assistant 流式增长,一旦撑满 user
+ *   下方可见空间(即"到底"),转一次贴底跟随(scrollToEnd → following),之后由原语 autoScroll
+ *   自动跟随后续流式输出。补齐 regenerate 原地替换无法走原语新增锚定路径的缺口。
+ * target 带 nonce,保证同一轮反复重新生成也能重新触发。所有滚动都走原语方法,无 effect 内 setState。
+ */
+function ScrollAnchor({
+  target,
+  messages,
+  streaming,
+  viewportRef,
+}: {
+  target: string | null;
+  messages: ChatMessage[];
+  streaming: boolean;
+  viewportRef: RefObject<HTMLDivElement | null>;
+}) {
+  const { scrollToMessage, scrollToEnd } = useMessageScroller();
+  const anchoredRef = useRef(false);
+  const switchedRef = useRef(false);
+  const msgId = target?.split("#")[0] ?? null;
+
+  // target 变化(新一轮重新生成)时重置一次性标记
+  useEffect(() => {
+    anchoredRef.current = false;
+    switchedRef.current = false;
+  }, [target]);
+
+  // 检测目标 assistant 被清空为空占位后,锚定 user 到中上部
+  useEffect(() => {
+    if (!msgId || anchoredRef.current) return;
+    const uIdx = Number(msgId.slice(4));
+    const next = messages[uIdx + 1];
+    if (next?.role === "assistant" && !next.content && !next.reasoning) {
+      scrollToMessage(msgId, { align: "start", behavior: "auto", scrollMargin: ANCHOR_SCROLL_MARGIN });
+      anchoredRef.current = true;
+    }
+  }, [msgId, messages, scrollToMessage]);
+
+  // 到底跟随:user 钉中上部(anchoredRef)后,下方 assistant 流式增长撑满可见空间则转贴底跟随
+  useEffect(() => {
+    if (!msgId || !streaming) return;
+    const asstId = `msg-${Number(msgId.slice(4)) + 1}`;
+    const check = () => {
+      // 未锚定前跳过,避免 assistant 清空前旧内容的高度误触发贴底
+      if (switchedRef.current || !anchoredRef.current) return;
+      const userEl = document.getElementById(msgId);
+      const asstEl = document.getElementById(asstId);
+      const vp = viewportRef.current;
+      if (!userEl || !asstEl || !vp) return;
+      const userBottom = userEl.getBoundingClientRect().bottom;
+      const asstHeight = asstEl.getBoundingClientRect().height;
+      // assistant 高度填满 user 下方的可见空间即视为"到底",转贴底跟随
+      if (asstHeight >= vp.clientHeight - userBottom) {
+        scrollToEnd({ behavior: "auto" });
+        switchedRef.current = true;
+      }
+    };
+    const ro = new ResizeObserver(() => check());
+    const asstEl = document.getElementById(asstId);
+    if (asstEl) ro.observe(asstEl);
+    check();
+    return () => ro.disconnect();
+  }, [msgId, streaming, viewportRef, scrollToEnd]);
+
+  return null;
+}
+
 /**
  * 消息列表段 —— 基于 @shadcn/react/message-scroller 原语的滚动容器 + 空状态 + 消息渲染 + 对话大纲 + 回到最新。
  *
@@ -77,6 +150,19 @@ export function ChatMessageList({
   const [selection, setSelection] = useState<{ text: string; top: number; left: number } | null>(null);
   // 待确认删除的消息 publicId(user 消息):确认后连同其 AI 回复及后续整段子树一并删除
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  // 重新生成是原地替换 assistant,不触发 scrollAnchor;记下目标 user 的 domId(带 nonce),交给
+  // ScrollAnchor(Provider 内)在该轮 assistant 被清空后锚定到中上部,并接管独立的「到底跟随」。
+  const [regenTarget, setRegenTarget] = useState<string | null>(null);
+  const handleRegenerate = (publicId: string, model: string) => {
+    // 被重新生成的是 assistant,向前找最近一条 user 消息,标记为锚定目标(nonce 保证同轮反复触发)
+    const aIdx = messages.findIndex((m) => m.publicId === publicId);
+    let uIdx = -1;
+    for (let i = aIdx; i >= 0; i--) {
+      if (messages[i].role === "user") { uIdx = i; break; }
+    }
+    if (uIdx >= 0) setRegenTarget(`msg-${uIdx}#${Date.now()}`);
+    onRegenerate?.(publicId, model);
+  };
   // 视口 ref:供选区检测判断选区是否落在消息区内
   const viewportRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -129,7 +215,7 @@ export function ChatMessageList({
                       model={model}
                       renderStyleClass={renderStyleClass}
                       renderStyleRenderer={renderStyleRenderer}
-                      onRegenerate={onRegenerate}
+                      onRegenerate={handleRegenerate}
                       onEdit={onEdit}
                       onSwitchVersion={onSwitchVersion}
                       onOpenArtifact={onOpenArtifact}
@@ -148,6 +234,9 @@ export function ChatMessageList({
         {/* 对话大纲:贴消息区右边缘(滚动条左侧),hover 整列弹出完整轮次列表。
             高亮/跳转由其内部 useMessageScrollerVisibility/useMessageScroller 承载(在 Provider 内)。 */}
         <ChatOutline messages={messages} streaming={streaming} />
+
+        {/* 重新生成的锚定信号消费者(须在 Provider 内) */}
+        <ScrollAnchor target={regenTarget} messages={messages} streaming={streaming} viewportRef={viewportRef} />
 
         {/* 删除二次确认:删除用户消息会连带其 AI 回复及之后整段子树 */}
         <ConfirmDialog
