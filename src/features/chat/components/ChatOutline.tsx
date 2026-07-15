@@ -2,11 +2,12 @@
 
 import { useMemo, useRef, useState } from "react";
 import { clsx } from "clsx";
+import { useMessageScroller, useMessageScrollerVisibility } from "@shadcn/react/message-scroller";
 import type { ChatMessage } from "@/features/chat/model/types";
 
 /** 一轮对话:user 消息及其在扁平列表中的下标。 */
 interface OutlineTurn {
-  /** 该轮 user 消息在扁平 messages 数组中的下标,供虚拟列表 scrollToIndex 跳转。 */
+  /** 该轮 user 消息在扁平 messages 数组中的下标,供 scrollToMessage 跳转。 */
   userIndex: number;
   /** 用户原话,用于预览。 */
   preview: string;
@@ -28,36 +29,43 @@ interface ChatOutlineProps {
   messages: ChatMessage[];
   /** 是否正在流式生成(用于高亮最后一轮)。 */
   streaming: boolean;
-  /** 当前视口顶部对应的 msg index,-1 表示未知;用于高亮「当前轮次」。 */
-  activeMessageIndex: number;
-  /** 点击某轮时上报其 userIndex,由持有虚拟列表的父组件 scrollToIndex 跳转。 */
-  onJump?: (userIndex: number) => void;
 }
 
 /**
  * 对话大纲:贴滚动区右边缘(滚动条左侧)的一列短横线,排布密集。
  * 鼠标 hover 到整列区域即弹出完整轮次列表(每项显示用户原话),点击列表项跳转到对应消息。
+ *
+ * 高亮当前轮 / 跳转均由 message-scroller 原语承载:本组件须渲染在 MessageScroller.Provider 内。
  */
-export function ChatOutline({ messages, streaming, activeMessageIndex, onJump }: ChatOutlineProps) {
+export function ChatOutline({ messages, streaming }: ChatOutlineProps) {
   const turns = useMemo(() => buildTurns(messages), [messages]);
+  const { currentAnchorId } = useMessageScrollerVisibility();
+  const { scrollToMessage } = useMessageScroller();
   const [hovered, setHovered] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 当前视口顶部 msg 落在哪一轮(向后找最近的 user 消息轮次),-1 表示无定位
+  // currentAnchorId 形如 "msg-N":解析出 msg index,用于高亮当前所在轮次
+  const anchorIndex = (() => {
+    if (!currentAnchorId?.startsWith("msg-")) return -1;
+    const n = Number(currentAnchorId.slice(4));
+    return Number.isFinite(n) ? n : -1;
+  })();
+
+  // 当前锚定 msg 落在哪一轮(向后找最近的 user 消息轮次),-1 表示无定位
   const activeTurnIdx = useMemo(() => {
-    if (activeMessageIndex < 0 || turns.length === 0) return -1;
+    if (anchorIndex < 0 || turns.length === 0) return -1;
     let idx = -1;
     for (let i = 0; i < turns.length; i++) {
-      if (turns[i].userIndex <= activeMessageIndex) idx = i;
+      if (turns[i].userIndex <= anchorIndex) idx = i;
       else break;
     }
     return idx;
-  }, [turns, activeMessageIndex]);
+  }, [turns, anchorIndex]);
 
   if (turns.length === 0) return null;
 
   const handleJump = (userIndex: number) => {
-    onJump?.(userIndex);
+    scrollToMessage(`msg-${userIndex}`, { behavior: "smooth" });
     setHovered(false);
   };
 

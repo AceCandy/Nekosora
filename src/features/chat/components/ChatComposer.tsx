@@ -7,7 +7,6 @@ import { ArtifactPanel, type Artifact } from "@/features/artifacts/ArtifactPanel
 import FilePreviewModal, { type PreviewableFile } from "@/shared/components/file-preview/FilePreviewModal";
 import { useChatRuntime } from "@/features/chat/hooks/useChatRuntime";
 import { useChatAttachments } from "@/features/chat/hooks/useChatAttachments";
-import { useChatScrollController } from "@/features/chat/hooks/useChatScrollController";
 import { ChatMessageList } from "@/features/chat/components/ChatMessageList";
 import { ChatToolbar } from "@/features/chat/components/ChatToolbar";
 import { ChatInputBox } from "@/features/chat/components/ChatInputBox";
@@ -120,8 +119,6 @@ export default function ChatComposer({
     uploadAttachments: uploadPending,
     onConversationCreated: setActiveConvId,
   });
-  const { scrollRef, endRef: messagesEndRef, isNearBottom, ready, onScroll, scrollToBottom, pinToMessageTop } = useChatScrollController(runtime.messages, runtime.streaming);
-
   // 输入文本 + 图片附件的 token 估算(图片固定 255/张);非图片文件由后端解析,前端不计入
   const inputTokens = useMemo(() => {
     const textTokens = estimateTokens(input);
@@ -147,9 +144,7 @@ export default function ChatComposer({
   }, [runtime.streaming]);
 
   const handleSend = () => {
-    const userMsgIdx = runtime.messages.length; // 发送前:user 消息将落入的 index
-    // prompt-pin:先标记待 pin(同步,须在 send 前),send 触发 messages 变化后由跟随 effect 在 DOM 更新后定位到视口中部偏上。
-    pinToMessageTop(userMsgIdx);
+    // 滚动锚定由 message-scroller 的 scrollAnchor(user 消息)自动处理,无需手动 pin。
     runtime.send(input, modelName, model, selectedCardIds, webSearch, selectedKbIds, { outputModeId, renderStyleId, reasoning });
     setInput("");
   };
@@ -165,8 +160,6 @@ export default function ChatComposer({
   };
   // 选中文本「追问」:以选中文本为新问题直接发送(继续当前会话,不走分支)
   const handleSelectionAsk = (text: string) => {
-    const userMsgIdx = runtime.messages.length;
-    pinToMessageTop(userMsgIdx);
     runtime.send(text, modelName, model, selectedCardIds, webSearch, selectedKbIds, { outputModeId, renderStyleId, reasoning });
   };
 
@@ -328,12 +321,6 @@ export default function ChatComposer({
         <ChatMessageList
           messages={runtime.messages}
           streaming={runtime.streaming}
-          scrollRef={scrollRef}
-          messagesEndRef={messagesEndRef}
-          isNearBottom={isNearBottom}
-          ready={ready}
-          onScroll={onScroll}
-          scrollToBottom={scrollToBottom}
           model={model}
           renderStyleClass={activeRenderStyleClass}
           renderStyleRenderer={activeRenderStyleRenderer}

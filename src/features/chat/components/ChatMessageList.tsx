@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useEffect, useState, type RefObject } from "react";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
+import { MessageScroller } from "@shadcn/react/message-scroller";
 import { Sparkles, ChevronDown, Copy, Reply, MessagesSquare, Volume2, Square } from "lucide-react";
 import { clsx } from "clsx";
 import { ChatMessageItem } from "@/features/chat/components/ChatMessageItem";
@@ -17,16 +17,6 @@ import { useMessageSpeech } from "@/features/chat/hooks/useMessageSpeech";
 interface ChatMessageListProps {
   messages: ChatMessage[];
   streaming: boolean;
-  /** 滚动容器 ref（由 useChatScrollController 提供）。 */
-  scrollRef: RefObject<HTMLDivElement | null>;
-  /** 底部锚点 ref（流式时撑高 h-32 作为缓冲与滚动锚）。 */
-  messagesEndRef: RefObject<HTMLDivElement | null>;
-  /** 距底 ≤ 1/3 视口高视为「在最新附近」;回到最新按钮据此显隐。 */
-  isNearBottom: boolean;
-  /** 挂载贴底收敛前为 false(消息区 opacity-0 隐藏测量追赶),收敛后 true 触发淡入显形。 */
-  ready: boolean;
-  onScroll: () => void;
-  scrollToBottom: () => void;
   /** 当前模型名（传给 ChatMessageItem 供 regenerate/edit 使用）。 */
   model: string;
   /** 当前会话选用的输出样式 cssClass（null=默认渲染）。 */
@@ -54,22 +44,17 @@ interface ChatMessageListProps {
 const SELECTION_SPEECH_ID = "selection";
 
 /**
- * 消息列表段 —— 滚动容器 + 空状态 + 消息渲染 + 对话大纲 + 回到底部按钮。
+ * 消息列表段 —— 基于 @shadcn/react/message-scroller 原语的滚动容器 + 空状态 + 消息渲染 + 对话大纲 + 回到最新。
  *
- * 从 ChatComposer 抽出，纯展示：所有状态由父组件（ChatComposer）受控下传。
- * 消息数组语义为「只追加 / 原地替换 / 末尾截断」，故 index 作为 key 在此场景功能正确
- * （publicId 延迟回填，改用 publicId 需 fallback 且无额外收益）。
- * 每条 ChatMessageItem 外包 ErrorBoundary，单条渲染崩溃不影响兄弟消息。
+ * 滚动行为(autoScroll 跟随流式 / scrollAnchor 锚定 user 消息到中上部 / 打开贴底 / 回到最新按钮)
+ * 全部由 message-scroller 原语承载,不再手写控制器、不再虚拟滚动(见 design.md)。
+ * 消息数组语义为「只追加 / 原地替换 / 末尾截断」,index 作为 key 在此场景功能正确
+ * (publicId 延迟回填,改用 publicId 需 fallback 且无额外收益)。
+ * 每条 ChatMessageItem 外包 ErrorBoundary,单条渲染崩溃不影响兄弟消息。
  */
 export function ChatMessageList({
   messages,
   streaming,
-  scrollRef,
-  messagesEndRef,
-  isNearBottom,
-  ready,
-  onScroll,
-  scrollToBottom,
   model,
   renderStyleClass,
   renderStyleRenderer,
@@ -92,6 +77,8 @@ export function ChatMessageList({
   const [selection, setSelection] = useState<{ text: string; top: number; left: number } | null>(null);
   // 待确认删除的消息 publicId(user 消息):确认后连同其 AI 回复及后续整段子树一并删除
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  // 视口 ref:供选区检测判断选区是否落在消息区内
+  const viewportRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const compute = () => {
       const sel = window.getSelection();
@@ -99,200 +86,168 @@ export function ChatMessageList({
       const text = sel.toString().trim();
       if (!text) return setSelection(null);
       const range = sel.getRangeAt(0);
-      if (!scrollRef.current?.contains(range.commonAncestorContainer)) return setSelection(null);
+      if (!viewportRef.current?.contains(range.commonAncestorContainer)) return setSelection(null);
       const rect = range.getBoundingClientRect();
       if (rect.width === 0 && rect.height === 0) return setSelection(null);
       setSelection({ text, top: rect.top, left: rect.left + rect.width / 2 });
     };
     document.addEventListener("mouseup", compute);
     return () => document.removeEventListener("mouseup", compute);
-  }, [scrollRef]);
+  }, []);
   const rawSamples = t.raw("sampleQuestions");
   const samples: string[] = Array.isArray(rawSamples)
     ? rawSamples.filter((s): s is string => typeof s === "string" && s.trim() !== "")
     : [];
 
-  // 虚拟滚动:仅渲染可见消息项 + overscan 缓冲,解决长会话卡顿;measureElement 动态测量每项实际高度。
-  // useChatScrollController 基于 scrollHeight,虚拟化撑高 div 后仍正确,贴底/跟随/平滑滚动逻辑不变。
-  const rowVirtualizer = useVirtualizer({
-    count: messages.length,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: () => 200,
-    overscan: 4,
-  });
-
-  // 当前视口顶部对应的 msg index(首个底边越过 scrollTop 的可见项),供对话大纲高亮「当前轮次」
-  const visItems = rowVirtualizer.getVirtualItems();
-  let activeMessageIndex = -1;
-  if (visItems.length > 0) {
-    const top = scrollRef.current?.scrollTop ?? 0;
-    activeMessageIndex = visItems.find((vi) => vi.start + vi.size >= top)?.index ?? visItems[visItems.length - 1].index;
-  }
-
   return (
-    // 相对外层 relative 容器,让对话大纲/回到最新按钮锚定在消息区(而非含输入框的主区)。
-    // ready(hide-until-settled):贴底未收敛前 opacity-0 隐藏测量追赶,收敛后挂 animate-in 淡入显形。
-    <div className={clsx("relative flex-1 min-h-0", ready ? "animate-in fade-in slide-in-from-bottom-2 duration-200" : "opacity-0")}>
-      <div ref={scrollRef} onScroll={onScroll} className="h-full overflow-y-auto px-6 pt-8 pb-2 md:pt-12 md:pb-3 [overflow-anchor:none]">
-        {messages.length === 0 ? (
-          <div className="max-w-4xl mx-auto">
-            <WelcomeBlock samples={samples} onPickSample={onPickSample} />
-          </div>
-        ) : (
-          <div
-            style={{ height: rowVirtualizer.getTotalSize(), position: "relative", width: "100%" }}
-          >
-            {rowVirtualizer.getVirtualItems().map((vi) => {
-              const m = messages[vi.index];
-              return (
-                <div
-                  key={vi.key}
-                  data-index={vi.index}
-                  ref={rowVirtualizer.measureElement}
-                  className="absolute top-0 left-0 w-full"
-                  style={{ transform: `translateY(${vi.start}px)` }}
-                >
-                  <div className="max-w-4xl mx-auto py-4">
-                    <ErrorBoundary name="message">
-                      <ChatMessageItem
-                        domId={`msg-${vi.index}`}
-                        message={m}
-                        isLast={vi.index === messages.length - 1}
-                        isStreaming={streaming}
-                        model={model}
-                        renderStyleClass={renderStyleClass}
-                        renderStyleRenderer={renderStyleRenderer}
-                        onRegenerate={onRegenerate}
-                        onEdit={onEdit}
-                        onSwitchVersion={onSwitchVersion}
-                        onOpenArtifact={onOpenArtifact}
-                        onRequestDelete={(pid) => setPendingDelete(pid)}
-                        conversationStreaming={streaming}
-                        onContinue={onContinue}
-                        models={models}
-                      />
-                    </ErrorBoundary>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-        {/* 底部锚点(层3 用 scrollTop=scrollHeight 贴底,不再靠此缓冲撑高);底部呼吸留白由 scrollRef 的 py 提供。prompt-pin 阶段的下方留白由用户消息钉顶 + 回复未长自然产生。 */}
-        <div ref={messagesEndRef} className="h-0" />
-      </div>
-
-      {/* 对话大纲:贴消息区右边缘(滚动条左侧),hover 整列弹出完整轮次列表 */}
-      <ChatOutline
-        messages={messages}
-        streaming={streaming}
-        activeMessageIndex={activeMessageIndex}
-        onJump={(idx) => rowVirtualizer.scrollToIndex(idx, { align: "start", behavior: "smooth" })}
-      />
-
-      {/* 删除二次确认:删除用户消息会连带其 AI 回复及之后整段子树 */}
-      <ConfirmDialog
-        open={!!pendingDelete}
-        onClose={() => setPendingDelete(null)}
-        title={t("delete")}
-        message={t("deleteCascadeNotice")}
-        confirmLabel={t("delete")}
-        danger
-        onConfirm={() => {
-          if (pendingDelete) onDelete?.(pendingDelete);
-          setPendingDelete(null);
-        }}
-      />
-
-      {/* 选中文本浮工具栏:复制 / 引用插入输入框 / 追问 */}
-      {selection && (
-        <div
-          className="fixed z-50 flex items-center gap-0.5 rounded-lg border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink px-1 py-0.5 shadow-md animate-in fade-in duration-100"
-          style={{
-            top: Math.max(8, selection.top - 38),
-            left: Math.max(8, Math.min(selection.left - 100, (typeof window !== "undefined" ? window.innerWidth : 9999) - 210)),
-          }}
+    <MessageScroller.Provider autoScroll defaultScrollPosition="end" scrollEdgeThreshold={24}>
+      {/* Root 即消息区外层容器,对话大纲/回到最新按钮锚定其内 */}
+      <MessageScroller.Root className="relative flex-1 min-h-0 animate-in fade-in slide-in-from-bottom-2 duration-200">
+        <MessageScroller.Viewport
+          ref={viewportRef}
+          className="h-full overflow-y-auto px-6 pt-8 pb-2 md:pt-12 md:pb-3 [overflow-anchor:none]"
+          preserveScrollOnPrepend
         >
-          <button
-            type="button"
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={async () => {
-              await copyToClipboard(selection.text);
-              setSelection(null);
-              window.getSelection()?.removeAllRanges();
+          <MessageScroller.Content className="mx-auto w-full max-w-4xl flex flex-col">
+            {messages.length === 0 ? (
+              <WelcomeBlock samples={samples} onPickSample={onPickSample} />
+            ) : (
+              messages.map((m, i) => (
+                // scrollAnchor 标在 user 消息:新轮锚定到该 user 消息(中上部),回复在其下方生长
+                <MessageScroller.Item
+                  key={i}
+                  messageId={`msg-${i}`}
+                  scrollAnchor={m.role === "user"}
+                  className="py-4"
+                >
+                  <ErrorBoundary name="message">
+                    <ChatMessageItem
+                      domId={`msg-${i}`}
+                      message={m}
+                      isLast={i === messages.length - 1}
+                      isStreaming={streaming}
+                      model={model}
+                      renderStyleClass={renderStyleClass}
+                      renderStyleRenderer={renderStyleRenderer}
+                      onRegenerate={onRegenerate}
+                      onEdit={onEdit}
+                      onSwitchVersion={onSwitchVersion}
+                      onOpenArtifact={onOpenArtifact}
+                      onRequestDelete={(pid) => setPendingDelete(pid)}
+                      conversationStreaming={streaming}
+                      onContinue={onContinue}
+                      models={models}
+                    />
+                  </ErrorBoundary>
+                </MessageScroller.Item>
+              ))
+            )}
+          </MessageScroller.Content>
+        </MessageScroller.Viewport>
+
+        {/* 对话大纲:贴消息区右边缘(滚动条左侧),hover 整列弹出完整轮次列表。
+            高亮/跳转由其内部 useMessageScrollerVisibility/useMessageScroller 承载(在 Provider 内)。 */}
+        <ChatOutline messages={messages} streaming={streaming} />
+
+        {/* 删除二次确认:删除用户消息会连带其 AI 回复及之后整段子树 */}
+        <ConfirmDialog
+          open={!!pendingDelete}
+          onClose={() => setPendingDelete(null)}
+          title={t("delete")}
+          message={t("deleteCascadeNotice")}
+          confirmLabel={t("delete")}
+          danger
+          onConfirm={() => {
+            if (pendingDelete) onDelete?.(pendingDelete);
+            setPendingDelete(null);
+          }}
+        />
+
+        {/* 选中文本浮工具栏:复制 / 引用插入输入框 / 追问 */}
+        {selection && (
+          <div
+            className="fixed z-50 flex items-center gap-0.5 rounded-lg border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink px-1 py-0.5 shadow-md animate-in fade-in duration-100"
+            style={{
+              top: Math.max(8, selection.top - 38),
+              left: Math.max(8, Math.min(selection.left - 100, (typeof window !== "undefined" ? window.innerWidth : 9999) - 210)),
             }}
-            className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-semibold text-neutral-500 hover:text-neutral-800 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-900 cursor-pointer"
-            title={t("copy")}
           >
-            <Copy className="w-3 h-3" aria-hidden="true" />{t("copy")}
-          </button>
-          <button
-            type="button"
-            disabled={!ttsSupported}
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => {
-              if (isSelectionSpeaking) {
-                stopSpeak();
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={async () => {
+                await copyToClipboard(selection.text);
                 setSelection(null);
                 window.getSelection()?.removeAllRanges();
-              } else {
-                speak(SELECTION_SPEECH_ID, selection.text);
-              }
-            }}
-            className={clsx(
-              "inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed",
-              isSelectionSpeaking
-                ? "text-sora-blue"
-                : "text-neutral-500 hover:text-neutral-800 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-900",
-            )}
-            title={!ttsSupported ? t("readAloudUnsupported") : isSelectionSpeaking ? t("stopReading") : t("readAloud")}
-          >
-            {isSelectionSpeaking ? (
-              <Square className="w-3 h-3" aria-hidden="true" />
-            ) : (
-              <Volume2 className="w-3 h-3" aria-hidden="true" />
-            )}
-            {isSelectionSpeaking ? t("stopReading") : t("readAloud")}
-          </button>
-          {onQuote && (
-            <button
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => { onQuote(selection.text); setSelection(null); window.getSelection()?.removeAllRanges(); }}
+              }}
               className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-semibold text-neutral-500 hover:text-neutral-800 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-900 cursor-pointer"
-              title={t("quote")}
+              title={t("copy")}
             >
-              <Reply className="w-3 h-3" aria-hidden="true" />{t("quote")}
+              <Copy className="w-3 h-3" aria-hidden="true" />{t("copy")}
             </button>
-          )}
-          {onAsk && (
             <button
               type="button"
+              disabled={!ttsSupported}
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => { onAsk(selection.text); setSelection(null); window.getSelection()?.removeAllRanges(); }}
-              className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-semibold text-sora-blue hover:bg-sora-blue/[0.06] cursor-pointer"
-              title={t("askFollowup")}
+              onClick={() => {
+                if (isSelectionSpeaking) {
+                  stopSpeak();
+                  setSelection(null);
+                  window.getSelection()?.removeAllRanges();
+                } else {
+                  speak(SELECTION_SPEECH_ID, selection.text);
+                }
+              }}
+              className={clsx(
+                "inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed",
+                isSelectionSpeaking
+                  ? "text-sora-blue"
+                  : "text-neutral-500 hover:text-neutral-800 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-900",
+              )}
+              title={!ttsSupported ? t("readAloudUnsupported") : isSelectionSpeaking ? t("stopReading") : t("readAloud")}
             >
-              <MessagesSquare className="w-3 h-3" aria-hidden="true" />{t("askFollowup")}
+              {isSelectionSpeaking ? (
+                <Square className="w-3 h-3" aria-hidden="true" />
+              ) : (
+                <Volume2 className="w-3 h-3" aria-hidden="true" />
+              )}
+              {isSelectionSpeaking ? t("stopReading") : t("readAloud")}
             </button>
-          )}
-        </div>
-      )}
+            {onQuote && (
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => { onQuote(selection.text); setSelection(null); window.getSelection()?.removeAllRanges(); }}
+                className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-semibold text-neutral-500 hover:text-neutral-800 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-900 cursor-pointer"
+                title={t("quote")}
+              >
+                <Reply className="w-3 h-3" aria-hidden="true" />{t("quote")}
+              </button>
+            )}
+            {onAsk && (
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => { onAsk(selection.text); setSelection(null); window.getSelection()?.removeAllRanges(); }}
+                className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-semibold text-sora-blue hover:bg-sora-blue/[0.06] cursor-pointer"
+                title={t("askFollowup")}
+              >
+                <MessagesSquare className="w-3 h-3" aria-hidden="true" />{t("askFollowup")}
+              </button>
+            )}
+          </div>
+        )}
 
-      {/* 跳到最新:上滑超过 1/3 视口高时浮出;在最新附近(≤1/3 屏)隐藏 */}
-      {!isNearBottom && (
-        <button
-          type="button"
-          onClick={scrollToBottom}
-          className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 inline-flex items-center gap-1.5 rounded-full border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink px-3 py-1.5 text-xs font-semibold text-neutral-600 dark:text-neutral-300 shadow-sm hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors duration-150"
-          title={t("scrollToLatest")}
-          aria-label={t("scrollToLatest")}
+        {/* 回到最新:不在底部时浮出(message-scroller Button 据 data-active 控制显隐) */}
+        <MessageScroller.Button
+          direction="end"
+          className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 inline-flex items-center gap-1.5 rounded-full border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink px-3 py-1.5 text-xs font-semibold text-neutral-600 dark:text-neutral-300 shadow-sm hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors duration-150 data-[active=false]:pointer-events-none data-[active=false]:opacity-0 data-[active=true]:opacity-100"
         >
           <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
           <span>{t("scrollToLatest")}</span>
-        </button>
-      )}
-    </div>
+        </MessageScroller.Button>
+      </MessageScroller.Root>
+    </MessageScroller.Provider>
   );
 }
 

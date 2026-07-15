@@ -74,6 +74,9 @@
 - **SSE 解析**:`fetch` + `ReadableStream` reader,帧解析逻辑抽到 `features/chat/model/sse.ts`(`consumeChatSSE` / `handleStreamError`),组件不直接拼帧。
 - **增量更新**:store 内按 conversationId 找到目标消息,对副本 `content += delta` 后整体替换 `runtimes`,配 `AbortController` 支持中断。
 - **事件类型**:`delta`(文本增量)、`finish`(含 usage)、`error`、`rag_search`、`compact`、`trace`。
+- **消息列表滚动用 `@shadcn/react/message-scroller` 原语,不虚拟滚动、不手写控制器**(`features/chat/components/ChatMessageList.tsx`):
+  - chat 消息数有限(几十~几百),普通 `messages.map` 渲染无压力;**不要用 `@tanstack/react-virtual` 虚拟滚动**——其 absolute 子项 + `getTotalSize` 异步测量会破坏 flex 居中 / `scrollHeight` 实时性 / scrollAnchor,引入难调的滚动竞态(曾因此导致「新消息中上部定位」「流式跟随」双双失效)。
+  - 滚动行为全部由原语承载:`<Provider autoScroll>`(流式跟随)、`<Item scrollAnchor={role==="user"}>` + `defaultScrollPosition`(user 消息锚定中上部)、`useMessageScrollerVisibility`(大纲高亮)、`useMessageScroller().scrollToMessage`(大纲跳转)、`<Button>`(回到底部)。业务层**不手写** `scrollTop=scrollHeight` / `scrollBy` 控制器(手写在异步测量下必竞态)。`useMessageScroller*` hooks 须在 `Provider` 内的子组件调用(如大纲),Provider 渲染者自身不能调。
 
 ## Markdown 渲染
 
