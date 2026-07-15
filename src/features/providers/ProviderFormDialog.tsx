@@ -1,10 +1,10 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import type { ProviderProtocol } from "@/db/types";
 import type { FormDataSerializableAction } from "@/features/providers/types";
 import Modal from "@/shared/ui/Modal";
-import KeyBundleEditor, { type EditorRow, type TestKeyAction } from "@/features/providers/KeyBundleEditor";
+import KeyBundleEditor, { type EditorRow, type KeyBundleEditorHandle, type TestKeyAction } from "@/features/providers/KeyBundleEditor";
 import { DEFAULT_HOSTS, resolveModelsUrl } from "@/lib/providers/defaults";
 import Input from "@/shared/ui/Input";
 import Select from "@/shared/ui/Select";
@@ -45,6 +45,8 @@ export default function ProviderFormDialog({
   // 并在切换协议时自动填充默认 baseUrl。
   const [protocol, setProtocol] = useState(initial?.protocol ?? protocols[0]?.value ?? "openai");
   const [baseUrl, setBaseUrl] = useState(initial?.baseUrl ?? "");
+  // 保存前交由 KeyBundleEditor 查重(发现重复则阻止本次提交)。
+  const editorRef = useRef<KeyBundleEditorHandle>(null);
 
   const handleClose = () => {
     onClose();
@@ -81,7 +83,12 @@ export default function ProviderFormDialog({
       <form
         key={formKey}
         action={action}
-        onSubmit={() => {
+        onSubmit={(e) => {
+          // 先做客户端查重:有重复则阻止提交并高亮到重复行,放行后再走原关闭逻辑。
+          if (editorRef.current?.validateDuplicates()) {
+            e.preventDefault();
+            return;
+          }
           setTimeout(handleClose, 0);
         }}
         className="space-y-5"
@@ -154,6 +161,7 @@ export default function ProviderFormDialog({
           <div className="block col-span-2">
             <span className={labelCls}>{t("fieldApiKey")}</span>
             <KeyBundleEditor
+              ref={editorRef}
               initialRows={initial?.keys}
               requireKeys={!isEdit}
               protocol={protocol}
