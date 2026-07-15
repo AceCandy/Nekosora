@@ -25,6 +25,7 @@ export interface PiModel {
 /** model_catalog chat 行的现状(脚本从 DB 读出后传入)。 */
 export interface CatalogRow {
   canonicalModelId: string;
+  name: string;
   aliases: string[];
   capabilities: ModelCapabilities;
   contextWindow: number | null;
@@ -137,9 +138,11 @@ export function sqlLit(s: string): string {
   return `'${s.replace(/'/g, "''")}'`;
 }
 
-/** 生成单条幂等 upsert SQL。capabilities 全量覆盖;ctx/max 仅在 pi 提供时 SET。 */
+/** 生成单条幂等 upsert SQL。INSERT 补全 NOT NULL 列(name/model_type);
+ *  ON CONFLICT 时仅 UPDATE capabilities/ctx/max。 */
 export function buildUpsert(
   canon: string,
+  name: string,
   cap: ModelCapabilities,
   ctx: number | null,
   max: number | null,
@@ -149,8 +152,8 @@ export function buildUpsert(
   if (ctx != null) sets.push(`"context_window" = ${ctx}`);
   if (max != null) sets.push(`"max_output_tokens" = ${max}`);
   return (
-    `INSERT INTO "model_catalog" ("id", "canonical_model_id", "capabilities") ` +
-    `VALUES (gen_random_uuid(), ${sqlLit(canon)}, '${capJson}'::jsonb)\n` +
+    `INSERT INTO "model_catalog" ("id", "canonical_model_id", "name", "model_type", "capabilities") ` +
+    `VALUES (gen_random_uuid(), ${sqlLit(canon)}, ${sqlLit(name)}, 'chat', '${capJson}'::jsonb)\n` +
     `ON CONFLICT ("canonical_model_id") DO UPDATE SET\n  ` +
     sets.join(",\n  ") + ";"
   );

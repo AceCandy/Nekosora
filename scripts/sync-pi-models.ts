@@ -30,6 +30,7 @@ async function main(): Promise<void> {
   const rows = await db.select({
     id: tbl.id,
     canonicalModelId: tbl.canonicalModelId,
+    name: tbl.name,
     aliases: tbl.aliases,
     capabilities: tbl.capabilities,
     contextWindow: tbl.contextWindow,
@@ -57,7 +58,7 @@ async function main(): Promise<void> {
     const ctxCh = ctxNew != null && ctxNew !== row.contextWindow ? `${row.contextWindow} → ${ctxNew}` : null;
     const maxCh = maxNew != null && maxNew !== row.maxOutputTokens ? `${row.maxOutputTokens} → ${maxNew}` : null;
     // 迁移对所有匹配模型全量 upsert(保证新库重放也达目标态,非仅运行库差异)。
-    if (WRITE) stmts.push(buildUpsert(row.canonicalModelId, next, ctxNew, maxNew));
+    if (WRITE) stmts.push(buildUpsert(row.canonicalModelId, row.name, next, ctxNew, maxNew));
     if (capCh.length === 0 && !ctxCh && !maxCh) { unchanged++; continue; }
     const seg = [`• ${row.canonicalModelId} (${m.via})`];
     if (capCh.length) seg.push(`    cap  ${capCh.join("; ")}`);

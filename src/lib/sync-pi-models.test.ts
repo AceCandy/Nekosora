@@ -110,14 +110,14 @@ describe("passesInvariants", () => {
 
 describe("buildUpsert", () => {
   it("生成幂等 upsert,含 capabilities/ctx/max", () => {
-    const sql = buildUpsert("glm-5.2", cap({ reasoning: true }), 1000000, 131072);
+    const sql = buildUpsert("glm-5.2", "GLM 5.2", cap({ reasoning: true }), 1000000, 131072);
     expect(sql).toContain("ON CONFLICT (\"canonical_model_id\") DO UPDATE SET");
     expect(sql).toContain("'glm-5.2'");
     expect(sql).toContain("\"context_window\" = 1000000");
     expect(sql).toContain("\"max_output_tokens\" = 131072");
   });
   it("ctx/max 为 null 时不下发", () => {
-    const sql = buildUpsert("x", cap({}), null, null);
+    const sql = buildUpsert("x", "X", cap({}), null, null);
     expect(sql).not.toContain("context_window");
     expect(sql).not.toContain("max_output_tokens");
   });
