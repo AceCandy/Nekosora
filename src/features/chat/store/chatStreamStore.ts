@@ -102,17 +102,51 @@ interface PendingDelta {
  */
 const deltaBuffer = new Map<string, PendingDelta>();
 let deltaFlushRaf = 0;
+let deltaFlushTimeout = 0;
 
-/** 每帧最多一次:把所有积压增量按会话合并,单次 setState 写回各 runtime。 */
-function flushDeltas() {
-  deltaFlushRaf = 0;
+/**
+ * 流式正文每帧最多追加的字符数。rAF 每帧约 16ms,15 字/帧 ≈ 900 字/秒,
+ * 使上游 token 再快也保持逐帧打字节奏,避免一坨一坨蹦出;reasoning 不限。
+ */
+const MAX_CONTENT_CHARS_PER_FRAME = 15;
+
+/**
+ * rAF 兜底间隔:tab 切后台时浏览器会暂停/降频 rAF,纯靠 rAF 流式会卡死、回前台一次性放出积压。
+ * 另起 setTimeout 兜底,后台时仍能(被降频到 ~1s)推进 flush;前台时 rAF(~16ms)总先到并 cancel 它,基本不触发。
+ */
+const STREAM_FLUSH_FALLBACK_MS = 50;
+
+/**
+ * 每帧最多一次:把积压增量按会话合并,单次 setState 写回各 runtime。
+ * force=false(常规 rAF/兜底路径)时,content 字段每帧最多追加 MAX_CONTENT_CHARS_PER_FRAME 字,
+ * 剩余留 buffer 下一帧续放;force=true(流结束/中断强制 flush)时一次性放完,避免末尾积压丢失。
+ */
+function flushDeltas(force = false) {
+  // 进入 flush 即取消已排队的 rAF 与兜底定时器,避免重复 flush(本帧可能由其中之一触发,另一个仍排队)。
+  if (deltaFlushRaf) {
+    cancelAnimationFrame(deltaFlushRaf);
+    deltaFlushRaf = 0;
+  }
+  if (deltaFlushTimeout) {
+    window.clearTimeout(deltaFlushTimeout);
+    deltaFlushTimeout = 0;
+  }
   if (deltaBuffer.size === 0) return;
   const entries = Array.from(deltaBuffer.values());
   deltaBuffer.clear();
+  // 预算本帧放出/留存的切片,避免在 setState 回调内产生副作用。
+  const remainders: PendingDelta[] = [];
+  const emits = entries.map((d) => {
+    if (!force && d.field === "content" && d.text.length > MAX_CONTENT_CHARS_PER_FRAME) {
+      remainders.push({ ...d, text: d.text.slice(MAX_CONTENT_CHARS_PER_FRAME) });
+      return { ...d, text: d.text.slice(0, MAX_CONTENT_CHARS_PER_FRAME) };
+    }
+    return d;
+  });
   useChatStreamStore.setState((s) => {
     let runtimes = s.runtimes;
     let changed = false;
-    for (const d of entries) {
+    for (const d of emits) {
       const rt = runtimes[d.key];
       if (!rt || d.idx < 0 || d.idx >= rt.messages.length) continue;
       const msgs = [...rt.messages];
@@ -126,6 +160,17 @@ function flushDeltas() {
     }
     return changed ? { runtimes } : s;
   });
+  // 留存的 content 尾巴塞回 buffer,调度下一帧继续放。
+  for (const r of remainders) {
+    const bk = `${r.key}:${r.idx}:${r.field}`;
+    const ex = deltaBuffer.get(bk);
+    if (ex) ex.text += r.text;
+    else deltaBuffer.set(bk, r);
+  }
+  if (deltaBuffer.size > 0 && !deltaFlushRaf && !deltaFlushTimeout) {
+    deltaFlushRaf = requestAnimationFrame(() => flushDeltas());
+    deltaFlushTimeout = window.setTimeout(() => flushDeltas(), STREAM_FLUSH_FALLBACK_MS);
+  }
 }
 
 /** 累积一条增量并调度下一帧 flush;同帧内多次调用只累积不 set。 */
@@ -135,8 +180,9 @@ function enqueueDelta(key: string, idx: number, field: DeltaField, text: string)
   const ex = deltaBuffer.get(bk);
   if (ex) ex.text += text;
   else deltaBuffer.set(bk, { key, idx, field, text });
-  if (deltaFlushRaf) return;
-  deltaFlushRaf = requestAnimationFrame(flushDeltas);
+  if (deltaFlushRaf || deltaFlushTimeout) return;
+  deltaFlushRaf = requestAnimationFrame(() => flushDeltas());
+  deltaFlushTimeout = window.setTimeout(() => flushDeltas(), STREAM_FLUSH_FALLBACK_MS);
 }
 
 /** 同步强制 flush:流式结束/中断前调用,避免最后一帧积压丢失。 */
@@ -145,7 +191,11 @@ function flushDeltasNow() {
     cancelAnimationFrame(deltaFlushRaf);
     deltaFlushRaf = 0;
   }
-  flushDeltas();
+  if (deltaFlushTimeout) {
+    window.clearTimeout(deltaFlushTimeout);
+    deltaFlushTimeout = 0;
+  }
+  flushDeltas(true);
 }
 
 export const useChatStreamStore = create<ChatStreamState>((set, get) => ({

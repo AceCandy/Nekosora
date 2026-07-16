@@ -142,8 +142,27 @@ status: finished ? "success" : "interrupted",
 
 ---
 
+## 流式 delta 合批与吐字节奏
+
+流式增量经 `deltaBuffer` 合批:逐 token 的 delta 先累积,rAF 每帧最多 flush 一次,避免每 token `[...messages]` 整组替换 + setState 的高频重渲染。按 `${conversationKey}:${msgIdx}:${field}` 聚合,天然支持多会话并行。
+
+**逐字 fadeIn 永久禁用**(`<Markdown>` 的 `animated={false}`)。A/B 实测 streamdown `animated:{animation:"fadeIn",sep:"char"}` 在弱硬件(60Hz)上 on 比 off 多 ~48% 掉帧、min FPS 更低,而 fadeIn 在正常/快 token 速率下肉眼本就不可见,性价比为负。打字感改由「store 逐帧增量 + 末尾光标(caret=block)」承担,不靠渲染器内部动画。
+
+**正文限速**(`MAX_CONTENT_CHARS_PER_FRAME = 15`,~900 字/秒):`flushDeltas(force=false)` 时 content 字段每帧只追加前 15 字,剩余塞回 buffer 下一帧续放,使上游再快也保持逐帧节奏、不一坨一坨蹦。`reasoning` 不限速;`force=true`(`flushDeltasNow`)跳过限速一次性放完,避免流结束/中断末尾积压丢失。
+
+**后台 tab 兜底**(`STREAM_FLUSH_FALLBACK_MS = 50`):tab 切后台时浏览器暂停/降频 rAF,纯靠 rAF 流式会卡死。`enqueueDelta` 与续帧处双调度 rAF + setTimeout(50ms),先到先 flush、另一个 cancel;前台 rAF(~16ms)总先到,兜底基本不触发;后台 setTimeout(降频到 ~1s)接管缓慢推进。`flushDeltasNow` 同步执行不依赖定时器,后台流结束也能立即放完。
+
+```ts
+// 双调度:rAF 主路径,setTimeout 兜底后台 tab
+deltaFlushRaf = requestAnimationFrame(() => flushDeltas());
+deltaFlushTimeout = window.setTimeout(() => flushDeltas(), STREAM_FLUSH_FALLBACK_MS);
+```
+
+---
+
 ## Common Mistakes
 
+- **`requestAnimationFrame(flushDeltas)` 直接传函数引用** -> rAF 把时间戳作为首参传入,若 `flushDeltas(force = false)` 有默认参数,时间戳(truthy)会被当 `force=true`,限速静默失效。必须箭头包裹 `() => flushDeltas()`;setTimeout 兜底回调同理。
 - **在完整回答上允许续写** → prefill 是已结束的整段文本，模型续写时复述原文、内容雷同。续写按钮必须仅 `status === "interrupted"` 时渲染。
 - **后端 status 用「有没有输出文本」判定** → 中断但已生成部分内容的消息被误判 success，刷新会话后前端丢 interrupted 标记、续写按钮消失。必须用「是否收到 finish 事件」判定。
 - **selector 里返回新对象/数组字面量** → zustand 判定引用变化，触发无限渲染。改用 `useShallow` + 模块级常量兜底。

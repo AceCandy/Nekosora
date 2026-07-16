@@ -356,10 +356,10 @@ function MarkdownImpl({ content, isStreaming, renderer = "streamdown", className
   const streamdown = (
     <Streamdown
       mode={isStreaming ? "streaming" : "static"}
-      // 流式启用逐字淡入 + 末尾光标(层2):配合 store 合批(每帧 content 只变一次),
-      // streamdown 对每帧增量逐字 fadeIn,大块/同步到达也呈「流式流出」而非瞬现。
-      // sep/animation 为初值,具体 stagger/duration 手感待实测调。
-      animated={isStreaming ? { animation: "fadeIn", sep: "char", stagger: 30 } : false}
+      // 流式不再启用逐字 fadeIn:A/B 实测在弱硬件(60Hz)上 on 比 off 多 ~48% 掉帧、min FPS 更低;
+      // 而 fadeIn 在正常/快 token 速率下肉眼本就不可见(两次 harness 对照均「差不多」),性价比低。
+      // 流式感改由「字逐帧增加(store rAF 合批)+ 末尾光标」承担。
+      animated={false}
       caret={isStreaming ? "block" : undefined}
       allowedTags={ALLOWED_HTML_TAGS}
       components={STREAMDOWN_COMPONENTS}
