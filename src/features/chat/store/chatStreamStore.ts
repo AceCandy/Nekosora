@@ -198,6 +198,28 @@ function flushDeltasNow() {
   flushDeltas(true);
 }
 
+/** 读取某会话最后一条消息的索引(无消息返回 -1)。 */
+function lastMessageIdx(key: string): number {
+  const rt = useChatStreamStore.getState().runtimes[key];
+  return rt ? rt.messages.length - 1 : -1;
+}
+
+/**
+ * 把文本追加到某会话指定消息的 content 末尾(错误/停止标记专用)。
+ * 调用前应先 flushDeltasNow() 落库缓冲正文,保证"正文在前、标记在后",
+ * 避免标记直接 set 后被 finally 的 flushDeltasNow 残留正文赶到中间。
+ */
+function appendContentAt(key: string, idx: number, text: string) {
+  if (!text || idx < 0) return;
+  useChatStreamStore.setState((s) => {
+    const rt = s.runtimes[key];
+    if (!rt || idx >= rt.messages.length) return s;
+    const copy = [...rt.messages];
+    copy[idx] = { ...copy[idx], content: (copy[idx].content ?? "") + text };
+    return { runtimes: { ...s.runtimes, [key]: { ...rt, messages: copy } } };
+  });
+}
+
 export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
   runtimes: {},
   activeConversationId: null,
@@ -248,13 +270,6 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
     let newConvId: string | null = null;
 
     // 正文/思考增量走合批(enqueueDelta),每帧最多落库一次;其余为低频直接 set。
-    const setMessageContentAt = (k: string, idx: number, content: string) =>
-      set((s) => patchRuntime(s, k, (r) => {
-        if (idx < 0 || idx >= r.messages.length) return r;
-        const copy = [...r.messages];
-        copy[idx] = { ...copy[idx], content };
-        return { ...r, messages: copy };
-      }));
     const mergeTraceAt = (k: string, idx: number, trace: ChatMessage["trace"]) =>
       set((s) => patchRuntime(s, k, (r) => {
         if (idx < 0 || idx >= r.messages.length) return r;
@@ -363,7 +378,11 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
         onToolCall: (name, args) => addToolCallAt(activeKey, assistantIdx, { toolName: name, args, status: "calling" }),
         onToolResult: (name, isError) => finishToolCallAt(activeKey, assistantIdx, name, isError),
         onSearchResult: (results) => setSearchResultsAt(activeKey, assistantIdx, results),
-        onError: (err) => setMessageContentAt(activeKey, assistantIdx, `[错误] ${err}`),
+        onError: (err) => {
+          // 先 flush 缓冲正文再追加错误,保证"正文在前、错误在后";改覆盖为追加,避免丢已生成正文。
+          flushDeltasNow();
+          appendContentAt(activeKey, assistantIdx, `\n\n[错误] ${err}`);
+        },
         onTrace: (trace) => mergeTraceAt(activeKey, assistantIdx, trace),
         onUserMessage: (publicId) => {
           set((s) => patchRuntime(s, activeKey, (r) => {
@@ -398,25 +417,12 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
         },
       });
     } catch (err) {
+      // 先 flush 缓冲的限速正文,再追加错误/停止标记,否则标记会落在 finally flushDeltasNow 的残留正文之前,夹在正文中间。
+      flushDeltasNow();
       const activeKey = convId ?? newConvId ?? NEW_CONVERSATION_KEY;
-      const lastIdx = (() => {
-        let idx = -1;
-        set((s) => patchRuntime(s, activeKey, (r) => {
-          idx = r.messages.length - 1;
-          return r;
-        }));
-        return idx;
-      })();
       const { content } = handleStreamError(err, "网络错误");
-      if (lastIdx >= 0) {
-        const k = activeKey;
-        set((s) => patchRuntime(s, k, (r) => {
-          if (lastIdx >= r.messages.length) return r;
-          const copy = [...r.messages];
-          copy[lastIdx] = { ...copy[lastIdx], content: (copy[lastIdx].content ?? "") + content };
-          return { ...r, messages: copy };
-        }));
-      }
+      if (!content.includes("[错误]")) console.error("send failed:", err);
+      appendContentAt(activeKey, lastMessageIdx(activeKey), content);
     } finally {
       const finalKey = convId ?? newConvId ?? NEW_CONVERSATION_KEY;
       // 流式结束前同步 flush 残留 delta,避免最后一帧积压丢失,再置 streaming:false。
@@ -474,8 +480,10 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
         })),
       });
     } catch (err) {
+      flushDeltasNow();
       const { content } = handleStreamError(err, "网络错误");
       if (!content.includes("[错误]")) console.error("regenerate failed:", err);
+      appendContentAt(key, lastMessageIdx(key), content);
     } finally {
       flushDeltasNow();
       set((s) => patchRuntime(s, key, (r) => ({ ...r, streaming: false, abortController: null })));
@@ -526,8 +534,10 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
         onReasoning: (t) => enqueueDelta(key, assistantIdx, "reasoning", t),
       });
     } catch (err) {
+      flushDeltasNow();
       const { content } = handleStreamError(err, "网络错误");
       if (!content.includes("[错误]")) console.error("editAndResend failed:", err);
+      appendContentAt(key, lastMessageIdx(key), content);
     } finally {
       flushDeltasNow();
       set((s) => patchRuntime(s, key, (r) => ({ ...r, streaming: false, abortController: null })));
@@ -588,8 +598,10 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
         ),
       })));
     } catch (err) {
+      flushDeltasNow();
       const { content } = handleStreamError(err, "网络错误");
       if (!content.includes("[错误]")) console.error("continueGeneration failed:", err);
+      appendContentAt(key, assistantIdx, content);
     } finally {
       flushDeltasNow();
       set((s) => patchRuntime(s, key, (r) => ({ ...r, streaming: false, abortController: null })));

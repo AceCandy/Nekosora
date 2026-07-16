@@ -320,7 +320,7 @@ function MermaidInlineBlock({ code, isStreaming }: { code: string; isStreaming: 
  * 流式友好的 Markdown 渲染组件(streamdown 封装)。
  *
  * 相比 react-markdown 的优势:
- *   - 流式优化:未闭合的代码块/表格在 isStreaming=true 时优雅解析,不闪烁
+ *   - 流式优化:isStreaming 时启用 remend 补全未闭合的代码块/表格(见 parseIncompleteMarkdown),不闪烁
  *   - 内置 GFM(表格/任务列表/删除线)+ KaTeX 数学 + Mermaid 图 + Shiki 代码高亮
  *   - 安全:内置 rehype-harden 防 XSS
  *   - 放行 AI 输出的带样式 HTML 块,style 经白名单过滤 + 中性色映射(适配暗色)
@@ -360,6 +360,9 @@ function MarkdownImpl({ content, isStreaming, renderer = "streamdown", className
       // 而 fadeIn 在正常/快 token 速率下肉眼本就不可见(两次 harness 对照均「差不多」),性价比低。
       // 流式感改由「字逐帧增加(store rAF 合批)+ 末尾光标」承担。
       animated={false}
+      // 启用 remend 对不完整 markdown 的补全:streamdown 源码里补全条件是 mode==="streaming" && parseIncompleteMarkdown,
+      // 二者缺一不可;仅传 mode="streaming" 不会补全,未闭合的代码块/表格会渲染崩坏、闪烁。
+      parseIncompleteMarkdown={isStreaming}
       caret={isStreaming ? "block" : undefined}
       allowedTags={ALLOWED_HTML_TAGS}
       components={STREAMDOWN_COMPONENTS}

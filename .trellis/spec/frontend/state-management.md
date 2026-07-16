@@ -163,6 +163,7 @@ deltaFlushTimeout = window.setTimeout(() => flushDeltas(), STREAM_FLUSH_FALLBACK
 ## Common Mistakes
 
 - **`requestAnimationFrame(flushDeltas)` 直接传函数引用** -> rAF 把时间戳作为首参传入,若 `flushDeltas(force = false)` 有默认参数,时间戳(truthy)会被当 `force=true`,限速静默失效。必须箭头包裹 `() => flushDeltas()`;setTimeout 兜底回调同理。
+- **错误/停止标记直接 `set` 追加 content,绕过 `deltaBuffer`** -> `catch`/`onError` 里直接 set 写标记,会赶在 `finally` 的 `flushDeltasNow` 残留正文之前,标记夹在限速正文中间(`onError` 用覆盖还会丢已生成正文)。必须先 `flushDeltasNow()` 落库缓冲正文,再用 `appendContentAt` 追加标记,保证"正文在前、标记在后";四个流式动作(send/regenerate/editAndResend/continueGeneration)统一如此。
 - **在完整回答上允许续写** → prefill 是已结束的整段文本，模型续写时复述原文、内容雷同。续写按钮必须仅 `status === "interrupted"` 时渲染。
 - **后端 status 用「有没有输出文本」判定** → 中断但已生成部分内容的消息被误判 success，刷新会话后前端丢 interrupted 标记、续写按钮消失。必须用「是否收到 finish 事件」判定。
 - **selector 里返回新对象/数组字面量** → zustand 判定引用变化，触发无限渲染。改用 `useShallow` + 模块级常量兜底。

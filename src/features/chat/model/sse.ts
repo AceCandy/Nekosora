@@ -142,5 +142,5 @@ export function handleStreamError(
     return { content: "\n\n[已停止生成]", aborted: true };
   }
   const msg = err instanceof Error ? err.message : fallbackMessage;
-  return { content: `[错误] ${msg}`, aborted: false };
+  return { content: `\n\n[错误] ${msg}`, aborted: false };
 }
