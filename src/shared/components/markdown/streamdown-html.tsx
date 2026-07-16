@@ -6,10 +6,10 @@ import { sanitizeHTMLStyle } from "./streamdown-style";
 
 /**
  * 自定义 HTML 块/内联组件:在透传 streamdown 解析出的 style 前,
- * 用 sanitizeHTMLStyle 做白名单过滤 + 危险值拦截 + 中性色映射。
+ * 经 sanitizeHTMLStyle 处理(当前仅对 color 纯黑/纯白做中性色映射 -> currentColor,其余原样透传)。
  *
  * 这些组件对应 allowedTags 中放行 style 的标签(div/span/p/section 等)。
- * 若不自定义,style 会原样透传,失去安全过滤。
+ * 若不自定义,style 会完全原样透传,连中性色映射也不会做。
  */
 
 type BlockProps = React.HTMLAttributes<HTMLElement> & { node?: unknown };

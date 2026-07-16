@@ -44,7 +44,7 @@ interface MarkdownProps {
   /** 是否正在流式接收(true 时启用未闭合块解析,避免抖动)。 */
   isStreaming?: boolean;
   /**
-   * 渲染器:streamdown(默认,支持流式/代码高亮/KaTeX/Mermaid)
+   * 渲染器:streamdown(默认,支持流式/代码高亮/Mermaid)
    * 或 custom(流式结束后用内置解析器重渲,支持完整自定义 CSS 含 class 选择器)。
    * custom 仅在 isStreaming=false 时生效;流式中始终用 streamdown。
    */
@@ -321,9 +321,9 @@ function MermaidInlineBlock({ code, isStreaming }: { code: string; isStreaming: 
  *
  * 相比 react-markdown 的优势:
  *   - 流式优化:isStreaming 时启用 remend 补全未闭合的代码块/表格(见 parseIncompleteMarkdown),不闪烁
- *   - 内置 GFM(表格/任务列表/删除线)+ KaTeX 数学 + Mermaid 图 + Shiki 代码高亮
+ *   - 内置 GFM(表格/任务列表/删除线)+ Mermaid 图 + Shiki 代码高亮
  *   - 安全:内置 rehype-harden 防 XSS
- *   - 放行 AI 输出的带样式 HTML 块,style 经白名单过滤 + 中性色映射(适配暗色)
+ *   - 放行 AI 输出的带样式 HTML 块,style 经中性色映射(color 纯黑白->currentColor,适配暗色),其余原样透传
  *
  * 用法:
  *   <Markdown content={msg.content} isStreaming={streaming} />
