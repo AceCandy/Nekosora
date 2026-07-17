@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Send } from "lucide-react";
 import { clsx } from "clsx";
@@ -66,6 +66,15 @@ export function ChatInputBox({
   }, [slashActive, slashQuery, cards]);
   const [slashIndex, setSlashIndex] = useState(0);
 
+  // textarea 自适应高度:随输入行数增高,最高约视口 1/3,超出则内部滚动
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
+
   // 选中斜杠命令:挂载对应指令卡,并移除输入框开头的 /xxx 词,保留其后正文
   const applySlash = (card: CardOption) => {
     onCardToggle?.(card.id);
@@ -99,6 +108,7 @@ export function ChatInputBox({
           </div>
         )}
         <textarea
+          ref={textareaRef}
           value={value}
           onChange={(e) => {
             onChange(e.target.value);
@@ -161,8 +171,8 @@ export function ChatInputBox({
             }
           }}
           placeholder={t("placeholder")}
-          rows={2}
-          className="w-full bg-transparent border-0 outline-none text-sm resize-none focus:ring-0 text-neutral-800 dark:text-neutral-200 py-1.5 px-2.5 pr-16 leading-relaxed placeholder-neutral-400"
+          rows={1}
+          className="w-full bg-transparent border-0 outline-none text-sm resize-none focus:ring-0 text-neutral-800 dark:text-neutral-200 py-1.5 px-2.5 pr-16 leading-relaxed placeholder-neutral-400 max-h-[33dvh] overflow-y-auto"
           disabled={disabled}
           aria-label="对话输入框"
         />

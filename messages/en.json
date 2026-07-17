@@ -98,6 +98,7 @@
     "send": "Send message",
     "stopGeneration": "Stop generating",
     "scrollToLatest": "Scroll to latest",
+    "scrollToReplyTop": "Back to reply start",
     "stopped": "Generation stopped",
     "placeholder": "Send a message. Press Enter to send, Shift+Enter for new line...",
     "uploadAttachment": "Upload attachment",

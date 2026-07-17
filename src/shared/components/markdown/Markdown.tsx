@@ -3,6 +3,7 @@
 import {
   memo,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   useId,
@@ -173,6 +174,9 @@ function MarkdownCodeBlock({
   const [copied, setCopied] = useState(false);
   const [expandedCodeHash, setExpandedCodeHash] = useState<string | null>(null);
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 代码块折叠/展开过渡:外层包裹 ref + 展开态实测高度(见下方 useLayoutEffect)
+  const bodyWrapRef = useRef<HTMLDivElement>(null);
+  const [expandedHeight, setExpandedHeight] = useState<number | null>(null);
 
   const childArr = Children.toArray(children);
   const firstChild = childArr[0];
@@ -188,12 +192,35 @@ function MarkdownCodeBlock({
 
   const kind = resolvePreviewableKind(language, code);
   const canCopy = Boolean(code.trim());
+  const lineCount = getLineCount(code);
+  const isCollapsible = shouldCollapseCodeBlock(lineCount, isStreaming);
 
   useEffect(() => {
     return () => {
       if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
     };
   }, []);
+
+  // 折叠/展开过渡:展开态测量真实内容高度作为 maxHeight,使 max-height 在 22rem <-> 实际高度间可插值
+  // (max-height 到 none 不可过渡,直接移除上限会瞬变)。展开但尚未测得时先保持 22rem,避免撑开闪烁。
+  useLayoutEffect(() => {
+    if (!isCollapsible || !expanded) return;
+    const el = bodyWrapRef.current;
+    if (!el) return;
+    setExpandedHeight(el.scrollHeight);
+  }, [expanded, isCollapsible, code]);
+
+  // 宽度变化导致代码换行变化时,展开态高度随之更新(观察 body 内容元素,不受外层 maxHeight 影响)
+  useEffect(() => {
+    if (!expanded || !isCollapsible) return;
+    const wrap = bodyWrapRef.current;
+    if (!wrap) return;
+    const body = wrap.querySelector<HTMLElement>("[data-streamdown='code-block-body']");
+    if (!body) return;
+    const ro = new ResizeObserver(() => setExpandedHeight(wrap.scrollHeight));
+    ro.observe(body);
+    return () => ro.disconnect();
+  }, [expanded, isCollapsible]);
 
   async function handleCopy() {
     const ok = await copyToClipboard(code);
@@ -216,8 +243,6 @@ function MarkdownCodeBlock({
 
   // 以下:非结构化源码 / html-svg-mermaid 预览。
   const canPreview = Boolean(kind && onPreview && code.trim());
-  const lineCount = getLineCount(code);
-  const isCollapsible = shouldCollapseCodeBlock(lineCount, isStreaming);
 
   return (
     <div className="group relative">
@@ -303,12 +328,18 @@ function MarkdownCodeBlock({
         ) : null
       )}
       <div
+        ref={bodyWrapRef}
         className={clsx(
-          "[&_[data-streamdown='code-block-body']]:transition-[max-height] [&_[data-streamdown='code-block-body']]:duration-300 [&_[data-streamdown='code-block-body']]:ease-out",
-          isCollapsible &&
-            !expanded &&
-            "[&_[data-streamdown='code-block-body']]:max-h-[22rem] [&_[data-streamdown='code-block-body']]:overflow-hidden",
+          "transition-[max-height] duration-300 ease-out",
+          isCollapsible && "overflow-hidden",
         )}
+        style={{
+          maxHeight: !isCollapsible
+            ? undefined
+            : !expanded
+              ? "22rem"
+              : expandedHeight ?? "22rem",
+        }}
       >
         <CodeBlock
           code={code}

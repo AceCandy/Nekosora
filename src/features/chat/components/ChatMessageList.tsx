@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useTranslations } from "next-intl";
 import { MessageScroller, useMessageScroller } from "@shadcn/react/message-scroller";
 import { Sparkles, ChevronDown, Copy, Reply, MessagesSquare, Volume2, Square } from "lucide-react";
@@ -17,6 +17,10 @@ import { useMessageSpeech } from "@/features/chat/hooks/useMessageSpeech";
 interface ChatMessageListProps {
   messages: ChatMessage[];
   streaming: boolean;
+  /** 当前会话 id:用于记忆/恢复滚动位置(切走再切回保持原位置)。 */
+  conversationId?: string;
+  /** 底部浮动输入区占用的留白(含间距),供消息区 padding-bottom 与"回到最新"按钮定位。 */
+  bottomInset?: number;
   /** 当前模型名（传给 ChatMessageItem 供 regenerate/edit 使用）。 */
   model: string;
   /** 当前会话选用的输出样式 cssClass（null=默认渲染）。 */
@@ -45,6 +49,12 @@ const SELECTION_SPEECH_ID = "selection";
 
 /** 锚定 user 消息到中上部时的顶部留白,与 message-scroller 的 scrollPreviousItemPeek 默认值对齐。 */
 const ANCHOR_SCROLL_MARGIN = 64;
+
+/**
+ * 跨会话滚动位置记忆:按 conversationId 缓存 scrollTop。模块级(非 ref)以在
+ * ChatMessageList 因会话切换重挂载时仍保持记忆。
+ */
+const scrollMemory = new Map<string, number>();
 
 /**
  * 锚定信号消费者:须渲染在 MessageScroller.Provider 内。target 形如 `msg-{i}#{nonce}`。
@@ -128,6 +138,8 @@ function ScrollAnchor({
 export function ChatMessageList({
   messages,
   streaming,
+  conversationId,
+  bottomInset,
   model,
   renderStyleClass,
   renderStyleRenderer,
@@ -172,6 +184,44 @@ export function ChatMessageList({
   };
   // 视口 ref:供选区检测判断选区是否落在消息区内
   const viewportRef = useRef<HTMLDivElement>(null);
+
+  // ===== 会话滚动位置记忆 =====
+  // render 阶段(早于 scroll 事件)读取该会话的记忆位置,避免被切会话时 message-scroller
+  // 自动 scrollToEnd 触发的 onScroll 覆盖;仅依赖 conversationId,memory 更新不触发重算。
+  const savedScroll = useMemo(() => {
+    if (!conversationId) return undefined;
+    return scrollMemory.get(conversationId);
+  }, [conversationId]);
+  // 恢复期间暂停 onScroll 记录,防止自动滚动污染记忆
+  const restoringRef = useRef(false);
+  useEffect(() => {
+    if (savedScroll === undefined || !conversationId) {
+      restoringRef.current = false;
+      return;
+    }
+    restoringRef.current = true;
+    // 双 rAF:等 message-scroller 处理完 messages 替换的自动 scrollToEnd 后再覆盖恢复
+    const raf1 = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const vp = viewportRef.current;
+        if (vp) {
+          vp.scrollTop = savedScroll;
+          scrollMemory.set(conversationId, savedScroll);
+        }
+        restoringRef.current = false;
+      });
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      restoringRef.current = false;
+    };
+  }, [conversationId, savedScroll]);
+  const handleViewportScroll = useCallback(() => {
+    if (restoringRef.current) return;
+    const vp = viewportRef.current;
+    if (!vp || !conversationId) return;
+    scrollMemory.set(conversationId, vp.scrollTop);
+  }, [conversationId]);
   useEffect(() => {
     const compute = () => {
       const sel = window.getSelection();
@@ -198,7 +248,9 @@ export function ChatMessageList({
       <MessageScroller.Root className="relative flex-1 min-h-0 animate-in fade-in slide-in-from-bottom-2 duration-200">
         <MessageScroller.Viewport
           ref={viewportRef}
-          className="h-full overflow-y-auto px-6 pt-8 pb-2 md:pt-12 md:pb-3 [overflow-anchor:none]"
+          onScroll={handleViewportScroll}
+          className="h-full overflow-y-auto px-6 pt-8 md:pt-12 [overflow-anchor:none]"
+          style={{ paddingBottom: bottomInset ?? 8 }}
           preserveScrollOnPrepend
         >
           <MessageScroller.Content className="mx-auto w-full max-w-4xl flex flex-col">
@@ -337,7 +389,8 @@ export function ChatMessageList({
         {/* 回到最新:不在底部时浮出(message-scroller Button 据 data-active 控制显隐) */}
         <MessageScroller.Button
           direction="end"
-          className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 inline-flex items-center gap-1.5 rounded-full border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink px-3 py-1.5 text-xs font-semibold text-neutral-600 dark:text-neutral-300 shadow-sm hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors duration-150 data-[active=false]:pointer-events-none data-[active=false]:opacity-0 data-[active=true]:opacity-100"
+          style={{ bottom: (bottomInset ?? 8) + 8 }}
+          className="absolute left-1/2 -translate-x-1/2 z-20 inline-flex items-center gap-1.5 rounded-full border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink px-3 py-1.5 text-xs font-semibold text-neutral-600 dark:text-neutral-300 shadow-sm hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-all duration-200 ease-out data-[active=false]:pointer-events-none data-[active=false]:opacity-0 data-[active=false]:translate-y-3 data-[active=false]:scale-90 data-[active=true]:opacity-100 data-[active=true]:translate-y-0 data-[active=true]:scale-100"
         >
           <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
           <span>{t("scrollToLatest")}</span>

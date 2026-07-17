@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useMemo, useTransition } from "react";
+import { useState, useEffect, useMemo, useRef, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { Cpu } from "lucide-react";
 import { clsx } from "clsx";
@@ -106,6 +106,19 @@ export default function ChatComposer({
   const [, startModeTransition] = useTransition();
   // 活动会话 id:历史会话来自路由参数;新会话建会后由 useChatRuntime 回写,使订阅键与持久化目标跟随切换。
   const [activeConvId, setActiveConvId] = useState<string | undefined>(initialConvId);
+
+  // 浮动输入区高度:ResizeObserver 测量,用于消息区底部留白与"回到最新"按钮定位
+  const composerRef = useRef<HTMLDivElement>(null);
+  const [composerHeight, setComposerHeight] = useState(160);
+  useEffect(() => {
+    const el = composerRef.current;
+    if (!el) return;
+    const update = () => setComposerHeight(el.offsetHeight);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const {
     attached,
@@ -321,6 +334,8 @@ export default function ChatComposer({
         <ChatMessageList
           messages={runtime.messages}
           streaming={runtime.streaming}
+          conversationId={activeConvId}
+          bottomInset={composerHeight + 16}
           model={model}
           renderStyleClass={activeRenderStyleClass}
           renderStyleRenderer={activeRenderStyleRenderer}
@@ -342,9 +357,12 @@ export default function ChatComposer({
           onAsk={handleSelectionAsk}
         />
 
-        {/* Input Control Box */}
-        <div className="border-t border-morning-mist dark:border-deep-space/80 p-4 md:p-6 bg-nebula-white dark:bg-twilight-obsidian sticky bottom-0 z-10">
-          <div className="max-w-4xl mx-auto space-y-3.5">
+        {/* 输入区:悬浮卡片(消息可滚动到其下方),absolute 浮于消息区底部 */}
+        <div className="absolute inset-x-0 bottom-0 z-10 pointer-events-none">
+          <div
+            ref={composerRef}
+            className="pointer-events-auto max-w-4xl mx-auto mb-4 rounded-2xl border border-morning-mist dark:border-deep-space/80 bg-nebula-white/95 dark:bg-twilight-obsidian/95 backdrop-blur-sm shadow-[0_4px_24px_rgba(0,0,0,0.06)] p-3 md:p-4 space-y-3.5"
+          >
             <ChatToolbar
               models={models}
               model={model}

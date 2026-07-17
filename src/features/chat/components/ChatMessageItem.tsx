@@ -2,7 +2,7 @@
 
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Sparkles, RefreshCw, Loader2, User, Pencil, X, Check, Wrench, CheckCircle2, AlertCircle, ExternalLink, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Copy, Trash2, CornerDownRight } from "lucide-react";
+import { Sparkles, RefreshCw, Loader2, Pencil, X, Check, Wrench, CheckCircle2, AlertCircle, ExternalLink, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Copy, Trash2, CornerDownRight } from "lucide-react";
 import { clsx } from "clsx";
 import { Markdown } from "@/shared/components/markdown/Markdown";
 import { ErrorBoundary } from "@/shared/components/ErrorBoundary";
@@ -191,14 +191,23 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
   return (
     <div id={domId} className={clsx("flex gap-4 animate-in fade-in duration-200 scroll-mt-4", role === "user" ? "justify-end" : "justify-start")}>
       {role === "assistant" && (
-        <div className="w-7 h-7 rounded-full border border-sora-blue/10 bg-sora-blue/[0.04] flex items-center justify-center shrink-0 mt-0.5">
+        <button
+          type="button"
+          onClick={() => {
+            if (!domId) return;
+            document.getElementById(domId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+          }}
+          className="sticky top-4 w-7 h-7 rounded-full border border-sora-blue/10 bg-sora-blue/[0.04] hover:bg-sora-blue/[0.08] flex items-center justify-center shrink-0 self-start mt-0.5 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
+          title={t("scrollToReplyTop")}
+          aria-label={t("scrollToReplyTop")}
+        >
           <Sparkles className="w-3.5 h-3.5 text-sora-blue" aria-hidden="true" />
-        </div>
+        </button>
       )}
       <div className={clsx("max-w-[82%] space-y-2", role === "user" ? "flex flex-col items-end" : "")}>
         {role === "user" ? (
           /* 用户消息: 可编辑文本气泡 */
-          (editing ? (<div className="w-full max-w-[480px] space-y-1.5">
+          (editing ? (<div className="w-full space-y-1.5">
             <textarea
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
@@ -246,7 +255,17 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
           </div>) : (<div className="group relative">
             <div
               ref={userMsgRef}
-              className="rounded-2xl bg-neutral-900 text-white px-4 py-2.5 dark:bg-white dark:text-black shadow-none border border-transparent text-sm leading-relaxed whitespace-pre-wrap break-words overflow-hidden transition-[max-height] duration-300 ease-out"
+              onClick={() => {
+                if (!userMsgCanCollapse) return;
+                // 有选区时(划词选择)不触发,避免与复制/引用冲突
+                const sel = window.getSelection();
+                if (sel && sel.toString().trim()) return;
+                setUserMsgExpanded((v) => !v);
+              }}
+              className={clsx(
+                "rounded-2xl bg-neutral-900 text-white px-4 py-2.5 dark:bg-white dark:text-black shadow-none border border-transparent text-sm leading-relaxed whitespace-pre-wrap break-words overflow-hidden transition-[max-height] duration-300 ease-out",
+                userMsgCanCollapse && "cursor-pointer",
+              )}
               style={
                 userMsgCanCollapse && !userMsgExpanded
                   ? { maxHeight: userMsgCollapsedHeight }
@@ -581,11 +600,6 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
           </details>
         )}
       </div>
-      {role === "user" && (
-        <div className="w-7 h-7 rounded-full border border-morning-mist dark:border-deep-space bg-neutral-50 dark:bg-neutral-900 flex items-center justify-center shrink-0 mt-0.5">
-          <User className="w-3.5 h-3.5 text-neutral-600 dark:text-neutral-300" aria-hidden="true" />
-        </div>
-      )}
     </div>
   );
 });
