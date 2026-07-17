@@ -138,3 +138,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 5: 流式代码块延迟折叠
+
+**Date**: 2026-07-17
+**Task**: 流式代码块延迟折叠
+**Branch**: `main`
+
+### Summary
+
+流式期间完整展示长代码，完成后按 16 行阈值折叠；补回归测试并同步前端组件规范。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a20464c` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
