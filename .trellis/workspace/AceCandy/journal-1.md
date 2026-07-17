@@ -105,3 +105,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 4: Markdown 富媒体与代码块视觉完善
+
+**Date**: 2026-07-17
+**Task**: Markdown 富媒体与代码块视觉完善
+**Branch**: `main`
+
+### Summary
+
+新增 Markdown 图片加载、失败占位、下载与放大交互，补充 Mermaid 全屏缩放，修复 Streamdown 代码块缩进和标题对齐，添加 Shiki 直接依赖并同步前端实现规范。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a9e7ccd` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
