@@ -124,6 +124,8 @@
     "edit": "编辑",
     "editCancel": "取消",
     "editSaveAndResend": "保存并重新发送",
+    "collapseUserMessage": "收起",
+    "expandUserMessage": "展开",
     "groupPinned": "置顶",
     "groupToday": "今天",
     "groupYesterday": "昨天",
@@ -888,7 +890,9 @@
     "openPanel": "面板打开",
     "htmlPreview": "HTML 预览",
     "openExternal": "在新窗口打开",
-    "structuredParseFailed": "内容解析失败，已显示源码"
+    "structuredParseFailed": "内容解析失败，已显示源码",
+    "codeCollapse": "收起",
+    "codeExpand": "展开 {count} 行"
   },
   "share": {
     "title": "分享的对话",

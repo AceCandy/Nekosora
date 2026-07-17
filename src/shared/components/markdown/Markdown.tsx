@@ -10,15 +10,15 @@ import {
   createContext,
   useContext,
   Children,
-  cloneElement,
   isValidElement,
   type HTMLAttributes,
   type ReactNode,
 } from "react";
 import { clsx } from "clsx";
-import { Check, Copy, Eye, Code } from "lucide-react";
+import { Check, Copy, Eye, Code, ChevronDown, ChevronUp } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { Streamdown, type AllowedTags } from "streamdown";
+import { Streamdown, CodeBlock, type AllowedTags } from "streamdown";
+import { code as codeHighlighter } from "@streamdown/code";
 import {
   MarkdownHTMLDiv,
   MarkdownHTMLSection,
@@ -55,6 +55,8 @@ interface MarkdownProps {
    * 不传则代码块无预览按钮。
    */
   onPreview?: (payload: CodeBlockPreviewPayload) => void;
+  /** 输出样式 cssClass(如 "paper"),用于按皮肤差异化代码块渲染。 */
+  renderStyleClass?: string | null;
 }
 
 /** 代码块预览入口透传给 streamdown 自定义 pre 组件的载荷。 */
@@ -70,6 +72,8 @@ interface MarkdownRenderContextValue {
   onPreview?: (payload: CodeBlockPreviewPayload) => void;
   /** 是否流式中:结构化块在此期间显示骨架,结束后才解析内联渲染。 */
   isStreaming?: boolean;
+  /** 是否纸面杂志皮肤:代码块用语言/复制双态按钮、pre 撑满宽度等差异化样式。 */
+  isPaper?: boolean;
 }
 const MarkdownRenderContext = createContext<MarkdownRenderContextValue | null>(null);
 
@@ -112,6 +116,15 @@ function getCodeLanguage(className?: string): string {
   return m?.[1] ?? "";
 }
 
+/** 代码块超过此行数才折叠(参考 DEEIX,长代码块默认收起+渐隐遮罩)。 */
+const CODE_BLOCK_COLLAPSE_LINE_THRESHOLD = 16;
+
+/** 计算代码块行数(去掉末尾换行后按 \n 分割)。 */
+function getLineCount(value: string): number {
+  if (!value) return 0;
+  return value.replace(/\n$/, "").split("\n").length;
+}
+
 /** 递归提取 React 节点的纯文本(从 code 元素取源码,跳过 Shiki token span)。 */
 function getNodeText(node: ReactNode): string {
   return Children.toArray(node)
@@ -143,20 +156,22 @@ type PreChildProps = { className?: string; children?: ReactNode; "data-block"?: 
 
 /**
  * 自定义 streamdown pre 组件:对结构化代码块(chart/metric/table)正文内联渲染,
- * 对可预览代码块(html/svg/mermaid)在右上角叠加「预览」按钮,其余正常显示源码。
+ * 对可预览代码块(html/svg/mermaid)在右上角叠加「预览」按钮,其余用 streamdown
+ * CodeBlock 渲染(Shiki 高亮 + 块状 wrapper + 超过 16 行折叠)。
  * 仅处理 fenced code block(streamdown 传入的 children 为单个 code 元素);
  * 行内 code 走 streamdown 的 inlineCode,不受影响。
  */
 function MarkdownCodeBlock({
   children,
   node: _node,
-  ...rest
 }: HTMLAttributes<HTMLPreElement> & { node?: unknown }) {
   const ctx = useContext(MarkdownRenderContext);
   const onPreview = ctx?.onPreview;
   const isStreaming = ctx?.isStreaming ?? false;
+  const isPaper = ctx?.isPaper ?? false;
   const t = useTranslations("artifacts");
   const [copied, setCopied] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const childArr = Children.toArray(children);
@@ -171,7 +186,6 @@ function MarkdownCodeBlock({
 
   const kind = resolvePreviewableKind(language, code);
   const canCopy = Boolean(code.trim());
-  const codeBlock = codeEl ? cloneElement(codeEl, { "data-block": "true" }) : null;
 
   useEffect(() => {
     return () => {
@@ -200,11 +214,17 @@ function MarkdownCodeBlock({
 
   // 以下:非结构化源码 / html-svg-mermaid 预览。
   const canPreview = Boolean(kind && onPreview && code.trim());
+  const lineCount = getLineCount(code);
+  const isCollapsible = lineCount > CODE_BLOCK_COLLAPSE_LINE_THRESHOLD;
 
   return (
     <div className="group relative">
-      {(canCopy || (canPreview && kind && onPreview)) ? (
-        <div className="absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded-md bg-white/80 dark:bg-space-ink/80 px-1 py-1 backdrop-blur-sm opacity-0 transition-opacity group-hover:opacity-100 [@media(pointer:coarse)]:opacity-100">
+      {isPaper ? (
+        // paper:右上角语言标签小块(半透明白底适配深色 pre),hover/触屏切换为复制/预览按钮。
+        <div className="absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded-md bg-white/15 px-1.5 py-0.5 text-[11px] font-mono backdrop-blur-sm">
+          <span className="text-white/60 group-hover:hidden [@media(pointer:coarse)]:hidden">
+            {language || "text"}
+          </span>
           {canPreview && kind && onPreview ? (
             <button
               type="button"
@@ -217,7 +237,7 @@ function MarkdownCodeBlock({
                   title: inferPreviewTitle(language, code),
                 })
               }
-              className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-950/5 hover:text-neutral-800 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-white focus-visible:outline focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
+              className="hidden h-5 w-5 items-center justify-center rounded text-white/70 hover:bg-white/10 hover:text-white group-hover:inline-flex [@media(pointer:coarse)]:inline-flex focus-visible:outline focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
               title={t("openPreview")}
               aria-label={t("openPreview")}
             >
@@ -228,7 +248,7 @@ function MarkdownCodeBlock({
             <button
               type="button"
               onClick={handleCopy}
-              className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-950/5 hover:text-neutral-800 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-white focus-visible:outline focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
+              className="hidden h-5 w-5 items-center justify-center rounded text-white/70 hover:bg-white/10 hover:text-white group-hover:inline-flex [@media(pointer:coarse)]:inline-flex focus-visible:outline focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
               title={copied ? t("copied") : t("copy")}
               aria-label={copied ? t("copied") : t("copy")}
             >
@@ -240,8 +260,82 @@ function MarkdownCodeBlock({
             </button>
           ) : null}
         </div>
+      ) : (
+        (canCopy || (canPreview && kind && onPreview)) ? (
+          <div className="absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded-md bg-white/80 dark:bg-space-ink/80 px-1 py-1 backdrop-blur-sm opacity-0 transition-opacity group-hover:opacity-100 [@media(pointer:coarse)]:opacity-100">
+            {canPreview && kind && onPreview ? (
+              <button
+                type="button"
+                onClick={() =>
+                  onPreview({
+                    id: `preview-${kind}-${quickHash(code)}`,
+                    kind,
+                    language,
+                    content: code,
+                    title: inferPreviewTitle(language, code),
+                  })
+                }
+                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-950/5 hover:text-neutral-800 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-white focus-visible:outline focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
+                title={t("openPreview")}
+                aria-label={t("openPreview")}
+              >
+                <Eye className="w-3.5 h-3.5" aria-hidden="true" />
+              </button>
+            ) : null}
+            {canCopy ? (
+              <button
+                type="button"
+                onClick={handleCopy}
+                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-950/5 hover:text-neutral-800 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-white focus-visible:outline focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
+                title={copied ? t("copied") : t("copy")}
+                aria-label={copied ? t("copied") : t("copy")}
+              >
+                {copied ? (
+                  <Check className="w-3.5 h-3.5 text-green-500" aria-hidden="true" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5" aria-hidden="true" />
+                )}
+              </button>
+            ) : null}
+          </div>
+        ) : null
+      )}
+      <div
+        className={clsx(
+          "[&_[data-streamdown='code-block-body']]:transition-[max-height] [&_[data-streamdown='code-block-body']]:duration-300 [&_[data-streamdown='code-block-body']]:ease-out",
+          isCollapsible &&
+            !expanded &&
+            "[&_[data-streamdown='code-block-body']]:max-h-[22rem] [&_[data-streamdown='code-block-body']]:overflow-hidden",
+        )}
+      >
+        <CodeBlock
+          code={code}
+          language={language || "text"}
+          lineNumbers={false}
+          isIncomplete={isStreaming}
+        />
+      </div>
+      {isCollapsible && !expanded ? (
+        <div className="pointer-events-none absolute inset-x-0 bottom-8 h-20 bg-gradient-to-b from-transparent via-[var(--color-prose-code-bg)]/70 to-[var(--color-prose-code-bg)]" />
       ) : null}
-      {codeBlock ?? <pre {...rest}>{children}</pre>}
+      {isCollapsible ? (
+        <div className="flex justify-center">
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium text-neutral-500 hover:bg-neutral-950/5 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-white transition-colors cursor-pointer"
+          >
+            {expanded ? (
+              <ChevronUp className="w-3.5 h-3.5" aria-hidden="true" />
+            ) : (
+              <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
+            )}
+            <span>
+              {expanded ? t("codeCollapse") : t("codeExpand", { count: lineCount })}
+            </span>
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -330,25 +424,42 @@ function MermaidInlineBlock({ code, isStreaming }: { code: string; isStreaming: 
  *
  * 注:Tailwind 类扫描配置见 globals.css 的 @source 指令。
  */
-function MarkdownImpl({ content, isStreaming, renderer = "streamdown", className, onPreview }: MarkdownProps) {
+function MarkdownImpl({ content, isStreaming, renderer = "streamdown", className, onPreview, renderStyleClass }: MarkdownProps) {
   // custom 渲染器:仅在流式结束后启用(流式中 streamdown 更稳)。原样渲染 AI 的 HTML/class。
   const useCustom = renderer === "custom" && !isStreaming;
+  const isPaper = renderStyleClass === "paper";
 
   if (useCustom) {
-    // 按结构化代码块分段:结构化段用受控组件内联渲染,其余段用 parseMarkdown,
-    // 使「输出样式」(如纸面杂志)也能展示 chart/metric/table。
+    // 按结构化代码块分段:结构化段用受控组件内联渲染,代码块用 Streamdown
+    // 渲染(Shiki 高亮 + 块状,与默认渲染器一致),其余段用 parseMarkdown,
+    // 使「输出样式」(如纸面杂志)也能展示 chart/metric/table 且代码块保留高亮。
     const segments = splitStructuredSegments(content);
     return (
       <div className={clsx("nekusora-md", className)}>
-        {segments.map((seg, i) =>
-          seg.type === "structured" ? (
-            <StructuredInlineView key={i} kind={seg.kind} raw={seg.raw} />
-          ) : seg.type === "mermaid" ? (
-            <MermaidInlineBlock key={i} code={seg.raw} isStreaming={false} />
-          ) : (
-            <div key={i} dangerouslySetInnerHTML={{ __html: parseMarkdown(seg.text) }} />
-          ),
-        )}
+        <MarkdownRenderContext.Provider value={{ onPreview, isStreaming, isPaper }}>
+          {segments.map((seg, i) =>
+            seg.type === "structured" ? (
+              <StructuredInlineView key={i} kind={seg.kind} raw={seg.raw} />
+            ) : seg.type === "mermaid" ? (
+              <MermaidInlineBlock key={i} code={seg.raw} isStreaming={false} />
+            ) : seg.type === "code" ? (
+              <Streamdown
+                key={i}
+                mode="static"
+                controls={MARKDOWN_CONTROLS}
+                allowedTags={ALLOWED_HTML_TAGS}
+                components={STREAMDOWN_COMPONENTS}
+                shikiTheme={["github-light", "github-dark"]}
+                plugins={{ code: codeHighlighter }}
+                lineNumbers={false}
+              >
+                {"```" + seg.language + "\n" + seg.raw + "\n```"}
+              </Streamdown>
+            ) : (
+              <div key={i} dangerouslySetInnerHTML={{ __html: parseMarkdown(seg.text) }} />
+            ),
+          )}
+        </MarkdownRenderContext.Provider>
       </div>
     );
   }
@@ -367,6 +478,8 @@ function MarkdownImpl({ content, isStreaming, renderer = "streamdown", className
       allowedTags={ALLOWED_HTML_TAGS}
       components={STREAMDOWN_COMPONENTS}
       controls={MARKDOWN_CONTROLS}
+      plugins={{ code: codeHighlighter }}
+      shikiTheme={["github-light", "github-dark"]}
     >
       {content}
     </Streamdown>
@@ -374,7 +487,7 @@ function MarkdownImpl({ content, isStreaming, renderer = "streamdown", className
 
   return (
     <div className={clsx("nekusora-md", className)}>
-      <MarkdownRenderContext.Provider value={{ onPreview, isStreaming }}>
+      <MarkdownRenderContext.Provider value={{ onPreview, isStreaming, isPaper }}>
         {streamdown}
       </MarkdownRenderContext.Provider>
     </div>

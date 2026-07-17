@@ -10,10 +10,11 @@ import { resolveStructuredKind } from "@/lib/artifacts/structured";
 import { resolvePreviewableKind } from "@/lib/artifacts/previewable";
 import type { StructuredKind } from "@/shared/components/structured-blocks/schema";
 
-/** 混合渲染分段:结构化块(chart/metric/table)、mermaid 图与普通 markdown 文本分别处理。 */
+/** 混合渲染分段:结构化块(chart/metric/table)、mermaid 图、普通代码块与 markdown 文本分别处理。 */
 export type StructuredSegment =
   | { type: "structured"; kind: StructuredKind; raw: string }
   | { type: "mermaid"; raw: string }
+  | { type: "code"; language: string; raw: string }
   | { type: "markdown"; text: string };
 
 /**
@@ -55,10 +56,10 @@ export function splitStructuredSegments(input: string): StructuredSegment[] {
           flushMarkdown();
           segments.push({ type: "mermaid", raw });
         } else {
-          // 其余非结构化代码块原样归入 markdown 段,由 parseMarkdown 渲染为 pre/code。
-          markdown.push("```" + codeLang);
-          markdown.push(...codeBuffer);
-          markdown.push("```");
+          // 其余非结构化代码块单独切段,交由 MarkdownImpl 用 Streamdown 渲染
+          // (Shiki 高亮 + 块状,与默认渲染器一致),不归入 markdown 段。
+          flushMarkdown();
+          segments.push({ type: "code", language: codeLang, raw });
         }
         inCode = false;
         codeLang = "";

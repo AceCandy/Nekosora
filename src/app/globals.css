@@ -34,6 +34,7 @@
 
   --radius-md: 6px;
   --radius-lg: 8px;
+  --radius-xl: 12px;
 }
 
 @custom-variant dark (&:where(.dark, .dark *));
@@ -84,45 +85,83 @@ body {
  * 不输出 data-streamdown 元素,天然不冲突)。
  *
  * 不覆盖 Shiki 的 pre 内联背景:Shiki 的 token 配色与 github-light/dark 背景
- * 配套设计,强行替换背景会让 token 颜色失配。仅给外层容器补柔和背景与圆角。
+ * 配套设计,强行替换背景会让 token 颜色失配。外层保持透明无框无投影(遵循
+ * "静止状态无投影"原则),柔和背景与圆角交给 code-block-body 承担,形成层次。
  */
 .nekusora-md [data-streamdown="code-block"] {
   margin: 16px 0;
-  background: var(--color-prose-code-bg);
-  border: 1px solid var(--color-prose-code-border);
-  border-radius: 12px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-  overflow: hidden;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
 }
 .dark .nekusora-md [data-streamdown="code-block"] {
-  background: var(--color-prose-code-bg);
-  border-color: var(--color-prose-code-border);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  background: transparent;
+  border: 0;
+  box-shadow: none;
 }
 
-/* 头部语言标签条与外层背景融合,降低视觉割裂。 */
+/* 头部语言标签条:淡化,左对齐主体内容(body 自带 p-4 = 1rem)。 */
 .nekusora-md [data-streamdown="code-block-header"] {
   color: var(--color-prose-code-header);
+  padding-left: 1rem;
 }
 .dark .nekusora-md [data-streamdown="code-block-header"] {
   color: var(--color-prose-code-header);
 }
+/* paper:语言标签移到 pre 内右上角(MarkdownCodeBlock 按钮),隐藏上方原生 header。 */
+.rs-paper .nekusora-md [data-streamdown="code-block-header"] {
+  display: none;
+}
 
-/* 主体保留 Shiki 背景(其 token 配色与背景配套),仅统一字体与行距。 */
+/* 主体:柔和背景 + 大圆角(复刻 DEEIX rounded-xl),与外层透明形成层次。
+ * padding 0:pre 撑满 body,代码左缩进由 code padding-left 承担,语言标签同 padding-left 对齐。 */
 .nekusora-md [data-streamdown="code-block-body"] {
-  background: transparent;
+  background: var(--color-prose-code-bg);
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-xl);
+  padding: 0;
+}
+.dark .nekusora-md [data-streamdown="code-block-body"] {
+  background: var(--color-prose-code-bg);
 }
 .nekusora-md [data-streamdown="code-block-body"] pre {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
     "Liberation Mono", "Courier New", monospace;
   font-size: 13px;
   line-height: 1.6;
+  padding: 0.75rem 0;
 }
 .nekusora-md [data-streamdown="code-block-body"] pre,
 .nekusora-md [data-streamdown="code-block-body"] code {
   font-feature-settings: "calt" 0;
+}
+
+/* 关行号后(CodeBlock lineNumbers=false)行 span 不再带 block class,需显式块状保留换行;
+ * 行号列消失后代码紧贴左缘,补 code 左内边距维持缩进感(paper pre 自带 padding 不受影响)。 */
+.nekusora-md [data-streamdown="code-block-body"] code > span {
+  display: block;
+}
+.nekusora-md [data-streamdown="code-block-body"] code {
+  padding-left: 1rem;
+}
+
+/* paper 终端风 pre 深色背景(--pp-pre-bg #161616),Shiki token 默认走 light 主题(深底黑字看不清),
+ * 此处强制用 dark 主题色(--shiki-dark)适配深底。 */
+.rs-paper .nekusora-md [data-streamdown="code-block-body"] code > span > span {
+  color: var(--shiki-dark, var(--sdm-c, inherit));
+}
+/* paper pre 自带深色背景+mac 点+margin/padding。code-block-body 置透明且 padding 0,
+ * 让 pre 撑满正文宽度(不再内缩);pre margin-top 0 + header padding-left 0 让语言标签
+ * 紧贴代码块且与 pre 左缘对齐(不再孤零零悬在上方且离得远)。 */
+.rs-paper .nekusora-md [data-streamdown="code-block-body"] {
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+.rs-paper .nekusora-md [data-streamdown="code-block-body"] pre {
+  margin-top: 0;
 }
 
 /* 行内代码:圆角 + 柔和底色 + 等宽字体。 */

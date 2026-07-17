@@ -122,12 +122,15 @@ describe("splitStructuredSegments", () => {
     expect(segs[2].type).toBe("markdown");
   });
 
-  it("非结构化代码块(如 js)不切分,原样归入 markdown", () => {
+  it("非结构化代码块(如 js)单独切为 code 段(交 Streamdown 高亮渲染)", () => {
     const input = "```js\nconst x = 1;\n```";
     const segs = splitStructuredSegments(input);
     expect(segs).toHaveLength(1);
-    expect(segs[0].type).toBe("markdown");
-    if (segs[0].type === "markdown") expect(segs[0].text).toContain("const x = 1;");
+    expect(segs[0].type).toBe("code");
+    if (segs[0].type === "code") {
+      expect(segs[0].language).toBe("js");
+      expect(segs[0].raw).toContain("const x = 1;");
+    }
   });
 
   it("连续多个结构化块各自成段", () => {

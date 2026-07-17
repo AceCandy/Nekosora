@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Sparkles, RefreshCw, Loader2, User, Pencil, X, Check, Wrench, CheckCircle2, AlertCircle, ExternalLink, ChevronLeft, ChevronRight, Copy, Trash2, CornerDownRight } from "lucide-react";
+import { Sparkles, RefreshCw, Loader2, User, Pencil, X, Check, Wrench, CheckCircle2, AlertCircle, ExternalLink, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Copy, Trash2, CornerDownRight } from "lucide-react";
 import { clsx } from "clsx";
 import { Markdown } from "@/shared/components/markdown/Markdown";
 import { ErrorBoundary } from "@/shared/components/ErrorBoundary";
@@ -11,6 +11,11 @@ import type { ChatMessage, ModelOption } from "@/features/chat/model/types";
 import type { Artifact } from "@/features/artifacts/ArtifactPanel";
 
 import { copyToClipboard } from "@/shared/lib/clipboard";
+
+/** 用户消息超过此行数才折叠(长消息默认收起,避免撑高会话)。 */
+const USER_MESSAGE_COLLAPSE_LINES = 6;
+/** lineHeight 取不到时的兜底折叠高度(6 行 × 2rem × 16px)。 */
+const USER_MESSAGE_COLLAPSE_FALLBACK_HEIGHT = USER_MESSAGE_COLLAPSE_LINES * 2 * 16;
 
 interface ChatMessageItemProps {
   message: ChatMessage;
@@ -78,6 +83,14 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
   const reasoningEndRef = useRef<number | null>(null);
   const [elapsed, setElapsed] = useState<number | null>(null);
 
+  // 用户消息长文本折叠:基于实际行高判断是否超过 6 行(含自动换行),避免纯按 \n 计数漏判。
+  const [userMsgExpanded, setUserMsgExpanded] = useState(false);
+  const [userMsgCanCollapse, setUserMsgCanCollapse] = useState(false);
+  const [userMsgCollapsedHeight, setUserMsgCollapsedHeight] = useState(
+    USER_MESSAGE_COLLAPSE_FALLBACK_HEIGHT,
+  );
+  const userMsgRef = useRef<HTMLDivElement>(null);
+
   // 重新生成原地替换为新 assistant 占位时,重置思考计时与弹层状态
   useEffect(() => {
     reasoningStartRef.current = null;
@@ -139,6 +152,30 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
     document.addEventListener("mousedown", onPointerDown);
     return () => document.removeEventListener("mousedown", onPointerDown);
   }, [reasoningPanelOpen]);
+
+  // 用户消息折叠测量:基于实际行高计算 6 行高度,scrollHeight 超过则可折叠。
+  // content 变化(编辑后)或首次挂载时重测;ResizeObserver 兜底宽度变化导致的换行变化。
+  useLayoutEffect(() => {
+    const el = userMsgRef.current;
+    if (!el) {
+      setUserMsgCanCollapse(false);
+      return;
+    }
+    const measure = () => {
+      const lh = Number.parseFloat(window.getComputedStyle(el).lineHeight);
+      const collapsed =
+        Number.isFinite(lh) && lh > 0
+          ? lh * USER_MESSAGE_COLLAPSE_LINES
+          : USER_MESSAGE_COLLAPSE_FALLBACK_HEIGHT;
+      setUserMsgCollapsedHeight(collapsed);
+      setUserMsgCanCollapse(el.scrollHeight > collapsed + 1);
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [content]);
 
   const handleCopy = async () => {
     if (!content) return;
@@ -207,9 +244,34 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
               </button>
             </div>
           </div>) : (<div className="group relative">
-            <div className="rounded-2xl bg-neutral-900 text-white px-4 py-2.5 dark:bg-white dark:text-black shadow-none border border-transparent text-sm leading-relaxed whitespace-pre-wrap break-words">
+            <div
+              ref={userMsgRef}
+              className="rounded-2xl bg-neutral-900 text-white px-4 py-2.5 dark:bg-white dark:text-black shadow-none border border-transparent text-sm leading-relaxed whitespace-pre-wrap break-words overflow-hidden transition-[max-height] duration-300 ease-out"
+              style={
+                userMsgCanCollapse && !userMsgExpanded
+                  ? { maxHeight: userMsgCollapsedHeight }
+                  : undefined
+              }
+            >
               {content}
             </div>
+            {userMsgCanCollapse ? (
+              <button
+                type="button"
+                onClick={() => setUserMsgExpanded((v) => !v)}
+                className="mt-1 flex w-fit ml-auto items-center gap-1 text-[11px] font-semibold text-white/70 dark:text-black/60 hover:text-white dark:hover:text-black transition-colors cursor-pointer"
+                aria-expanded={userMsgExpanded}
+              >
+                {userMsgExpanded ? (
+                  <ChevronUp className="w-3 h-3" aria-hidden="true" />
+                ) : (
+                  <ChevronDown className="w-3 h-3" aria-hidden="true" />
+                )}
+                <span>
+                  {userMsgExpanded ? t("collapseUserMessage") : t("expandUserMessage")}
+                </span>
+              </button>
+            ) : null}
             {publicId && onEdit && !isStreaming && !conversationStreaming && (
               <button
                 type="button"
@@ -356,6 +418,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
                   content={content}
                   isStreaming={isStreaming && isLast}
                   renderer={renderStyleRenderer}
+                  renderStyleClass={renderStyleClass}
                   onPreview={onOpenArtifact}
                 />
               </ErrorBoundary>

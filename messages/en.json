@@ -124,6 +124,8 @@
     "edit": "Edit",
     "editCancel": "Cancel",
     "editSaveAndResend": "Save & resend",
+    "collapseUserMessage": "Collapse",
+    "expandUserMessage": "Expand",
     "groupPinned": "Pinned",
     "groupToday": "Today",
     "groupYesterday": "Yesterday",
@@ -888,7 +890,9 @@
     "openPanel": "Open panel",
     "htmlPreview": "HTML preview",
     "openExternal": "Open in new window",
-    "structuredParseFailed": "Preview unavailable, showing source"
+    "structuredParseFailed": "Preview unavailable, showing source",
+    "codeCollapse": "Collapse",
+    "codeExpand": "Expand {count} lines"
   },
   "share": {
     "title": "Shared conversation",
