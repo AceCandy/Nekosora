@@ -122,6 +122,9 @@ importers:
       sharp:
         specifier: ^0.35.1
         version: 0.35.1
+      shiki:
+        specifier: 3.23.0
+        version: 3.23.0
       streamdown:
         specifier: ^2.5.0
         version: 2.5.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)

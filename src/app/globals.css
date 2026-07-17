@@ -102,10 +102,14 @@ body {
   box-shadow: none;
 }
 
-/* 头部语言标签条:淡化,左对齐主体内容(body 自带 p-4 = 1rem)。 */
+/* 头部语言标签条:淡化,左缘与代码对齐(streamdown 标签 span 自带 ml-1 需清零,
+   padding-left 与 code padding-left 同值,标签与代码左缘严丝合缝)。 */
 .nekusora-md [data-streamdown="code-block-header"] {
   color: var(--color-prose-code-header);
-  padding-left: 1rem;
+  padding-left: 1.5rem;
+}
+.nekusora-md [data-streamdown="code-block-header"] span {
+  margin-left: 0;
 }
 .dark .nekusora-md [data-streamdown="code-block-header"] {
   color: var(--color-prose-code-header);
@@ -115,13 +119,15 @@ body {
   display: none;
 }
 
-/* 主体:柔和背景 + 大圆角(复刻 DEEIX rounded-xl),与外层透明形成层次。
+/* 主体:柔和背景 + 大圆角(16px,比 DEEIX rounded-xl 略大更显圆润)。overflow hidden
+ * 裁掉 pre 的 Shiki 不透明背景直角,让 body 圆角透出(否则 Shiki --sdm-bg 盖住圆角看着像直角)。
  * padding 0:pre 撑满 body,代码左缩进由 code padding-left 承担,语言标签同 padding-left 对齐。 */
 .nekusora-md [data-streamdown="code-block-body"] {
   background: var(--color-prose-code-bg);
   border: 0;
-  border-radius: var(--radius-xl);
+  border-radius: 16px;
   padding: 0;
+  overflow: hidden;
 }
 .dark .nekusora-md [data-streamdown="code-block-body"] {
   background: var(--color-prose-code-bg);
@@ -139,12 +145,15 @@ body {
 }
 
 /* 关行号后(CodeBlock lineNumbers=false)行 span 不再带 block class,需显式块状保留换行;
- * 行号列消失后代码紧贴左缘,补 code 左内边距维持缩进感(paper pre 自带 padding 不受影响)。 */
+ * 行号列消失后代码紧贴左缘,补 code 左内边距维持缩进感。code 必须显式 block:默认 inline 时
+ * 其 block 子元素(span)会脱离 inline 容器,padding-left 推不开文字,代码贴左且与 header
+ * 标签错位(paper 走 custom 渲染器,不输出此结构,不受影响)。 */
 .nekusora-md [data-streamdown="code-block-body"] code > span {
   display: block;
 }
 .nekusora-md [data-streamdown="code-block-body"] code {
-  padding-left: 1rem;
+  display: block;
+  padding-left: 1.5rem;
 }
 
 /* paper 终端风 pre 深色背景(--pp-pre-bg #161616),Shiki token 默认走 light 主题(深底黑字看不清),
@@ -159,6 +168,8 @@ body {
   background: transparent;
   border: 0;
   padding: 0;
+  /* paper 终端风 pre 保持直角 + Shiki 深色背景,撤销默认 overflow hidden 不裁圆角。 */
+  overflow: visible;
 }
 .rs-paper .nekusora-md [data-streamdown="code-block-body"] pre {
   margin-top: 0;

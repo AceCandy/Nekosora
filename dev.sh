@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
 
-PORT=3002 npm run dev
+PORT=3002 pnpm dev

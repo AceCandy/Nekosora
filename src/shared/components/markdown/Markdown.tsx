@@ -15,10 +15,11 @@ import {
   type ReactNode,
 } from "react";
 import { clsx } from "clsx";
-import { Check, Copy, Eye, Code, ChevronDown, ChevronUp } from "lucide-react";
+import { Check, Copy, Eye, Code, ChevronDown, ChevronUp, Maximize, ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Streamdown, CodeBlock, type AllowedTags } from "streamdown";
 import { code as codeHighlighter } from "@streamdown/code";
+import Modal from "@/shared/ui/Modal";
 import {
   MarkdownHTMLDiv,
   MarkdownHTMLSection,
@@ -30,6 +31,7 @@ import {
   MarkdownHTMLSummary,
   MarkdownHTMLSpan,
 } from "./streamdown-html";
+import { MarkdownImage } from "./MarkdownImage";
 import { parseMarkdown, splitStructuredSegments } from "./customRenderer";
 import { resolvePreviewableKind, type PreviewableKind } from "@/lib/artifacts/previewable";
 import { resolveStructuredKind } from "@/lib/artifacts/structured";
@@ -107,6 +109,7 @@ const STREAMDOWN_COMPONENTS = {
   summary: MarkdownHTMLSummary,
   span: MarkdownHTMLSpan,
   pre: MarkdownCodeBlock,
+  img: MarkdownImage,
 };
 
 /** 从 code 元素的 className 提取语言标识(language-xxx → xxx)。 */
@@ -359,6 +362,9 @@ function MermaidInlineBlock({ code, isStreaming }: { code: string; isStreaming: 
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current); }, []);
 
+  // 全屏查看(仅图模式有意义;源码模式不放大)。复用 MermaidViewerModal,内含 panZoom。
+  const [fullscreen, setFullscreen] = useState(false);
+
   async function handleCopy() {
     const ok = await copyToClipboard(code);
     if (!ok) return;
@@ -368,6 +374,7 @@ function MermaidInlineBlock({ code, isStreaming }: { code: string; isStreaming: 
   }
 
   return (
+    <>
     <div className="group relative my-2">
       <div className="absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded-md bg-white/80 dark:bg-space-ink/80 px-1 py-1 backdrop-blur-sm opacity-0 transition-opacity group-hover:opacity-100 [@media(pointer:coarse)]:opacity-100">
         <button
@@ -396,6 +403,17 @@ function MermaidInlineBlock({ code, isStreaming }: { code: string; isStreaming: 
             <Copy className="w-3.5 h-3.5" aria-hidden="true" />
           )}
         </button>
+        {!showSource && (
+          <button
+            type="button"
+            onClick={() => setFullscreen(true)}
+            className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-950/5 hover:text-neutral-800 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-white focus-visible:outline focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
+            title={t("fullscreen")}
+            aria-label={t("fullscreen")}
+          >
+            <Maximize className="w-3.5 h-3.5" aria-hidden="true" />
+          </button>
+        )}
       </div>
       <div className="overflow-x-auto rounded-lg border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink p-3">
         {showSource ? (
@@ -407,6 +425,59 @@ function MermaidInlineBlock({ code, isStreaming }: { code: string; isStreaming: 
         )}
       </div>
     </div>
+      <MermaidViewerModal
+        open={fullscreen}
+        onClose={() => setFullscreen(false)}
+        code={code}
+        id={`${id}-fullscreen`}
+      />
+    </>
+  );
+}
+
+/**
+ * Mermaid 全屏查看器:复用 Modal,内含 panZoom(滚轮缩放 + 拖拽平移)。
+ * 独立 id 避免与内联图 mermaid.render DOM 冲突;ESC/遮罩/关闭按钮关闭(Modal 内置)。
+ */
+function MermaidViewerModal({ open, onClose, code, id }: { open: boolean; onClose: () => void; code: string; id: string }) {
+  const t = useTranslations("artifacts");
+  const [scale, setScale] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const dragging = useRef<{ x: number; y: number } | null>(null);
+
+  const reset = () => { setScale(1); setOffset({ x: 0, y: 0 }); };
+
+  return (
+    <Modal
+      open={open}
+      onClose={() => { reset(); onClose(); }}
+      title={t("mermaidDiagram")}
+      dialogClassName="m-auto w-[min(1100px,94vw)] max-h-[92vh] rounded-lg border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/50 dark:border-deep-space dark:bg-twilight-obsidian dark:text-nebula-silver"
+      bodyClassName="p-0 h-[82vh] overflow-hidden relative"
+    >
+      <div className="absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded-md bg-white/80 dark:bg-space-ink/80 px-1 py-1 backdrop-blur-sm">
+        <button type="button" onClick={() => setScale((s) => Math.min(5, +(s + 0.2).toFixed(2)))} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-950/5 hover:text-neutral-800 dark:text-neutral-300 dark:hover:bg-white/10 cursor-pointer" title={t("zoomIn")} aria-label={t("zoomIn")}>
+          <ZoomIn className="w-3.5 h-3.5" aria-hidden="true" />
+        </button>
+        <button type="button" onClick={() => setScale((s) => Math.max(0.3, +(s - 0.2).toFixed(2)))} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-950/5 hover:text-neutral-800 dark:text-neutral-300 dark:hover:bg-white/10 cursor-pointer" title={t("zoomOut")} aria-label={t("zoomOut")}>
+          <ZoomOut className="w-3.5 h-3.5" aria-hidden="true" />
+        </button>
+        <button type="button" onClick={reset} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-950/5 hover:text-neutral-800 dark:text-neutral-300 dark:hover:bg-white/10 cursor-pointer" title={t("resetView")} aria-label={t("resetView")}>
+          <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
+        </button>
+      </div>
+      <div
+        className="h-full w-full flex items-center justify-center cursor-grab active:cursor-grabbing overflow-hidden"
+        onWheel={(e) => { setScale((s) => Math.max(0.3, Math.min(5, +(s + (e.deltaY < 0 ? 0.1 : -0.1)).toFixed(2)))); }}
+        onPointerDown={(e) => { dragging.current = { x: e.clientX - offset.x, y: e.clientY - offset.y }; (e.target as HTMLElement).setPointerCapture?.(e.pointerId); }}
+        onPointerMove={(e) => { if (dragging.current) setOffset({ x: e.clientX - dragging.current.x, y: e.clientY - dragging.current.y }); }}
+        onPointerUp={() => { dragging.current = null; }}
+      >
+        <div style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})` }} className="origin-center">
+          <MermaidDiagram id={id} content={code} />
+        </div>
+      </div>
+    </Modal>
   );
 }
 

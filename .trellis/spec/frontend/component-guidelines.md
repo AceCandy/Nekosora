@@ -95,6 +95,38 @@ AI 回复正文由 `shared/components/markdown/Markdown.tsx` 渲染,两条互斥
 
 **内联 style 过滤**:`streamdown-html.tsx` 对放行标签调 `sanitizeHTMLStyle`;当前为原样透传(不做属性白名单/危险值拦截/中性色映射),安全兜底依赖 streamdown 内部 rehype-harden。`custom` 路径完全不过滤。
 
+### Streamdown 富媒体交互契约
+
+- Markdown 图片只在 streamdown 路径通过 `components.img = MarkdownImage` 增强;必须保留懒加载、加载骨架、失败占位、原图下载和 Modal 放大。`alt` 同时是无障碍文本与失败兜底文案。custom 输出样式仍由 `customRenderer.ts` 原样渲染,不要假设两条路径自动共享 React 组件。
+- Mermaid 仅在图形模式显示全屏入口;源码模式不显示。全屏视图复用 `MermaidDiagram`,但必须传独立 `id`,避免内联图与全屏图的 `mermaid.render` DOM 标识冲突。关闭 Modal 时重置缩放和平移;缩放范围固定为 `0.3-5`。
+- `@streamdown/code` 的 Shiki 运行时必须在项目根 `package.json` 保持直接依赖,版本与插件解析出的版本一致。仅依赖传递依赖会让 Next.js `serverExternalPackages` 无法从项目根解析 `shiki` / `shiki/wasm`,开发服务器会持续输出 `Package shiki can't be external`。
+
+### Streamdown 代码块几何契约
+
+关闭行号后,Shiki 输出的行节点需要 `code > span { display: block }` 保留换行。此时外层 `code` 也必须是块级元素;如果保持默认 `inline`,其块级子节点不会被 `code` 的左内边距推开,即使 computed style 显示 padding 已生效,代码文字仍会贴住正文块左缘。
+
+```css
+/* Wrong: inline code 的 padding 无法约束块级行节点。 */
+.nekusora-md [data-streamdown="code-block-body"] code > span { display: block; }
+.nekusora-md [data-streamdown="code-block-body"] code { padding-left: 1.5rem; }
+
+/* Correct:header 与 code 使用同一内边距,并清掉标签的默认 margin。 */
+.nekusora-md [data-streamdown="code-block-header"] { padding-left: 1.5rem; }
+.nekusora-md [data-streamdown="code-block-header"] span { margin-left: 0; }
+.nekusora-md [data-streamdown="code-block-body"] code {
+  display: block;
+  padding-left: 1.5rem;
+}
+```
+
+浏览器回归检查必须直接比较文字节点,不能用“容器 left + padding”推算:
+
+```typescript
+expect(codeText.getBoundingClientRect().left - headerText.getBoundingClientRect().left).toBe(0);
+```
+
+至少覆盖桌面与窄屏;长代码允许在 `pre` 内横向滚动,但代码块本身不得撑出视口。
+
 ## Interaction Gotchas
 
 非显而易见的交互行为坑,踩过一次就要记住:

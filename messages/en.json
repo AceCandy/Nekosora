@@ -892,7 +892,15 @@
     "openExternal": "Open in new window",
     "structuredParseFailed": "Preview unavailable, showing source",
     "codeCollapse": "Collapse",
-    "codeExpand": "Expand {count} lines"
+    "codeExpand": "Expand {count} lines",
+    "imageZoom": "Zoom",
+    "imageDownload": "Download",
+    "imageFailed": "Image failed to load",
+    "mermaidDiagram": "Mermaid diagram",
+    "fullscreen": "Fullscreen",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "resetView": "Reset view"
   },
   "share": {
     "title": "Shared conversation",

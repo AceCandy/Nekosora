@@ -892,7 +892,15 @@
     "openExternal": "在新窗口打开",
     "structuredParseFailed": "内容解析失败，已显示源码",
     "codeCollapse": "收起",
-    "codeExpand": "展开 {count} 行"
+    "codeExpand": "展开 {count} 行",
+    "imageZoom": "放大",
+    "imageDownload": "下载",
+    "imageFailed": "图片加载失败",
+    "mermaidDiagram": "Mermaid 图",
+    "fullscreen": "全屏查看",
+    "zoomIn": "放大",
+    "zoomOut": "缩小",
+    "resetView": "重置视图"
   },
   "share": {
     "title": "分享的对话",
