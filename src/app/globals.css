@@ -228,12 +228,18 @@ body {
   border-top-color: var(--color-deep-space);
 }
 
-.nekusora-md a {
+/* streamdown 把 autolink 渲染成 <button data-streamdown="link"> 而非 <a>,
+   且其自带 text-primary 类依赖 --color-primary(本项目未定义,故失效);
+   故选择器同时覆盖 a 与 link button:a 适配 AI 输出的 raw HTML 链接。 */
+.nekusora-md :is(a, [data-streamdown="link"]) {
   color: var(--color-sora-blue);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
-.nekusora-md a:hover { text-decoration-thickness: 2px; }
+.nekusora-md :is(a, [data-streamdown="link"]):hover {
+  color: var(--color-sora-blue-hover);
+  text-decoration-thickness: 2px;
+}
 
 .nekusora-md strong {
   font-weight: 650;
