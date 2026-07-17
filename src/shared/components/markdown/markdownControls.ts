@@ -8,3 +8,8 @@ export const MARKDOWN_CONTROLS = {
   table: false,
   code: false,
 } satisfies ControlsConfig;
+
+/** 长代码块只在流式结束后进入默认折叠态。 */
+export function shouldCollapseCodeBlock(lineCount: number, isStreaming: boolean): boolean {
+  return !isStreaming && lineCount > 16;
+}

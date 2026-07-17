@@ -105,6 +105,8 @@ AI 回复正文由 `shared/components/markdown/Markdown.tsx` 渲染,两条互斥
 
 关闭行号后,Shiki 输出的行节点需要 `code > span { display: block }` 保留换行。此时外层 `code` 也必须是块级元素;如果保持默认 `inline`,其块级子节点不会被 `code` 的左内边距推开,即使 computed style 显示 padding 已生效,代码文字仍会贴住正文块左缘。
 
+长代码块的 16 行折叠门槛只在流式结束后生效。`isStreaming=true` 时不得应用 `max-height` / `overflow-hidden`、渐隐遮罩或折叠按钮,代码必须随增量完整展示;切换为 `false` 后,超过门槛的代码块才进入默认折叠态。手动展开状态应绑定当前代码内容,避免续写或重新生成沿用旧内容的展开状态。该边界由 `shouldCollapseCodeBlock(lineCount, isStreaming)` 统一判断,单测至少覆盖 16/17 行和 streaming/static 两种状态。
+
 ```css
 /* Wrong: inline code 的 padding 无法约束块级行节点。 */
 .nekusora-md [data-streamdown="code-block-body"] code > span { display: block; }

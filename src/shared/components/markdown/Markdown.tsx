@@ -38,7 +38,7 @@ import { resolveStructuredKind } from "@/lib/artifacts/structured";
 import { copyToClipboard } from "@/shared/lib/clipboard";
 import { StructuredInlineView } from "@/shared/components/structured-blocks";
 import { MermaidDiagram } from "@/shared/components/mermaid/MermaidDiagram";
-import { MARKDOWN_CONTROLS } from "./markdownControls";
+import { MARKDOWN_CONTROLS, shouldCollapseCodeBlock } from "./markdownControls";
 
 interface MarkdownProps {
   /** 待渲染的 markdown 文本(流式增量时会持续变化)。 */
@@ -119,9 +119,6 @@ function getCodeLanguage(className?: string): string {
   return m?.[1] ?? "";
 }
 
-/** 代码块超过此行数才折叠(参考 DEEIX,长代码块默认收起+渐隐遮罩)。 */
-const CODE_BLOCK_COLLAPSE_LINE_THRESHOLD = 16;
-
 /** 计算代码块行数(去掉末尾换行后按 \n 分割)。 */
 function getLineCount(value: string): number {
   if (!value) return 0;
@@ -174,7 +171,7 @@ function MarkdownCodeBlock({
   const isPaper = ctx?.isPaper ?? false;
   const t = useTranslations("artifacts");
   const [copied, setCopied] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  const [expandedCodeHash, setExpandedCodeHash] = useState<string | null>(null);
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const childArr = Children.toArray(children);
@@ -183,6 +180,8 @@ function MarkdownCodeBlock({
     childArr.length === 1 && isValidElement<PreChildProps>(firstChild) ? firstChild : null;
   const language = codeEl ? getCodeLanguage(codeEl.props.className) : "";
   const code = codeEl ? getNodeText(codeEl.props.children) : "";
+  const codeHash = quickHash(code);
+  const expanded = expandedCodeHash === codeHash;
 
   // 结构化块识别(chart/metric/table),与 html/svg/mermaid 预览互斥。
   const structuredKind = resolveStructuredKind(language);
@@ -218,7 +217,7 @@ function MarkdownCodeBlock({
   // 以下:非结构化源码 / html-svg-mermaid 预览。
   const canPreview = Boolean(kind && onPreview && code.trim());
   const lineCount = getLineCount(code);
-  const isCollapsible = lineCount > CODE_BLOCK_COLLAPSE_LINE_THRESHOLD;
+  const isCollapsible = shouldCollapseCodeBlock(lineCount, isStreaming);
 
   return (
     <div className="group relative">
@@ -325,7 +324,7 @@ function MarkdownCodeBlock({
         <div className="flex justify-center">
           <button
             type="button"
-            onClick={() => setExpanded((v) => !v)}
+            onClick={() => setExpandedCodeHash((value) => value === codeHash ? null : codeHash)}
             className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium text-neutral-500 hover:bg-neutral-950/5 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-white transition-colors cursor-pointer"
           >
             {expanded ? (
