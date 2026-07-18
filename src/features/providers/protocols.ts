@@ -5,8 +5,8 @@ import type { ProviderProtocol } from "@/db/types";
  * admin / panel 两处 page.tsx 共享,避免重复定义。
  */
 export const PROVIDER_PROTOCOLS: { value: ProviderProtocol; label: string }[] = [
+  { value: "openai-compatible", label: "openai-compatible" },
   { value: "openai", label: "openai" },
   { value: "anthropic", label: "anthropic" },
   { value: "gemini", label: "gemini" },
-  { value: "openai-compatible", label: "openai-compatible" },
 ];

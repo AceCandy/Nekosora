@@ -52,11 +52,13 @@ export interface LogUsageParams {
 /**
  * 上游 provider key 脱敏:前3后3,中间 `*`。短 key 兜底不暴露全量。
  * 运行时持明文,只把脱敏结果写入日志(绝不存明文)。
- * - 空值 → null
+ * - null/undefined -> null;空字符串(无 key provider)-> 「无key」
  * - length <= 6 → `${k.slice(0,2)}***`(避免短 key 泄露全量)
  * - 否则 → `${k.slice(0,3)}***${k.slice(-3)}`
  */
 export function maskKey(k?: string | null): string | null {
+  // 空字符串 = 无 key provider(如 OVH 免费层):日志以「无key」标识,区别于 null(字段缺失)。
+  if (k === "") return "无key";
   if (!k) return null;
   return k.length <= 6 ? `${k.slice(0, 2)}***` : `${k.slice(0, 3)}***${k.slice(-3)}`;
 }

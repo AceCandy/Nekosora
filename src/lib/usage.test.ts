@@ -2,10 +2,10 @@ import { describe, it, expect } from "vitest";
 import { maskKey } from "@/lib/usage";
 
 describe("maskKey", () => {
-  it("空值返回 null(绝不存明文)", () => {
+  it("空值返回 null;空字符串(无 key provider)返回「无key」", () => {
     expect(maskKey(undefined)).toBeNull();
     expect(maskKey(null)).toBeNull();
-    expect(maskKey("")).toBeNull();
+    expect(maskKey("")).toBe("无key");
   });
 
   it("长 key 取前3后3,中间用 * 连接", () => {

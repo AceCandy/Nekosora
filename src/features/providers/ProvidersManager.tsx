@@ -206,7 +206,6 @@ export default function ProvidersManager({
             name: editing.name,
             protocol: editing.protocol,
             baseUrl: editing.baseUrl,
-            keyStrategy: editing.keyStrategy,
             keys: editing.keys,
           }}
         />

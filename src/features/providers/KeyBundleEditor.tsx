@@ -1,7 +1,7 @@
 "use client";
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Eye, EyeOff, Plus, Trash2, ShieldCheck, ListPlus } from "lucide-react";
+import { Eye, EyeOff, Plus, Trash2, ShieldCheck } from "lucide-react";
 import { clsx } from "clsx";
 import Input from "@/shared/ui/Input";
 import { Button } from "@/shared/ui/Button";
@@ -22,6 +22,8 @@ export interface KeyBundleEditorHandle {
    * 无重复:返回 false(放行原保存流程)。
    */
   validateDuplicates: () => boolean;
+  /** 打开批量设置弹窗:预填当前所有行(key,weight),交由用户编辑/追加后整体替换。 */
+  openBatch: () => void;
 }
 
 /** 逐 key 测试 action:直接用原始参数探测,不读 DB。 */
@@ -34,6 +36,8 @@ export type TestKeyAction = (input: {
 interface KeyBundleEditorProps {
   requireKeys?: boolean;
   initialRows?: EditorRow[];
+  /** 无 key 模式:禁用所有密钥输入与按钮(提交时由父级 hidden 字段标记空 bundle)。 */
+  noKey?: boolean;
   /** 当前 provider 协议(测试用)。 */
   protocol?: string;
   /** 当前 provider 接口地址(测试用)。 */
@@ -45,7 +49,7 @@ interface KeyBundleEditorProps {
 type TestState = "idle" | "pending" | { result: ProbeResult };
 
 const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
-  function KeyBundleEditor({ requireKeys = true, initialRows, protocol, baseUrl, testAction }, ref) {
+  function KeyBundleEditor({ requireKeys = true, initialRows, noKey = false, protocol, baseUrl, testAction }, ref) {
     const t = useTranslations("providers");
     const [rows, setRows] = useState<EditorRow[]>(
       initialRows && initialRows.length > 0
@@ -58,7 +62,7 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
     // 每行各自的测试状态(按行索引)。null = 未测/idle。
     const [testStates, setTestStates] = useState<TestState[]>(() => rows.map(() => "idle"));
 
-    // 批量添加弹窗。
+    // 批量设置弹窗。
     const [batchOpen, setBatchOpen] = useState(false);
     const [batchText, setBatchText] = useState("");
 
@@ -99,27 +103,41 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
     const toggleReveal = (i: number) =>
       setRevealed((v) => v.map((on, idx) => (idx === i ? !on : on)));
 
-    // 批量添加:按行拆分 → trim → 丢空行 → 批次内去重(保留首次)→ 权重默认 1 追加到列表末尾。
+    // 批量设置:弹窗预填当前所有行(key,weight),用户可编辑/追加。
+    // 确定时按行解析「key」或「key,权重」(权重省略/非法 -> 1),整体去重(同 key 保留首次含其权重),
+    // 整体替换 rows(与"保存后整体更新"语义一致)。
     const commitBatch = () => {
       const seen = new Set<string>();
-      const fresh: EditorRow[] = [];
+      const result: EditorRow[] = [];
       for (const raw of batchText.split("\n")) {
-        const k = raw.trim();
-        if (!k || seen.has(k)) continue;
-        seen.add(k);
-        fresh.push({ key: k, weight: "1" });
+        const line = raw.trim();
+        if (!line) continue;
+        const commaIdx = line.indexOf(",");
+        let key: string;
+        let weight: string;
+        if (commaIdx === -1) {
+          key = line;
+          weight = "1";
+        } else {
+          key = line.slice(0, commaIdx).trim();
+          const wStr = line.slice(commaIdx + 1).trim();
+          weight = wStr && Number.isFinite(Number(wStr)) && Number(wStr) >= 0 ? wStr : "1";
+        }
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        result.push({ key, weight });
       }
-      if (fresh.length > 0) {
+      if (result.length > 0) {
         clearDuplicate();
-        setRows((r) => [...r, ...fresh]);
-        setRevealed((v) => [...v, ...fresh.map(() => false)]);
-        setTestStates((s) => [...s, ...fresh.map((): TestState => "idle")]);
+        setRows(result);
+        setRevealed(result.map(() => false));
+        setTestStates(result.map((): TestState => "idle"));
       }
       setBatchText("");
       setBatchOpen(false);
     };
 
-    // 暴露给父表单:保存前查重。依赖 rows,确保读到最新值。
+    // 暴露给父表单:保存前查重 + 打开批量设置弹窗。依赖 rows,确保读到最新值。
     useImperativeHandle(
       ref,
       () => ({
@@ -141,6 +159,10 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
           }
           setDuplicateInfo(null);
           return false;
+        },
+        openBatch: () => {
+          setBatchText(rows.map((r) => `${r.key},${r.weight}`).join("\n"));
+          setBatchOpen(true);
         },
       }),
       [rows],
@@ -199,6 +221,7 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
                   name="keys[].key"
                   type={revealed[i] ? "text" : "password"}
                   required={requireKeys}
+                  disabled={noKey}
                   value={row.key}
                   onChange={(e) => update(i, "key", e.target.value)}
                   className="pr-9 font-mono text-xs"
@@ -222,6 +245,7 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
                   type="number"
                   min={0}
                   step={1}
+                  disabled={noKey}
                   value={row.weight}
                   onChange={(e) => update(i, "weight", e.target.value)}
                   className="w-16 font-mono text-xs"
@@ -234,7 +258,7 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
                   size="xs"
                   onClick={() => testOne(i)}
                   loading={st === "pending"}
-                  disabled={!row.key.trim()}
+                  disabled={noKey || !row.key.trim()}
                   className="shrink-0 text-sora-blue hover:text-sora-blue-hover"
                   title={t("testKeyTitle")}
                 >
@@ -247,7 +271,7 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
                 size="xs"
                 onClick={() => removeRow(i)}
                 className="shrink-0 p-2 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 disabled:opacity-30 transition-colors"
-                disabled={rows.length <= 1}
+                disabled={noKey || rows.length <= 1}
                 aria-label={t("deleteKeyAria")}
                 title={t("deleteKeyTitle")}
               >
@@ -259,30 +283,22 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
         })}
 
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={addRow}
-              className="inline-flex items-center gap-1 text-xs font-semibold text-sora-blue hover:text-sora-blue-hover transition-colors"
-            >
-              <Plus size={14} />
-              <span>{t("addApiKey")}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setBatchOpen(true)}
-              className="inline-flex items-center gap-1 text-xs font-semibold text-sora-blue hover:text-sora-blue-hover transition-colors"
-            >
-              <ListPlus size={14} />
-              <span>{t("batchAddKey")}</span>
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={addRow}
+            disabled={noKey}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-sora-blue hover:text-sora-blue-hover transition-colors disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-sora-blue"
+          >
+            <Plus size={14} />
+            <span>{t("addApiKey")}</span>
+          </button>
           {canTest && rows.length > 1 && (
             <Button
               type="button"
               variant="ghost"
               size="xs"
               onClick={testAll}
+              disabled={noKey}
               className="text-sora-blue hover:text-sora-blue-hover"
             >
               <ShieldCheck size={14} />
@@ -299,12 +315,10 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
 
         <p className="text-xs text-neutral-400 dark:text-neutral-500 leading-normal flex items-start gap-1">
           <span className="text-sora-blue shrink-0">※</span>
-          <span>
-            {requireKeys ? t("keyHintRequired") : t("keyHintEdit")}
-          </span>
+          <span>{t("keyHintRequired")}</span>
         </p>
 
-        {/* 批量添加弹窗(嵌套于编辑服务商弹窗;原生 <dialog> 支持叠层展示)。 */}
+        {/* 批量设置弹窗(嵌套于编辑服务商弹窗;原生 <dialog> 支持叠层展示)。 */}
         <Modal open={batchOpen} onClose={() => setBatchOpen(false)} title={t("batchAddTitle")}>
           <div className="space-y-3">
             <p className="text-xs text-neutral-500 dark:text-neutral-400 leading-normal">

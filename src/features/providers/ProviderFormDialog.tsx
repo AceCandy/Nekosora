@@ -9,6 +9,7 @@ import { DEFAULT_HOSTS, resolveModelsUrl } from "@/lib/providers/defaults";
 import Input from "@/shared/ui/Input";
 import Select from "@/shared/ui/Select";
 import { Button } from "@/shared/ui/Button";
+import { ListPlus } from "lucide-react";
 
 interface ProviderFormDialogProps {
   open: boolean;
@@ -22,7 +23,6 @@ interface ProviderFormDialogProps {
     name?: string;
     protocol?: string;
     baseUrl?: string;
-    keyStrategy?: string;
     keys?: EditorRow[];
   };
 }
@@ -43,16 +43,21 @@ export default function ProviderFormDialog({
   const [formKey, setFormKey] = useState(0);
   // protocol / baseUrl 需受控,以便测试按钮据此请求对应上游,
   // 并在切换协议时自动填充默认 baseUrl。
-  const [protocol, setProtocol] = useState(initial?.protocol ?? protocols[0]?.value ?? "openai");
+  const [protocol, setProtocol] = useState(initial?.protocol ?? protocols[0]?.value ?? "openai-compatible");
   const [baseUrl, setBaseUrl] = useState(initial?.baseUrl ?? "");
+  // 无 key provider(如 OVH 免费层):勾选后禁用密钥输入,提交空 key bundle,
+  // 转发用空 key,日志以「无key」记录。编辑模式回显时若已无 key 则默认勾选。
+  const initialHasKeys = !!(initial?.keys && initial.keys.some((k) => k.key.trim()));
+  const [noKey, setNoKey] = useState(isEdit && !initialHasKeys);
   // 保存前交由 KeyBundleEditor 查重(发现重复则阻止本次提交)。
   const editorRef = useRef<KeyBundleEditorHandle>(null);
 
   const handleClose = () => {
     onClose();
     setFormKey((k) => k + 1);
-    setProtocol(initial?.protocol ?? protocols[0]?.value ?? "openai");
+    setProtocol(initial?.protocol ?? protocols[0]?.value ?? "openai-compatible");
     setBaseUrl(initial?.baseUrl ?? "");
+    setNoKey(isEdit && !initialHasKeys);
   };
 
   // 切换协议:若当前 baseUrl 为空或仍是某协议的默认值,则自动套用新协议的默认值,
@@ -119,18 +124,6 @@ export default function ProviderFormDialog({
             </Select>
           </label>
           <label className="block col-span-2">
-            <span className={labelCls}>{t("fieldKeyStrategy")}</span>
-            <Select
-              name="keyStrategy"
-              defaultValue={initial?.keyStrategy ?? "round_robin"}
-              className="w-full"
-            >
-              <option value="round_robin">{t("keyStrategyRoundRobin")}</option>
-              <option value="weighted">{t("keyStrategyWeighted")}</option>
-            </Select>
-          </label>
-
-          <label className="block col-span-2">
             <span className={labelCls}>{t("fieldBaseUrl")}</span>
             <Input
               name="baseUrl"
@@ -159,11 +152,35 @@ export default function ProviderFormDialog({
             </div>
           </label>
           <div className="block col-span-2">
-            <span className={labelCls}>{t("fieldApiKey")}</span>
+            <div className="mb-1.5 flex items-center justify-between">
+              <span className="text-xs font-semibold text-neutral-500 dark:text-neutral-400">{t("fieldApiKey")}</span>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => editorRef.current?.openBatch()}
+                  disabled={noKey}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-sora-blue hover:text-sora-blue-hover transition-colors disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-sora-blue"
+                >
+                  <ListPlus size={14} />
+                  <span>{t("batchAddKey")}</span>
+                </button>
+                <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={noKey}
+                    onChange={(e) => setNoKey(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-neutral-300 dark:border-neutral-600 text-sora-blue focus:ring-sora-blue/30 cursor-pointer"
+                  />
+                  {t("noKey")}
+                </label>
+              </div>
+            </div>
+            <input type="hidden" name="noKey" value={noKey ? "1" : ""} />
             <KeyBundleEditor
               ref={editorRef}
               initialRows={initial?.keys}
               requireKeys={false}
+              noKey={noKey}
               protocol={protocol}
               baseUrl={baseUrl}
               testAction={testAction}

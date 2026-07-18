@@ -102,7 +102,7 @@ export async function createProvider(formData: FormData) {
       String(formData.get("baseUrl") ?? ""),
     ),
     apiKeysEnc,
-    keyStrategy: String(formData.get("keyStrategy") ?? "round_robin"),
+    keyStrategy: "weighted",
     enabled: true,
     priority: 0,
   });
@@ -123,11 +123,13 @@ export async function updateProvider(id: string, formData: FormData) {
     updatedAt: new Date(),
   };
   const keys = collectKeys(formData);
-  if (keys.length > 0) {
+  const noKey = formData.get("noKey") === "1";
+  // 无 key 模式:显式清空 bundle;否则 keys 非空才更新,空表示不改 key。
+  if (noKey) {
+    patch.apiKeysEnc = encryptKeyBundle([]);
+  } else if (keys.length > 0) {
     patch.apiKeysEnc = encryptKeyBundle(keys);
   }
-  const ks = formData.get("keyStrategy");
-  if (ks !== null) patch.keyStrategy = String(ks);
   await db
     .update(S().providers)
     .set(patch)
