@@ -91,6 +91,11 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
   );
   const userMsgRef = useRef<HTMLDivElement>(null);
 
+  // 移动端长按(桌面右键)消息弹出的操作菜单:编辑 / 删除
+  const [menuOpen, setMenuOpen] = useState(false);
+  // contextmenu 触发后抑制紧随的 click,避免长按后又误触折叠 toggle
+  const contextMenuFiredRef = useRef(false);
+
   // 重新生成原地替换为新 assistant 占位时,重置思考计时与弹层状态
   useEffect(() => {
     reasoningStartRef.current = null;
@@ -188,6 +193,11 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
     }
   };
 
+  // 是否可弹出操作菜单(移动长按 / 桌面右键):至少有编辑或删除之一可用
+  const canEdit = Boolean(publicId && onEdit && !isStreaming && !conversationStreaming);
+  const canDelete = Boolean(publicId && onRequestDelete && !conversationStreaming);
+  const canShowMenu = canEdit || canDelete;
+
   return (
     <div id={domId} className={clsx("flex gap-4 animate-in fade-in duration-200 scroll-mt-4", role === "user" ? "justify-end" : "justify-start")}>
       {role === "assistant" && (
@@ -204,7 +214,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
           <Sparkles className="w-3.5 h-3.5 text-sora-blue" aria-hidden="true" />
         </button>
       )}
-      <div className={clsx("max-w-[82%] space-y-2", role === "user" ? "flex flex-col items-end" : "")}>
+      <div className={clsx("max-w-[82%] space-y-2", role === "user" ? "flex flex-col items-end w-full" : "")}>
         {role === "user" ? (
           /* 用户消息: 可编辑文本气泡 */
           (editing ? (<div className="w-full space-y-1.5">
@@ -255,7 +265,14 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
           </div>) : (<div className="group relative">
             <div
               ref={userMsgRef}
+              onContextMenu={(e) => {
+                if (!canShowMenu) return;
+                e.preventDefault();
+                contextMenuFiredRef.current = true;
+                setMenuOpen(true);
+              }}
               onClick={() => {
+                if (contextMenuFiredRef.current) { contextMenuFiredRef.current = false; return; }
                 if (!userMsgCanCollapse) return;
                 // 有选区时(划词选择)不触发,避免与复制/引用冲突
                 const sel = window.getSelection();
@@ -263,7 +280,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
                 setUserMsgExpanded((v) => !v);
               }}
               className={clsx(
-                "rounded-2xl bg-neutral-900 text-white px-4 py-2.5 dark:bg-white dark:text-black shadow-none border border-transparent text-sm leading-relaxed whitespace-pre-wrap break-words overflow-hidden transition-[max-height] duration-300 ease-out",
+                "relative rounded-2xl bg-neutral-900 text-white px-4 py-2.5 dark:bg-white dark:text-black shadow-none border border-transparent text-sm leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere] overflow-hidden transition-[max-height] duration-300 ease-out",
                 userMsgCanCollapse && "cursor-pointer",
               )}
               style={
@@ -273,6 +290,9 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
               }
             >
               {content}
+              {userMsgCanCollapse && !userMsgExpanded ? (
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-b from-transparent to-neutral-900 dark:to-white" />
+              ) : null}
             </div>
             {userMsgCanCollapse ? (
               <button
@@ -600,6 +620,38 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
           </details>
         )}
       </div>
+      {role === "user" && menuOpen && canShowMenu && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm animate-in fade-in duration-150"
+          onClick={() => setMenuOpen(false)}
+        >
+          <div
+            className="rounded-xl border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink p-1.5 min-w-[160px] shadow-lg animate-in fade-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => { setMenuOpen(false); setDraft(content); setEditing(true); }}
+                className="flex items-center gap-2 w-full px-3 py-2 text-sm text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-900 rounded-lg transition-colors cursor-pointer"
+              >
+                <Pencil className="w-4 h-4" aria-hidden="true" />
+                <span>{t("edit")}</span>
+              </button>
+            )}
+            {canDelete && (
+              <button
+                type="button"
+                onClick={() => { setMenuOpen(false); if (publicId) onRequestDelete?.(publicId); }}
+                className="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" aria-hidden="true" />
+                <span>{t("delete")}</span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 });

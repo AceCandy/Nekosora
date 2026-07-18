@@ -55,7 +55,7 @@ export default async function ChatLayout({ children }: { children: React.ReactNo
   }));
 
   return (
-    <div className="flex h-screen overflow-hidden bg-nebula-white text-space-ink dark:bg-twilight-obsidian dark:text-nebula-silver transition-colors duration-200">
+    <div className="flex h-[100dvh] overflow-hidden bg-nebula-white text-space-ink dark:bg-twilight-obsidian dark:text-nebula-silver transition-colors duration-200">
       <Sidebar
         userEmail={user.email}
         conversations={mappedConversations}
