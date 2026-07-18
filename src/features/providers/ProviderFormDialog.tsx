@@ -163,7 +163,7 @@ export default function ProviderFormDialog({
             <KeyBundleEditor
               ref={editorRef}
               initialRows={initial?.keys}
-              requireKeys={!isEdit}
+              requireKeys={false}
               protocol={protocol}
               baseUrl={baseUrl}
               testAction={testAction}

@@ -93,6 +93,9 @@ export function pickWeightedKey(keys: WeightedKey[]): string {
  * stream.ts 用它做"同 provider 内逐 key 重试":权重高的先试。
  */
 export function orderedWeightedKeys(keys: WeightedKey[]): WeightedKey[] {
+  // 无 key provider(如 OVH 免费层):keys 为空时尝试一次空 key,
+  // 与 pickWeightedKey 的兜底对齐,让 stream.ts 故障转移循环能执行。
+  if (keys.length === 0) return [{ key: "", weight: 1 }];
   const remaining = [...keys];
   const out: WeightedKey[] = [];
   while (remaining.length > 0) {

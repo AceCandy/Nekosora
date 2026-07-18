@@ -91,7 +91,7 @@ function buildModelsRequest(
         url: `${base}/models`,
         init: {
           ...common,
-          headers: { Authorization: `Bearer ${apiKey}`, ...merged },
+          headers: { ...(apiKey && { Authorization: `Bearer ${apiKey}` }), ...merged },
         },
       };
   }
@@ -109,10 +109,7 @@ export async function probeProviderKey(opts: {
   upstreamModelName?: string;
   headers?: Record<string, string>;
 }): Promise<ProbeResult> {
-  const { apiKey, baseUrl, upstreamModelName } = opts;
-  if (!apiKey) {
-    return { ok: false, error: "缺少 API Key", errorKind: "unknown" };
-  }
+  const { baseUrl, upstreamModelName } = opts;
   if (!baseUrl) {
     return { ok: false, error: "缺少接口地址", errorKind: "unknown" };
   }
@@ -276,7 +273,6 @@ export async function fetchUpstreamModels(opts: {
   headers?: Record<string, string>;
 }): Promise<UpstreamModel[]> {
   const { protocol, baseUrl, apiKey, headers } = opts;
-  if (!apiKey) throw new Error("缺少 API Key");
   if (!baseUrl) throw new Error("缺少接口地址");
 
   const base = baseUrl.replace(/\/+$/, "");

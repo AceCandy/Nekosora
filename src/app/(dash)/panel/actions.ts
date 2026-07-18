@@ -92,7 +92,7 @@ export async function getMyProviders() {
 export async function createMyProvider(formData: FormData) {
   const user = await requireSession();
   const db = await getDb();
-  // 收集多 key(与 admin 一致),空则报错。
+  // 收集多 key(与 admin 一致),允许为空(无 key provider,如 OVH 免费层)。
   const rawKeys = formData.getAll("keys[].key").map((k) => String(k));
   const rawWeights = formData.getAll("keys[].weight").map((w) => Number(String(w)));
   let keys: WeightedKey[];
@@ -108,7 +108,6 @@ export async function createMyProvider(formData: FormData) {
     const single = String(formData.get("apiKey") ?? "").trim();
     keys = single ? [{ key: single, weight: 1 }] : [];
   }
-  if (keys.length === 0) throw new Error("至少需要一个 API Key");
   await db.insert(S().providers).values({
     ownerUserId: user.id,
     name: String(formData.get("name") ?? ""),

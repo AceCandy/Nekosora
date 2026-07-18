@@ -91,7 +91,7 @@ export async function createProvider(formData: FormData) {
   const admin = await requireAdmin();
   const db = await getDb();
   const keys = collectKeys(formData);
-  if (keys.length === 0) throw new Error("至少需要一个 API Key");
+  // 允许无 key provider(如 OVH 免费层):keys 为空时存空 bundle,转发时用空 key。
   const apiKeysEnc = encryptKeyBundle(keys);
   await db.insert(S().providers).values({
     ownerUserId: admin.id,
