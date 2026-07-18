@@ -195,10 +195,13 @@ export async function checkProviderHealth(id: string): Promise<ProviderHealthRes
   if (!provider) throw new Error("服务商不存在");
 
   const keys = parseKeyBundle(provider.apiKeysEnc as string);
+  // 无 key provider(如 OVH 免费层):keys 为空时用空 key 探测一次上游连通性,
+  // 与转发时空 key 行为一致(probe 空 key 不发 Authorization 头)。
+  const probeList = keys.length > 0 ? keys : [{ key: "", weight: 1 }];
   const protocol = provider.protocol as ProviderProtocol;
   const baseUrl = provider.baseUrl as string;
   let healthy = 0;
-  for (const k of keys) {
+  for (const k of probeList) {
     const result = await probeProviderKey({ protocol, baseUrl, apiKey: k.key });
     if (result.ok) healthy += 1;
   }
@@ -208,12 +211,12 @@ export async function checkProviderHealth(id: string): Promise<ProviderHealthRes
     .set({
       lastHealthCheckedAt: new Date(checkedAt),
       lastHealthyKeyCount: healthy,
-      lastTotalKeyCount: keys.length,
+      lastTotalKeyCount: probeList.length,
       updatedAt: new Date(),
     })
     .where(and(eq(S().providers.id, id), eq(S().providers.ownerUserId, admin.id)));
   revalidatePath("/admin", "layout");
-  return { healthy, total: keys.length, checkedAt };
+  return { healthy, total: probeList.length, checkedAt };
 }
 
 /** 拉取 provider 的上游模型列表(直接 fetch /models)。 */
