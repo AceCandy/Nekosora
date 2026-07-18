@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { useTranslations } from "next-intl";
 import { MessageScroller, useMessageScroller } from "@shadcn/react/message-scroller";
 import { Sparkles, ChevronDown, Copy, Reply, MessagesSquare, Volume2, Square } from "lucide-react";
@@ -186,38 +186,29 @@ export function ChatMessageList({
   const viewportRef = useRef<HTMLDivElement>(null);
 
   // ===== 会话滚动位置记忆 =====
-  // render 阶段(早于 scroll 事件)读取该会话的记忆位置,避免被切会话时 message-scroller
-  // 自动 scrollToEnd 触发的 onScroll 覆盖;仅依赖 conversationId,memory 更新不触发重算。
-  const savedScroll = useMemo(() => {
-    if (!conversationId) return undefined;
-    return scrollMemory.get(conversationId);
-  }, [conversationId]);
-  // 恢复期间暂停 onScroll 记录,防止自动滚动污染记忆
-  const restoringRef = useRef(false);
+  // 关闭 message-scroller 的 autoScroll(其 following-bottom 模式会在 messages 变化时持续
+  // scrollToEnd,覆盖恢复的位置),改为手动控制:切会话时 useLayoutEffect 在 fe 首次滚底后
+  // 同步覆盖回记忆位置(无闪烁);流式时仅在用户已贴底时手动跟随(参考 GPT/Claude:用户在
+  // 非底部看历史时不强制跟随)。restoredForConvRef 防止流式结束后重复恢复。
+  const restoredForConvRef = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    if (!conversationId || streaming) return;
+    if (restoredForConvRef.current === conversationId) return;
+    restoredForConvRef.current = conversationId;
+    const saved = scrollMemory.get(conversationId);
+    if (saved === undefined) return;
+    const vp = viewportRef.current;
+    if (vp) vp.scrollTop = saved;
+  }, [conversationId, streaming]);
+  // 流式时手动跟随底部(仅当用户已贴底);替代 autoScroll 的自动 scrollToEnd
   useEffect(() => {
-    if (savedScroll === undefined || !conversationId) {
-      restoringRef.current = false;
-      return;
-    }
-    restoringRef.current = true;
-    // 双 rAF:等 message-scroller 处理完 messages 替换的自动 scrollToEnd 后再覆盖恢复
-    const raf1 = requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        const vp = viewportRef.current;
-        if (vp) {
-          vp.scrollTop = savedScroll;
-          scrollMemory.set(conversationId, savedScroll);
-        }
-        restoringRef.current = false;
-      });
-    });
-    return () => {
-      cancelAnimationFrame(raf1);
-      restoringRef.current = false;
-    };
-  }, [conversationId, savedScroll]);
+    if (!streaming) return;
+    const vp = viewportRef.current;
+    if (!vp) return;
+    const atBottom = vp.scrollTop + vp.clientHeight >= vp.scrollHeight - 24;
+    if (atBottom) vp.scrollTop = vp.scrollHeight;
+  }, [messages, streaming]);
   const handleViewportScroll = useCallback(() => {
-    if (restoringRef.current) return;
     const vp = viewportRef.current;
     if (!vp || !conversationId) return;
     scrollMemory.set(conversationId, vp.scrollTop);
@@ -243,7 +234,7 @@ export function ChatMessageList({
     : [];
 
   return (
-    <MessageScroller.Provider autoScroll defaultScrollPosition="end" scrollEdgeThreshold={24}>
+    <MessageScroller.Provider autoScroll={false} defaultScrollPosition="end" scrollEdgeThreshold={24}>
       {/* Root 即消息区外层容器,对话大纲/回到最新按钮锚定其内 */}
       <MessageScroller.Root className="relative flex-1 min-h-0 animate-in fade-in slide-in-from-bottom-2 duration-200">
         <MessageScroller.Viewport
