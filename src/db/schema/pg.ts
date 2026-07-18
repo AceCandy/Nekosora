@@ -166,6 +166,14 @@ export const modelCatalog = pgTable(
   ],
 );
 
+/** 单个 key 的存活探测结果(用 index 标识第几个 key,不存明文 key)。 */
+export interface ProviderKeyResult {
+  index: number;
+  ok: boolean;
+  errorKind?: "auth" | "network" | "unknown";
+  error?: string;
+}
+
 export const providers = pgTable(
   "providers",
   {
@@ -188,6 +196,10 @@ export const providers = pgTable(
     lastHealthCheckedAt: timestamp("last_health_checked_at", { withTimezone: true }),
     lastHealthyKeyCount: integer("last_healthy_key_count"),
     lastTotalKeyCount: integer("last_total_key_count"),
+    // 网络层连通判定:任一 key 探测非 network 即通(能连上服务器)。null=未检测。
+    lastNetworkOk: boolean("last_network_ok"),
+    // 逐 key 探测结果(用 index 标识第几个 key,不存明文 key)。null=未检测。
+    lastKeyResults: jsonb("last_key_results").$type<ProviderKeyResult[]>(),
     // 检测模型(手填或从上游模型列表选),用于后续深度健康检测;空表示未配置。
     testModel: text("test_model"),
     // 最近一次拉取并落库的上游模型 id 列表(/models);空表示未拉取。

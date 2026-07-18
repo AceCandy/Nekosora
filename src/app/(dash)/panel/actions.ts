@@ -8,6 +8,7 @@ import { probeProviderKey, fetchUpstreamModels, type ProbeResult, type UpstreamM
 import { normalizeBaseUrl } from "@/lib/providers/defaults";
 import { recordSuccess, recordFailure } from "@/lib/circuit-breaker";
 import type { ProviderProtocol } from "@/db/types";
+import type { ProviderKeyResult } from "@/db/schema/pg";
 import { requireSession } from "@/lib/session";
 import { findCatalogMatch, pickDisplayName } from "@/lib/model-catalog";
 import {
@@ -191,12 +192,17 @@ export async function testMyKeyDirect(input: {
 }
 
 /**
- * 检测 provider 的所有 key 健康度(校验归属),汇总 X/Y 并落库。
+ * 检测 provider 的所有 key 存活(校验归属):网络层(任一非 network 即通) + key 层(每 key 401/403 判无效)。
+ * 串行逐个探测,结果写回 provider 表,列表持久展示。
  */
 export async function checkMyProviderHealth(id: string): Promise<{
   healthy: number;
   total: number;
   checkedAt: number;
+  /** 网络层连通:任一 key 探测非 network 即通(能连上服务器)。 */
+  networkOk: boolean;
+  /** 逐 key 探测结果(用 index 标识,不存明文 key)。 */
+  keyResults: ProviderKeyResult[];
 }> {
   const user = await requireSession();
   const db = await getDb();
@@ -212,11 +218,19 @@ export async function checkMyProviderHealth(id: string): Promise<{
   const probeList = keys.length > 0 ? keys : [{ key: "", weight: 1 }];
   const protocol = provider.protocol as ProviderProtocol;
   const baseUrl = provider.baseUrl as string;
-  let healthy = 0;
-  for (const k of probeList) {
-    const result = await probeProviderKey({ protocol, baseUrl, apiKey: k.key });
-    if (result.ok) healthy += 1;
+  const keyResults: ProviderKeyResult[] = [];
+  for (let i = 0; i < probeList.length; i++) {
+    const result = await probeProviderKey({ protocol, baseUrl, apiKey: probeList[i].key });
+    keyResults.push({
+      index: i,
+      ok: result.ok,
+      errorKind: result.errorKind,
+      error: result.error,
+    });
   }
+  const healthy = keyResults.filter((r) => r.ok).length;
+  // 网络层:任一 key 探测非 network 即通(含 ok/auth/unknown,均说明能连上服务器)。
+  const networkOk = keyResults.some((r) => r.errorKind !== "network");
   const checkedAt = Date.now();
   await db
     .update(S().providers)
@@ -224,11 +238,13 @@ export async function checkMyProviderHealth(id: string): Promise<{
       lastHealthCheckedAt: new Date(checkedAt),
       lastHealthyKeyCount: healthy,
       lastTotalKeyCount: probeList.length,
+      lastNetworkOk: networkOk,
+      lastKeyResults: keyResults,
       updatedAt: new Date(),
     })
     .where(and(eq(S().providers.id, id), eq(S().providers.ownerUserId, user.id)));
   revalidatePath("/panel", "layout");
-  return { healthy, total: probeList.length, checkedAt };
+  return { healthy, total: probeList.length, checkedAt, networkOk, keyResults };
 }
 
 /** 拉取 provider 的上游模型列表(校验归属,仅限自己的)。 */

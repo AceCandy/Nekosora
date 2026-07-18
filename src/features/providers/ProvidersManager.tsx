@@ -2,6 +2,7 @@
 import { useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import type { FormDataSerializableAction } from "@/features/providers/types";
+import type { ProviderKeyResult } from "@/db/schema/pg";
 import type { EditorRow, TestKeyAction } from "@/features/providers/KeyBundleEditor";
 import ProviderFormDialog from "@/features/providers/ProviderFormDialog";
 import ProviderHealthButton, { type HealthAction, type HealthDisplay } from "@/features/providers/ProviderHealthButton";
@@ -43,11 +44,13 @@ export interface ProviderItem {
   keyStrategy?: string;
   /** 回显的明文 key(编辑时用)。 */
   keys: EditorRow[];
-  /** 落库的最近一次健康检测结果(列表回显)。 */
+  /** 落库的最近一次存活检测结果(列表回显)。 */
   health?: {
     healthy: number | null;
     total: number | null;
     checkedAt: Date | null;
+    networkOk: boolean | null;
+    keyResults?: ProviderKeyResult[];
   };
   /** 检测模型(手填或从上游模型列表选);用于后续深度健康检测。 */
   testModel?: string | null;
@@ -112,6 +115,9 @@ export default function ProvidersManager({
         total: p.health.total ?? 0,
         checkedAt:
           p.health.checkedAt instanceof Date ? p.health.checkedAt.getTime() : Number(p.health.checkedAt),
+        // 旧数据(迁移前未检测网络层)networkOk 为 null,视为不显红(true)。
+        networkOk: p.health.networkOk ?? true,
+        keyResults: p.health.keyResults ?? [],
       };
     }
     return null;

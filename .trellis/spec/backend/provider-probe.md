@@ -41,3 +41,44 @@
 ### 7. 相关
 - `src/lib/providers/probe.ts`(`probeProviderKey` 双路 + `buildModelsRequest` + `fetchUpstreamModels`)是探测的唯一中枢。
 - 设计参考 `docs/cankao/AQBot` 的 `validate_key`(GET /models 看鉴权)与 `test_model`(极小生成请求测具体模型)分离。
+
+---
+
+## Scenario: 两级存活检测(网络层 + key 层)
+
+### 1. Scope / Trigger
+- Trigger: 列表「存活检测」按钮手动点击(`checkProviderHealth`/`checkMyProviderHealth`)。不自动、不频繁;其余时候回显落库的最近一次结果。
+- 目标:用最小耗费测 key 存活--先判供应商 URL 网络是否通,再判每个 key 是否有效。
+
+### 2. Signatures
+- `checkProviderHealth(id)` / `checkMyProviderHealth(id)` -- 串行逐 key 调 `probeProviderKey`(不传 model,GET /models),收集 per-key 结果,落库 + 返回 `{ healthy, total, checkedAt, networkOk, keyResults }`。
+- `ProviderKeyResult`(`src/db/schema/pg.ts`)-- `{ index, ok, errorKind?, error? }`,用 `index` 标识第几个 key,**不存明文 key**。
+
+### 3. Contracts
+- **网络层判定(零额外请求)**: `networkOk = keyResults 中任一 errorKind !== "network"`。能连上服务器即通(含 ok/auth/unknown);全部 network 失败 -> 不通。
+  - 复用 key 探测结果推断,不单独发空 key 探测。
+  - 无 key provider(如 OVH 免费层):用空 key 探测一次,network 失败即网络不通。
+- **key 层判定**: 每 key `GET /models`,按 `errorKind` 分类:
+  - `ok`(2xx/3xx/400/404)-> key 有效
+  - `auth`(401/403)-> key 无效/无权限
+  - `network`(fetch throw)-> URL 不通(同时拉低网络层)
+  - `unknown`(5xx)-> 上游异常(网络层仍算通)
+- **落库回显**: 写 `last_network_ok` boolean + `last_key_results` jsonb(用 index,不存明文 key)+ 现有 `last_healthy_key_count`/`last_total_key_count`/`last_health_checked_at`。UI 回显落库值,会话级覆盖最新检测结果。
+- **UI**: `networkOk=false` 显红「网络不通」;X/Y 徽章 hover 出 per-key 详情(`密钥 #index: 有效/无效/网络异常`,hover 看 error 原文)。文案「存活检测」而非含糊「健康度」。
+
+### 4. Wrong vs Correct
+#### Wrong
+- 把网络层与 key 层合并成单一「健康度」X/Y(网络不通时仍显示 key 有效数,误导)。
+- 网络层单独发空 key 探测(多一次请求,与 key 探测重复)。
+- per-key 结果存明文 key(泄露)。
+- 自动频繁检测(冲击上游)。
+#### Correct
+- 两层独立:网络层(任一非 network 即通) + key 层(每 key errorKind)。
+- 网络层复用 key 探测结果,零额外请求。
+- per-key 用 index 标识;编辑增删 key 后 index 错位,重新检测即刷新(可接受)。
+- 手动触发,落库回显。
+
+### 5. 相关
+- `src/lib/providers/probe.ts` `probeProviderKey`(`errorKind` 分级是两级判定的基础)。
+- `src/db/schema/pg.ts` `providers.lastNetworkOk`/`lastKeyResults` + `ProviderKeyResult`。
+- `src/features/providers/ProviderHealthButton.tsx`(网络标记 + per-key 悬浮)。

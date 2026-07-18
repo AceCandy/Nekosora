@@ -11,6 +11,7 @@ import {
   refreshMyUpstreamModels,
 } from "../actions";
 import { revealKeyBundle } from "@/lib/providers/keys";
+import type { ProviderKeyResult } from "@/db/schema/pg";
 import ProvidersManager, {
   type ProviderItem,
 } from "@/features/providers/ProvidersManager";
@@ -47,6 +48,8 @@ export default async function MyProvidersPage() {
       healthy: (p.lastHealthyKeyCount as number | null) ?? null,
       total: (p.lastTotalKeyCount as number | null) ?? null,
       checkedAt: (p.lastHealthCheckedAt as Date | null) ?? null,
+      networkOk: (p.lastNetworkOk as boolean | null) ?? null,
+      keyResults: (p.lastKeyResults as ProviderKeyResult[] | null) ?? undefined,
     },
     testModel: (p.testModel as string | null) ?? null,
     upstreamModels: (p.upstreamModels as string[] | null) ?? [],

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mockData = vi.hoisted(() => ({
   models: [] as Record<string, unknown>[],
   catalogs: [{ id: "catalog-chat", canonicalModelId: "__generic_chat__", aliases: [], enabled: true }],
+  providers: [] as Record<string, unknown>[],
   user: { id: "admin-a", role: "admin" },
 }));
 
@@ -95,21 +96,37 @@ vi.mock("@/lib/infra/db", () => {
       sortOrder: "sortOrder",
       name: "name",
     },
+    providers: {
+      __table: "providers",
+      id: "id",
+      ownerUserId: "ownerUserId",
+      apiKeysEnc: "apiKeysEnc",
+      protocol: "protocol",
+      baseUrl: "baseUrl",
+    },
   };
 
   const db = {
     select: (fields?: Record<string, unknown>) => ({
-      from: (table: { __table?: string }) =>
-        makeQuery(table.__table === "modelCatalog" ? mockData.catalogs : mockData.models, fields),
+      from: (table: { __table?: string }) => {
+        const rows =
+          table.__table === "modelCatalog"
+            ? mockData.catalogs
+            : table.__table === "providers"
+              ? mockData.providers
+              : mockData.models;
+        return makeQuery(rows, fields);
+      },
     }),
-    update: () => ({
+    update: (table?: { __table?: string }) => ({
       set: (patch: Record<string, unknown>) => ({
         where: (condition: Condition) => {
+          const rows = table?.__table === "providers" ? mockData.providers : mockData.models;
           const apply = () => {
             let count = 0;
-            for (const model of mockData.models) {
-              if (matches(model, condition)) {
-                Object.assign(model, patch);
+            for (const row of rows) {
+              if (matches(row, condition)) {
+                Object.assign(row, patch);
                 count++;
               }
             }
@@ -136,10 +153,15 @@ vi.mock("@/lib/infra/db", () => {
   return { getDb: async () => db, getSchema: () => schema, isPg: false };
 });
 
-import { createMyModel, reorderMyModels, updateMyModel } from "./actions";
+import { createMyModel, reorderMyModels, updateMyModel, checkMyProviderHealth } from "./actions";
+import { probeProviderKey } from "@/lib/providers/probe";
+import { parseKeyBundle } from "@/lib/providers/keys";
 
 beforeEach(() => {
   mockData.user = { id: "admin-a", role: "admin" };
+  mockData.providers = [];
+  vi.mocked(probeProviderKey).mockReset();
+  vi.mocked(parseKeyBundle).mockReset();
   mockData.models = [
     { id: "public-a", name: "public-a", ownerUserId: "admin-a", visibility: "public", sortOrder: 0 },
     { id: "public-b", name: "public-b", ownerUserId: "admin-a", visibility: "public", sortOrder: 1 },
@@ -250,5 +272,71 @@ describe("模型创建与编辑", () => {
     await updateMyModel("private-a", formData);
 
     expect(mockData.models.find((model) => model.id === "private-a")?.visibility).toBe("private");
+  });
+});
+
+describe("checkMyProviderHealth", () => {
+  it("全 network 失败 -> networkOk false, keyResults 全无效", async () => {
+    mockData.providers = [{
+      id: "p-a", ownerUserId: "admin-a", apiKeysEnc: "enc",
+      protocol: "openai", baseUrl: "https://a",
+      lastNetworkOk: null, lastKeyResults: null,
+    }];
+    vi.mocked(parseKeyBundle).mockReturnValue([
+      { key: "k1", weight: 1 },
+      { key: "k2", weight: 1 },
+    ]);
+    vi.mocked(probeProviderKey)
+      .mockResolvedValueOnce({ ok: false, errorKind: "network", error: "fetch failed" })
+      .mockResolvedValueOnce({ ok: false, errorKind: "network", error: "timeout" });
+
+    const r = await checkMyProviderHealth("p-a");
+
+    expect(r.networkOk).toBe(false);
+    expect(r.healthy).toBe(0);
+    expect(r.total).toBe(2);
+    expect(r.keyResults).toHaveLength(2);
+    expect(r.keyResults[0]).toMatchObject({ index: 0, ok: false, errorKind: "network" });
+    expect(mockData.providers[0].lastNetworkOk).toBe(false);
+    expect(mockData.providers[0].lastKeyResults as unknown[]).toHaveLength(2);
+  });
+
+  it("有 ok/非 network -> networkOk true, healthy 计 ok 数", async () => {
+    mockData.providers = [{
+      id: "p-b", ownerUserId: "admin-a", apiKeysEnc: "enc",
+      protocol: "openai", baseUrl: "https://b",
+      lastNetworkOk: null, lastKeyResults: null,
+    }];
+    vi.mocked(parseKeyBundle).mockReturnValue([
+      { key: "k1", weight: 1 },
+      { key: "k2", weight: 1 },
+      { key: "k3", weight: 1 },
+    ]);
+    vi.mocked(probeProviderKey)
+      .mockResolvedValueOnce({ ok: true })
+      .mockResolvedValueOnce({ ok: false, errorKind: "auth", error: "401" })
+      .mockResolvedValueOnce({ ok: false, errorKind: "unknown", error: "500" });
+
+    const r = await checkMyProviderHealth("p-b");
+
+    expect(r.networkOk).toBe(true);
+    expect(r.healthy).toBe(1);
+    expect(r.total).toBe(3);
+    expect(mockData.providers[0].lastNetworkOk).toBe(true);
+  });
+
+  it("全 auth 失败也 networkOk true(能连上服务器)", async () => {
+    mockData.providers = [{
+      id: "p-c", ownerUserId: "admin-a", apiKeysEnc: "enc",
+      protocol: "openai", baseUrl: "https://c",
+      lastNetworkOk: null, lastKeyResults: null,
+    }];
+    vi.mocked(parseKeyBundle).mockReturnValue([{ key: "k1", weight: 1 }]);
+    vi.mocked(probeProviderKey).mockResolvedValue({ ok: false, errorKind: "auth", error: "401" });
+
+    const r = await checkMyProviderHealth("p-c");
+
+    expect(r.networkOk).toBe(true);
+    expect(r.healthy).toBe(0);
   });
 });
