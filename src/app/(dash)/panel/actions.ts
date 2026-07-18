@@ -82,11 +82,12 @@ export async function unbindBinding(bindingId: string) {
 export async function getMyProviders() {
   const user = await requireSession();
   const db = await getDb();
-  // providers 无 visibility,恒 per-user:仅 owner 自己可见。
+  // providers 无 visibility,恒 per-user:仅 owner 自己可见。按添加顺序(createdAt 升序)返回。
   return db
     .select()
     .from(S().providers)
-    .where(eq(S().providers.ownerUserId, user.id));
+    .where(eq(S().providers.ownerUserId, user.id))
+    .orderBy(asc(S().providers.createdAt));
 }
 
 /**

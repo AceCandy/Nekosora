@@ -360,7 +360,7 @@ export default function ProvidersManager({
                   </td>
                   <td className="p-3.5">
                     <div className="space-y-1.5">
-                      <div className="truncate text-xs font-medium text-neutral-700 dark:text-neutral-300">
+                      <div className={clsx("truncate text-xs font-medium", p.testModel ? "text-neutral-700 dark:text-neutral-300" : "text-amber-600 dark:text-amber-400")}>
                         {p.testModel || t("testModelPlaceholder")}
                       </div>
                       <div className="flex items-center gap-1.5">
