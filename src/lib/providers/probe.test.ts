@@ -59,8 +59,8 @@ describe("probeProviderKey 连通性探测(errorKind 分级)", () => {
     expect(r.errorKind).toBeUndefined();
   });
 
-  it("404 -> ok true(端点缺失不影响 key 判定)", async () => {
-    mockFetch(() => Promise.resolve({ status: 404, statusText: "Not Found" }));
+  it("400 -> ok true(valid key 缺 messages 等字段,chat 端点已校验 key)", async () => {
+    mockFetch(() => Promise.resolve({ status: 400, statusText: "Bad Request" }));
     const r = await probeProviderKey(baseOpts);
     expect(r.ok).toBe(true);
   });

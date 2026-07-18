@@ -1,22 +1,23 @@
 /**
- * 主动探测 —— 配置期对上游 provider 的连通性验证与模型列表拉取。
+ * 主动探测 -- 配置期对上游 provider 的 key 有效性验证与模型列表拉取。
  *
  * 与运行期的被动熔断(circuit-breaker)互补:被动机制只在真实请求失败时生效,
  * 这里提供"配完即测"的主动能力,避免 key/baseUrl/模型名 配错后要等到真实调用才发现。
  *
  * probeProviderKey 按是否传入 upstreamModelName 区分两个职责(对齐 AQBot 的
  * validate_key 与 test_model 分离):
- *   - 不传模型名 → 验证 key+baseUrl+协议鉴权:GET /models 看 401/403(对齐 AQBot,
- *     valid key → 200/400,invalid → 401/403)。不发生成请求,避免聚合中转站因
- *     "/models 列表第一个是 voice/image 等非 chat 模型"或"预扣费 quota 不足"误判 key 无效。
- *   - 传入模型名 → 测该具体模型可用性:发极小生成请求,验证模型 + key + 协议构建全链路。
+ *   - 不传模型名 -> 验证 key 有效性:对 chat 端点发空 body POST(对齐 AQBot anthropic
+ *     的 /messages 空 body 思路)。chat 端点一定校验 key(不像 /models 很多中转站公开),
+ *     valid key -> 400(缺字段),invalid -> 401/403。空 body 不产生生成、不计费、不依赖
+ *     具体模型,避免聚合站 "/models 公开不校验 key" 或 "列表第一个是 voice/image" 误判。
+ *   - 传入模型名 -> 测该具体模型可用性:发极小生成请求,验证模型 + key + 协议构建全链路。
  *
- * fetchUpstreamModels —— 直接 fetch 上游 /models 拉取真实模型名,防手填出错。
+ * fetchUpstreamModels -- 直接 fetch 上游 /models 拉取真实模型名,防手填出错。
  *
- * 协议差异(鉴权头/URL):
- *   - openai/openai-compatible: Authorization: Bearer,GET {base}/models
- *   - anthropic:    x-api-key + anthropic-version,GET {base}/models
- *   - gemini:       key 在 query param,GET {base}/models?key=...
+ * 协议差异(key 探测的 URL/鉴权头):
+ *   - openai/openai-compatible: Authorization: Bearer,POST {base}/chat/completions
+ *   - anthropic:    x-api-key + anthropic-version,POST {base}/messages
+ *   - gemini:       key 在 query param,GET {base}/models?key=...(chat 端点要带 model 路径,退回 /models)
  */
 import { generateText, streamText } from "ai";
 import { buildLanguageModelWithKey } from "@/lib/providers/registry";
@@ -47,8 +48,8 @@ const PROBE_TIMEOUT_MS = 15000;
 
 /**
  * 按协议构建 GET /models 的 URL 与鉴权头。
- * key 连通性探测(probeKeyConnectivity)与列表拉取(fetchUpstreamModels)共用,
- * 保证鉴权头逻辑单一来源。
+ * gemini 的 key 探测(buildKeyAuthRequest 的 gemini 分支)与列表拉取(fetchUpstreamModels)
+ * 共用,保证鉴权头逻辑单一来源。
  */
 function buildModelsRequest(
   protocol: ProviderProtocol,
@@ -70,7 +71,7 @@ function buildModelsRequest(
           headers: {
             "x-api-key": apiKey,
             // 部分上游(火山 Ark 的 anthropic 兼容端点)/models 仅认 Bearer,
-            // /messages 才认 x-api-key —— 同一 key 两端点鉴权头不一致。
+            // /messages 才认 x-api-key -- 同一 key 两端点鉴权头不一致。
             // 同时携带两种头兼容这类混搭上游;标准 anthropic 服务端忽略多余的 Authorization。
             Authorization: `Bearer ${apiKey}`,
             "anthropic-version": "2023-06-01",
@@ -98,8 +99,65 @@ function buildModelsRequest(
 }
 
 /**
- * 探测上游:不传 upstreamModelName → 验证 key 连通性(GET /models);
- * 传 upstreamModelName → 测该具体模型可用性(极小生成请求)。
+ * 按协议构造 key 有效性探测请求:对 chat 端点发空 body POST(不产生生成、不计费)。
+ * chat 端点一定校验 key(不像 /models 可能公开),valid key -> 400(缺字段),invalid -> 401/403。
+ * gemini 的 chat 端点要带 model 路径,空 body 不便,退回 GET /models。
+ */
+function buildKeyAuthRequest(
+  protocol: ProviderProtocol,
+  base: string,
+  apiKey: string,
+  headers?: Record<string, string>,
+): { url: string; init: RequestInit } {
+  const merged = headers ?? {};
+  const common: RequestInit = {
+    signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+    cache: "no-store",
+  };
+  switch (protocol) {
+    case "anthropic":
+      return {
+        url: `${base}/messages`,
+        init: {
+          ...common,
+          method: "POST",
+          headers: {
+            "x-api-key": apiKey,
+            // 火山 Ark 等混搭上游 /messages 认 x-api-key,同时携带 Bearer 兼容。
+            Authorization: `Bearer ${apiKey}`,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+            ...merged,
+          },
+          body: "{}",
+        },
+      };
+    case "gemini":
+      // gemini chat 端点(/models/{model}:generateContent)要带 model 路径,
+      // 空 body 不便;退回 GET /models 校验 key(gemini key 在 query param)。
+      return buildModelsRequest(protocol, base, apiKey, headers);
+    case "openai":
+    case "openai-compatible":
+    default:
+      return {
+        url: `${base}/chat/completions`,
+        init: {
+          ...common,
+          method: "POST",
+          headers: {
+            ...(apiKey && { Authorization: `Bearer ${apiKey}` }),
+            "content-type": "application/json",
+            ...merged,
+          },
+          body: "{}",
+        },
+      };
+  }
+}
+
+/**
+ * 探测上游:不传 upstreamModelName -> 验证 key 有效性(POST chat 空 body);
+ * 传 upstreamModelName -> 测该具体模型可用性(极小生成请求)。
  */
 export async function probeProviderKey(opts: {
   protocol: ProviderProtocol;
@@ -122,7 +180,7 @@ export async function probeProviderKey(opts: {
       headers?: Record<string, string>;
     });
   }
-  return probeKeyConnectivity(opts);
+  return probeKeyAuth(opts);
 }
 
 /**
@@ -203,13 +261,13 @@ async function probeModelAvailability(opts: {
 }
 
 /**
- * 验证 key 连通性:GET /models,按 HTTP status 判定鉴权结果。
+ * 验证 key 有效性:对 chat 端点发空 body POST(不产生生成、不计费),按 HTTP status 判定。
  *
- * 只看鉴权头是否被接受:聚合中转站 /models 列表第一个常是非 chat 模型
- * (voice/image),发 chat 会触发计费或 model_not_found,把好端端的 key 误判成无效。
- * /models 同样走协议鉴权头,401/403 即 key 问题,其余视为通过。
+ * chat 端点一定校验 key(不像 /models 很多中转站公开),valid key -> 400(缺 messages 等字段),
+ * invalid -> 401/403。空 body 不指定 model、不产生生成,避免聚合站 voice/image 模型计费误判。
+ * gemini 退回 GET /models(见 buildKeyAuthRequest)。
  */
-async function probeKeyConnectivity(opts: {
+async function probeKeyAuth(opts: {
   protocol: ProviderProtocol;
   baseUrl: string;
   apiKey: string;
@@ -217,7 +275,7 @@ async function probeKeyConnectivity(opts: {
 }): Promise<ProbeResult> {
   const { protocol, baseUrl, apiKey, headers } = opts;
   const base = baseUrl.replace(/\/+$/, "");
-  const { url, init } = buildModelsRequest(protocol, base, apiKey, headers);
+  const { url, init } = buildKeyAuthRequest(protocol, base, apiKey, headers);
   const startedAt = Date.now();
   try {
     const res = await fetch(url, init);
@@ -241,8 +299,7 @@ async function probeKeyConnectivity(opts: {
         errorKind: "unknown",
       };
     }
-    // 2xx/3xx/4xx(非 401/403):鉴权通过。/models 端点缺失(404)或格式不规范(400)
-    // 属端点/格式问题,不影响 key 判定,视为连通。
+    // 400(valid key 缺 messages 等字段)/2xx/404 等:chat 端点已校验过 key,视为 key 有效 + 网络通。
     return { ok: true, latencyMs };
   } catch (err) {
     const latencyMs = Date.now() - startedAt;
