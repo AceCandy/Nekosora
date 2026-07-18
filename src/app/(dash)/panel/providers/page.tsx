@@ -9,6 +9,7 @@ import {
   testMyKeyDirect,
   checkMyProviderHealth,
   refreshMyUpstreamModels,
+  testMyProviderModel,
 } from "../actions";
 import { revealKeyBundle } from "@/lib/providers/keys";
 import type { ProviderKeyResult } from "@/db/schema/pg";
@@ -50,6 +51,9 @@ export default async function MyProvidersPage() {
       checkedAt: (p.lastHealthCheckedAt as Date | null) ?? null,
       networkOk: (p.lastNetworkOk as boolean | null) ?? null,
       keyResults: (p.lastKeyResults as ProviderKeyResult[] | null) ?? undefined,
+      modelProbeOk: (p.lastModelProbeOk as boolean | null) ?? null,
+      modelProbeAt: (p.lastModelProbeAt as Date | null) ?? null,
+      modelProbeError: (p.lastModelProbeError as string | null) ?? null,
     },
     testModel: (p.testModel as string | null) ?? null,
     upstreamModels: (p.upstreamModels as string[] | null) ?? [],
@@ -71,6 +75,9 @@ export default async function MyProvidersPage() {
   const refreshActions = Object.fromEntries(
     providers.map((p) => [p.id, refreshMyUpstreamModels.bind(null, p.id)]),
   );
+  const modelProbeActions = Object.fromEntries(
+    providers.map((p) => [p.id, testMyProviderModel.bind(null, p.id)]),
+  );
 
   return (
     <div className="flex flex-col h-[calc(100dvh-4rem)] gap-4">
@@ -87,6 +94,7 @@ export default async function MyProvidersPage() {
           testKeyAction={testMyKeyDirect}
           healthActions={healthActions}
           refreshActions={refreshActions}
+          modelProbeActions={modelProbeActions}
           routes={routes}
         />
     </div>

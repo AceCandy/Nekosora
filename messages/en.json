@@ -874,6 +874,10 @@
     "keyInvalid": "Auth failed",
     "keyNetworkError": "Network error",
     "keyUnknownError": "Test failed",
+    "deepProbeTitle": "Deep probe",
+    "deepProbeRetest": "Click to retest",
+    "deepProbeNoTestModel": "No test model configured",
+    "deepProbeFailed": "Deep probe failed",
     "protocolOpenaiCompatible": "openai (compatible)"
   },
   "filePreview": {

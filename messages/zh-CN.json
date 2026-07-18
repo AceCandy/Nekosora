@@ -874,6 +874,10 @@
     "keyInvalid": "认证失败",
     "keyNetworkError": "网络异常",
     "keyUnknownError": "验证失败",
+    "deepProbeTitle": "深度检测",
+    "deepProbeRetest": "点击重测",
+    "deepProbeNoTestModel": "未配置检测模型",
+    "deepProbeFailed": "深度检测失败",
     "protocolOpenaiCompatible": "openai(兼容)"
   },
   "filePreview": {

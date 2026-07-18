@@ -218,9 +218,30 @@ export async function checkMyProviderHealth(id: string): Promise<{
   const probeList = keys.length > 0 ? keys : [{ key: "", weight: 1 }];
   const protocol = provider.protocol as ProviderProtocol;
   const baseUrl = provider.baseUrl as string;
+  const testModel = (provider.testModel as string | null) ?? "";
   const keyResults: ProviderKeyResult[] = [];
+  // 存活检测回退深度检测时,聚合 provider 级深度结果(任一 key 深度成功即 true)。null=未回退。
+  let modelProbeOk: boolean | null = null;
+  let modelProbeError: string | null = null;
   for (let i = 0; i < probeList.length; i++) {
-    const result = await probeProviderKey({ protocol, baseUrl, apiKey: probeList[i].key });
+    let result = await probeProviderKey({ protocol, baseUrl, apiKey: probeList[i].key });
+    // 存活检测失败(非网络)+配了 testModel -> 回退深度检测(带 model 极小生成)。
+    // opencode 等先验 model 的上游空 body 验不了 key,靠深度检测确认;成功则该 key 标通过。
+    if (!result.ok && result.errorKind !== "network" && testModel) {
+      const deep = await probeProviderKey({
+        protocol,
+        baseUrl,
+        apiKey: probeList[i].key,
+        upstreamModelName: testModel,
+      });
+      result = deep.ok
+        ? { ok: true, latencyMs: deep.latencyMs, mode: deep.mode }
+        : { ok: false, latencyMs: deep.latencyMs, error: deep.error, errorKind: deep.errorKind };
+      if (modelProbeOk !== true) {
+        modelProbeOk = deep.ok;
+        modelProbeError = deep.ok ? null : (deep.error ?? null);
+      }
+    }
     keyResults.push({
       index: i,
       ok: result.ok,
@@ -232,19 +253,65 @@ export async function checkMyProviderHealth(id: string): Promise<{
   // 网络层:任一 key 探测非 network 即通(含 ok/auth/unknown,均说明能连上服务器)。
   const networkOk = keyResults.some((r) => r.errorKind !== "network");
   const checkedAt = Date.now();
+  const updateSet: Record<string, unknown> = {
+    lastHealthCheckedAt: new Date(checkedAt),
+    lastHealthyKeyCount: healthy,
+    lastTotalKeyCount: probeList.length,
+    lastNetworkOk: networkOk,
+    lastKeyResults: keyResults,
+    updatedAt: new Date(),
+  };
+  // 回退过深度检测才更新深度结果(未回退保留旧值)。
+  if (modelProbeOk !== null) {
+    updateSet.lastModelProbeOk = modelProbeOk;
+    updateSet.lastModelProbeAt = new Date();
+    updateSet.lastModelProbeError = modelProbeError;
+  }
+  await db
+    .update(S().providers)
+    .set(updateSet)
+    .where(and(eq(S().providers.id, id), eq(S().providers.ownerUserId, user.id)));
+  revalidatePath("/panel", "layout");
+  return { healthy, total: probeList.length, checkedAt, networkOk, keyResults };
+}
+
+/**
+ * 深度检测 provider 的 testModel:用 testModel 发极小生成请求,验证 model+key+协议全链路。
+ * 用于 opencode 等先校验 model 的上游(空 body 验不了 key),也确认 provider 真能跑该模型。
+ * 结果写回 provider 表(lastModelProbeOk/At/Error),列表回显。
+ */
+export async function testMyProviderModel(id: string): Promise<ProbeResult> {
+  const user = await requireSession();
+  const db = await getDb();
+  const [provider] = await db
+    .select()
+    .from(S().providers)
+    .where(and(eq(S().providers.id, id), eq(S().providers.ownerUserId, user.id)));
+  if (!provider) throw new Error("服务商不存在");
+
+  const testModel = (provider.testModel as string | null) ?? "";
+  if (!testModel) {
+    return { ok: false, error: "未配置检测模型", errorKind: "unknown" };
+  }
+  const keys = parseKeyBundle(provider.apiKeysEnc as string);
+  const apiKey = pickWeightedKey(keys);
+  const result = await probeProviderKey({
+    protocol: provider.protocol as ProviderProtocol,
+    baseUrl: provider.baseUrl as string,
+    apiKey,
+    upstreamModelName: testModel,
+  });
   await db
     .update(S().providers)
     .set({
-      lastHealthCheckedAt: new Date(checkedAt),
-      lastHealthyKeyCount: healthy,
-      lastTotalKeyCount: probeList.length,
-      lastNetworkOk: networkOk,
-      lastKeyResults: keyResults,
+      lastModelProbeOk: result.ok,
+      lastModelProbeAt: new Date(),
+      lastModelProbeError: result.ok ? null : (result.error ?? null),
       updatedAt: new Date(),
     })
     .where(and(eq(S().providers.id, id), eq(S().providers.ownerUserId, user.id)));
   revalidatePath("/panel", "layout");
-  return { healthy, total: probeList.length, checkedAt, networkOk, keyResults };
+  return result;
 }
 
 /** 拉取 provider 的上游模型列表(校验归属,仅限自己的)。 */

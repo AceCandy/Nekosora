@@ -16,7 +16,7 @@
 
 ### 3. Contracts
 - **不传 upstreamModelName(验证 key 有效性)** -> 对 chat 端点发**空 body POST**(openai/openai-compatible: `/chat/completions`;anthropic: `/messages`;gemini 退回 `GET /models`),按 HTTP status 判定,**不产生生成、不计费**:
-  - `401/403` -> `auth` 失败(key 无效/无权限)
+  - `401/403` -> 读响应体区分:`ModelError`/`not supported` 等 model 相关错误体 -> `unknown`(opencode 等先校验 model 的上游,空 body 缺 model 直接返 401,压根没到 key 校验,不误判 auth;网络层仍通);其余 401/403 -> `auth` 失败(key 无效/无权限)
   - `5xx` -> `unknown` 失败(上游异常,不误导成密钥错)
   - 其余(400/2xx/404)-> key 有效。chat 端点一定校验 key(不像 /models 可能公开),valid key 缺 messages 等字段返 400,空 body 不指定 model、不产生生成(对齐 AQBot anthropic 的 /messages 空 body 思路)。
 - **传 upstreamModelName(测具体模型可用性)** -> 先用极小 `generateText`(`maxOutputTokens:1`)测非流式；非流式出现非鉴权、非网络失败时再用 `streamText` 完整消费流复核。任一模式成功即路由可用，结果用 `mode` 标明通过方式并保留 `nonStreamError`。鉴权或网络失败不重复请求。
@@ -62,9 +62,10 @@
   - 无 key provider(如 OVH 免费层):用空 key 探测一次,network 失败即网络不通。
 - **key 层判定**: 每 key `POST chat 空 body`(gemini 退回 GET /models),按 `errorKind` 分类:
   - `ok`(400/2xx/404)-> key 有效(chat 端点校验过 key,400=缺字段)
-  - `auth`(401/403)-> key 无效/无权限
+  - `auth`(401/403 且错误体非 model 相关)-> key 无效/无权限
   - `network`(fetch throw)-> URL 不通(同时拉低网络层)
-  - `unknown`(5xx)-> 上游异常(网络层仍算通)
+  - `unknown`(5xx 或 伪 401 ModelError)-> 上游异常 / 空 body 验不了 key(网络层仍算通)
+- **存活检测失败回退深度检测**: 单 key 存活检测失败(非 network)且 provider 配了 `testModel` -> 对该 key 回退 `probeModelAvailability`(带 testModel 极小生成)。深度成功 -> 该 key 存活结果标 ok(深度验证通过);深度失败 -> 保留深度 `errorKind`。回退时同步更新 provider 级深度结果(`last_model_probe_ok/at/error`,任一 key 深度成功即 true)。未配 testModel 或 network 失败不回退。
 - **落库回显**: 写 `last_network_ok` boolean + `last_key_results` jsonb(用 index,不存明文 key)+ 现有 `last_healthy_key_count`/`last_total_key_count`/`last_health_checked_at`。UI 回显落库值,会话级覆盖最新检测结果。
 - **UI**: `networkOk=false` 显红「网络不通」;X/Y 徽章 hover 出 per-key 详情(`密钥 #index: 有效/无效/网络异常`,hover 看 error 原文)。文案「存活检测」而非含糊「健康度」。
 
@@ -82,5 +83,33 @@
 
 ### 5. 相关
 - `src/lib/providers/probe.ts` `probeKeyAuth`(`errorKind` 分级是两级判定的基础)。
+
+## Scenario: testModel 深度检测(带 model 极小生成)
+
+### 1. Scope / Trigger
+- Trigger: provider 列表「检测模型」列的深度检测按钮手动点击(`testProviderModel`/`testMyProviderModel`)。不自动、不频繁;其余时候回显落库的最近一次结果。
+- 用途:opencode 等先校验 model 的上游,空 body 验不了 key(伪 401 ModelError),只能靠带 model 的极小生成验 model+key+协议全链路;也用于确认「provider 真能跑该模型」。
+
+### 2. Signatures
+- `testProviderModel(id)` / `testMyProviderModel(id)` -- 读 `provider.testModel` + keys,`pickWeightedKey` 选 key,调 `probeProviderKey`(传 `upstreamModelName=testModel`,走 `probeModelAvailability` 极小生成),落库 + 返回 `ProbeResult`。
+- `testModel` 为空 -> 直接返回 `{ ok:false, error:"未配置检测模型", errorKind:"unknown" }`,不探测。
+
+### 3. Contracts
+- **探测**: 复用 `probeModelAvailability`(`generateText` `maxOutputTokens:1` 非流式;非鉴权非网络失败再 `streamText` 复核),与「测试路由」(`testRoute`)同构,但用 provider 的 `testModel` 而非 route 的 `upstreamModelName`。
+- **落库回显**: 写 `last_model_probe_ok` boolean + `last_model_probe_at` timestamp + `last_model_probe_error` text。UI 回显落库值,会话级覆盖最新检测结果。
+- **UI**(`ModelProbeButton`): 未配 testModel 禁用;未测显 `Zap`;测中转圈;通过显绿 `Check`(hover「点击重测」);失败显红 `X`(hover 错误原文 +「点击重测」)。
+
+### 4. Wrong vs Correct
+#### Wrong
+- 用空 body 验 opencode 这类先校验 model 的上游(空 body 缺 model 返 401 ModelError,误判 auth)。
+- 深度检测不落库(刷新丢失,与存活检测不一致)。
+
+#### Correct
+- opencode 类上游用深度检测(带 model 极小生成)验 key+model;存活检测(空 body)对这类上游判 `unknown` 不误判 auth。
+- 深度检测结果落库回显,与存活检测一致。
+
+### 5. 相关
+- `src/lib/providers/probe.ts` `probeModelAvailability`(带 model 极小生成)。
+- `src/features/providers/ModelProbeButton.tsx`(深度检测按钮)。
 - `src/db/schema/pg.ts` `providers.lastNetworkOk`/`lastKeyResults` + `ProviderKeyResult`。
 - `src/features/providers/ProviderHealthButton.tsx`(网络标记 + per-key 悬浮)。

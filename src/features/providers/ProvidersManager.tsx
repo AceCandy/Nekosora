@@ -6,6 +6,7 @@ import type { ProviderKeyResult } from "@/db/schema/pg";
 import type { EditorRow, TestKeyAction } from "@/features/providers/KeyBundleEditor";
 import ProviderFormDialog from "@/features/providers/ProviderFormDialog";
 import ProviderHealthButton, { type HealthAction, type HealthDisplay } from "@/features/providers/ProviderHealthButton";
+import ModelProbeButton, { type ModelProbeAction, type ModelProbeDisplay } from "@/features/providers/ModelProbeButton";
 import ConfirmDialog from "@/shared/ui/ConfirmDialog";
 import Popover from "@/shared/ui/Popover";
 import Input from "@/shared/ui/Input";
@@ -51,6 +52,10 @@ export interface ProviderItem {
     checkedAt: Date | null;
     networkOk: boolean | null;
     keyResults?: ProviderKeyResult[];
+    /** 落库的最近一次 testModel 深度检测结果(列表回显)。 */
+    modelProbeOk?: boolean | null;
+    modelProbeAt?: Date | null;
+    modelProbeError?: string | null;
   };
   /** 检测模型(手填或从上游模型列表选);用于后续深度健康检测。 */
   testModel?: string | null;
@@ -73,6 +78,8 @@ interface ProvidersManagerProps {
   healthActions?: Record<string, HealthAction>;
   /** 拉取最新上游模型列表 action(按 id 索引)。不传则不显示拉取按钮。 */
   refreshActions?: Record<string, RefreshAction>;
+  /** testModel 深度检测 action(按 id 索引)。不传则不显示深度检测按钮。 */
+  modelProbeActions?: Record<string, ModelProbeAction>;
   /** 已配置的路由引用(用于检测模型悬浮窗标注哪些上游模型已配路由)。 */
   routes?: ProviderRouteRef[];
 }
@@ -87,6 +94,7 @@ export default function ProvidersManager({
   testKeyAction,
   healthActions,
   refreshActions,
+  modelProbeActions,
   routes,
 }: ProvidersManagerProps) {
   const t = useTranslations("providers");
@@ -103,6 +111,10 @@ export default function ProvidersManager({
   // 上游模型列表的会话级覆盖:拉取成功后即时刷新"共 N 个模型",无需等 RSC 重渲。
   const [modelsMap, setModelsMap] = useState<Record<string, { models: string[]; checkedAt: number }>>({});
   const [refreshingIds, setRefreshingIds] = useState<Set<string>>(new Set());
+
+  // testModel 深度检测结果:会话级覆盖优先,回退落库值(p.health.modelProbe*)。
+  const [modelProbeMap, setModelProbeMap] = useState<Record<string, ModelProbeDisplay>>({});
+  const [modelProbePending, setModelProbePending] = useState<Set<string>>(new Set());
 
   const editing = providers.find((p) => p.id === editId) ?? null;
   const deleting = providers.find((p) => p.id === deleteId) ?? null;
@@ -145,20 +157,23 @@ export default function ProvidersManager({
     if (ids.length === 0) return;
     setAllPending(true);
     setPendingIds(new Set(ids));
-    Promise.allSettled(ids.map((id) => healthActions![id](id)))
-      .then((results) => {
-        setHealthMap((prev) => {
-          const next = { ...prev };
-          results.forEach((r, i) => {
-            if (r.status === "fulfilled") next[ids[i]] = r.value;
-          });
-          return next;
-        });
-      })
-      .finally(() => {
-        setAllPending(false);
-        setPendingIds(new Set());
-      });
+    // 并行触发,每个 provider 完成即更新该行 UI(不等所有),避免"全部 pending -> 一次性完成"的排队感。
+    const promises = ids.map((id) =>
+      healthActions![id](id)
+        .then((result) => {
+          setHealthMap((prev) => ({ ...prev, [id]: result }));
+          return result;
+        })
+        .catch(() => {})
+        .finally(() =>
+          setPendingIds((prev) => {
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+          }),
+        ),
+    );
+    Promise.allSettled(promises).finally(() => setAllPending(false));
   };
 
   // 当前展示的上游模型列表:会话级覆盖优先,回退落库值。
@@ -182,6 +197,48 @@ export default function ProvidersManager({
       .catch(() => {})
       .finally(() =>
         setRefreshingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        }),
+      );
+  };
+
+  // 深度检测展示:会话级覆盖优先,回退落库值。
+  const displayModelProbeFor = (p: ProviderItem): ModelProbeDisplay => {
+    if (modelProbeMap[p.id]) return modelProbeMap[p.id];
+    if (p.health?.modelProbeAt) {
+      return {
+        ok: p.health.modelProbeOk ?? false,
+        checkedAt:
+          p.health.modelProbeAt instanceof Date
+            ? p.health.modelProbeAt.getTime()
+            : Number(p.health.modelProbeAt),
+        error: p.health.modelProbeError ?? undefined,
+      };
+    }
+    return null;
+  };
+
+  const probeOne = (id: string) => {
+    const action = modelProbeActions?.[id];
+    if (!action || modelProbePending.has(id)) return;
+    setModelProbePending((prev) => new Set(prev).add(id));
+    action(id)
+      .then((result) =>
+        setModelProbeMap((prev) => ({
+          ...prev,
+          [id]: {
+            ok: result.ok,
+            checkedAt: Date.now(),
+            error: result.error,
+            errorKind: result.errorKind,
+          },
+        })),
+      )
+      .catch(() => {})
+      .finally(() =>
+        setModelProbePending((prev) => {
           const next = new Set(prev);
           next.delete(id);
           return next;
@@ -366,8 +423,18 @@ export default function ProvidersManager({
                   </td>
                   <td className="p-3.5">
                     <div className="space-y-1.5">
-                      <div className={clsx("truncate text-xs font-medium", p.testModel ? "text-neutral-700 dark:text-neutral-300" : "text-amber-600 dark:text-amber-400")}>
-                        {p.testModel || t("testModelPlaceholder")}
+                      <div className="flex items-center gap-1.5">
+                        <div className={clsx("truncate text-xs font-medium flex-1", p.testModel ? "text-neutral-700 dark:text-neutral-300" : "text-amber-600 dark:text-amber-400")}>
+                          {p.testModel || t("testModelPlaceholder")}
+                        </div>
+                        {modelProbeActions?.[p.id] && (
+                          <ModelProbeButton
+                            display={displayModelProbeFor(p)}
+                            pending={modelProbePending.has(p.id)}
+                            onProbe={() => probeOne(p.id)}
+                            hasTestModel={!!p.testModel}
+                          />
+                        )}
                       </div>
                       <div className="flex items-center gap-1.5">
                         {modelsFor(p).length > 0 ? (

@@ -153,9 +153,9 @@ vi.mock("@/lib/infra/db", () => {
   return { getDb: async () => db, getSchema: () => schema, isPg: false };
 });
 
-import { createMyModel, reorderMyModels, updateMyModel, checkMyProviderHealth } from "./actions";
+import { createMyModel, reorderMyModels, updateMyModel, checkMyProviderHealth, testMyProviderModel } from "./actions";
 import { probeProviderKey } from "@/lib/providers/probe";
-import { parseKeyBundle } from "@/lib/providers/keys";
+import { parseKeyBundle, pickWeightedKey } from "@/lib/providers/keys";
 
 beforeEach(() => {
   mockData.user = { id: "admin-a", role: "admin" };
@@ -338,5 +338,62 @@ describe("checkMyProviderHealth", () => {
 
     expect(r.networkOk).toBe(true);
     expect(r.healthy).toBe(0);
+  });
+
+  it("存活检测失败 + 有 testModel -> 回退深度检测,成功则 key 标 ok + 更新两处结果", async () => {
+    mockData.providers = [{
+      id: "p-d", ownerUserId: "admin-a", apiKeysEnc: "enc",
+      protocol: "openai", baseUrl: "https://d", testModel: "claude-fable-5",
+      lastNetworkOk: null, lastKeyResults: null,
+    }];
+    vi.mocked(parseKeyBundle).mockReturnValue([{ key: "k1", weight: 1 }]);
+    // 存活检测(空 body)返 unknown(opencode 伪 401),回退深度检测(带 model)返 ok
+    vi.mocked(probeProviderKey)
+      .mockResolvedValueOnce({ ok: false, errorKind: "unknown", error: "伪 401" })
+      .mockResolvedValueOnce({ ok: true, latencyMs: 50 });
+
+    const r = await checkMyProviderHealth("p-d");
+
+    expect(r.healthy).toBe(1);
+    expect(r.networkOk).toBe(true);
+    expect(r.keyResults[0]).toMatchObject({ index: 0, ok: true });
+    expect(mockData.providers[0].lastModelProbeOk).toBe(true);
+    expect(vi.mocked(probeProviderKey).mock.calls[1][0]).toMatchObject({ upstreamModelName: "claude-fable-5" });
+  });
+});
+
+describe("testMyProviderModel", () => {
+  it("未配置 testModel -> ok false, 不调 probe", async () => {
+    mockData.providers = [{
+      id: "p-a", ownerUserId: "admin-a", apiKeysEnc: "enc",
+      protocol: "openai", baseUrl: "https://a", testModel: null,
+    }];
+    vi.mocked(probeProviderKey).mockReset();
+
+    const r = await testMyProviderModel("p-a");
+
+    expect(r.ok).toBe(false);
+    expect(r.errorKind).toBe("unknown");
+    expect(vi.mocked(probeProviderKey)).not.toHaveBeenCalled();
+  });
+
+  it("配了 testModel -> 用 testModel 调 probeProviderKey, 落库 ok", async () => {
+    mockData.providers = [{
+      id: "p-b", ownerUserId: "admin-a", apiKeysEnc: "enc",
+      protocol: "openai", baseUrl: "https://b", testModel: "claude-fable-5",
+    }];
+    vi.mocked(parseKeyBundle).mockReturnValue([{ key: "k1", weight: 1 }]);
+    vi.mocked(pickWeightedKey).mockReturnValue("k1");
+    vi.mocked(probeProviderKey).mockResolvedValue({ ok: true, latencyMs: 50 });
+
+    const r = await testMyProviderModel("p-b");
+
+    expect(r.ok).toBe(true);
+    expect(vi.mocked(probeProviderKey)).toHaveBeenCalledWith(expect.objectContaining({
+      upstreamModelName: "claude-fable-5",
+      apiKey: "k1",
+    }));
+    expect(mockData.providers[0].lastModelProbeOk).toBe(true);
+    expect(mockData.providers[0].lastModelProbeError).toBeNull();
   });
 });

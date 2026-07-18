@@ -70,4 +70,36 @@ describe("probeProviderKey 连通性探测(errorKind 分级)", () => {
     expect(r.ok).toBe(false);
     expect(r.errorKind).toBe("unknown");
   });
+
+  it("401 + ModelError body(opencode 伪 401,空 body 缺 model)-> errorKind unknown,非 auth", async () => {
+    mockFetch(() =>
+      Promise.resolve({
+        status: 401,
+        statusText: "Unauthorized",
+        text: () =>
+          Promise.resolve(
+            '{"type":"error","error":{"type":"ModelError","message":"Model {{model}} is not supported"}}',
+          ),
+      }),
+    );
+    const r = await probeProviderKey(baseOpts);
+    expect(r.ok).toBe(false);
+    expect(r.errorKind).toBe("unknown");
+  });
+
+  it("401 + AuthError body(真鉴权失败)-> errorKind auth", async () => {
+    mockFetch(() =>
+      Promise.resolve({
+        status: 401,
+        statusText: "Unauthorized",
+        text: () =>
+          Promise.resolve(
+            '{"type":"error","error":{"type":"AuthError","message":"Invalid API key."}}',
+          ),
+      }),
+    );
+    const r = await probeProviderKey(baseOpts);
+    expect(r.ok).toBe(false);
+    expect(r.errorKind).toBe("auth");
+  });
 });

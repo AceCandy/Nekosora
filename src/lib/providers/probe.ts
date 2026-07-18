@@ -282,6 +282,17 @@ async function probeKeyAuth(opts: {
     const latencyMs = Date.now() - startedAt;
     const status = res.status;
     if (status === 401 || status === 403) {
+      const body = typeof res.text === "function" ? await res.text().catch(() => "") : "";
+      // 伪 401/403:opencode 等先校验 model 的上游,空 body 缺 model 直接返 401 + ModelError,
+      // 压根没到 key 校验。判 unknown(网络层仍通),避免误导成"密钥错";要验 key 需带 model 深度检测。
+      if (/modelerror|not supported|unsupported model|model.{0,10}not/i.test(body)) {
+        return {
+          ok: false,
+          latencyMs,
+          error: `上游要求指定 model(HTTP ${status}),空 body 无法验证 key`,
+          errorKind: "unknown",
+        };
+      }
       // 鉴权失败:key 无效或无权限。
       return {
         ok: false,

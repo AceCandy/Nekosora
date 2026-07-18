@@ -202,6 +202,10 @@ export const providers = pgTable(
     lastKeyResults: jsonb("last_key_results").$type<ProviderKeyResult[]>(),
     // 检测模型(手填或从上游模型列表选),用于后续深度健康检测;空表示未配置。
     testModel: text("test_model"),
+    // 最近一次深度检测结果(用 testModel 发极小生成验证 model+key+协议全链路);null=未检测。
+    lastModelProbeOk: boolean("last_model_probe_ok"),
+    lastModelProbeAt: timestamp("last_model_probe_at", { withTimezone: true }),
+    lastModelProbeError: text("last_model_probe_error"),
     // 最近一次拉取并落库的上游模型 id 列表(/models);空表示未拉取。
     upstreamModels: jsonb("upstream_models").$type<string[]>(),
     upstreamModelsAt: timestamp("upstream_models_at", { withTimezone: true }),
