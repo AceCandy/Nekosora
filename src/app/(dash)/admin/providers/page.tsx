@@ -1,11 +1,13 @@
 import {
   listProviders,
+  listRoutes,
   createProvider,
   updateProvider,
   toggleProvider,
   deleteProvider,
   testKeyDirect,
   checkProviderHealth,
+  refreshUpstreamModels,
 } from "../actions";
 import { revealKeyBundle } from "@/lib/providers/keys";
 import { getTranslations } from "next-intl/server";
@@ -20,6 +22,15 @@ export default async function ProvidersPage() {
   const tn = await getTranslations("nav");
   const t = await getTranslations("admin.providers");
   const rows = await listProviders();
+  // 已配路由(用于检测模型悬浮窗标注哪些上游模型已配路由)。
+  const routeRows = await listRoutes();
+  const routes = routeRows.map((r: Record<string, unknown>) => {
+    const route = r.route as Record<string, unknown>;
+    return {
+      providerId: route.providerId as string,
+      upstreamModelName: route.upstreamModelName as string,
+    };
+  });
 
   const providers: ProviderItem[] = rows.map((p: Record<string, unknown>) => ({
     id: p.id as string,
@@ -37,6 +48,9 @@ export default async function ProvidersPage() {
       total: (p.lastTotalKeyCount as number | null) ?? null,
       checkedAt: (p.lastHealthCheckedAt as Date | null) ?? null,
     },
+    testModel: (p.testModel as string | null) ?? null,
+    upstreamModels: (p.upstreamModels as string[] | null) ?? [],
+    upstreamModelsAt: (p.upstreamModelsAt as Date | null) ?? null,
   }));
 
   // 预先 bind 每个 id 对应的 action,组成按 id 索引的表(传给客户端壳)。
@@ -52,12 +66,16 @@ export default async function ProvidersPage() {
   const healthActions = Object.fromEntries(
     providers.map((p) => [p.id, checkProviderHealth.bind(null, p.id)]),
   );
+  const refreshActions = Object.fromEntries(
+    providers.map((p) => [p.id, refreshUpstreamModels.bind(null, p.id)]),
+  );
 
   return (
-    <div className="space-y-8">
-      <div className="space-y-4">
+    <div className="flex flex-col h-[calc(100dvh-4rem)] gap-4">
+      <div className="shrink-0">
         <PageHeader icon={Server} title={tn("globalProviders")} desc={t("desc")} />
-        <ProvidersManager
+      </div>
+      <ProvidersManager
           providers={providers}
           protocols={PROVIDER_PROTOCOLS}
           createAction={createProvider}
@@ -66,8 +84,9 @@ export default async function ProvidersPage() {
           deleteActions={deleteActions}
           testKeyAction={testKeyDirect}
           healthActions={healthActions}
+          refreshActions={refreshActions}
+          routes={routes}
         />
-      </div>
     </div>
   );
 }

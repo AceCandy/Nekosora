@@ -1,16 +1,37 @@
 "use client";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import type { FormDataSerializableAction } from "@/features/providers/types";
 import type { EditorRow, TestKeyAction } from "@/features/providers/KeyBundleEditor";
 import ProviderFormDialog from "@/features/providers/ProviderFormDialog";
-import ProviderHealthButton, { type HealthAction } from "@/features/providers/ProviderHealthButton";
+import ProviderHealthButton, { type HealthAction, type HealthDisplay } from "@/features/providers/ProviderHealthButton";
 import ConfirmDialog from "@/shared/ui/ConfirmDialog";
-import { Plus, Edit2, Play, Square, Trash2, ShieldAlert } from "lucide-react";
+import Popover from "@/shared/ui/Popover";
+import Input from "@/shared/ui/Input";
+import Select from "@/shared/ui/Select";
+import { Plus, Edit2, Trash2, ShieldAlert, HeartPulse, Loader2, RefreshCw } from "lucide-react";
 import { clsx } from "clsx";
 import { Button } from "@/shared/ui/Button";
-import Badge from "@/shared/ui/Badge";
-import StatusDot from "@/shared/ui/StatusDot";
+
+// 4 种协议各自的彩色块(低饱和填充,与「莫兰迪灰调」管理侧协调);未命中协议回退中性色。
+const PROTOCOL_STYLE: Record<string, { bg: string; text: string }> = {
+  openai: { bg: "bg-emerald-100 dark:bg-emerald-900/40", text: "text-emerald-700 dark:text-emerald-300" },
+  anthropic: { bg: "bg-orange-100 dark:bg-orange-900/40", text: "text-orange-700 dark:text-orange-300" },
+  gemini: { bg: "bg-blue-100 dark:bg-blue-900/40", text: "text-blue-700 dark:text-blue-300" },
+  "openai-compatible": { bg: "bg-slate-200 dark:bg-slate-700/50", text: "text-slate-700 dark:text-slate-200" },
+};
+
+/** server action 签名:拉取 provider 最新上游模型列表,返回模型 id 列表 + 时间。 */
+export type RefreshAction = (providerId: string) => Promise<{
+  models: string[];
+  checkedAt: number;
+}>;
+
+/** routes 表中与 provider 关联的上游模型引用(用于标注哪些上游模型已配路由)。 */
+export interface ProviderRouteRef {
+  providerId: string;
+  upstreamModelName: string;
+}
 
 export interface ProviderItem {
   id: string;
@@ -28,6 +49,12 @@ export interface ProviderItem {
     total: number | null;
     checkedAt: Date | null;
   };
+  /** 检测模型(手填或从上游模型列表选);用于后续深度健康检测。 */
+  testModel?: string | null;
+  /** 已拉取并落库的上游模型 id 列表(/models)。 */
+  upstreamModels?: string[];
+  /** 上次拉取上游模型列表的时间。 */
+  upstreamModelsAt?: Date | null;
 }
 
 interface ProvidersManagerProps {
@@ -41,6 +68,10 @@ interface ProvidersManagerProps {
   testKeyAction?: TestKeyAction;
   /** 全量健康检测 action(按 id 索引)。不传则不显示检测按钮。 */
   healthActions?: Record<string, HealthAction>;
+  /** 拉取最新上游模型列表 action(按 id 索引)。不传则不显示拉取按钮。 */
+  refreshActions?: Record<string, RefreshAction>;
+  /** 已配置的路由引用(用于检测模型悬浮窗标注哪些上游模型已配路由)。 */
+  routes?: ProviderRouteRef[];
 }
 
 export default function ProvidersManager({
@@ -52,18 +83,158 @@ export default function ProvidersManager({
   deleteActions,
   testKeyAction,
   healthActions,
+  refreshActions,
+  routes,
 }: ProvidersManagerProps) {
   const t = useTranslations("providers");
   const [addOpen, setAddOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
+  // 健康度状态上提到此层:既支持单行检测,也支持表头"全部检测"统一刷新所有行。
+  // healthMap 只存本次会话的检测结果;未检测的行回显落库值(p.health)。
+  const [healthMap, setHealthMap] = useState<Record<string, HealthDisplay>>({});
+  const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
+  const [allPending, setAllPending] = useState(false);
+
+  // 上游模型列表的会话级覆盖:拉取成功后即时刷新"共 N 个模型",无需等 RSC 重渲。
+  const [modelsMap, setModelsMap] = useState<Record<string, { models: string[]; checkedAt: number }>>({});
+  const [refreshingIds, setRefreshingIds] = useState<Set<string>>(new Set());
+
   const editing = providers.find((p) => p.id === editId) ?? null;
   const deleting = providers.find((p) => p.id === deleteId) ?? null;
 
+  const displayFor = (p: ProviderItem): HealthDisplay => {
+    if (healthMap[p.id]) return healthMap[p.id];
+    if (p.health?.checkedAt) {
+      return {
+        healthy: p.health.healthy ?? 0,
+        total: p.health.total ?? 0,
+        checkedAt:
+          p.health.checkedAt instanceof Date ? p.health.checkedAt.getTime() : Number(p.health.checkedAt),
+      };
+    }
+    return null;
+  };
+
+  const checkOne = (id: string) => {
+    const action = healthActions?.[id];
+    if (!action || pendingIds.has(id)) return;
+    setPendingIds((prev) => new Set(prev).add(id));
+    action(id)
+      .then((result) => setHealthMap((prev) => ({ ...prev, [id]: result })))
+      .catch(() => {})
+      .finally(() =>
+        setPendingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        }),
+      );
+  };
+
+  const checkAll = () => {
+    if (allPending) return;
+    const ids = providers.map((p) => p.id).filter((id) => !!healthActions?.[id]);
+    if (ids.length === 0) return;
+    setAllPending(true);
+    setPendingIds(new Set(ids));
+    Promise.allSettled(ids.map((id) => healthActions![id](id)))
+      .then((results) => {
+        setHealthMap((prev) => {
+          const next = { ...prev };
+          results.forEach((r, i) => {
+            if (r.status === "fulfilled") next[ids[i]] = r.value;
+          });
+          return next;
+        });
+      })
+      .finally(() => {
+        setAllPending(false);
+        setPendingIds(new Set());
+      });
+  };
+
+  // 当前展示的上游模型列表:会话级覆盖优先,回退落库值。
+  const modelsFor = (p: ProviderItem): string[] => modelsMap[p.id]?.models ?? p.upstreamModels ?? [];
+
+  // 上次拉取时间(毫秒):会话级覆盖优先,回退落库值,供检测模型下拉的按需刷新缓存判定。
+  const fetchedAtFor = (p: ProviderItem): number | null =>
+    modelsMap[p.id]?.checkedAt ??
+    (p.upstreamModelsAt instanceof Date
+      ? p.upstreamModelsAt.getTime()
+      : p.upstreamModelsAt
+        ? Number(p.upstreamModelsAt)
+        : null);
+
+  const refreshOne = (id: string) => {
+    const action = refreshActions?.[id];
+    if (!action || refreshingIds.has(id)) return;
+    setRefreshingIds((prev) => new Set(prev).add(id));
+    action(id)
+      .then((result) => setModelsMap((prev) => ({ ...prev, [id]: result })))
+      .catch(() => {})
+      .finally(() =>
+        setRefreshingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        }),
+      );
+  };
+
+  // 筛选:客户端过滤(空值不过滤)。密钥精准匹配,其余模糊(大小写不敏感)。
+  const [filter, setFilter] = useState({
+    name: "",
+    baseUrl: "",
+    key: "",
+    model: "",
+    status: "all" as "all" | "enabled" | "disabled",
+  });
+  const filteredProviders = providers.filter((p) => {
+    const q = filter;
+    if (q.name && !p.name.toLowerCase().includes(q.name.toLowerCase())) return false;
+    if (q.baseUrl && !p.baseUrl.toLowerCase().includes(q.baseUrl.toLowerCase())) return false;
+    if (q.key && !p.keys.some((k) => k.key === q.key)) return false;
+    if (q.model && !modelsFor(p).some((m) => m.toLowerCase().includes(q.model.toLowerCase()))) return false;
+    if (q.status === "enabled" && !p.enabled) return false;
+    if (q.status === "disabled" && p.enabled) return false;
+    return true;
+  });
+
+  // 按 provider 聚合已配路由的上游模型集合,供悬浮窗标注绿/灰底。
+  const configuredByProvider = new Map<string, Set<string>>();
+  for (const r of routes ?? []) {
+    let set = configuredByProvider.get(r.providerId);
+    if (!set) { set = new Set(); configuredByProvider.set(r.providerId, set); }
+    set.add(r.upstreamModelName);
+  }
+
+  // 检测模型悬浮窗:已配路由模型绿底在前,其余灰底在后。
+  const renderModelsList = (p: ProviderItem) => {
+    const configured = configuredByProvider.get(p.id);
+    const models = modelsFor(p);
+    const listed = models.filter((m) => configured?.has(m));
+    const rest = models.filter((m) => !configured?.has(m));
+    return [...listed, ...rest].map((m) => (
+      <div
+        key={m}
+        title={m}
+        className={clsx(
+          "px-2 py-1 text-xs font-mono truncate",
+          configured?.has(m)
+            ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300"
+            : "bg-neutral-100 dark:bg-neutral-800/60 text-neutral-600 dark:text-neutral-400",
+        )}
+      >
+        {m}
+      </div>
+    ));
+  };
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="flex flex-col min-h-0 flex-1 gap-4">
+      <div className="flex items-center justify-between shrink-0">
         <span className="text-xs font-mono text-neutral-400 dark:text-neutral-500 uppercase tracking-wider">
           {t("configuredCount", { count: providers.length })}
         </span>
@@ -78,27 +249,85 @@ export default function ProvidersManager({
         </Button>
       </div>
 
-      <div className="rounded-lg border border-morning-mist dark:border-deep-space bg-nebula-white dark:bg-twilight-obsidian overflow-hidden transition-colors duration-150">
+      <div className="flex items-center gap-2 shrink-0">
+        <Input
+          placeholder={t("filterNamePlaceholder")}
+          value={filter.name}
+          onChange={(e) => setFilter((f) => ({ ...f, name: e.target.value }))}
+          className="h-8 w-32 text-xs"
+        />
+        <Input
+          placeholder={t("filterBaseUrlPlaceholder")}
+          value={filter.baseUrl}
+          onChange={(e) => setFilter((f) => ({ ...f, baseUrl: e.target.value }))}
+          className="h-8 w-36 text-xs"
+        />
+        <Input
+          placeholder={t("filterKeyPlaceholder")}
+          value={filter.key}
+          onChange={(e) => setFilter((f) => ({ ...f, key: e.target.value }))}
+          className="h-8 w-36 text-xs"
+        />
+        <Input
+          placeholder={t("filterModelPlaceholder")}
+          value={filter.model}
+          onChange={(e) => setFilter((f) => ({ ...f, model: e.target.value }))}
+          className="h-8 w-32 text-xs"
+        />
+        <Select
+          value={filter.status}
+          onChange={(e) => setFilter((f) => ({ ...f, status: e.target.value as typeof filter.status }))}
+          className="h-8 w-24 text-xs"
+        >
+          <option value="all">{t("filterStatusAll")}</option>
+          <option value="enabled">{t("filterStatusEnabled")}</option>
+          <option value="disabled">{t("filterStatusDisabled")}</option>
+        </Select>
+      </div>
+
+      <div className="rounded-lg border border-morning-mist dark:border-deep-space bg-nebula-white dark:bg-twilight-obsidian overflow-auto transition-colors duration-150 flex-1 min-h-0">
         <table className="w-full text-sm border-collapse text-left">
-          <thead className="bg-neutral-50/70 dark:bg-neutral-900/50 border-b border-morning-mist dark:border-deep-space text-neutral-500 dark:text-neutral-400 font-mono text-xs uppercase">
+          <thead className="bg-neutral-50 dark:bg-neutral-900 border-b border-morning-mist dark:border-deep-space text-neutral-500 dark:text-neutral-400 font-mono text-xs uppercase sticky top-0 z-10">
             <tr>
               <th className="p-3.5 font-medium">{t("colName")}</th>
-              <th className="p-3.5 font-medium">{t("colProtocol")}</th>
               <th className="p-3.5 font-medium">{t("colBaseUrl")}</th>
-              <th className="p-3.5 font-medium text-center">{t("colKeyCount")}</th>
+              <th className="p-3.5 font-medium text-center">
+                <div className="inline-flex items-center gap-1.5">
+                  <span>{t("colKeyCount")}</span>
+                  {healthActions && providers.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={checkAll}
+                      disabled={allPending}
+                      title={t("healthCheckAllTitle")}
+                      className="inline-flex items-center justify-center rounded p-0.5 text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {allPending ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <HeartPulse className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                  )}
+                </div>
+              </th>
+              <th className="p-3.5 font-medium">{t("colTestModel")}</th>
               <th className="p-3.5 font-medium">{t("colStatus")}</th>
               <th className="p-3.5 font-medium text-right">{t("colActions")}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800/60">
-            {providers.length === 0 ? (
+            {filteredProviders.length === 0 ? (
               <tr>
                 <td colSpan={6} className="p-10 text-center text-xs text-neutral-400 dark:text-neutral-500">
-                  {t("emptyState")}
+                  {providers.length === 0 ? t("emptyState") : t("filterNoMatch")}
                 </td>
               </tr>
             ) : (
-              providers.map((p) => (
+              filteredProviders.map((p) => {
+                const protocolStyle =
+                  PROTOCOL_STYLE[p.protocol] ?? { bg: "bg-neutral-100 dark:bg-neutral-800/60", text: "text-neutral-600 dark:text-neutral-400" };
+                return (
                 <tr
                   key={p.id}
                   className="hover:bg-neutral-50/50 dark:hover:bg-neutral-900/10 transition-colors duration-150"
@@ -106,28 +335,104 @@ export default function ProvidersManager({
                   <td className="p-3.5 font-semibold text-neutral-800 dark:text-neutral-200">
                     {p.name}
                   </td>
-                  <td className="p-3.5 font-mono text-xs">
-                    <Badge variant="neutral" className="font-mono">
-                      {p.protocol}
-                    </Badge>
-                  </td>
-                  <td className="p-3.5 font-mono text-xs text-neutral-500 dark:text-neutral-400 max-w-[200px] truncate">
-                    {p.baseUrl}
+                  <td className="p-3.5 max-w-[220px]">
+                    <div className="space-y-1.5">
+                      <div className="font-mono text-xs text-neutral-500 dark:text-neutral-400 truncate">
+                        {p.baseUrl}
+                      </div>
+                      <span className={clsx("inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-medium", protocolStyle.bg, protocolStyle.text)}>
+                        {p.protocol}
+                      </span>
+                    </div>
                   </td>
                   <td className="p-3.5 text-center font-mono text-xs">
-                    {p.keys.length}
+                    <div className="flex flex-col items-center gap-1.5">
+                      <span>{p.keys.length}</span>
+                      {healthActions?.[p.id] && (
+                        <ProviderHealthButton
+                          display={displayFor(p)}
+                          pending={pendingIds.has(p.id)}
+                          onCheck={() => checkOne(p.id)}
+                          iconOnly
+                        />
+                      )}
+                    </div>
                   </td>
                   <td className="p-3.5">
-                    <StatusDot enabled={p.enabled} />
+                    <div className="space-y-1.5">
+                      <div className="truncate text-xs font-medium text-neutral-700 dark:text-neutral-300">
+                        {p.testModel || t("testModelPlaceholder")}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        {modelsFor(p).length > 0 ? (
+                          <Popover
+                            openOnHover
+                            hoverDelayMs={1500}
+                            clickToggle
+                            side="bottom"
+                            align="left"
+                            panelClassName="p-0"
+                            trigger={
+                              <span className="text-[11px] text-neutral-400 dark:text-neutral-500 font-mono cursor-default">
+                                {t.rich("modelsCount", {
+                                  count: modelsFor(p).length,
+                                  num: (chunks: ReactNode) => (
+                                    <span className="font-semibold text-sora-blue tabular-nums">{chunks}</span>
+                                  ),
+                                })}
+                              </span>
+                            }
+                          >
+                            <div className="max-h-60 w-64 overflow-auto py-1">
+                              {renderModelsList(p)}
+                            </div>
+                          </Popover>
+                        ) : (
+                          <span className="text-[11px] text-neutral-400 dark:text-neutral-500 font-mono">
+                            {t("modelsEmpty")}
+                          </span>
+                        )}
+                        {refreshActions?.[p.id] && (
+                          <button
+                            type="button"
+                            onClick={() => refreshOne(p.id)}
+                            disabled={refreshingIds.has(p.id)}
+                            title={t("refreshModelsTitle")}
+                            className="inline-flex items-center justify-center rounded p-1 text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                          >
+                            {refreshingIds.has(p.id) ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <RefreshCw className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="p-3.5">
+                    <form action={toggleActions[p.id]} className="inline-block">
+                      <button
+                        type="submit"
+                        role="switch"
+                        aria-checked={p.enabled}
+                        aria-label={p.enabled ? t("disable") : t("enable")}
+                        title={p.enabled ? t("disable") : t("enable")}
+                        className={clsx(
+                          "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue/40",
+                          p.enabled ? "bg-green-600 dark:bg-green-500" : "bg-neutral-300 dark:bg-neutral-600"
+                        )}
+                      >
+                        <span
+                          className={clsx(
+                            "pointer-events-none absolute top-1/2 left-0 h-4 w-4 -translate-y-1/2 rounded-full bg-white transition-transform duration-200",
+                            p.enabled ? "translate-x-[18px]" : "translate-x-[2px]"
+                          )}
+                        />
+                      </button>
+                    </form>
                   </td>
                   <td className="p-3.5 text-right space-x-1">
-                    {healthActions?.[p.id] && (
-                      <ProviderHealthButton
-                        action={healthActions[p.id]}
-                        providerId={p.id}
-                        initial={p.health}
-                      />
-                    )}
                     <Button
                       variant="ghost"
                       size="sm"
@@ -138,32 +443,6 @@ export default function ProvidersManager({
                       <Edit2 className="w-3.5 h-3.5" />
                       <span>{t("edit")}</span>
                     </Button>
-
-                    <form action={toggleActions[p.id]} className="inline">
-                      <Button
-                        type="submit"
-                        variant="ghost"
-                        size="sm"
-                        className={clsx(
-                          p.enabled
-                            ? "text-amber-600 dark:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/20"
-                            : "text-green-600 dark:text-green-500 hover:bg-green-50 dark:hover:bg-green-950/20"
-                        )}
-                        title={p.enabled ? t("disable") : t("enable")}
-                      >
-                        {p.enabled ? (
-                          <>
-                            <Square className="w-3.5 h-3.5 fill-current" />
-                            <span>{t("disable")}</span>
-                          </>
-                        ) : (
-                          <>
-                            <Play className="w-3.5 h-3.5 fill-current" />
-                            <span>{t("enable")}</span>
-                          </>
-                        )}
-                      </Button>
-                    </form>
 
                     <Button
                       variant="ghost"
@@ -177,7 +456,8 @@ export default function ProvidersManager({
                     </Button>
                   </td>
                 </tr>
-              ))
+                );
+              })
             )}
           </tbody>
         </table>
@@ -202,11 +482,19 @@ export default function ProvidersManager({
           action={updateActions[editing.id]}
           protocols={protocols}
           testAction={testKeyAction}
+          refreshUpstreamModels={
+            refreshActions?.[editing.id]
+              ? () => refreshActions![editing.id]!(editing.id)
+              : undefined
+          }
           initial={{
             name: editing.name,
             protocol: editing.protocol,
             baseUrl: editing.baseUrl,
             keys: editing.keys,
+            testModel: editing.testModel ?? "",
+            upstreamModels: modelsFor(editing),
+            upstreamModelsAt: fetchedAtFor(editing),
           }}
         />
       )}

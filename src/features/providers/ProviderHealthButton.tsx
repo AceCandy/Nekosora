@@ -1,7 +1,6 @@
 "use client";
-import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
-import { HeartPulse } from "lucide-react";
+import { HeartPulse, Loader2 } from "lucide-react";
 import { Button } from "@/shared/ui/Button";
 import Badge from "@/shared/ui/Badge";
 
@@ -12,65 +11,52 @@ export type HealthAction = (providerId: string) => Promise<{
   checkedAt: number;
 }>;
 
+/** 健康度展示状态:null 表示无可用结果。 */
+export type HealthDisplay = { healthy: number; total: number; checkedAt: number } | null;
+
 interface ProviderHealthButtonProps {
-  /** 已 bind 好 id 的健康检测 action。 */
-  action: HealthAction;
-  providerId: string;
-  /** 落库的初始健康度(列表回显)。 */
-  initial?: {
-    healthy: number | null;
-    total: number | null;
-    checkedAt: Date | null;
-  };
+  /** 当前展示的健康度(由父组件控制,支持"全部检测"统一刷新)。 */
+  display: HealthDisplay;
+  /** 检测进行中(按钮禁用 + 图标转圈)。 */
+  pending: boolean;
+  /** 触发检测。 */
+  onCheck: () => void;
+  /** 仅图标模式:隐藏"检测"文字,用于紧凑列表内联。 */
+  iconOnly?: boolean;
 }
 
-type Display = { healthy: number; total: number; checkedAt: number } | null;
-
 /**
- * Provider 全量密钥健康检测按钮 —— 检测该 provider 所有 key,
- * 汇总成 X/Y 健康徽章(如 2/3),结果落库,刷新后仍可见。
+ * Provider 全量密钥健康检测按钮(受控)。检测该 provider 所有 key,
+ * 汇总成 X/Y 健康徽章(如 2/3)。状态与触发逻辑上提到父组件,
+ * 以便表头"全部检测"能统一刷新所有行。
  *
  * 与编辑弹窗里的逐 key 即时测试互补:
  *   弹窗内测未保存的 key(配 key 时验证);
  *   此处测已存库的全量 key(列表级健康概览 + 持久化)。
  */
 export default function ProviderHealthButton({
-  action,
-  providerId,
-  initial,
+  display,
+  pending,
+  onCheck,
+  iconOnly,
 }: ProviderHealthButtonProps) {
   const t = useTranslations("providers");
-  const [isPending, startTransition] = useTransition();
-  // 当前展示的健康度:优先用即时检测结果,回退到落库值。
-  const [display, setDisplay] = useState<Display>(
-    initial?.checkedAt
-      ? {
-          healthy: initial.healthy ?? 0,
-          total: initial.total ?? 0,
-          checkedAt: initial.checkedAt instanceof Date ? initial.checkedAt.getTime() : Number(initial.checkedAt),
-        }
-      : null,
-  );
-
-  const handleCheck = () => {
-    startTransition(async () => {
-      const result = await action(providerId);
-      setDisplay(result);
-    });
-  };
-
   return (
     <span className="inline-flex items-center gap-1.5">
       <Button
         variant="ghost"
-        size="sm"
-        loading={isPending}
-        onClick={handleCheck}
-        className="text-neutral-750 hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-white"
+        size={iconOnly ? "xs" : "sm"}
+        disabled={pending}
+        onClick={onCheck}
+        className="text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-100"
         title={t("healthCheckTitle")}
       >
-        <HeartPulse className="w-3.5 h-3.5" />
-        <span>{t("healthCheck")}</span>
+        {pending ? (
+          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+        ) : (
+          <HeartPulse className="w-3.5 h-3.5" />
+        )}
+        {!iconOnly && <span>{t("healthCheck")}</span>}
       </Button>
       {display && <HealthBadge healthy={display.healthy} total={display.total} />}
     </span>

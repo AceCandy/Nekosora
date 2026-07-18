@@ -1,6 +1,6 @@
 {
-  "id": "630c0c32-e231-4151-9c65-89132cfdf6bb",
-  "prevId": "35a80c56-0415-4558-8b1f-9f35045b60e6",
+  "id": "0e17ba70-d5a5-4d66-b94c-871572e02cfc",
+  "prevId": "630c0c32-e231-4151-9c65-89132cfdf6bb",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2877,6 +2877,24 @@
         "last_total_key_count": {
           "name": "last_total_key_count",
           "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "test_model": {
+          "name": "test_model",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "upstream_models": {
+          "name": "upstream_models",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "upstream_models_at": {
+          "name": "upstream_models_at",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },

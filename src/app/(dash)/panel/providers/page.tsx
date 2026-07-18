@@ -1,12 +1,14 @@
 import { getTranslations } from "next-intl/server";
 import {
   getMyProviders,
+  listMyRoutes,
   createMyProvider,
   updateMyProvider,
   toggleMyProvider,
   deleteMyProvider,
   testMyKeyDirect,
   checkMyProviderHealth,
+  refreshMyUpstreamModels,
 } from "../actions";
 import { revealKeyBundle } from "@/lib/providers/keys";
 import ProvidersManager, {
@@ -20,6 +22,15 @@ export default async function MyProvidersPage() {
   const t = await getTranslations("panel.providers");
   const tn = await getTranslations("nav");
   const rows = await getMyProviders();
+  // 已配路由(用于检测模型悬浮窗标注哪些上游模型已配路由)。
+  const routeRows = await listMyRoutes();
+  const routes = routeRows.map((r: Record<string, unknown>) => {
+    const route = r.route as Record<string, unknown>;
+    return {
+      providerId: route.providerId as string,
+      upstreamModelName: route.upstreamModelName as string,
+    };
+  });
 
   const providers: ProviderItem[] = rows.map((p: Record<string, unknown>) => ({
     id: p.id as string,
@@ -37,6 +48,9 @@ export default async function MyProvidersPage() {
       total: (p.lastTotalKeyCount as number | null) ?? null,
       checkedAt: (p.lastHealthCheckedAt as Date | null) ?? null,
     },
+    testModel: (p.testModel as string | null) ?? null,
+    upstreamModels: (p.upstreamModels as string[] | null) ?? [],
+    upstreamModelsAt: (p.upstreamModelsAt as Date | null) ?? null,
   }));
 
   const updateActions = Object.fromEntries(
@@ -51,10 +65,15 @@ export default async function MyProvidersPage() {
   const healthActions = Object.fromEntries(
     providers.map((p) => [p.id, checkMyProviderHealth.bind(null, p.id)]),
   );
+  const refreshActions = Object.fromEntries(
+    providers.map((p) => [p.id, refreshMyUpstreamModels.bind(null, p.id)]),
+  );
 
   return (
-    <div className="space-y-4">
-      <PageHeader icon={Server} title={tn("providers")} desc={t("desc")} />
+    <div className="flex flex-col h-[calc(100dvh-4rem)] gap-4">
+      <div className="shrink-0">
+        <PageHeader icon={Server} title={tn("providers")} desc={t("desc")} />
+      </div>
       <ProvidersManager
         providers={providers}
         protocols={PROVIDER_PROTOCOLS}
@@ -64,6 +83,8 @@ export default async function MyProvidersPage() {
           deleteActions={deleteActions}
           testKeyAction={testMyKeyDirect}
           healthActions={healthActions}
+          refreshActions={refreshActions}
+          routes={routes}
         />
     </div>
   );

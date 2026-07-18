@@ -87,26 +87,53 @@ export async function listProviders() {
     .orderBy(S().providers.createdAt);
 }
 
+/**
+ * 拉取上游模型列表并落库到 provider(upstreamModels + upstreamModelsAt)。
+ * 拉取失败抛错,由调用方决定是否静默;调用方需先完成归属校验。
+ */
+async function fetchAndStoreUpstreamModels(
+  db: Awaited<ReturnType<typeof getDb>>,
+  providerId: string,
+  protocol: ProviderProtocol,
+  baseUrl: string,
+  apiKey: string,
+): Promise<{ models: string[]; checkedAt: number }> {
+  const fetched = await fetchUpstreamModels({ protocol, baseUrl, apiKey });
+  const models = fetched.map((m) => m.id);
+  const checkedAt = Date.now();
+  await db
+    .update(S().providers)
+    .set({ upstreamModels: models, upstreamModelsAt: new Date(checkedAt), updatedAt: new Date() })
+    .where(eq(S().providers.id, providerId));
+  return { models, checkedAt };
+}
+
 export async function createProvider(formData: FormData) {
   const admin = await requireAdmin();
   const db = await getDb();
   const keys = collectKeys(formData);
   // 允许无 key provider(如 OVH 免费层):keys 为空时存空 bundle,转发时用空 key。
   const apiKeysEnc = encryptKeyBundle(keys);
-  await db.insert(S().providers).values({
-    ownerUserId: admin.id,
-    name: String(formData.get("name") ?? ""),
-    protocol: String(formData.get("protocol") ?? "openai"),
-    baseUrl: normalizeBaseUrl(
-      String(formData.get("protocol") ?? "openai") as ProviderProtocol,
-      String(formData.get("baseUrl") ?? ""),
-    ),
-    apiKeysEnc,
-    keyStrategy: "weighted",
-    enabled: true,
-    priority: 0,
-  });
+  const protocol = String(formData.get("protocol") ?? "openai") as ProviderProtocol;
+  const baseUrl = normalizeBaseUrl(protocol, String(formData.get("baseUrl") ?? ""));
+  const [created] = await db
+    .insert(S().providers)
+    .values({
+      ownerUserId: admin.id,
+      name: String(formData.get("name") ?? ""),
+      protocol,
+      baseUrl,
+      apiKeysEnc,
+      testModel: String(formData.get("testModel") ?? ""),
+      keyStrategy: "weighted",
+      enabled: true,
+      priority: 0,
+    })
+    .returning({ id: S().providers.id });
   revalidatePath("/admin", "layout");
+
+  // 创建后自动拉取一次上游模型列表并落库;失败静默不阻塞创建(无 key 用空 key,与转发一致)。
+  await fetchAndStoreUpstreamModels(db, created.id, protocol, baseUrl, keys[0]?.key ?? "").catch(() => {});
 }
 
 /** 更新 provider(支持改 name/baseUrl/protocol/keys)。keys 为空表示不改 key。 */
@@ -120,6 +147,7 @@ export async function updateProvider(id: string, formData: FormData) {
       String(formData.get("protocol") ?? "openai") as ProviderProtocol,
       String(formData.get("baseUrl") ?? ""),
     ),
+    testModel: String(formData.get("testModel") ?? ""),
     updatedAt: new Date(),
   };
   const keys = collectKeys(formData);
@@ -235,6 +263,32 @@ export async function listUpstreamModels(id: string): Promise<UpstreamModel[]> {
     baseUrl: provider.baseUrl,
     apiKey: firstKey,
   });
+}
+
+/**
+ * 拉取 provider 的最新上游模型列表并落库(列表「拉取最新」按钮调用)。
+ * 校验归属;拉取失败不落库(保留旧值),抛错供 UI 提示。
+ */
+export async function refreshUpstreamModels(
+  id: string,
+): Promise<{ models: string[]; checkedAt: number }> {
+  const admin = await requireAdmin();
+  const db = await getDb();
+  const [provider] = await db
+    .select()
+    .from(S().providers)
+    .where(and(eq(S().providers.id, id), eq(S().providers.ownerUserId, admin.id)));
+  if (!provider) throw new Error("服务商不存在");
+  const keys = parseKeyBundle(provider.apiKeysEnc as string);
+  const result = await fetchAndStoreUpstreamModels(
+    db,
+    id,
+    provider.protocol as ProviderProtocol,
+    provider.baseUrl as string,
+    keys[0]?.key ?? "",
+  );
+  revalidatePath("/admin", "layout");
+  return result;
 }
 
 /**
