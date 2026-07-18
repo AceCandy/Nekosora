@@ -32,16 +32,24 @@ interface ChatOutlineProps {
 }
 
 /**
- * 对话大纲:贴滚动区右边缘(滚动条左侧)的一列短横线,排布密集。
- * 鼠标 hover 到整列区域即弹出完整轮次列表(每项显示用户原话),点击列表项跳转到对应消息。
+ * 对话大纲:贴滚动区右边缘(滚动条左侧)的一列圆点。
+ * 桌面 hover / 手机在圆点上按下 均展开完整轮次列表:
+ *   - 桌面:鼠标移到列表项点击跳转;
+ *   - 手机:在圆点上上下滑动(scrub),列表内对应项高亮跟随,放手跳到停下的轮。
+ * 手机 scrub 由 touch-action:none 接管手势(不滚页面),touchend 立即收起列表并跳转。
  *
- * 高亮当前轮 / 跳转均由 message-scroller 原语承载:本组件须渲染在 MessageScroller.Provider 内。
+ * 高亮当前轮 / 跳转由 message-scroller 原语承载:本组件须渲染在 MessageScroller.Provider 内。
  */
 export function ChatOutline({ messages, streaming }: ChatOutlineProps) {
   const turns = useMemo(() => buildTurns(messages), [messages]);
   const { currentAnchorId } = useMessageScrollerVisibility();
   const { scrollToMessage } = useMessageScroller();
-  const [hovered, setHovered] = useState(false);
+  // 完整列表是否展开:桌面 hover 或 手机 scrub 期间
+  const [open, setOpen] = useState(false);
+  // 手机 scrub 高亮的轮次索引,null=未拖动;ref 同步供 touchend 即时读取(state 异步可能未提交)
+  const [scrubIdx, setScrubIdx] = useState<number | null>(null);
+  const scrubIdxRef = useRef<number | null>(null);
+  const navRef = useRef<HTMLElement>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // currentAnchorId 形如 "msg-N":解析出 msg index,用于高亮当前所在轮次
@@ -66,29 +74,56 @@ export function ChatOutline({ messages, streaming }: ChatOutlineProps) {
 
   const handleJump = (userIndex: number) => {
     scrollToMessage(`msg-${userIndex}`, { behavior: "smooth" });
-    setHovered(false);
+    setOpen(false);
   };
 
   const onEnter = () => {
     if (closeTimer.current) clearTimeout(closeTimer.current);
-    setHovered(true);
+    setOpen(true);
   };
   const onLeave = () => {
-    // 延迟收起,给鼠标从横线移到浮层留出过渡时间
-    closeTimer.current = setTimeout(() => setHovered(false), 150);
+    // 延迟收起,给鼠标从圆点移到浮层留出过渡时间
+    closeTimer.current = setTimeout(() => setOpen(false), 150);
+  };
+
+  // 据触摸 Y 映射到轮次索引:nav 高度均分到各轮
+  const computeIdx = (clientY: number) => {
+    const nav = navRef.current;
+    if (!nav || turns.length === 0) return 0;
+    const rect = nav.getBoundingClientRect();
+    if (rect.height === 0) return 0;
+    const ratio = (clientY - rect.top) / rect.height;
+    return Math.max(0, Math.min(turns.length - 1, Math.round(ratio * (turns.length - 1))));
+  };
+  const updateScrub = (i: number) => {
+    scrubIdxRef.current = i;
+    setScrubIdx(i);
+  };
+  const onTouchStart = (e: React.TouchEvent) => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    setOpen(true);
+    updateScrub(computeIdx(e.touches[0].clientY));
+  };
+  const onTouchMove = (e: React.TouchEvent) => updateScrub(computeIdx(e.touches[0].clientY));
+  const onTouchEnd = () => {
+    const i = scrubIdxRef.current;
+    if (i !== null) scrollToMessage(`msg-${turns[i].userIndex}`, { behavior: "smooth" });
+    scrubIdxRef.current = null;
+    setScrubIdx(null);
+    setOpen(false);
   };
 
   return (
-    // 触发容器只占横条列尺寸、垂直居中于消息区,hover 仅在此区域生效,
-    // 不再撑满整列高度(避免横条上下方空白处误触浮层)
+    // 触发容器只占圆点列尺寸、垂直居中于消息区。桌面 hover / 手机 scrub 均展开完整列表。
+    // 不再撑满整列高度(避免圆点上下方空白处误触浮层)。
     <div
       className="absolute top-1/2 right-0 -translate-y-1/2 z-10 flex items-center"
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
     >
-      {/* 完整列表浮层:hover 时从横条左侧弹出,显示所有轮次的用户原话 */}
-      {hovered && (
-        <div className="mr-1 max-h-[60vh] overflow-y-auto w-64 rounded-lg border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink p-2 shadow-lg">
+      {/* 完整轮次列表:桌面 hover 或 手机 scrub 时展开;手机拖动时列表项高亮跟随 scrubIdx */}
+      {open && (
+        <div className="mr-1 max-h-[60vh] overflow-y-auto w-64 max-w-[80vw] rounded-lg border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink p-2 shadow-lg">
           <ul className="space-y-0.5">
             {turns.map((turn, i) => (
               <li key={turn.userIndex}>
@@ -97,9 +132,11 @@ export function ChatOutline({ messages, streaming }: ChatOutlineProps) {
                   onClick={() => handleJump(turn.userIndex)}
                   className={clsx(
                     "w-full text-left rounded-md px-2 py-1.5 text-xs transition-colors line-clamp-1",
-                    i === activeTurnIdx
-                      ? "bg-sora-blue/[0.10] text-neutral-800 dark:text-white font-medium"
-                      : "text-neutral-600 dark:text-neutral-300 hover:bg-sora-blue/[0.06] dark:hover:bg-sora-blue/[0.08]",
+                    i === scrubIdx
+                      ? "bg-sora-blue/20 text-neutral-800 dark:text-white font-medium"
+                      : i === activeTurnIdx
+                        ? "bg-sora-blue/[0.10] text-neutral-800 dark:text-white font-medium"
+                        : "text-neutral-600 dark:text-neutral-300 hover:bg-sora-blue/[0.06] dark:hover:bg-sora-blue/[0.08]",
                   )}
                 >
                   <span className="text-neutral-400 dark:text-neutral-500 mr-1.5 tabular-nums">{i + 1}.</span>
@@ -111,27 +148,32 @@ export function ChatOutline({ messages, streaming }: ChatOutlineProps) {
         </div>
       )}
 
-      {/* 横线列:离右边缘留白,避免与滚动条贴合 */}
+      {/* 点状大纲:生成中/拖动/当前轮高亮,桌面 hover 弱高亮 */}
       <nav
-        className="flex flex-col items-end gap-[5px] w-10 pr-4 cursor-pointer"
+        ref={navRef}
+        className="flex flex-col items-end gap-[5px] w-6 pr-2 cursor-pointer touch-none"
         aria-label="对话大纲"
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
       >
         {turns.map((turn, i) => {
           const isLast = i === turns.length - 1;
           const isGenerating = isLast && streaming;
           const isActive = i === activeTurnIdx;
+          const isScrub = scrubIdx === i;
           return (
             <span
               key={turn.userIndex}
               className={clsx(
-                "block h-[3px] rounded-full transition-all duration-200",
+                "block rounded-full transition-all duration-150",
                 isGenerating
-                  ? "w-6 bg-sora-blue"
-                  : isActive
-                    ? "w-6 bg-sora-blue/70"
-                    : hovered
-                      ? "w-6 bg-sora-blue/60"
-                      : "w-5 bg-neutral-300 dark:bg-neutral-600",
+                  ? "w-2 h-2 bg-sora-blue animate-pulse"
+                  : isScrub || isActive
+                    ? "w-2 h-2 bg-sora-blue"
+                    : open
+                      ? "w-1.5 h-1.5 bg-sora-blue/50"
+                      : "w-1.5 h-1.5 bg-neutral-300 dark:bg-neutral-600",
               )}
             />
           );

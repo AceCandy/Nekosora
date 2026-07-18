@@ -207,14 +207,14 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
             if (!domId) return;
             document.getElementById(domId)?.scrollIntoView({ behavior: "smooth", block: "start" });
           }}
-          className="sticky top-4 w-7 h-7 rounded-full border border-sora-blue/10 bg-sora-blue/[0.04] hover:bg-sora-blue/[0.08] flex items-center justify-center shrink-0 self-start mt-0.5 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
+          className="sticky top-4 w-7 h-7 rounded-full border border-sora-blue/10 bg-sora-blue/[0.04] hover:bg-sora-blue/[0.08] hidden sm:flex items-center justify-center shrink-0 self-start mt-0.5 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
           title={t("scrollToReplyTop")}
           aria-label={t("scrollToReplyTop")}
         >
           <Sparkles className="w-3.5 h-3.5 text-sora-blue" aria-hidden="true" />
         </button>
       )}
-      <div className={clsx("max-w-[82%] space-y-2", role === "user" ? "flex flex-col items-end w-full" : "")}>
+      <div className={clsx("space-y-2", role === "user" ? "flex flex-col items-end w-full max-w-[82%]" : "flex-1 min-w-0")}>
         {role === "user" ? (
           /* 用户消息: 可编辑文本气泡 */
           (editing ? (<div className="w-full space-y-1.5">
@@ -340,11 +340,11 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
         ) : (
           /* Assistant 消息: 流式 markdown 渲染 */
           (<div className={clsx(
-            "text-neutral-800 dark:text-neutral-200 max-w-[75ch] text-sm leading-relaxed",
+            "text-neutral-800 dark:text-neutral-200 text-sm leading-relaxed",
             renderStyleClass && `rs-${renderStyleClass}`,
           )}>
             {hasReasoning && (
-              <div className="mb-2 max-w-[75ch]">
+              <div className="mb-2">
                 {/* 思考单行:未吐字显「思考中」,吐字时一行截断,完成后收成「已思考X秒」。点击看全文 */}
                 {/* 触发区只包内容(不撑满整行),箭头紧跟文字;点击展开/收起,hover 仅作视觉反馈 */}
                 <div
@@ -570,7 +570,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
 
 
         {role === "assistant" && searchResults && searchResults.length > 0 && (
-          <details className="text-[11px] border border-morning-mist dark:border-deep-space/80 rounded-md bg-neutral-50/30 dark:bg-[#0d0f14]/10 overflow-hidden max-w-[75ch]">
+          <details className="text-[11px] border border-morning-mist dark:border-deep-space/80 rounded-md bg-neutral-50/30 dark:bg-[#0d0f14]/10 overflow-hidden">
             <summary className="cursor-pointer hover:text-neutral-600 dark:hover:text-neutral-300 px-3 py-1.5 select-none flex items-center gap-1.5 text-neutral-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue">
               <ExternalLink className="w-3 h-3" aria-hidden="true" />
               <span>{t("webSources")} ({searchResults.length})</span>
@@ -597,7 +597,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
         )}
 
         {role === "assistant" && trace && (
-          <details className="text-[11px] text-neutral-400 border border-morning-mist dark:border-deep-space/80 rounded-md bg-neutral-50/30 dark:bg-[#0d0f14]/10 overflow-hidden max-w-[75ch]">
+          <details className="text-[11px] text-neutral-400 border border-morning-mist dark:border-deep-space/80 rounded-md bg-neutral-50/30 dark:bg-[#0d0f14]/10 overflow-hidden">
             <summary className="cursor-pointer hover:text-neutral-600 dark:hover:text-neutral-300 px-3 py-1.5 font-mono select-none flex items-center gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue">
               <span>
                 🔍 {t("routeTrace")} (

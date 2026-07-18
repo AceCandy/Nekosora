@@ -157,6 +157,8 @@ expect(codeText.getBoundingClientRect().left - headerText.getBoundingClientRect(
 
 适用 `ChatOutline` 这类「贴边小触发器 + 弹出浮层」的结构。
 
+**手机无 hover**:触屏上 `onMouseEnter` 不生效,贴边大纲改用 scrub -- 容器加 `touch-action:none`(Tailwind `touch-none`)接管手势不滚页面,`onTouchStart/Move` 据触摸 Y 映射到轮次索引高亮预览(用 ref 同步供 `onTouchEnd` 即时读,state 异步可能未提交),`onTouchEnd` 放手 `scrollToMessage` 跳转;桌面 hover 浮层列表行为保留。
+
 ### 浮层被祖先 overflow 裁剪
 
 **症状**:`Popover`/`OptionPicker` 等浮层在表格(`overflow-auto`)、弹窗(`max-h`)等可滚动容器内被裁剪,超出容器边缘的部分看不到;`max-h-[calc(100vh-...)]` 估值不准时也会被截。
