@@ -381,9 +381,9 @@ export function ChatMessageList({
         <MessageScroller.Button
           direction="end"
           style={{ bottom: (bottomInset ?? 8) + 8 }}
-          className="absolute left-1/2 -translate-x-1/2 z-20 inline-flex items-center gap-1.5 rounded-full border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink px-3 py-1.5 text-xs font-semibold text-neutral-600 dark:text-neutral-300 shadow-sm hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-all duration-200 ease-out data-[active=false]:pointer-events-none data-[active=false]:opacity-0 data-[active=false]:translate-y-3 data-[active=false]:scale-90 data-[active=true]:opacity-100 data-[active=true]:translate-y-0 data-[active=true]:scale-100"
+          className="absolute left-1/2 -translate-x-1/2 z-20 inline-flex items-center gap-1.5 rounded-full border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink px-3 py-1.5 text-xs font-semibold text-neutral-600 dark:text-neutral-300 shadow-sm hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-all duration-300 ease-out data-[active=false]:pointer-events-none data-[active=false]:opacity-0 data-[active=false]:translate-y-4 data-[active=false]:scale-95 data-[active=true]:opacity-100 data-[active=true]:translate-y-0 data-[active=true]:scale-100"
         >
-          <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
+          <ChevronDown className="w-3.5 h-3.5 animate-[scroll-hint_1.6s_ease-in-out_infinite]" aria-hidden="true" />
           <span>{t("scrollToLatest")}</span>
         </MessageScroller.Button>
       </MessageScroller.Root>

@@ -320,3 +320,14 @@ body {
 .nekusora-md [data-streamdown="table"] > :is(thead, tbody) {
   border-top: 0;
 }
+
+/* 「回到最新」按钮箭头持续轻弹:向下指向可滚动方向,克制 2px 幅度避免喧宾夺主。 */
+@keyframes scroll-hint {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(2px);
+  }
+}
