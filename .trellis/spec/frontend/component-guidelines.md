@@ -157,6 +157,44 @@ expect(codeText.getBoundingClientRect().left - headerText.getBoundingClientRect(
 
 适用 `ChatOutline` 这类「贴边小触发器 + 弹出浮层」的结构。
 
+### 浮层被祖先 overflow 裁剪
+
+**症状**:`Popover`/`OptionPicker` 等浮层在表格(`overflow-auto`)、弹窗(`max-h`)等可滚动容器内被裁剪,超出容器边缘的部分看不到;`max-h-[calc(100vh-...)]` 估值不准时也会被截。
+
+**原因**:面板用 `position: absolute`,相对最近的 positioned 祖先定位,会被该祖先的 `overflow` 裁剪--任何中间层 `overflow-auto/hidden` 都吃掉溢出部分。
+
+**解法**:浮层面板改 `position: fixed`(相对视口,不被任何祖先 overflow 裁剪),位置由 `useLayoutEffect` 依据触发器 `getBoundingClientRect()` 命令式计算,直接写 `panel.style.left/top`(不 `setState`,避免 `react-hooks/set-state-in-effect` 告警与级联重渲染),并 clamp 到视口内 8px 边距:
+```tsx
+useLayoutEffect(() => {
+  if (!open) return;
+  const wrapper = wrapperRef.current, panel = panelRef.current;
+  if (!wrapper || !panel) return;
+  const compute = () => {
+    const wr = wrapper.getBoundingClientRect();
+    const gap = 4;
+    let left = align === "right" ? wr.right - panel.offsetWidth : wr.left;
+    let top = side === "bottom" ? wr.bottom + gap : wr.top - panel.offsetHeight - gap;
+    left = Math.max(8, Math.min(left, window.innerWidth - panel.offsetWidth - 8));
+    top = Math.max(8, Math.min(top, window.innerHeight - panel.offsetHeight - 8));
+    panel.style.left = `${left}px`;
+    panel.style.top = `${top}px`;
+    panel.style.visibility = "visible";
+  };
+  panel.style.visibility = "hidden"; // 先隐藏,compute 后再显示,避免首帧闪在 (0,0)
+  compute();
+  const ro = new ResizeObserver(compute); ro.observe(panel);
+  const onScroll = () => requestAnimationFrame(compute);
+  window.addEventListener("scroll", onScroll, true); // capture:子树任意滚动都跟随
+  window.addEventListener("resize", onScroll);
+  return () => { ro.disconnect(); window.removeEventListener("scroll", onScroll, true); window.removeEventListener("resize", onScroll); };
+}, [open, align, side]);
+```
+- `scroll` 用 capture 阶段 + rAF 节流,触发器所在容器滚动时面板跟随重定位。
+- 面板 `onClick` 阻止冒泡,避免 `clickToggle` 模式下点面板误触发关闭。
+- `absolute -> fixed` 是单向升级:`shared/ui/Popover` 所有用法(模型悬浮窗、Combobox、UsageLogsTable、ChatToolbar 等)一并受益,无需各调用方改。
+
+**注意**:`<dialog showModal>` top-layer 内的 fixed 面板定位正常;但祖先有 `transform`/`filter`/`will-change` 时 fixed 会相对该祖先而非视口(CSS 规范),面板错位--此时去掉祖先 transform 或改回 absolute。
+
 ### 粘贴上传的文件类型过滤
 
 **症状**:用户复制一段富文本/网页内容进输入框,被误当成「粘贴文件」触发上传。
