@@ -424,7 +424,7 @@ export default function ProvidersManager({
                   <td className="p-3.5">
                     <div className="space-y-1.5">
                       <div className="flex items-center gap-1.5">
-                        <div className={clsx("truncate text-xs font-medium flex-1", p.testModel ? "text-neutral-700 dark:text-neutral-300" : "text-amber-600 dark:text-amber-400")}>
+                        <div className={clsx("truncate text-xs font-medium max-w-[14rem]", p.testModel ? "text-neutral-700 dark:text-neutral-300" : "text-amber-600 dark:text-amber-400")}>
                           {p.testModel || t("testModelPlaceholder")}
                         </div>
                         {modelProbeActions?.[p.id] && (

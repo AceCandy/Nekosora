@@ -176,8 +176,8 @@ export default function ModelsManager({
   const routeEditing = routes?.find((r) => r.id === routeEditId) ?? null;
   const routeDeleting = routes?.find((r) => r.id === routeDeleteId) ?? null;
 
-  // 列数:基础列(showVisibility ? 7 : 6)+ 拖动手柄列(可拖动时 +1)。空态 / 展开行 colSpan 用此值。
-  const colCount = (showVisibility ? 7 : 6) + (reorderable ? 1 : 0);
+  // 列数:基础列(showVisibility ? 5 : 4,对外名/显示名合一 + 去路由数列)+ 拖动手柄列(可拖动时 +1)。空态 / 展开行 colSpan 用此值。
+  const colCount = (showVisibility ? 5 : 4) + (reorderable ? 1 : 0);
 
   function handleDragEnd(
     event: DragEndEvent,
@@ -211,10 +211,8 @@ export default function ModelsManager({
             <tr>
               {reorderable && <th className="p-3.5 w-8" />}
               <th className="p-3.5 font-medium">{t("colExternalName")}</th>
-              <th className="p-3.5 font-medium">{t("colDisplayName")}</th>
               <th className="p-3.5 font-medium">{t("catalogLabel")}</th>
               {showVisibility && <th className="p-3.5 font-medium">{t("colVisibility")}</th>}
-              <th className="p-3.5 font-medium text-center">{t("colRouteCount")}</th>
               <th className="p-3.5 font-medium">{t("colStatus")}</th>
               <th className="p-3.5 font-medium text-right">{t("colActions")}</th>
             </tr>
@@ -490,15 +488,17 @@ function ModelRowCells({
   const t = useTranslations("models");
   return (
     <>
-      <td className="p-3.5 font-mono text-xs font-semibold text-neutral-800 dark:text-neutral-200">
-        <span className="block max-w-[14rem] truncate" title={model.name}>
-          {model.name}
-        </span>
-      </td>
-      <td className="p-3.5 text-xs text-neutral-600 dark:text-neutral-300">
-        <span className="block max-w-[12rem] truncate" title={model.displayName ?? undefined}>
-          {model.displayName ?? "-"}
-        </span>
+      <td className="p-3.5">
+        <div className="flex flex-col gap-0.5 min-w-0">
+          <span className="font-mono text-xs font-semibold text-neutral-800 dark:text-neutral-200 max-w-[16rem] truncate" title={model.name}>
+            {model.name}
+          </span>
+          {model.displayName && model.displayName !== model.name ? (
+            <span className="text-xs text-neutral-500 dark:text-neutral-400 max-w-[16rem] truncate" title={model.displayName}>
+              {model.displayName}
+            </span>
+          ) : null}
+        </div>
       </td>
       <td className="p-3.5 text-xs">
         {catalogOption ? (
@@ -556,11 +556,27 @@ function ModelRowCells({
           )}
         </td>
       )}
-      <td className="p-3.5 text-center font-mono text-xs">
-        {routeCount}
-      </td>
       <td className="p-3.5">
-        <StatusDot enabled={model.enabled} enabledLabel={t("statusEnabled")} disabledLabel={t("statusDisabled")} />
+        <form action={toggleAction} className="inline-block">
+          <button
+            type="submit"
+            role="switch"
+            aria-checked={model.enabled}
+            aria-label={model.enabled ? t("disable") : t("enable")}
+            title={model.enabled ? t("disable") : t("enable")}
+            className={clsx(
+              "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue/40",
+              model.enabled ? "bg-green-600 dark:bg-green-500" : "bg-neutral-300 dark:bg-neutral-600"
+            )}
+          >
+            <span
+              className={clsx(
+                "pointer-events-none absolute top-1/2 left-0 h-4 w-4 -translate-y-1/2 rounded-full bg-white transition-transform duration-200",
+                model.enabled ? "translate-x-[18px]" : "translate-x-[2px]"
+              )}
+            />
+          </button>
+        </form>
       </td>
       <td className="p-3.5 text-right space-x-1 whitespace-nowrap">
         <Button
@@ -588,31 +604,6 @@ function ModelRowCells({
           <Edit2 className="w-3.5 h-3.5" />
           <span>{t("edit")}</span>
         </Button>
-        <form action={toggleAction} className="inline">
-          <Button
-            type="submit"
-            variant="ghost"
-            size="sm"
-            className={clsx(
-              model.enabled
-                ? "text-amber-600 dark:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/20"
-                : "text-green-600 dark:text-green-500 hover:bg-green-50 dark:hover:bg-green-950/20"
-            )}
-            title={model.enabled ? t("disable") : t("enable")}
-          >
-            {model.enabled ? (
-              <>
-                <Square className="w-3.5 h-3.5 fill-current" />
-                <span>{t("disable")}</span>
-              </>
-            ) : (
-              <>
-                <Play className="w-3.5 h-3.5 fill-current" />
-                <span>{t("enable")}</span>
-              </>
-            )}
-          </Button>
-        </form>
         <Button
           variant="ghost"
           size="sm"
