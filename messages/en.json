@@ -375,7 +375,7 @@
         "renderStyles": "Render styles"
       },
       "basicTitle": "Request User-Agent",
-      "basicDesc": "Configure the User-Agent sent when forwarding upstream. Defaults to Nekusora/{version} when unset. Probe requests follow the chat UA. Takes effect immediately after saving.",
+      "basicDesc": "Configure the User-Agent sent when forwarding upstream. Defaults to Nekusora/<version> when unset. Probe requests follow the chat UA. Takes effect immediately after saving.",
       "chatUaLabel": "Chat UA",
       "chatUaHint": "Used by chat workspace forwarding + auxiliary tasks (title/summary/memory) + probe requests. Leave empty to use the default.",
       "gatewayUaLabel": "Gateway UA",

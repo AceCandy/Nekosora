@@ -375,7 +375,7 @@
         "renderStyles": "输出样式"
       },
       "basicTitle": "请求 User-Agent",
-      "basicDesc": "配置转发上游时的 User-Agent。未配置时默认 Nekusora/{版本}。检测请求与聊天 UA 保持一致。保存后即时生效。",
+      "basicDesc": "配置转发上游时的 User-Agent。未配置时默认 Nekusora/<版本>。检测请求与聊天 UA 保持一致。保存后即时生效。",
       "chatUaLabel": "聊天 UA",
       "chatUaHint": "聊天工作台转发 + 副任务(标题/摘要/记忆)+ 检测请求使用。留空用默认值。",
       "gatewayUaLabel": "转发 UA",
