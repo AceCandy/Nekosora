@@ -171,3 +171,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 6: 依赖安全审计与升级
+
+**Date**: 2026-07-19
+**Task**: 依赖安全审计与升级
+**Branch**: `main`
+
+### Summary
+
+升级 25 个直接依赖并定向覆盖易受攻击的 PostCSS/esbuild；漏洞审计清零，319 项测试、质量检查与生产构建通过。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `514fe3e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
