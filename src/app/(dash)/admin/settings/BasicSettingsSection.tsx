@@ -1,3 +1,4 @@
+import { revalidatePath } from "next/cache";
 import { getTranslations } from "next-intl/server";
 import { getSettings, upsertSettings } from "@/lib/system-settings/service";
 import { resetUAConfig, getChatUA, getGatewayUA } from "@/lib/system-settings/ua";
@@ -26,6 +27,7 @@ export default async function BasicSettingsSection() {
       gateway_ua: gatewayUa,
     });
     resetUAConfig();
+    revalidatePath("/admin/settings");
   }
 
   return (
