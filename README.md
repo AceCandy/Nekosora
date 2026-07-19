@@ -163,6 +163,15 @@ pnpm worker                    # 另开终端:文件处理队列(pg-boss)
 
 ## 🐳 Docker 部署
 
+预构建镜像由 CI 自动发布(GHCR 每 12h 检查 main 有更新则构建;打 `v*` tag 时同步发 DockerHub):
+
+```bash
+docker pull ghcr.io/acecandy/nekosora:edge     # 定时构建的最新 main
+docker pull acecandy/nekosora:latest           # 打 v* tag 后的正式版
+```
+
+或本地构建:
+
 ```bash
 docker build -t nekusora .
 docker run -p 3000:3000 \
