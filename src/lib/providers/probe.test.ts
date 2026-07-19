@@ -103,3 +103,60 @@ describe("probeProviderKey 连通性探测(errorKind 分级)", () => {
     expect(r.errorKind).toBe("auth");
   });
 });
+
+describe("probeProviderKey gemini /models 无效 key 识别", () => {
+  // gemini 退回 GET /models,官方对无效 key 返 400(非 401/403)+ "API key not valid" body;
+  // 通用判定会误把 400 当"key 有效",需解析 body 纠正。
+  it("gemini 400 + 'API key not valid' body -> errorKind auth", async () => {
+    mockFetch(() =>
+      Promise.resolve({
+        status: 400,
+        statusText: "Bad Request",
+        text: () =>
+          Promise.resolve(
+            '{"error":{"code":400,"message":"API key not valid. Please pass a valid API key.","status":"INVALID_ARGUMENT"}}',
+          ),
+      }),
+    );
+    const r = await probeProviderKey({ ...baseOpts, protocol: "gemini" as const });
+    expect(r.ok).toBe(false);
+    expect(r.errorKind).toBe("auth");
+  });
+
+  it("gemini 400 + 'API_KEY_INVALID' body -> errorKind auth", async () => {
+    mockFetch(() =>
+      Promise.resolve({
+        status: 400,
+        statusText: "Bad Request",
+        text: () => Promise.resolve('{"error":{"message":"API_KEY_INVALID"}}'),
+      }),
+    );
+    const r = await probeProviderKey({ ...baseOpts, protocol: "gemini" as const });
+    expect(r.ok).toBe(false);
+    expect(r.errorKind).toBe("auth");
+  });
+
+  it("gemini 200 + 模型列表 body -> ok true(不误伤有效 key)", async () => {
+    mockFetch(() =>
+      Promise.resolve({
+        status: 200,
+        statusText: "OK",
+        text: () => Promise.resolve('{"models":[{"name":"models/gemini-1.5-flash"}]}'),
+      }),
+    );
+    const r = await probeProviderKey({ ...baseOpts, protocol: "gemini" as const });
+    expect(r.ok).toBe(true);
+  });
+
+  it("openai 400 缺字段 body(无 key 无效字样)仍 ok true(通用判定不受影响)", async () => {
+    mockFetch(() =>
+      Promise.resolve({
+        status: 400,
+        statusText: "Bad Request",
+        text: () => Promise.resolve('{"error":{"message":"messages is required"}}'),
+      }),
+    );
+    const r = await probeProviderKey(baseOpts);
+    expect(r.ok).toBe(true);
+  });
+});

@@ -310,6 +310,23 @@ async function probeKeyAuth(opts: {
         errorKind: "unknown",
       };
     }
+    // gemini 退回 GET /models:官方对无效 key 返 400(非 401/403),body 含 "API key not valid"。
+    // 通用判定把 400 当"key 有效",此处单独解析 body,命中 key 无效字样判 auth 失败。
+    if (protocol === "gemini") {
+      const body = typeof res.text === "function" ? await res.text().catch(() => "") : "";
+      if (
+        /api key not valid|api[_-]?key.{0,20}invalid|invalid.{0,20}api[_-]?key|api_key_invalid|permission_denied/i.test(
+          body,
+        )
+      ) {
+        return {
+          ok: false,
+          latencyMs,
+          error: `密钥无效或无权限 (HTTP ${status})`,
+          errorKind: "auth",
+        };
+      }
+    }
     // 400(valid key 缺 messages 等字段)/2xx/404 等:chat 端点已校验过 key,视为 key 有效 + 网络通。
     return { ok: true, latencyMs };
   } catch (err) {

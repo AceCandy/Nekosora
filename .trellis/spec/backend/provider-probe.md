@@ -19,6 +19,7 @@
   - `401/403` -> 读响应体区分:`ModelError`/`not supported` 等 model 相关错误体 -> `unknown`(opencode 等先校验 model 的上游,空 body 缺 model 直接返 401,压根没到 key 校验,不误判 auth;网络层仍通);其余 401/403 -> `auth` 失败(key 无效/无权限)
   - `5xx` -> `unknown` 失败(上游异常,不误导成密钥错)
   - 其余(400/2xx/404)-> key 有效。chat 端点一定校验 key(不像 /models 可能公开),valid key 缺 messages 等字段返 400,空 body 不指定 model、不产生生成(对齐 AQBot anthropic 的 /messages 空 body 思路)。
+  - **gemini 特例**: gemini 退回 `GET /models`,官方对无效 key 返 **400**(非 401/403)+ body `"API key not valid"`。通用"400=有效"会误判,`probeKeyAuth` 对 `protocol==="gemini"` 额外解析响应体,命中 `api key not valid`/`api_key_invalid`/`invalid api key`/`permission_denied` 等字样改判 `auth` 失败。中转站若 `/models` 完全公开返 200+模型列表(体中无 key 无效字样)仍判有效--这种只能靠深度检测(带 testModel)确认。
 - **传 upstreamModelName(测具体模型可用性)** -> 先用极小 `generateText`(`maxOutputTokens:1`)测非流式；非流式出现非鉴权、非网络失败时再用 `streamText` 完整消费流复核。任一模式成功即路由可用，结果用 `mode` 标明通过方式并保留 `nonStreamError`。鉴权或网络失败不重复请求。
 - 流式兼容性属于 route/provider 组合，不写入模型目录。禁止从模型名推断 stream 支持，也禁止把所有模型强制改为流式测试。
 
@@ -34,6 +35,7 @@
 ### 6. Wrong vs Correct
 #### Wrong
 - 验证 key 用 GET /models 看 status(中转站 /models 公开不校验 key,无效 key 也 200,误判有效)。
+- gemini 无效 key 返 400+`API key not valid` body,却套用通用"400=有效"判通过(误判有效,需解析 body 纠正)。
 - 验证 key 发带 model 的 chat 请求(指定 voice/image 模型触发计费/quota/`model_not_found` 误判)。
 - 把 5xx 或 quota 403 归为 `auth`(误导成密钥错)。
 #### Correct
@@ -61,7 +63,7 @@
   - 复用 key 探测结果推断,不单独发空 key 探测。
   - 无 key provider(如 OVH 免费层):用空 key 探测一次,network 失败即网络不通。
 - **key 层判定**: 每 key `POST chat 空 body`(gemini 退回 GET /models),按 `errorKind` 分类:
-  - `ok`(400/2xx/404)-> key 有效(chat 端点校验过 key,400=缺字段)
+  - `ok`(400/2xx/404)-> key 有效(chat 端点校验过 key,400=缺字段;gemini 退回 GET /models,body 含 key 无效字样的 400 判 auth,见上 Scenario)
   - `auth`(401/403 且错误体非 model 相关)-> key 无效/无权限
   - `network`(fetch throw)-> URL 不通(同时拉低网络层)
   - `unknown`(5xx 或 伪 401 ModelError)-> 上游异常 / 空 body 验不了 key(网络层仍算通)
