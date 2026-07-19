@@ -11,6 +11,7 @@
  */
 import { type NextRequest, NextResponse } from "next/server";
 import { streamChat } from "@/lib/stream";
+import { getGatewayUA } from "@/lib/system-settings/ua";
 import { verifyKey, extractBearer } from "@/lib/keys";
 import { apiErrorLocalized, ErrorCode, ERROR_META } from "@/lib/errors";
 import { classifyError } from "@/lib/error-classify";
@@ -102,7 +103,7 @@ function streamResponse(
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
 
       try {
-        for await (const ev of streamChat({ ctx, request, cacheKey: ctx.apiKeyId ?? undefined })) {
+        for await (const ev of streamChat({ ctx, request, cacheKey: ctx.apiKeyId ?? undefined, userAgent: await getGatewayUA() })) {
           if (abortController.signal.aborted) break;
           switch (ev.type) {
             case "text-delta":
@@ -191,7 +192,7 @@ async function nonStreamResponse(
   let finishReason = "stop";
   let error: { message: string; code?: string } | null = null;
 
-  for await (const ev of streamChat({ ctx, request })) {
+  for await (const ev of streamChat({ ctx, request, userAgent: await getGatewayUA() })) {
     switch (ev.type) {
       case "text-delta":
         content += ev.text;

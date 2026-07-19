@@ -25,6 +25,15 @@ export function buildLanguageModel(route: ResolvedRoute): LanguageModel {
   return buildLanguageModelWithKey(route, route.provider.apiKey);
 }
 
+/** 包装 fetch,强制覆盖 user-agent(AI SDK 内部 UA 无法用 headers 覆盖,需在 fetch 层 set)。 */
+function withUAFetch(ua: string) {
+  return async (url: string | URL | Request, init?: RequestInit): Promise<Response> => {
+    const headers = new Headers(init?.headers);
+    headers.set("user-agent", ua);
+    return globalThis.fetch(url, init ? { ...init, headers } : { headers });
+  };
+}
+
 /** 用指定 api key 构造 LanguageModel(stream.ts 换 key 重试时调用)。 */
 export function buildLanguageModelWithKey(
   route: ResolvedRoute,
@@ -32,11 +41,14 @@ export function buildLanguageModelWithKey(
   /** 会话级 cache key;openai-compatible 时注入 session affinity header,缺省不注入。 */
   cacheKey?: string,
   reasoning?: ReasoningLevel,
+  /** 覆盖上游请求 User-Agent(AI SDK 默认 UA 无法用 headers 覆盖,需 customFetch)。 */
+  userAgent?: string,
 ): LanguageModel {
   const { protocol, provider, upstreamModelName } = route;
   const { baseUrl, headers } = provider;
 
   const commonHeaders = headers ?? {};
+  const fetchOpts = userAgent ? { fetch: withUAFetch(userAgent) } : {};
 
   switch (protocol as ProviderProtocol) {
     case "openai": {
@@ -47,6 +59,7 @@ export function buildLanguageModelWithKey(
         apiKey,
         name: provider.id,
         headers: commonHeaders,
+        ...fetchOpts,
       });
       return providerInstance.chat(upstreamModelName);
     }
@@ -65,6 +78,7 @@ export function buildLanguageModelWithKey(
         baseURL: baseUrl,
         apiKey,
         headers: { ...commonHeaders, ...sessionHeaders },
+        ...fetchOpts,
         // 显式要求流式响应在末尾返回 usage。部分 OpenAI 兼容上游严格遵循规范,
         // 仅当请求带 stream_options.include_usage 时才返回 token 计数,
         // 否则流式不返回 usage,导致用量统计为 0。
@@ -78,6 +92,7 @@ export function buildLanguageModelWithKey(
         baseURL: baseUrl,
         apiKey,
         headers: commonHeaders,
+        ...fetchOpts,
       });
       return providerInstance.chat(upstreamModelName);
     }
@@ -86,6 +101,7 @@ export function buildLanguageModelWithKey(
         baseURL: baseUrl,
         apiKey,
         headers: commonHeaders,
+        ...fetchOpts,
       });
       return providerInstance(upstreamModelName);
     }

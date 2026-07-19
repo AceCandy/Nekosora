@@ -369,10 +369,17 @@
     "settings": {
       "desc": "Manage system-level model configuration for embedding, web search, title generation, and other auxiliary tasks. Changes take effect immediately after saving.",
       "tabs": {
+        "basic": "Basic",
         "model": "Model configuration",
         "outputModes": "Output modes",
         "renderStyles": "Render styles"
       },
+      "basicTitle": "Request User-Agent",
+      "basicDesc": "Configure the User-Agent sent when forwarding upstream. Defaults to Nekusora/{version} when unset. Probe requests follow the chat UA. Takes effect immediately after saving.",
+      "chatUaLabel": "Chat UA",
+      "chatUaHint": "Used by chat workspace forwarding + auxiliary tasks (title/summary/memory) + probe requests. Leave empty to use the default.",
+      "gatewayUaLabel": "Gateway UA",
+      "gatewayUaHint": "Used by the API gateway (/v1) forwarding. Leave empty to use the default.",
       "configTitle": "Model configuration",
       "configDesc": "Configure embedding (memory recall / RAG) and web search providers and keys. Takes effect immediately after saving.",
       "embeddingTitle": "Embedding model",

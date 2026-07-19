@@ -2,7 +2,7 @@ import Link from "next/link";
 import { clsx } from "clsx";
 import { useTranslations } from "next-intl";
 
-export type SettingsTab = "model" | "output-modes" | "render-styles";
+export type SettingsTab = "basic" | "model" | "output-modes" | "render-styles";
 
 interface SettingsTabsProps {
   current: SettingsTab;
@@ -15,6 +15,7 @@ interface SettingsTabsProps {
 export function SettingsTabs({ current }: SettingsTabsProps) {
   const t = useTranslations("admin.settings.tabs");
   const tabs: { id: SettingsTab; label: string }[] = [
+    { id: "basic", label: t("basic") },
     { id: "model", label: t("model") },
     { id: "output-modes", label: t("outputModes") },
     { id: "render-styles", label: t("renderStyles") },

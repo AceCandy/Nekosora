@@ -5,6 +5,7 @@ import { getDb, getSchema } from "@/lib/infra/db";
 import { encryptKeyBundle, parseKeyBundle, pickWeightedKey } from "@/lib/providers/keys";
 import type { WeightedKey } from "@/lib/providers/keys";
 import { probeProviderKey, fetchUpstreamModels, type ProbeResult, type UpstreamModel } from "@/lib/providers/probe";
+import { getProbeHeaders } from "@/lib/system-settings/ua";
 import { normalizeBaseUrl } from "@/lib/providers/defaults";
 import { recordSuccess, recordFailure } from "@/lib/circuit-breaker";
 import type { ProviderProtocol } from "@/db/types";
@@ -188,6 +189,7 @@ export async function testMyKeyDirect(input: {
     protocol: input.protocol as ProviderProtocol,
     baseUrl: input.baseUrl,
     apiKey: input.apiKey,
+    headers: await getProbeHeaders(),
   });
 }
 
@@ -220,11 +222,13 @@ export async function checkMyProviderHealth(id: string): Promise<{
   const baseUrl = provider.baseUrl as string;
   const testModel = (provider.testModel as string | null) ?? "";
   const keyResults: ProviderKeyResult[] = [];
+  // 检测请求 UA(与聊天 UA 一致);循环外读一次,两条探测路径共用。
+  const probeHeaders = await getProbeHeaders();
   // 存活检测回退深度检测时,聚合 provider 级深度结果(任一 key 深度成功即 true)。null=未回退。
   let modelProbeOk: boolean | null = null;
   let modelProbeError: string | null = null;
   for (let i = 0; i < probeList.length; i++) {
-    let result = await probeProviderKey({ protocol, baseUrl, apiKey: probeList[i].key });
+    let result = await probeProviderKey({ protocol, baseUrl, apiKey: probeList[i].key, headers: probeHeaders });
     // 存活检测失败(非网络)+配了 testModel -> 回退深度检测(带 model 极小生成)。
     // opencode 等先验 model 的上游空 body 验不了 key,靠深度检测确认;成功则该 key 标通过。
     if (!result.ok && result.errorKind !== "network" && testModel) {
@@ -233,6 +237,7 @@ export async function checkMyProviderHealth(id: string): Promise<{
         baseUrl,
         apiKey: probeList[i].key,
         upstreamModelName: testModel,
+        headers: probeHeaders,
       });
       result = deep.ok
         ? { ok: true, latencyMs: deep.latencyMs, mode: deep.mode }
@@ -300,6 +305,7 @@ export async function testMyProviderModel(id: string): Promise<ProbeResult> {
     baseUrl: provider.baseUrl as string,
     apiKey,
     upstreamModelName: testModel,
+    headers: await getProbeHeaders(),
   });
   await db
     .update(S().providers)
@@ -815,6 +821,7 @@ export async function testMyRoute(routeId: string): Promise<ProbeResult> {
     baseUrl: provider.baseUrl,
     apiKey,
     upstreamModelName: route.upstreamModelName as string,
+    headers: await getProbeHeaders(),
   });
   if (result.ok) recordSuccess(providerId);
   else recordFailure(providerId);

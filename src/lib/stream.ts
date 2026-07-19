@@ -14,6 +14,7 @@
 import { streamText, generateText } from "ai";
 import { resolveRoutes, resolveRoutesById, RoutingError } from "@/lib/routing";
 import { buildLanguageModelWithKey } from "@/lib/providers/registry";
+import { getChatUA } from "@/lib/system-settings/ua";
 import { orderedWeightedKeys } from "@/lib/providers/keys";
 import { recordSuccess, recordFailure } from "@/lib/circuit-breaker";
 import { logUsage, maskKey } from "@/lib/usage";
@@ -48,6 +49,11 @@ export interface StreamChatOptions {
    * 网关 / 副任务不传,行为不变。
    */
   abortSignal?: AbortSignal;
+  /**
+   * 上游请求 User-Agent(chat 工作台 / 网关各传不同 UA;副任务 generateChat 缺省读 getChatUA)。
+   * 注入到 registry 的 customFetch,覆盖 AI SDK 默认 UA。
+   */
+  userAgent?: string;
 }
 
 /** 判断错误是否值得路由级故障转移(连接/5xx/限流类),而非确定性失败。 */
@@ -156,7 +162,7 @@ export async function* streamChat(
       for (let k = 0; k < keySeq.length; k++) {
         const tryKey = keySeq[k].key;
         try {
-          for await (const ev of streamWithRoute(route, request, tryKey, timing, opts.cacheKey, opts.abortSignal)) {
+          for await (const ev of streamWithRoute(route, request, tryKey, timing, opts.cacheKey, opts.abortSignal, opts.userAgent)) {
             yield ev;
             if (ev.type === "finish") finalUsage = ev.usage;
           }
@@ -280,9 +286,11 @@ async function* streamWithRoute(
   cacheKey?: string,
   /** 中止信号:透传给 streamText,客户端断开时中止上游 fetch,避免写已关闭 socket。 */
   abortSignal?: AbortSignal,
+  /** 上游请求 User-Agent(覆盖 AI SDK 默认 UA)。 */
+  userAgent?: string,
 ): AsyncGenerator<StreamEvent, void, unknown> {
   const reasoning = request.reasoning ?? getDefaultReasoningLevel(route.capabilities);
-  const model = buildLanguageModelWithKey(route, apiKey, cacheKey, reasoning); // 失败则抛出,交由上层故障转移
+  const model = buildLanguageModelWithKey(route, apiKey, cacheKey, reasoning, userAgent); // 失败则抛出,交由上层故障转移
   const { system, messages } = separateSystem(request);
 
   // 按 protocol 注入 prompt 缓存控制(复刻 pi 兜底策略):
@@ -388,6 +396,8 @@ export interface GenerateChatResult {
 export async function generateChat(opts: StreamChatOptions): Promise<GenerateChatResult> {
   const { ctx, request, runId = `run_${crypto.randomUUID()}` } = opts;
   const startedAt = Date.now();
+  // 副任务统一用聊天 UA(opts.userAgent 缺省时读配置);注入 registry customFetch 覆盖 AI SDK 默认 UA。
+  const chatUA = opts.userAgent ?? await getChatUA();
   let finalUsage: IRUsage = {};
   let usedRoute: ResolvedRoute | undefined;
 
@@ -434,7 +444,7 @@ export async function generateChat(opts: StreamChatOptions): Promise<GenerateCha
       for (let k = 0; k < keySeq.length; k++) {
         const tryKey = keySeq[k].key;
         try {
-          const model = buildLanguageModelWithKey(route, tryKey);
+          const model = buildLanguageModelWithKey(route, tryKey, undefined, undefined, chatUA);
           const { system, messages } = separateSystem(request);
           const result = await generateText({
             model,
@@ -570,6 +580,7 @@ export async function* streamChatWithTools(
       request: { ...opts.request, messages, tools },
       modelId: opts.modelId,
       abortSignal: opts.abortSignal,
+      userAgent: opts.userAgent,
     })) {
       if (ev.type === "tool-call") {
         pendingToolCalls.push({

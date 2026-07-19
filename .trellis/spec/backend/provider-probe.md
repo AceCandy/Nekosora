@@ -115,3 +115,38 @@
 - `src/features/providers/ModelProbeButton.tsx`(深度检测按钮)。
 - `src/db/schema/pg.ts` `providers.lastNetworkOk`/`lastKeyResults` + `ProviderKeyResult`。
 - `src/features/providers/ProviderHealthButton.tsx`(网络标记 + per-key 悬浮)。
+
+---
+
+## Scenario: 请求 User-Agent 注入(转发 + 检测统一)
+
+### 1. Scope / Trigger
+- Trigger: 所有转发上游的请求(chat 工作台 / API 网关 / 副任务 / 检测)。
+- 目标: UA 可在「系统设置 -> 基础设置」配置,未配置时默认 `Nekusora/{version}`;检测 UA 与聊天 UA 一致。
+
+### 2. Signatures
+- `getChatUA()` / `getGatewayUA()`(`src/lib/system-settings/ua.ts`)-- 读 `system_settings`(namespace=`gateway`,keys: `chat_ua`/`gateway_ua`),内存缓存;DB 不可用降级默认值不阻断。`resetUAConfig()` 清缓存(保存后调)。
+- `getProbeHeaders()`(同文件)-- 返回 `{ "user-agent": chatUA }`,probe 调用方传入。
+
+### 3. Contracts
+- **存储**: 复用 `system_settings` KV 表,无迁移;空串=删除(沿用 `upsertSettings` 语义)。
+- **默认值**: `Nekusora/{package.json version}`(当前 0.1.0)。
+- **chat 转发**(`registry.ts` `buildLanguageModelWithKey`): `userAgent` 参数 -> `withUAFetch(ua)` customFetch 传给 `createOpenAI`/`createAnthropic`/`createGoogle`/`createOpenAICompatible`。
+  - **关键**: AI SDK 传入 `headers.user-agent` **不能覆盖**其默认 UA(实测被忽略);必须用 customFetch 在最终 fetch 层 `headers.set("user-agent", ua)` 强制覆盖。
+- **路由入口**: `/api/chat`(chat 工作台)传 `chatUA`;`/v1/chat/completions`(网关)传 `gatewayUA`;副任务 `generateChat` 内部读 `chatUA`。
+- **检测**(`probe.ts`): 调用方(admin/panel 的 testKeyDirect/checkProviderHealth/testProviderModel/testRoute 及 my 版)传 `headers: await getProbeHeaders()`。`probeKeyAuth`(直接 fetch)headers 含 user-agent 即发出;`probeModelAvailability`(走 AI SDK)从 headers 提取 user-agent 传 `buildLanguageModelWithKey` 的 `userAgent` 参数(customFetch 覆盖)。
+
+### 4. Wrong vs Correct
+#### Wrong
+- 在 `createOpenAI({ headers: { "user-agent": ua } })` 设 UA(AI SDK 忽略,实测不覆盖默认 UA)。
+- 检测请求不发 UA(个别上游因无 UA 限流/拒收)。
+- 每次请求读 DB 查 UA(无缓存,开销)。
+#### Correct
+- chat 转发用 customFetch(`withUAFetch`)在 fetch 层强制 set user-agent。
+- 检测 headers 注入 user-agent;深度检测(`probeModelAvailability`)提取传 `buildLanguageModelWithKey`。
+- UA service 内存缓存,保存后 `resetUAConfig` 即时生效;DB 不可用降级默认值不阻断转发/检测。
+
+### 5. 相关
+- `src/lib/system-settings/ua.ts`(UA service + `getProbeHeaders`)。
+- `src/lib/providers/registry.ts` `withUAFetch` + `buildLanguageModelWithKey`(`userAgent` 参数)。
+- `src/app/(dash)/admin/settings/BasicSettingsSection.tsx`(基础设置 UI)。

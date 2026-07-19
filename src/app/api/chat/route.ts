@@ -15,6 +15,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { getSession } from "@/lib/session";
 import { streamChat, streamChatWithTools } from "@/lib/stream";
+import { getChatUA } from "@/lib/system-settings/ua";
 import { resolveMcpServers } from "@/lib/mcp/registry";
 import { extractArtifacts } from "@/lib/artifacts/extract";
 import { getQueue } from "@/lib/infra/queue";
@@ -267,9 +268,10 @@ export async function POST(req: NextRequest) {
         // P1-A:解析 MCP server。有可用工具则走 agent loop,否则普通 streamChat。
         const mcpServers = await resolveMcpServers(ctx).catch(() => []);
         const hasTools = mcpServers.some((sv) => sv.tools.length > 0);
+        const chatUA = await getChatUA();
         const gen = hasTools
-          ? streamChatWithTools({ ctx, request: irRequest, mcpServers, cacheKey: body.conversationId, modelId: body.modelId, abortSignal: abortCtl.signal })
-          : streamChat({ ctx, request: irRequest, cacheKey: body.conversationId, modelId: body.modelId, abortSignal: abortCtl.signal });
+          ? streamChatWithTools({ ctx, request: irRequest, mcpServers, cacheKey: body.conversationId, modelId: body.modelId, abortSignal: abortCtl.signal, userAgent: chatUA })
+          : streamChat({ ctx, request: irRequest, cacheKey: body.conversationId, modelId: body.modelId, abortSignal: abortCtl.signal, userAgent: chatUA });
         for await (const ev of gen) {
           if (ev.type === "text-delta") {
             assistantText += ev.text;

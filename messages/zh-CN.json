@@ -369,10 +369,17 @@
     "settings": {
       "desc": "管理 embedding、联网搜索、标题生成等辅助任务的系统级模型配置。保存后即时生效。",
       "tabs": {
+        "basic": "基础设置",
         "model": "模型配置",
         "outputModes": "输出模式",
         "renderStyles": "输出样式"
       },
+      "basicTitle": "请求 User-Agent",
+      "basicDesc": "配置转发上游时的 User-Agent。未配置时默认 Nekusora/{版本}。检测请求与聊天 UA 保持一致。保存后即时生效。",
+      "chatUaLabel": "聊天 UA",
+      "chatUaHint": "聊天工作台转发 + 副任务(标题/摘要/记忆)+ 检测请求使用。留空用默认值。",
+      "gatewayUaLabel": "转发 UA",
+      "gatewayUaHint": "API 网关(/v1)转发使用。留空用默认值。",
       "configTitle": "模型配置",
       "configDesc": "配置 embedding(记忆召回/RAG)与联网搜索所需的模型和密钥。保存后即时生效。",
       "embeddingTitle": "Embedding 模型",

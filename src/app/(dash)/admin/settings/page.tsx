@@ -9,13 +9,14 @@ import { getTranslations } from "next-intl/server";
 import { Settings } from "lucide-react";
 import { PageHeader } from "@/shared/components/PageHeader";
 import { SettingsTabs, type SettingsTab } from "./SettingsTabs";
+import BasicSettingsSection from "./BasicSettingsSection";
 import ModelConfigSection from "./ModelConfigSection";
 import OutputModesSection from "./OutputModesSection";
 import RenderStylesSection from "./RenderStylesSection";
 
 export const dynamic = "force-dynamic";
 
-const VALID_TABS: SettingsTab[] = ["model", "output-modes", "render-styles"];
+const VALID_TABS: SettingsTab[] = ["basic", "model", "output-modes", "render-styles"];
 
 export default async function SettingsPage({
   searchParams,
@@ -64,6 +65,7 @@ export default async function SettingsPage({
           }}
         />
       )}
+      {tab === "basic" && <BasicSettingsSection />}
       {tab === "output-modes" && <OutputModesSection />}
       {tab === "render-styles" && <RenderStylesSection />}
     </div>

@@ -215,7 +215,7 @@ async function probeModelAvailability(opts: {
     routeId: "__probe__",
   };
   const startedAt = Date.now();
-  const model = buildLanguageModelWithKey(route, apiKey);
+  const model = buildLanguageModelWithKey(route, apiKey, undefined, undefined, headers?.["user-agent"]);
   try {
     await generateText({
       model,
