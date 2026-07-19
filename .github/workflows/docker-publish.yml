@@ -1,20 +1,19 @@
-# 双 registry 发布:GHCR + DockerHub。
+# Docker 镜像发布:
+#   GHCR      —— 每 12h 定时检查 main 有更新则发布;打 v* tag 或手动触发也发布。
+#   DockerHub —— 仅在打 v* tag 时发布(需配 DOCKERHUB_USERNAME / DOCKERHUB_TOKEN)。
+# 定时触发时若 main 自上次成功构建后无新提交,自动跳过,避免无意义重复构建。
 #
-# 在 ghcr-image.yml 基础上扩展,DockerHub 需额外配置 secret:
-#   DOCKERHUB_USERNAME  DockerHub 账号
-#   DOCKERHUB_TOKEN     访问令牌(https://hub.docker.com/settings/security)
-#
-# 拉取镜像(任选其一):
-#   docker pull ghcr.io/acecandy/nekusora:latest
-#   docker pull acecandy/nekusora:latest
-#
-# 触发条件与 GHCR 一致:push v* 标签 / push main / 手动。
-name: Publish Docker image (GHCR + DockerHub)
+# 拉取镜像:
+#   ghcr.io/acecandy/nekosora:edge      定时构建的最新 main
+#   ghcr.io/acecandy/nekosora:1.2.3     打 v1.2.3 tag 时
+#   acecandy/nekosora:latest            打 v* tag 时(DockerHub)
+name: Publish Docker image
 
 on:
+  schedule:
+    - cron: '17 */12 * * *'   # 每 12 小时(UTC 00:17 / 12:17,GitHub schedule 按 UTC)
   push:
-    branches: [main]
-    tags: ["v*"]
+    tags: ['v*']
   workflow_dispatch:
 
 env:
@@ -28,27 +27,52 @@ jobs:
       contents: read
       packages: write
       id-token: write
+      actions: read   # 定时检查时查询最近一次成功构建的 commit
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # 仅定时触发时检查:对比当前 main HEAD 与最近一次成功构建的 commit,
+      # 相同则跳过本次构建(push tag / 手动触发不检查,必定构建)
+      - name: 检查是否有更新(仅定时触发)
+        id: check
+        if: github.event_name == 'schedule'
+        run: |
+          HEAD_SHA=$(git rev-parse HEAD)
+          LAST_SHA=$(curl -sf -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs?conclusion=success&per_page=1" \
+            | jq -r '.workflow_runs[0].head_sha // ""')
+          echo "head=$HEAD_SHA last=$LAST_SHA"
+          if [ "$HEAD_SHA" = "$LAST_SHA" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "main 自上次成功构建后无更新,跳过本次构建"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Set up QEMU(多架构支持)
+        if: steps.check.outputs.skip != 'true'
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
+        if: steps.check.outputs.skip != 'true'
         uses: docker/setup-buildx-action@v3
 
       # --- GHCR 登录(用自动注入的 GITHUB_TOKEN,无需额外 secret)---
       - name: Log in to GHCR
+        if: steps.check.outputs.skip != 'true'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.GHCR_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # --- DockerHub 登录(需手动配 secret,无则跳过 DockerHub push)---
+      # --- DockerHub 登录:仅在打 v* tag 时(定时/手动只发 GHCR)---
+      # secret 未配时 continue-on-error 跳过,不影响 GHCR 发布
       - name: Log in to DockerHub
+        if: steps.check.outputs.skip != 'true' && startsWith(github.ref, 'refs/tags/v')
         id: dockerhub-login
         uses: docker/login-action@v3
         continue-on-error: true
@@ -57,14 +81,13 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # 标签:语义化版本 + sha + edge。
-      # 通过 docker/metadata-action 的 images 列表,自动为两个 registry 生成对应 tag。
-      # DockerHub image 名 = <dockerhub_username>/<repo> (全小写)。
+      # 标签:语义化版本(tag) + sha + edge(定时 main)。
+      # DockerHub image 仅在 DockerHub 登录成功时加入,否则只推 GHCR。
       - name: Extract metadata(标签 + labels)
+        if: steps.check.outputs.skip != 'true'
         id: meta
         uses: docker/metadata-action@v5
         with:
-          # 两个 registry 的完整镜像名;secret 未配置时 DockerHub 的会被忽略(见下方条件)
           images: |
             ${{ env.GHCR_REGISTRY }}/${{ github.repository }}
             ${{ steps.dockerhub-login.outcome == 'success' && format('{0}/{1}', env.DOCKERHUB_REGISTRY, github.repository) || '' }}
@@ -77,6 +100,7 @@ jobs:
             type=sha,format=short
 
       - name: Build and push
+        if: steps.check.outputs.skip != 'true'
         id: push
         uses: docker/build-push-action@v6
         with:
@@ -89,4 +113,5 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Print image digest
+        if: steps.check.outputs.skip != 'true'
         run: echo "digest ${{ steps.push.outputs.digest }}"

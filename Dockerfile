@@ -9,6 +9,8 @@ WORKDIR /app
 
 # 安装依赖(利用 docker 层缓存)
 COPY package.json pnpm-lock.yaml* ./
+# postinstall 依赖此脚本(同步 pdfjs cmaps/fonts 到 public),需在 install 前复制进镜像
+COPY scripts/sync-pdfjs-assets.cjs ./scripts/
 RUN pnpm install --frozen-lockfile || pnpm install
 
 COPY . .
