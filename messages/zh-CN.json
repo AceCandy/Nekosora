@@ -250,18 +250,9 @@
       "sourceAi": "AI 提取",
       "sourceManual": "手动",
       "save": "保存",
-      "healthTitle": "记忆健康检查",
-      "healthDesc": "以下为只读标记,不会自动删除。请在表格中对照标记手动清理(复用删除按钮)。",
-      "healthDuplicate": "{count} 条疑似重复",
-      "healthStale": "{count} 条陈旧未命中",
-      "healthDuplicateBadge": "重复",
-      "healthStaleBadge": "陈旧",
-      "healthDuplicateHint": "与同分类下其他记忆高度相似,建议合并或删除其一",
-      "healthStaleHint": "超过 30 天未被召回命中,可能已过时",
       "createdAt": "创建时间",
       "clearAll": "全部清空",
       "clearScope": "清空此分类",
-      "disclosureLabel": "何时使用",
       "scopeCount": "{count} 条"
     },
     "cards": {

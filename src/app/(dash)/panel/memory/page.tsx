@@ -9,9 +9,8 @@ import {
   type MemoryScope,
   type UserMemory,
 } from "@/lib/memory/service";
-import { getMemoryDiagnostics } from "@/lib/memory/recall";
 import { requireSession } from "@/lib/session";
-import { Trash2, Plus, BrainCircuit, AlertTriangle, Eraser } from "lucide-react";
+import { Trash2, Plus, BrainCircuit, Eraser } from "lucide-react";
 import { clsx } from "clsx";
 import { PageHeader } from "@/shared/components/PageHeader";
 
@@ -31,10 +30,6 @@ export default async function MemoryPage() {
   const t = await getTranslations("panel.memory");
   const tn = await getTranslations("nav");
   const memories = await getMemories(user.id);
-  const diagnostics = await getMemoryDiagnostics(user.id).catch(() => ({
-    duplicateIds: new Set<string>(),
-    staleIds: new Set<string>(),
-  }));
 
   // 按 scope 分组,组内按创建时间倒序(新的在前)
   const grouped = new Map<MemoryScope, UserMemory[]>();
@@ -84,28 +79,6 @@ export default async function MemoryPage() {
           </form>
         )}
       </div>
-
-      {(diagnostics.duplicateIds.size > 0 || diagnostics.staleIds.size > 0) && (
-        <div className="rounded-lg border border-amber-200 dark:border-amber-900/40 bg-amber-50/50 dark:bg-amber-950/10 p-4">
-          <h3 className="text-sm font-bold text-neutral-800 dark:text-white flex items-center gap-1.5">
-            <AlertTriangle className="w-4 h-4 text-amber-500" />
-            <span>{t("healthTitle")}</span>
-          </h3>
-          <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">{t("healthDesc")}</p>
-          <div className="flex flex-wrap gap-4 mt-2 text-xs">
-            {diagnostics.duplicateIds.size > 0 && (
-              <span className="text-amber-700 dark:text-amber-400">
-                {t("healthDuplicate", { count: diagnostics.duplicateIds.size })}
-              </span>
-            )}
-            {diagnostics.staleIds.size > 0 && (
-              <span className="text-neutral-500 dark:text-neutral-400">
-                {t("healthStale", { count: diagnostics.staleIds.size })}
-              </span>
-            )}
-          </div>
-        </div>
-      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
         {/* 左:按分类分组的记忆卡片 */}
@@ -165,22 +138,6 @@ export default async function MemoryPage() {
                           >
                             {m.source === "ai" ? "AI" : t("sourceManual")}
                           </span>
-                          {diagnostics.duplicateIds.has(m.id) && (
-                            <span
-                              className="rounded-full px-1.5 py-0.5 text-[9px] font-medium border bg-amber-500/[0.03] border-amber-500/20 text-amber-600 dark:text-amber-400"
-                              title={t("healthDuplicateHint")}
-                            >
-                              {t("healthDuplicateBadge")}
-                            </span>
-                          )}
-                          {diagnostics.staleIds.has(m.id) && (
-                            <span
-                              className="rounded-full px-1.5 py-0.5 text-[9px] font-medium border bg-neutral-100 dark:bg-neutral-800 border-neutral-250 dark:border-neutral-700 text-neutral-500 dark:text-neutral-400"
-                              title={t("healthStaleHint")}
-                            >
-                              {t("healthStaleBadge")}
-                            </span>
-                          )}
                         </div>
                         <form
                           action={async () => {
@@ -218,13 +175,6 @@ export default async function MemoryPage() {
                           </button>
                         </form>
                       </details>
-
-                      {m.disclosure && (
-                        <p className="text-[11px] text-neutral-400 dark:text-neutral-500 leading-relaxed border-l-2 border-neutral-100 dark:border-neutral-800 pl-2">
-                          <span className="font-medium text-neutral-500 dark:text-neutral-400">{t("disclosureLabel")}:</span>{" "}
-                          {m.disclosure}
-                        </p>
-                      )}
 
                       <div className="text-[10px] text-neutral-400 dark:text-neutral-500 font-mono pt-1 mt-auto border-t border-neutral-100 dark:border-neutral-800/60">
                         {t("createdAt")}: {formatDate(m.createdAt)}

@@ -49,7 +49,6 @@ const PG_BASELINE_TABLES = [
   "tool_calls",
   "usage_logs",
   "user",
-  "user_memories",
   "user_settings",
   "verification",
 ];

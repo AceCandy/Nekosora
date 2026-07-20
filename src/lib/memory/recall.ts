@@ -29,18 +29,3 @@ export async function recallMemories(
     return [];
   }
 }
-
-export interface MemoryDiagnostics {
-  /** 疑似重复的记忆 id 集合。 */
-  duplicateIds: Set<string>;
-  /** 陈旧的 project 记忆 id 集合。 */
-  staleIds: Set<string>;
-}
-
-/**
- * 记忆健康诊断(M-4 待重建为基于 mem0)。
- * M-3 切换 mem0 数据源后,旧 user_memories 诊断逻辑失效,暂返回空。
- */
-export async function getMemoryDiagnostics(_userId: string): Promise<MemoryDiagnostics> {
-  return { duplicateIds: new Set(), staleIds: new Set() };
-}

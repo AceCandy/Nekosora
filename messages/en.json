@@ -250,18 +250,9 @@
       "sourceAi": "AI extracted",
       "sourceManual": "Manual",
       "save": "Save",
-      "healthTitle": "Memory health check",
-      "healthDesc": "Read-only markers, nothing is auto-deleted. Review the flagged items in the table and remove manually.",
-      "healthDuplicate": "{count} suspected duplicate",
-      "healthStale": "{count} stale",
-      "healthDuplicateBadge": "dup",
-      "healthStaleBadge": "stale",
-      "healthDuplicateHint": "Highly similar to another memory in the same scope; consider merging or deleting one",
-      "healthStaleHint": "Not recalled in over 30 days; may be outdated",
       "createdAt": "Created",
       "clearAll": "Clear all",
       "clearScope": "Clear scope",
-      "disclosureLabel": "When to use",
       "scopeCount": "{count} items"
     },
     "cards": {
