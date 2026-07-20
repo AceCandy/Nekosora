@@ -77,6 +77,7 @@
 - **自定义 metadata 字段**（存 metadata JSON，非 SDK 原生）：`scope`/`source`/`expirationDate`/`priority`；`disclosure` 已废弃（M-4）。search filter 按 `user_id`（原生）+ `scope`（自定义塞 metadata 再 filter）。
 - **升级流程**：① 看 changelog（关注 MemoryConfig/Options 字段名、过期语义、表结构）；② 测试环境验证 add/search/过期；③ 备「清 `mem0_memories` 重建」退路（记忆可由对话重抽，丢失成本低）；④ major 版（如 4.0）手动改 `package.json` + 重点验证配置字段；⑤ caret（`^3.1.0`）内 minor/patch 自动跟进，lockfile 更新仍跑记忆测试。
 - **OSS vs Platform**：用 OSS 开源核心（向量+LLM 抽取+去重合并+过期）；Platform 独有的 hosted dashboard / graph memory 不在范围，新特性可能先上 Platform、OSS 跟进滞后。
+- **构建配置（`next.config.ts`）**：mem0ai 是大 bundle，内部动态 import 各 provider SDK（aws/azure/google/qdrant…，均为 peerDep，按需加载）。必须设 `serverExternalPackages: ["mem0ai"]`，构建时不打包其依赖图、运行时按需 require。否则 webpack 解析缺失的 peer provider SDK（如 `@aws-sdk/client-bedrock-runtime`）报 Module not found。我们只用 pgvector（`pg`，已装）+ openai（mem0ai dep 自带），运行时不触发缺失包。
 
 ---
 
