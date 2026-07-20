@@ -33,16 +33,39 @@ export function defaultPriorityForScope(scope: MemoryScope): number {
   return scope === "profile" ? 1 : scope === "project" ? 2 : 0;
 }
 
-/**
- * 清理过期的 project 记忆(M-4 待重建为 mem0 expirationDate 懒清理)。
- * M-3 切换 mem0 数据源后,旧 user_memories 清理逻辑失效,暂空操作。
- */
-export async function purgeExpiredProjectMemories(_userId: string): Promise<void> {
-  // M-4 重建:project 记忆 add 时设 expirationDate=+7d,mem0 自动软过滤;定期硬删走 mem0.delete
+const PROJECT_EXPIRE_DAYS = 7;
+
+/** project 记忆的过期日期(YYYY-MM-DD,M-4 用 mem0 expirationDate 软过滤 + 懒硬删)。 */
+export function toProjectExpirationDate(): string {
+  return new Date(Date.now() + PROJECT_EXPIRE_DAYS * 86400 * 1000).toISOString().slice(0, 10);
 }
 
-/** 读取用户全部记忆(带 60s 缓存)。 */
+/**
+ * 清理过期的 project 记忆(M-4:mem0 expirationDate 懒硬删)。
+ * mem0 search/getAll 默认 showExpired=false 已软过滤;此处额外硬删清理空间。
+ * 在 getMemories 入口懒触发。
+ */
+export async function purgeExpiredProjectMemories(userId: string): Promise<void> {
+  try {
+    const memory = await getMemory();
+    const res = await memory.getAll({
+      filters: { user_id: userId, scope: "project" },
+      showExpired: true,
+    });
+    const today = new Date().toISOString().slice(0, 10);
+    const expired = (res.results ?? []).filter((m) => {
+      const exp = m.metadata?.expirationDate;
+      return typeof exp === "string" && exp < today;
+    });
+    await Promise.all(expired.map((m) => memory.delete(m.id)));
+  } catch {
+    // mem0 不可用时静默
+  }
+}
+
+/** 读取用户全部记忆(带 60s 缓存)。入口触发 project 过期懒硬删。 */
 export async function getMemories(userId: string): Promise<UserMemory[]> {
+  await purgeExpiredProjectMemories(userId).catch(() => {});
   return cacheWrap(
     `memories:${userId}`,
     async () => {
@@ -58,13 +81,21 @@ export async function getMemories(userId: string): Promise<UserMemory[]> {
   );
 }
 
-/** 添加一条记忆(手动来源,infer=false 直接存原文,不经 LLM 抽取改写)。 */
+/** 添加一条记忆(手动来源,infer=false 直接存原文;project 设 7 天过期)。 */
 export async function addMemory(userId: string, scope: MemoryScope, content: string): Promise<void> {
   const memory = await getMemory();
+  const isProject = scope === "project";
+  const expirationDate = isProject ? toProjectExpirationDate() : null;
   await memory.add(content, {
     userId,
     infer: false,
-    metadata: { scope, source: "manual", priority: defaultPriorityForScope(scope) },
+    expirationDate,
+    metadata: {
+      scope,
+      source: "manual",
+      priority: defaultPriorityForScope(scope),
+      ...(isProject ? { expirationDate } : {}),
+    },
   });
   await invalidateMemoryCache(userId);
 }

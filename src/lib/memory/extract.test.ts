@@ -30,9 +30,10 @@ vi.mock("@/lib/memory/mem0", () => ({
   resetMemoryClient: vi.fn(),
 }));
 
-// mock @/lib/memory/service:invalidateMemoryCache(no-op,避免触发 mem0.getAll)
+// mock @/lib/memory/service:invalidateMemoryCache + toProjectExpirationDate(固定日期便于断言)
 vi.mock("@/lib/memory/service", () => ({
   invalidateMemoryCache: vi.fn().mockResolvedValue(undefined),
+  toProjectExpirationDate: vi.fn(() => "2026-01-08"),
 }));
 
 // mock cache:cacheWrap 首次缓存 fetcher 结果,cacheSet 覆盖(对齐真实 cacheWrap 语义)
@@ -71,7 +72,11 @@ describe("extractMemories", () => {
       messages: { role: string; content: string }[];
       config: { userId: string; metadata: Record<string, unknown> };
     };
-    expect(config).toEqual({ userId: "u1", metadata: { scope: "project", source: "ai" } });
+    expect(config).toEqual({
+      userId: "u1",
+      expirationDate: "2026-01-08",
+      metadata: { scope: "project", source: "ai", expirationDate: "2026-01-08" },
+    });
     expect(messages).toEqual([
       { role: "user", content: "你好" },
       { role: "assistant", content: "你好,有什么可以帮你的?" },

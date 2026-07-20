@@ -60,7 +60,7 @@
 - **mem0 工厂（M-2）**：`src/lib/memory/mem0.ts` 的 `getMemory()` 惰性初始化（动态 import `mem0ai/oss` 避 Edge 打包，仿 `getDb`）。配置：vectorStore=pgvector（复用 `DATABASE_URL`，collectionName=`mem0_memories`，1024 维）、embedder=openai（bge-m3 经 `rag.embedding_*` 上游）、llm=openai（复用 embedding 上游连接 + `rag.mem0_llm_model`，回退 `task.title_model`）。admin「mem0 抽取模型」在 /admin/settings 模型配置区，保存后 `resetMemoryClient()`。
 - **AI 抽取默认 project**：mem0 全权抽取不产 scope；AI 抽取统一标 `scope=project`（metadata）。preference/profile 靠用户手动添加。自研三分类 LLM 抽取（prompt/disclosure/confidence/去重）已废弃。
 - **手动 add infer=false**：`addMemory` 传 `infer=false`，直接存原文，不经 mem0 LLM 抽取改写。
-- **M-4 待重建**：`purgeExpiredProjectMemories`（project 1 周过期）+ `getMemoryDiagnostics`（重复/陈旧诊断）当前是 stub（M-3 切 mem0 后旧 user_memories 逻辑失效）。M-4 用 mem0 `expirationDate` + `mem0.getAll` 重建。`getMemories` 入口暂不触发过期清理。
+- **M-4：project 过期已重建,诊断/disclosure 废弃**：project 记忆 add 时设 `expirationDate=+7d`（`AddMemoryOptions` 软过滤 + `metadata.expirationDate` 供硬删）；`purgeExpiredProjectMemories` 在 `getMemories` 入口懒硬删（`getAll({showExpired:true})` + filter + delete）。`getMemoryDiagnostics` 保持 stub：mem0 `MemoryItem` 不暴露 embedding/lastAccessedAt,重复/陈旧检测不可行。disclosure 废弃：mem0 全权抽取不产 disclosure。M-5 移除诊断/disclosure UI。
 - **mem0 自建表**：mem0 在本库 PG 自建 `mem0_memories` 表（与 `user_memories` 分离）。M-5 drop `user_memories`。
 - **embedding 维度固定 1024(bge-m3)**：`file_chunks.embedding` 与 `user_memories.embedding` 均为 `vector(1024)`，常量 `EMBEDDING_DIM=1024`（`rag/embedding.ts`、`infra/vector.ts`）。管理员须配 1024 维 embedding 模型（如 bge-m3，经硅基流动等 OpenAI 兼容接口）。改维度须同步 schema 两处 + 两处常量 + 迁移清旧向量（维度不兼容，`ALTER TYPE` 前须 `UPDATE SET embedding=NULL`）。
 - **输出呈现偏好（退化风险）**：自研 extract.ts 的 prompt 曾排除「回答呈现类偏好」；M-3 切 mem0 内置 prompt 后不再硬过滤。若需恢复，用 mem0 `customInstructions` 定制（M-4/M-5 可加）。

@@ -8,7 +8,7 @@
  */
 import { getMemory } from "./mem0";
 import { cacheWrap, cacheSet } from "@/lib/infra/cache";
-import { invalidateMemoryCache } from "./service";
+import { invalidateMemoryCache, toProjectExpirationDate } from "./service";
 
 const RECENT_TURNS = 6; // 取最近 N 条消息做提取
 
@@ -40,7 +40,12 @@ export async function extractMemories(
 
   try {
     const memory = await getMemory();
-    await memory.add(messages, { userId, metadata: { scope: "project", source: "ai" } });
+    const expirationDate = toProjectExpirationDate(); // project 记忆 7 天过期(mem0 软过滤 + 懒硬删)
+    await memory.add(messages, {
+      userId,
+      expirationDate,
+      metadata: { scope: "project", source: "ai", expirationDate },
+    });
   } catch {
     return; // 提取失败静默跳过
   }
