@@ -1,15 +1,15 @@
 /**
- * 长期记忆服务 —— 跨会话的用户偏好/画像/项目记忆。
+ * 长期记忆服务 -- 跨会话的用户偏好/画像/项目记忆(基于 mem0)。
  *
  * 三分类(design §1):
  *   - preference:用户偏好(恒定注入,cap 400 字)
  *   - profile:用户身份/事实(恒定注入,top N)
- *   - project:在做的事(召回注入,1 周过期硬删)
+ *   - project:在做的事(召回注入,M-4 用 mem0 expirationDate 过期)
  *
+ * 存储/检索/抽取由 mem0 承担;本文件负责 CRUD 适配 + 槽位构造 + 缓存。
  * 读时缓存(60s),写入后主动失效(design §6)。
  */
-import { eq, and, sql } from "drizzle-orm";
-import { getDb, getSchema } from "@/lib/infra/db";
+import { getMemory } from "./mem0";
 import { cacheWrap, cacheDel } from "@/lib/infra/cache";
 
 const PREFERENCE_CAP_CHARS = 400;
@@ -28,105 +28,70 @@ export interface UserMemory {
   createdAt?: Date | null;
 }
 
-/** scope → 默认 priority(design §1:preference=0/profile=1/project=2)。 */
+/** scope -> 默认 priority(design §1:preference=0/profile=1/project=2)。 */
 export function defaultPriorityForScope(scope: MemoryScope): number {
   return scope === "profile" ? 1 : scope === "project" ? 2 : 0;
 }
 
 /**
- * 清理过期的 project 记忆(1 周未访问硬删)。
- * 在 getMemories / extractMemories 入口懒触发(design §2)。
+ * 清理过期的 project 记忆(M-4 待重建为 mem0 expirationDate 懒清理)。
+ * M-3 切换 mem0 数据源后,旧 user_memories 清理逻辑失效,暂空操作。
  */
-export async function purgeExpiredProjectMemories(userId: string): Promise<void> {
-  const db = await getDb();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const s = getSchema() as any;
-  await db.execute(
-    sql`DELETE FROM ${s.userMemories} WHERE ${s.userMemories.userId} = ${userId} AND ${s.userMemories.scope} = 'project' AND ${s.userMemories.lastAccessedAt} < NOW() - INTERVAL '7 days'`,
-  );
+export async function purgeExpiredProjectMemories(_userId: string): Promise<void> {
+  // M-4 重建:project 记忆 add 时设 expirationDate=+7d,mem0 自动软过滤;定期硬删走 mem0.delete
 }
 
-/** 读取用户全部记忆(带 60s 缓存)。入口触发 project 过期懒清理。 */
+/** 读取用户全部记忆(带 60s 缓存)。 */
 export async function getMemories(userId: string): Promise<UserMemory[]> {
-  await purgeExpiredProjectMemories(userId).catch(() => {});
   return cacheWrap(
     `memories:${userId}`,
     async () => {
-      const db = await getDb();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const s = getSchema() as any;
-      const rows = await db
-        .select({
-          id: s.userMemories.id,
-          scope: s.userMemories.scope,
-          content: s.userMemories.content,
-          source: s.userMemories.source,
-          disclosure: s.userMemories.disclosure,
-          priority: s.userMemories.priority,
-          lastAccessedAt: s.userMemories.lastAccessedAt,
-          createdAt: s.userMemories.createdAt,
-        })
-        .from(s.userMemories)
-        .where(eq(s.userMemories.userId, userId));
-      return rows as UserMemory[];
+      try {
+        const memory = await getMemory();
+        const res = await memory.getAll({ filters: { user_id: userId } });
+        return (res.results ?? []).map(toUserMemory);
+      } catch {
+        return [];
+      }
     },
     60_000,
   );
 }
 
-/** 添加一条记忆(手动来源)。 */
+/** 添加一条记忆(手动来源,infer=false 直接存原文,不经 LLM 抽取改写)。 */
 export async function addMemory(userId: string, scope: MemoryScope, content: string): Promise<void> {
-  const db = await getDb();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const s = getSchema() as any;
-  await db.insert(s.userMemories).values({
+  const memory = await getMemory();
+  await memory.add(content, {
     userId,
-    scope,
-    content,
-    source: "manual",
-    priority: defaultPriorityForScope(scope),
-    lastAccessedAt: new Date(),
+    infer: false,
+    metadata: { scope, source: "manual", priority: defaultPriorityForScope(scope) },
   });
   await invalidateMemoryCache(userId);
 }
 
-/** 更新记忆内容(重新生成 embedding,刷新 lastAccessedAt)。 */
+/** 更新记忆内容。 */
 export async function updateMemory(userId: string, memoryId: string, content: string): Promise<void> {
-  const db = await getDb();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const s = getSchema() as any;
-  let embedding = null;
-  try {
-    const { embedText } = await import("@/lib/rag/embedding");
-    embedding = await embedText(content);
-  } catch {
-    /* embedding 不可用时置空 */
-  }
-  await db
-    .update(s.userMemories)
-    .set({ content, embedding, lastAccessedAt: new Date() })
-    .where(and(eq(s.userMemories.id, memoryId), eq(s.userMemories.userId, userId)));
+  const memory = await getMemory();
+  await memory.update(memoryId, { text: content });
   await invalidateMemoryCache(userId);
 }
 
 /** 删除记忆。 */
 export async function deleteMemory(userId: string, memoryId: string): Promise<void> {
-  const db = await getDb();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const s = getSchema() as any;
-  await db.delete(s.userMemories).where(and(eq(s.userMemories.id, memoryId), eq(s.userMemories.userId, userId)));
+  const memory = await getMemory();
+  await memory.delete(memoryId);
   await invalidateMemoryCache(userId);
 }
 
 /** 清空记忆:scope 缺省清空全部,传 scope 只清该分类。 */
 export async function clearMemories(userId: string, scope?: MemoryScope): Promise<void> {
-  const db = await getDb();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const s = getSchema() as any;
+  const memory = await getMemory();
   if (scope) {
-    await db.delete(s.userMemories).where(and(eq(s.userMemories.userId, userId), eq(s.userMemories.scope, scope)));
+    // deleteAll 仅按 userId,不支持 scope;getAll + 逐个 delete
+    const res = await memory.getAll({ filters: { user_id: userId, scope } });
+    await Promise.all((res.results ?? []).map((m) => memory.delete(m.id)));
   } else {
-    await db.delete(s.userMemories).where(eq(s.userMemories.userId, userId));
+    await memory.deleteAll({ userId });
   }
   await invalidateMemoryCache(userId);
 }
@@ -155,4 +120,19 @@ export function buildProfilePrompt(memories: UserMemory[], maxItems = 5): string
 export function buildProjectPrompt(memories: UserMemory[], maxItems = 5): string {
   if (memories.length === 0) return "";
   return memories.slice(0, maxItems).map((m) => `- ${m.content}`).join("\n");
+}
+
+/** mem0 MemoryItem -> UserMemory(metadata 承载 scope/source/disclosure/priority)。 */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function toUserMemory(item: any): UserMemory {
+  const meta = item.metadata ?? {};
+  return {
+    id: item.id,
+    scope: (meta.scope as MemoryScope) ?? "project",
+    content: item.memory,
+    source: (meta.source as MemorySource) ?? "manual",
+    disclosure: (meta.disclosure as string | null) ?? null,
+    priority: typeof meta.priority === "number" ? meta.priority : undefined,
+    createdAt: item.createdAt ? new Date(item.createdAt) : null,
+  };
 }
