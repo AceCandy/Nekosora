@@ -431,7 +431,10 @@
       "configNoProviders": "尚无可用上游渠道,请先在「全局渠道」添加。",
       "compactTaskTitle": "摘要生成模型",
       "compactTaskModel": "模型名",
-      "compactTaskHint": "用于长会话上下文压缩摘要(链式合并旧摘要)。留空则回退到第一个可用模型。按模型名经网关路由解析。"
+      "compactTaskHint": "用于长会话上下文压缩摘要(链式合并旧摘要)。留空则回退到第一个可用模型。按模型名经网关路由解析。",
+      "mem0LlmTitle": "mem0 抽取模型",
+      "mem0LlmModel": "模型名",
+      "mem0LlmHint": "mem0 记忆抽取/合并用的 chat 模型,复用 embedding 上游连接。须填该上游可用的 chat 模型(如 Qwen2.5-7B-Instruct)。留空回退标题模型(同样须在 embedding 上游可用)。"
     },
     "models": {
       "title": "全局模型管理",

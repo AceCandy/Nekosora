@@ -5,6 +5,7 @@ import { getSettings, upsertSettings } from "@/lib/system-settings/service";
 import { resetEmbeddingConfig } from "@/lib/rag/embedding";
 import { resetTitleModelConfig } from "@/lib/conversation-title/service";
 import { resetCompactModelConfig } from "@/lib/compact/service";
+import { resetMemoryClient } from "@/lib/memory/mem0";
 import { requireAdmin } from "@/lib/session";
 import EmbeddingConfigForm from "./EmbeddingConfigForm";
 import { listUpstreamModelsCached } from "../actions";
@@ -31,6 +32,9 @@ export default async function ModelConfigSection({
     compactTaskTitle: string;
     compactTaskModel: string;
     compactTaskHint: string;
+    mem0LlmTitle: string;
+    mem0LlmModel: string;
+    mem0LlmHint: string;
     save: string;
     saved: string;
     selectProvider: string;
@@ -76,6 +80,14 @@ export default async function ModelConfigSection({
     const model = String(formData.get("model") ?? "").trim();
     await upsertSettings("task", { compact_model: model });
     resetCompactModelConfig();
+    revalidatePath("/admin/settings");
+  }
+
+  async function saveMem0LlmModel(formData: FormData) {
+    "use server";
+    const model = String(formData.get("model") ?? "").trim();
+    await upsertSettings("rag", { mem0_llm_model: model });
+    resetMemoryClient();
     revalidatePath("/admin/settings");
   }
 
@@ -140,6 +152,24 @@ export default async function ModelConfigSection({
             className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-3 py-2 text-sm font-mono focus:outline-none focus:border-sora-blue"
           />
           <p className="text-[11px] text-neutral-400">{labels.compactTaskHint}</p>
+        </div>
+        <button type="submit" className="rounded-md bg-sora-blue hover:bg-sora-blue-hover text-white px-4 py-2 text-sm font-semibold cursor-pointer">
+          {labels.save}
+        </button>
+      </form>
+
+      {/* mem0 抽取模型配置 */}
+      <form action={saveMem0LlmModel} className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] p-5 space-y-3">
+        <h3 className="text-sm font-bold text-neutral-800 dark:text-white">{labels.mem0LlmTitle}</h3>
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-neutral-500">{labels.mem0LlmModel}</label>
+          <input
+            name="model"
+            defaultValue={rag.mem0_llm_model ?? ""}
+            placeholder="Qwen2.5-7B-Instruct"
+            className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-3 py-2 text-sm font-mono focus:outline-none focus:border-sora-blue"
+          />
+          <p className="text-[11px] text-neutral-400">{labels.mem0LlmHint}</p>
         </div>
         <button type="submit" className="rounded-md bg-sora-blue hover:bg-sora-blue-hover text-white px-4 py-2 text-sm font-semibold cursor-pointer">
           {labels.save}

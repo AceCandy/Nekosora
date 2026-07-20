@@ -16,7 +16,7 @@ import type { Vector } from "@/lib/infra/vector";
 
 export const EMBEDDING_DIM = 1024;
 
-interface EmbeddingConfig {
+export interface EmbeddingConfig {
   baseUrl: string;
   apiKey: string;
   model: string;
@@ -77,6 +77,11 @@ async function loadConfig(): Promise<EmbeddingConfig | null> {
 export function resetEmbeddingConfig(): void {
   _config = null;
   _configError = null;
+}
+
+/** 当前 embedding 配置(供 mem0 等复用;触发 loadConfig 缓存)。 */
+export async function getEmbeddingConfig(): Promise<EmbeddingConfig | null> {
+  return loadConfig();
 }
 
 /** embedding 是否可用(配置就绪)。 */

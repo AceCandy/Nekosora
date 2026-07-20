@@ -431,7 +431,10 @@
       "configNoProviders": "No enabled providers. Add one in Global Providers first.",
       "compactTaskTitle": "Compaction model",
       "compactTaskModel": "Model name",
-      "compactTaskHint": "Used for long-conversation context compaction (chains on previous summary). Falls back to the first available model if empty. Resolved by name via gateway routing."
+      "compactTaskHint": "Used for long-conversation context compaction (chains on previous summary). Falls back to the first available model if empty. Resolved by name via gateway routing.",
+      "mem0LlmTitle": "Mem0 extraction model",
+      "mem0LlmModel": "Model name",
+      "mem0LlmHint": "Chat model for mem0 memory extraction/consolidation; reuses the embedding upstream connection. Must be a chat model available on that upstream (e.g. Qwen2.5-7B-Instruct). Falls back to the title model (also must be available on the embedding upstream) if empty."
     },
     "models": {
       "title": "Global Models",
