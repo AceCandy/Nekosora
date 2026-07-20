@@ -153,7 +153,7 @@ vi.mock("@/lib/infra/db", () => {
   return { getDb: async () => db, getSchema: () => schema, isPg: false };
 });
 
-import { createMyModel, reorderMyModels, updateMyModel, checkMyProviderHealth, testMyProviderModel } from "./actions";
+import { createMyModel, reorderMyModels, updateMyModel, checkMyProviderHealth, testMyProviderModel, testMyKeyDirect } from "./actions";
 import { probeProviderKey } from "@/lib/providers/probe";
 import { parseKeyBundle, pickWeightedKey } from "@/lib/providers/keys";
 
@@ -395,5 +395,40 @@ describe("testMyProviderModel", () => {
     }));
     expect(mockData.providers[0].lastModelProbeOk).toBe(true);
     expect(mockData.providers[0].lastModelProbeError).toBeNull();
+  });
+});
+
+describe("testMyKeyDirect", () => {
+  beforeEach(() => {
+    vi.mocked(probeProviderKey).mockReset();
+  });
+
+  it("无 testModel -> 不带 upstreamModelName(空 body 验 key)", async () => {
+    vi.mocked(probeProviderKey).mockResolvedValue({ ok: true, latencyMs: 30 });
+
+    const r = await testMyKeyDirect({
+      protocol: "openai",
+      baseUrl: "https://a",
+      apiKey: "k1",
+    });
+
+    expect(r.ok).toBe(true);
+    const callArg = vi.mocked(probeProviderKey).mock.calls[0][0];
+    expect(callArg.upstreamModelName).toBeFalsy();
+  });
+
+  it("有 testModel -> 带 upstreamModelName 走深度检测", async () => {
+    vi.mocked(probeProviderKey).mockResolvedValue({ ok: true, latencyMs: 50 });
+
+    const r = await testMyKeyDirect({
+      protocol: "openai",
+      baseUrl: "https://a",
+      apiKey: "k1",
+      testModel: "claude-fable-5",
+    });
+
+    expect(r.ok).toBe(true);
+    const callArg = vi.mocked(probeProviderKey).mock.calls[0][0];
+    expect(callArg.upstreamModelName).toBe("claude-fable-5");
   });
 });

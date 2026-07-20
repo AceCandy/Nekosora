@@ -13,6 +13,7 @@
 - `probeProviderKey({ protocol, baseUrl, apiKey, upstreamModelName?, headers? })`(`src/lib/providers/probe.ts`)--按是否传 `upstreamModelName` 分双路(对齐 AQBot 的 `validate_key` / `test_model` 职责分离)。
 - `buildKeyAuthRequest(protocol, base, apiKey, headers)` -- 按协议构造 key 探测请求:openai/anthropic 对 chat 端点发空 body POST(`/chat/completions`、`/messages`),gemini 退回 `GET /models`。
 - `buildModelsRequest(protocol, base, apiKey, headers)` -- 统一各协议 `/models` 的 URL + 鉴权头,`fetchUpstreamModels` 与 gemini key 探测共用,鉴权头逻辑单一来源。
+- `testKeyDirect` / `testMyKeyDirect`(`src/app/(dash)/admin|panel/actions.ts`)-- 编辑服务商弹窗 `KeyBundleEditor` 逐 key 检测:用表单当前 `protocol/baseUrl/apiKey/testModel` 直接探测,**不读 DB、不落库**。有 `testModel` 传 `upstreamModelName` 走深度(`probeModelAvailability`),无则空 body 验 key(`probeKeyAuth`)。
 
 ### 3. Contracts
 - **不传 upstreamModelName(验证 key 有效性)** -> 对 chat 端点发**空 body POST**(openai/openai-compatible: `/chat/completions`;anthropic: `/messages`;gemini 退回 `GET /models`),按 HTTP status 判定,**不产生生成、不计费**:
@@ -22,6 +23,7 @@
   - **gemini 特例**: gemini 退回 `GET /models`,官方对无效 key 返 **400**(非 401/403)+ body `"API key not valid"`。通用"400=有效"会误判,`probeKeyAuth` 对 `protocol==="gemini"` 额外解析响应体,命中 `api key not valid`/`api_key_invalid`/`invalid api key`/`permission_denied` 等字样改判 `auth` 失败。中转站若 `/models` 完全公开返 200+模型列表(体中无 key 无效字样)仍判有效--这种只能靠深度检测(带 testModel)确认。
 - **传 upstreamModelName(测具体模型可用性)** -> 先用极小 `generateText`(`maxOutputTokens:1`)测非流式；非流式出现非鉴权、非网络失败时再用 `streamText` 完整消费流复核。任一模式成功即路由可用，结果用 `mode` 标明通过方式并保留 `nonStreamError`。鉴权或网络失败不重复请求。
 - 流式兼容性属于 route/provider 组合，不写入模型目录。禁止从模型名推断 stream 支持，也禁止把所有模型强制改为流式测试。
+- **编辑页逐 key 检测**(`testKeyDirect`/`testMyKeyDirect`): 配 key 时(尚未保存)即测,用表单当前值,**不读 DB、不落库**(区别于列表存活检测/深度检测落库回显)。有 `testModel` -> 传 `upstreamModelName` 走深度(极小生成验全链路);无 -> 空 body 验 key。与列表存活检测「先空 body 失败回退深度」不同:编辑页有 `testModel` 直接深度(用户填了模型即意图验模型,省一次空 body 请求)。
 
 ### 4. 为什么用 POST chat 空 body 验证 key(而非 GET /models)
 很多中转站/聚合站 `/models` 端点公开不校验 key,无效 key 也返 200,GET /models 无法判定 key 有效性。chat 端点(`/chat/completions`、`/messages`)一定校验 key:valid key 缺字段返 400,invalid 返 401/403。空 body `{}` 不指定 model、不产生生成,既不计费也不依赖具体模型,避免聚合站 "/models 第一个是 voice/image" 或 "预扣费 quota" 误判(对齐 AQBot anthropic 的 /messages 空 body;openai 系 AQBot 仍用 GET /models,本仓统一改用 POST chat 空 body 更严格)。gemini chat 端点要带 model 路径,空 body 不便,退回 GET /models。

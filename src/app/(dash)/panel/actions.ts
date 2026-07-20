@@ -178,17 +178,21 @@ export async function toggleMyProvider(id: string, enabled: boolean) {
 /**
  * 直接用原始参数探测密钥连通性(不读 DB,校验已登录)。
  * 用于 KeyBundleEditor 里逐 key 测试:配 key 时(尚未保存)即可验证。
+ * 有 testModel 时走深度检测(带 model 极小生成验全链路),无则空 body 验 key。
  */
 export async function testMyKeyDirect(input: {
   protocol: string;
   baseUrl: string;
   apiKey: string;
+  /** 检测模型:传入则走深度检测,缺省空 body 验 key。 */
+  testModel?: string;
 }): Promise<ProbeResult> {
   await requireSession();
   return probeProviderKey({
     protocol: input.protocol as ProviderProtocol,
     baseUrl: input.baseUrl,
     apiKey: input.apiKey,
+    upstreamModelName: input.testModel || undefined,
     headers: await getProbeHeaders(),
   });
 }

@@ -26,11 +26,13 @@ export interface KeyBundleEditorHandle {
   openBatch: () => void;
 }
 
-/** 逐 key 测试 action:直接用原始参数探测,不读 DB。 */
+/** 逐 key 测试 action:直接用原始参数探测,不读 DB。有 testModel 时走深度检测(带 model 极小生成)。 */
 export type TestKeyAction = (input: {
   protocol: string;
   baseUrl: string;
   apiKey: string;
+  /** 检测模型:传入则走深度检测(极小生成验全链路),缺省走空 body 验 key。 */
+  testModel?: string;
 }) => Promise<ProbeResult>;
 
 interface KeyBundleEditorProps {
@@ -42,6 +44,8 @@ interface KeyBundleEditorProps {
   protocol?: string;
   /** 当前 provider 接口地址(测试用)。 */
   baseUrl?: string;
+  /** 检测模型(测试用):传入则逐 key 测试走深度检测(带 model 极小生成)。 */
+  testModel?: string;
   /** 逐 key 测试 action(可选,传入则启用测试按钮)。 */
   testAction?: TestKeyAction;
 }
@@ -49,7 +53,7 @@ interface KeyBundleEditorProps {
 type TestState = "idle" | "pending" | { result: ProbeResult };
 
 const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
-  function KeyBundleEditor({ requireKeys = true, initialRows, noKey = false, protocol, baseUrl, testAction }, ref) {
+  function KeyBundleEditor({ requireKeys = true, initialRows, noKey = false, protocol, baseUrl, testModel, testAction }, ref) {
     const t = useTranslations("providers");
     const [rows, setRows] = useState<EditorRow[]>(
       initialRows && initialRows.length > 0
@@ -175,7 +179,7 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
       if (!apiKey) return;
       setTestStates((s) => s.map((st, idx) => (idx === i ? "pending" : st)));
       try {
-        const result = await testAction({ protocol, baseUrl, apiKey });
+        const result = await testAction({ protocol, baseUrl, apiKey, testModel });
         setTestStates((s) => s.map((st, idx) => (idx === i ? { result } : st)));
       } catch (e) {
         setTestStates((s) =>

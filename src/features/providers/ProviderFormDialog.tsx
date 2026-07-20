@@ -325,6 +325,7 @@ export default function ProviderFormDialog({
               noKey={noKey}
               protocol={protocol}
               baseUrl={baseUrl}
+              testModel={testModel}
               testAction={testAction}
             />
           </div>
