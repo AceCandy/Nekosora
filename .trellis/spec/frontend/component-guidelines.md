@@ -195,7 +195,13 @@ useLayoutEffect(() => {
 - 面板 `onClick` 阻止冒泡,避免 `clickToggle` 模式下点面板误触发关闭。
 - `absolute -> fixed` 是单向升级:`shared/ui/Popover` 所有用法(模型悬浮窗、Combobox、UsageLogsTable、ChatToolbar 等)一并受益,无需各调用方改。
 
-**注意**:`<dialog showModal>` top-layer 内的 fixed 面板定位正常;但祖先有 `transform`/`filter`/`will-change` 时 fixed 会相对该祖先而非视口(CSS 规范),面板错位--此时去掉祖先 transform 或改回 absolute。
+**fixed 的 containing block 陷阱(必读)**:`position: fixed` 不一定相对视口--祖先有 `transform`/`filter`/`backdrop-filter`/`will-change`/`perspective`/`contain: paint` 时,该祖先会成为 fixed 后代的 containing block(CSS 规范),面板实际相对该祖先定位。此时 `useLayoutEffect` 仍用视口坐标 `getBoundingClientRect()` 设 `left/top`,坐标系错位,面板会飞到视口外--表现是「点击触发器没反应」(浮层其实开了,只是看不见)。chat 输入区悬浮卡片 `composerRef` 的 `backdrop-blur-sm`(设计要求的毛玻璃,不能去)就踩过这个坑;`backdrop-filter` 与 `transform` 同类,都会劫持 fixed。
+
+**根治:面板 `createPortal` 到 `document.body`**。面板脱离所有祖先的 containing block 与 overflow,fixed 相对视口定位,坐标系与 `getBoundingClientRect()` 一致,既不被 overflow 裁剪、也不被 backdrop-blur 等祖先劫持。比「去掉祖先 transform」或「改回 absolute」更优--前者常做不到(视觉必需)、后者会让 overflow 裁剪复发。`shared/ui/Popover` 已统一 Portal,所有调用方受益。Portal 后:
+- `PopoverCloseContext` 仍跨 Portal 生效(`createPortal` 保留 React 树),面板内 `usePopoverClose()` 照常工作。
+- hover 模式下面板已脱离 wrapper,需在面板自绑 `onMouseEnter/onMouseLeave`(复用 trigger 的 onEnter/onLeave),否则鼠标从 trigger 移到面板会触发 wrapper `onLeave` 收起浮层。
+- `typeof document !== "undefined"` 守卫避免 SSR 时 `createPortal` 报错(面板本就由 `effectiveOpen` 控制仅在客户端打开)。
+- `<dialog showModal>` top-layer 内的 fixed 面板定位正常,无需 Portal。
 
 ### 粘贴上传的文件类型过滤
 

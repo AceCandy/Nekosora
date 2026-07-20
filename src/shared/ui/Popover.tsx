@@ -8,6 +8,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { clsx } from "clsx";
 
 export interface PopoverProps {
@@ -50,7 +51,8 @@ export const usePopoverClose = () => useContext(PopoverCloseContext);
 /**
  * Popover -- 域无关的受控浮层壳。
  *
- * 面板用 position: fixed 相对视口定位,不被任意祖先 overflow 容器裁剪;
+ * 面板用 position: fixed 相对视口定位,并通过 createPortal 渲染到 document.body,
+ * 既不被祖先 overflow 容器裁剪,也不被 backdrop-filter/transform 等祖先劫持为 containing block;
  * 位置由 useLayoutEffect 依据 trigger(wrapper) 的 getBoundingClientRect 计算,
  * 并在 scroll/resize/面板尺寸变化时重算,使面板跟随 trigger 滚动。
  *
@@ -158,7 +160,7 @@ export function Popover({
         onClick={openOnHover && clickToggle ? onWrapperClick : undefined}
       >
         {trigger}
-        {effectiveOpen && (
+        {typeof document !== "undefined" && effectiveOpen && createPortal(
           <>
             {/* click-outside catcher：覆盖全屏，点击即关闭（hover 模式不需要） */}
             {!openOnHover && <div className="fixed inset-0 z-20" onClick={onClose} aria-hidden="true" />}
@@ -166,6 +168,9 @@ export function Popover({
               ref={panelRef}
               // 面板内点击不冒泡到 wrapper,避免 clickToggle 模式下点面板误触发 toggle 关闭。
               onClick={(e) => e.stopPropagation()}
+              // Portal 后面板脱离 wrapper,hover 模式需自绑 enter/leave 保持跨元素悬停连续。
+              onMouseEnter={openOnHover ? onEnter : undefined}
+              onMouseLeave={openOnHover ? onLeave : undefined}
               style={{ visibility: "hidden" }}
               className={clsx(
                 "fixed rounded-md border border-morning-mist dark:border-deep-space bg-white dark:bg-space-ink shadow-lg p-1",
@@ -175,7 +180,8 @@ export function Popover({
             >
               {children}
             </div>
-          </>
+          </>,
+          document.body,
         )}
       </div>
     </PopoverCloseContext.Provider>
