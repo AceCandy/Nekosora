@@ -62,6 +62,7 @@
 - **身份/偏好恒定注入不刷新 lastAccessedAt**：诊断陈旧只判 project（走召回的才有「未命中」语义）；preference/profile 恒定注入用 lastAccessedAt 判陈旧会误标。
 - **记忆与消息解耦**：会话删除/重生成不联动删记忆；不记来源消息 id（记忆是用户级，跨会话稳定）。
 - **旧 embedding 清空重建**：迁移时 embedding/disclosure 置 NULL，旧记忆靠关键词兜底，新抽取渐进恢复融合向量。
+- **embedding 维度固定 1024(bge-m3)**：`file_chunks.embedding` 与 `user_memories.embedding` 均为 `vector(1024)`，常量 `EMBEDDING_DIM=1024`(`rag/embedding.ts`、`infra/vector.ts`)。管理员须配 1024 维 embedding 模型(如 bge-m3，经硅基流动等 OpenAI 兼容接口)。改维度须同步 schema 两处 + 两处常量 + 迁移清旧向量(维度不兼容，`ALTER TYPE` 前须 `UPDATE SET embedding=NULL`)。
 - **updateMemory 手动编辑用 content-only embed**（已知遗留）：与融合向量略不一致，低频，靠关键词兜底兜住。
 - **输出呈现偏好不抽取**：preference 不收录「回答怎么呈现」(格式/风格/排版),该域由输出模式/输出样式管;记忆与两者职责不重叠,避免重复注入与冲突。
 

@@ -5,9 +5,9 @@
  *   - 维度常量与向量工具(序列化、距离↔相似度转换)
  *   - 生成 embedding 的入口(委托给 AI SDK embedding provider)
  *
- * PG:  file_chunks.embedding 类型为 vector(1536),用 `<=>`(余弦距离)算子。
+ * PG:  file_chunks.embedding 类型为 vector(1024),用 `<=>`(余弦距离)算子。
  */
-export const EMBEDDING_DIM = 1536; // OpenAI text-embedding-3-small 维度
+export const EMBEDDING_DIM = 1024; // bge-m3 维度
 
 export type Vector = number[];
 

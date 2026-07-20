@@ -568,7 +568,7 @@ export const fileChunks = pgTable(
     charOffset: integer("char_offset"),
     content: text("content").notNull(),
     tokenCount: integer("token_count").notNull().default(0),
-    embedding: vector("embedding", { dimensions: 1536 }),
+    embedding: vector("embedding", { dimensions: 1024 }),
   },
   (t) => [
     index("file_chunks_file_idx").on(t.fileId),
@@ -724,7 +724,7 @@ export const userMemories = pgTable(
     content: text("content").notNull(),
     disclosure: text("disclosure"), // 「何时该用这条记忆」(抽取时 LLM 生成);旧记忆为 NULL
     priority: integer("priority").notNull().default(0), // 重要性;scope 默认映射 preference=0/profile=1/project=2
-    embedding: vector("embedding", { dimensions: 1536 }), // 融合向量 embed(content + " " + disclosure)
+    embedding: vector("embedding", { dimensions: 1024 }), // 融合向量 embed(content + " " + disclosure)
     lastAccessedAt: timestamp("last_accessed_at", { withTimezone: true }), // 召回命中时刷新;project 过期判断依据
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

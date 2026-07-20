@@ -73,7 +73,7 @@ export default function EmbeddingConfigForm({
             name="model"
             value={model}
             onChange={(e) => setModel(e.target.value)}
-            placeholder="text-embedding-3-small"
+            placeholder="bge-m3"
             className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-3 py-2 text-sm font-mono focus:outline-none focus:border-sora-blue"
           />
           <UpstreamModelPicker

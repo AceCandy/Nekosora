@@ -5,7 +5,7 @@
  * 并在 system_settings(namespace="rag", key="embedding_provider_id"/"embedding_model")指定。
  * 若未配置则抛错(调用方应捕获并降级为 unavailable)。
  *
- * 维度固定 1536(text-embedding-3-small),与 schema 的 vector(1536) 一致。
+ * 维度固定 1024(bge-m3),与 schema 的 vector(1024) 一致。
  */
 import { embedMany } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
@@ -14,7 +14,7 @@ import { getDb, getSchema } from "@/lib/infra/db";
 import { parseKeyBundle, pickWeightedKey } from "@/lib/providers/keys";
 import type { Vector } from "@/lib/infra/vector";
 
-export const EMBEDDING_DIM = 1536;
+export const EMBEDDING_DIM = 1024;
 
 interface EmbeddingConfig {
   baseUrl: string;
