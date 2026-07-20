@@ -16,6 +16,8 @@ interface UpstreamModelPickerProps {
   providerId: string;
   /** 选中模型后回填的目标 input ref。 */
   inputRef: React.RefObject<HTMLInputElement | null>;
+  /** 可选:无搜索词时只显示命中的模型(如 embedding 场景只看含 embed 的);有搜索词时仍从全量搜兜底。 */
+  filter?: (m: { id: string }) => boolean;
 }
 
 /**
@@ -29,6 +31,7 @@ export default function UpstreamModelPicker({
   fetchAction,
   providerId,
   inputRef,
+  filter,
 }: UpstreamModelPickerProps) {
   const t = useTranslations("models");
   const [open, setOpen] = useState(false);
@@ -65,9 +68,12 @@ export default function UpstreamModelPicker({
     setOpen(false);
   };
 
+  // 无搜索词时按 filter 收窄(如只看 embedding);有搜索词时从全量搜,放开兜底。
   const filtered = query
     ? models.filter((m) => m.id.toLowerCase().includes(query.toLowerCase()))
-    : models;
+    : filter
+      ? models.filter(filter)
+      : models;
 
   return (
     <>

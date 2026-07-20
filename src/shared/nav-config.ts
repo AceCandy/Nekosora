@@ -19,6 +19,7 @@ const myConfigGroup: NavGroup = {
     { href: "/panel/keys", labelKey: "keys" },
     { href: "/panel/providers", labelKey: "providers" },
     { href: "/panel/models", labelKey: "models" },
+    { href: "/panel/web-search", labelKey: "webSearch" },
     { href: "/panel/templates", labelKey: "templates" },
     { href: "/panel/cards", labelKey: "cards" },
     { href: "/panel/memory", labelKey: "memory" },

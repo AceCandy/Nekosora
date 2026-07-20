@@ -353,6 +353,53 @@ export async function listUpstreamModels(id: string): Promise<UpstreamModel[]> {
   });
 }
 
+/** 上游模型落库列表的缓存有效期:超期才再次实时拉取,避免每次打开都请求上游。 */
+const UPSTREAM_MODELS_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * 带缓存的拉取 -- 优先用 provider 已落库的 upstream_models(创建/更新 provider 时自动拉取),
+ * 落库为空或超过 TTL 才实时拉取并落库,一段时间内不重复请求上游。
+ * 实时拉取失败时,若有过期落库则降级返回,否则抛错由调用方提示。
+ */
+export async function listUpstreamModelsCached(id: string): Promise<UpstreamModel[]> {
+  const admin = await requireAdmin();
+  const db = await getDb();
+  const [provider] = await db
+    .select()
+    .from(S().providers)
+    .where(and(eq(S().providers.id, id), eq(S().providers.ownerUserId, admin.id)));
+  if (!provider) throw new Error("服务商不存在");
+
+  const cached = (provider.upstreamModels as string[] | null) ?? null;
+  const checkedAt = provider.upstreamModelsAt as Date | null;
+  const fresh =
+    !!cached &&
+    cached.length > 0 &&
+    !!checkedAt &&
+    Date.now() - checkedAt.getTime() < UPSTREAM_MODELS_TTL_MS;
+  if (fresh && cached) {
+    return cached.map((mid) => ({ id: mid }));
+  }
+
+  // 落库为空或过期:实时拉取并落库。
+  const keys = parseKeyBundle(provider.apiKeysEnc as string);
+  const firstKey = keys[0]?.key ?? "";
+  try {
+    const { models } = await fetchAndStoreUpstreamModels(
+      db,
+      id,
+      provider.protocol as ProviderProtocol,
+      provider.baseUrl as string,
+      firstKey,
+    );
+    return models.map((mid) => ({ id: mid }));
+  } catch {
+    // 拉取失败:有过期落库则降级返回,否则抛错。
+    if (cached && cached.length > 0) return cached.map((mid) => ({ id: mid }));
+    throw new Error("拉取上游模型失败");
+  }
+}
+
 /**
  * 拉取 provider 的最新上游模型列表并落库(列表「拉取最新」按钮调用)。
  * 校验归属;拉取失败不落库(保留旧值),抛错供 UI 提示。

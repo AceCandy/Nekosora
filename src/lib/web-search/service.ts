@@ -1,8 +1,8 @@
 /**
  * 联网搜索统一入口。
  *
- * searchWeb(query):
- *   - 通过 registry 解析当前 provider
+ * searchWeb(userId, query):
+ *   - 通过 registry 解析该用户的 provider
  *   - 带缓存(相同 query 60s 内复用)与超时保护
  *   - 返回归一化的 SearchBundle,供 chat route 注入 system + 发 SSE 引用事件
  *
@@ -16,13 +16,13 @@ const MAX_RESULTS = 5;
 const SEARCH_TIMEOUT_MS = 8000;
 
 /** 执行一次联网搜索(带缓存)。未配置 provider 时返回 hit:false。 */
-export async function searchWeb(query: string): Promise<SearchBundle> {
-  const provider = await resolveProvider();
-  if (!provider) return { results: [], hit: false, reason: "未配置 web_search provider" };
+export async function searchWeb(userId: string, query: string): Promise<SearchBundle> {
+  const provider = await resolveProvider(userId);
+  if (!provider) return { results: [], hit: false, reason: "未配置联网搜索" };
 
   try {
     const results = await cacheWrap(
-      `websearch:${provider.name}:${query}`,
+      `websearch:${provider.name}:${userId}:${query}`,
       () => withTimeout(provider.search(query, { maxResults: MAX_RESULTS }), SEARCH_TIMEOUT_MS),
       60_000,
     );

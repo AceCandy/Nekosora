@@ -188,7 +188,7 @@ export async function prepareChatContext(
     })(),
 
     // 分支 B:联网搜索(失败冒泡,保留原行为)
-    webSearchOn ? searchWeb(userContent) : Promise.resolve(null),
+    webSearchOn ? searchWeb(userId, userContent) : Promise.resolve(null),
 
     // 分支 C:长期记忆(preference/profile 恒定注入 + project 召回)
     (async () => {
