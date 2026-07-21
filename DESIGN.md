@@ -85,10 +85,17 @@ components:
 
 ## 3. Typography
 
-我们使用系统字体栈来承载界面的全部文字，不进行 Display / Body 字体配对，这最契合开发调试和流式聊天等功能性任务的性质。
+我们使用三套本地自托管字体系列，覆盖西文、中文和等宽场景：
 
-**Display Font:** System UI Sans-serif (`ui-sans-serif, system-ui, -apple-system, sans-serif`)
-**Body Font:** System UI Sans-serif (`ui-sans-serif, system-ui, -apple-system, sans-serif`)
+- **Inter（西文正文/标题）**：现代无衬线，400/500/600 字重，通过 `next/font/local` 自托管至 `src/fonts/`。
+- **Noto Sans SC（简体中文回退）**：subset 常用字 + CJK 全范围 + 标点符号，400/500/600 字重，通过 `next/font/local` 自托管至 `src/fonts/`。
+- **JetBrains Mono（等宽字体）**：代码块、行内代码、数字/配置标识，400/500/600 字重，通过 `next/font/local` 自托管至 `src/fonts/`。
+
+三套字体由 `src/shared/fonts.ts` 统一导出 CSS 变量（`--font-inter` / `--font-cjk` / `--font-mono`），在 `RootLayout` 注入到 `<html>` 的 `className` 中，`globals.css` 的 `body` 使用 `var(--font-inter), var(--font-cjk)` 作为首选字体栈，`pre`/`code` 使用 `var(--font-mono)`。
+
+**Display Font:** Inter, Noto Sans SC (`var(--font-inter), var(--font-cjk)`)
+**Body Font:** Inter, Noto Sans SC (`var(--font-inter), var(--font-cjk)`)
+**Monospace Font:** JetBrains Mono (`var(--font-mono)`)
 
 **Character:** 纯粹、中性且严密对齐。依靠字重的对比和行高的松紧来区分层级，绝不使用夸张的装饰性字体。
 

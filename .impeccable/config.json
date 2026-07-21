@@ -1,0 +1,20 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "design-system-radius",
+        "value": "999px",
+        "reason": "User confirmed 999px is intentional for scrollbar-thumb pill shape",
+        "createdAt": "2026-07-21T12:37:39.472Z"
+      },
+      {
+        "rule": "design-system-radius",
+        "value": "16px",
+        "reason": "User confirmed 16px is intentional for code-block-body larger radius",
+        "createdAt": "2026-07-21T12:37:39.542Z"
+      }
+    ]
+  }
+}

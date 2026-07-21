@@ -5,7 +5,38 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { clsx } from "clsx";
-import type { NavGroup } from "@/shared/nav-config";
+import {
+  Key,
+  Server,
+  Boxes,
+  Globe,
+  FileText,
+  CreditCard,
+  Brain,
+  BookOpen,
+  BarChart3,
+  Users,
+  Activity,
+  Settings,
+  type LucideIcon,
+} from "lucide-react";
+import type { NavGroup, NavIcon } from "@/shared/nav-config";
+
+/** NavIcon key -> lucide 图标组件。icon 以字符串 key 跨 RSC 边界传递,在此映射为组件。 */
+const NAV_ICONS: Record<NavIcon, LucideIcon> = {
+  Key,
+  Server,
+  Boxes,
+  Globe,
+  FileText,
+  CreditCard,
+  Brain,
+  BookOpen,
+  BarChart3,
+  Users,
+  Activity,
+  Settings,
+};
 
 interface SidebarNavProps {
   /** 分组导航数据,由 nav-config 工厂函数生成。 */
@@ -79,7 +110,7 @@ export default function SidebarNav({ groups, matchMode = "exact", collapsed = fa
               matchMode === "prefix"
                 ? pathname.startsWith(item.href)
                 : pathname === item.href;
-            const Icon = item.icon;
+            const Icon = NAV_ICONS[item.icon];
             return (
               <Link
                 key={item.href}

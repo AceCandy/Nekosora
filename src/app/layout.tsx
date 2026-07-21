@@ -4,6 +4,7 @@ import { getLocale, getMessages } from "next-intl/server";
 import "./globals.css";
 import RegisterSW from "./RegisterSW";
 import ScrollActivity from "@/shared/components/ScrollActivity";
+import { inter, jetbrainsMono, notoSansSC } from "@/shared/fonts";
 
 export const metadata: Metadata = {
   title: "Nekusora · 星枢",
@@ -37,7 +38,11 @@ export default async function RootLayout({
   const messages = await getMessages();
 
   return (
-    <html lang={locale} suppressHydrationWarning>
+    <html
+        lang={locale}
+        suppressHydrationWarning
+        className={`${inter.variable} ${jetbrainsMono.variable} ${notoSansSC.variable}`}
+      >
       <body>
         <NextIntlClientProvider locale={locale} messages={messages}>
           {children}

@@ -1,25 +1,28 @@
-import type { LucideIcon } from "lucide-react";
-import {
-  Key,
-  Server,
-  Boxes,
-  Globe,
-  FileText,
-  CreditCard,
-  Brain,
-  BookOpen,
-  BarChart3,
-  Users,
-  Activity,
-  Settings,
-} from "lucide-react";
 import type { SessionUser } from "@/lib/session";
 
-/** 单条侧栏导航项:href 为目标路由,labelKey 对应 messages 的 nav 命名空间文案 key,icon 为收起态展示的图标。 */
+/**
+ * 侧栏导航项图标 key,对应 SidebarNav 内的 lucide 图标映射。
+ * 用字符串而非组件引用,以便 groups 数据跨 RSC 边界(Server -> Client)序列化传递。
+ */
+export type NavIcon =
+  | "Key"
+  | "Server"
+  | "Boxes"
+  | "Globe"
+  | "FileText"
+  | "CreditCard"
+  | "Brain"
+  | "BookOpen"
+  | "BarChart3"
+  | "Users"
+  | "Activity"
+  | "Settings";
+
+/** 单条侧栏导航项:href 为目标路由,labelKey 对应 messages 的 nav 命名空间文案 key,icon 为收起态展示的图标 key。 */
 export interface NavItem {
   href: string;
   labelKey: string;
-  icon: LucideIcon;
+  icon: NavIcon;
 }
 
 /** 一组侧栏导航:titleKey 为可选的分组小标题(对应 nav 命名空间 key),无标题则不渲染分组头。 */
@@ -32,15 +35,15 @@ export interface NavGroup {
 const myConfigGroup: NavGroup = {
   titleKey: "sectionMyConfig",
   items: [
-    { href: "/panel/keys", labelKey: "keys", icon: Key },
-    { href: "/panel/providers", labelKey: "providers", icon: Server },
-    { href: "/panel/models", labelKey: "models", icon: Boxes },
-    { href: "/panel/web-search", labelKey: "webSearch", icon: Globe },
-    { href: "/panel/templates", labelKey: "templates", icon: FileText },
-    { href: "/panel/cards", labelKey: "cards", icon: CreditCard },
-    { href: "/panel/memory", labelKey: "memory", icon: Brain },
-    { href: "/panel/knowledge", labelKey: "knowledge", icon: BookOpen },
-    { href: "/panel/usage", labelKey: "myUsage", icon: BarChart3 },
+    { href: "/panel/keys", labelKey: "keys", icon: "Key" },
+    { href: "/panel/providers", labelKey: "providers", icon: "Server" },
+    { href: "/panel/models", labelKey: "models", icon: "Boxes" },
+    { href: "/panel/web-search", labelKey: "webSearch", icon: "Globe" },
+    { href: "/panel/templates", labelKey: "templates", icon: "FileText" },
+    { href: "/panel/cards", labelKey: "cards", icon: "CreditCard" },
+    { href: "/panel/memory", labelKey: "memory", icon: "Brain" },
+    { href: "/panel/knowledge", labelKey: "knowledge", icon: "BookOpen" },
+    { href: "/panel/usage", labelKey: "myUsage", icon: "BarChart3" },
   ],
 };
 
@@ -52,9 +55,9 @@ const myConfigGroup: NavGroup = {
 const globalManagementGroup: NavGroup = {
   titleKey: "sectionGlobalManagement",
   items: [
-    { href: "/admin/users", labelKey: "users", icon: Users },
-    { href: "/admin/operations", labelKey: "operations", icon: Activity },
-    { href: "/admin/settings", labelKey: "settings", icon: Settings },
+    { href: "/admin/users", labelKey: "users", icon: "Users" },
+    { href: "/admin/operations", labelKey: "operations", icon: "Activity" },
+    { href: "/admin/settings", labelKey: "settings", icon: "Settings" },
   ],
 };
 
