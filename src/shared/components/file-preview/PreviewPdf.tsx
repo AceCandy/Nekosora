@@ -40,15 +40,9 @@ export default function PreviewPdf({ url, filename }: PreviewPdfProps) {
         // 动态 import,避免 pdfjs 在 SSR 阶段执行(它依赖 DOM/worker)。
         const pdfjs = await import("pdfjs-dist");
 
-        // 配置 worker(从 pdfjs-dist 包内解析,Next 打包为静态资源)。
-        // pdfjs 6.x 用 URL 构造 worker。
+        // worker 由 postinstall 同步到 public/pdfjs,与 cmaps/fonts 一样同源加载。
         if (!pdfjs.GlobalWorkerOptions.workerSrc) {
-          // 通过动态 import URL 获取 worker 模块的实际路径。
-          const workerUrl = new URL(
-            "pdfjs-dist/build/pdf.worker.min.mjs",
-            window.location.origin,
-          );
-          pdfjs.GlobalWorkerOptions.workerSrc = workerUrl.href;
+          pdfjs.GlobalWorkerOptions.workerSrc = "/pdfjs/pdf.worker.min.mjs";
         }
 
         const loadingTask = pdfjs.getDocument({
@@ -103,7 +97,7 @@ export default function PreviewPdf({ url, filename }: PreviewPdfProps) {
       cancelled = true;
       if (renderTask?.promise) renderTask.promise.catch(() => undefined);
     };
-  }, [url]);
+  }, [url, t]);
 
   if (error) {
     return (

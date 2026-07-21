@@ -276,6 +276,58 @@ for (const item of items) {
 
 拖拽(`onDrop`)走 `dataTransfer.files`,不含文本项,无需同样过滤。
 
+## Scenario: PDF 预览静态资源
+
+### 1. Scope / Trigger
+
+升级 `pdfjs-dist`、修改 `PreviewPdf` 或调整安装/部署流程时，必须验证 worker、CMap 和标准字体三类资源。浏览器不能直接从运行时 URL 解析 `node_modules` 包路径。
+
+### 2. Signatures
+
+- 安装入口：`package.json#postinstall -> node scripts/sync-pdfjs-assets.cjs`
+- worker URL：`/pdfjs/pdf.worker.min.mjs`
+- CMap URL：`/pdfjs/cmaps/`
+- 标准字体 URL：`/pdfjs/standard_fonts/`
+
+### 3. Contracts
+
+- `sync-pdfjs-assets.cjs` 从当前安装的 `pdfjs-dist` 同步 1 个 worker、CMap 目录和标准字体目录到 `public/pdfjs/`。
+- `PreviewPdf` 只引用同源 `/pdfjs/` URL，不依赖 CDN，也不构造 `/pdfjs-dist/...` 包路径。
+- 三类资源都是第三方安装生成物，必须由 `.gitignore` 排除，不提交仓库。
+- 找不到 `pdfjs-dist` 或 worker 时输出警告；安装流程沿用可选 PDF 能力的降级策略。
+
+### 4. Validation & Error Matrix
+
+| 条件 | 结果 |
+|---|---|
+| worker 同步成功 | `/pdfjs/pdf.worker.min.mjs` 返回 200 JavaScript |
+| worker 缺失 | postinstall 警告，PDF 预览不可用 |
+| CMap/字体缺失 | PDF 可能渲染，但 CJK 或标准字体异常 |
+| 组件引用 `/pdfjs-dist/...` | Next 静态服务返回 404，worker 初始化失败 |
+
+### 5. Good / Base / Bad Cases
+
+- Good：`pnpm install` 后三类资源均可由 Next 同源静态访问，PDF 无需外网即可渲染。
+- Base：不使用 PDF 预览时，资源同步失败不影响其他聊天功能。
+- Bad：仅检查 `node_modules/pdfjs-dist/build/pdf.worker.min.mjs` 存在，却让浏览器请求 `/pdfjs-dist/build/...`；依赖已安装但运行时仍 404。
+
+### 6. Tests Required
+
+- 运行 `node scripts/sync-pdfjs-assets.cjs`，断言输出包含 `1 worker`。
+- 用 `cmp` 校验 public worker 与当前依赖 worker 内容一致。
+- 启动本地 Next 后请求 `/pdfjs/pdf.worker.min.mjs`，断言 HTTP 200、JavaScript 内容类型和非零大小；验收后关闭服务。
+- 运行 lint，确保 `PreviewPdf` effect 无缺失依赖 warning。
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong:window.location.origin 只会生成站内 URL,不会让 Next 暴露 node_modules。
+new URL("pdfjs-dist/build/pdf.worker.min.mjs", window.location.origin).href;
+
+// Correct:postinstall 已把版本匹配的 worker 同步到 public。
+pdfjs.GlobalWorkerOptions.workerSrc = "/pdfjs/pdf.worker.min.mjs";
+```
+
 ## Common Mistakes
 
 - **不要在 Client Component 直接 import server action** —— 用 `import { action } from "./actions"`(next 自动处理)。
