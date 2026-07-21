@@ -50,6 +50,13 @@
       "when": 1784527600177,
       "tag": "0006_absent_wind_dancer",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1784618922038,
+      "tag": "0007_fearless_jazinda",
+      "breakpoints": true
     }
   ]
 }

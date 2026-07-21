@@ -815,6 +815,12 @@ export const opsErrorLogs = pgTable(
     firstTokenLatencyMs: integer("first_token_latency_ms"), // 失败前是否产出首 token
     /** 副任务类型(null=主回复/网关请求;title/memory/compact=后台副任务)。 */
     taskKind: text("task_kind"),
+    /**
+     * 尝试序号(1..N)。方案 X:每次 key 尝试失败各记一条 ops_error_logs,带递增 attempt。
+     * null=非尝试记录(中断,由 finally 记)。成功走 usage_logs,不涉及此字段。
+     * 前端按 requestId 聚合、按 attempt 升序展示完整重试链。
+     */
+    attempt: integer("attempt"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

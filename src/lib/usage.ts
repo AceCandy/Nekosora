@@ -17,7 +17,8 @@ export interface LogUsageParams {
   model: string;
   providerRef?: string;
   usage: IRUsage;
-  latencyMs: number;
+  /** 端到端耗时;中间失败重试记录未计量单次耗时不传(留 null)。 */
+  latencyMs?: number;
   status: "success" | "failed" | "interrupted";
   errorCode?: string;
   // —— 网关日志重构新增(均为可选,缺失留 null) ——
@@ -47,6 +48,17 @@ export interface LogUsageParams {
   upstreamKeyMasked?: string | null;
   /** 副任务类型(null=主回复/网关请求;title/memory/compact=后台副任务)。 */
   taskKind?: string;
+  /**
+   * 尝试序号(1..N)。方案 X:每次 key 尝试失败各记一条 ops_error_logs,带递增 attempt。
+   * 缺省 null=非尝试记录(中断/最终结果)。成功走 usage_logs,不涉及此字段。
+   */
+  attempt?: number;
+  /**
+   * 跳过 Prometheus 埋点(observeRequest)。中间失败重试记录传 true:
+   * 一次请求只应在最终结果(success/interrupted/failed)埋一次点,
+   * 中间每次尝试失败若也埋点会导致 nekusora_requests_total 重复计数。
+   */
+  skipMetrics?: boolean;
 }
 
 /**
@@ -124,22 +136,26 @@ export async function logUsage(params: LogUsageParams): Promise<void> {
         latencyMs: params.latencyMs,
         firstTokenLatencyMs: params.firstTokenLatencyMs ?? null,
         taskKind: params.taskKind ?? null,
+        attempt: params.attempt ?? null,
       });
     }
 
     // 同步埋点 Prometheus 指标(metrics 失败不影响主流程)。
-    try {
-      const { observeRequest } = await import("@/lib/infra/metrics");
-      observeRequest({
-        source: params.ctx.source,
-        model: params.model,
-        status: params.status,
-        latencyMs: params.latencyMs,
-        promptTokens: params.usage.inputTokens ?? 0,
-        completionTokens: params.usage.outputTokens ?? 0,
-      });
-    } catch {
-      /* metrics 埋点失败忽略 */
+    // skipMetrics=true 时跳过(中间失败重试记录:一次请求只在最终结果埋一次点)。
+    if (!params.skipMetrics) {
+      try {
+        const { observeRequest } = await import("@/lib/infra/metrics");
+        observeRequest({
+          source: params.ctx.source,
+          model: params.model,
+          status: params.status,
+          latencyMs: params.latencyMs ?? 0,
+          promptTokens: params.usage.inputTokens ?? 0,
+          completionTokens: params.usage.outputTokens ?? 0,
+        });
+      } catch {
+        /* metrics 埋点失败忽略 */
+      }
     }
   } catch (err) {
     // 日志记录失败不应影响主流程。

@@ -6,7 +6,7 @@
  *   - admin 后台:不传 userId(看全部)
  *   - panel 用户端:必传 userId(只看自己的)
  */
-import { eq, and, gte, lte, desc, sql, isNotNull, ilike, or, type SQL } from "drizzle-orm";
+import { eq, and, gte, lte, desc, sql, isNotNull, ilike, or, inArray, type SQL } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
 
 /** 错误请求明细行(DTO,服务边界收敛成显式类型供前端消费)。 */
@@ -44,6 +44,8 @@ export interface ErrorLogRow {
   userEmail: string | null;
   /** 副任务类型(null=主回复/网关请求;title/memory/compact=后台副任务)。 */
   taskKind: string | null;
+  /** 尝试序号(1..N);null=非尝试记录(中断)。同 requestId 按 attempt 升序即完整重试链。 */
+  attempt: number | null;
   createdAt: Date;
 }
 
@@ -150,6 +152,7 @@ function toRow(
     userName: meta.userName ?? null,
     userEmail: meta.userEmail ?? null,
     taskKind: r.taskKind ?? null,
+    attempt: r.attempt ?? null,
     createdAt: r.createdAt instanceof Date ? r.createdAt : new Date(r.createdAt),
   };
 }
@@ -219,6 +222,49 @@ export async function getErrorLog(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { row, apiKeyName, userName, userEmail } = rowRaw as any;
   return toRow(row, { apiKeyName, userName, userEmail });
+}
+
+/**
+ * 批量查询多个 requestId 的全部错误尝试(供详情重试链展示)。
+ *
+ * 方案 X:一次请求的每次 key 失败各记一条 ops_error_logs(同 requestId,attempt=1..N),
+ * 中断/最终记录 attempt=null。此方法按 requestId 聚合,组内按 attempt 升序(null 排最后),
+ * 调用方据此渲染完整重试链。userId 传入时强制隔离(防越权)。
+ */
+export async function listAttemptsByRequestIds(
+  requestIds: string[],
+  userId?: string,
+): Promise<Map<string, ErrorLogRow[]>> {
+  if (requestIds.length === 0) return new Map();
+  const db = await getDb();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const s = getSchema() as any;
+  const t = s.opsErrorLogs;
+  const conds: SQL[] = [inArray(t.requestId, requestIds)];
+  if (userId) conds.push(eq(t.userId, userId));
+  const rowsRaw = await db
+    .select({ row: t, apiKeyName: s.apiKeys.name, userName: s.user.name, userEmail: s.user.email })
+    .from(t)
+    .leftJoin(s.apiKeys, eq(t.apiKeyId, s.apiKeys.id))
+    .leftJoin(s.user, eq(t.userId, s.user.id))
+    .where(and(...conds));
+  const out = new Map<string, ErrorLogRow[]>();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const { row, apiKeyName, userName, userEmail } of rowsRaw as any[]) {
+    const r = toRow(row, { apiKeyName, userName, userEmail });
+    const list = out.get(r.requestId) ?? [];
+    list.push(r);
+    out.set(r.requestId, list);
+  }
+  // 组内按 attempt 升序(null 排最后:中断/最终记录置于尝试链末尾)。
+  for (const list of out.values()) {
+    list.sort((a, b) => {
+      if (a.attempt == null) return 1;
+      if (b.attempt == null) return -1;
+      return a.attempt - b.attempt;
+    });
+  }
+  return out;
 }
 
 // ===========================================================================

@@ -13,6 +13,7 @@
  */
 import { useState } from "react";
 import { useTranslations } from "next-intl";
+import { clsx } from "clsx";
 import Badge from "@/shared/ui/Badge";
 import { Pagination } from "@/shared/ui/Pagination";
 import { formatDateTimeLocal, formatDuration } from "@/shared/lib/format";
@@ -27,6 +28,8 @@ import { ErrorDetailDrawer } from "./ErrorDetailDrawer";
  */
 export interface ErrorLogClientRow {
   id: string;
+  /** 一次生成的关联 id(同一次请求的多次 key 尝试共享;用于聚合重试链)。 */
+  requestId: string;
   source: string;
   model: string;
   upstreamModel: string | null;
@@ -52,6 +55,8 @@ export interface ErrorLogClientRow {
   userEmail: string | null;
   /** 副任务类型(null=主回复/网关请求;title/memory/compact=后台副任务)。 */
   taskKind: string | null;
+  /** 尝试序号(1..N);null=非尝试记录(中断)。同 requestId 按 attempt 升序即完整重试链。 */
+  attempt: number | null;
   /** 粗分类(服务端派生,前端 i18n key 后缀)。 */
   category: ErrorCategory;
   createdAt: string;
@@ -67,6 +72,12 @@ interface ErrorLogsTableProps {
   labels: { user?: string; key?: string };
   basePath: string;
   variant: "admin" | "panel";
+  /**
+   * 当前页涉及 requestId 的全部尝试(方案 X:每次 key 失败各记一条)。
+   * key=requestId,value=按 attempt 升序的尝试链(含当前页可见行 + 跨页的其他尝试)。
+   * 供详情 drawer 展示完整重试链。缺省时 drawer 不展示重试链。
+   */
+  attemptsByRequestId?: Record<string, ErrorLogClientRow[]>;
 }
 
 /** httpStatus 徽标颜色(低饱和:4xx 中性偏暖、5xx 红、null 灰)。 */
@@ -86,10 +97,16 @@ export function ErrorLogsTable({
   labels,
   basePath,
   variant,
+  attemptsByRequestId,
 }: ErrorLogsTableProps) {
   const t = useTranslations("admin.usage");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = rows.find((r) => r.id === selectedId) ?? null;
+  // 选中行的完整重试链(同 requestId 全部尝试,按 attempt 升序);无预查数据时退化为仅当前行。
+  const selectedAttempts =
+    selected
+      ? (attemptsByRequestId?.[selected.requestId] ?? [selected])
+      : null;
 
   const buildPageHref = (p: number) => {
     const params = new URLSearchParams();
@@ -139,12 +156,17 @@ export function ErrorLogsTable({
                   </td>
                 </tr>
               )}
-              {rows.map((r) => {
+              {rows.map((r, idx) => {
                 const category = r.category;
+                // 同 requestId 相邻的非首行 = 同一请求的重试尝试,浅色底标识。
+                const isRetry = idx > 0 && rows[idx - 1].requestId === r.requestId;
                 return (
                   <tr
                     key={r.id}
-                    className="hover:bg-neutral-50/30 dark:hover:bg-neutral-900/10 transition-colors duration-150 cursor-pointer"
+                    className={clsx(
+                      "hover:bg-neutral-50/30 dark:hover:bg-neutral-900/10 transition-colors duration-150 cursor-pointer",
+                      isRetry && "bg-neutral-50/40 dark:bg-neutral-900/15",
+                    )}
                     onClick={() => setSelectedId(r.id)}
                   >
                     <td className="px-4 py-3 font-mono text-neutral-500 dark:text-neutral-400 whitespace-nowrap">
@@ -168,10 +190,20 @@ export function ErrorLogsTable({
                         )}
                       </span>
                     </td>
-                    {/* 执行链路:服务商 · 模型(↳上游) · 脱敏上游key */}
+                    {/* 执行链路:服务商 · 模型(↳上游) · 脱敏上游key;attempt 序号 + ↳ 重试标识 */}
                     <td className="px-4 py-3 max-w-[240px]">
                       <div className="space-y-0.5">
-                        <div className="text-neutral-700 dark:text-neutral-300 truncate">{r.providerName ?? r.providerRef ?? "-"}</div>
+                        <div className="flex items-center gap-1.5">
+                          {r.attempt != null && (
+                            <span className="shrink-0 inline-flex items-center rounded-full bg-sora-blue/10 px-1.5 py-0.5 text-[10px] font-mono font-semibold text-sora-blue">
+                              #{r.attempt}
+                            </span>
+                          )}
+                          {isRetry && (
+                            <span className="shrink-0 text-neutral-400 dark:text-neutral-500 text-[10px]">↳</span>
+                          )}
+                          <span className="truncate text-neutral-700 dark:text-neutral-300">{r.providerName ?? r.providerRef ?? "-"}</span>
+                        </div>
                         <div className="font-mono text-neutral-900 dark:text-white truncate">
                           {r.model}
                           {r.upstreamModel && r.upstreamModel !== r.model && (
@@ -229,7 +261,12 @@ export function ErrorLogsTable({
         }}
       />
 
-      <ErrorDetailDrawer row={selected} open={!!selected} onClose={() => setSelectedId(null)} />
+      <ErrorDetailDrawer
+        row={selected}
+        attempts={selectedAttempts}
+        open={!!selected}
+        onClose={() => setSelectedId(null)}
+      />
     </div>
   );
 }

@@ -536,6 +536,7 @@
         "empty": "No error requests",
         "viewDetail": "Details",
         "detailTitle": "Error details",
+        "detailRetryChain": "Retry chain",
         "detailCreatedAt": "Time",
         "detailSource": "Source",
         "detailModel": "Public model",

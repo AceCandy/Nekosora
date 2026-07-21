@@ -9,7 +9,7 @@ import {
   listUsageLogs,
   type UsageLogFilters,
 } from "@/lib/usage-aggregate";
-import { listErrorLogs, type ErrorLogFilters } from "@/lib/repositories/error-log-repository";
+import { listErrorLogs, listAttemptsByRequestIds, type ErrorLogFilters, type ErrorLogRow } from "@/lib/repositories/error-log-repository";
 import { classifyError } from "@/lib/error-classify";
 import { UsageDashboard } from "@/app/(dash)/admin/usage/UsageDashboard";
 import { CollapsibleStats } from "@/app/(dash)/admin/usage/CollapsibleStats";
@@ -272,8 +272,9 @@ async function renderErrorsTab({
   ]);
 
   // panel 放宽:错误日志均为用户自己调用产生,全字段可见(与 admin 同款);仅无用户列。
-  const clientRows: ErrorLogClientRow[] = rows.map((r) => ({
+  const toClientRow = (r: ErrorLogRow): ErrorLogClientRow => ({
     id: r.id,
+    requestId: r.requestId,
     source: r.source,
     model: r.model,
     upstreamModel: r.upstreamModel,
@@ -294,13 +295,25 @@ async function renderErrorsTab({
     userName: isAdmin ? r.userName : null,
     userEmail: isAdmin ? r.userEmail : null,
     taskKind: r.taskKind,
+    attempt: r.attempt,
     category: classifyError({
       errorCode: r.errorCode,
       httpStatus: r.httpStatus ?? undefined,
       errorMessage: r.errorMessage ?? undefined,
     }).category,
     createdAt: r.createdAt.toISOString(),
-  }));
+  });
+  const clientRows: ErrorLogClientRow[] = rows.map(toClientRow);
+
+  // 方案 X:预查当前页涉及 requestId 的全部尝试(含跨页的其他 attempt),供详情 drawer 展示完整重试链。
+  const attemptsMap = await listAttemptsByRequestIds(
+    [...new Set(rows.map((r) => r.requestId))],
+    effectiveUserId,
+  );
+  const attemptsByRequestId: Record<string, ErrorLogClientRow[]> = {};
+  for (const [reqId, attemptRows] of attemptsMap) {
+    attemptsByRequestId[reqId] = attemptRows.map(toClientRow);
+  }
 
   const filterValues: ErrorFilterValues = {
     range: timeRange.range,
@@ -332,6 +345,7 @@ async function renderErrorsTab({
       labels={labels}
       basePath="/panel/usage"
       variant={isAdmin ? "admin" : "panel"}
+      attemptsByRequestId={attemptsByRequestId}
     />
   );
 }

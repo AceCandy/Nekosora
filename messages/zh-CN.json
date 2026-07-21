@@ -536,6 +536,7 @@
         "empty": "暂无错误请求",
         "viewDetail": "详情",
         "detailTitle": "错误详情",
+        "detailRetryChain": "重试链",
         "detailCreatedAt": "时间",
         "detailSource": "来源",
         "detailModel": "对外模型",
