@@ -19,11 +19,12 @@ import { eq } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { getSession } from "@/lib/session";
 import { getStorage } from "@/lib/infra/storage";
+import { parseByteRange } from "@/lib/http-range";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(_req: NextRequest, ctx: { params: Promise<{ fileId: string }> }) {
+export async function GET(req: NextRequest, ctx: { params: Promise<{ fileId: string }> }) {
   const user = await getSession();
   if (!user) return NextResponse.json({ error: "未登录" }, { status: 401 });
 
@@ -42,6 +43,19 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ fileId: st
     return NextResponse.json({ error: "文件不存在或无权访问" }, { status: 404 });
   }
 
+  const size = Number(file.size);
+  const rangeHeader = req.headers.get("range");
+  const range = rangeHeader ? parseByteRange(rangeHeader, size) : null;
+  if (rangeHeader && !range) {
+    return new NextResponse(null, {
+      status: 416,
+      headers: {
+        "Accept-Ranges": "bytes",
+        "Content-Range": `bytes */${size}`,
+      },
+    });
+  }
+
   const storage = await getStorage();
 
   // S3 类 driver:优先 302 重定向到预签名 URL,省应用带宽。
@@ -54,7 +68,9 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ fileId: st
   // Local / S3 无直链:读字节流式返回。
   let buf: Buffer;
   try {
-    buf = await storage.get(file.storagePath);
+    buf = range
+      ? await storage.get(file.storagePath, range)
+      : await storage.get(file.storagePath);
   } catch {
     return NextResponse.json({ error: "文件内容读取失败" }, { status: 500 });
   }
@@ -63,11 +79,13 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ fileId: st
   const filename = encodeURIComponent(file.filename);
   // NextResponse 的 BodyInit 需要 Uint8Array 而非 Buffer(Buffer 是 Node 扩展类型)。
   return new NextResponse(new Uint8Array(buf), {
-    status: 200,
+    status: range ? 206 : 200,
     headers: {
       "Content-Type": mime,
       "Content-Length": String(buf.byteLength),
       "Content-Disposition": `inline; filename="${filename}"`,
+      "Accept-Ranges": "bytes",
+      ...(range ? { "Content-Range": `bytes ${range.start}-${range.end}/${size}` } : {}),
       // 属主私有,不缓存。
       "Cache-Control": "private, no-store",
     },

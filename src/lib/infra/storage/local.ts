@@ -8,9 +8,9 @@
  * 向后兼容:旧 file_objects.storagePath 存的是绝对路径(如 /app/uploads/...)。
  * get/put/delete 内部做一次 isAbsoluteKey 判断:绝对路径直接用,否则拼 root。
  */
-import { readFile, writeFile, mkdir, unlink, stat } from "node:fs/promises";
+import { open, readFile, writeFile, mkdir, unlink, stat } from "node:fs/promises";
 import { dirname, join, resolve, isAbsolute } from "node:path";
-import type { StorageDriver, StorageKind, StorageResult, PutOpts } from "./driver";
+import type { StorageDriver, StorageKind, StorageResult, PutOpts, GetOpts } from "./driver";
 
 /** LocalDriver 构造参数。 */
 export interface LocalDriverOptions {
@@ -43,9 +43,28 @@ export class LocalDriver implements StorageDriver {
     return { key, url: null, size: data.byteLength };
   }
 
-  async get(key: string): Promise<Buffer> {
+  async get(key: string, opts?: GetOpts): Promise<Buffer> {
     const path = this.resolveKey(key);
-    return readFile(path);
+    if (!opts) return readFile(path);
+
+    const length = opts.end - opts.start + 1;
+    if (
+      !Number.isSafeInteger(opts.start) ||
+      !Number.isSafeInteger(opts.end) ||
+      opts.start < 0 ||
+      length <= 0
+    ) {
+      throw new RangeError("无效的存储读取范围");
+    }
+
+    const file = await open(path, "r");
+    try {
+      const buffer = Buffer.alloc(length);
+      const { bytesRead } = await file.read(buffer, 0, length, opts.start);
+      return buffer.subarray(0, bytesRead);
+    } finally {
+      await file.close();
+    }
   }
 
   async delete(key: string): Promise<void> {
