@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { clsx } from "clsx";
-import { PanelLeftClose, PanelLeftOpen, LogOut, MessageSquare } from "lucide-react";
+import { Menu, PanelLeftClose, PanelLeftOpen, LogOut, MessageSquare, X } from "lucide-react";
 import type { SessionUser } from "@/lib/session";
 import type { NavGroup } from "@/shared/nav-config";
 import type { FooterLink } from "@/shared/components/AppShell";
@@ -38,98 +38,227 @@ export default function DashSidebar({
   logoutAction,
 }: DashSidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const mobileTriggerRef = useRef<HTMLButtonElement>(null);
+  const mobileCloseRef = useRef<HTMLButtonElement>(null);
+  const sidebarRef = useRef<HTMLElement>(null);
   const t = useTranslations("nav");
 
-  return (
-    <aside
-      className={clsx(
-        "flex w-56 flex-col justify-between border-r border-morning-mist p-4 transition-[width,min-width,max-width,padding] duration-250 ease-in-out dark:border-deep-space md:w-56 md:min-w-56 md:max-w-56",
-        collapsed && "md:w-14 md:min-w-14 md:max-w-14 md:p-2",
-      )}
-    >
-      <div className="space-y-6">
-        <div className={clsx("flex items-center", collapsed ? "justify-center py-1" : "px-3 py-2")}>
-          {!collapsed && (
-            <div className="min-w-0 flex-1">
-              <Link
-                href={brandHref}
-                className="block truncate text-lg font-bold tracking-tight text-neutral-900 transition-opacity hover:opacity-80 dark:text-white"
-              >
-                Nekusora
-              </Link>
-              <div className="mt-0.5 truncate font-mono text-[10px] text-neutral-400 dark:text-neutral-500">
-                {user.email}
-                {brandBadge ? ` (${brandBadge})` : ""}
-              </div>
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={() => setCollapsed((v) => !v)}
-            className="touch-target hidden h-7 w-7 shrink-0 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:hover:bg-neutral-900 dark:hover:text-neutral-100 md:inline-flex"
-            aria-label={collapsed ? "展开侧边栏" : "收起侧边栏"}
-            title={collapsed ? "展开侧边栏" : "收起侧边栏"}
-          >
-            {collapsed ? (
-              <PanelLeftOpen className="h-[18px] w-[18px]" aria-hidden="true" />
-            ) : (
-              <PanelLeftClose className="h-[18px] w-[18px]" aria-hidden="true" />
-            )}
-          </button>
-        </div>
-        <SidebarNav groups={groups} matchMode={matchMode} collapsed={collapsed} />
-      </div>
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 768px)");
+    const syncViewport = () => {
+      setIsMobileViewport(!media.matches);
+      if (media.matches) setMobileOpen(false);
+    };
 
-      <div
+    syncViewport();
+    media.addEventListener("change", syncViewport);
+    return () => media.removeEventListener("change", syncViewport);
+  }, []);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+
+    const mobileTrigger = mobileTriggerRef.current;
+    const mainContent = document.getElementById("dash-main-content");
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    mainContent?.setAttribute("inert", "");
+    mainContent?.setAttribute("aria-hidden", "true");
+    mobileCloseRef.current?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setMobileOpen(false);
+        return;
+      }
+      if (event.key !== "Tab") return;
+
+      const focusable = Array.from(
+        sidebarRef.current?.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      ).filter((element) => element.offsetParent !== null);
+      if (focusable.length === 0) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      mainContent?.removeAttribute("inert");
+      mainContent?.removeAttribute("aria-hidden");
+      document.removeEventListener("keydown", handleKeyDown);
+      requestAnimationFrame(() => {
+        if (mobileTrigger?.isConnected) mobileTrigger.focus();
+      });
+    };
+  }, [mobileOpen]);
+
+  const openMobileSidebar = () => {
+    setCollapsed(false);
+    setMobileOpen(true);
+  };
+
+  return (
+    <>
+      <header
+        aria-hidden={mobileOpen ? true : undefined}
+        inert={mobileOpen ? true : undefined}
+        className="flex h-14 shrink-0 items-center gap-3 border-b border-morning-mist bg-nebula-white px-3 dark:border-deep-space dark:bg-twilight-obsidian md:hidden"
+      >
+        <button
+          ref={mobileTriggerRef}
+          type="button"
+          onClick={openMobileSidebar}
+          className="touch-target inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:text-neutral-300 dark:hover:bg-neutral-900 dark:hover:text-neutral-100"
+          aria-controls="dash-sidebar"
+          aria-expanded={mobileOpen}
+          aria-label={t("openSidebar")}
+          title={t("openSidebar")}
+        >
+          <Menu className="h-5 w-5" aria-hidden="true" />
+        </button>
+        <Link
+          href={brandHref}
+          className="min-w-0 truncate rounded text-base font-semibold text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:text-white"
+        >
+          Nekusora
+        </Link>
+      </header>
+
+      {mobileOpen && (
+        <div
+          onClick={() => setMobileOpen(false)}
+          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+          aria-hidden="true"
+        />
+      )}
+
+      <aside
+        ref={sidebarRef}
+        id="dash-sidebar"
+        role={isMobileViewport ? "dialog" : undefined}
+        aria-modal={isMobileViewport && mobileOpen ? true : undefined}
+        aria-label={isMobileViewport ? t("sidebarNavigation") : undefined}
+        aria-hidden={isMobileViewport && !mobileOpen ? true : undefined}
+        inert={isMobileViewport && !mobileOpen ? true : undefined}
+        onClick={(event) => {
+          if (isMobileViewport && (event.target as HTMLElement).closest("a")) setMobileOpen(false);
+        }}
         className={clsx(
-          "border-t border-morning-mist pt-4 dark:border-deep-space",
-          collapsed ? "space-y-1" : "space-y-2",
+          "fixed inset-y-0 left-0 z-50 flex w-[min(18rem,calc(100vw-3rem))] max-w-72 flex-col justify-between overflow-y-auto border-r border-morning-mist bg-nebula-white p-4 transition-transform duration-200 ease-out dark:border-deep-space dark:bg-twilight-obsidian md:static md:z-auto md:translate-x-0 md:transition-[width,min-width,max-width,padding] md:duration-250 md:ease-in-out",
+          mobileOpen ? "translate-x-0" : "-translate-x-full",
+          collapsed
+            ? "md:w-14 md:min-w-14 md:max-w-14 md:p-2"
+            : "md:w-56 md:min-w-56 md:max-w-56",
         )}
       >
-        {collapsed ? (
-          <>
-            {footerLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                title={link.label}
-                aria-label={link.label}
-                className="touch-target flex items-center justify-center rounded-md p-2 text-neutral-600 transition-colors hover:bg-neutral-50 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-900/50 dark:hover:text-neutral-100"
-              >
-                <MessageSquare className="h-4 w-4" aria-hidden="true" />
-              </Link>
-            ))}
-            <form action={logoutAction}>
-              <button
-                type="submit"
-                title={t("logout")}
-                aria-label={t("logout")}
-                className="touch-target flex w-full items-center justify-center rounded-md p-2 text-red-500 transition-colors hover:bg-red-50 dark:hover:bg-red-950/20"
-              >
-                <LogOut className="h-4 w-4" aria-hidden="true" />
-              </button>
-            </form>
-          </>
-        ) : (
-          <>
-            <LanguageSwitcher className="block rounded-md px-3 py-2" />
-            {footerLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className="touch-target block rounded-md px-3 py-2 text-sm font-medium text-neutral-600 transition-colors duration-150 hover:bg-neutral-50 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-900/50 dark:hover:text-neutral-100"
-              >
-                {link.label}
-              </Link>
-            ))}
-            <form action={logoutAction}>
-              <button className="touch-target block w-full rounded-md px-3 py-2 text-left text-sm font-medium text-red-500 transition-colors duration-150 hover:bg-red-50 dark:hover:bg-red-950/20">
-                {t("logout")}
-              </button>
-            </form>
-          </>
-        )}
-      </div>
-    </aside>
+        <div className="space-y-6">
+          <div className={clsx("flex items-center", collapsed ? "justify-center py-1" : "px-3 py-2")}>
+            {!collapsed && (
+              <div className="min-w-0 flex-1">
+                <Link
+                  href={brandHref}
+                  className="block truncate text-lg font-bold tracking-tight text-neutral-900 transition-opacity hover:opacity-80 dark:text-white"
+                >
+                  Nekusora
+                </Link>
+                <div className="mt-0.5 truncate font-mono text-[10px] text-neutral-400 dark:text-neutral-500">
+                  {user.email}
+                  {brandBadge ? ` (${brandBadge})` : ""}
+                </div>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => setCollapsed((v) => !v)}
+              className="touch-target hidden h-7 w-7 shrink-0 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:hover:bg-neutral-900 dark:hover:text-neutral-100 md:inline-flex"
+              aria-label={collapsed ? t("expandSidebar") : t("collapseSidebar")}
+              title={collapsed ? t("expandSidebar") : t("collapseSidebar")}
+            >
+              {collapsed ? (
+                <PanelLeftOpen className="h-[18px] w-[18px]" aria-hidden="true" />
+              ) : (
+                <PanelLeftClose className="h-[18px] w-[18px]" aria-hidden="true" />
+              )}
+            </button>
+            <button
+              ref={mobileCloseRef}
+              type="button"
+              onClick={() => setMobileOpen(false)}
+              className="touch-target inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:hover:bg-neutral-900 dark:hover:text-neutral-100 md:hidden"
+              aria-label={t("closeSidebar")}
+              title={t("closeSidebar")}
+            >
+              <X className="h-[18px] w-[18px]" aria-hidden="true" />
+            </button>
+          </div>
+          <SidebarNav groups={groups} matchMode={matchMode} collapsed={collapsed} />
+        </div>
+
+        <div
+          className={clsx(
+            "border-t border-morning-mist pt-4 dark:border-deep-space",
+            collapsed ? "space-y-1" : "space-y-2",
+          )}
+        >
+          {collapsed ? (
+            <>
+              {footerLinks.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  title={link.label}
+                  aria-label={link.label}
+                  className="touch-target flex items-center justify-center rounded-md p-2 text-neutral-600 transition-colors hover:bg-neutral-50 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-900/50 dark:hover:text-neutral-100"
+                >
+                  <MessageSquare className="h-4 w-4" aria-hidden="true" />
+                </Link>
+              ))}
+              <form action={logoutAction}>
+                <button
+                  type="submit"
+                  title={t("logout")}
+                  aria-label={t("logout")}
+                  className="touch-target flex w-full items-center justify-center rounded-md p-2 text-red-500 transition-colors hover:bg-red-50 dark:hover:bg-red-950/20"
+                >
+                  <LogOut className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </form>
+            </>
+          ) : (
+            <>
+              <LanguageSwitcher className="block rounded-md px-3 py-2" />
+              {footerLinks.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="touch-target block rounded-md px-3 py-2 text-sm font-medium text-neutral-600 transition-colors duration-150 hover:bg-neutral-50 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-900/50 dark:hover:text-neutral-100"
+                >
+                  {link.label}
+                </Link>
+              ))}
+              <form action={logoutAction}>
+                <button className="touch-target block w-full rounded-md px-3 py-2 text-left text-sm font-medium text-red-500 transition-colors duration-150 hover:bg-red-50 dark:hover:bg-red-950/20">
+                  {t("logout")}
+                </button>
+              </form>
+            </>
+          )}
+        </div>
+      </aside>
+    </>
   );
 }

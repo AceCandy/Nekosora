@@ -52,7 +52,7 @@ export default function AppShell({
   children,
 }: AppShellProps) {
   return (
-    <div className="flex h-screen bg-[#fcfdff] text-[#0f121a] transition-colors duration-200 dark:bg-[#0d0f14] dark:text-[#f1f3f7]">
+    <div className="flex h-dvh flex-col bg-[#fcfdff] text-[#0f121a] transition-colors duration-200 dark:bg-[#0d0f14] dark:text-[#f1f3f7] md:flex-row">
       <DashSidebar
         user={user}
         groups={groups}
@@ -62,7 +62,9 @@ export default function AppShell({
         footerLinks={footerLinks}
         logoutAction={logoutAction}
       />
-      <main className="scroll-fade-y flex-1 overflow-auto p-8">{children}</main>
+      <main id="dash-main-content" className="scroll-fade-y min-h-0 flex-1 overflow-auto p-4 sm:p-6 md:p-8">
+        {children}
+      </main>
     </div>
   );
 }
