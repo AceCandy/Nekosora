@@ -337,3 +337,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 11: 实现文本预览端到端有界读取
+
+**Date**: 2026-07-22
+**Task**: 实现文本预览端到端有界读取
+**Branch**: `opt0722`
+
+### Summary
+
+新增单段 HTTP Range、StorageDriver 有界读取和 local/S3 实现，让文本预览只传输并解码 512KB，同时清零 lint warning。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2dba1c9` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
