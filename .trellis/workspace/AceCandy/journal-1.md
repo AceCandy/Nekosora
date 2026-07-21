@@ -304,3 +304,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 10: 修复 PDF worker 静态资源加载
+
+**Date**: 2026-07-22
+**Task**: 修复 PDF worker 静态资源加载
+**Branch**: `opt0722`
+
+### Summary
+
+将 pdf.js worker 纳入 postinstall 同源静态资源同步，修复运行时 404，并补齐 Hook 依赖与前端资源契约。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `014828b` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
