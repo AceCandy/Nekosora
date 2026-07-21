@@ -62,6 +62,50 @@
 
 详见根目录 `DESIGN.md` 的设计主线「星枢天流」。
 
+## 无障碍、主题与自适应交互契约
+
+### 键盘焦点
+
+- 共享交互原语必须显式提供 `focus-visible` 状态，不能只写 `outline-none`。
+- `globals.css` 为没有显式 `focus-visible:ring` 的原生 `a/button/input/select/textarea/summary` 提供 2px `sora-blue` outline 兜底；新增组件不要覆盖或移除该兜底，除非同时提供对比度不低于 3:1 的替代焦点样式。
+- 表单 label 必须通过 `htmlFor` / `id` 关联字段；动态错误用稳定 id + `aria-describedby`，需要即时播报时使用 `role="alert"`。
+
+```tsx
+// Wrong:视觉 label 与输入框没有程序化关联,且清掉焦点后无替代。
+<label>密码</label>
+<input className="outline-none" />
+
+// Correct:稳定关联 + 可见焦点 + 错误说明。
+<label htmlFor="password">密码</label>
+<Input id="password" aria-describedby={error ? "password-error" : undefined} />
+```
+
+浏览器检查必须使用键盘 Tab 使元素命中 `:focus-visible`，并检查截图或实际 ring/outline 颜色；仅搜索 class 名不能证明焦点可见。
+
+### 系统暗色主题
+
+项目的 Tailwind `dark:` 变体由 `<html>.dark` 驱动。`RootLayout` 必须在首屏根据 `matchMedia("(prefers-color-scheme: dark)")` 同步该 class，并监听系统主题变化；否则所有 `dark:` 与 `.dark ...` raw CSS 都是不可达样式。
+
+- `viewport.themeColor` 同时声明亮暗媒体值。
+- 新增主题相关 CSS variable 时，在 `.dark` 中补对应覆盖。
+- 运行态验证必须确认系统媒体变化后 `.dark`、页面背景和至少一个主题变量同时变化。
+
+### Reduced motion 与过渡范围
+
+- `globals.css` 的 `prefers-reduced-motion: reduce` 是全局兜底：动画/过渡降为 `0.01ms`、迭代一次、关闭 smooth scrolling。
+- 组件可以额外使用 `motion-reduce:*`，但不得删除全局兜底。
+- 禁止 `transition-all`；按实际状态变化使用 `transition-colors`、`transition-opacity`、`transition-transform` 或明确的 `transition-[...]` 属性列表。
+
+### 触屏目标
+
+需要保持桌面紧凑密度、但在触屏上达到 44px 的控件使用 `touch-target`。`globals.css` 只在 `(pointer: coarse)` 下设置 `min-width/min-height: 44px`。
+
+- 共享 `Button` / `Input` / `Select` / `Pagination` 默认接入。
+- 直接实现的图标按钮、侧栏入口和紧凑菜单项必须显式添加 `touch-target`。
+- 不要直接把所有桌面控件永久放大到 44px；用输入能力媒体查询适配。
+
+浏览器验证至少覆盖 320/390/768/1280px 无横向溢出，并在 coarse-pointer 仿真中检查 `getBoundingClientRect()` 不小于 44px。
+
 ## UI 原语约定(`shared/ui/`)
 
 - **样式拼接用 `clsx`**,不引入 `cva` / `tailwind-merge`。变体用联合字符串字面量 + `&&` 短路:
