@@ -201,7 +201,7 @@ useLayoutEffect(() => {
 - `PopoverCloseContext` 仍跨 Portal 生效(`createPortal` 保留 React 树),面板内 `usePopoverClose()` 照常工作。
 - hover 模式下面板已脱离 wrapper,需在面板自绑 `onMouseEnter/onMouseLeave`(复用 trigger 的 onEnter/onLeave),否则鼠标从 trigger 移到面板会触发 wrapper `onLeave` 收起浮层。
 - `typeof document !== "undefined"` 守卫避免 SSR 时 `createPortal` 报错(面板本就由 `effectiveOpen` 控制仅在客户端打开)。
-- `<dialog showModal>` top-layer 内的 fixed 面板定位正常,无需 Portal。
+- `<dialog showModal>` top-layer 内的 fixed 面板必须保留在 dialog 内(`Popover portal={false}`);Portal 到 `document.body` 会被 top-layer 遮挡。
 
 ### 粘贴上传的文件类型过滤
 

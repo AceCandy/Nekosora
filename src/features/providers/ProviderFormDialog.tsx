@@ -235,6 +235,7 @@ export default function ProviderFormDialog({
                   onClose={closeModelsPopover}
                   side="bottom"
                   align="right"
+                  portal={false}
                   panelClassName="p-0"
                   trigger={
                     <button

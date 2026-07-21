@@ -28,6 +28,8 @@ export interface PopoverProps {
   panelClassName?: string;
   /** 浮层面板 z-index 层级（默认 z-30，遮罩 z-20）。 */
   panelZ?: string;
+  /** 是否 Portal 到 document.body；原生 <dialog> 内应关闭，以保留 top-layer 层级。 */
+  portal?: boolean;
   /**
    * 是否改为 hover 打开（默认 false）。
    * 开启后由内部 hovered state 控制：鼠标进入触发器/面板即展开，离开延迟 150ms 收起，
@@ -51,8 +53,8 @@ export const usePopoverClose = () => useContext(PopoverCloseContext);
 /**
  * Popover -- 域无关的受控浮层壳。
  *
- * 面板用 position: fixed 相对视口定位,并通过 createPortal 渲染到 document.body,
- * 既不被祖先 overflow 容器裁剪,也不被 backdrop-filter/transform 等祖先劫持为 containing block;
+ * 面板用 position: fixed 相对视口定位,默认通过 createPortal 渲染到 document.body,
+ * 避免被祖先 overflow 裁剪或被 containing block 劫持;原生 dialog 内可关闭 Portal 以保留 top-layer 层级。
  * 位置由 useLayoutEffect 依据 trigger(wrapper) 的 getBoundingClientRect 计算,
  * 并在 scroll/resize/面板尺寸变化时重算,使面板跟随 trigger 滚动。
  *
@@ -67,6 +69,7 @@ export function Popover({
   side = "bottom",
   panelClassName,
   panelZ = "z-30",
+  portal = true,
   openOnHover = false,
   hoverDelayMs = 0,
   clickToggle = false,
@@ -149,6 +152,28 @@ export function Popover({
   }, [effectiveOpen, align, side]);
 
   const ctx = close;
+  const floatingContent = (
+    <>
+      {/* click-outside catcher：覆盖全屏，点击即关闭（hover 模式不需要） */}
+      {!openOnHover && <div className="fixed inset-0 z-20" onClick={onClose} aria-hidden="true" />}
+      <div
+        ref={panelRef}
+        // 面板内点击不冒泡到 wrapper,避免 clickToggle 模式下点面板误触发 toggle 关闭。
+        onClick={(e) => e.stopPropagation()}
+        // Portal 时面板脱离 wrapper,hover 模式需自绑 enter/leave 保持跨元素悬停连续。
+        onMouseEnter={openOnHover ? onEnter : undefined}
+        onMouseLeave={openOnHover ? onLeave : undefined}
+        style={{ visibility: "hidden" }}
+        className={clsx(
+          "fixed rounded-md border border-morning-mist dark:border-deep-space bg-white dark:bg-space-ink shadow-lg p-1",
+          panelZ,
+          panelClassName,
+        )}
+      >
+        {children}
+      </div>
+    </>
+  );
 
   return (
     <PopoverCloseContext.Provider value={ctx}>
@@ -160,28 +185,8 @@ export function Popover({
         onClick={openOnHover && clickToggle ? onWrapperClick : undefined}
       >
         {trigger}
-        {typeof document !== "undefined" && effectiveOpen && createPortal(
-          <>
-            {/* click-outside catcher：覆盖全屏，点击即关闭（hover 模式不需要） */}
-            {!openOnHover && <div className="fixed inset-0 z-20" onClick={onClose} aria-hidden="true" />}
-            <div
-              ref={panelRef}
-              // 面板内点击不冒泡到 wrapper,避免 clickToggle 模式下点面板误触发 toggle 关闭。
-              onClick={(e) => e.stopPropagation()}
-              // Portal 后面板脱离 wrapper,hover 模式需自绑 enter/leave 保持跨元素悬停连续。
-              onMouseEnter={openOnHover ? onEnter : undefined}
-              onMouseLeave={openOnHover ? onLeave : undefined}
-              style={{ visibility: "hidden" }}
-              className={clsx(
-                "fixed rounded-md border border-morning-mist dark:border-deep-space bg-white dark:bg-space-ink shadow-lg p-1",
-                panelZ,
-                panelClassName,
-              )}
-            >
-              {children}
-            </div>
-          </>,
-          document.body,
+        {typeof document !== "undefined" && effectiveOpen && (
+          portal ? createPortal(floatingContent, document.body) : floatingContent
         )}
       </div>
     </PopoverCloseContext.Provider>
