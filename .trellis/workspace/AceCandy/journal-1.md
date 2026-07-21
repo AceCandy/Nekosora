@@ -238,3 +238,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 8: 后台侧边栏移动端抽屉适配
+
+**Date**: 2026-07-22
+**Task**: 后台侧边栏移动端抽屉适配
+**Branch**: `main`
+
+### Summary
+
+后台共享侧边栏增加移动端顶栏与模态抽屉，补齐遮罩、Escape、焦点圈定、背景 inert、滚动锁与中英文无障碍文案；修复桌面折叠宽度类冲突，并完成多视口运行态验证。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a325df4` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
