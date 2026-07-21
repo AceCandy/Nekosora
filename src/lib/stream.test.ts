@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isFailoverableError, isKeyAuthError, separateSystem } from "@/lib/stream";
+import { isFailoverableError, isKeyAuthError, separateSystem, classifyStreamError } from "@/lib/stream";
 import type { IRRequest } from "@/lib/providers/types";
 
 describe("isFailoverableError", () => {
@@ -102,5 +102,67 @@ describe("separateSystem", () => {
       messages: [{ role: "system", content: "只有 system" }],
     };
     expect(() => separateSystem(request)).toThrow("消息无效");
+  });
+});
+
+describe("classifyStreamError", () => {
+  // 模拟 AI SDK RetryError:Error 子类,lastError 是 AI_APICallError(带 statusCode)
+  function makeRetryError(statusCode: number, message: string): Error {
+    const err = new Error(message);
+    (err as Record<string, unknown>).lastError = { statusCode };
+    return err;
+  }
+  // 模拟 AI_APICallError:Error 子类,带 statusCode
+  function makeApiError(statusCode: number, message: string): Error {
+    const err = new Error(message);
+    (err as Record<string, unknown>).statusCode = statusCode;
+    return err;
+  }
+
+  it("429 RetryError -> rate_limited / 429", () => {
+    expect(classifyStreamError(makeRetryError(429, "Failed after 3 attempts: Too Many Requests")))
+      .toMatchObject({ statusCode: 429, errorCode: "rate_limited" });
+  });
+
+  it("401 AI_APICallError -> auth_error / 401", () => {
+    expect(classifyStreamError(makeApiError(401, "Unauthorized")))
+      .toMatchObject({ statusCode: 401, errorCode: "auth_error" });
+  });
+
+  it("403 -> auth_error / 403", () => {
+    expect(classifyStreamError(makeApiError(403, "Forbidden")))
+      .toMatchObject({ statusCode: 403, errorCode: "auth_error" });
+  });
+
+  it("5xx -> upstream_error", () => {
+    expect(classifyStreamError(makeApiError(502, "Bad Gateway")))
+      .toMatchObject({ statusCode: 502, errorCode: "upstream_error" });
+    expect(classifyStreamError(makeApiError(503, "Service Unavailable")))
+      .toMatchObject({ statusCode: 503, errorCode: "upstream_error" });
+  });
+
+  it("无 statusCode + 网络关键字 -> network_error", () => {
+    expect(classifyStreamError(new Error("connect ETIMEDOUT")))
+      .toMatchObject({ errorCode: "network_error" });
+  });
+
+  it("无 statusCode + 无网络关键字 -> generation_failed 兜底", () => {
+    expect(classifyStreamError(new Error("some unknown error")))
+      .toMatchObject({ errorCode: "generation_failed" });
+  });
+
+  it("400(非限流/鉴权 4xx)-> generation_failed", () => {
+    expect(classifyStreamError(makeApiError(400, "Bad Request")))
+      .toMatchObject({ statusCode: 400, errorCode: "generation_failed" });
+  });
+
+  it("RetryError 取 lastError.statusCode(err 本身无 statusCode)", () => {
+    const err = new Error("retry failed");
+    (err as Record<string, unknown>).lastError = { statusCode: 429 };
+    expect(classifyStreamError(err)).toMatchObject({ statusCode: 429, errorCode: "rate_limited" });
+  });
+
+  it("message 保留原 Error.message", () => {
+    expect(classifyStreamError(new Error("Too Many Requests")).message).toBe("Too Many Requests");
   });
 });

@@ -74,6 +74,11 @@ const ERROR_CODE_MAP: Record<string, ClassifiedError> = {
   [ErrorCode.GATEWAY_UPSTREAM_ERROR]: { phase: "upstream", category: "upstream" },
   [ErrorCode.GATEWAY_ALL_ROUTES_FAILED]: { phase: "upstream", category: "service_unavailable" },
   generation_failed: { phase: "upstream", category: "upstream" },
+  // stream.ts 按真实上游 statusCode 提取的细码(区分限流/鉴权/上游/网络),与 generation_failed 兜底互补。
+  rate_limited: { phase: "request", category: "rate_limit" },
+  auth_error: { phase: "auth", category: "auth" },
+  upstream_error: { phase: "upstream", category: "upstream" },
+  network_error: { phase: "network", category: "upstream" },
 
   // —— 超时(网络层) ——
   [ErrorCode.GATEWAY_TIMEOUT]: { phase: "network", category: "upstream" },
@@ -88,8 +93,8 @@ const ERROR_CODE_MAP: Record<string, ClassifiedError> = {
   [ErrorCode.SERVER_SERVICE_UNAVAILABLE]: { phase: "internal", category: "service_unavailable" },
 };
 
-/** network/超时 关键字识别(errorMessage 中命中即归 network)。 */
-const NETWORK_KEYWORDS =
+/** network/超时 关键字识别(errorMessage 中命中即归 network)。stream.ts 复用此正则判网络错误。 */
+export const NETWORK_KEYWORDS =
   /timeout|timed out|etimedout|econnreset|enetunreach|ehostunreach|econnrefused|socket hang up|network error|connect\b/i;
 
 /** 把一次失败的可用线索分类成 phase + category。 */

@@ -70,6 +70,32 @@
 
 ---
 
+## 生成失败错误归类(`stream.ts`)
+
+stream 生成失败时,从 AI SDK 错误提取**真实上游 statusCode** 归类落库,不再笼统记 `generation_failed`/502(否则 429 限流、5xx、网络错误在后台都显示 502,丢失真实状态码)。
+
+### 提取与映射(`classifyStreamError`)
+- AI SDK `RetryError`(`maxRetriesExceeded`)的真实错误在 `lastError`(`AI_APICallError` 带 `statusCode`);直接抛出的 `AI_APICallError` 自带 `statusCode`。duck-typing 提取(`err.lastError?.statusCode ?? err.statusCode`),不依赖错误类 import。
+- 按真实 statusCode 映射短码(与 `error-classify.ts` `ERROR_CODE_MAP` 对齐,四条细码已收录):
+  - `429` -> `rate_limited`(phase=request, category=rate_limit)
+  - `401/403` -> `auth_error`(phase=auth)
+  - `5xx` -> `upstream_error`(phase=upstream)
+  - 无 statusCode + 命中网络关键字(`NETWORK_KEYWORDS`) -> `network_error`(phase=network)
+  - 其余(400/404 等 4xx 或未知)-> `generation_failed`(兜底,phase=upstream)
+- 落库(`ops_error_logs`):`httpStatus` 用真实 statusCode(无则 `SHORT_HTTP_STATUS[errorCode]`);`errorPhase` 经 `classifyError({ errorCode, httpStatus, errorMessage })` 三参同传,429 归 `rate_limit` 而非 `upstream`。`errorMessage` 保留 `lastError.message`(含 "Too Many Requests" 等原文)。
+
+### 重试策略
+- `streamText`/`generateText` 显式 `maxRetries: 0`,**禁用 AI SDK 自动重试**(默认 2 次 = 3 次尝试)。
+  - 理由:AI SDK 对 429(`isRetryable`)无脑重试放大 TPM 消耗(不尊重 `retry-after`,每次重发 messages 重复计费),5xx 重试加重上游压力;且 V5 `maxRetries` 是全局数字,不支持"只对 429 不重试"。
+  - 故障转移由 `stream.ts` 接管:多 key(`isKeyAuthError` 换 key)+ 多路由(`isFailoverableError` 转移)+ 熔断器。
+  - 代价:单路由单 key 的临时网络抖动/5xx 不再自动重试(靠多路由转移或手动重试,熔断器仍记录)。
+
+### 不变
+- 发给前端的 `error` 帧 `code` 保持粗码 `generation_failed`(前端契约不变);只落库用细码。
+- `isFailoverableError`:429 仍判可转移(换不同 provider 路由有用;换同 provider key 由 `isKeyAuthError` 挡住)。
+
+---
+
 ## Common Mistakes
 
 - **不要硬编码错误字符串进响应** → 走 `ErrorCode` + i18n,保证前端可按 code 分支。

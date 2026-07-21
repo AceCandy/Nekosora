@@ -18,7 +18,7 @@ import { getChatUA } from "@/lib/system-settings/ua";
 import { orderedWeightedKeys } from "@/lib/providers/keys";
 import { recordSuccess, recordFailure } from "@/lib/circuit-breaker";
 import { logUsage, maskKey } from "@/lib/usage";
-import { classifyError } from "@/lib/error-classify";
+import { classifyError, NETWORK_KEYWORDS } from "@/lib/error-classify";
 import { buildReasoningProviderOptions, getDefaultReasoningLevel } from "@/lib/reasoning";
 import type {
   CallContext,
@@ -92,7 +92,38 @@ const SHORT_HTTP_STATUS: Record<string, number> = {
   model_not_bound: 403,
   no_route: 503,
   capability_not_supported: 400,
+  // stream.ts 按真实上游 statusCode 提取的细码(与 error-classify ERROR_CODE_MAP 对齐)。
+  rate_limited: 429,
+  auth_error: 401,
+  upstream_error: 502,
+  network_error: 503,
 };
+
+/**
+ * 从生成错误提取真实上游 statusCode 与分类短码,供落库 httpStatus/errorCode/errorPhase 使用。
+ *
+ * AI SDK 的 RetryError(maxRetriesExceeded)把真实错误包在 lastError(AI_APICallError 带 statusCode);
+ * 直接抛出的 AI_APICallError 自带 statusCode。duck-typing 提取,不依赖错误类 import。
+ * 优先按真实 statusCode 分类(429/401/403/5xx),无 statusCode 时按 message 网络关键字,最后兜底 generation_failed。
+ */
+export function classifyStreamError(err: unknown): {
+  statusCode?: number;
+  errorCode: string;
+  message: string;
+} {
+  // RetryError.lastError 是最后一次真实错误;非 RetryError 则 err 本身即真实错误源。
+  const lastError = (err as { lastError?: unknown } | null)?.lastError;
+  const source = (lastError ?? err) as { statusCode?: number };
+  const statusCode = typeof source?.statusCode === "number" ? source.statusCode : undefined;
+  const message = err instanceof Error ? err.message : err != null ? String(err) : "生成失败";
+
+  if (statusCode === 429) return { statusCode, errorCode: "rate_limited", message };
+  if (statusCode === 401 || statusCode === 403) return { statusCode, errorCode: "auth_error", message };
+  if (statusCode !== undefined && statusCode >= 500) return { statusCode, errorCode: "upstream_error", message };
+  if (NETWORK_KEYWORDS.test(message)) return { statusCode, errorCode: "network_error", message };
+  // 其余(400/404/402 等 4xx 或无 statusCode 的未知错误):归 generation_failed。
+  return { statusCode, errorCode: "generation_failed", message };
+}
 
 /**
  * 执行一次流式生成。async generator,产出 StreamEvent。
@@ -212,14 +243,7 @@ export async function* streamChat(
     const firstTokenLatencyMs =
       timing.firstTokenAt !== undefined ? timing.firstTokenAt - startedAt : undefined;
     // 失败时的错误文案/分类(成功 / 中止路径不传错误字段)。
-    const failedErrorCode = succeeded || aborted ? undefined : "generation_failed";
-    const failedErrMsg = succeeded || aborted
-      ? undefined
-      : lastError instanceof Error
-        ? lastError.message
-        : lastError
-          ? String(lastError)
-          : undefined;
+    const failed = succeeded || aborted ? undefined : classifyStreamError(lastError);
     // try/finally 兜底:无论成功/失败/中断,都记录一条用量(中止记 interrupted,不计 generation_failed)。
     await logUsage({
       ctx,
@@ -229,12 +253,12 @@ export async function* streamChat(
       usage: finalUsage,
       latencyMs: Date.now() - startedAt,
       status: succeeded ? "success" : aborted ? "interrupted" : "failed",
-      errorCode: failedErrorCode,
-      errorMessage: failedErrMsg,
-      errorPhase: failedErrorCode
-        ? classifyError({ errorCode: failedErrorCode }).phase
+      errorCode: failed?.errorCode,
+      errorMessage: failed?.message,
+      errorPhase: failed
+        ? classifyError({ errorCode: failed.errorCode, httpStatus: failed.statusCode, errorMessage: failed.message }).phase
         : undefined,
-      errorType: failedErrorCode,
+      errorType: failed?.errorCode,
       // 路由可读信息快照(provider 改名不影响历史行)。
       providerName: usedRoute?.provider.name,
       routeId: usedRoute?.routeId,
@@ -243,7 +267,7 @@ export async function* streamChat(
         : undefined,
       upstreamModel: usedRoute?.upstreamModelName,
       firstTokenLatencyMs,
-      httpStatus: failedErrorCode ? (SHORT_HTTP_STATUS[failedErrorCode] ?? 500) : undefined,
+      httpStatus: failed ? (failed.statusCode ?? SHORT_HTTP_STATUS[failed.errorCode] ?? 500) : undefined,
       stream: true,
       taskKind: opts.taskKind,
       upstreamKeyMasked: maskKey(usedRoute?.provider.apiKey),
@@ -314,6 +338,9 @@ async function* streamWithRoute(
 
   const result = streamText({
     model,
+    // 禁用 AI SDK 自动重试(默认 2 次):429/quota 不被重试放大 TPM,5xx 不加重上游压力;
+    // 故障转移由上层 streamChat 的多 key + 多路由 + 熔断接管。
+    maxRetries: 0,
     instructions: instructionsParam as never,
     messages: messagesParam as never,
     temperature: request.temperature,
@@ -448,6 +475,8 @@ export async function generateChat(opts: StreamChatOptions): Promise<GenerateCha
           const { system, messages } = separateSystem(request);
           const result = await generateText({
             model,
+            // 禁用 AI SDK 自动重试,理由同 streamWithRoute(429 不放大、5xx 不施压),故障转移由上层接管。
+            maxRetries: 0,
             instructions: system,
             messages: messages as never,
             temperature: request.temperature,
@@ -491,14 +520,8 @@ export async function generateChat(opts: StreamChatOptions): Promise<GenerateCha
     return { text, usage: finalUsage };
   } finally {
     releaseStream();
-    const failedErrorCode = succeeded ? undefined : "generation_failed";
-    const failedErrMsg = succeeded
-      ? undefined
-      : lastError instanceof Error
-        ? lastError.message
-        : lastError
-          ? String(lastError)
-          : undefined;
+    // 失败时从真实上游错误提取 statusCode + 细码(429/鉴权/5xx/网络),成功路径不传错误字段。
+    const failed = succeeded ? undefined : classifyStreamError(lastError);
     await logUsage({
       ctx,
       runId,
@@ -507,12 +530,12 @@ export async function generateChat(opts: StreamChatOptions): Promise<GenerateCha
       usage: finalUsage,
       latencyMs: Date.now() - startedAt,
       status: succeeded ? "success" : "failed",
-      errorCode: failedErrorCode,
-      errorMessage: failedErrMsg,
-      errorPhase: failedErrorCode
-        ? classifyError({ errorCode: failedErrorCode }).phase
+      errorCode: failed?.errorCode,
+      errorMessage: failed?.message,
+      errorPhase: failed
+        ? classifyError({ errorCode: failed.errorCode, httpStatus: failed.statusCode, errorMessage: failed.message }).phase
         : undefined,
-      errorType: failedErrorCode,
+      errorType: failed?.errorCode,
       // 路由可读信息快照。
       providerName: usedRoute?.provider.name,
       routeId: usedRoute?.routeId,
@@ -522,7 +545,7 @@ export async function generateChat(opts: StreamChatOptions): Promise<GenerateCha
       upstreamModel: usedRoute?.upstreamModelName,
       // 非流式 generateText 一次性返回,无首 token 概念,TTFT 恒为 undefined。
       firstTokenLatencyMs: undefined,
-      httpStatus: failedErrorCode ? (SHORT_HTTP_STATUS[failedErrorCode] ?? 500) : undefined,
+      httpStatus: failed ? (failed.statusCode ?? SHORT_HTTP_STATUS[failed.errorCode] ?? 500) : undefined,
       stream: false,
       taskKind: opts.taskKind,
       upstreamKeyMasked: maskKey(usedRoute?.provider.apiKey),
