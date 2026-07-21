@@ -25,11 +25,22 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#ffffff",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#fcfdff" },
+    { media: "(prefers-color-scheme: dark)", color: "#0d0f14" },
+  ],
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
 };
+
+const themeScript = `
+(() => {
+  const query = window.matchMedia("(prefers-color-scheme: dark)");
+  const syncTheme = () => document.documentElement.classList.toggle("dark", query.matches);
+  syncTheme();
+  query.addEventListener("change", syncTheme);
+})();`;
 
 export default async function RootLayout({
   children,
@@ -43,6 +54,9 @@ export default async function RootLayout({
         suppressHydrationWarning
         className={`${inter.variable} ${jetbrainsMono.variable} ${notoSansSC.variable}`}
       >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
       <body>
         <NextIntlClientProvider locale={locale} messages={messages}>
           {children}

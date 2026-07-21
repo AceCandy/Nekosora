@@ -137,11 +137,11 @@ function CardItem({
         </div>
         {isMine && (
           <div className="flex items-center gap-1 shrink-0">
-            <button onClick={onEdit} className="p-1 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300" title={t("editButton")}>
-              <Pencil className="w-3.5 h-3.5" />
+            <button type="button" onClick={onEdit} className="touch-target inline-flex items-center justify-center p-1 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300" title={t("editButton")} aria-label={t("editButton")}>
+              <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
             </button>
-            <button onClick={onDelete} className="p-1 text-neutral-400 hover:text-red-500" title={t("deleteButton")}>
-              <Trash2 className="w-3.5 h-3.5" />
+            <button type="button" onClick={onDelete} className="touch-target inline-flex items-center justify-center p-1 text-neutral-400 hover:text-red-500" title={t("deleteButton")} aria-label={t("deleteButton")}>
+              <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
             </button>
           </div>
         )}

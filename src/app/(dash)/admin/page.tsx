@@ -42,7 +42,7 @@ export default async function AdminHomePage() {
           <Link
             key={s.labelKey}
             href={s.href}
-            className="group block rounded-lg border border-morning-mist bg-white p-5 hover:border-sora-blue/30 hover:bg-neutral-50/50 dark:border-deep-space dark:bg-twilight-obsidian dark:hover:border-sora-blue/20 dark:hover:bg-neutral-900/30 transition-all duration-200 shadow-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.03)]"
+            className="group block rounded-lg border border-morning-mist bg-white p-5 hover:border-sora-blue/30 hover:bg-neutral-50/50 dark:border-deep-space dark:bg-twilight-obsidian dark:hover:border-sora-blue/20 dark:hover:bg-neutral-900/30 transition-[background-color,border-color,box-shadow] duration-200 shadow-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.03)]"
           >
             <div className="text-xs font-medium text-neutral-400 dark:text-neutral-500 group-hover:text-sora-blue transition-colors">{t(s.labelKey)}</div>
             <div className="mt-2 text-3xl font-semibold tracking-tight text-neutral-900 dark:text-white font-mono">{s.value}</div>
@@ -58,7 +58,7 @@ export default async function AdminHomePage() {
             <Link
               key={q.href}
               href={q.href}
-              className="block rounded-lg border border-morning-mist bg-white p-5 hover:border-sora-blue/30 hover:bg-neutral-50/50 dark:border-deep-space dark:bg-twilight-obsidian dark:hover:border-sora-blue/20 dark:hover:bg-neutral-900/30 transition-all duration-200 shadow-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.03)]"
+              className="block rounded-lg border border-morning-mist bg-white p-5 hover:border-sora-blue/30 hover:bg-neutral-50/50 dark:border-deep-space dark:bg-twilight-obsidian dark:hover:border-sora-blue/20 dark:hover:bg-neutral-900/30 transition-[background-color,border-color,box-shadow] duration-200 shadow-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.03)]"
             >
               <div className="text-sm font-semibold text-neutral-800 dark:text-neutral-200">{t(q.titleKey)}</div>
               <div className="mt-1 text-xs text-neutral-400 dark:text-neutral-500 leading-relaxed">{t(q.descKey)}</div>

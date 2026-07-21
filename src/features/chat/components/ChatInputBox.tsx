@@ -218,7 +218,7 @@ export function ChatInputBox({
         {disabled ? (
           <button
             onClick={onStop}
-            className="pointer-events-auto inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-red-500 text-white transition-all duration-200 hover:bg-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+            className="touch-target pointer-events-auto inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-red-500 text-white transition-[background-color,box-shadow,opacity,transform] duration-200 hover:bg-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
             title={t("stopGeneration")}
             aria-label={t("stopGeneration")}
           >
@@ -230,7 +230,7 @@ export function ChatInputBox({
           <button
             onClick={onSend}
             disabled={!value.trim()}
-            className="pointer-events-auto inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-transparent text-neutral-700 transition-all duration-200 hover:bg-neutral-100 disabled:cursor-default disabled:text-neutral-300 disabled:hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none dark:text-neutral-200 dark:hover:bg-neutral-800 dark:disabled:text-neutral-600 dark:disabled:hover:bg-transparent"
+            className="touch-target pointer-events-auto inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-transparent text-neutral-700 transition-[background-color,color,box-shadow,opacity,transform] duration-200 hover:bg-neutral-100 disabled:cursor-default disabled:text-neutral-300 disabled:hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none dark:text-neutral-200 dark:hover:bg-neutral-800 dark:disabled:text-neutral-600 dark:disabled:hover:bg-transparent"
             title={t("send")}
             aria-label={t("send")}
           >

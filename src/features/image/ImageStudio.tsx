@@ -163,7 +163,7 @@ export default function ImageStudio({ models }: { models: ImageModel[] }) {
         <button
           onClick={handleGenerate}
           disabled={!prompt.trim() || generating}
-          className="w-full inline-flex items-center justify-center gap-1.5 rounded-md bg-sora-blue hover:bg-sora-blue-hover text-white px-4 py-2.5 text-sm font-semibold disabled:opacity-40 transition-all duration-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
+          className="touch-target w-full inline-flex items-center justify-center gap-1.5 rounded-md bg-sora-blue hover:bg-sora-blue-hover text-white px-4 py-2.5 text-sm font-semibold disabled:opacity-40 transition-[background-color,box-shadow,opacity,transform] duration-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
         >
           {generating ? (
             <>

@@ -264,7 +264,7 @@ function ModelParamsPicker({
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={clsx(
-          "inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-semibold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer",
+          "touch-target inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-semibold transition-[background-color,color,border-color,box-shadow,opacity] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer",
           hasCustom
             ? "border-sora-blue/30 bg-sora-blue/[0.04] text-sora-blue"
             : "border-morning-mist dark:border-deep-space bg-white dark:bg-space-ink text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900",
@@ -328,7 +328,7 @@ function ReasoningPicker({
         onClick={() => { if (!fixed) setOpen((v) => !v); }}
         disabled={fixed}
         className={clsx(
-          "inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-semibold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue",
+          "touch-target inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-semibold transition-[background-color,color,border-color,box-shadow,opacity] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue",
           fixed ? "cursor-default opacity-80" : "cursor-pointer",
           active
             ? "border-sora-blue/30 bg-sora-blue/[0.04] text-sora-blue"

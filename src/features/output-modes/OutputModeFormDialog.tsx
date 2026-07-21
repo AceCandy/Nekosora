@@ -100,7 +100,7 @@ export default function OutputModeFormDialog({
               rows={6}
               defaultValue={initial?.systemPrompt ?? ""}
               placeholder={t("promptPlaceholder")}
-              className="w-full rounded-md border border-morning-mist dark:border-deep-space bg-white dark:bg-[#0f121a] px-3 py-2 text-sm text-space-ink dark:text-nebula-silver focus:outline-none focus:border-sora-blue dark:focus:border-sora-blue focus-visible:ring-2 focus-visible:ring-sora-blue/20 transition-all duration-150 font-mono resize-y"
+              className="w-full rounded-md border border-morning-mist dark:border-deep-space bg-white dark:bg-[#0f121a] px-3 py-2 text-sm text-space-ink dark:text-nebula-silver focus:outline-none focus:border-sora-blue dark:focus:border-sora-blue focus-visible:ring-2 focus-visible:ring-sora-blue transition-[background-color,color,border-color,box-shadow] duration-150 font-mono resize-y"
             />
           </label>
         </div>

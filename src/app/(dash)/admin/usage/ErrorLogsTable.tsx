@@ -132,7 +132,7 @@ export function ErrorLogsTable({
     <div className="space-y-3">
       <ErrorFilterBar variant={variant} values={filterValues} labels={labels} basePath={basePath} />
 
-      <div className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] overflow-hidden shadow-none transition-all duration-200">
+      <div className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] overflow-hidden shadow-none">
         <div className="overflow-x-auto">
           <table className="w-full text-xs border-collapse">
             <thead>

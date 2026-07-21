@@ -118,7 +118,7 @@ export default function SidebarNav({ groups, matchMode = "exact", collapsed = fa
                 title={collapsed ? t(item.labelKey) : undefined}
                 aria-label={collapsed ? t(item.labelKey) : undefined}
                 className={clsx(
-                  "group/nav flex items-center rounded-md text-sm font-medium transition-all duration-150 ease-out",
+                  "touch-target group/nav flex items-center rounded-md text-sm font-medium transition-[background-color,color,padding] duration-150 ease-out",
                   collapsed ? "justify-center p-2" : "gap-2 px-3 py-2",
                   isActive
                     ? "bg-sora-blue/8 text-sora-blue dark:bg-sora-blue/10"

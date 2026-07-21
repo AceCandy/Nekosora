@@ -59,14 +59,14 @@ export default async function KnowledgePage() {
           name="name"
           placeholder={t("namePlaceholder")}
           required
-          className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-3 py-2 text-sm focus:outline-none focus:border-sora-blue"
+          className="touch-target w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-3 py-2 text-sm focus:outline-none focus:border-sora-blue"
         />
         <input
           name="description"
           placeholder={t("descPlaceholder")}
-          className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-3 py-2 text-sm focus:outline-none focus:border-sora-blue"
+          className="touch-target w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-3 py-2 text-sm focus:outline-none focus:border-sora-blue"
         />
-        <button type="submit" className="rounded-md bg-sora-blue hover:bg-sora-blue-hover text-white px-4 py-2 text-sm font-semibold cursor-pointer">
+        <button type="submit" className="touch-target rounded-md bg-sora-blue hover:bg-sora-blue-hover text-white px-4 py-2 text-sm font-semibold cursor-pointer">
           {t("createBtn")}
         </button>
       </form>
@@ -85,8 +85,8 @@ export default async function KnowledgePage() {
                   <div className="text-[11px] text-neutral-400 mt-1 font-mono">{kb.fileCount} {t("files")}</div>
                 </div>
                 <form action={handleDelete.bind(null, kb.id)}>
-                  <button type="submit" className="p-1.5 rounded text-neutral-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors cursor-pointer" aria-label={t("delete")}>
-                    <Trash2 className="w-4 h-4" />
+                  <button type="submit" className="touch-target inline-flex items-center justify-center p-1.5 rounded text-neutral-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors cursor-pointer" aria-label={t("delete")}>
+                    <Trash2 className="w-4 h-4" aria-hidden="true" />
                   </button>
                 </form>
               </div>
@@ -94,13 +94,13 @@ export default async function KnowledgePage() {
               {freeFiles.length > 0 && (
                 <form action={handleAttach} className="flex items-center gap-2">
                   <input type="hidden" name="kbId" value={kb.id} />
-                  <select name="fileId" className="flex-1 rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-2 py-1.5 text-xs focus:outline-none focus:border-sora-blue cursor-pointer">
+                  <select name="fileId" className="touch-target flex-1 rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-2 py-1.5 text-xs focus:outline-none focus:border-sora-blue cursor-pointer">
                     <option value="">{t("selectFile")}</option>
                     {freeFiles.map((f: { id: string; filename: string }) => (
                       <option key={f.id} value={f.id}>{f.filename}</option>
                     ))}
                   </select>
-                  <button type="submit" className="rounded-md border border-neutral-200 dark:border-neutral-800 px-3 py-1.5 text-xs font-semibold hover:bg-neutral-50 dark:hover:bg-neutral-900 cursor-pointer">
+                  <button type="submit" className="touch-target rounded-md border border-neutral-200 dark:border-neutral-800 px-3 py-1.5 text-xs font-semibold hover:bg-neutral-50 dark:hover:bg-neutral-900 cursor-pointer">
                     {t("attach")}
                   </button>
                 </form>

@@ -166,7 +166,7 @@ export function ChatOutline({ messages, streaming }: ChatOutlineProps) {
             <span
               key={turn.userIndex}
               className={clsx(
-                "block rounded-full transition-all duration-150",
+                "block rounded-full transition-[width,height,background-color,opacity,transform] duration-150",
                 isGenerating
                   ? "w-2 h-2 bg-sora-blue animate-pulse"
                   : isScrub || isActive

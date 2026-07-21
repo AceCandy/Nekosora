@@ -9,7 +9,7 @@ export function Badge({ className, variant = "neutral", children, ...props }: Ba
   return (
     <span
       className={clsx(
-        "inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold border transition-all duration-150",
+        "inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold border transition-[background-color,color,border-color,opacity] duration-150",
         variant === "primary" && "bg-sora-blue/[0.03] border-sora-blue/20 text-sora-blue",
         variant === "warning" && "bg-neku-amber/[0.03] border-neku-amber/20 text-neku-amber",
         variant === "success" && "bg-green-500/[0.03] border-green-500/20 text-green-600 dark:text-green-400",

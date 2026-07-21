@@ -20,12 +20,25 @@ export interface TimeSeriesPoint {
 export interface ModelRow { model: string; calls: number; promptTokens: number; completionTokens: number; }
 export interface SourceRow { source: string; calls: number; }
 
-const PROMPT_COLOR = "#3b6fb6";    // sora-blue 系
-const COMPLETION_COLOR = "#9db8d4"; // 莫兰迪蓝灰
-const CALLS_COLOR = "#5a7a9e";
-const PIE_COLORS = ["#3b6fb6", "#6b8cae", "#9db8d4", "#c4d2e0", "#7a93a8", "#536b82"];
+const PROMPT_COLOR = "var(--color-chart-1)";
+const COMPLETION_COLOR = "var(--color-chart-2)";
+const CALLS_COLOR = "var(--color-chart-3)";
+const PIE_COLORS = [
+  "var(--color-chart-1)",
+  "var(--color-chart-2)",
+  "var(--color-chart-3)",
+  "var(--color-chart-4)",
+  "var(--color-chart-5)",
+  "var(--color-chart-6)",
+];
 
-const tooltipStyle = { fontSize: 11, borderRadius: 6, border: "1px solid rgba(120,120,120,0.2)" };
+const tooltipStyle = {
+  fontSize: 11,
+  borderRadius: 6,
+  border: "1px solid var(--color-chart-tooltip-border)",
+  backgroundColor: "var(--color-chart-tooltip-bg)",
+  color: "var(--color-chart-tooltip-text)",
+};
 const legendStyle = { fontSize: 11 };
 
 // recharts v3 formatter 类型严格(value 可能为 undefined/非 number),用宽类型兼容。
@@ -58,9 +71,9 @@ export function RequestsTrendChart({ data }: { data: TimeSeriesPoint[] }) {
             <stop offset="95%" stopColor={COMPLETION_COLOR} stopOpacity={0.05} />
           </linearGradient>
         </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="rgba(120,120,120,0.12)" vertical={false} />
-        <XAxis dataKey="bucket" tick={{ fontSize: 10, fill: "#888" }} interval="preserveStartEnd" minTickGap={32} />
-        <YAxis tick={{ fontSize: 10, fill: "#888" }} width={48} />
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-chart-grid)" vertical={false} />
+        <XAxis dataKey="bucket" tick={{ fontSize: 10, fill: "var(--color-chart-axis)" }} interval="preserveStartEnd" minTickGap={32} />
+        <YAxis tick={{ fontSize: 10, fill: "var(--color-chart-axis)" }} width={48} />
         <Tooltip
           contentStyle={tooltipStyle}
           formatter={formatNumber}
@@ -84,9 +97,9 @@ export function ModelTokensChart({ data }: { data: ModelRow[] }) {
   return (
     <ResponsiveContainer width="100%" height={260}>
       <BarChart data={top} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="rgba(120,120,120,0.12)" vertical={false} />
-        <XAxis dataKey="model" tick={{ fontSize: 10, fill: "#888" }} interval={0} />
-        <YAxis tick={{ fontSize: 10, fill: "#888" }} width={48} />
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-chart-grid)" vertical={false} />
+        <XAxis dataKey="model" tick={{ fontSize: 10, fill: "var(--color-chart-axis)" }} interval={0} />
+        <YAxis tick={{ fontSize: 10, fill: "var(--color-chart-axis)" }} width={48} />
         <Tooltip
           contentStyle={tooltipStyle}
           formatter={formatNumber}
@@ -133,9 +146,9 @@ export function SourceBar({ data }: { data: SourceRow[] }) {
   return (
     <ResponsiveContainer width="100%" height={180}>
       <BarChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="rgba(120,120,120,0.12)" vertical={false} />
-        <XAxis dataKey="source" tick={{ fontSize: 11, fill: "#888" }} />
-        <YAxis tick={{ fontSize: 10, fill: "#888" }} width={48} />
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-chart-grid)" vertical={false} />
+        <XAxis dataKey="source" tick={{ fontSize: 11, fill: "var(--color-chart-axis)" }} />
+        <YAxis tick={{ fontSize: 10, fill: "var(--color-chart-axis)" }} width={48} />
         <Tooltip
           contentStyle={tooltipStyle}
           formatter={formatNumber}

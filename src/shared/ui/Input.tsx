@@ -12,10 +12,13 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         ref={ref}
         type={type}
         className={clsx(
-          "w-full rounded-md border border-morning-mist dark:border-deep-space",
-          "bg-white dark:bg-[#0f121a] px-3 py-2 text-sm text-space-ink dark:text-nebula-silver",
+          "touch-target w-full rounded-md border border-morning-mist dark:border-deep-space",
+          "bg-white dark:bg-space-ink px-3 py-2 text-sm text-space-ink dark:text-nebula-silver",
+          "placeholder:text-neutral-600 dark:placeholder:text-neutral-400",
           "focus:outline-none focus:border-sora-blue dark:focus:border-sora-blue",
-          "focus-visible:ring-2 focus-visible:ring-sora-blue/20 transition-all duration-150",
+          "focus-visible:ring-2 focus-visible:ring-sora-blue focus-visible:ring-offset-1",
+          "focus-visible:ring-offset-white dark:focus-visible:ring-offset-space-ink",
+          "transition-[background-color,color,border-color,box-shadow] duration-150",
           "disabled:opacity-50 disabled:cursor-not-allowed",
           className
         )}

@@ -214,7 +214,7 @@ export default async function MemoryPage() {
               </span>
               <select
                 name="scope"
-                className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#0f121a] px-3.5 py-2 text-sm focus:outline-none focus:border-blue-500 dark:focus:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500/20 text-neutral-800 dark:text-neutral-200 transition-all duration-150"
+                className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#0f121a] px-3.5 py-2 text-sm focus:outline-none focus:border-blue-500 dark:focus:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500 text-neutral-800 dark:text-neutral-200 transition-[background-color,color,border-color,box-shadow] duration-150"
               >
                 <option value="preference">{t("scopePreferenceOpt")}</option>
                 <option value="profile">{t("scopeProfileOpt")}</option>
@@ -231,7 +231,7 @@ export default async function MemoryPage() {
                 required
                 placeholder={t("contentPlaceholder")}
                 rows={4}
-                className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#0f121a] px-3.5 py-2 text-sm focus:outline-none focus:border-blue-500 dark:focus:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500/20 text-neutral-800 dark:text-neutral-200 transition-all duration-150 resize-none"
+                className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#0f121a] px-3.5 py-2 text-sm focus:outline-none focus:border-blue-500 dark:focus:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500 text-neutral-800 dark:text-neutral-200 transition-[background-color,color,border-color,box-shadow] duration-150 resize-none"
               />
             </label>
 

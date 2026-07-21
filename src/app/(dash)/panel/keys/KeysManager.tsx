@@ -263,7 +263,7 @@ export default function KeysManager({
                     key={sk.id}
                     onClick={() => setSelectedSubKeyId(sk.id)}
                     className={clsx(
-                      "cursor-pointer rounded-lg border p-3.5 flex items-center justify-between transition-all duration-150 group",
+                      "cursor-pointer rounded-lg border p-3.5 flex items-center justify-between transition-[background-color,border-color,box-shadow] duration-150 group",
                       isActive
                         ? "bg-sora-blue/[0.03] border-sora-blue/40 text-neutral-900 dark:text-white"
                         : "bg-nebula-white dark:bg-[#0d0f14] border-morning-mist dark:border-deep-space text-neutral-700 dark:text-neutral-300 hover:border-neutral-300 dark:hover:border-neutral-700"

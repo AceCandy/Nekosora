@@ -22,6 +22,12 @@
   --color-chart-3: oklch(0.68 0.10 270);
   --color-chart-4: oklch(0.72 0.09 200);
   --color-chart-5: oklch(0.75 0.15 80);
+  --color-chart-6: oklch(0.55 0.06 245);
+  --color-chart-axis: oklch(0.45 0.01 250);
+  --color-chart-grid: oklch(0.88 0.008 250);
+  --color-chart-tooltip-bg: oklch(0.99 0.003 250);
+  --color-chart-tooltip-border: oklch(0.88 0.008 250);
+  --color-chart-tooltip-text: oklch(0.22 0.012 260);
   
   /* 默认态正文(prose)基线辅助灰:代码块/行内代码/列表标记的背景、边框、文字色。
      精确等价原字面量(非就近近似),集中在此维护;暗色值由下方 .dark 覆盖。 */
@@ -46,6 +52,11 @@
 
 /* prose 基线辅助灰的暗色覆盖(marker 明暗同值,无需覆盖)。 */
 .dark {
+  --color-chart-axis: oklch(0.72 0.01 250);
+  --color-chart-grid: oklch(0.32 0.015 250);
+  --color-chart-tooltip-bg: oklch(0.16 0.01 260);
+  --color-chart-tooltip-border: oklch(0.32 0.015 250);
+  --color-chart-tooltip-text: oklch(0.92 0.005 250);
   --color-prose-code-bg: oklch(0.165 0.008 260);
   --color-prose-code-border: oklch(0.24 0.01 260);
   --color-prose-code-header: oklch(0.7 0.01 260);
@@ -72,6 +83,29 @@ body {
     Roboto,
     sans-serif;
   -webkit-font-smoothing: antialiased;
+}
+
+:where(a[href], button, input, select, textarea, summary):not([class*="focus-visible:ring"]):focus-visible {
+  outline: 2px solid var(--color-sora-blue);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (pointer: coarse) {
+  .touch-target {
+    min-width: 44px;
+    min-height: 44px;
+  }
 }
 
 /* 滚动条默认隐去，仅在实际滚动后的短时间内以低对比度显示。 */

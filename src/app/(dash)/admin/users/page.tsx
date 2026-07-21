@@ -15,7 +15,7 @@ export default async function UsersPage() {
     <div className="space-y-6">
       <PageHeader icon={Users} title={tn("users")} desc={t("desc")} />
 
-      <div className="rounded-lg border border-morning-mist bg-nebula-white dark:border-deep-space dark:bg-twilight-obsidian overflow-hidden shadow-none transition-all duration-200">
+      <div className="rounded-lg border border-morning-mist bg-nebula-white dark:border-deep-space dark:bg-twilight-obsidian overflow-hidden shadow-none">
         <div className="overflow-x-auto">
           <table className="w-full text-sm border-collapse">
             <thead>

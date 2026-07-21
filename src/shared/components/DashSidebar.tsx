@@ -66,7 +66,7 @@ export default function DashSidebar({
           <button
             type="button"
             onClick={() => setCollapsed((v) => !v)}
-            className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:hover:bg-neutral-900 dark:hover:text-neutral-100 md:inline-flex"
+            className="touch-target hidden h-7 w-7 shrink-0 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:hover:bg-neutral-900 dark:hover:text-neutral-100 md:inline-flex"
             aria-label={collapsed ? "展开侧边栏" : "收起侧边栏"}
             title={collapsed ? "展开侧边栏" : "收起侧边栏"}
           >
@@ -94,7 +94,7 @@ export default function DashSidebar({
                 href={link.href}
                 title={link.label}
                 aria-label={link.label}
-                className="flex items-center justify-center rounded-md p-2 text-neutral-600 transition-colors hover:bg-neutral-50 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-900/50 dark:hover:text-neutral-100"
+                className="touch-target flex items-center justify-center rounded-md p-2 text-neutral-600 transition-colors hover:bg-neutral-50 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-900/50 dark:hover:text-neutral-100"
               >
                 <MessageSquare className="h-4 w-4" aria-hidden="true" />
               </Link>
@@ -104,7 +104,7 @@ export default function DashSidebar({
                 type="submit"
                 title={t("logout")}
                 aria-label={t("logout")}
-                className="flex w-full items-center justify-center rounded-md p-2 text-red-500 transition-colors hover:bg-red-50 dark:hover:bg-red-950/20"
+                className="touch-target flex w-full items-center justify-center rounded-md p-2 text-red-500 transition-colors hover:bg-red-50 dark:hover:bg-red-950/20"
               >
                 <LogOut className="h-4 w-4" aria-hidden="true" />
               </button>
@@ -117,13 +117,13 @@ export default function DashSidebar({
               <Link
                 key={link.href}
                 href={link.href}
-                className="block rounded-md px-3 py-2 text-sm font-medium text-neutral-600 transition-all duration-150 hover:bg-neutral-50 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-900/50 dark:hover:text-neutral-100"
+                className="touch-target block rounded-md px-3 py-2 text-sm font-medium text-neutral-600 transition-colors duration-150 hover:bg-neutral-50 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-900/50 dark:hover:text-neutral-100"
               >
                 {link.label}
               </Link>
             ))}
             <form action={logoutAction}>
-              <button className="block w-full rounded-md px-3 py-2 text-left text-sm font-medium text-red-500 transition-all duration-150 hover:bg-red-50 dark:hover:bg-red-950/20">
+              <button className="touch-target block w-full rounded-md px-3 py-2 text-left text-sm font-medium text-red-500 transition-colors duration-150 hover:bg-red-50 dark:hover:bg-red-950/20">
                 {t("logout")}
               </button>
             </form>
