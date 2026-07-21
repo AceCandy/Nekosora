@@ -1,5 +1,6 @@
 "use client";
 import { useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import type { FormDataSerializableAction } from "@/features/providers/types";
 import type { ProviderKeyResult } from "@/db/schema/pg";
@@ -82,6 +83,7 @@ interface ProvidersManagerProps {
   modelProbeActions?: Record<string, ModelProbeAction>;
   /** 已配置的路由引用(用于检测模型悬浮窗标注哪些上游模型已配路由)。 */
   routes?: ProviderRouteRef[];
+  modelCreatePath: "/panel/models" | "/admin/models";
 }
 
 export default function ProvidersManager({
@@ -96,7 +98,9 @@ export default function ProvidersManager({
   refreshActions,
   modelProbeActions,
   routes,
+  modelCreatePath,
 }: ProvidersManagerProps) {
+  const router = useRouter();
   const t = useTranslations("providers");
   const [addOpen, setAddOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -280,18 +284,20 @@ export default function ProvidersManager({
     const listed = models.filter((m) => configured?.has(m));
     const rest = models.filter((m) => !configured?.has(m));
     return [...listed, ...rest].map((m) => (
-      <div
+      <button
+        type="button"
         key={m}
         title={m}
+        onClick={() => router.push(`${modelCreatePath}?createModel=1&name=${encodeURIComponent(m)}&providerId=${encodeURIComponent(p.id)}&upstreamModelName=${encodeURIComponent(m)}`)}
         className={clsx(
-          "px-2 py-1 text-xs font-mono truncate",
+          "block w-full text-left px-2 py-1 text-xs font-mono truncate hover:bg-sora-blue/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sora-blue",
           configured?.has(m)
             ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300"
             : "bg-neutral-100 dark:bg-neutral-800/60 text-neutral-600 dark:text-neutral-400",
         )}
       >
         {m}
-      </div>
+      </button>
     ));
   };
 

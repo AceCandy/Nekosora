@@ -23,9 +23,11 @@ import { getTranslations } from "next-intl/server";
 import { Boxes } from "lucide-react";
 import { PageHeader } from "@/shared/components/PageHeader";
 
-export default async function ModelsPage() {
+export default async function ModelsPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   const tn = await getTranslations("nav");
   const t = await getTranslations("admin.models");
+  const query = (await searchParams) ?? {};
+  const queryValue = (key: string) => (Array.isArray(query[key]) ? query[key]?.[0] : query[key]) ?? "";
   const [models, providers, routes] = await Promise.all([
     listModels(),
     listProviders(),
@@ -109,6 +111,11 @@ export default async function ModelsPage() {
         fetchModelsAction={listUpstreamModels}
         testRouteActions={testRouteActions}
         reorderAction={reorderModels}
+        createInitial={queryValue("createModel") === "1" ? {
+          name: queryValue("name"),
+          providerId: queryValue("providerId"),
+          upstreamModelName: queryValue("upstreamModelName"),
+        } : undefined}
       />
     </div>
   );

@@ -26,11 +26,13 @@ import { requireSession } from "@/lib/session";
 import { Boxes } from "lucide-react";
 import { PageHeader } from "@/shared/components/PageHeader";
 
-export default async function MyModelsPage() {
+export default async function MyModelsPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   const t = await getTranslations("panel.models");
   const tn = await getTranslations("nav");
   const user = await requireSession();
   const isAdmin = user.role === "admin";
+  const query = (await searchParams) ?? {};
+  const queryValue = (key: string) => (Array.isArray(query[key]) ? query[key]?.[0] : query[key]) ?? "";
   const [models, providers, catalog] = await Promise.all([
     getMyModels(),
     getMyProviders(),
@@ -140,6 +142,11 @@ export default async function MyModelsPage() {
           reorderAction={reorderMyModels.bind(null, "private")}
           groupedReorderAction={isAdmin ? reorderMyModels : undefined}
           visibilityActions={isAdmin ? visibilityActions : undefined}
+          createInitial={queryValue("createModel") === "1" ? {
+            name: queryValue("name"),
+            providerId: queryValue("providerId"),
+            upstreamModelName: queryValue("upstreamModelName"),
+          } : undefined}
         />
       )}
     </div>

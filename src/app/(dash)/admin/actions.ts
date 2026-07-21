@@ -520,7 +520,15 @@ export async function createModel(formData: FormData) {
   const admin = await requireAdmin();
   const db = await getDb();
   const name = String(formData.get("name") ?? "");
+  const providerId = String(formData.get("providerId") ?? "");
+  const upstreamModelName = String(formData.get("upstreamModelName") ?? "");
   const visibility = resolveVisibility(formData);
+  const [duplicate] = await db
+    .select({ id: S().models.id })
+    .from(S().models)
+    .where(and(eq(S().models.ownerUserId, admin.id), eq(S().models.name, name)))
+    .limit(1);
+  if (duplicate) throw new Error(`MODEL_ALREADY_EXISTS: ${visibility === "public" ? "已存在同名 public 模型" : "已存在同名模型"}`);
   const catalogId = String(formData.get("catalogId") ?? "");
   const displayName = await resolveDisplayName(db, String(formData.get("displayName") ?? ""), catalogId, name);
   // public 模型 name 全局唯一(应用层校验,避免多 admin 建同名 public)。
@@ -538,16 +546,15 @@ export async function createModel(formData: FormData) {
     .from(S().models)
     .where(eq(S().models.ownerUserId, admin.id));
   const nextSort = (maxRow?.maxSort ?? -1) + 1;
-  await db.insert(S().models).values({
-    ownerUserId: admin.id,
-    visibility,
-    name,
-    displayName,
-    catalogId,
-    enabled: true,
-    systemPrompt: String(formData.get("systemPrompt") ?? "") || null,
-    description: String(formData.get("description") ?? "") || null,
-    sortOrder: nextSort,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await db.transaction(async (tx: any) => {
+    await tx.insert(S().models).values({ ownerUserId: admin.id, visibility, name, displayName, catalogId, enabled: true, systemPrompt: String(formData.get("systemPrompt") ?? "") || null, description: String(formData.get("description") ?? "") || null, sortOrder: nextSort });
+    const [created] = await tx.select({ id: S().models.id }).from(S().models).where(and(eq(S().models.ownerUserId, admin.id), eq(S().models.name, name))).limit(1);
+    if (providerId && upstreamModelName) {
+      const [provider] = await tx.select({ id: S().providers.id }).from(S().providers).where(eq(S().providers.id, providerId)).limit(1);
+      if (!provider) throw new Error("服务商不存在");
+      await tx.insert(S().routes).values({ ownerUserId: admin.id, modelId: created.id, providerId, upstreamModelName, enabled: true });
+    }
   });
   revalidatePath("/admin", "layout");
 }

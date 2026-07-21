@@ -102,6 +102,7 @@ interface ModelsManagerProps {
   groupedReorderAction?: (visibility: ModelVisibility, orderedIds: string[]) => void | Promise<void>;
   /** 管理员列表中的发布/收回 action(按模型 id 索引)。 */
   visibilityActions?: Record<string, ModelVisibilityActions>;
+  createInitial?: ModelInitial;
 }
 
 export interface ModelCatalogOption {
@@ -130,13 +131,14 @@ export default function ModelsManager({
   reorderAction,
   groupedReorderAction,
   visibilityActions,
+  createInitial,
 }: ModelsManagerProps) {
   const t = useTranslations("models");
   // visibility 列仅 admin 可见;普通用户模型恒 private,不显示该列。
   const showVisibility = isAdmin;
   const groupedReorderable = isAdmin && Boolean(groupedReorderAction);
   const reorderable = Boolean(reorderAction || groupedReorderAction);
-  const [addOpen, setAddOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(Boolean(createInitial));
   const [editId, setEditId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [publishId, setPublishId] = useState<string | null>(null);
@@ -350,6 +352,7 @@ export default function ModelsManager({
         mode="add"
         isAdmin={isAdmin}
         action={createAction}
+        initial={createInitial}
         catalog={catalog}
       />
       {editing && (

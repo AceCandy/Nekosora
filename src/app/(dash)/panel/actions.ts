@@ -505,6 +505,14 @@ export async function createMyModel(formData: FormData) {
         : "private"
       : "private";
   const name = String(formData.get("name") ?? "");
+  const providerId = String(formData.get("providerId") ?? "");
+  const upstreamModelName = String(formData.get("upstreamModelName") ?? "");
+  const [duplicate] = await db
+    .select({ id: S().models.id })
+    .from(S().models)
+    .where(and(eq(S().models.ownerUserId, user.id), eq(S().models.name, name)))
+    .limit(1);
+  if (duplicate) throw new Error(`MODEL_ALREADY_EXISTS: ${visibility === "public" ? "已存在同名 public 模型" : "已存在同名模型"}`);
   const catalog = await resolveCatalogId(db, name, String(formData.get("catalogId") ?? ""));
   if (visibility === "public") {
     const [dup] = await db
@@ -525,21 +533,25 @@ export async function createMyModel(formData: FormData) {
       ),
     );
   const nextSort = (maxRow?.maxSort ?? -1) + 1;
-  await db.insert(S().models).values({
-    ownerUserId: user.id,
-    visibility,
-    name,
-    displayName: pickDisplayName(
-      String(formData.get("displayName") ?? ""),
-      catalog.name,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await db.transaction(async (tx: any) => {
+    await tx.insert(S().models).values({
+      ownerUserId: user.id,
+      visibility,
       name,
-      catalog.canonicalModelId,
-    ),
-    catalogId: catalog.id,
-    systemPrompt: String(formData.get("systemPrompt") ?? "") || null,
-    description: String(formData.get("description") ?? "") || null,
-    enabled: true,
-    sortOrder: nextSort,
+      displayName: pickDisplayName(String(formData.get("displayName") ?? ""), catalog.name, name, catalog.canonicalModelId),
+      catalogId: catalog.id,
+      systemPrompt: String(formData.get("systemPrompt") ?? "") || null,
+      description: String(formData.get("description") ?? "") || null,
+      enabled: true,
+      sortOrder: nextSort,
+    });
+    const [created] = await tx.select({ id: S().models.id }).from(S().models).where(and(eq(S().models.ownerUserId, user.id), eq(S().models.name, name))).limit(1);
+    if (providerId && upstreamModelName) {
+      const [provider] = await tx.select({ id: S().providers.id }).from(S().providers).where(and(eq(S().providers.id, providerId), eq(S().providers.ownerUserId, user.id))).limit(1);
+      if (!provider) throw new Error("服务商不存在");
+      await tx.insert(S().routes).values({ ownerUserId: user.id, modelId: created.id, providerId, upstreamModelName, enabled: true });
+    }
   });
   revalidatePath("/panel", "layout");
 }

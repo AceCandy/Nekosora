@@ -17,6 +17,8 @@ export interface ModelInitial {
   visibility?: "public" | "private";
   systemPrompt?: string;
   description?: string;
+  providerId?: string;
+  upstreamModelName?: string;
 }
 
 interface ModelFormDialogProps {
@@ -55,14 +57,14 @@ export default function ModelFormDialog({
   const [catalogId, setCatalogId] = useState(ini?.catalogId ?? "");
   const [previewOpen, setPreviewOpen] = useState(false);
   // 原生 form action 抛错会被框架吞掉、前端无反馈;此处捕获后保留弹窗并在模板位置提示。
-  const [catalogError, setCatalogError] = useState(false);
+  const [formError, setFormError] = useState<"catalog" | "duplicate" | null>(null);
   const [pending, startTransition] = useTransition();
   const previewCatalog = catalog.find((c) => c.id === catalogId);
 
   const handleClose = () => {
     onClose();
     setFormKey((k) => k + 1);
-    setCatalogError(false);
+    setFormError(null);
   };
 
   const title = isEdit ? t("editModel") : t("addModel");
@@ -75,14 +77,14 @@ export default function ModelFormDialog({
           e.preventDefault();
           // 同步读取 formData:异步回调里 currentTarget 已被清空。
           const fd = new FormData(e.currentTarget);
-          setCatalogError(false);
+          setFormError(null);
           startTransition(async () => {
             try {
               await action(fd);
               handleClose();
-            } catch {
+            } catch (error) {
               // server action 抛错(如模板未匹配):保留弹窗,在模板选择处提示。
-              setCatalogError(true);
+              setFormError(error instanceof Error && error.message.startsWith("MODEL_ALREADY_EXISTS") ? "duplicate" : "catalog");
             }
           });
         }}
@@ -100,6 +102,12 @@ export default function ModelFormDialog({
               className={inputCls}
               placeholder="gpt-4o"
             />
+            {ini?.providerId && ini.upstreamModelName && (
+              <>
+                <input type="hidden" name="providerId" value={ini.providerId} />
+                <input type="hidden" name="upstreamModelName" value={ini.upstreamModelName} />
+              </>
+            )}
           </label>
 
           <label className="block">
@@ -150,9 +158,9 @@ export default function ModelFormDialog({
                 {previewCatalog && <CatalogDetailCard catalog={previewCatalog} />}
               </Popover>
             </div>
-            {catalogError && (
+            {formError && (
               <p className="mt-1.5 text-xs leading-normal text-red-600 dark:text-red-400">
-                {t("catalogMatchFailedHint")}
+                {formError === "duplicate" ? t("modelAlreadyExists") : t("catalogMatchFailedHint")}
               </p>
             )}
           </label>

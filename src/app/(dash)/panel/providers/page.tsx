@@ -96,6 +96,7 @@ export default async function MyProvidersPage() {
           refreshActions={refreshActions}
           modelProbeActions={modelProbeActions}
           routes={routes}
+          modelCreatePath="/panel/models"
         />
     </div>
   );
