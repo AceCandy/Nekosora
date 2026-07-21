@@ -72,6 +72,30 @@ export function isKeyAuthError(err: unknown): boolean {
   return /invalid_api_key|authentication|incorrect.*api.*key|401|403/i.test(msg);
 }
 
+/**
+ * 判断错误是否值得在同 provider 内换 key 重试。
+ *
+ * 同一 provider 下的多个 key 通常共享上游但独立计费/限流,因此:
+ *   - 认证类(401/403):该 key 无效,换 key 有意义。
+ *   - 限流(429):不同 key 独立限流窗口,换 key 有意义。
+ *   - 连接/超时/5xx:偶发上游故障,换 key 重试成本低收益高。
+ * 请求本身的确定性错误(model_not_found/invalid_request/context_length)
+ * 换 key 也会失败,不重试--由 isFailoverableError 统一排除。
+ */
+export function isRetryableForKey(err: unknown): boolean {
+  if (isKeyAuthError(err)) return true;
+  // 429 限流:不同 key 独立限流窗口。复刻 classifyStreamError 的 statusCode 提取
+  // (RetryError.lastError / 直接 statusCode),避免依赖错误类 import。
+  const lastError = (err as { lastError?: unknown } | null)?.lastError;
+  const source = (lastError ?? err) as { statusCode?: number };
+  if (typeof source?.statusCode === "number" && source.statusCode === 429) return true;
+  // 其余按路由级可转移判定(已排除 model_not_found/invalid_request/context_length)。
+  return isFailoverableError(err);
+}
+
+/** 同 provider 内换 key 重试的总尝试次数上限(含首次)。避免 key 过多时单请求撞太多次上游。 */
+const MAX_KEY_ATTEMPTS = 6;
+
 /** 判断错误是否是主动中止(abortSignal 触发)。中止不重试 key、不转移路由,用量记 interrupted。 */
 export function isAbortError(err: unknown): boolean {
   if (err instanceof Error && err.name === "AbortError") return true;
@@ -188,9 +212,11 @@ export async function* streamChat(
 
       // 路由内 key 尝试序列:加权随机打乱,权重高的先试。
       const keySeq = orderedWeightedKeys(route.provider.keys);
+      // 换 key 重试上限:总尝试次数 ≤ MAX_KEY_ATTEMPTS(key 过多时只试权重高的前若干个)。
+      const maxAttempts = Math.min(keySeq.length, MAX_KEY_ATTEMPTS);
 
       let routeDone = false;
-      for (let k = 0; k < keySeq.length; k++) {
+      for (let k = 0; k < maxAttempts; k++) {
         const tryKey = keySeq[k].key;
         try {
           for await (const ev of streamWithRoute(route, request, tryKey, timing, opts.cacheKey, opts.abortSignal, opts.userAgent)) {
@@ -209,11 +235,12 @@ export async function* streamChat(
             aborted = true;
             break;
           }
-          // 认证/key 类错误:还有备选 key → 换 key 重试(不跨路由)。
-          const hasMoreKeys = k < keySeq.length - 1;
-          if (isKeyAuthError(err) && hasMoreKeys) {
+          // 可换 key 重试的错误(认证/限流/连接/5xx)+ 还有尝试额度 -> 换 key 重试(不跨路由)。
+          // 请求本身的确定性错误(model_not_found/invalid_request/context_length)不换 key。
+          const hasMoreAttempts = k < maxAttempts - 1;
+          if (hasMoreAttempts && isRetryableForKey(err)) {
             console.warn(
-              `[streamChat] key 重试 ${k + 2}/${keySeq.length} (model=${route.upstreamModelName}):`,
+              `[streamChat] key 重试 ${k + 2}/${maxAttempts} (model=${route.upstreamModelName}):`,
               err instanceof Error ? err.message : err,
             );
             continue;
@@ -466,9 +493,10 @@ export async function generateChat(opts: StreamChatOptions): Promise<GenerateCha
       const route = routes[i];
       usedRoute = route;
       const keySeq = orderedWeightedKeys(route.provider.keys);
+      const maxAttempts = Math.min(keySeq.length, MAX_KEY_ATTEMPTS);
 
       let routeDone = false;
-      for (let k = 0; k < keySeq.length; k++) {
+      for (let k = 0; k < maxAttempts; k++) {
         const tryKey = keySeq[k].key;
         try {
           const model = buildLanguageModelWithKey(route, tryKey, undefined, undefined, chatUA);
@@ -498,8 +526,8 @@ export async function generateChat(opts: StreamChatOptions): Promise<GenerateCha
           break;
         } catch (err) {
           lastError = err;
-          const hasMoreKeys = k < keySeq.length - 1;
-          if (isKeyAuthError(err) && hasMoreKeys) continue;
+          const hasMoreAttempts = k < maxAttempts - 1;
+          if (hasMoreAttempts && isRetryableForKey(err)) continue;
           break;
         }
       }

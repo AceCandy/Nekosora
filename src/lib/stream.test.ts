@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isFailoverableError, isKeyAuthError, separateSystem, classifyStreamError } from "@/lib/stream";
+import { isFailoverableError, isKeyAuthError, isRetryableForKey, separateSystem, classifyStreamError } from "@/lib/stream";
 import type { IRRequest } from "@/lib/providers/types";
 
 describe("isFailoverableError", () => {
@@ -54,6 +54,64 @@ describe("isKeyAuthError", () => {
   it("非鉴权类错误返回 false", () => {
     expect(isKeyAuthError(new Error("connect ETIMEDOUT"))).toBe(false);
     expect(isKeyAuthError(new Error("500 internal error"))).toBe(false);
+  });
+});
+
+describe("isRetryableForKey", () => {
+  // 模拟 AI SDK RetryError:lastError 带 statusCode
+  function makeRetryError(statusCode: number, message: string): Error {
+    const err = new Error(message);
+    (err as Record<string, unknown>).lastError = { statusCode };
+    return err;
+  }
+  // 模拟 AI_APICallError:带 statusCode
+  function makeApiError(statusCode: number, message: string): Error {
+    const err = new Error(message);
+    (err as Record<string, unknown>).statusCode = statusCode;
+    return err;
+  }
+
+  it("认证类(401/403)换 key", () => {
+    expect(isRetryableForKey(new Error("invalid_api_key"))).toBe(true);
+    expect(isRetryableForKey(new Error("401 Unauthorized"))).toBe(true);
+    expect(isRetryableForKey(new Error("403 Forbidden"))).toBe(true);
+  });
+
+  it("限流(429)换 key:直接 AI_APICallError", () => {
+    expect(isRetryableForKey(makeApiError(429, "Too Many Requests"))).toBe(true);
+  });
+
+  it("限流(429)换 key:RetryError 包 lastError", () => {
+    expect(isRetryableForKey(makeRetryError(429, "Failed after retries"))).toBe(true);
+  });
+
+  it("5xx 换 key", () => {
+    expect(isRetryableForKey(makeApiError(502, "Bad Gateway"))).toBe(true);
+    expect(isRetryableForKey(makeApiError(503, "Service Unavailable"))).toBe(true);
+  });
+
+  it("连接/超时类换 key", () => {
+    expect(isRetryableForKey(new Error("connect ETIMEDOUT"))).toBe(true);
+    expect(isRetryableForKey(new Error("fetch failed"))).toBe(true);
+  });
+
+  it("确定性错误不换 key:model_not_found", () => {
+    expect(isRetryableForKey(new Error("model_not_found: gpt-5"))).toBe(false);
+  });
+
+  it("确定性错误不换 key:invalid_request", () => {
+    expect(isRetryableForKey(new Error("invalid_request_error"))).toBe(false);
+  });
+
+  it("确定性错误不换 key:context length", () => {
+    expect(isRetryableForKey(new Error("This model maximum context length is 8192"))).toBe(false);
+  });
+
+  it("泛化 400(message 无确定性关键词)仍可换 key,与路由级 isFailoverableError 行为一致", () => {
+    // makeApiError(400) 的 message 是 "Bad Request",既非认证也非限流,
+    // 不命中 429;isFailoverableError 对 "bad request" 返回 true(只有 model_not_found/
+    // invalid_request/context length 才 false)。故 400 泛化错误会换 key。
+    expect(isRetryableForKey(makeApiError(400, "Bad Request"))).toBe(true);
   });
 });
 
