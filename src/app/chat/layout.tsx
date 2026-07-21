@@ -57,16 +57,20 @@ export default async function ChatLayout({ children }: { children: React.ReactNo
   return (
     <div className="flex h-[100dvh] overflow-hidden bg-nebula-white text-space-ink dark:bg-twilight-obsidian dark:text-nebula-silver transition-colors duration-200">
       <Sidebar
+        userName={user.name}
         userEmail={user.email}
         conversations={mappedConversations}
         newConversationText={t("newConversation")}
         conversationsText={t("conversations")}
         noConversationsText={t("noConversations")}
-        panelText={tc("panel")}
+        settingsText={tc("settings")}
         logoutText={tc("logout")}
         groupPinnedText={t("groupPinned")}
         groupTodayText={t("groupToday")}
         groupYesterdayText={t("groupYesterday")}
+        groupDayBeforeYesterdayText={t("groupDayBeforeYesterday")}
+        groupWithinWeekText={t("groupWithinWeek")}
+        groupWithinMonthText={t("groupWithinMonth")}
         groupEarlierText={t("groupEarlier")}
         groupArchivedText={t("groupArchived")}
         searchText={t("searchConversations")}
@@ -90,4 +94,3 @@ export default async function ChatLayout({ children }: { children: React.ReactNo
     </div>
   );
 }
-

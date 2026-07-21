@@ -16,6 +16,8 @@ interface SidebarNavProps {
    *   - "prefix":pathname.startsWith(item.href)(适合 /admin 的子路由树)
    */
   matchMode?: "exact" | "prefix";
+  /** 收起态:仅展示图标,label/hotkey 隐藏,hover 由 title 提供tooltip。 */
+  collapsed?: boolean;
 }
 
 /**
@@ -25,7 +27,7 @@ interface SidebarNavProps {
  * 合并了原 panel/SidebarNav 与 admin/AdminSidebarNav 的实现,差异由 groups 数据与
  * matchMode 驱动,不再各自硬编码 navItems。
  */
-export default function SidebarNav({ groups, matchMode = "exact" }: SidebarNavProps) {
+export default function SidebarNav({ groups, matchMode = "exact", collapsed = false }: SidebarNavProps) {
   const pathname = usePathname();
   const router = useRouter();
   const t = useTranslations("nav");
@@ -63,10 +65,10 @@ export default function SidebarNav({ groups, matchMode = "exact" }: SidebarNavPr
   }, [flatItems, router]);
 
   return (
-    <nav className="space-y-4">
+    <nav className={clsx("space-y-4", collapsed && "space-y-2")}>
       {groups.map((group, groupIdx) => (
         <div key={group.titleKey ?? groupIdx} className="space-y-1">
-          {group.titleKey && (
+          {group.titleKey && !collapsed && (
             <div className="px-3 pb-1 text-[10px] font-medium uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
               {t(group.titleKey)}
             </div>
@@ -77,21 +79,28 @@ export default function SidebarNav({ groups, matchMode = "exact" }: SidebarNavPr
               matchMode === "prefix"
                 ? pathname.startsWith(item.href)
                 : pathname === item.href;
+            const Icon = item.icon;
             return (
               <Link
                 key={item.href}
                 href={item.href}
+                title={collapsed ? t(item.labelKey) : undefined}
+                aria-label={collapsed ? t(item.labelKey) : undefined}
                 className={clsx(
-                  "group/nav flex items-center justify-between rounded-md px-3 py-2 text-sm font-medium transition-all duration-150 ease-out",
+                  "group/nav flex items-center rounded-md text-sm font-medium transition-all duration-150 ease-out",
+                  collapsed ? "justify-center p-2" : "gap-2 px-3 py-2",
                   isActive
                     ? "bg-sora-blue/8 text-sora-blue dark:bg-sora-blue/10"
                     : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-50 dark:text-neutral-400 dark:hover:text-neutral-100 dark:hover:bg-neutral-900/50",
                 )}
               >
-                <span>{t(item.labelKey)}</span>
-                <span className="hidden border border-neutral-200 px-1.5 py-0.5 font-mono text-[10px] text-neutral-400 opacity-0 transition-opacity group-hover/nav:opacity-100 dark:border-neutral-800 dark:text-neutral-500 sm:inline-block">
-                  {hotkey}
-                </span>
+                <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                {!collapsed && <span className="flex-1 truncate">{t(item.labelKey)}</span>}
+                {!collapsed && (
+                  <span className="hidden border border-neutral-200 px-1.5 py-0.5 font-mono text-[10px] text-neutral-400 opacity-0 transition-opacity group-hover/nav:opacity-100 dark:border-neutral-800 dark:text-neutral-500 sm:inline-block">
+                    {hotkey}
+                  </span>
+                )}
               </Link>
             );
           })}

@@ -8,11 +8,10 @@ import FilePreviewModal, { type PreviewableFile } from "@/shared/components/file
 import { useChatRuntime } from "@/features/chat/hooks/useChatRuntime";
 import { useChatAttachments } from "@/features/chat/hooks/useChatAttachments";
 import { ChatMessageList } from "@/features/chat/components/ChatMessageList";
-import { ChatToolbar } from "@/features/chat/components/ChatToolbar";
+import { ChatToolbar, ComposerPlusMenu, ModelControlMenu, type ChatToolbarProps } from "@/features/chat/components/ChatToolbar";
 import { ChatInputBox } from "@/features/chat/components/ChatInputBox";
 import ChatHeader from "@/features/chat/components/ChatHeader";
 import { setConversationOutputMode, setConversationRenderStyle, setConversationModel, setConversationWebSearch, setConversationComposerState, setConversationModelParams, setConversationModelReasoning } from "@/features/chat/actions/conversations";
-import { estimateTokens } from "@/lib/tokens";
 import type { ChatMessage, ModelOption, CardOption, KnowledgeBaseOption, OutputModeOption, RenderStyleOption } from "@/features/chat/model/types";
 import type { ReasoningLevel } from "@/db/types";
 import { resolveReasoningForModel } from "@/lib/reasoning";
@@ -57,8 +56,8 @@ interface ChatComposerProps {
  *
  * 持有所有会话级 selection state 与持久化逻辑，把渲染拆给三个子组件：
  *   - ChatMessageList：消息滚动区 + 空状态 + 对话大纲
- *   - ChatToolbar：模型/附件/4 个 picker/联网 toggle/chip 行
- *   - ChatInputBox：输入框 + 发送/停止 + token 计数
+ *   - ChatToolbar：已选资源与附件状态
+ *   - ChatInputBox：自适应输入框 + 紧凑设置入口 + 发送/停止
  */
 export default function ChatComposer({
   models,
@@ -132,13 +131,6 @@ export default function ChatComposer({
     uploadAttachments: uploadPending,
     onConversationCreated: setActiveConvId,
   });
-  // 输入文本 + 图片附件的 token 估算(图片固定 255/张);非图片文件由后端解析,前端不计入
-  const inputTokens = useMemo(() => {
-    const textTokens = estimateTokens(input);
-    const imageTokens = attached.filter((a) => a.isImage).length * 255;
-    return textTokens + imageTokens;
-  }, [input, attached]);
-
   // 本会话累计发送 token(从各 assistant 消息的 trace 聚合),供 ChatHeader 实时显示。
   const totalTokens = useMemo(
     () => runtime.messages.reduce((sum, m) => sum + (m.trace?.sentTokenEstimate ?? 0), 0),
@@ -321,6 +313,51 @@ export default function ChatComposer({
     );
   }
 
+  const toolbarProps: ChatToolbarProps = {
+    models,
+    model,
+    onModelChange: handleModelChange,
+    modelPickerOpen,
+    onModelPickerToggle: () => setModelPickerOpen((value) => !value),
+    onModelPickerClose: () => setModelPickerOpen(false),
+    attached,
+    onRemoveAttachment: removeAttachment,
+    onPreviewFile: setPreviewFile,
+    cards,
+    selectedCardIds,
+    cardPickerOpen,
+    onCardPickerToggle: () => setCardPickerOpen((value) => !value),
+    onCardPickerClose: () => setCardPickerOpen(false),
+    onCardToggle: handleCardToggle,
+    knowledgeBases,
+    selectedKbIds,
+    kbPickerOpen,
+    onKbPickerToggle: () => setKbPickerOpen((value) => !value),
+    onKbPickerClose: () => setKbPickerOpen(false),
+    onKbToggle: handleKbToggle,
+    outputModes,
+    outputModeId,
+    outputModePickerOpen,
+    onOutputModePickerToggle: () => setOutputModePickerOpen((value) => !value),
+    onOutputModePickerClose: () => setOutputModePickerOpen(false),
+    onOutputModeToggle: handleOutputModeChange,
+    onOutputModeClear: () => handleOutputModeChange(""),
+    renderStyles,
+    renderStyleId,
+    renderStylePickerOpen,
+    onRenderStylePickerToggle: () => setRenderStylePickerOpen((value) => !value),
+    onRenderStylePickerClose: () => setRenderStylePickerOpen(false),
+    onRenderStyleToggle: handleRenderStyleChange,
+    onRenderStyleClear: () => handleRenderStyleChange(""),
+    webSearch,
+    onWebSearchToggle: handleWebSearchToggle,
+    modelParams,
+    onModelParamsChange: handleModelParamsChange,
+    onModelParamsReset: handleModelParamsReset,
+    reasoning,
+    onReasoningChange: handleReasoningChange,
+  };
+
   return (
     <div className="flex-1 flex h-full bg-nebula-white dark:bg-twilight-obsidian transition-colors duration-250">
       {/* 主区:消息 + 输入(可被 artifact 面板挤压) */}
@@ -357,56 +394,13 @@ export default function ChatComposer({
           onAsk={handleSelectionAsk}
         />
 
-        {/* 输入区:悬浮卡片(消息可滚动到其下方),absolute 浮于消息区底部 */}
+        {/* 输入区:absolute 浮于消息区底部，消息可滚动到其下方。 */}
         <div className="absolute inset-x-0 bottom-0 z-10 pointer-events-none">
           <div
             ref={composerRef}
-            className="pointer-events-auto max-w-4xl mx-auto mb-4 rounded-2xl border border-morning-mist dark:border-deep-space/80 bg-nebula-white/95 dark:bg-twilight-obsidian/95 backdrop-blur-sm shadow-[0_4px_24px_rgba(0,0,0,0.06)] p-3 md:p-4 space-y-3.5"
+            className="pointer-events-auto mx-auto mb-4 w-[calc(100%_-_2rem)] max-w-3xl space-y-2"
           >
-            <ChatToolbar
-              models={models}
-              model={model}
-              onModelChange={handleModelChange}
-              modelPickerOpen={modelPickerOpen}
-              onModelPickerToggle={() => setModelPickerOpen((v) => !v)}
-              onModelPickerClose={() => setModelPickerOpen(false)}
-              attached={attached}
-              onRemoveAttachment={removeAttachment}
-              onPreviewFile={setPreviewFile}
-              cards={cards}
-              selectedCardIds={selectedCardIds}
-              cardPickerOpen={cardPickerOpen}
-              onCardPickerToggle={() => setCardPickerOpen((v) => !v)}
-              onCardPickerClose={() => setCardPickerOpen(false)}
-              onCardToggle={handleCardToggle}
-              knowledgeBases={knowledgeBases}
-              selectedKbIds={selectedKbIds}
-              kbPickerOpen={kbPickerOpen}
-              onKbPickerToggle={() => setKbPickerOpen((v) => !v)}
-              onKbPickerClose={() => setKbPickerOpen(false)}
-              onKbToggle={handleKbToggle}
-              outputModes={outputModes}
-              outputModeId={outputModeId}
-              outputModePickerOpen={outputModePickerOpen}
-              onOutputModePickerToggle={() => setOutputModePickerOpen((v) => !v)}
-              onOutputModePickerClose={() => setOutputModePickerOpen(false)}
-              onOutputModeToggle={handleOutputModeChange}
-              onOutputModeClear={() => handleOutputModeChange("")}
-              renderStyles={renderStyles}
-              renderStyleId={renderStyleId}
-              renderStylePickerOpen={renderStylePickerOpen}
-              onRenderStylePickerToggle={() => setRenderStylePickerOpen((v) => !v)}
-              onRenderStylePickerClose={() => setRenderStylePickerOpen(false)}
-              onRenderStyleToggle={handleRenderStyleChange}
-              onRenderStyleClear={() => handleRenderStyleChange("")}
-              webSearch={webSearch}
-              onWebSearchToggle={handleWebSearchToggle}
-              modelParams={modelParams}
-              onModelParamsChange={handleModelParamsChange}
-              onModelParamsReset={handleModelParamsReset}
-              reasoning={reasoning}
-              onReasoningChange={handleReasoningChange}
-            />
+            <ChatToolbar {...toolbarProps} />
 
             <ChatInputBox
               value={input}
@@ -416,9 +410,10 @@ export default function ChatComposer({
               onStop={runtime.stopGeneration}
               onPasteFiles={handleUpload}
               onDropFiles={handleUpload}
-              tokenCount={inputTokens}
               cards={cards}
               onCardToggle={handleCardToggle}
+              leadingControl={<ComposerPlusMenu {...toolbarProps} />}
+              trailingControl={<ModelControlMenu {...toolbarProps} />}
             />
           </div>
         </div>

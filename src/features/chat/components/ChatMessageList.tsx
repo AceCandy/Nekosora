@@ -240,11 +240,11 @@ export function ChatMessageList({
         <MessageScroller.Viewport
           ref={viewportRef}
           onScroll={handleViewportScroll}
-          className="h-full overflow-y-auto px-6 pt-8 md:pt-12 [overflow-anchor:none]"
+          className="scroll-fade-y scrollbar-hidden h-full overflow-y-auto px-6 pt-8 md:pt-12 [overflow-anchor:none]"
           style={{ paddingBottom: bottomInset ?? 8 }}
           preserveScrollOnPrepend
         >
-          <MessageScroller.Content className="mx-auto w-full max-w-4xl flex flex-col">
+          <MessageScroller.Content className="mx-auto flex w-full max-w-3xl flex-col">
             {messages.length === 0 ? (
               <WelcomeBlock samples={samples} onPickSample={onPickSample} />
             ) : (

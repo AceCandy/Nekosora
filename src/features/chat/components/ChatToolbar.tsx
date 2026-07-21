@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Loader2, Sparkles, Globe, Library, Wand2, Palette, X, Paperclip, SlidersHorizontal, Brain, Cpu, ChevronDown } from "lucide-react";
+import { Loader2, Sparkles, Globe, Library, Wand2, Palette, X, Paperclip, SlidersHorizontal, Brain, Cpu, ChevronDown, Plus } from "lucide-react";
 import { clsx } from "clsx";
 import { OptionPicker, type OptionItem } from "@/shared/ui/OptionPicker";
 import type { ReasoningLevel, ModelCapabilities } from "@/db/types";
@@ -17,19 +17,7 @@ import type { UploadFileItem } from "@/features/chat/model/types";
 import type { PreviewableFile } from "@/shared/components/file-preview/FilePreviewModal";
 import { getSupportedReasoningLevels } from "@/lib/reasoning";
 
-/** 单选 picker 的统一触发器样式（与原 output mode / render style 一致）。 */
-const SINGLE_TRIGGER_ACTIVE = "border-transparent bg-sora-blue/[0.04] text-sora-blue hover:bg-sora-blue/[0.08]";
-const SINGLE_TRIGGER_IDLE = "border-transparent bg-transparent text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900";
-
-/** 多选 picker 触发器样式（有选中高亮，与原指令卡 / 知识库一致）。 */
-function multiTriggerClass(hasSelected: boolean): string {
-  return clsx(
-    "inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-semibold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer",
-    hasSelected
-      ? "border-sora-blue/30 bg-sora-blue/[0.04] text-sora-blue"
-      : "border-morning-mist dark:border-deep-space bg-white dark:bg-space-ink text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900",
-  );
-}
+const MENU_ROW = "flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:text-neutral-200 dark:hover:bg-neutral-900";
 
 export interface ChatToolbarProps {
   // 模型选择（单选，必选不可清空，click 展开 + 向上弹出）
@@ -93,218 +81,18 @@ export interface ChatToolbarProps {
   onReasoningChange: (v: ReasoningLevel) => void;
 }
 
-/**
- * 工具栏段 —— 模型选择 + 文件上传 + 4 个 OptionPicker + 联网 toggle + 已选 chip 行。
- * 纯受控：所有状态由父组件持有，本组件只渲染并回传事件。
- */
+/** 仅在存在选择或附件时展示紧凑状态行。 */
 export function ChatToolbar(props: ChatToolbarProps) {
   const t = useTranslations("chat");
   const {
-    models, model, onModelChange, modelPickerOpen, onModelPickerToggle, onModelPickerClose,
     attached, onRemoveAttachment, onPreviewFile,
-    cards, selectedCardIds, cardPickerOpen, onCardPickerToggle, onCardPickerClose, onCardToggle,
-    knowledgeBases, selectedKbIds, kbPickerOpen, onKbPickerToggle, onKbPickerClose, onKbToggle,
-    outputModes, outputModeId, outputModePickerOpen, onOutputModePickerToggle, onOutputModePickerClose, onOutputModeToggle, onOutputModeClear,
-    renderStyles, renderStyleId, renderStylePickerOpen, onRenderStylePickerToggle, onRenderStylePickerClose, onRenderStyleToggle, onRenderStyleClear,
-    webSearch, onWebSearchToggle,
-    modelParams, onModelParamsChange, onModelParamsReset,
-    reasoning, onReasoningChange,
+    cards, selectedCardIds, onCardToggle,
+    knowledgeBases, selectedKbIds, onKbToggle,
   } = props;
-
-  // 当前选中模型的能力位(决定推理控件是否露出 + 档位)。model 现为 modelId。
-  const currentCapabilities = models.find((m) => m.modelId === model)?.capabilities;
+  if (selectedCardIds.length === 0 && selectedKbIds.length === 0 && attached.length === 0) return null;
 
   return (
-    <div className="flex items-center gap-2 mb-2 flex-wrap">
-      {/* 模型选择（单选，必选不可清空，click 展开 + 向上弹出） */}
-      <OptionPicker
-        open={modelPickerOpen}
-        onClose={onModelPickerClose}
-        options={models.map((m): OptionItem => ({
-          id: m.modelId,
-          label: m.displayName ?? m.name,
-          badge: m.source === "global" ? t("globalLabel") : undefined,
-          badgeVariant: m.source === "global" ? "primary" : undefined,
-        }))}
-        selectedIds={model ? [model] : []}
-        mode="single"
-        onToggle={onModelChange}
-        side="top"
-        trigger={
-          <button
-            type="button"
-            onClick={onModelPickerToggle}
-            className={clsx(
-              "inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-semibold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer",
-              model ? SINGLE_TRIGGER_ACTIVE : SINGLE_TRIGGER_IDLE,
-            )}
-            title={t("selectModel")}
-            aria-haspopup="listbox"
-            aria-expanded={modelPickerOpen}
-            aria-label={t("selectModel")}
-          >
-            <Cpu className="w-3.5 h-3.5" aria-hidden="true" />
-            <span className="max-w-[140px] truncate">
-              {model
-                ? (models.find((m) => m.modelId === model)?.displayName ?? model)
-                : t("selectModel")}
-            </span>
-            <ChevronDown className="w-3 h-3 opacity-50" aria-hidden="true" />
-          </button>
-        }
-      />
-
-      {/* 文件上传已改为粘贴/拖拽接入,工具栏不再显示上传按钮 */}
-
-      {/* 推理级别(仅可推理模型露出) */}
-      <ReasoningPicker capabilities={currentCapabilities} value={reasoning} onChange={onReasoningChange} />
-
-      {/* 联网搜索 toggle（纯按钮，非 listbox） */}
-      <button
-        type="button"
-        onClick={onWebSearchToggle}
-        className={clsx(
-          "inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-semibold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer",
-          webSearch
-            ? "border-sora-blue/30 bg-sora-blue/[0.04] text-sora-blue"
-            : "border-morning-mist dark:border-deep-space bg-white dark:bg-space-ink text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900",
-        )}
-        title={t("webSearch")}
-        aria-pressed={webSearch}
-        aria-label={t("webSearch")}
-      >
-        <Globe className="w-3.5 h-3.5" aria-hidden="true" />
-        <span>{t("webSearch")}</span>
-      </button>
-
-      {/* 指令卡（多选） */}
-      {cards.length > 0 && (
-        <OptionPicker
-          open={cardPickerOpen}
-          onClose={onCardPickerClose}
-          options={cards.map((c): OptionItem => ({ id: c.id, label: c.title, description: c.description, badge: `/${c.trigger}` }))}
-          selectedIds={selectedCardIds}
-          mode="multi"
-          onToggle={onCardToggle}
-          trigger={
-            <button
-              type="button"
-              onClick={onCardPickerToggle}
-              className={multiTriggerClass(selectedCardIds.length > 0)}
-              title={t("instructionCard")}
-              aria-haspopup="listbox"
-              aria-expanded={cardPickerOpen}
-              aria-label="选择指令卡"
-            >
-              <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>{t("instructionCard")}{selectedCardIds.length > 0 ? ` (${selectedCardIds.length})` : ""}</span>
-            </button>
-          }
-        />
-      )}
-
-      {/* 知识库（多选） */}
-      {knowledgeBases.length > 0 && (
-        <OptionPicker
-          open={kbPickerOpen}
-          onClose={onKbPickerClose}
-          options={knowledgeBases.map((kb): OptionItem => ({ id: kb.id, label: kb.name, badge: `${kb.fileCount} 文件` }))}
-          selectedIds={selectedKbIds}
-          mode="multi"
-          onToggle={onKbToggle}
-          trigger={
-            <button
-              type="button"
-              onClick={onKbPickerToggle}
-              className={multiTriggerClass(selectedKbIds.length > 0)}
-              title={t("knowledgeBase")}
-              aria-haspopup="listbox"
-              aria-expanded={kbPickerOpen}
-              aria-label={t("knowledgeBase")}
-            >
-              <Library className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>{t("knowledgeBase")}{selectedKbIds.length > 0 ? ` (${selectedKbIds.length})` : ""}</span>
-            </button>
-          }
-        />
-      )}
-
-      {/* 模型参数(temperature/topP/maxTokens) */}
-      <ModelParamsPicker params={modelParams} onChange={onModelParamsChange} onReset={onModelParamsReset} />
-
-      {/* 输出模式（单选可清除，hover 展开 + 向上弹出） */}
-      {outputModes.length > 0 && (
-        <OptionPicker
-          open={outputModePickerOpen}
-          onClose={onOutputModePickerClose}
-          options={outputModes.map((m): OptionItem => ({ id: m.id, label: m.name, description: m.description }))}
-          selectedIds={outputModeId ? [outputModeId] : []}
-          mode="single"
-          onToggle={onOutputModeToggle}
-          onClear={onOutputModeClear}
-          side="top"
-          openOnHover
-          trigger={
-            <button
-              type="button"
-              onClick={onOutputModePickerToggle}
-              className={clsx(
-                "inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-semibold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer",
-                outputModeId ? SINGLE_TRIGGER_ACTIVE : SINGLE_TRIGGER_IDLE,
-              )}
-              title={t("outputMode")}
-              aria-haspopup="listbox"
-              aria-expanded={outputModePickerOpen}
-              aria-label={t("outputMode")}
-            >
-              <Wand2 className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>
-                {outputModeId
-                  ? (outputModes.find((m) => m.id === outputModeId)?.name ?? t("outputMode"))
-                  : t("outputMode")}
-              </span>
-            </button>
-          }
-        />
-      )}
-
-      {/* 输出样式（单选可清除，hover 展开 + 向上弹出） */}
-      {renderStyles.length > 0 && (
-        <OptionPicker
-          open={renderStylePickerOpen}
-          onClose={onRenderStylePickerClose}
-          options={renderStyles.map((s): OptionItem => ({ id: s.id, label: s.name, description: s.description }))}
-          selectedIds={renderStyleId ? [renderStyleId] : []}
-          mode="single"
-          onToggle={onRenderStyleToggle}
-          onClear={onRenderStyleClear}
-          side="top"
-          openOnHover
-          trigger={
-            <button
-              type="button"
-              onClick={onRenderStylePickerToggle}
-              className={clsx(
-                "inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-semibold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer",
-                renderStyleId ? SINGLE_TRIGGER_ACTIVE : SINGLE_TRIGGER_IDLE,
-              )}
-              title={t("renderStyle")}
-              aria-haspopup="listbox"
-              aria-expanded={renderStylePickerOpen}
-              aria-label={t("renderStyle")}
-            >
-              <Palette className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>
-                {renderStyleId
-                  ? (renderStyles.find((s) => s.id === renderStyleId)?.name ?? t("renderStyle"))
-                  : t("renderStyle")}
-              </span>
-            </button>
-          }
-        />
-      )}
-
-      {/* 已选指令卡 chip */}
+    <div className="flex flex-wrap items-center gap-1.5 px-2">
       {selectedCardIds.map((id) => {
         const card = cards.find((c) => c.id === id);
         if (!card) return null;
@@ -322,6 +110,20 @@ export function ChatToolbar(props: ChatToolbarProps) {
               aria-label="移除指令卡"
             >
               <X className="w-3.5 h-3.5" aria-hidden="true" />
+            </button>
+          </span>
+        );
+      })}
+
+      {selectedKbIds.map((id) => {
+        const kb = knowledgeBases.find((item) => item.id === id);
+        if (!kb) return null;
+        return (
+          <span key={id} className="inline-flex items-center gap-1.5 rounded-full border border-sora-blue/20 bg-sora-blue/[0.04] px-2.5 py-1 text-[11px] font-medium text-sora-blue">
+            <Library className="h-3.5 w-3.5" aria-hidden="true" />
+            <span className="max-w-[100px] truncate">{kb.name}</span>
+            <button onClick={() => onKbToggle(id)} className="-m-1 rounded-full p-1.5 hover:opacity-75 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sora-blue" title={t("attachRemove")} aria-label="移除知识库">
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           </span>
         );
@@ -379,6 +181,66 @@ export function ChatToolbar(props: ChatToolbarProps) {
           </span>
         );
       })}
+    </div>
+  );
+}
+
+/** 输入框左侧加号菜单：输出模式、输出样式，以及原有指令卡/知识库入口。 */
+export function ComposerPlusMenu(props: ChatToolbarProps) {
+  const t = useTranslations("chat");
+  const [open, setOpen] = useState(false);
+  const close = () => {
+    setOpen(false);
+    props.onOutputModePickerClose();
+    props.onRenderStylePickerClose();
+    props.onCardPickerClose();
+    props.onKbPickerClose();
+  };
+  return (
+    <div className="pointer-events-auto relative shrink-0">
+      <button type="button" onClick={() => { if (open) close(); else setOpen(true); }} className="inline-flex h-8 w-8 items-center justify-center rounded-full text-neutral-600 transition-colors duration-200 hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none dark:text-neutral-300 dark:hover:bg-neutral-900" aria-label="更多设置" aria-expanded={open}>
+        <Plus className="h-4.5 w-4.5" aria-hidden="true" />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={close} aria-hidden="true" />
+          <div className="absolute bottom-full left-0 z-20 mb-2 w-56 space-y-1 rounded-lg border border-morning-mist bg-white p-1.5 shadow-lg dark:border-deep-space dark:bg-space-ink">
+            {props.outputModes.length > 0 && <OptionPicker open={props.outputModePickerOpen} onClose={props.onOutputModePickerClose} options={props.outputModes.map((item): OptionItem => ({ id: item.id, label: item.name, description: item.description }))} selectedIds={props.outputModeId ? [props.outputModeId] : []} mode="single" onToggle={props.onOutputModeToggle} onClear={props.onOutputModeClear} side="top" trigger={<button type="button" onClick={props.onOutputModePickerToggle} className={MENU_ROW}><Wand2 className="h-4 w-4" aria-hidden="true" /><span className="flex-1">{t("outputMode")}</span><span className="max-w-20 truncate text-neutral-400">{props.outputModes.find((item) => item.id === props.outputModeId)?.name}</span></button>} />}
+            {props.renderStyles.length > 0 && <OptionPicker open={props.renderStylePickerOpen} onClose={props.onRenderStylePickerClose} options={props.renderStyles.map((item): OptionItem => ({ id: item.id, label: item.name, description: item.description }))} selectedIds={props.renderStyleId ? [props.renderStyleId] : []} mode="single" onToggle={props.onRenderStyleToggle} onClear={props.onRenderStyleClear} side="top" trigger={<button type="button" onClick={props.onRenderStylePickerToggle} className={MENU_ROW}><Palette className="h-4 w-4" aria-hidden="true" /><span className="flex-1">{t("renderStyle")}</span><span className="max-w-20 truncate text-neutral-400">{props.renderStyles.find((item) => item.id === props.renderStyleId)?.name}</span></button>} />}
+            {props.cards.length > 0 && <OptionPicker open={props.cardPickerOpen} onClose={props.onCardPickerClose} options={props.cards.map((item): OptionItem => ({ id: item.id, label: item.title, description: item.description, badge: `/${item.trigger}` }))} selectedIds={props.selectedCardIds} mode="multi" onToggle={props.onCardToggle} side="top" trigger={<button type="button" onClick={props.onCardPickerToggle} className={MENU_ROW}><Sparkles className="h-4 w-4" aria-hidden="true" /><span className="flex-1">{t("instructionCard")}</span>{props.selectedCardIds.length > 0 && <span className="text-sora-blue">{props.selectedCardIds.length}</span>}</button>} />}
+            {props.knowledgeBases.length > 0 && <OptionPicker open={props.kbPickerOpen} onClose={props.onKbPickerClose} options={props.knowledgeBases.map((item): OptionItem => ({ id: item.id, label: item.name, badge: `${item.fileCount} 文件` }))} selectedIds={props.selectedKbIds} mode="multi" onToggle={props.onKbToggle} side="top" trigger={<button type="button" onClick={props.onKbPickerToggle} className={MENU_ROW}><Library className="h-4 w-4" aria-hidden="true" /><span className="flex-1">{t("knowledgeBase")}</span>{props.selectedKbIds.length > 0 && <span className="text-sora-blue">{props.selectedKbIds.length}</span>}</button>} />}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** 输入框右侧模型菜单：模型、推理、联网和模型参数。 */
+export function ModelControlMenu(props: ChatToolbarProps) {
+  const t = useTranslations("chat");
+  const [open, setOpen] = useState(false);
+  const current = props.models.find((item) => item.modelId === props.model);
+  const close = () => {
+    setOpen(false);
+    props.onModelPickerClose();
+  };
+  return (
+    <div className="pointer-events-auto relative shrink-0">
+      <button type="button" onClick={() => { if (open) close(); else setOpen(true); }} className="inline-flex h-8 max-w-28 items-center gap-1 rounded-full bg-transparent px-2.5 text-xs font-medium text-neutral-700 transition-colors duration-200 hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none dark:text-neutral-200 dark:hover:bg-neutral-800 sm:max-w-40" aria-label={t("selectModel")} aria-expanded={open}>
+        <span className="truncate">{current?.displayName ?? current?.name ?? t("selectModel")}</span><ChevronDown className="h-3 w-3 shrink-0" aria-hidden="true" />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={close} aria-hidden="true" />
+          <div className="absolute bottom-full right-0 z-20 mb-2 w-64 space-y-1 rounded-lg border border-morning-mist bg-white p-1.5 shadow-lg dark:border-deep-space dark:bg-space-ink">
+            <OptionPicker open={props.modelPickerOpen} onClose={props.onModelPickerClose} options={props.models.map((item): OptionItem => ({ id: item.modelId, label: item.displayName ?? item.name, badge: item.source === "global" ? t("globalLabel") : undefined, badgeVariant: item.source === "global" ? "primary" : undefined }))} selectedIds={props.model ? [props.model] : []} mode="single" onToggle={props.onModelChange} side="top" trigger={<button type="button" onClick={props.onModelPickerToggle} className={MENU_ROW}><Cpu className="h-4 w-4" aria-hidden="true" /><span className="flex-1">{t("selectModel")}</span><span className="max-w-24 truncate text-neutral-400">{current?.displayName ?? current?.name}</span></button>} />
+            <ReasoningPicker capabilities={current?.capabilities} value={props.reasoning} onChange={props.onReasoningChange} />
+            <button type="button" onClick={props.onWebSearchToggle} className={clsx(MENU_ROW, props.webSearch && "bg-sora-blue/[0.06] text-sora-blue")} aria-pressed={props.webSearch}><Globe className="h-4 w-4" aria-hidden="true" /><span className="flex-1">{t("webSearch")}</span><span>{props.webSearch ? "✓" : ""}</span></button>
+            <ModelParamsPicker params={props.modelParams} onChange={props.onModelParamsChange} onReset={props.onModelParamsReset} />
+          </div>
+        </>
+      )}
     </div>
   );
 }

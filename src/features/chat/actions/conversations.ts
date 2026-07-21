@@ -1,5 +1,5 @@
 "use server";
-import { eq, and, or, desc, isNull, like, asc } from "drizzle-orm";
+import { eq, and, or, desc, isNull, asc, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { requireSession } from "@/lib/session";
@@ -322,7 +322,7 @@ export async function setConversationModelReasoning(
 }
 
 /**
- * 全文搜索当前用户会话的消息内容(LIKE,依赖 pg 的 jsonb 隐式转 text)。
+ * 全文搜索当前用户会话的消息内容(jsonb 显式转 text 后使用 ILIKE)。
  * 排除软删消息,按命中消息时间倒序,最多 50 条,每条返回前后约 30 字符的片段。
  */
 export async function searchMessages(keyword: string): Promise<Array<{
@@ -337,6 +337,7 @@ export async function searchMessages(keyword: string): Promise<Array<{
   if (!kw) return [];
   const db = await getDb();
   const s = S();
+  const escapedKeyword = kw.replace(/[!%_]/g, "!$&");
   const rows = await db
     .select({
       conversationId: s.messages.conversationId,
@@ -350,7 +351,7 @@ export async function searchMessages(keyword: string): Promise<Array<{
     .where(and(
       eq(s.conversations.userId, user.id),
       isNull(s.messages.deletedAt),
-      like(s.messages.content, `%${kw}%`),
+      sql`${s.messages.content}::text ILIKE ${`%${escapedKeyword}%`} ESCAPE '!'`,
     ))
     .orderBy(desc(s.messages.createdAt))
     .limit(50);

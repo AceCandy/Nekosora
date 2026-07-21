@@ -5,7 +5,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { searchMessages } from "@/features/chat/actions/conversations";
-import { Plus, Settings2, MessageSquare, LogOut, Menu, X, Search, Pin, Archive, Trash2, ImageIcon, Loader2 } from "lucide-react";
+import Modal from "@/shared/ui/Modal";
+import { Plus, Settings2, LogOut, Menu, X, Search, Pin, Archive, Trash2, ImageIcon, Loader2, PanelLeftClose, PanelLeftOpen, ChevronDown } from "lucide-react";
 import { clsx } from "clsx";
 import { useShallow } from "zustand/react/shallow";
 import { useChatStreamStore } from "@/features/chat/store/chatStreamStore";
@@ -29,16 +30,20 @@ interface SearchResult {
 }
 
 interface SidebarProps {
+  userName: string;
   userEmail: string;
   conversations: ConversationItem[];
   newConversationText: string;
   conversationsText: string;
   noConversationsText: string;
-  panelText: string;
+  settingsText: string;
   logoutText: string;
   groupPinnedText: string;
   groupTodayText: string;
   groupYesterdayText: string;
+  groupDayBeforeYesterdayText: string;
+  groupWithinWeekText: string;
+  groupWithinMonthText: string;
   groupEarlierText: string;
   groupArchivedText: string;
   searchText: string;
@@ -81,27 +86,39 @@ function highlightSnippet(text: string, keyword: string): React.ReactNode {
   return parts;
 }
 
-/** 按更新时间归入时间分组(今天/昨天/更早)。 */
-function dayBucket(ts: number): "today" | "yesterday" | "earlier" {
+/** 按更新时间归入近 7 天 / 近 30 天的互斥时间分组。 */
+function dayBucket(ts: number): "today" | "yesterday" | "dayBeforeYesterday" | "withinWeek" | "withinMonth" | "earlier" {
   const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const startOfYesterday = startOfToday - 86400000;
-  if (ts >= startOfToday) return "today";
-  if (ts >= startOfYesterday) return "yesterday";
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const boundary = (daysAgo: number) => {
+    const date = new Date(startOfToday);
+    date.setDate(date.getDate() - daysAgo);
+    return date.getTime();
+  };
+  const start = startOfToday.getTime();
+  if (ts >= start) return "today";
+  if (ts >= boundary(1)) return "yesterday";
+  if (ts >= boundary(2)) return "dayBeforeYesterday";
+  if (ts >= boundary(7)) return "withinWeek";
+  if (ts >= boundary(30)) return "withinMonth";
   return "earlier";
 }
 
 export default function Sidebar({
+  userName,
   userEmail,
   conversations,
   newConversationText,
   conversationsText,
   noConversationsText,
-  panelText,
+  settingsText,
   logoutText,
   groupPinnedText,
   groupTodayText,
   groupYesterdayText,
+  groupDayBeforeYesterdayText,
+  groupWithinWeekText,
+  groupWithinMonthText,
   groupEarlierText,
   groupArchivedText,
   searchText,
@@ -119,12 +136,27 @@ export default function Sidebar({
   getGeneratingStatusesAction,
 }: SidebarProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set(["earlier", "archived"]));
   const tSidebar = useTranslations("chat");
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const displayName = userName.trim() || userEmail;
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (!userMenuRef.current?.contains(event.target as Node)) setUserMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    return () => document.removeEventListener("pointerdown", closeOnOutsideClick);
+  }, [userMenuOpen]);
 
   // 当前路由对应的会话 id(/chat/{id});新对话页 /chat 为 null。
   const pathname = usePathname();
@@ -272,42 +304,51 @@ export default function Sidebar({
     ];
   }, [conversations, optimisticConversation, newConversationText]);
 
-  // 前端过滤:标题搜索 + 归档默认隐藏
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return allConversations.filter((c) => {
-      if (!q) return true;
-      return c.title.toLowerCase().includes(q);
-    });
-  }, [allConversations, query]);
-
-  // 分组:置顶 / 今天 / 昨天 / 更早 / 归档
+  // 分组:置顶 / 今天 / 昨天 / 前天 / 周内 / 月内 / 更早 / 归档
   const groups = useMemo(() => {
     const pinned: ConversationItem[] = [];
     const today: ConversationItem[] = [];
     const yesterday: ConversationItem[] = [];
+    const dayBeforeYesterday: ConversationItem[] = [];
+    const withinWeek: ConversationItem[] = [];
+    const withinMonth: ConversationItem[] = [];
     const earlier: ConversationItem[] = [];
     const archived: ConversationItem[] = [];
-    for (const c of filtered) {
+    for (const c of allConversations) {
       if (c.archived) archived.push(c);
       else if (c.pinned) pinned.push(c);
       else {
         const b = dayBucket(c.updatedAt);
         if (b === "today") today.push(c);
         else if (b === "yesterday") yesterday.push(c);
+        else if (b === "dayBeforeYesterday") dayBeforeYesterday.push(c);
+        else if (b === "withinWeek") withinWeek.push(c);
+        else if (b === "withinMonth") withinMonth.push(c);
         else earlier.push(c);
       }
     }
-    return { pinned, today, yesterday, earlier, archived };
-  }, [filtered]);
+    return { pinned, today, yesterday, dayBeforeYesterday, withinWeek, withinMonth, earlier, archived };
+  }, [allConversations]);
 
-  const sections: { key: string; label: string; items: ConversationItem[]; collapsible?: boolean }[] = [
+  const sections: { key: string; label: string; items: ConversationItem[] }[] = [
     { key: "pinned", label: groupPinnedText, items: groups.pinned },
     { key: "today", label: groupTodayText, items: groups.today },
     { key: "yesterday", label: groupYesterdayText, items: groups.yesterday },
+    { key: "dayBeforeYesterday", label: groupDayBeforeYesterdayText, items: groups.dayBeforeYesterday },
+    { key: "withinWeek", label: groupWithinWeekText, items: groups.withinWeek },
+    { key: "withinMonth", label: groupWithinMonthText, items: groups.withinMonth },
     { key: "earlier", label: groupEarlierText, items: groups.earlier },
-    { key: "archived", label: groupArchivedText, items: groups.archived, collapsible: true },
+    { key: "archived", label: groupArchivedText, items: groups.archived },
   ].filter((s) => s.items.length > 0);
+
+  const toggleGroup = (key: string) => {
+    setCollapsedGroups((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   const renderItem = (c: ConversationItem) => {
     const isActive = c.id === activeConvId;
@@ -329,25 +370,15 @@ export default function Sidebar({
         onClick={handleClick}
         aria-current={isActive ? "page" : undefined}
         className={clsx(
-          "inline-flex w-full items-center gap-2 truncate rounded-md px-3 py-2 text-xs font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue",
+          "inline-flex min-w-0 max-w-full w-full items-center gap-2 overflow-hidden rounded-md px-3 py-2 pr-8 text-xs font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue",
           isActive
             ? "bg-sora-blue/[0.08] text-neutral-900 dark:text-white font-semibold"
             : "text-neutral-600 dark:text-neutral-450 hover:text-neutral-900 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-900",
         )}
       >
-        {c.pinned && <Pin className="w-3 h-3 shrink-0 text-sora-blue" aria-hidden="true" />}
-        {(c.generating || streamingConvIds.includes(c.id)) ? (
-          <Loader2 className="w-3.5 h-3.5 shrink-0 text-sora-blue animate-spin" aria-hidden="true" />
-        ) : justCompleted ? (
-          // 后台执行完成、尚未查看的会话:蓝点提示(点击后消失)
-          <span className="relative shrink-0 flex items-center justify-center w-3.5 h-3.5" aria-label="有新回复">
-            <MessageSquare className="w-3.5 h-3.5 opacity-60 text-neutral-400 dark:text-neutral-500" aria-hidden="true" />
-            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-sora-blue ring-2 ring-nebula-white dark:ring-[#090b0e]" />
-          </span>
-        ) : (
-          <MessageSquare className={clsx("w-3.5 h-3.5 shrink-0", isActive ? "text-sora-blue opacity-100" : "opacity-60 text-neutral-400 dark:text-neutral-500")} aria-hidden="true" />
-        )}
-        <span className="truncate">{c.title}</span>
+        <span className="min-w-0 flex-1 truncate">{c.title}</span>
+        {(c.generating || streamingConvIds.includes(c.id)) && <Loader2 className="ml-auto h-3.5 w-3.5 shrink-0 animate-spin text-sora-blue" aria-label="生成中" />}
+        {justCompleted && <span className="ml-auto h-2 w-2 shrink-0 rounded-full bg-sora-blue" aria-label="有新回复" />}
       </Link>
       {/* hover 操作按钮 */}
       <button
@@ -425,44 +456,70 @@ export default function Sidebar({
       {/* Actual Sidebar Panel */}
       <aside
         className={clsx(
-          "fixed inset-y-0 left-0 z-40 w-60 border-r border-morning-mist dark:border-deep-space p-3 flex flex-col bg-nebula-white dark:bg-[#090b0e] transform transition-transform duration-250 ease-in-out md:translate-x-0 md:static md:h-screen shrink-0",
+          "fixed inset-y-0 left-0 z-40 flex w-60 min-w-0 max-w-60 shrink-0 flex-col border-r border-morning-mist bg-nebula-white p-3 transform transition-[width,min-width,max-width,transform] duration-250 ease-in-out dark:border-deep-space dark:bg-[#090b0e] md:static md:h-screen md:translate-x-0",
+          collapsed ? "md:w-14 md:min-w-14 md:max-w-14 md:p-2" : "md:w-60 md:min-w-60 md:max-w-60",
           isOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
-        {/* Brand & User Info */}
-        <div className="px-2 py-1 shrink-0 flex items-center justify-between">
-          <div className="min-w-0">
+        {/* Header */}
+        <div className={clsx("shrink-0 flex items-center", collapsed ? "justify-center" : "justify-between px-1 py-1")}>
+          <div className={clsx("min-w-0", collapsed && "hidden")}>
             <Link
               href="/"
               onClick={() => setIsOpen(false)}
-              className="font-bold text-lg tracking-tight text-neutral-900 dark:text-white block hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue rounded"
+              className="block rounded text-2xl font-bold text-neutral-900 hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:text-white"
             >
               Nekusora
             </Link>
-            <div className="text-[10px] text-neutral-450 dark:text-neutral-500 font-mono mt-0.5 truncate">
-              {userEmail}
-            </div>
           </div>
-          {/* Close button inside sidebar on mobile */}
-          <button
-            type="button"
-            onClick={() => setIsOpen(false)}
-            className="md:hidden p-1.5 rounded hover:bg-neutral-100 dark:hover:bg-neutral-900 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
-            aria-label="关闭侧边栏"
-          >
-            <X className="w-4 h-4" aria-hidden="true" />
-          </button>
+          <div className="flex items-center gap-1">
+            {!collapsed && (
+              <button type="button" onClick={() => setSearchOpen(true)} className="inline-flex h-9 w-9 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:hover:bg-neutral-900 dark:hover:text-neutral-100" aria-label={searchText} title={searchText}>
+                <Search className="h-[18px] w-[18px]" aria-hidden="true" />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setCollapsed((value) => !value)}
+              className="hidden h-9 w-9 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-neutral-900 dark:hover:text-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue md:inline-flex"
+              aria-label={collapsed ? "展开侧边栏" : "收起侧边栏"}
+              title={collapsed ? "展开侧边栏" : "收起侧边栏"}
+            >
+              {collapsed ? <PanelLeftOpen className="h-[18px] w-[18px]" aria-hidden="true" /> : <PanelLeftClose className="h-[18px] w-[18px]" aria-hidden="true" />}
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsOpen(false)}
+              className="md:hidden inline-flex items-center justify-center rounded-md p-2 text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
+              aria-label="关闭侧边栏"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
         </div>
 
-        {/* New Conversation Button */}
-        <Link
-          href="/chat"
-          onClick={() => setIsOpen(false)}
-          className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-morning-mist dark:border-deep-space hover:bg-neutral-50 dark:hover:bg-neutral-900 px-3 py-2 text-sm font-semibold text-neutral-700 dark:text-neutral-200 transition-all duration-150 ease-out shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
-        >
-          <Plus className="w-4 h-4 text-sora-blue" aria-hidden="true" />
-          <span>{newConversationText}</span>
-        </Link>
+        <nav className={clsx("min-h-0 flex-1 flex-col items-center gap-1.5 pt-3", collapsed ? "hidden md:flex" : "hidden")} aria-label="快捷导航">
+          <Link href="/chat" className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-neutral-100 text-neutral-800 hover:bg-neutral-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800" aria-label={newConversationText} title={newConversationText}>
+            <Plus className="h-[18px] w-[18px]" aria-hidden="true" />
+          </Link>
+          <button type="button" onClick={() => setSearchOpen(true)} className="inline-flex h-9 w-9 items-center justify-center rounded-md text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:text-neutral-300 dark:hover:bg-neutral-900" aria-label={searchText} title={searchText}>
+            <Search className="h-[18px] w-[18px]" aria-hidden="true" />
+          </button>
+          <Link href="/image" className="inline-flex h-9 w-9 items-center justify-center rounded-md text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:text-neutral-300 dark:hover:bg-neutral-900" aria-label={imageText} title={imageText}>
+            <ImageIcon className="h-[18px] w-[18px]" aria-hidden="true" />
+          </Link>
+        </nav>
+
+        <div className={clsx("flex min-h-0 flex-1 flex-col", collapsed && "md:hidden")}>
+          {/* New Conversation Button */}
+          <Link
+            href="/chat"
+            onClick={() => setIsOpen(false)}
+            className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-morning-mist dark:border-deep-space hover:bg-neutral-50 dark:hover:bg-neutral-900 px-3 py-2 text-sm font-semibold text-neutral-700 dark:text-neutral-200 transition-all duration-150 ease-out shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
+          >
+            <Plus className="w-4 h-4 text-sora-blue" aria-hidden="true" />
+            <span>{newConversationText}</span>
+          </Link>
 
         {/* 图像工作区入口 */}
         <Link
@@ -474,94 +531,67 @@ export default function Sidebar({
           <span>{imageText}</span>
         </Link>
 
-        {/* Search box */}
-        <div className="mt-3 relative shrink-0">
-          <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-400" aria-hidden="true" />
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={searchText}
-            className="w-full rounded-md border border-morning-mist dark:border-deep-space bg-white dark:bg-space-ink pl-7 pr-2 py-1.5 text-xs text-neutral-700 dark:text-neutral-300 placeholder-neutral-400 focus:outline-none focus:border-sora-blue transition-colors"
-            aria-label={searchText}
-          />
-        </div>
-
         {/* Conversations List Label */}
         <div className="mt-3 px-3 py-1.5 text-[10px] font-semibold text-neutral-400 dark:text-neutral-500 uppercase tracking-wider shrink-0 select-none">
           {conversationsText}
         </div>
 
-        {/* Scrollable Conversation List(query 非空时显示全文搜索结果,否则分组列表) */}
-        <div className="flex-1 overflow-y-auto -mx-1 px-1 space-y-3">
-          {query.trim() ? (
-            searching ? (
-              <p className="text-xs text-neutral-400 px-3 py-2 flex items-center gap-1.5">
-                <Loader2 className="w-3 h-3 animate-spin" aria-hidden="true" />
-                {tSidebar("searching")}
-              </p>
-            ) : searchResults.length === 0 ? (
-              <p className="text-xs text-neutral-400 px-3 py-2">{tSidebar("noSearchResults")}</p>
-            ) : (
-              <div className="space-y-1">
-                {searchResults.map((r) => (
-                  <Link
-                    key={`${r.conversationId}-${r.messagePublicId}-${r.createdAt}`}
-                    href={`/chat/${r.conversationId}`}
-                    onClick={() => setIsOpen(false)}
-                    className="block rounded-md px-3 py-2 hover:bg-neutral-100 dark:hover:bg-neutral-900 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
-                  >
-                    <div className="text-xs font-medium text-neutral-700 dark:text-neutral-200 truncate flex items-center gap-1.5">
-                      <MessageSquare className="w-3 h-3 shrink-0 opacity-60" aria-hidden="true" />
-                      <span className="truncate">{r.conversationTitle}</span>
-                    </div>
-                    <div className="text-[11px] text-neutral-500 dark:text-neutral-400 line-clamp-2 mt-0.5 break-all">
-                      {highlightSnippet(r.snippet, query.trim())}
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            )
-          ) : sections.length === 0 ? (
+        {/* Scrollable Conversation List */}
+        <div className="scroll-fade-y flex-1 overflow-y-auto -mx-1 px-1 space-y-3">
+          {sections.length === 0 ? (
             <p className="text-xs text-neutral-400 px-3 py-2">{noConversationsText}</p>
           ) : (
             sections.map((section) => (
               <div key={section.key}>
-                <div className="px-3 py-1 text-[10px] font-semibold text-neutral-400 dark:text-neutral-500 uppercase tracking-wider select-none flex items-center gap-1">
-                  {section.key === "pinned" && <Pin className="w-2.5 h-2.5" aria-hidden="true" />}
-                  {section.key === "archived" && <Archive className="w-2.5 h-2.5" aria-hidden="true" />}
+                <button type="button" onClick={() => toggleGroup(section.key)} className="flex w-full items-center gap-2 px-3 py-2 text-[11px] font-medium text-neutral-450 hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sora-blue dark:text-neutral-500 dark:hover:text-neutral-300" aria-expanded={!collapsedGroups.has(section.key)}>
                   <span>{section.label}</span>
+                  <span className="h-px min-w-4 flex-1 bg-morning-mist/80 dark:bg-deep-space/70" aria-hidden="true" />
                   <span className="text-neutral-300 dark:text-neutral-700">{section.items.length}</span>
-                </div>
-                <div className="space-y-0.5">{section.items.map(renderItem)}</div>
+                  <ChevronDown className={clsx("h-3 w-3 transition-transform", collapsedGroups.has(section.key) && "-rotate-90")} aria-hidden="true" />
+                </button>
+                {!collapsedGroups.has(section.key) && <div className="space-y-0.5">{section.items.map(renderItem)}</div>}
               </div>
             ))
           )}
         </div>
 
-        {/* Footer controls */}
-        <div className="pt-3 mt-2 border-t border-morning-mist dark:border-deep-space shrink-0 space-y-0.5">
-          <Link
-            href="/panel"
-            onClick={() => setIsOpen(false)}
-            className="inline-flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs font-medium text-neutral-500 dark:text-neutral-450 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
-          >
-            <Settings2 className="w-3.5 h-3.5 text-neutral-400 dark:text-neutral-500" aria-hidden="true" />
-            <span>{panelText}</span>
-          </Link>
-          <form onSubmit={handleSignOut}>
-            <button
-              type="submit"
-              disabled={isPending}
-              className="inline-flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 transition-all duration-150 cursor-pointer disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
-              aria-label={logoutText}
-            >
-              <LogOut className="w-3.5 h-3.5 text-red-400" aria-hidden="true" />
-              <span>{logoutText}</span>
-            </button>
-          </form>
+        </div>
+
+        {/* Footer user menu */}
+        <div ref={userMenuRef} className="relative pt-3 mt-2 border-t border-morning-mist dark:border-deep-space shrink-0">
+          {userMenuOpen && (
+            <div className={clsx("absolute bottom-full left-0 right-0 z-30 mb-2 rounded-lg border border-morning-mist bg-white p-1 shadow-lg dark:border-deep-space dark:bg-space-ink", collapsed && "md:bottom-0 md:left-full md:right-auto md:mb-0 md:ml-2 md:w-48")}>
+              <Link href="/panel" onClick={() => { setUserMenuOpen(false); setIsOpen(false); }} className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-900">
+                <Settings2 className="h-4 w-4" aria-hidden="true" />
+                {settingsText}
+              </Link>
+              <form onSubmit={handleSignOut}>
+                <button type="submit" disabled={isPending} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-red-500 hover:bg-red-50 disabled:opacity-50 dark:hover:bg-red-950/20">
+                  <LogOut className="h-4 w-4" aria-hidden="true" />
+                  {logoutText}
+                </button>
+              </form>
+            </div>
+          )}
+          <button type="button" onClick={() => setUserMenuOpen((value) => !value)} className={clsx("flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left hover:bg-neutral-100 dark:hover:bg-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue", collapsed && "md:justify-center")} aria-expanded={userMenuOpen}>
+            <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sora-blue/10 text-xs font-semibold text-sora-blue">{displayName.slice(0, 1).toUpperCase()}</span>
+            <span className={clsx("min-w-0 flex-1", collapsed && "md:hidden")}><span className="block truncate text-sm font-semibold text-neutral-800 dark:text-neutral-100">{displayName}</span><span className="mt-0.5 block truncate text-[10px] font-mono text-neutral-450 dark:text-neutral-500">{userEmail}</span></span>
+            <ChevronDown className={clsx("h-4 w-4 shrink-0 text-neutral-400 transition-transform", userMenuOpen && "rotate-180", collapsed && "md:hidden")} aria-hidden="true" />
+          </button>
         </div>
       </aside>
+
+      <Modal open={searchOpen} onClose={() => setSearchOpen(false)} title={searchText} dialogClassName="m-auto w-[min(720px,92vw)] rounded-xl border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/40 dark:border-deep-space dark:bg-twilight-obsidian dark:text-nebula-silver">
+        <div className="space-y-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" aria-hidden="true" />
+            <input autoFocus type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={searchText} aria-label={searchText} className="w-full rounded-lg border border-morning-mist bg-white py-3 pl-10 pr-3 text-sm text-space-ink outline-none focus:border-sora-blue dark:border-deep-space dark:bg-space-ink dark:text-nebula-silver" />
+          </div>
+          <div className="scroll-fade-y max-h-[min(55vh,460px)] overflow-y-auto">
+            {!query.trim() ? <p className="py-8 text-center text-sm text-neutral-400">{searchText}</p> : searching ? <p className="flex items-center justify-center gap-2 py-8 text-sm text-neutral-400"><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />{tSidebar("searching")}</p> : searchResults.length === 0 ? <p className="py-8 text-center text-sm text-neutral-400">{tSidebar("noSearchResults")}</p> : <div className="space-y-1">{searchResults.map((r) => <Link key={`${r.conversationId}-${r.messagePublicId}-${r.createdAt}`} href={`/chat/${r.conversationId}`} onClick={() => setSearchOpen(false)} className="block rounded-lg px-3 py-3 hover:bg-neutral-100 dark:hover:bg-neutral-900"><div className="truncate text-sm font-medium">{r.conversationTitle}</div><div className="mt-1 line-clamp-2 text-xs text-neutral-500 dark:text-neutral-400">{highlightSnippet(r.snippet, query.trim())}</div></Link>)}</div>}
+          </div>
+        </div>
+      </Modal>
     </>
   );
 }

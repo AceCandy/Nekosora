@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Send } from "lucide-react";
 import { clsx } from "clsx";
@@ -19,19 +19,19 @@ interface ChatInputBoxProps {
   onPasteFiles: (files: File[]) => void;
   /** 拖拽文件时触发。 */
   onDropFiles: (files: File[]) => void;
-  /** 当前输入文本 + 附件的 token 估算（图片按固定 255 计）。 */
-  tokenCount?: number;
-  /** 当前模型上下文上限；提供后超 90% 阈值时计数变色警示。 */
-  tokenLimit?: number;
   /** 可用指令卡(输入 / 时触发斜杠命令)。空数组则不触发。 */
   cards?: CardOption[];
   /** 选中斜杠命令时挂载/卸载对应指令卡。 */
   onCardToggle?: (id: string) => void;
+  /** 输入框左侧控制。 */
+  leadingControl?: React.ReactNode;
+  /** 发送按钮前的右侧控制。 */
+  trailingControl?: React.ReactNode;
 }
 
 /**
- * 输入框段 —— textarea（粘贴/拖拽/回车）+ 发送/停止按钮 + token 计数 + 斜杠命令。
- * 纯受控：value 与 disabled 由父组件持有；tokenCount 由父组件估算后传入。
+ * 输入框段 —— textarea（粘贴/拖拽/回车）+ 发送/停止按钮 + 斜杠命令。
+ * 单行时控件与文字同排，文字换行后输入区向上增高并为底部控件留出空间。
  */
 export function ChatInputBox({
   value,
@@ -41,18 +41,12 @@ export function ChatInputBox({
   onStop,
   onPasteFiles,
   onDropFiles,
-  tokenCount,
-  tokenLimit,
   cards = [],
   onCardToggle,
+  leadingControl,
+  trailingControl,
 }: ChatInputBoxProps) {
   const t = useTranslations("chat");
-  const showCount = typeof tokenCount === "number" && tokenCount > 0;
-  const overBudget =
-    typeof tokenLimit === "number" &&
-    tokenLimit > 0 &&
-    typeof tokenCount === "number" &&
-    tokenCount > tokenLimit * 0.9;
 
   // 斜杠命令:输入以 / 开头(单行,无空格隔断)时弹出指令卡列表,模糊匹配 trigger / title
   const slashActive = !disabled && cards.length > 0 && value.startsWith("/") && !value.includes("\n");
@@ -66,13 +60,33 @@ export function ChatInputBox({
   }, [slashActive, slashQuery, cards]);
   const [slashIndex, setSlashIndex] = useState(0);
 
-  // textarea 自适应高度:随输入行数增高,最高约视口 1/3,超出则内部滚动
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  useLayoutEffect(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
+  // 用单行态的实际可用宽度测量换行，避免控件下沉后宽度变大导致布局反复切换。
+  const collapsedMeasureRef = useRef<HTMLDivElement>(null);
+  const expandedMeasureRef = useRef<HTMLDivElement>(null);
+  const [layout, setLayout] = useState({ multiline: false, height: 48 });
+  useEffect(() => {
+    const collapsedMeasure = collapsedMeasureRef.current;
+    const expandedMeasure = expandedMeasureRef.current;
+    if (!collapsedMeasure || !expandedMeasure) return;
+
+    const syncLayout = () => {
+      const multiline = value.includes("\n") || collapsedMeasure.scrollHeight > 20;
+      const height = multiline
+        ? Math.min(expandedMeasure.scrollHeight + 60, window.innerHeight * 0.33)
+        : 48;
+      setLayout((current) => {
+        if (current.multiline === multiline && current.height === height) return current;
+        return { multiline, height };
+      });
+    };
+
+    syncLayout();
+    const resizeObserver = new ResizeObserver(syncLayout);
+    resizeObserver.observe(collapsedMeasure);
+    resizeObserver.observe(expandedMeasure);
+    return () => {
+      resizeObserver.disconnect();
+    };
   }, [value]);
 
   // 选中斜杠命令:挂载对应指令卡,并移除输入框开头的 /xxx 词,保留其后正文
@@ -83,8 +97,25 @@ export function ChatInputBox({
   };
 
   return (
-    <div className="flex gap-3 items-end bg-white dark:bg-space-ink border border-morning-mist dark:border-deep-space rounded-lg p-2.5 focus-within:border-sora-blue dark:focus-within:border-sora-blue transition-all duration-150">
-      <div className="relative flex-1 min-w-0">
+    <div
+      className="relative rounded-2xl border border-morning-mist bg-white shadow-sm transition-[height,border-color] duration-200 ease-out focus-within:border-sora-blue motion-reduce:transition-none dark:border-deep-space dark:bg-space-ink dark:focus-within:border-sora-blue"
+      style={{ height: `${layout.height}px` }}
+    >
+      <div
+        ref={collapsedMeasureRef}
+        className="pointer-events-none invisible absolute left-12 right-40 top-0 whitespace-pre-wrap break-words text-sm leading-5 sm:right-52"
+        aria-hidden="true"
+      >
+        {`${value || " "}\u200b`}
+      </div>
+      <div
+        ref={expandedMeasureRef}
+        className="pointer-events-none invisible absolute left-3 right-3 top-0 whitespace-pre-wrap break-words text-sm leading-5"
+        aria-hidden="true"
+      >
+        {`${value || " "}\u200b`}
+      </div>
+      <div className="relative h-full min-w-0">
         {/* 斜杠命令 popover:贴 textarea 上方,键盘 + 鼠标均可选 */}
         {slashMatches.length > 0 && (
           <div className="absolute bottom-full left-0 mb-2 z-40 w-72 max-h-60 overflow-y-auto rounded-lg border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink py-1 shadow-md">
@@ -108,7 +139,6 @@ export function ChatInputBox({
           </div>
         )}
         <textarea
-          ref={textareaRef}
           value={value}
           onChange={(e) => {
             onChange(e.target.value);
@@ -172,47 +202,42 @@ export function ChatInputBox({
           }}
           placeholder={t("placeholder")}
           rows={1}
-          className="w-full bg-transparent border-0 outline-none text-sm resize-none focus:ring-0 text-neutral-800 dark:text-neutral-200 py-1.5 px-2.5 pr-16 leading-relaxed placeholder-neutral-400 max-h-[33dvh] overflow-y-auto"
+          className={clsx(
+            "scrollbar-hidden block h-full w-full resize-none overflow-y-auto border-0 bg-transparent py-3 text-sm leading-5 text-neutral-800 outline-none transition-[padding] duration-200 ease-out placeholder-neutral-400 focus:ring-0 motion-reduce:transition-none dark:text-neutral-200",
+            layout.multiline ? "px-3 pb-12" : "pl-12 pr-40 sm:pr-52",
+          )}
           disabled={disabled}
           aria-label="对话输入框"
         />
-        {showCount && (
-          <span
-            className={clsx(
-              "pointer-events-none absolute bottom-1.5 right-2 text-[10px] font-mono tabular-nums select-none",
-              overBudget
-                ? "text-orange-500 dark:text-orange-400"
-                : "text-neutral-400 dark:text-neutral-600",
-            )}
-            aria-hidden="true"
-          >
-            {t("inputTokens", { count: tokenCount })}
-          </span>
-        )}
       </div>
 
-      {disabled ? (
-        <button
-          onClick={onStop}
-          className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-red-500 hover:bg-red-600 text-white hover:shadow-[0_4px_12px_rgba(239,68,68,0.15)] transition-all duration-200 shrink-0 shadow-none cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
-          title={t("stopGeneration")}
-          aria-label={t("stopGeneration")}
-        >
-          <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24" aria-hidden="true">
-            <rect x="5" y="5" width="14" height="14" rx="1" />
-          </svg>
-        </button>
-      ) : (
-        <button
-          onClick={onSend}
-          disabled={!value.trim()}
-          className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-sora-blue hover:bg-sora-blue-hover text-white hover:shadow-[0_4px_12px_rgba(0,0,0,0.05)] disabled:opacity-40 disabled:hover:shadow-none transition-all duration-200 shrink-0 shadow-none cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
-          title={t("send")}
-          aria-label={t("send")}
-        >
-          <Send className="w-4 h-4" aria-hidden="true" />
-        </button>
-      )}
+      <div className="pointer-events-none absolute inset-x-2 bottom-2 flex h-8 items-center gap-1.5">
+        {leadingControl}
+        <div className="flex-1" />
+        {trailingControl}
+        {disabled ? (
+          <button
+            onClick={onStop}
+            className="pointer-events-auto inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-red-500 text-white transition-all duration-200 hover:bg-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+            title={t("stopGeneration")}
+            aria-label={t("stopGeneration")}
+          >
+            <svg className="h-3.5 w-3.5 fill-current" viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="5" y="5" width="14" height="14" rx="1" />
+            </svg>
+          </button>
+        ) : (
+          <button
+            onClick={onSend}
+            disabled={!value.trim()}
+            className="pointer-events-auto inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-transparent text-neutral-700 transition-all duration-200 hover:bg-neutral-100 disabled:cursor-default disabled:text-neutral-300 disabled:hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none dark:text-neutral-200 dark:hover:bg-neutral-800 dark:disabled:text-neutral-600 dark:disabled:hover:bg-transparent"
+            title={t("send")}
+            aria-label={t("send")}
+          >
+            <Send className="h-4 w-4" aria-hidden="true" />
+          </button>
+        )}
+      </div>
     </div>
   );
 }

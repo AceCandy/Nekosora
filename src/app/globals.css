@@ -72,6 +72,55 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* 滚动条默认隐去，仅在实际滚动后的短时间内以低对比度显示。 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.is-scrolling {
+  scrollbar-color: color-mix(in oklch, var(--color-space-ink) 18%, transparent) transparent;
+}
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: transparent;
+}
+.is-scrolling::-webkit-scrollbar-thumb {
+  background: color-mix(in oklch, var(--color-space-ink) 18%, transparent);
+}
+.dark .is-scrolling {
+  scrollbar-color: color-mix(in oklch, var(--color-nebula-silver) 22%, transparent) transparent;
+}
+.dark .is-scrolling::-webkit-scrollbar-thumb {
+  background: color-mix(in oklch, var(--color-nebula-silver) 22%, transparent);
+}
+
+/* 保留滚动能力但永久隐藏滚动条，聊天正文由大纲承担位置导航。 */
+.scrollbar-hidden {
+  scrollbar-width: none;
+}
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none;
+}
+
+/* 主要纵向滚动区用轻微边缘淡化提示内容仍可继续滚动。 */
+.scroll-fade-y {
+  --scroll-fade-size: 12px;
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    black var(--scroll-fade-size),
+    black calc(100% - var(--scroll-fade-size)),
+    transparent
+  );
+}
+
 /*
  * 默认态正文代码块美化。
  *

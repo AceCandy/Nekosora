@@ -3,6 +3,7 @@ import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
 import "./globals.css";
 import RegisterSW from "./RegisterSW";
+import ScrollActivity from "@/shared/components/ScrollActivity";
 
 export const metadata: Metadata = {
   title: "Nekusora · 星枢",
@@ -41,6 +42,7 @@ export default async function RootLayout({
         <NextIntlClientProvider locale={locale} messages={messages}>
           {children}
         </NextIntlClientProvider>
+        <ScrollActivity />
         <RegisterSW />
       </body>
     </html>

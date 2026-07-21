@@ -26,6 +26,15 @@
 - server action 的 `revalidatePath` 指向容器页(如 `/admin/settings`),不是原独立路由。
 - tab 样式:无侧边彩色粗条、无 Eyebrow、静止无投影(遵守 DESIGN)。
 
+## 侧边栏收起(chat + dash 后台)
+
+聊天侧(`features/chat/components/Sidebar.tsx`)与后台侧(`shared/components/DashSidebar.tsx` + `AppShell.tsx`)都支持桌面端收起侧边栏,交互一致:
+
+- **收起状态是 client 组件内 `useState`,会话内有效、不持久化**(刷新重置为展开)。后台 `AppShell` 是 server component,收起交互下沉到 client 子组件 `DashSidebar`;登出仍走 server action,由 `AppShell` 模块级定义后透传给 `DashSidebar`,不在 client 侧另写一套。
+- **宽度**:收起态 `md:w-14`、展开态 chat `md:w-60` / dash `md:w-56`,用 `transition-[width,min-width,max-width,padding] duration-250` 过渡;折叠按钮 `PanelLeftClose`/`PanelLeftOpen` 仅桌面显示(`hidden md:inline-flex`),移动端各自保持原状(chat 抽屉 / dash 固定 `w-56`)。
+- **导航项必须有 `icon`**(`shared/nav-config.ts` 的 `NavItem.icon: LucideIcon`):收起态 `SidebarNav` 仅渲染图标,label 与 hotkey 隐藏,靠 `title`/`aria-label` 提供 tooltip。**新增 nav 项漏配 icon 会导致收起态空图标**。
+- **收起态底部图标化**:登出 → `LogOut`、footerLinks → `MessageSquare`;`LanguageSwitcher` 在收起态隐藏(语言切换需展开后操作)。
+
 ## Props Conventions
 
 - 显式 interface 定义 props,不用 inline 类型。
