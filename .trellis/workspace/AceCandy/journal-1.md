@@ -271,3 +271,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 9: 修正 provider 熔断状态机与失败计数
+
+**Date**: 2026-07-22
+**Task**: 修正 provider 熔断状态机与失败计数
+**Branch**: `opt0722`
+
+### Summary
+
+修复 half-open 重复放行与终端路由失败漏计数，新增流式和非流式回归测试，并沉淀网关熔断契约。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8c93281` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 8
+- **Total Sessions**: 9
 - **Last Active**: 2026-07-22
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~273 | Active |
+| `journal-1.md` | ~306 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 9 | 2026-07-22 | 修正 provider 熔断状态机与失败计数 | `8c93281` | `opt0722` |
 | 8 | 2026-07-22 | 后台侧边栏移动端抽屉适配 | `a325df4` | `main` |
 | 7 | 2026-07-21 | 修复前端审计问题并复评 | `d1382c9`, `6c8c6da` | `main` |
 | 6 | 2026-07-19 | 依赖安全审计与升级 | `514fe3e` | `main` |
