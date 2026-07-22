@@ -40,7 +40,8 @@
     "07-22-share-exclude-deleted-messages",
     "07-22-key-binding-owner-isolation",
     "07-22-subkey-model-list-visibility",
-    "07-22-mcp-subkey-model-list-bindings"
+    "07-22-mcp-subkey-model-list-bindings",
+    "07-22-key-enabled-owner-scope"
   ],
   "parent": null,
   "relatedFiles": [],

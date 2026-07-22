@@ -11,12 +11,13 @@ Apply this contract to panel server actions that read or mutate API keys and `ke
 - `bindModel(keyId, modelId): Promise<void>`
 - `unbindBinding(bindingId): Promise<void>`
 - `POST /v1/mcp` with `tools/call: list_models`
+- `setKeyEnabled(userId, keyId, enabled): Promise<void>`
 - `requireOwnedKey(db, userId, keyId, subOnly?): Promise<ApiKey>`
 
 ## 3. Contracts
 
 - Every key lookup combines `api_keys.id = keyId` with `api_keys.user_id = session.user.id`.
-- `disableKey` verifies ownership before calling the low-level `setKeyEnabled` helper.
+- `disableKey` verifies ownership before calling the low-level `setKeyEnabled` helper, and the helper repeats `api_keys.user_id = userId` in the update itself.
 - `getBindings` verifies key ownership before returning binding rows.
 - `bindModel` accepts only a caller-owned `kind='sub'` key.
 - A bindable model is enabled and either public or owned by the caller. This must match `getBindableModels`.
@@ -29,6 +30,7 @@ Apply this contract to panel server actions that read or mutate API keys and `ke
 | Operation | Required authorization | Invalid result |
 | --- | --- | --- |
 | Disable key | `key.userId === session.user.id` | Throw before update |
+| Persist key status | Key ID + user ID in one update condition | Update zero foreign rows |
 | Read bindings | `key.userId === session.user.id` | Throw before returning rows |
 | Bind model | Owned sub key + enabled public/owned model | Throw before insert |
 | Unbind model | Binding references an owned key | Throw before delete |
@@ -51,6 +53,7 @@ Apply this contract to panel server actions that read or mutate API keys and `ke
 - Accept an enabled public model and the caller's enabled private model.
 - Reject deleting a binding whose key belongs to another user without calling delete.
 - Keep positive owner tests for key disable and binding reads.
+- Low-level key tests assert `setKeyEnabled` combines key ID and user ID in the update predicate.
 - MCP route tests cover master-key owner filtering, sub-key binding join conditions, and an empty binding set.
 - Run lint, typecheck, full tests, production build, and diff checks.
 
@@ -87,4 +90,14 @@ await db.select().from(s.keyModelBindings)
     eq(s.models.ownerUserId, ctx.userId),
     eq(s.models.enabled, true),
   ));
+```
+
+```typescript
+// Wrong:a reusable write helper trusts global key IDs.
+await db.update(s.apiKeys).set({ enabled })
+  .where(eq(s.apiKeys.id, keyId));
+
+// Correct:the data write remains owner-scoped even after action authorization.
+await db.update(s.apiKeys).set({ enabled })
+  .where(and(eq(s.apiKeys.id, keyId), eq(s.apiKeys.userId, userId)));
 ```

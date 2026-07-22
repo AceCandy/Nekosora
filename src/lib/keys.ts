@@ -7,7 +7,7 @@
  * 校验:从 Authorization: Bearer 提取 → sha256 → 按 prefix 候选查回 → 常量时间比对。
  */
 import { customAlphabet } from "nanoid";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { hashSecret, safeEqual, encrypt } from "@/lib/infra/crypto";
 import { getEnvInfo } from "@/lib/infra/env";
@@ -107,11 +107,14 @@ export async function listKeys(userId: string): Promise<ApiKeyRecord[]> {
 }
 
 /** 禁用/启用密钥。 */
-export async function setKeyEnabled(keyId: string, enabled: boolean): Promise<void> {
+export async function setKeyEnabled(userId: string, keyId: string, enabled: boolean): Promise<void> {
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
-  await db.update(s.apiKeys).set({ enabled }).where(eq(s.apiKeys.id, keyId));
+  await db
+    .update(s.apiKeys)
+    .set({ enabled })
+    .where(and(eq(s.apiKeys.id, keyId), eq(s.apiKeys.userId, userId)));
 }
 
 /**

@@ -91,7 +91,7 @@ describe("子密钥模型绑定属主隔离", () => {
 
     await disableKey("own-key");
 
-    expect(mocks.setKeyEnabled).toHaveBeenCalledWith("own-key", false);
+    expect(mocks.setKeyEnabled).toHaveBeenCalledWith("user-1", "own-key", false);
   });
 
   it("不能读取其他用户 key 的绑定", async () => {

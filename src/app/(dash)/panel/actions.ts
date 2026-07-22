@@ -66,7 +66,7 @@ export async function disableKey(keyId: string) {
   const user = await requireSession();
   const db = await getDb();
   await requireOwnedKey(db, user.id, keyId);
-  await setKeyEnabled(keyId, false);
+  await setKeyEnabled(user.id, keyId, false);
   revalidatePath("/panel", "layout");
 }
 
