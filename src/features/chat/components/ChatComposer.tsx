@@ -123,12 +123,14 @@ export default function ChatComposer({
     attached,
     handleUpload,
     removeAttachment,
+    clearConsumedAttachments,
     uploadPending,
   } = useChatAttachments(activeConvId ?? null);
   const runtime = useChatRuntime({
     conversationId: activeConvId ?? null,
     initialMessages,
     uploadAttachments: uploadPending,
+    onAttachmentsConsumed: clearConsumedAttachments,
     onConversationCreated: setActiveConvId,
   });
   // 本会话累计发送 token(从各 assistant 消息的 trace 聚合),供 ChatHeader 实时显示。

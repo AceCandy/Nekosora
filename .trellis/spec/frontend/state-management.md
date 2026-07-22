@@ -172,3 +172,61 @@ deltaFlushTimeout = window.setTimeout(() => flushDeltas(), STREAM_FLUSH_FALLBACK
 - **忘记 `revalidatePath`** → Server Action 写库后页面不刷新。
 - **乐观创建资源后用 `router.replace` 同步 URL** → 触发 RSC 重载 + 组件重挂，新会话发消息时闪欢迎态、打断流式。改用 `window.history.replaceState` 静默换 URL，配合组件持有可变活动 id 切订阅 key（见上「乐观创建资源后的 URL 同步」）。
 - **新会话侧栏标题不刷新** → SSE `title_updated` 帧带了 `title`，但 store 层回调签名写成无参 `() => void` 把 title 丢了；又因新会话跳过 `router.refresh()`，侧栏停在截断标题直到整页刷新。store 回调必须接住 `(title, conversationId)` 并更新 `optimisticConversation.title`（见「乐观创建资源后的 URL 同步 · 乐观项标题的异步刷新」）。
+
+## Scenario: 聊天附件消费边界
+
+### 1. Scope / Trigger
+
+修改 `useChatAttachments`、`useChatRuntime` 或 `chatStreamStore.send` 的附件发送状态时，必须保证附件只属于用户明确发送的当前一轮，同时保留未被服务器接受或未上传成功的项。
+
+### 2. Signatures
+
+- `uploadAttachments(conversationId): Promise<string[]>` 返回本轮请求携带的 fileIds。
+- `onAttachmentsConsumed(fileIds: string[]): void` 表示 `/api/chat` 已接受这些 fileIds。
+- `clearConsumedAttachments(fileIds)` 只清理本轮已消费的 uploaded 项。
+
+### 3. Contracts
+
+- `chatStreamStore.send` 在 `response.ok && response.body` 之后、`consumeChatSSE` 之前调用一次 `onAttachmentsConsumed(fileIds)`。
+- 非 2xx、无 body、fetch 或上传失败时不得调用；响应已接受后的 SSE 中断不恢复附件。
+- 回调必须携带本轮 fileIds，不能无参清空全部 uploaded 项，否则请求等待期间并发新增的附件会被误删。
+- 附件 hook 使用 functional update，仅移除 `status === "uploaded"` 且 fileId 位于参数集合中的项；保留 pending/uploading/error 和其他 uploaded 项。
+- 被移除项有 preview URL 时同步 `URL.revokeObjectURL`。
+
+### 4. Validation & Error Matrix
+
+| 时机 | 消费回调 | 附件状态 |
+| --- | --- | --- |
+| 上传或 fetch 失败 | 不调用 | 全部保留 |
+| HTTP 非成功 / 无 body | 不调用 | 全部保留 |
+| HTTP 成功且有流 body | 本轮 fileIds 调用一次 | 仅清本轮 uploaded |
+| 后续 SSE 中断 | 已调用，不恢复 | 新增/失败项仍保留 |
+
+### 5. Good / Base / Bad Cases
+
+- Good：本轮 `file-1` 被接受，等待期间新增的 `file-2` 继续留在 Composer。
+- Base：无附件消息回调空 fileIds，不改变附件 state。
+- Bad：从不清理 uploaded 项会让每条后续消息重复携带旧 fileIds；成功后无参 reset 又会误删并发新增或失败项。
+
+### 6. Tests Required
+
+- Store 单测断言成功 response 的 request body fileIds 与消费回调参数一致，且回调先于 SSE 消费。
+- 非成功 response 不调用消费回调。
+- 成功 response 后 SSE 失败仍只调用一次消费回调。
+- lint/typecheck 必须证明 Composer -> runtime hook -> store 的带参回调完整透传。
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong:旧附件永远保留，或成功时把所有附件一刀切清空。
+const fileIds = await uploadAttachments(conversationId);
+await fetch("/api/chat", request);
+resetAttachments();
+
+// Correct:服务器接受后只消费本轮 fileIds。
+const fileIds = await uploadAttachments(conversationId);
+const response = await fetch("/api/chat", request);
+if (!response.ok || !response.body) throw new Error("请求失败");
+onAttachmentsConsumed?.(fileIds);
+await consumeChatSSE(response.body, handlers);
+```

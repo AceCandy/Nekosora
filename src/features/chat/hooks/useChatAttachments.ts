@@ -96,14 +96,18 @@ export function useChatAttachments(conversationId: string | null) {
     setAttached((prev) => prev.filter((x) => x.id !== id));
   }, []);
 
-  const resetAttachments = useCallback(() => {
-    // 释放图片预览的 object URL,避免内存泄漏。
-    setAttached((prev) => {
-      prev.forEach((x) => {
-        if (x.previewUrl) URL.revokeObjectURL(x.previewUrl);
-      });
-      return [];
-    });
+  const clearConsumedAttachments = useCallback((fileIds: string[]) => {
+    const consumedIds = new Set(fileIds);
+    setAttached((prev) =>
+      prev.filter((item) => {
+        const consumed =
+          item.status === "uploaded" &&
+          item.fileId !== undefined &&
+          consumedIds.has(item.fileId);
+        if (consumed && item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+        return !consumed;
+      }),
+    );
   }, []);
 
   return {
@@ -111,6 +115,6 @@ export function useChatAttachments(conversationId: string | null) {
     handleUpload,
     uploadPending,
     removeAttachment,
-    resetAttachments,
+    clearConsumedAttachments,
   };
 }
