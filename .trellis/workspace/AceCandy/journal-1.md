@@ -502,3 +502,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 16: 修复 MCP 同名服务工具误路由
+
+**Date**: 2026-07-22
+**Task**: 修复 MCP 同名服务工具误路由
+**Branch**: `opt0722`
+
+### Summary
+
+为同一请求内规范化后同名的 MCP server 分配确定性唯一前缀，IR 工具生成与调用路由共享 server ID 映射；新增同名、规范化碰撞与天然后缀测试，完成 lint、typecheck、361 项测试和生产构建验证。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5981b5f` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
