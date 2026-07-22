@@ -1030,3 +1030,36 @@ setKeyEnabled 接收 userId 并在更新 SQL 中同时限制 key ID 与属主，
 ### Next Steps
 
 - None - task complete
+
+
+## Session 32: 服务商模型相似匹配与路由复用
+
+**Date**: 2026-07-22
+**Task**: 服务商模型相似匹配与路由复用
+**Branch**: `opt0722`
+
+### Summary
+
+实现服务商上游模型点击后的完全匹配、相似候选、幂等补路由与新建分流；补齐 admin/panel 权限测试、双语交互和桌面/窄屏浏览器验证。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e056569` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

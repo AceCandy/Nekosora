@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 31
+- **Total Sessions**: 32
 - **Last Active**: 2026-07-22
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1032 | Active |
+| `journal-1.md` | ~1065 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 32 | 2026-07-22 | 服务商模型相似匹配与路由复用 | `e056569` | `opt0722` |
 | 31 | 2026-07-22 | 网关模型属主边界收敛 | `9b810ee` | `opt0722` |
 | 30 | 2026-07-22 | 密钥状态写入属主约束 | `cddb7d8` | `opt0722` |
 | 29 | 2026-07-22 | MCP 子密钥模型列表约束 | `ba36083` | `opt0722` |
