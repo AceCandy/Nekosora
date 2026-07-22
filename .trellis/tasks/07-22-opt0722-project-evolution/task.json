@@ -32,7 +32,8 @@
     "07-22-upload-db-failure-storage-cleanup",
     "07-22-upload-queue-failure-fallback",
     "07-22-file-processing-atomic-claim",
-    "07-22-clear-consumed-chat-attachments"
+    "07-22-clear-consumed-chat-attachments",
+    "07-22-chat-attachment-preview-url-cleanup"
   ],
   "parent": null,
   "relatedFiles": [],

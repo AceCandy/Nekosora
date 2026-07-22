@@ -35,3 +35,4 @@
 - `07-22-upload-queue-failure-fallback`：队列获取或投递失败时回退本地文件处理。
 - `07-22-file-processing-atomic-claim`：以数据库原子状态抢占避免文件处理并发重复。
 - `07-22-clear-consumed-chat-attachments`：聊天请求接受后只清理本轮已消费附件。
+- `07-22-chat-attachment-preview-url-cleanup`：回收聊天附件手动移除与卸载时的 blob URL。
