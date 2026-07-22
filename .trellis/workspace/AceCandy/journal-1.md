@@ -634,3 +634,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 20: 队列失败时回退文件处理
+
+**Date**: 2026-07-22
+**Task**: 队列失败时回退文件处理
+**Branch**: `opt0722`
+
+### Summary
+
+捕获队列获取与投递异常并统一启动 processFile fire-and-forget fallback；显式 unavailable 保持无错误降级，fallback 拒绝被日志捕获。统一 storage、DB、queue 与 fallback 的 MIME，新增四条队列失败回归；lint、typecheck、390 个测试与生产构建通过。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `617fbe0` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
