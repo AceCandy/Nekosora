@@ -32,3 +32,4 @@
 - `07-22-bounded-multipart-request-body`：为附件与语音转写 multipart 请求增加流式硬上限。
 - `07-22-local-storage-path-traversal`：清洗上传文件名并阻止 LocalDriver 相对 key 越界。
 - `07-22-upload-db-failure-storage-cleanup`：数据库持久化失败时补偿删除已写入的上传对象。
+- `07-22-upload-queue-failure-fallback`：队列获取或投递失败时回退本地文件处理。

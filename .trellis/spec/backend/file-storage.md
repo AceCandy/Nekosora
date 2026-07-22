@@ -261,3 +261,69 @@ try {
   throw error;
 }
 ```
+
+## Scenario: Upload Queue Failure Fallback
+
+### 1. Scope / Trigger
+
+Apply this contract when changing `/api/upload` dispatch to the `file-process` queue. The pg-boss adapter can fail during initialization or send even though the only current adapter reports `available: true`.
+
+### 2. Signatures
+
+- `getQueue(): Promise<QueueAdapter>` may reject while initializing pg-boss.
+- `queue.send("file-process", { fileId, storagePath, mime })` may reject while dispatching.
+- `processFile(fileId, storagePath, mime): Promise<void>` is the existing no-queue fallback.
+
+### 3. Contracts
+
+- A successful queue send is the only path that skips synchronous fallback.
+- `available: false`, queue acquisition failure, and send failure each start exactly one fire-and-forget `processFile` call.
+- Log acquisition/send errors before fallback. Explicit `available: false` is not an error and must not emit a queue-failure log.
+- Attach a rejection handler to fallback processing; a fallback failure is logged but does not turn the already-persisted upload response into an error.
+- Normalize MIME once and reuse it for storage, DB, queue payload, and fallback; an empty type becomes `application/octet-stream`.
+- A send that commits server-side but reports a client-side error can still race with fallback processing. Exactly-once dispatch and concurrent processing locks remain outside this contract.
+
+### 4. Validation & Error Matrix
+
+| Queue condition | Processing path | Upload response |
+| --- | --- | --- |
+| Send succeeds | Worker only | 200 processing |
+| Adapter reports unavailable | Fire-and-forget fallback | 200 processing |
+| `getQueue` or `send` throws | Log queue error, then fallback | 200 processing |
+| Fallback rejects | Log processing error | Remains 200 processing |
+
+### 5. Good / Base / Bad Cases
+
+- Good: a transient pg-boss failure no longer leaves a persisted attachment indefinitely pending.
+- Base: a healthy queue receives one job and the request process does no local file processing.
+- Bad: awaiting `getQueue` and `send` outside a catch returns a failed upload after storage and DB persistence, while no retry path exists.
+
+### 6. Tests Required
+
+- Assert adapter acquisition and send failures both return 200, log the queue error, and call `processFile` once with the stored identifiers.
+- Assert `available: false` falls back without a queue-error log.
+- Assert healthy send does not invoke fallback.
+- Assert fallback rejection is observed and logged without an unhandled rejection.
+- Cover empty MIME equality across storage, DB, queue/fallback.
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong: queue exceptions escape after the upload has already been persisted.
+const queue = await getQueue();
+await queue.send("file-process", payload);
+
+// Correct: all non-success dispatch paths converge on one fallback call.
+let useSyncFallback = false;
+try {
+  const queue = await getQueue();
+  if (queue.available) await queue.send("file-process", payload);
+  else useSyncFallback = true;
+} catch (queueError) {
+  console.error("[upload] queue dispatch failed, using sync fallback:", queueError);
+  useSyncFallback = true;
+}
+if (useSyncFallback) {
+  processFile(fileId, storagePath, mime).catch(logSyncFailure);
+}
+```

@@ -64,12 +64,13 @@ export async function POST(req: NextRequest) {
 
   const fileId = crypto.randomUUID();
   const safeFilename = sanitizeUploadFilename(file.name);
+  const mime = file.type || "application/octet-stream";
   // storage key:driver 无关的相对路径。LocalDriver 拼成 ./uploads/{userId}/...
   // 与历史绝对路径一致;S3 driver 作为 object key。
   const storagePath = `${user.id}/${fileId}-${safeFilename}`;
   const buf = Buffer.from(await file.arrayBuffer());
   const storage = await getStorage();
-  await storage.put(storagePath, buf, file.type || "application/octet-stream");
+  await storage.put(storagePath, buf, mime);
 
   try {
     const db = await getDb();
@@ -80,7 +81,7 @@ export async function POST(req: NextRequest) {
       userId: user.id,
       conversationId: conversationId || null,
       filename: safeFilename,
-      mime: file.type || "application/octet-stream",
+      mime,
       storagePath,
       size: file.size,
       processingStatus: "pending",
@@ -95,12 +96,21 @@ export async function POST(req: NextRequest) {
   }
 
   // 入队或同步处理
-  const queue = await getQueue();
-  if (queue.available) {
-    await queue.send("file-process", { fileId, storagePath, mime: file.type });
-  } else {
-    // 队列不可用时:同步处理(不阻塞响应过多 —— 简单起见在后台 fire-and-forget)
-    processFile(fileId, storagePath, file.type || "application/octet-stream").catch((e) =>
+  let useSyncFallback = false;
+  try {
+    const queue = await getQueue();
+    if (queue.available) {
+      await queue.send("file-process", { fileId, storagePath, mime });
+    } else {
+      useSyncFallback = true;
+    }
+  } catch (queueError) {
+    console.error("[upload] queue dispatch failed, using sync fallback:", queueError);
+    useSyncFallback = true;
+  }
+  if (useSyncFallback) {
+    // 队列不可用或投递失败时:后台 fire-and-forget 处理,不阻塞上传响应。
+    processFile(fileId, storagePath, mime).catch((e) =>
       console.error("[upload] sync process failed:", e),
     );
   }

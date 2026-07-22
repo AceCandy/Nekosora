@@ -39,9 +39,9 @@ function request() {
   return new NextRequest("http://localhost/api/upload", { method: "POST" });
 }
 
-function uploadForm(size = 5, filename = "hello.txt"): FormData {
+function uploadForm(size = 5, filename = "hello.txt", mime = "text/plain"): FormData {
   const formData = new FormData();
-  const file = new File(["hello"], filename, { type: "text/plain" });
+  const file = new File(["hello"], filename, { type: mime });
   Object.defineProperty(file, "size", { value: size });
   formData.set("file", file);
   formData.set("conversationId", "conversation-1");
@@ -68,7 +68,7 @@ describe("POST /api/upload", () => {
       available: true,
       send: mocks.queueSend,
     });
-    mocks.processFile.mockReset();
+    mocks.processFile.mockReset().mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -131,6 +131,7 @@ describe("POST /api/upload", () => {
       expect.objectContaining({ mime: "text/plain" }),
     );
     expect(mocks.storageDelete).not.toHaveBeenCalled();
+    expect(mocks.processFile).not.toHaveBeenCalled();
   });
 
   it("DB 插入失败时删除已写入对象并保留原始异常", async () => {
@@ -183,6 +184,95 @@ describe("POST /api/upload", () => {
     expect(mocks.getDb).not.toHaveBeenCalled();
     expect(mocks.storageDelete).not.toHaveBeenCalled();
     expect(mocks.getQueue).not.toHaveBeenCalled();
+  });
+
+  it("队列获取失败时记录错误并回退同步处理", async () => {
+    const queueError = new Error("queue unavailable");
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    mocks.getQueue.mockRejectedValue(queueError);
+
+    const response = await POST(request());
+    const body = await response.json();
+    const storagePath = mocks.storagePut.mock.calls[0][0] as string;
+
+    expect(response.status).toBe(200);
+    expect(consoleError).toHaveBeenCalledWith(
+      "[upload] queue dispatch failed, using sync fallback:",
+      queueError,
+    );
+    expect(mocks.processFile).toHaveBeenCalledOnce();
+    expect(mocks.processFile).toHaveBeenCalledWith(
+      body.fileId,
+      storagePath,
+      "text/plain",
+    );
+  });
+
+  it("队列投递失败时保留对象与 DB 行并回退同步处理", async () => {
+    const queueError = new Error("send failed");
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    mocks.parseFormData.mockResolvedValue(uploadForm(5, "hello.bin", ""));
+    mocks.queueSend.mockRejectedValue(queueError);
+
+    const response = await POST(request());
+    const body = await response.json();
+    const storagePath = mocks.storagePut.mock.calls[0][0] as string;
+
+    expect(response.status).toBe(200);
+    expect(consoleError).toHaveBeenCalledWith(
+      "[upload] queue dispatch failed, using sync fallback:",
+      queueError,
+    );
+    expect(mocks.processFile).toHaveBeenCalledOnce();
+    expect(mocks.processFile).toHaveBeenCalledWith(
+      body.fileId,
+      storagePath,
+      "application/octet-stream",
+    );
+    expect(mocks.storagePut).toHaveBeenCalledWith(
+      storagePath,
+      Buffer.from("hello"),
+      "application/octet-stream",
+    );
+    expect(mocks.dbValues).toHaveBeenCalledWith(
+      expect.objectContaining({ mime: "application/octet-stream" }),
+    );
+    expect(mocks.storageDelete).not.toHaveBeenCalled();
+  });
+
+  it("队列显式不可用时直接回退且不记录队列异常", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    mocks.getQueue.mockResolvedValue({
+      available: false,
+      send: mocks.queueSend,
+    });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(200);
+    expect(mocks.queueSend).not.toHaveBeenCalled();
+    expect(mocks.processFile).toHaveBeenCalledOnce();
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  it("同步 fallback 失败时记录错误且上传仍成功", async () => {
+    const processError = new Error("processing failed");
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    mocks.getQueue.mockResolvedValue({
+      available: false,
+      send: mocks.queueSend,
+    });
+    mocks.processFile.mockRejectedValue(processError);
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(200);
+    await vi.waitFor(() => {
+      expect(consoleError).toHaveBeenCalledWith(
+        "[upload] sync process failed:",
+        processError,
+      );
+    });
   });
 
   it.each(["../../../escape.txt", "..\\..\\escape.txt"])(
