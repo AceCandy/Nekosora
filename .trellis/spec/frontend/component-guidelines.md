@@ -258,6 +258,10 @@ useLayoutEffect(() => {
 - `typeof document !== "undefined"` 守卫避免 SSR 时 `createPortal` 报错(面板本就由 `effectiveOpen` 控制仅在客户端打开)。
 - `<dialog showModal>` top-layer 内的 fixed 面板必须保留在 dialog 内(`Popover portal={false}`);Portal 到 `document.body` 会被 top-layer 遮挡。
 
+**click-outside 不要用「组件树内 `fixed inset-0` 透明遮罩」**(除非是真正的视觉遮罩,如移动端抽屉/模态)。同一套 containing block 陷阱会让遮罩只盖住祖先盒子,点主内容区关不掉浮层(侧栏会话菜单踩过此坑)。轻量菜单统一用 `useClickOutside(ref, onOutside, enabled)`(`src/shared/lib/useClickOutside.ts`):document 级 `pointerdown`,不依赖 fixed。注意:
+- ref 包住触发器 + 面板;Portal 出去的子浮层(如 `OptionPicker`/`Popover`)在根节点标 `data-popover-root`,hook 会忽略其内部点击,避免父菜单在子选项点选时被先拆掉。
+- 视觉遮罩(半透明 backdrop、锁滚动)仍用 fixed 覆盖层,且须是 transform 祖先的兄弟或 Portal 到 body,不能嵌在 transform 容器内。
+
 ### 粘贴上传的文件类型过滤
 
 **症状**:用户复制一段富文本/网页内容进输入框,被误当成「粘贴文件」触发上传。

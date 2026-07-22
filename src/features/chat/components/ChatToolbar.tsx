@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Loader2, Sparkles, Globe, Library, Wand2, Palette, X, Paperclip, SlidersHorizontal, Brain, Cpu, ChevronDown, Plus } from "lucide-react";
 import { clsx } from "clsx";
@@ -16,6 +16,7 @@ import type {
 import type { UploadFileItem } from "@/features/chat/model/types";
 import type { PreviewableFile } from "@/shared/components/file-preview/FilePreviewModal";
 import { getSupportedReasoningLevels } from "@/lib/reasoning";
+import { useClickOutside } from "@/shared/lib/useClickOutside";
 
 const MENU_ROW = "flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:text-neutral-200 dark:hover:bg-neutral-900";
 
@@ -189,6 +190,7 @@ export function ChatToolbar(props: ChatToolbarProps) {
 export function ComposerPlusMenu(props: ChatToolbarProps) {
   const t = useTranslations("chat");
   const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
   const close = () => {
     setOpen(false);
     props.onOutputModePickerClose();
@@ -196,21 +198,19 @@ export function ComposerPlusMenu(props: ChatToolbarProps) {
     props.onCardPickerClose();
     props.onKbPickerClose();
   };
+  useClickOutside(rootRef, close, open);
   return (
-    <div className="pointer-events-auto relative shrink-0">
+    <div ref={rootRef} className="pointer-events-auto relative shrink-0">
       <button type="button" onClick={() => { if (open) close(); else setOpen(true); }} className="inline-flex h-8 w-8 items-center justify-center rounded-full text-neutral-600 transition-colors duration-200 hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none dark:text-neutral-300 dark:hover:bg-neutral-900" aria-label="更多设置" aria-expanded={open}>
         <Plus className="h-4.5 w-4.5" aria-hidden="true" />
       </button>
       {open && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={close} aria-hidden="true" />
-          <div className="absolute bottom-full left-0 z-20 mb-2 w-56 space-y-1 rounded-lg border border-morning-mist bg-white p-1.5 shadow-lg dark:border-deep-space dark:bg-space-ink">
-            {props.outputModes.length > 0 && <OptionPicker open={props.outputModePickerOpen} onClose={props.onOutputModePickerClose} options={props.outputModes.map((item): OptionItem => ({ id: item.id, label: item.name, description: item.description }))} selectedIds={props.outputModeId ? [props.outputModeId] : []} mode="single" onToggle={props.onOutputModeToggle} onClear={props.onOutputModeClear} side="top" trigger={<button type="button" onClick={props.onOutputModePickerToggle} className={MENU_ROW}><Wand2 className="h-4 w-4" aria-hidden="true" /><span className="flex-1">{t("outputMode")}</span><span className="max-w-20 truncate text-neutral-400">{props.outputModes.find((item) => item.id === props.outputModeId)?.name}</span></button>} />}
-            {props.renderStyles.length > 0 && <OptionPicker open={props.renderStylePickerOpen} onClose={props.onRenderStylePickerClose} options={props.renderStyles.map((item): OptionItem => ({ id: item.id, label: item.name, description: item.description }))} selectedIds={props.renderStyleId ? [props.renderStyleId] : []} mode="single" onToggle={props.onRenderStyleToggle} onClear={props.onRenderStyleClear} side="top" trigger={<button type="button" onClick={props.onRenderStylePickerToggle} className={MENU_ROW}><Palette className="h-4 w-4" aria-hidden="true" /><span className="flex-1">{t("renderStyle")}</span><span className="max-w-20 truncate text-neutral-400">{props.renderStyles.find((item) => item.id === props.renderStyleId)?.name}</span></button>} />}
-            {props.cards.length > 0 && <OptionPicker open={props.cardPickerOpen} onClose={props.onCardPickerClose} options={props.cards.map((item): OptionItem => ({ id: item.id, label: item.title, description: item.description, badge: `/${item.trigger}` }))} selectedIds={props.selectedCardIds} mode="multi" onToggle={props.onCardToggle} side="top" trigger={<button type="button" onClick={props.onCardPickerToggle} className={MENU_ROW}><Sparkles className="h-4 w-4" aria-hidden="true" /><span className="flex-1">{t("instructionCard")}</span>{props.selectedCardIds.length > 0 && <span className="text-sora-blue">{props.selectedCardIds.length}</span>}</button>} />}
-            {props.knowledgeBases.length > 0 && <OptionPicker open={props.kbPickerOpen} onClose={props.onKbPickerClose} options={props.knowledgeBases.map((item): OptionItem => ({ id: item.id, label: item.name, badge: `${item.fileCount} 文件` }))} selectedIds={props.selectedKbIds} mode="multi" onToggle={props.onKbToggle} side="top" trigger={<button type="button" onClick={props.onKbPickerToggle} className={MENU_ROW}><Library className="h-4 w-4" aria-hidden="true" /><span className="flex-1">{t("knowledgeBase")}</span>{props.selectedKbIds.length > 0 && <span className="text-sora-blue">{props.selectedKbIds.length}</span>}</button>} />}
-          </div>
-        </>
+        <div className="absolute bottom-full left-0 z-20 mb-2 w-56 space-y-1 rounded-lg border border-morning-mist bg-white p-1.5 shadow-lg dark:border-deep-space dark:bg-space-ink">
+          {props.outputModes.length > 0 && <OptionPicker open={props.outputModePickerOpen} onClose={props.onOutputModePickerClose} options={props.outputModes.map((item): OptionItem => ({ id: item.id, label: item.name, description: item.description }))} selectedIds={props.outputModeId ? [props.outputModeId] : []} mode="single" onToggle={props.onOutputModeToggle} onClear={props.onOutputModeClear} side="top" trigger={<button type="button" onClick={props.onOutputModePickerToggle} className={MENU_ROW}><Wand2 className="h-4 w-4" aria-hidden="true" /><span className="flex-1">{t("outputMode")}</span><span className="max-w-20 truncate text-neutral-400">{props.outputModes.find((item) => item.id === props.outputModeId)?.name}</span></button>} />}
+          {props.renderStyles.length > 0 && <OptionPicker open={props.renderStylePickerOpen} onClose={props.onRenderStylePickerClose} options={props.renderStyles.map((item): OptionItem => ({ id: item.id, label: item.name, description: item.description }))} selectedIds={props.renderStyleId ? [props.renderStyleId] : []} mode="single" onToggle={props.onRenderStyleToggle} onClear={props.onRenderStyleClear} side="top" trigger={<button type="button" onClick={props.onRenderStylePickerToggle} className={MENU_ROW}><Palette className="h-4 w-4" aria-hidden="true" /><span className="flex-1">{t("renderStyle")}</span><span className="max-w-20 truncate text-neutral-400">{props.renderStyles.find((item) => item.id === props.renderStyleId)?.name}</span></button>} />}
+          {props.cards.length > 0 && <OptionPicker open={props.cardPickerOpen} onClose={props.onCardPickerClose} options={props.cards.map((item): OptionItem => ({ id: item.id, label: item.title, description: item.description, badge: `/${item.trigger}` }))} selectedIds={props.selectedCardIds} mode="multi" onToggle={props.onCardToggle} side="top" trigger={<button type="button" onClick={props.onCardPickerToggle} className={MENU_ROW}><Sparkles className="h-4 w-4" aria-hidden="true" /><span className="flex-1">{t("instructionCard")}</span>{props.selectedCardIds.length > 0 && <span className="text-sora-blue">{props.selectedCardIds.length}</span>}</button>} />}
+          {props.knowledgeBases.length > 0 && <OptionPicker open={props.kbPickerOpen} onClose={props.onKbPickerClose} options={props.knowledgeBases.map((item): OptionItem => ({ id: item.id, label: item.name, badge: `${item.fileCount} 文件` }))} selectedIds={props.selectedKbIds} mode="multi" onToggle={props.onKbToggle} side="top" trigger={<button type="button" onClick={props.onKbPickerToggle} className={MENU_ROW}><Library className="h-4 w-4" aria-hidden="true" /><span className="flex-1">{t("knowledgeBase")}</span>{props.selectedKbIds.length > 0 && <span className="text-sora-blue">{props.selectedKbIds.length}</span>}</button>} />}
+        </div>
       )}
     </div>
   );
@@ -220,26 +220,25 @@ export function ComposerPlusMenu(props: ChatToolbarProps) {
 export function ModelControlMenu(props: ChatToolbarProps) {
   const t = useTranslations("chat");
   const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
   const current = props.models.find((item) => item.modelId === props.model);
   const close = () => {
     setOpen(false);
     props.onModelPickerClose();
   };
+  useClickOutside(rootRef, close, open);
   return (
-    <div className="pointer-events-auto relative shrink-0">
+    <div ref={rootRef} className="pointer-events-auto relative shrink-0">
       <button type="button" onClick={() => { if (open) close(); else setOpen(true); }} className="inline-flex h-8 max-w-28 items-center gap-1 rounded-full bg-transparent px-2.5 text-xs font-medium text-neutral-700 transition-colors duration-200 hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none dark:text-neutral-200 dark:hover:bg-neutral-800 sm:max-w-40" aria-label={t("selectModel")} aria-expanded={open}>
         <span className="truncate">{current?.displayName ?? current?.name ?? t("selectModel")}</span><ChevronDown className="h-3 w-3 shrink-0" aria-hidden="true" />
       </button>
       {open && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={close} aria-hidden="true" />
-          <div className="absolute bottom-full right-0 z-20 mb-2 w-64 space-y-1 rounded-lg border border-morning-mist bg-white p-1.5 shadow-lg dark:border-deep-space dark:bg-space-ink">
-            <OptionPicker open={props.modelPickerOpen} onClose={props.onModelPickerClose} options={props.models.map((item): OptionItem => ({ id: item.modelId, label: item.displayName ?? item.name, badge: item.source === "global" ? t("globalLabel") : undefined, badgeVariant: item.source === "global" ? "primary" : undefined }))} selectedIds={props.model ? [props.model] : []} mode="single" onToggle={props.onModelChange} side="top" trigger={<button type="button" onClick={props.onModelPickerToggle} className={MENU_ROW}><Cpu className="h-4 w-4" aria-hidden="true" /><span className="flex-1">{t("selectModel")}</span><span className="max-w-24 truncate text-neutral-400">{current?.displayName ?? current?.name}</span></button>} />
-            <ReasoningPicker capabilities={current?.capabilities} value={props.reasoning} onChange={props.onReasoningChange} />
-            <button type="button" onClick={props.onWebSearchToggle} className={clsx(MENU_ROW, props.webSearch && "bg-sora-blue/[0.06] text-sora-blue")} aria-pressed={props.webSearch}><Globe className="h-4 w-4" aria-hidden="true" /><span className="flex-1">{t("webSearch")}</span><span>{props.webSearch ? "✓" : ""}</span></button>
-            <ModelParamsPicker params={props.modelParams} onChange={props.onModelParamsChange} onReset={props.onModelParamsReset} />
-          </div>
-        </>
+        <div className="absolute bottom-full right-0 z-20 mb-2 w-64 space-y-1 rounded-lg border border-morning-mist bg-white p-1.5 shadow-lg dark:border-deep-space dark:bg-space-ink">
+          <OptionPicker open={props.modelPickerOpen} onClose={props.onModelPickerClose} options={props.models.map((item): OptionItem => ({ id: item.modelId, label: item.displayName ?? item.name, badge: item.source === "global" ? t("globalLabel") : undefined, badgeVariant: item.source === "global" ? "primary" : undefined }))} selectedIds={props.model ? [props.model] : []} mode="single" onToggle={props.onModelChange} side="top" trigger={<button type="button" onClick={props.onModelPickerToggle} className={MENU_ROW}><Cpu className="h-4 w-4" aria-hidden="true" /><span className="flex-1">{t("selectModel")}</span><span className="max-w-24 truncate text-neutral-400">{current?.displayName ?? current?.name}</span></button>} />
+          <ReasoningPicker capabilities={current?.capabilities} value={props.reasoning} onChange={props.onReasoningChange} />
+          <button type="button" onClick={props.onWebSearchToggle} className={clsx(MENU_ROW, props.webSearch && "bg-sora-blue/[0.06] text-sora-blue")} aria-pressed={props.webSearch}><Globe className="h-4 w-4" aria-hidden="true" /><span className="flex-1">{t("webSearch")}</span><span>{props.webSearch ? "✓" : ""}</span></button>
+          <ModelParamsPicker params={props.modelParams} onChange={props.onModelParamsChange} onReset={props.onModelParamsReset} />
+        </div>
       )}
     </div>
   );
@@ -257,9 +256,11 @@ function ModelParamsPicker({
 }) {
   const t = useTranslations("chat");
   const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
   const hasCustom = params.temperature !== null || params.topP !== null || params.maxTokens !== null;
+  useClickOutside(rootRef, () => setOpen(false), open);
   return (
-    <div className="relative">
+    <div ref={rootRef} className="relative">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -278,26 +279,23 @@ function ModelParamsPicker({
         <span>{t("modelParams")}</span>
       </button>
       {open && (
-        <>
-          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-          <div className="absolute bottom-full mb-2 left-0 z-40 w-64 rounded-lg border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink p-3 shadow-md space-y-2.5">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-200">{t("modelParams")}</span>
-              {hasCustom && (
-                <button
-                  type="button"
-                  onClick={onReset}
-                  className="text-[11px] text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 underline underline-offset-2 cursor-pointer"
-                >
-                  {t("resetDefaults")}
-                </button>
-              )}
-            </div>
-            <ParamInput label={t("temperature")} value={params.temperature} min={0} max={2} step={0.1} onChange={(v) => onChange({ temperature: v })} />
-            <ParamInput label={t("topP")} value={params.topP} min={0} max={1} step={0.05} onChange={(v) => onChange({ topP: v })} />
-            <ParamInput label={t("maxTokens")} value={params.maxTokens} min={1} step={1} onChange={(v) => onChange({ maxTokens: v })} />
+        <div className="absolute bottom-full mb-2 left-0 z-40 w-64 rounded-lg border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink p-3 shadow-md space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-200">{t("modelParams")}</span>
+            {hasCustom && (
+              <button
+                type="button"
+                onClick={onReset}
+                className="text-[11px] text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 underline underline-offset-2 cursor-pointer"
+              >
+                {t("resetDefaults")}
+              </button>
+            )}
           </div>
-        </>
+          <ParamInput label={t("temperature")} value={params.temperature} min={0} max={2} step={0.1} onChange={(v) => onChange({ temperature: v })} />
+          <ParamInput label={t("topP")} value={params.topP} min={0} max={1} step={0.05} onChange={(v) => onChange({ topP: v })} />
+          <ParamInput label={t("maxTokens")} value={params.maxTokens} min={1} step={1} onChange={(v) => onChange({ maxTokens: v })} />
+        </div>
       )}
     </div>
   );
@@ -315,14 +313,20 @@ function ReasoningPicker({
 }) {
   const t = useTranslations("chat");
   const [open, setOpen] = useState(false);
-  if (!capabilities?.reasoning) return null;
+  const rootRef = useRef<HTMLDivElement>(null);
   const levels = getSupportedReasoningLevels(capabilities);
-  if (levels.length === 0 || (levels.length === 1 && levels[0] === "off")) return null;
+  // hooks 须在 early return 前调用;不支持推理时 enabled=false,不挂监听。
+  const visible =
+    Boolean(capabilities?.reasoning) &&
+    levels.length > 0 &&
+    !(levels.length === 1 && levels[0] === "off");
+  useClickOutside(rootRef, () => setOpen(false), open && visible);
+  if (!visible) return null;
   const fixed = levels.length === 1;
   const active = value !== "off";
   const labelKey = reasoningLabelKey(value, fixed);
   return (
-    <div className="relative">
+    <div ref={rootRef} className="relative">
       <button
         type="button"
         onClick={() => { if (!fixed) setOpen((v) => !v); }}
@@ -343,28 +347,25 @@ function ReasoningPicker({
         <span>{t(labelKey)}</span>
       </button>
       {open && (
-        <>
-          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-          <div className="absolute bottom-full mb-2 right-0 z-40 w-40 rounded-lg border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink p-1.5 shadow-md">
-            {levels.map((lvl) => {
-              const key = reasoningLabelKey(lvl, false);
-              const selected = value === lvl;
-              return (
-                <button
-                  key={lvl}
-                  type="button"
-                  onClick={() => { onChange(lvl); setOpen(false); }}
-                  className={clsx(
-                    "w-full text-left px-2.5 py-1.5 rounded text-xs transition-colors cursor-pointer",
-                    selected ? "bg-sora-blue/[0.08] text-sora-blue font-semibold" : "text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900",
-                  )}
-                >
-                  {t(key)}
-                </button>
-              );
-            })}
-          </div>
-        </>
+        <div className="absolute bottom-full mb-2 right-0 z-40 w-40 rounded-lg border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink p-1.5 shadow-md">
+          {levels.map((lvl) => {
+            const key = reasoningLabelKey(lvl, false);
+            const selected = value === lvl;
+            return (
+              <button
+                key={lvl}
+                type="button"
+                onClick={() => { onChange(lvl); setOpen(false); }}
+                className={clsx(
+                  "w-full text-left px-2.5 py-1.5 rounded text-xs transition-colors cursor-pointer",
+                  selected ? "bg-sora-blue/[0.08] text-sora-blue font-semibold" : "text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900",
+                )}
+              >
+                {t(key)}
+              </button>
+            );
+          })}
+        </div>
       )}
     </div>
   );
