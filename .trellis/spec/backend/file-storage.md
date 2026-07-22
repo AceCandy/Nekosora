@@ -133,3 +133,66 @@ const form = await parseBoundedMultipartFormData(request, maxBodyBytes);
 const file = form.get("file");
 if (file instanceof File && file.size > maxFileBytes) return tooLarge();
 ```
+
+## Scenario: Safe Upload Names And Local Storage Keys
+
+### 1. Scope / Trigger
+
+Apply this contract when constructing a storage key from multipart `File.name`, or when changing `LocalDriver` path resolution. Multipart filenames are untrusted and may contain POSIX or Windows traversal segments.
+
+### 2. Signatures
+
+- `sanitizeUploadFilename(filename: string): string` is private to `/api/upload`.
+- `LocalDriver.resolveKey(key: string): string` accepts legacy absolute paths or contained relative keys.
+- A rejected relative key uses the stable error message `storage_key_outside_root`.
+
+### 3. Contracts
+
+- Normalize both `/` and `\\` as filename separators and keep only the final segment.
+- Remove NUL, ASCII control characters, DEL, and surrounding whitespace. Empty, `.` and `..` normalize to `file`.
+- Use the same safe filename in the storage key, `file_objects.filename`, and the upload response.
+- Resolve relative storage keys against the configured root and reject a `relative(root, resolved)` result that is `..`, starts with `..${sep}`, or is absolute.
+- Preserve absolute storage paths only for historical database compatibility; new uploads always produce relative keys.
+
+### 4. Validation & Error Matrix
+
+| Input / operation | Result |
+| --- | --- |
+| `../../../escape.txt` or `..\\..\\escape.txt` upload name | `escape.txt` in storage, DB, and response |
+| Empty/control-only, `.` or `..` upload name | `file` |
+| Contained relative key | Normal local operation |
+| Outside-root relative key in put/get/delete | Throw `storage_key_outside_root` before filesystem access |
+| Outside-root relative key in exists | Return `false` |
+| Historical absolute key | Pass through unchanged |
+
+### 5. Good / Base / Bad Cases
+
+- Good: `userId/uuid-escape.txt` is persisted after a traversal-shaped filename is reduced to its basename.
+- Base: `notes/report.txt` remains a valid nested relative key and existing absolute records remain readable.
+- Bad: `join(root, key)` without containment validation lets enough `../` segments escape the storage root.
+
+### 6. Tests Required
+
+- Route tests must cover POSIX and Windows separators, embedded controls, fallback names, and equality across storage/DB/response.
+- Local tests must prove put/get/delete reject outside-root keys without touching the sibling file, and `exists` returns false.
+- Keep legal nested-key, legacy absolute-path, full-read, and Range-read regressions.
+- Remove local temporary directories and sibling fixtures in `afterEach`.
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong: normalization alone does not prove containment.
+return join(this.root, key);
+
+// Correct: resolve first, then reject a path relative to the root that escapes it.
+const path = resolve(this.root, key);
+const relativePath = relative(this.root, path);
+if (
+  relativePath === ".." ||
+  relativePath.startsWith(`..${sep}`) ||
+  isAbsolute(relativePath)
+) {
+  throw new Error("storage_key_outside_root");
+}
+return path;
+```

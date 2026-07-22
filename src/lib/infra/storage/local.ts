@@ -6,10 +6,10 @@
  * join(process.cwd(), "uploads", ...) 拼出的路径完全一致 —— 现有数据零迁移。
  *
  * 向后兼容:旧 file_objects.storagePath 存的是绝对路径(如 /app/uploads/...)。
- * get/put/delete 内部做一次 isAbsoluteKey 判断:绝对路径直接用,否则拼 root。
+ * 绝对路径直接使用;相对 key 解析到 root 后校验边界,拒绝路径穿越。
  */
 import { open, readFile, writeFile, mkdir, unlink, stat } from "node:fs/promises";
-import { dirname, join, resolve, isAbsolute } from "node:path";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import type { StorageDriver, StorageKind, StorageResult, PutOpts, GetOpts } from "./driver";
 
 /** LocalDriver 构造参数。 */
@@ -31,9 +31,18 @@ export class LocalDriver implements StorageDriver {
   }
 
   private resolveKey(key: string): string {
-    // 向后兼容:旧记录是绝对路径,直接用;否则拼到 root 下。
+    // 向后兼容:旧记录是绝对路径,直接用;相对 key 必须留在存储根目录内。
     if (isAbsolute(key)) return key;
-    return join(this.root, key);
+    const path = resolve(this.root, key);
+    const relativePath = relative(this.root, path);
+    if (
+      relativePath === ".." ||
+      relativePath.startsWith(`..${sep}`) ||
+      isAbsolute(relativePath)
+    ) {
+      throw new Error("storage_key_outside_root");
+    }
+    return path;
   }
 
   async put(key: string, data: Buffer, _mime: string, _opts?: PutOpts): Promise<StorageResult> {

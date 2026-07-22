@@ -38,9 +38,9 @@ function request() {
   return new NextRequest("http://localhost/api/upload", { method: "POST" });
 }
 
-function uploadForm(size = 5): FormData {
+function uploadForm(size = 5, filename = "hello.txt"): FormData {
   const formData = new FormData();
-  const file = new File(["hello"], "hello.txt", { type: "text/plain" });
+  const file = new File(["hello"], filename, { type: "text/plain" });
   Object.defineProperty(file, "size", { value: size });
   formData.set("file", file);
   formData.set("conversationId", "conversation-1");
@@ -120,6 +120,45 @@ describe("POST /api/upload", () => {
     expect(mocks.queueSend).toHaveBeenCalledWith(
       "file-process",
       expect.objectContaining({ mime: "text/plain" }),
+    );
+  });
+
+  it.each(["../../../escape.txt", "..\\..\\escape.txt"])(
+    "清洗路径型 filename:%s",
+    async (filename) => {
+      mocks.parseFormData.mockResolvedValue(uploadForm(5, filename));
+
+      const response = await POST(request());
+      const body = await response.json();
+      const storagePath = mocks.storagePut.mock.calls[0][0] as string;
+
+      expect(response.status).toBe(200);
+      expect(body.filename).toBe("escape.txt");
+      expect(storagePath).toMatch(/^user-1\/[0-9a-f-]+-escape\.txt$/);
+      expect(storagePath).not.toContain("..");
+      expect(mocks.dbValues).toHaveBeenCalledWith(
+        expect.objectContaining({ filename: "escape.txt", storagePath }),
+      );
+    },
+  );
+
+  it.each([
+    [" \u0000\u0001 ", "file"],
+    [".", "file"],
+    ["..", "file"],
+    ["a\u0000b.txt", "ab.txt"],
+  ])("清洗空值或控制字符 filename:%s", async (filename, expected) => {
+    mocks.parseFormData.mockResolvedValue(uploadForm(5, filename));
+
+    const response = await POST(request());
+    const storagePath = mocks.storagePut.mock.calls[0][0] as string;
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ filename: expected });
+    expect(storagePath).toMatch(/^user-1\/[0-9a-f-]+-/);
+    expect(storagePath.endsWith(`-${expected}`)).toBe(true);
+    expect(mocks.dbValues).toHaveBeenCalledWith(
+      expect.objectContaining({ filename: expected, storagePath }),
     );
   });
 });

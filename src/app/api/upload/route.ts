@@ -30,6 +30,12 @@ export const dynamic = "force-dynamic";
 export const MAX_UPLOAD_FILE_BYTES = 10 * 1024 * 1024;
 export const MAX_UPLOAD_BODY_BYTES = MAX_UPLOAD_FILE_BYTES + 1024 * 1024;
 
+function sanitizeUploadFilename(filename: string): string {
+  const basename = filename.replace(/\\/g, "/").split("/").pop() ?? "";
+  const cleaned = basename.replace(/[\u0000-\u001f\u007f]/g, "").trim();
+  return !cleaned || cleaned === "." || cleaned === ".." ? "file" : cleaned;
+}
+
 export async function POST(req: NextRequest) {
   const user = await getSession();
   if (!user) return NextResponse.json({ error: "未登录" }, { status: 401 });
@@ -57,9 +63,10 @@ export async function POST(req: NextRequest) {
   }
 
   const fileId = crypto.randomUUID();
+  const safeFilename = sanitizeUploadFilename(file.name);
   // storage key:driver 无关的相对路径。LocalDriver 拼成 ./uploads/{userId}/...
   // 与历史绝对路径一致;S3 driver 作为 object key。
-  const storagePath = `${user.id}/${fileId}-${file.name}`;
+  const storagePath = `${user.id}/${fileId}-${safeFilename}`;
   const buf = Buffer.from(await file.arrayBuffer());
   const storage = await getStorage();
   await storage.put(storagePath, buf, file.type || "application/octet-stream");
@@ -71,7 +78,7 @@ export async function POST(req: NextRequest) {
     id: fileId,
     userId: user.id,
     conversationId: conversationId || null,
-    filename: file.name,
+    filename: safeFilename,
     mime: file.type || "application/octet-stream",
     storagePath,
     size: file.size,
@@ -89,5 +96,5 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  return NextResponse.json({ fileId, filename: file.name, status: "processing" });
+  return NextResponse.json({ fileId, filename: safeFilename, status: "processing" });
 }
