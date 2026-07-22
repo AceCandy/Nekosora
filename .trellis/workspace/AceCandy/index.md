@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 28
+- **Total Sessions**: 29
 - **Last Active**: 2026-07-22
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~933 | Active |
+| `journal-1.md` | ~966 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 29 | 2026-07-22 | MCP 子密钥模型列表约束 | `ba36083` | `opt0722` |
 | 28 | 2026-07-22 | 子密钥绑定属主隔离 | `12cc845` | `opt0722` |
 | 27 | 2026-07-22 | 分享排除已删除消息 | `30d701e` | `opt0722` |
 | 26 | 2026-07-22 | 聊天动作属主隔离 | `b8c0278` | `opt0722` |

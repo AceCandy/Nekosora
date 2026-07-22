@@ -931,3 +931,36 @@ retrieve、文件 context、多模态组装、知识库扩展均强制 userId ow
 ### Next Steps
 
 - None - task complete
+
+
+## Session 29: MCP 子密钥模型列表约束
+
+**Date**: 2026-07-22
+**Task**: MCP 子密钥模型列表约束
+**Branch**: `opt0722`
+
+### Summary
+
+MCP list_models 对 sub key 通过绑定表 join 模型，仅返回当前用户已启用且已绑定的模型；新增 master、sub 与空绑定测试并通过 423 项测试、lint、typecheck 与生产构建。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ba36083` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
