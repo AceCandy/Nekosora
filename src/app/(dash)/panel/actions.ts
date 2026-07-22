@@ -788,6 +788,48 @@ export async function createMyRoute(modelId: string, formData: FormData) {
   revalidatePath("/panel", "layout");
 }
 
+/** 从服务商上游模型列表快速补路由；重复绑定返回 exists，不重复写入。 */
+export async function attachMyProviderModelRoute(
+  modelId: string,
+  providerId: string,
+  upstreamModelName: string,
+): Promise<{ status: "created" | "exists" }> {
+  const user = await requireSession();
+  const db = await getDb();
+  const [model] = await db
+    .select({ id: S().models.id })
+    .from(S().models)
+    .where(and(eq(S().models.id, modelId), eq(S().models.ownerUserId, user.id)))
+    .limit(1);
+  if (!model) throw new Error("模型不存在");
+  const [provider] = await db
+    .select({ id: S().providers.id })
+    .from(S().providers)
+    .where(and(eq(S().providers.id, providerId), eq(S().providers.ownerUserId, user.id)))
+    .limit(1);
+  if (!provider) throw new Error("服务商不存在");
+  const [existing] = await db
+    .select({ id: S().routes.id })
+    .from(S().routes)
+    .where(and(
+      eq(S().routes.modelId, modelId),
+      eq(S().routes.providerId, providerId),
+      eq(S().routes.upstreamModelName, upstreamModelName),
+    ))
+    .limit(1);
+  if (existing) return { status: "exists" };
+
+  await db.insert(S().routes).values({
+    ownerUserId: user.id,
+    modelId,
+    providerId,
+    upstreamModelName,
+    enabled: true,
+  });
+  revalidatePath("/panel", "layout");
+  return { status: "created" };
+}
+
 /** 更新路由(校验归属)。modelId 不可改(路由归属模型固定)。 */
 export async function updateMyRoute(id: string, formData: FormData) {
   const user = await requireSession();
