@@ -37,3 +37,4 @@
 - `07-22-clear-consumed-chat-attachments`：聊天请求接受后只清理本轮已消费附件。
 - `07-22-chat-attachment-preview-url-cleanup`：回收聊天附件手动移除与卸载时的 blob URL。
 - `07-22-rag-file-owner-isolation`：阻止 WebChat、知识库与 MCP 跨用户读取文件。
+- `07-22-chat-message-reference-isolation`：阻止聊天 parent/source/retry/continue 引用跨会话。

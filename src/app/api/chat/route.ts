@@ -21,6 +21,7 @@ import { extractArtifacts } from "@/lib/artifacts/extract";
 import { getQueue } from "@/lib/infra/queue";
 import { maybeGenerateTitle } from "@/lib/conversation-title/service";
 import { prepareChatContext } from "@/lib/chat/orchestrator";
+import { findConversationMessage } from "@/lib/chat/message-reference";
 import type { IRRequest } from "@/lib/providers/types";
 import type { ReasoningLevel } from "@/db/types";
 
@@ -102,12 +103,22 @@ export async function POST(req: NextRequest) {
   let parentIdInternal: string | null = null;
   let sourceIdInternal: string | null = null;
   if (body.parentPublicId) {
-    const [p] = await db.select().from(s.messages).where(eq(s.messages.publicId, body.parentPublicId)).limit(1);
-    parentIdInternal = p?.id ?? null;
+    const parent = await findConversationMessage(db, s, body.conversationId, {
+      publicId: body.parentPublicId,
+    });
+    if (!parent) {
+      return NextResponse.json({ error: "父消息不存在或不属于当前会话" }, { status: 400 });
+    }
+    parentIdInternal = parent.id as string;
   }
   if (body.sourcePublicId) {
-    const [p] = await db.select().from(s.messages).where(eq(s.messages.publicId, body.sourcePublicId)).limit(1);
-    sourceIdInternal = p?.id ?? null;
+    const source = await findConversationMessage(db, s, body.conversationId, {
+      publicId: body.sourcePublicId,
+    });
+    if (!source) {
+      return NextResponse.json({ error: "源消息不存在或不属于当前会话" }, { status: 400 });
+    }
+    sourceIdInternal = source.id as string;
   }
 
   // 续写模式:在指定 assistant 消息末尾继续生成。复用其 publicId 与所在行,
@@ -117,28 +128,29 @@ export async function POST(req: NextRequest) {
   let continueAssistantInternalId: string | null = null;
   let continueParentUserPublicId: string | null = null;
   if (body.continueFromPublicId) {
-    const [contMsg] = await db
-      .select()
-      .from(s.messages)
-      .where(eq(s.messages.publicId, body.continueFromPublicId))
-      .limit(1);
-    if (!contMsg || contMsg.conversationId !== body.conversationId) {
+    const contMsg = await findConversationMessage(db, s, body.conversationId, {
+      publicId: body.continueFromPublicId,
+    });
+    if (!contMsg) {
       return NextResponse.json({ error: "续写消息不存在或不属于该会话" }, { status: 400 });
     }
     if (contMsg.role !== "assistant") {
       return NextResponse.json({ error: "仅支持在 assistant 消息上续写" }, { status: 400 });
     }
     isContinue = true;
-    continueAssistantInternalId = contMsg.id;
+    continueAssistantInternalId = contMsg.id as string;
     continuePrefixText =
       typeof contMsg.content === "string" ? contMsg.content : String(contMsg.content ?? "");
     if (contMsg.parentId) {
-      const [parentUser] = await db
-        .select()
-        .from(s.messages)
-        .where(eq(s.messages.id, contMsg.parentId))
-        .limit(1);
-      continueParentUserPublicId = parentUser?.publicId ?? null;
+      const parentUser = await findConversationMessage(db, s, body.conversationId, {
+        id: contMsg.parentId as string,
+      });
+      if (parentUser?.role === "user") {
+        continueParentUserPublicId = parentUser.publicId as string;
+      }
+    }
+    if (!continueParentUserPublicId) {
+      return NextResponse.json({ error: "续写消息缺少当前会话内的用户父消息" }, { status: 400 });
     }
   }
 
@@ -146,23 +158,38 @@ export async function POST(req: NextRequest) {
   // - send 流程(无 userPublicId):生成并插入新 user 消息。
   // - edit/retry 流程(传入 userPublicId):跳过插入,复用既有的 user 消息。
   let userPublicId: string;
+  let userMessageInternalId: string | null = null;
   if (isContinue) {
+    if (!continueParentUserPublicId) {
+      return NextResponse.json({ error: "续写消息缺少用户父消息" }, { status: 400 });
+    }
     // 续写沿用原 user 父消息,不插入新 user
-    userPublicId = continueParentUserPublicId ?? body.userPublicId ?? "";
+    userPublicId = continueParentUserPublicId;
   } else if (body.userPublicId) {
+    const userMessage = await findConversationMessage(db, s, body.conversationId, {
+      publicId: body.userPublicId,
+    });
+    if (!userMessage || userMessage.role !== "user") {
+      return NextResponse.json({ error: "用户消息不存在或不属于当前会话" }, { status: 400 });
+    }
     userPublicId = body.userPublicId;
+    userMessageInternalId = userMessage.id as string;
   } else {
     userPublicId = crypto.randomUUID();
-    await db.insert(s.messages).values({
-      conversationId: body.conversationId,
-      publicId: userPublicId,
-      parentId: parentIdInternal,
-      sourceId: sourceIdInternal,
-      branchReason: body.branchReason ?? null,
-      role: "user",
-      content: userContent,
-      status: "success",
-    });
+    const [insertedUser] = await db
+      .insert(s.messages)
+      .values({
+        conversationId: body.conversationId,
+        publicId: userPublicId,
+        parentId: parentIdInternal,
+        sourceId: sourceIdInternal,
+        branchReason: body.branchReason ?? null,
+        role: "user",
+        content: userContent,
+        status: "success",
+      })
+      .returning({ id: s.messages.id });
+    userMessageInternalId = insertedUser.id as string;
   }
 
   // ===== 段 A:上下文准备(抽到 orchestrator,纯输入→输出)=====
@@ -312,15 +339,10 @@ export async function POST(req: NextRequest) {
             .where(eq(s.messages.id, continueAssistantInternalId));
         } else {
           // 持久化 assistant 消息;parentId 指向本轮 user 消息;附 process_trace
-          const [userMsgRow] = await db
-            .select({ id: s.messages.id })
-            .from(s.messages)
-            .where(eq(s.messages.publicId, userPublicId))
-            .limit(1);
           await db.insert(s.messages).values({
             conversationId: body.conversationId,
             publicId: assistantPublicId,
-            parentId: userMsgRow?.id ?? null,
+            parentId: userMessageInternalId,
             role: "assistant",
             content: assistantText,
             reasoning: assistantReasoning || null,
@@ -334,11 +356,12 @@ export async function POST(req: NextRequest) {
           try {
             const { artifacts: parsed } = extractArtifacts(assistantText);
             if (parsed.length > 0) {
-              const [assistantMsgRow] = await db
-                .select({ id: s.messages.id })
-                .from(s.messages)
-                .where(eq(s.messages.publicId, assistantPublicId))
-                .limit(1);
+              const assistantMsgRow = await findConversationMessage(
+                db,
+                s,
+                body.conversationId,
+                { publicId: assistantPublicId },
+              );
               if (assistantMsgRow) {
                 await db.insert(s.artifacts).values(
                   parsed.map((a) => ({
