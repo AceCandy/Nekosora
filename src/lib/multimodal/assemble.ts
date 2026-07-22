@@ -13,7 +13,7 @@
  */
 import { getStorage } from "@/lib/infra/storage";
 import { getDb, getSchema } from "@/lib/infra/db";
-import { inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { IRMessage } from "@/lib/providers/types";
 
 /** 内联 base64 的体积上限(压缩目标,字节)。 */
@@ -38,6 +38,7 @@ export function isImageMime(mime: string): boolean {
 export async function buildMultimodalUserMessage(
   text: string,
   imageFileIds: string[],
+  userId: string,
 ): Promise<IRMessage> {
   if (imageFileIds.length === 0) {
     return { role: "user", content: text };
@@ -54,7 +55,12 @@ export async function buildMultimodalUserMessage(
   const files = await db
     .select()
     .from(s.fileObjects)
-    .where(inArray(s.fileObjects.id, imageFileIds));
+    .where(
+      and(
+        inArray(s.fileObjects.id, imageFileIds),
+        eq(s.fileObjects.userId, userId),
+      ),
+    );
 
   for (const file of files) {
     const mime = file.mime as string;

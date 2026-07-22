@@ -140,7 +140,7 @@ async function handleToolCall(
     case "search_knowledge": {
       const query = String(args.query ?? "");
       if (!query) return { content: [{ type: "text", text: "缺少 query 参数" }], isError: true };
-      const result = await retrieve(query, [], { topK: 5 });
+      const result = await retrieve(query, [], { userId: ctx.userId, topK: 5 });
       if (result.chunks.length === 0) {
         return { content: [{ type: "text", text: "未找到相关文档" }] };
       }

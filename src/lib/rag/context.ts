@@ -7,7 +7,7 @@
  *
  * 输出增强后的 messages(system 块里带文件上下文)+ ragStatus。
  */
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { retrieve, type RetrieveStatus } from "./retrieve";
 import { estimateTokens } from "@/lib/tokens";
@@ -18,6 +18,7 @@ const AUTO_FULL_THRESHOLD = 1500; // auto 模式下,文件 ≤ 此 token 数则�
 export type FileMode = "auto" | "full_context" | "rag";
 
 export interface BuildContextInput {
+  userId: string;
   messages: { role: string; content: string | unknown[] }[];
   fileIds: string[];
   fileMode: FileMode;
@@ -40,7 +41,12 @@ export async function buildMessagesWithFileContext(
   const fileRows = await db
     .select()
     .from(s.fileObjects)
-    .where(inArray(s.fileObjects.id, input.fileIds));
+    .where(
+      and(
+        inArray(s.fileObjects.id, input.fileIds),
+        eq(s.fileObjects.userId, input.userId),
+      ),
+    );
 
   if (fileRows.length === 0) {
     return { messages: input.messages, ragStatus: "skipped" };
@@ -95,9 +101,10 @@ async function buildFullContext(
 /** rag:向量检索相关片段。 */
 async function buildRagContext(
   input: BuildContextInput,
-  _fileRows: Record<string, unknown>[],
+  fileRows: Record<string, unknown>[],
 ): Promise<BuildContextOutput> {
-  const result = await retrieve(input.query, input.fileIds);
+  const ownedFileIds = fileRows.map((file) => file.id as string);
+  const result = await retrieve(input.query, ownedFileIds, { userId: input.userId });
   if (result.status !== "rag_hit" || result.chunks.length === 0) {
     return { messages: input.messages, ragStatus: result.status };
   }

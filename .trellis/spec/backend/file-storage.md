@@ -386,3 +386,63 @@ const [claimed] = await db.update(s.fileObjects)
   .returning({ id: s.fileObjects.id });
 if (!claimed) return;
 ```
+
+## Scenario: User-Owned RAG And Vision Files
+
+### 1. Scope / Trigger
+
+Apply this contract whenever client-supplied file IDs, knowledge-base IDs, RAG retrieval, or multimodal assembly can reach `file_objects`, `file_chunks`, or `StorageDriver`. IDs from WebChat, debug APIs, and MCP are untrusted even after authentication.
+
+### 2. Signatures
+
+- `retrieve(query, fileIds, { userId, ...opts })` requires the authenticated owner id.
+- `getFileIdsByKnowledgeBases(kbIds, userId)` returns only that user's rag-ready files.
+- `BuildContextInput` includes `userId`.
+- `buildMultimodalUserMessage(text, imageFileIds, userId)` requires the owner id.
+
+### 3. Contracts
+
+- Every DB query that selects files for context, vector candidates, image storage reads, or KB expansion includes `file_objects.user_id = userId`.
+- `retrieve(..., fileIds=[], { userId })` means all rag-ready files owned by that user, never all rows in the database.
+- Context must derive the IDs sent to retrieve from the owner-filtered file rows, not reuse raw client IDs.
+- WebChat's initial image classification and multimodal assembly both enforce owner filtering; this is intentional defense in depth.
+- Unauthorized and missing IDs collapse to empty results without revealing whether another user's resource exists.
+
+### 4. Validation & Error Matrix
+
+| Input | Result |
+| --- | --- |
+| Owned explicit file IDs | Normal vision/full-context/RAG behavior |
+| Mixed owned and foreign IDs | Only owned rows continue |
+| Foreign KB IDs | No foreign file IDs returned |
+| MCP search with empty file IDs | Current user's rag-ready corpus only |
+| Only unauthorized IDs | Empty/skipped result, no storage read |
+
+### 5. Good / Base / Bad Cases
+
+- Good: a forged foreign image ID is absent from both classification and storage assembly queries.
+- Base: the user's own KB files remain searchable from WebChat, debug search, and MCP.
+- Bad: filtering only by primary key lets any authenticated caller read another user's image bytes or chunks when an ID is guessed or leaked.
+
+### 6. Tests Required
+
+- Retrieve tests cover explicit and empty file ID lists and assert owner + rag-ready SQL conditions.
+- Context tests assert only IDs from owner-filtered rows reach retrieve with the same userId.
+- Multimodal tests assert owner filtering and zero storage calls for an empty owned result.
+- KB service tests assert kbIds + owner + rag-ready conditions.
+- Search all call sites and run typecheck so no legacy signature can omit userId.
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong:authentication does not make client-supplied IDs owned.
+const files = await db.select().from(s.fileObjects)
+  .where(inArray(s.fileObjects.id, fileIds));
+
+// Correct:authorization is part of the resource query.
+const files = await db.select().from(s.fileObjects)
+  .where(and(
+    inArray(s.fileObjects.id, fileIds),
+    eq(s.fileObjects.userId, userId),
+  ));
+```
