@@ -997,3 +997,36 @@ setKeyEnabled 接收 userId 并在更新 SQL 中同时限制 key ID 与属主，
 ### Next Steps
 
 - None - task complete
+
+
+## Session 31: 网关模型属主边界收敛
+
+**Date**: 2026-07-22
+**Task**: 网关模型属主边界收敛
+**Branch**: `opt0722`
+
+### Summary
+
+依据历史已确认的 owner-only 决策，移除跨用户 public 模型的子密钥绑定候选与写入，并在 /v1/models 过滤历史跨用户绑定；通过 427 项测试、lint、typecheck 与生产构建。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9b810ee` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
