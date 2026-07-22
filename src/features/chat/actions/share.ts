@@ -69,9 +69,16 @@ export async function getShare(shareId: string): Promise<{
 
 /** 撤销分享(需登录鉴权)。 */
 export async function revokeShare(shareId: string): Promise<void> {
-  await requireSession(); // 鉴权守卫
+  const user = await requireSession();
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
+
+  const [share] = await db.select().from(s.conversationShares).where(eq(s.conversationShares.shareId, shareId)).limit(1);
+  if (!share) throw new Error("分享不存在");
+
+  const [conv] = await db.select().from(s.conversations).where(eq(s.conversations.id, share.conversationId)).limit(1);
+  if (!conv || conv.userId !== user.id) throw new Error("无权操作");
+
   await db.update(s.conversationShares).set({ revokedAt: new Date(), status: "revoked" }).where(eq(s.conversationShares.shareId, shareId));
 }
