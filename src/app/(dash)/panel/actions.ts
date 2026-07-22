@@ -1,5 +1,5 @@
 "use server";
-import { eq, ne, and, or, asc, sql } from "drizzle-orm";
+import { eq, ne, and, asc, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { encryptKeyBundle, parseKeyBundle, pickWeightedKey } from "@/lib/providers/keys";
@@ -89,7 +89,7 @@ export async function bindModel(keyId: string, modelId: string) {
     .where(and(
       eq(S().models.id, modelId),
       eq(S().models.enabled, true),
-      or(eq(S().models.visibility, "public"), eq(S().models.ownerUserId, user.id)),
+      eq(S().models.ownerUserId, user.id),
     ))
     .limit(1);
   if (!model) throw new Error("模型不存在或无权操作");
@@ -729,28 +729,16 @@ export async function toggleMyModel(id: string, enabled: boolean) {
   revalidatePath("/panel", "layout");
 }
 
-/** 可供子 key 绑定的模型列表:public ∪ 我的(byo)。 */
+/** 可供子 key 绑定的模型列表:网关 owner-only,只包含自己的 enabled 模型。 */
 export async function getBindableModels() {
   const user = await requireSession();
   const db = await getDb();
-  const [globals, byos] = await Promise.all([
-    db
-      .select()
-      .from(S().models)
-      .where(and(eq(S().models.visibility, "public"), eq(S().models.enabled, true))),
-    db
-      .select()
-      .from(S().models)
-      .where(
-        and(
-          eq(S().models.ownerUserId, user.id),
-          eq(S().models.visibility, "private"),
-          eq(S().models.enabled, true),
-        ),
-      ),
-  ]);
+  const byos = await db
+    .select()
+    .from(S().models)
+    .where(and(eq(S().models.ownerUserId, user.id), eq(S().models.enabled, true)));
   return {
-    globals: globals as Record<string, unknown>[],
+    globals: [] as Record<string, unknown>[],
     byos: byos as Record<string, unknown>[],
   };
 }

@@ -7,13 +7,11 @@ const mocks = vi.hoisted(() => ({
   setKeyEnabled: vi.fn(),
   eq: vi.fn((left: unknown, right: unknown) => ({ op: "eq", left, right })),
   and: vi.fn((...conditions: unknown[]) => ({ op: "and", conditions })),
-  or: vi.fn((...conditions: unknown[]) => ({ op: "or", conditions })),
 }));
 
 vi.mock("drizzle-orm", () => ({
   eq: mocks.eq,
   and: mocks.and,
-  or: mocks.or,
   ne: vi.fn(),
   asc: vi.fn(),
   sql: vi.fn(),
@@ -126,20 +124,17 @@ describe("子密钥模型绑定属主隔离", () => {
     expect(insert).not.toHaveBeenCalled();
   });
 
-  it("不能绑定其他用户的 private 模型", async () => {
+  it.each(["public", "private"])("不能绑定其他用户的 %s 模型", async (visibility) => {
     const { db, insert } = makeDb([[{ id: "sub-key", kind: "sub" }], []]);
     mocks.getDb.mockResolvedValue(db);
 
-    await expect(bindModel("sub-key", "foreign-private-model")).rejects.toThrow("模型不存在或无权操作");
-    expect(mocks.or).toHaveBeenCalledWith(
-      { op: "eq", left: schema.models.visibility, right: "public" },
-      { op: "eq", left: schema.models.ownerUserId, right: "user-1" },
-    );
+    await expect(bindModel("sub-key", `foreign-${visibility}-model`)).rejects.toThrow("模型不存在或无权操作");
+    expect(mocks.eq).toHaveBeenCalledWith(schema.models.ownerUserId, "user-1");
     expect(insert).not.toHaveBeenCalled();
   });
 
   it.each([
-    ["public 模型", { id: "public-model", visibility: "public", ownerUserId: "user-2" }],
+    ["自己的 public 模型", { id: "public-model", visibility: "public", ownerUserId: "user-1" }],
     ["自己的 private 模型", { id: "private-model", visibility: "private", ownerUserId: "user-1" }],
   ])("允许绑定%s", async (_name, model) => {
     const { db, values } = makeDb([[{ id: "sub-key", kind: "sub" }], [model]]);

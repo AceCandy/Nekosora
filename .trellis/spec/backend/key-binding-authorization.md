@@ -20,7 +20,7 @@ Apply this contract to panel server actions that read or mutate API keys and `ke
 - `disableKey` verifies ownership before calling the low-level `setKeyEnabled` helper, and the helper repeats `api_keys.user_id = userId` in the update itself.
 - `getBindings` verifies key ownership before returning binding rows.
 - `bindModel` accepts only a caller-owned `kind='sub'` key.
-- A bindable model is enabled and either public or owned by the caller. This must match `getBindableModels`.
+- A bindable model is enabled and owned by the caller. Public visibility affects WebChat, not gateway key authorization. This must match `getBindableModels`.
 - `unbindBinding` resolves the binding's `keyId`, verifies ownership of that key, and only then deletes the binding.
 - Model-list endpoints are authorization surfaces: MCP `list_models` returns all enabled owner models for a master key, but joins `key_model_bindings` for a sub key and returns only rows bound to `ctx.apiKeyId`.
 - Authorization failures occur before insert, update, or delete. UUID foreign keys and UI filtering are not authorization controls.
@@ -32,25 +32,24 @@ Apply this contract to panel server actions that read or mutate API keys and `ke
 | Disable key | `key.userId === session.user.id` | Throw before update |
 | Persist key status | Key ID + user ID in one update condition | Update zero foreign rows |
 | Read bindings | `key.userId === session.user.id` | Throw before returning rows |
-| Bind model | Owned sub key + enabled public/owned model | Throw before insert |
+| Bind model | Owned sub key + enabled owner model | Throw before insert |
 | Unbind model | Binding references an owned key | Throw before delete |
 | MCP model list | Owner + enabled; sub key also bound | Omit unbound models |
 
 ## 5. Good / Base / Bad Cases
 
-- Good: a public enabled model can be bound to the caller's sub key.
-- Good: the caller's enabled private model can be bound to their sub key.
+- Good: the caller's enabled public or private model can be bound to their sub key.
 - Base: owners can read bindings and disable their own master or sub key.
 - Base: a master key's MCP model list contains all enabled owner models; an unbound sub key returns `无可用模型`.
 - Bad: `requireSession()` followed by a global key or binding ID write lets any user mutate another user's gateway authorization.
-- Bad: trusting an arbitrary `modelId` lets a user bind another user's private model, which downstream routing treats as authorized.
+- Bad: treating public visibility as gateway authorization lets a user bind another owner's model even though `/v1/*` is owner-only.
 
 ## 6. Tests Required
 
 - Reject disabling and reading bindings for a foreign key.
 - Reject binding to a foreign key or a master key without calling insert.
-- Reject another user's private model without calling insert.
-- Accept an enabled public model and the caller's enabled private model.
+- Reject another user's public or private model without calling insert.
+- Accept the caller's enabled public and private models.
 - Reject deleting a binding whose key belongs to another user without calling delete.
 - Keep positive owner tests for key disable and binding reads.
 - Low-level key tests assert `setKeyEnabled` combines key ID and user ID in the update predicate.
@@ -71,7 +70,7 @@ const [model] = await db.select({ id: s.models.id }).from(s.models)
   .where(and(
     eq(s.models.id, modelId),
     eq(s.models.enabled, true),
-    or(eq(s.models.visibility, "public"), eq(s.models.ownerUserId, user.id)),
+    eq(s.models.ownerUserId, user.id),
   ))
   .limit(1);
 if (!model) throw new Error("模型不存在或无权操作");

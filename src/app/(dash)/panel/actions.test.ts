@@ -85,6 +85,7 @@ vi.mock("@/lib/infra/db", () => {
       id: "id",
       ownerUserId: "ownerUserId",
       visibility: "visibility",
+      enabled: "enabled",
       sortOrder: "sortOrder",
       createdAt: "createdAt",
       name: "name",
@@ -153,7 +154,7 @@ vi.mock("@/lib/infra/db", () => {
   return { getDb: async () => db, getSchema: () => schema, isPg: false };
 });
 
-import { createMyModel, reorderMyModels, updateMyModel, checkMyProviderHealth, testMyProviderModel, testMyKeyDirect } from "./actions";
+import { createMyModel, reorderMyModels, updateMyModel, checkMyProviderHealth, testMyProviderModel, testMyKeyDirect, getBindableModels } from "./actions";
 import { probeProviderKey } from "@/lib/providers/probe";
 import { parseKeyBundle, pickWeightedKey } from "@/lib/providers/keys";
 
@@ -184,6 +185,18 @@ describe("reorderMyModels", () => {
 
     expect(mockData.models.find((model) => model.id === "private-a")?.sortOrder).toBe(0);
     expect(mockData.models.find((model) => model.id === "private-b")?.sortOrder).toBe(2);
+  });
+});
+
+describe("getBindableModels", () => {
+  it("只返回当前用户自己的 enabled 模型", async () => {
+    mockData.models.forEach((model) => { model.enabled = true; });
+
+    const result = await getBindableModels();
+
+    expect(result.globals).toEqual([]);
+    expect(result.byos.map((model) => model.id)).toEqual(["public-a", "public-b", "private-a"]);
+    expect(result.byos.some((model) => model.id === "private-b")).toBe(false);
   });
 });
 
