@@ -766,3 +766,36 @@ processFile 在流水线前以数据库原子条件 pending/error -> extracting/
 ### Next Steps
 
 - None - task complete
+
+
+## Session 24: 阻止 RAG 跨用户文件读取
+
+**Date**: 2026-07-22
+**Task**: 阻止 RAG 跨用户文件读取
+**Branch**: `opt0722`
+
+### Summary
+
+retrieve、文件 context、多模态组装、知识库扩展均强制 userId owner where；MCP 空 fileIds 收敛为当前用户语料，WebChat 只传播 owned IDs。新增四组五条安全回归，lint、typecheck、401 个测试与生产构建通过。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c15d99a` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
