@@ -601,3 +601,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 19: 补偿清理上传孤儿对象
+
+**Date**: 2026-07-22
+**Task**: 补偿清理上传孤儿对象
+**Branch**: `opt0722`
+
+### Summary
+
+上传对象写入成功但数据库获取、schema 解析或 file_objects 插入失败时，幂等删除同一 storage key；清理失败只记录且保留原始 DB 异常。新增失败隔离与异常优先级测试，lint、typecheck、386 个测试与生产构建通过。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5d53ee2` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
