@@ -21,7 +21,8 @@
   "children": [
     "07-22-circuit-breaker-correctness",
     "07-22-pdf-worker-static-asset",
-    "07-22-bounded-text-preview"
+    "07-22-bounded-text-preview",
+    "07-22-production-dependency-security"
   ],
   "parent": null,
   "relatedFiles": [],
