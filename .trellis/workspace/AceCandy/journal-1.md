@@ -370,3 +370,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 12: 修复生产依赖高危漏洞
+
+**Date**: 2026-07-22
+**Task**: 修复生产依赖高危漏洞
+**Branch**: `opt0722`
+
+### Summary
+
+通过精确 pnpm overrides 将 fast-uri 统一到 3.1.4，并将 Next 15.5.20 的 sharp 限定到已验证的 0.35.3；恢复无关 peer 锁文件选择，完成冻结安装、生产审计、运行时加载、lint、typecheck、350 项测试和生产构建验证。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0c81194` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

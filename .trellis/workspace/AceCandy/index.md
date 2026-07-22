@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 11
+- **Total Sessions**: 12
 - **Last Active**: 2026-07-22
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~372 | Active |
+| `journal-1.md` | ~405 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 12 | 2026-07-22 | 修复生产依赖高危漏洞 | `0c81194` | `opt0722` |
 | 11 | 2026-07-22 | 实现文本预览端到端有界读取 | `2dba1c9` | `opt0722` |
 | 10 | 2026-07-22 | 修复 PDF worker 静态资源加载 | `014828b` | `opt0722` |
 | 9 | 2026-07-22 | 修正 provider 熔断状态机与失败计数 | `8c93281` | `opt0722` |
