@@ -403,3 +403,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 13: 消除剩余生产依赖中危漏洞
+
+**Date**: 2026-07-22
+**Task**: 消除剩余生产依赖中危漏洞
+**Branch**: `opt0722`
+
+### Summary
+
+通过 MCP SDK 作用域 override 将 Hono 升至 4.12.31、node-server 升至 2.0.10；处理 2.0.5 新暴露的 advisory，恢复无关 peer 漂移，并完成 0 漏洞审计、MCP 客户端与服务端 transport smoke test、冻结安装、350 项测试和生产构建验证。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5dc27cd` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
