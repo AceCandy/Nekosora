@@ -568,3 +568,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 18: 阻止本地文件存储路径穿越
+
+**Date**: 2026-07-22
+**Task**: 阻止本地文件存储路径穿越
+**Branch**: `opt0722`
+
+### Summary
+
+清洗上传文件名并统一用于 storage key、数据库与响应；LocalDriver 对相对 key 增加根目录包含校验，同时保留历史绝对路径兼容。新增路径穿越回归测试，lint、typecheck、382 个测试与生产构建通过。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5c4b7ec` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
