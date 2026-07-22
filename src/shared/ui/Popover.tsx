@@ -10,11 +10,12 @@ import React, {
 } from "react";
 import { createPortal } from "react-dom";
 import { clsx } from "clsx";
+import { useClickOutside } from "@/shared/lib/useClickOutside";
 
 export interface PopoverProps {
   /** 受控显隐状态:click 模式由外部持有;openOnHover 模式可省略(内部 hovered 控制)。 */
   open?: boolean;
-  /** 关闭回调(点击遮罩时触发);openOnHover 模式可省略。 */
+  /** 关闭回调(点击外部或面板内 requestClose 时触发);openOnHover 模式可省略。 */
   onClose?: () => void;
   /** 触发器：由外部渲染并自行控制 open（本组件不做事件绑定）。 */
   trigger: React.ReactNode;
@@ -26,14 +27,14 @@ export interface PopoverProps {
   side?: "bottom" | "top";
   /** 浮层面板额外 class（宽度/内边距等由调用方决定）。 */
   panelClassName?: string;
-  /** 浮层面板 z-index 层级（默认 z-30，遮罩 z-20）。 */
+  /** 浮层面板 z-index 层级（默认 z-30）。 */
   panelZ?: string;
   /** 是否 Portal 到 document.body；原生 <dialog> 内应关闭，以保留 top-layer 层级。 */
   portal?: boolean;
   /**
    * 是否改为 hover 打开（默认 false）。
    * 开启后由内部 hovered state 控制：鼠标进入触发器/面板即展开，离开延迟 150ms 收起，
-   * 不再渲染 click-outside 遮罩。供面板内子项通过 PopoverCloseContext 请求立即关闭。
+   * 不挂 click-outside 监听。供面板内子项通过 PopoverCloseContext 请求立即关闭。
    */
   openOnHover?: boolean;
   /** openOnHover 模式下打开前的悬停延迟(ms),默认 0(立即);避免快速划过误开。 */
@@ -106,6 +107,10 @@ export function Popover({
     else onClose?.();
   }, [openOnHover, onClose]);
 
+  // click 模式:document 级外部点击关闭。不用 fixed 全屏透明遮罩——
+  // 那层遮罩会整页盖住,体感像「还罩着一个框」,且在 transform 祖先内会失效。
+  useClickOutside([wrapperRef, panelRef], close, effectiveOpen && !openOnHover);
+
   // fixed 定位:面板相对视口,按 align/side 贴齐 trigger(wrapper),并 clamp 到视口内。
   // scroll/resize/面板尺寸变化时重算,使面板跟随 trigger 滚动且不被 overflow 裁剪。
   // 直接写 panel.style(命令式),避免 effect 内 setState 触发级联重渲染。
@@ -152,27 +157,24 @@ export function Popover({
   }, [effectiveOpen, align, side]);
 
   const ctx = close;
-  // data-popover-root:供 useClickOutside 识别 Portal 浮层,避免父菜单误关。
+  // data-popover-root:供父级 useClickOutside 识别 Portal 面板,点选项时不误关父菜单。
   const floatingContent = (
-    <div data-popover-root="">
-      {/* click-outside catcher：覆盖全屏，点击即关闭（hover 模式不需要） */}
-      {!openOnHover && <div className="fixed inset-0 z-20" onClick={onClose} aria-hidden="true" />}
-      <div
-        ref={panelRef}
-        // 面板内点击不冒泡到 wrapper,避免 clickToggle 模式下点面板误触发 toggle 关闭。
-        onClick={(e) => e.stopPropagation()}
-        // Portal 时面板脱离 wrapper,hover 模式需自绑 enter/leave 保持跨元素悬停连续。
-        onMouseEnter={openOnHover ? onEnter : undefined}
-        onMouseLeave={openOnHover ? onLeave : undefined}
-        style={{ visibility: "hidden" }}
-        className={clsx(
-          "fixed rounded-md border border-morning-mist dark:border-deep-space bg-white dark:bg-space-ink shadow-lg p-1",
-          panelZ,
-          panelClassName,
-        )}
-      >
-        {children}
-      </div>
+    <div
+      ref={panelRef}
+      data-popover-root=""
+      // 面板内点击不冒泡到 wrapper,避免 clickToggle 模式下点面板误触发 toggle 关闭。
+      onClick={(e) => e.stopPropagation()}
+      // Portal 时面板脱离 wrapper,hover 模式需自绑 enter/leave 保持跨元素悬停连续。
+      onMouseEnter={openOnHover ? onEnter : undefined}
+      onMouseLeave={openOnHover ? onLeave : undefined}
+      style={{ visibility: "hidden" }}
+      className={clsx(
+        "fixed rounded-md border border-morning-mist dark:border-deep-space bg-white dark:bg-space-ink shadow-lg p-1",
+        panelZ,
+        panelClassName,
+      )}
+    >
+      {children}
     </div>
   );
 

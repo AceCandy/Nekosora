@@ -39,6 +39,8 @@ export interface OptionPickerProps {
   ariaLabel?: string;
   /** 浮层垂直方向：bottom=下展（默认），top=上展。 */
   side?: "bottom" | "top";
+  /** 浮层水平对齐：left=左对齐触发器（默认），right=右对齐。 */
+  align?: "left" | "right";
   /** 是否改为 hover 打开（默认 false，沿用 click）。 */
   openOnHover?: boolean;
 }
@@ -138,6 +140,7 @@ export function OptionPicker({
   panelClassName = "w-64 max-h-72 overflow-y-auto",
   ariaLabel,
   side,
+  align,
   openOnHover,
 }: OptionPickerProps) {
   return (
@@ -147,6 +150,7 @@ export function OptionPicker({
       trigger={trigger}
       panelClassName={panelClassName}
       side={side}
+      align={align}
       openOnHover={openOnHover}
     >
       <OptionList

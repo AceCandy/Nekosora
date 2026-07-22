@@ -31,11 +31,11 @@
 聊天侧(`features/chat/components/Sidebar.tsx`)与后台侧(`shared/components/DashSidebar.tsx` + `AppShell.tsx`)都支持桌面端收起侧边栏,交互一致:
 
 - **收起状态是 client 组件内 `useState`,会话内有效、不持久化**(刷新重置为展开)。后台 `AppShell` 是 server component,收起交互下沉到 client 子组件 `DashSidebar`;登出仍走 server action,由 `AppShell` 模块级定义后透传给 `DashSidebar`,不在 client 侧另写一套。
-- **桌面宽度**:收起态 `md:w-14`、展开态 chat `md:w-60` / dash `md:w-56`,用 `transition-[width,min-width,max-width,padding] duration-250` 过渡;折叠按钮 `PanelLeftClose`/`PanelLeftOpen` 仅桌面显示(`hidden md:inline-flex`)。
+- **桌面宽度**:chat 与 dash 都是收起态 `md:w-14`、展开态 `md:w-60`,用 `transition-[width,min-width,max-width,transform] duration-250` 过渡;内边距随状态立即切换,折叠按钮 `PanelLeftClose`/`PanelLeftOpen` 仅桌面显示(`hidden md:inline-flex`)。
 - **移动端统一使用抽屉**:默认关闭,由 `md:hidden` 顶栏菜单按钮打开;侧栏固定覆盖在正文上方,支持关闭按钮、遮罩、`Escape` 与导航后关闭。打开时锁定 body 滚动、将背景顶栏/正文设为 `inert` + `aria-hidden` 并把焦点限制在抽屉内,关闭后焦点返回菜单按钮;关闭态侧栏本身也必须 `inert` + `aria-hidden`,避免离屏导航进入 Tab 顺序。移动端打开后台抽屉时重置桌面 `collapsed`,保证完整标签可见。
-- **断点类必须互斥**:桌面展开/收起宽度不能同时把 `md:w-56` 写在基础类、再条件追加 `md:w-14`;Tailwind 同断点工具类可能仍由 `w-56` 覆盖。应使用 `collapsed ? "md:w-14 ..." : "md:w-56 ..."`。移动端菜单与关闭按钮固定 `h-11 w-11`(`44×44px`),不能只依赖 coarse-pointer 兜底。
+- **断点类必须互斥**:桌面展开/收起宽度不能同时把 `md:w-60` 写在基础类、再条件追加 `md:w-14`;Tailwind 同断点工具类可能仍由 `w-60` 覆盖。应使用 `collapsed ? "md:w-14 ..." : "md:w-60 ..."`。移动端菜单与关闭按钮固定 `h-11 w-11`(`44×44px`),不能只依赖 coarse-pointer 兜底。
 - **导航项必须有 `icon`**(`shared/nav-config.ts` 的 `NavItem.icon: LucideIcon`):收起态 `SidebarNav` 仅渲染图标,label 与 hotkey 隐藏,靠 `title`/`aria-label` 提供 tooltip。**新增 nav 项漏配 icon 会导致收起态空图标**。
-- **收起态底部图标化**:登出 → `LogOut`、footerLinks → `MessageSquare`;`LanguageSwitcher` 在收起态隐藏(语言切换需展开后操作)。
+- **底部统一为用户菜单**:展开/收起态都只显示用户头像入口;点击后展示 `footerLinks`(如回到聊天)、`LanguageSwitcher` 与登出。展开态菜单向上弹出,收起态向侧栏右侧弹出。侧栏自身保持桌面 `z-40` 且不设置 `overflow-y-auto`,滚动只放在上方导航容器,否则收起态菜单会被正文覆盖或被侧栏裁剪。
 
 ## Props Conventions
 
@@ -258,9 +258,15 @@ useLayoutEffect(() => {
 - `typeof document !== "undefined"` 守卫避免 SSR 时 `createPortal` 报错(面板本就由 `effectiveOpen` 控制仅在客户端打开)。
 - `<dialog showModal>` top-layer 内的 fixed 面板必须保留在 dialog 内(`Popover portal={false}`);Portal 到 `document.body` 会被 top-layer 遮挡。
 
-**click-outside 不要用「组件树内 `fixed inset-0` 透明遮罩」**(除非是真正的视觉遮罩,如移动端抽屉/模态)。同一套 containing block 陷阱会让遮罩只盖住祖先盒子,点主内容区关不掉浮层(侧栏会话菜单踩过此坑)。轻量菜单统一用 `useClickOutside(ref, onOutside, enabled)`(`src/shared/lib/useClickOutside.ts`):document 级 `pointerdown`,不依赖 fixed。注意:
-- ref 包住触发器 + 面板;Portal 出去的子浮层(如 `OptionPicker`/`Popover`)在根节点标 `data-popover-root`,hook 会忽略其内部点击,避免父菜单在子选项点选时被先拆掉。
+**click-outside 不要用「`fixed inset-0` 透明遮罩」**(除非是真正的视觉遮罩,如移动端抽屉/模态)。问题有两层:
+1. containing block 陷阱:遮罩嵌在 `transform`/`backdrop-filter` 祖先内时只盖住祖先盒子,点主内容区关不掉(侧栏会话菜单踩过)。
+2. 即便 Portal 到 body 盖住全屏,透明遮罩仍会整页拦截指针,体感像「还罩着一个框」,滚动/点选背后内容都被挡住。
+
+轻量菜单统一用 `useClickOutside(ref | ref[], onOutside, enabled)`(`src/shared/lib/useClickOutside.ts`):document 级 `pointerdown`,不渲染遮罩。注意:
+- ref 包住触发器 + 面板;Portal 面板可与 trigger 分属不同 ref,传数组即可(`Popover` 已如此)。
+- Portal 面板根节点标 `data-popover-root`,父级 hook 会忽略其内部点击,避免子 OptionPicker 点选时父菜单被先拆掉。
 - 视觉遮罩(半透明 backdrop、锁滚动)仍用 fixed 覆盖层,且须是 transform 祖先的兄弟或 Portal 到 body,不能嵌在 transform 容器内。
+- `shared/ui/Popover` **不得**再渲染全屏透明 catcher;关闭只走 `useClickOutside`。
 
 ### 粘贴上传的文件类型过滤
 

@@ -4,12 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { clsx } from "clsx";
-import { Menu, PanelLeftClose, PanelLeftOpen, LogOut, MessageSquare, X } from "lucide-react";
+import { ChevronDown, Menu, PanelLeftClose, PanelLeftOpen, LogOut, MessageSquare, X } from "lucide-react";
 import type { SessionUser } from "@/lib/session";
 import type { NavGroup } from "@/shared/nav-config";
 import type { FooterLink } from "@/shared/components/AppShell";
 import SidebarNav from "@/shared/components/SidebarNav";
 import LanguageSwitcher from "@/shared/components/LanguageSwitcher";
+import { useClickOutside } from "@/shared/lib/useClickOutside";
 
 interface DashSidebarProps {
   user: SessionUser;
@@ -26,7 +27,7 @@ interface DashSidebarProps {
  * dash 后台侧栏(client) -- 管理「收起」状态。
  *
  * 参考聊天页 Sidebar 的收起交互:桌面端折叠按钮切换 collapsed,收起后 aside 变窄、
- * 导航变 icon-only(hover tooltip)、底部操作图标化。会话内状态,不持久化(同 chat)。
+ * 导航变 icon-only(hover tooltip)、底部保留用户菜单入口。会话内状态,不持久化(同 chat)。
  */
 export default function DashSidebar({
   user,
@@ -40,10 +41,15 @@ export default function DashSidebar({
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const mobileTriggerRef = useRef<HTMLButtonElement>(null);
   const mobileCloseRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   const t = useTranslations("nav");
+  const displayName = user.name.trim() || user.email;
+
+  useClickOutside(userMenuRef, () => setUserMenuOpen(false), userMenuOpen);
 
   useEffect(() => {
     const media = window.matchMedia("(min-width: 768px)");
@@ -158,33 +164,29 @@ export default function DashSidebar({
           if (isMobileViewport && (event.target as HTMLElement).closest("a")) setMobileOpen(false);
         }}
         className={clsx(
-          "fixed inset-y-0 left-0 z-50 flex w-[min(18rem,calc(100vw-3rem))] max-w-72 flex-col justify-between overflow-y-auto border-r border-morning-mist bg-nebula-white p-4 transition-transform duration-200 ease-out dark:border-deep-space dark:bg-twilight-obsidian md:static md:z-auto md:translate-x-0 md:transition-[width,min-width,max-width,padding] md:duration-250 md:ease-in-out",
+          "fixed inset-y-0 left-0 z-50 flex min-h-0 w-[min(18rem,calc(100vw-3rem))] max-w-72 flex-col border-r border-morning-mist bg-nebula-white p-4 transition-transform duration-200 ease-out dark:border-deep-space dark:bg-twilight-obsidian md:static md:z-40 md:translate-x-0 md:transition-[width,min-width,max-width,transform] md:duration-250 md:ease-in-out",
           mobileOpen ? "translate-x-0" : "-translate-x-full",
           collapsed
             ? "md:w-14 md:min-w-14 md:max-w-14 md:p-2"
-            : "md:w-56 md:min-w-56 md:max-w-56",
+            : "md:w-60 md:min-w-60 md:max-w-60 md:p-3",
         )}
       >
-        <div className="space-y-6">
-          <div className={clsx("flex items-center", collapsed ? "justify-center py-1" : "px-3 py-2")}>
+        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto">
+          <div className={clsx("flex items-center", collapsed ? "justify-center" : "justify-between px-1 py-1")}>
             {!collapsed && (
               <div className="min-w-0 flex-1">
                 <Link
                   href={brandHref}
-                  className="block truncate text-lg font-bold tracking-tight text-neutral-900 transition-opacity hover:opacity-80 dark:text-white"
+                  className="block truncate rounded text-2xl font-bold text-neutral-900 transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:text-white"
                 >
                   Nekusora
                 </Link>
-                <div className="mt-0.5 truncate font-mono text-[10px] text-neutral-400 dark:text-neutral-500">
-                  {user.email}
-                  {brandBadge ? ` (${brandBadge})` : ""}
-                </div>
               </div>
             )}
             <button
               type="button"
               onClick={() => setCollapsed((v) => !v)}
-              className="touch-target hidden h-7 w-7 shrink-0 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:hover:bg-neutral-900 dark:hover:text-neutral-100 md:inline-flex"
+              className="touch-target hidden h-9 w-9 shrink-0 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:hover:bg-neutral-900 dark:hover:text-neutral-100 md:inline-flex"
               aria-label={collapsed ? t("expandSidebar") : t("collapseSidebar")}
               title={collapsed ? t("expandSidebar") : t("collapseSidebar")}
             >
@@ -208,55 +210,63 @@ export default function DashSidebar({
           <SidebarNav groups={groups} matchMode={matchMode} collapsed={collapsed} />
         </div>
 
-        <div
-          className={clsx(
-            "border-t border-morning-mist pt-4 dark:border-deep-space",
-            collapsed ? "space-y-1" : "space-y-2",
-          )}
-        >
-          {collapsed ? (
-            <>
+        <div ref={userMenuRef} className="relative mt-2 shrink-0 border-t border-morning-mist pt-3 dark:border-deep-space">
+          {userMenuOpen && (
+            <div
+              className={clsx(
+                "absolute bottom-full left-0 right-0 z-30 mb-2 rounded-lg border border-morning-mist bg-white p-1 shadow-lg dark:border-deep-space dark:bg-space-ink",
+                collapsed && "md:bottom-0 md:left-full md:right-auto md:mb-0 md:ml-2 md:w-48",
+              )}
+            >
               {footerLinks.map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
-                  title={link.label}
-                  aria-label={link.label}
-                  className="touch-target flex items-center justify-center rounded-md p-2 text-neutral-600 transition-colors hover:bg-neutral-50 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-900/50 dark:hover:text-neutral-100"
+                  onClick={() => {
+                    setUserMenuOpen(false);
+                    setMobileOpen(false);
+                  }}
+                  className="touch-target flex items-center gap-2 rounded-md px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-900"
                 >
                   <MessageSquare className="h-4 w-4" aria-hidden="true" />
-                </Link>
-              ))}
-              <form action={logoutAction}>
-                <button
-                  type="submit"
-                  title={t("logout")}
-                  aria-label={t("logout")}
-                  className="touch-target flex w-full items-center justify-center rounded-md p-2 text-red-500 transition-colors hover:bg-red-50 dark:hover:bg-red-950/20"
-                >
-                  <LogOut className="h-4 w-4" aria-hidden="true" />
-                </button>
-              </form>
-            </>
-          ) : (
-            <>
-              <LanguageSwitcher className="block rounded-md px-3 py-2" />
-              {footerLinks.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className="touch-target block rounded-md px-3 py-2 text-sm font-medium text-neutral-600 transition-colors duration-150 hover:bg-neutral-50 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-900/50 dark:hover:text-neutral-100"
-                >
                   {link.label}
                 </Link>
               ))}
+              <LanguageSwitcher className="touch-target flex w-full rounded-md px-3 py-2 hover:bg-neutral-100 dark:hover:bg-neutral-900" />
               <form action={logoutAction}>
-                <button className="touch-target block w-full rounded-md px-3 py-2 text-left text-sm font-medium text-red-500 transition-colors duration-150 hover:bg-red-50 dark:hover:bg-red-950/20">
+                <button
+                  type="submit"
+                  className="touch-target flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20"
+                >
+                  <LogOut className="h-4 w-4" aria-hidden="true" />
                   {t("logout")}
                 </button>
               </form>
-            </>
+            </div>
           )}
+          <button
+            type="button"
+            onClick={() => setUserMenuOpen((open) => !open)}
+            className={clsx(
+              "touch-target flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:hover:bg-neutral-900",
+              collapsed && "md:justify-center",
+            )}
+            aria-expanded={userMenuOpen}
+          >
+            <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sora-blue/10 text-xs font-semibold text-sora-blue">
+              {displayName.slice(0, 1).toUpperCase()}
+            </span>
+            <span className={clsx("min-w-0 flex-1", collapsed && "md:hidden")}>
+              <span className="block truncate text-sm font-semibold text-neutral-800 dark:text-neutral-100">{displayName}</span>
+              <span className="mt-0.5 block truncate font-mono text-[10px] text-neutral-450 dark:text-neutral-500">
+                {user.email}{brandBadge ? ` (${brandBadge})` : ""}
+              </span>
+            </span>
+            <ChevronDown
+              className={clsx("h-4 w-4 shrink-0 text-neutral-400 transition-transform", userMenuOpen && "rotate-180", collapsed && "md:hidden")}
+              aria-hidden="true"
+            />
+          </button>
         </div>
       </aside>
     </>
