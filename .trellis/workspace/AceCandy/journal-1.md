@@ -898,3 +898,36 @@ retrieve、文件 context、多模态组装、知识库扩展均强制 userId ow
 ### Next Steps
 
 - None - task complete
+
+
+## Session 28: 子密钥绑定属主隔离
+
+**Date**: 2026-07-22
+**Task**: 子密钥绑定属主隔离
+**Branch**: `opt0722`
+
+### Summary
+
+为 key 禁用、绑定读取、模型绑定和解绑补齐 key 属主校验，并限制绑定模型为已启用 public 或本人模型；新增 10 项回归测试并通过 420 项测试、lint、typecheck 与生产构建。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `12cc845` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
