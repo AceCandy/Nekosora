@@ -55,7 +55,7 @@ interface ChatComposerProps {
  * ChatComposer —— 纯编排层。
  *
  * 持有所有会话级 selection state 与持久化逻辑，把渲染拆给三个子组件：
- *   - ChatMessageList：消息滚动区 + 空状态 + 对话大纲
+ *   - ChatMessageList：消息滚动区 + 对话大纲
  *   - ChatToolbar：已选资源与附件状态
  *   - ChatInputBox：自适应输入框 + 紧凑设置入口 + 发送/停止
  */
@@ -154,11 +154,6 @@ export default function ChatComposer({
     // 滚动锚定由 message-scroller 的 scrollAnchor(user 消息)自动处理,无需手动 pin。
     runtime.send(input, modelName, model, selectedCardIds, webSearch, selectedKbIds, { outputModeId, renderStyleId, reasoning });
     setInput("");
-  };
-
-  // 空状态示例问题:填入输入框,用户可编辑后发送(不自动发送,保留修改空间)
-  const handlePickSample = (text: string) => {
-    setInput(text);
   };
 
   // 选中文本「引用」:以 Markdown 引用块插入输入框末尾
@@ -359,6 +354,7 @@ export default function ChatComposer({
     reasoning,
     onReasoningChange: handleReasoningChange,
   };
+  const isEmptyConversation = runtime.messages.length === 0;
 
   return (
     <div className="flex-1 flex h-full bg-nebula-white dark:bg-twilight-obsidian transition-colors duration-250">
@@ -391,17 +387,29 @@ export default function ChatComposer({
           onDelete={runtime.deleteMessage}
           onContinue={(id) => runtime.continueGeneration(id, modelName, model)}
           models={models}
-          onPickSample={handlePickSample}
           onQuote={handleSelectionQuote}
           onAsk={handleSelectionAsk}
         />
 
-        {/* 输入区:absolute 浮于消息区底部，消息可滚动到其下方。 */}
-        <div className="absolute inset-x-0 bottom-0 z-10 pointer-events-none">
+        {/* 新会话将标题与输入器居中；开始对话后输入器回到底部。 */}
+        <div
+          className={clsx(
+            "absolute inset-x-0 z-10 pointer-events-none",
+            isEmptyConversation ? "top-[42%] -translate-y-1/2 md:top-[44%]" : "bottom-0",
+          )}
+        >
           <div
             ref={composerRef}
-            className="pointer-events-auto mx-auto mb-4 w-[calc(100%_-_2rem)] max-w-3xl space-y-2"
+            className={clsx(
+              "pointer-events-auto mx-auto w-[calc(100%_-_2rem)] max-w-3xl space-y-2",
+              !isEmptyConversation && "mb-4",
+            )}
           >
+            {isEmptyConversation && (
+              <h1 className="mb-6 text-center text-2xl font-semibold text-space-ink dark:text-nebula-silver">
+                {t("welcomeTitle")}
+              </h1>
+            )}
             <ChatToolbar {...toolbarProps} />
 
             <ChatInputBox

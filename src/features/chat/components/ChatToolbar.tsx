@@ -2,7 +2,7 @@
 
 import React, { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Loader2, Sparkles, Globe, Library, Wand2, Palette, X, Paperclip, SlidersHorizontal, Brain, Cpu, ChevronDown, Plus } from "lucide-react";
+import { Loader2, Sparkles, Globe, Library, Wand2, Palette, X, Paperclip, SlidersHorizontal, Brain, ChevronDown, Plus } from "lucide-react";
 import { clsx } from "clsx";
 import { OptionPicker, type OptionItem } from "@/shared/ui/OptionPicker";
 import type { ReasoningLevel, ModelCapabilities } from "@/db/types";
@@ -19,6 +19,11 @@ import { getSupportedReasoningLevels } from "@/lib/reasoning";
 import { useClickOutside } from "@/shared/lib/useClickOutside";
 
 const MENU_ROW = "flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:text-neutral-200 dark:hover:bg-neutral-900";
+/** 输入栏内联控件:与发送按钮同高,无多余描边框。 */
+const TOOLBAR_CHIP =
+  "pointer-events-auto inline-flex h-8 max-w-28 items-center gap-1 rounded-full px-2 text-xs font-medium text-neutral-600 transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none dark:text-neutral-300 dark:hover:bg-neutral-800 sm:max-w-40";
+const TOOLBAR_ICON =
+  "pointer-events-auto inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200";
 
 export interface ChatToolbarProps {
   // 模型选择（单选，必选不可清空，click 展开 + 向上弹出）
@@ -216,35 +221,74 @@ export function ComposerPlusMenu(props: ChatToolbarProps) {
   );
 }
 
-/** 输入框右侧模型菜单：模型、推理、联网和模型参数。 */
+/**
+ * 输入框右侧模型相关控件(内联,无中间层菜单框):
+ * 推理档位 / 联网 / 参数图标 + 模型名(点开直接出模型列表)。
+ */
 export function ModelControlMenu(props: ChatToolbarProps) {
   const t = useTranslations("chat");
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
   const current = props.models.find((item) => item.modelId === props.model);
-  const close = () => {
-    setOpen(false);
-    props.onModelPickerClose();
-  };
-  useClickOutside(rootRef, close, open);
   return (
-    <div ref={rootRef} className="pointer-events-auto relative shrink-0">
-      <button type="button" onClick={() => { if (open) close(); else setOpen(true); }} className="inline-flex h-8 max-w-28 items-center gap-1 rounded-full bg-transparent px-2.5 text-xs font-medium text-neutral-700 transition-colors duration-200 hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none dark:text-neutral-200 dark:hover:bg-neutral-800 sm:max-w-40" aria-label={t("selectModel")} aria-expanded={open}>
-        <span className="truncate">{current?.displayName ?? current?.name ?? t("selectModel")}</span><ChevronDown className="h-3 w-3 shrink-0" aria-hidden="true" />
-      </button>
-      {open && (
-        <div className="absolute bottom-full right-0 z-20 mb-2 w-64 space-y-1 rounded-lg border border-morning-mist bg-white p-1.5 shadow-lg dark:border-deep-space dark:bg-space-ink">
-          <OptionPicker open={props.modelPickerOpen} onClose={props.onModelPickerClose} options={props.models.map((item): OptionItem => ({ id: item.modelId, label: item.displayName ?? item.name, badge: item.source === "global" ? t("globalLabel") : undefined, badgeVariant: item.source === "global" ? "primary" : undefined }))} selectedIds={props.model ? [props.model] : []} mode="single" onToggle={props.onModelChange} side="top" trigger={<button type="button" onClick={props.onModelPickerToggle} className={MENU_ROW}><Cpu className="h-4 w-4" aria-hidden="true" /><span className="flex-1">{t("selectModel")}</span><span className="max-w-24 truncate text-neutral-400">{current?.displayName ?? current?.name}</span></button>} />
-          <ReasoningPicker capabilities={current?.capabilities} value={props.reasoning} onChange={props.onReasoningChange} />
-          <button type="button" onClick={props.onWebSearchToggle} className={clsx(MENU_ROW, props.webSearch && "bg-sora-blue/[0.06] text-sora-blue")} aria-pressed={props.webSearch}><Globe className="h-4 w-4" aria-hidden="true" /><span className="flex-1">{t("webSearch")}</span><span>{props.webSearch ? "✓" : ""}</span></button>
-          <ModelParamsPicker params={props.modelParams} onChange={props.onModelParamsChange} onReset={props.onModelParamsReset} />
-        </div>
-      )}
+    <div className="flex shrink-0 items-center gap-0.5">
+      <div className="hidden sm:block">
+        <ReasoningPicker
+          capabilities={current?.capabilities}
+          value={props.reasoning}
+          onChange={props.onReasoningChange}
+        />
+      </div>
+      <div className="hidden sm:block">
+        <button
+          type="button"
+          onClick={props.onWebSearchToggle}
+          className={clsx(TOOLBAR_ICON, props.webSearch && "bg-sora-blue/[0.08] text-sora-blue hover:bg-sora-blue/[0.12] hover:text-sora-blue dark:hover:bg-sora-blue/[0.12] dark:hover:text-sora-blue")}
+          aria-pressed={props.webSearch}
+          aria-label={t("webSearch")}
+          title={t("webSearch")}
+        >
+          <Globe className="h-4 w-4" aria-hidden="true" />
+        </button>
+      </div>
+      <div className="hidden sm:block">
+        <ModelParamsPicker
+          params={props.modelParams}
+          onChange={props.onModelParamsChange}
+          onReset={props.onModelParamsReset}
+        />
+      </div>
+      <OptionPicker
+        open={props.modelPickerOpen}
+        onClose={props.onModelPickerClose}
+        options={props.models.map((item): OptionItem => ({
+          id: item.modelId,
+          label: item.displayName ?? item.name,
+          badge: item.source === "global" ? t("globalLabel") : undefined,
+          badgeVariant: item.source === "global" ? "primary" : undefined,
+        }))}
+        selectedIds={props.model ? [props.model] : []}
+        mode="single"
+        onToggle={props.onModelChange}
+        side="top"
+        align="right"
+        panelClassName="w-64 max-h-72 overflow-y-auto"
+        trigger={
+          <button
+            type="button"
+            onClick={props.onModelPickerToggle}
+            className={clsx(TOOLBAR_CHIP, "text-neutral-700 dark:text-neutral-200")}
+            aria-label={t("selectModel")}
+            aria-expanded={props.modelPickerOpen}
+          >
+            <span className="truncate">{current?.displayName ?? current?.name ?? t("selectModel")}</span>
+            <ChevronDown className="h-3 w-3 shrink-0 opacity-60" aria-hidden="true" />
+          </button>
+        }
+      />
     </div>
   );
 }
 
-/** 模型参数调节 picker：temperature / topP / maxTokens,空值用模型默认。 */
+/** 模型参数调节:输入栏图标触发,面板上展。 */
 function ModelParamsPicker({
   params,
   onChange,
@@ -264,29 +308,23 @@ function ModelParamsPicker({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className={clsx(
-          "touch-target inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-semibold transition-[background-color,color,border-color,box-shadow,opacity] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer",
-          hasCustom
-            ? "border-sora-blue/30 bg-sora-blue/[0.04] text-sora-blue"
-            : "border-morning-mist dark:border-deep-space bg-white dark:bg-space-ink text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900",
-        )}
+        className={clsx(TOOLBAR_ICON, hasCustom && "bg-sora-blue/[0.08] text-sora-blue hover:bg-sora-blue/[0.12] hover:text-sora-blue dark:hover:bg-sora-blue/[0.12] dark:hover:text-sora-blue")}
         title={t("modelParams")}
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-label={t("modelParams")}
       >
-        <SlidersHorizontal className="w-3.5 h-3.5" aria-hidden="true" />
-        <span>{t("modelParams")}</span>
+        <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
       </button>
       {open && (
-        <div className="absolute bottom-full mb-2 left-0 z-40 w-64 rounded-lg border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink p-3 shadow-md space-y-2.5">
+        <div className="absolute bottom-full right-0 z-40 mb-2 w-64 space-y-2.5 rounded-lg border border-morning-mist bg-white p-3 shadow-md dark:border-deep-space/80 dark:bg-space-ink">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-200">{t("modelParams")}</span>
             {hasCustom && (
               <button
                 type="button"
                 onClick={onReset}
-                className="text-[11px] text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 underline underline-offset-2 cursor-pointer"
+                className="cursor-pointer text-[11px] text-neutral-400 underline underline-offset-2 hover:text-neutral-600 dark:hover:text-neutral-300"
               >
                 {t("resetDefaults")}
               </button>
@@ -301,7 +339,7 @@ function ModelParamsPicker({
   );
 }
 
-/** 推理级别 picker:仅当模型 capabilities.reasoning===true 时渲染;档位按 thinkingLevelMap 动态。 */
+/** 推理档位:输入栏紧凑 chip,仅可推理模型显示。 */
 function ReasoningPicker({
   capabilities,
   value,
@@ -332,22 +370,20 @@ function ReasoningPicker({
         onClick={() => { if (!fixed) setOpen((v) => !v); }}
         disabled={fixed}
         className={clsx(
-          "touch-target inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-semibold transition-[background-color,color,border-color,box-shadow,opacity] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue",
+          TOOLBAR_CHIP,
           fixed ? "cursor-default opacity-80" : "cursor-pointer",
-          active
-            ? "border-sora-blue/30 bg-sora-blue/[0.04] text-sora-blue"
-            : "border-morning-mist dark:border-deep-space bg-white dark:bg-space-ink text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900",
+          active && "bg-sora-blue/[0.08] text-sora-blue hover:bg-sora-blue/[0.12] dark:hover:bg-sora-blue/[0.12]",
         )}
         title={t("reasoning")}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={t("reasoning")}
       >
-        <Brain className="w-3.5 h-3.5" aria-hidden="true" />
-        <span>{t(labelKey)}</span>
+        <Brain className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+        <span className="truncate">{t(labelKey)}</span>
       </button>
       {open && (
-        <div className="absolute bottom-full mb-2 right-0 z-40 w-40 rounded-lg border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink p-1.5 shadow-md">
+        <div className="absolute bottom-full right-0 z-40 mb-2 w-40 rounded-lg border border-morning-mist bg-white p-1.5 shadow-md dark:border-deep-space/80 dark:bg-space-ink">
           {levels.map((lvl) => {
             const key = reasoningLabelKey(lvl, false);
             const selected = value === lvl;
@@ -357,8 +393,10 @@ function ReasoningPicker({
                 type="button"
                 onClick={() => { onChange(lvl); setOpen(false); }}
                 className={clsx(
-                  "w-full text-left px-2.5 py-1.5 rounded text-xs transition-colors cursor-pointer",
-                  selected ? "bg-sora-blue/[0.08] text-sora-blue font-semibold" : "text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900",
+                  "w-full cursor-pointer rounded px-2.5 py-1.5 text-left text-xs transition-colors",
+                  selected
+                    ? "bg-sora-blue/[0.08] font-semibold text-sora-blue"
+                    : "text-neutral-600 hover:bg-neutral-50 dark:text-neutral-300 dark:hover:bg-neutral-900",
                 )}
               >
                 {t(key)}

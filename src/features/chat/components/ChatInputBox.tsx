@@ -103,7 +103,7 @@ export function ChatInputBox({
     >
       <div
         ref={collapsedMeasureRef}
-        className="pointer-events-none invisible absolute left-12 right-40 top-0 whitespace-pre-wrap break-words text-sm leading-5 sm:right-52"
+        className="pointer-events-none invisible absolute left-12 right-40 top-0 whitespace-pre-wrap break-words text-sm leading-5 sm:right-72"
         aria-hidden="true"
       >
         {`${value || " "}\u200b`}
@@ -204,7 +204,7 @@ export function ChatInputBox({
           rows={1}
           className={clsx(
             "scrollbar-hidden block h-full w-full resize-none overflow-y-auto border-0 bg-transparent py-3 text-sm leading-5 text-neutral-800 outline-none transition-[padding] duration-200 ease-out placeholder-neutral-400 focus:ring-0 motion-reduce:transition-none dark:text-neutral-200",
-            layout.multiline ? "px-3 pb-12" : "pl-12 pr-40 sm:pr-52",
+            layout.multiline ? "px-3 pb-12" : "pl-12 pr-40 sm:pr-72",
           )}
           disabled={disabled}
           aria-label="对话输入框"

@@ -72,14 +72,7 @@
     "webSearch": "联网搜索"
   },
   "chat": {
-    "welcomeTitle": "欢迎来到 Nekusora 调试工作台",
-    "welcomeDesc": "大呼吸感流式对话排版，已载入个性化记忆。请选择模型开始您的提问。",
-    "sampleQuestions": [
-      "帮我润色一段产品文案",
-      "总结这篇文章的核心观点",
-      "用 Python 实现一个快速排序",
-      "给我一些团队晨会议题灵感"
-    ],
+    "welcomeTitle": "Nekusora",
     "renderFailed": "该内容渲染失败",
     "retry": "重试",
     "showRaw": "查看原始内容",
@@ -105,7 +98,7 @@
     "scrollToLatest": "回到最新",
     "scrollToReplyTop": "回到该回复开头",
     "stopped": "已停止生成",
-    "placeholder": "发送消息，按 Enter 发送，Shift + Enter 换行...",
+    "placeholder": "你想知道什么？",
     "uploadAttachment": "上传附件",
     "instructionCard": "指令卡",
     "selectModel": "选择模型",

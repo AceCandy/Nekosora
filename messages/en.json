@@ -72,14 +72,7 @@
     "webSearch": "Web Search"
   },
   "chat": {
-    "welcomeTitle": "Welcome to Nekusora",
-    "welcomeDesc": "Spacious streaming conversation layout with personalized memory loaded. Select a model to begin.",
-    "sampleQuestions": [
-      "Polish a product description for me",
-      "Summarize the key points of this article",
-      "Implement quicksort in Python",
-      "Give me ideas for daily team standups"
-    ],
+    "welcomeTitle": "Nekusora",
     "renderFailed": "This content failed to render",
     "retry": "Retry",
     "showRaw": "Show raw",
@@ -105,7 +98,7 @@
     "scrollToLatest": "Scroll to latest",
     "scrollToReplyTop": "Back to reply start",
     "stopped": "Generation stopped",
-    "placeholder": "Send a message. Press Enter to send, Shift+Enter for new line...",
+    "placeholder": "Ask anything",
     "uploadAttachment": "Upload attachment",
     "instructionCard": "Instruction card",
     "selectModel": "Select model",

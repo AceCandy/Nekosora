@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { useTranslations } from "next-intl";
 import { MessageScroller, useMessageScroller } from "@shadcn/react/message-scroller";
-import { Sparkles, ChevronDown, Copy, Reply, MessagesSquare, Volume2, Square } from "lucide-react";
+import { ChevronDown, Copy, Reply, MessagesSquare, Volume2, Square } from "lucide-react";
 import { clsx } from "clsx";
 import { ChatMessageItem } from "@/features/chat/components/ChatMessageItem";
 import { ChatOutline } from "@/features/chat/components/ChatOutline";
@@ -36,8 +36,6 @@ interface ChatMessageListProps {
   onContinue?: (publicId: string) => void;
   /** 可用模型列表(传给 ChatMessageItem 供重新生成换模型)。 */
   models?: ModelOption[];
-  /** 空状态点击示例问题：填入输入框供用户编辑后发送。 */
-  onPickSample?: (text: string) => void;
   /** 选中文本「引用」：插入输入框。 */
   onQuote?: (text: string) => void;
   /** 选中文本「追问」：以该文本为新问题发送。 */
@@ -127,7 +125,7 @@ function ScrollAnchor({
 }
 
 /**
- * 消息列表段 —— 基于 @shadcn/react/message-scroller 原语的滚动容器 + 空状态 + 消息渲染 + 对话大纲 + 回到最新。
+ * 消息列表段 —— 基于 @shadcn/react/message-scroller 原语的滚动容器 + 消息渲染 + 对话大纲 + 回到最新。
  *
  * 滚动行为(autoScroll 跟随流式 / scrollAnchor 锚定 user 消息到中上部 / 打开贴底 / 回到最新按钮)
  * 全部由 message-scroller 原语承载,不再手写控制器、不再虚拟滚动(见 design.md)。
@@ -150,7 +148,6 @@ export function ChatMessageList({
   onDelete,
   onContinue,
   models,
-  onPickSample,
   onQuote,
   onAsk,
 }: ChatMessageListProps) {
@@ -228,11 +225,6 @@ export function ChatMessageList({
     document.addEventListener("mouseup", compute);
     return () => document.removeEventListener("mouseup", compute);
   }, []);
-  const rawSamples = t.raw("sampleQuestions");
-  const samples: string[] = Array.isArray(rawSamples)
-    ? rawSamples.filter((s): s is string => typeof s === "string" && s.trim() !== "")
-    : [];
-
   return (
     <MessageScroller.Provider autoScroll={false} defaultScrollPosition="end" scrollEdgeThreshold={24}>
       {/* Root 即消息区外层容器,对话大纲/回到最新按钮锚定其内 */}
@@ -245,39 +237,35 @@ export function ChatMessageList({
           preserveScrollOnPrepend
         >
           <MessageScroller.Content className="mx-auto flex w-full max-w-3xl flex-col">
-            {messages.length === 0 ? (
-              <WelcomeBlock samples={samples} onPickSample={onPickSample} />
-            ) : (
-              messages.map((m, i) => (
-                // scrollAnchor 标在 user 消息:新轮锚定到该 user 消息(中上部),回复在其下方生长
-                <MessageScroller.Item
-                  key={i}
-                  messageId={`msg-${i}`}
-                  scrollAnchor={m.role === "user"}
-                  className="py-4"
-                >
-                  <ErrorBoundary name="message">
-                    <ChatMessageItem
-                      domId={`msg-${i}`}
-                      message={m}
-                      isLast={i === messages.length - 1}
-                      isStreaming={streaming}
-                      model={model}
-                      renderStyleClass={renderStyleClass}
-                      renderStyleRenderer={renderStyleRenderer}
-                      onRegenerate={handleRegenerate}
-                      onEdit={handleEdit}
-                      onSwitchVersion={onSwitchVersion}
-                      onOpenArtifact={onOpenArtifact}
-                      onRequestDelete={(pid) => setPendingDelete(pid)}
-                      conversationStreaming={streaming}
-                      onContinue={onContinue}
-                      models={models}
-                    />
-                  </ErrorBoundary>
-                </MessageScroller.Item>
-              ))
-            )}
+            {messages.map((m, i) => (
+              // scrollAnchor 标在 user 消息:新轮锚定到该 user 消息(中上部),回复在其下方生长
+              <MessageScroller.Item
+                key={i}
+                messageId={`msg-${i}`}
+                scrollAnchor={m.role === "user"}
+                className="py-4"
+              >
+                <ErrorBoundary name="message">
+                  <ChatMessageItem
+                    domId={`msg-${i}`}
+                    message={m}
+                    isLast={i === messages.length - 1}
+                    isStreaming={streaming}
+                    model={model}
+                    renderStyleClass={renderStyleClass}
+                    renderStyleRenderer={renderStyleRenderer}
+                    onRegenerate={handleRegenerate}
+                    onEdit={handleEdit}
+                    onSwitchVersion={onSwitchVersion}
+                    onOpenArtifact={onOpenArtifact}
+                    onRequestDelete={(pid) => setPendingDelete(pid)}
+                    conversationStreaming={streaming}
+                    onContinue={onContinue}
+                    models={models}
+                  />
+                </ErrorBoundary>
+              </MessageScroller.Item>
+            ))}
           </MessageScroller.Content>
         </MessageScroller.Viewport>
 
@@ -388,43 +376,5 @@ export function ChatMessageList({
         </MessageScroller.Button>
       </MessageScroller.Root>
     </MessageScroller.Provider>
-  );
-}
-
-/** 空会话欢迎屏：引导文案 + 可点击示例问题（点击填入输入框）。 */
-function WelcomeBlock({
-  samples,
-  onPickSample,
-}: {
-  samples: string[];
-  onPickSample?: (text: string) => void;
-}) {
-  const t = useTranslations("chat");
-  return (
-    <div className="text-center py-24 md:py-32 space-y-6 animate-in fade-in duration-300">
-      <div className="w-12 h-12 rounded-full bg-sora-blue/[0.04] dark:bg-sora-blue/[0.02] border border-sora-blue/20 flex items-center justify-center mx-auto">
-        <Sparkles className="w-5 h-5 text-sora-blue" aria-hidden="true" />
-      </div>
-      <div className="space-y-1.5">
-        <h2 className="text-base font-bold text-neutral-800 dark:text-white">{t("welcomeTitle")}</h2>
-        <p className="text-xs text-neutral-450 dark:text-neutral-500 max-w-[280px] mx-auto leading-relaxed">
-          {t("welcomeDesc")}
-        </p>
-      </div>
-      {samples.length > 0 && (
-        <div className="max-w-xl mx-auto grid grid-cols-1 sm:grid-cols-2 gap-2 text-left">
-          {samples.map((q, i) => (
-            <button
-              key={i}
-              type="button"
-              onClick={() => onPickSample?.(q)}
-              className="touch-target rounded-lg border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink px-3.5 py-2.5 text-xs text-neutral-600 dark:text-neutral-300 hover:border-sora-blue dark:hover:border-sora-blue hover:text-neutral-900 dark:hover:text-white hover:shadow-sm transition-[color,border-color,box-shadow] duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
-            >
-              {q}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
   );
 }
