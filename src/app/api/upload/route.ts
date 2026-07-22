@@ -18,24 +18,42 @@ import { getSession } from "@/lib/session";
 import { getQueue } from "@/lib/infra/queue";
 import { getStorage } from "@/lib/infra/storage";
 import { processFile } from "@/lib/rag/process";
+import { apiError, ErrorCode } from "@/lib/errors";
+import {
+  parseBoundedMultipartFormData,
+  RequestBodyTooLargeError,
+} from "@/lib/multipart";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+export const MAX_UPLOAD_FILE_BYTES = 10 * 1024 * 1024;
+export const MAX_UPLOAD_BODY_BYTES = MAX_UPLOAD_FILE_BYTES + 1024 * 1024;
 
 export async function POST(req: NextRequest) {
   const user = await getSession();
   if (!user) return NextResponse.json({ error: "未登录" }, { status: 401 });
 
-  const formData = await req.formData();
+  let formData: FormData;
+  try {
+    formData = await parseBoundedMultipartFormData(req, MAX_UPLOAD_BODY_BYTES);
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      return apiError(ErrorCode.REQUEST_PAYLOAD_TOO_LARGE, {
+        maxFileBytes: MAX_UPLOAD_FILE_BYTES,
+      });
+    }
+    return NextResponse.json({ error: "上传请求格式非法" }, { status: 400 });
+  }
   const file = formData.get("file");
   const conversationId = String(formData.get("conversationId") ?? "");
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "缺少 file 字段" }, { status: 400 });
   }
-  if (file.size > MAX_SIZE) {
-    return NextResponse.json({ error: "文件超过 10MB 限制" }, { status: 413 });
+  if (file.size > MAX_UPLOAD_FILE_BYTES) {
+    return apiError(ErrorCode.REQUEST_PAYLOAD_TOO_LARGE, {
+      maxFileBytes: MAX_UPLOAD_FILE_BYTES,
+    });
   }
 
   const fileId = crypto.randomUUID();

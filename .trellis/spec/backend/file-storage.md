@@ -74,3 +74,62 @@ const truncated = buffer.byteLength > MAX_TEXT_BYTES;
 const preview = truncated ? buffer.slice(0, MAX_TEXT_BYTES) : buffer;
 setContent(new TextDecoder().decode(preview));
 ```
+
+## Scenario: Bounded Multipart Uploads
+
+### 1. Scope / Trigger
+
+Apply this contract to any route that calls `Request.formData()` for file uploads. Standard form-data parsing buffers the body, so the request stream must be bounded first.
+
+### 2. Signatures
+
+- `parseBoundedMultipartFormData(request: Request, maxBytes: number): Promise<FormData>`
+- `RequestBodyTooLargeError(maxBytes)`
+- `/api/upload`: file 10MB, total multipart body 11MB.
+- `/v1/audio/transcriptions`: file 25MB, total multipart body 26MB. The 25MB file limit follows the official OpenAI Speech-to-Text guide.
+
+### 3. Contracts
+
+- Reject an already excessive numeric Content-Length without obtaining a body reader.
+- Content-Length is only a fast path; always count actual stream chunks when reading.
+- When actual bytes exceed the body limit, cancel the reader and throw `RequestBodyTooLargeError`.
+- After materializing the bounded bytes, remove the original `Content-Length` and `Transfer-Encoding` before constructing the parsing Request; client framing metadata may not match actual bytes.
+- After bounded parsing, independently check `File.size`; the extra 1MB is only multipart metadata allowance.
+- Oversize paths return before storage, DB, queue, or transcription provider calls.
+
+### 4. Validation & Error Matrix
+
+| Condition | HTTP / result | Downstream |
+| --- | --- | --- |
+| Declared or actual body exceeds route body limit | 413 `request.payload_too_large` | None |
+| Parsed file exceeds route file limit | 413 `request.payload_too_large` | None |
+| Malformed multipart within limit | Existing invalid-body 400 | None |
+| Valid attachment | 200 processing response | Storage, DB, queue |
+| Valid transcription | 200 text response | Transcription route |
+
+### 5. Good / Base / Bad Cases
+
+- Good: a chunked 100MB request without Content-Length is canceled after crossing 11MB/26MB.
+- Base: a small multipart request produces the same File and text fields as native `formData()`.
+- Bad: call `req.formData()` first and inspect `file.size` later; the limit no longer protects memory.
+
+### 6. Tests Required
+
+- Assert Content-Length fast rejection does not call `getReader()`.
+- Assert actual chunk overflow invokes stream cancel.
+- Assert valid multipart preserves File name/content and text fields.
+- Assert a falsely small Content-Length cannot truncate or corrupt an otherwise bounded multipart body.
+- Route tests must prove oversize paths do not reach storage/DB/queue/provider and valid paths still do.
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong: body is already buffered before the limit check.
+const form = await request.formData();
+if ((form.get("file") as File).size > maxFileBytes) return tooLarge();
+
+// Correct: bound total bytes first, then enforce the stricter file limit.
+const form = await parseBoundedMultipartFormData(request, maxBodyBytes);
+const file = form.get("file");
+if (file instanceof File && file.size > maxFileBytes) return tooLarge();
+```

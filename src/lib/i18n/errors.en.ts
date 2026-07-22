@@ -27,6 +27,7 @@ export const errorsEn: Record<ErrorCodeValue, string> = {
   // request.*
   "request.invalid_json": "Request body is not valid JSON",
   "request.missing_field": "Missing required field",
+  "request.payload_too_large": "Request payload is too large",
 
   // gateway.*
   "gateway.upstream_error": "Upstream service returned an error",

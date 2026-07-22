@@ -21,12 +21,19 @@ import {
 import { classifyError } from "@/lib/error-classify";
 import { logUsage } from "@/lib/usage";
 import type { CallContext } from "@/lib/providers/types";
+import {
+  parseBoundedMultipartFormData,
+  RequestBodyTooLargeError,
+} from "@/lib/multipart";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** 请求路径常量(错误日志 requestPath 用)。 */
 const REQUEST_PATH = "/v1/audio/transcriptions";
+export const MAX_TRANSCRIPTION_FILE_BYTES = 25 * 1024 * 1024;
+export const MAX_TRANSCRIPTION_BODY_BYTES =
+  MAX_TRANSCRIPTION_FILE_BYTES + 1024 * 1024;
 
 export async function POST(req: NextRequest) {
   const startedAt = Date.now();
@@ -43,8 +50,21 @@ export async function POST(req: NextRequest) {
 
   let formData: FormData;
   try {
-    formData = await req.formData();
-  } catch {
+    formData = await parseBoundedMultipartFormData(
+      req,
+      MAX_TRANSCRIPTION_BODY_BYTES,
+    );
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      await logRouteError({
+        startedAt,
+        ctx: verified.ctx,
+        code: ErrorCode.REQUEST_PAYLOAD_TOO_LARGE,
+      });
+      return apiErrorLocalized(ErrorCode.REQUEST_PAYLOAD_TOO_LARGE, req, {
+        maxFileBytes: MAX_TRANSCRIPTION_FILE_BYTES,
+      });
+    }
     await logRouteError({ startedAt, ctx: verified.ctx, code: ErrorCode.REQUEST_INVALID_JSON });
     return apiErrorLocalized(ErrorCode.REQUEST_INVALID_JSON, req);
   }
@@ -63,6 +83,17 @@ export async function POST(req: NextRequest) {
       startedAt, ctx: verified.ctx, code: ErrorCode.REQUEST_MISSING_FIELD, model,
     });
     return apiErrorLocalized(ErrorCode.REQUEST_MISSING_FIELD, req, { fields: ["file"] });
+  }
+  if (file.size > MAX_TRANSCRIPTION_FILE_BYTES) {
+    await logRouteError({
+      startedAt,
+      ctx: verified.ctx,
+      model,
+      code: ErrorCode.REQUEST_PAYLOAD_TOO_LARGE,
+    });
+    return apiErrorLocalized(ErrorCode.REQUEST_PAYLOAD_TOO_LARGE, req, {
+      maxFileBytes: MAX_TRANSCRIPTION_FILE_BYTES,
+    });
   }
 
   const audio = Buffer.from(await file.arrayBuffer());
