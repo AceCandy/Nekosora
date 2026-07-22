@@ -667,3 +667,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 21: 原子抢占文件处理任务
+
+**Date**: 2026-07-22
+**Task**: 原子抢占文件处理任务
+**Branch**: `opt0722`
+
+### Summary
+
+processFile 在流水线前以数据库原子条件 pending/error -> extracting/running 抢占，未抢到立即 no-op，避免 worker 与同步 fallback 并发重复删写 chunks。新增三条 query-builder 单测；lint、typecheck、393 个测试与生产构建通过。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e13b141` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

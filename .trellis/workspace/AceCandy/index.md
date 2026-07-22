@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 20
+- **Total Sessions**: 21
 - **Last Active**: 2026-07-22
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~669 | Active |
+| `journal-1.md` | ~702 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 21 | 2026-07-22 | 原子抢占文件处理任务 | `e13b141` | `opt0722` |
 | 20 | 2026-07-22 | 队列失败时回退文件处理 | `617fbe0` | `opt0722` |
 | 19 | 2026-07-22 | 补偿清理上传孤儿对象 | `5d53ee2` | `opt0722` |
 | 18 | 2026-07-22 | 阻止本地文件存储路径穿越 | `5c4b7ec` | `opt0722` |
