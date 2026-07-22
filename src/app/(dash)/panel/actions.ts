@@ -1,5 +1,5 @@
 "use server";
-import { eq, ne, and, asc, sql } from "drizzle-orm";
+import { eq, ne, and, or, asc, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { encryptKeyBundle, parseKeyBundle, pickWeightedKey } from "@/lib/providers/keys";
@@ -47,8 +47,25 @@ export async function newSubKey(name: string) {
   return key;
 }
 
+async function requireOwnedKey(
+  db: Awaited<ReturnType<typeof getDb>>,
+  userId: string,
+  keyId: string,
+  subOnly = false,
+) {
+  const [key] = await db
+    .select({ id: S().apiKeys.id, kind: S().apiKeys.kind })
+    .from(S().apiKeys)
+    .where(and(eq(S().apiKeys.id, keyId), eq(S().apiKeys.userId, userId)))
+    .limit(1);
+  if (!key || (subOnly && key.kind !== "sub")) throw new Error("密钥不存在或无权操作");
+  return key;
+}
+
 export async function disableKey(keyId: string) {
-  await requireSession();
+  const user = await requireSession();
+  const db = await getDb();
+  await requireOwnedKey(db, user.id, keyId);
   await setKeyEnabled(keyId, false);
   revalidatePath("/panel", "layout");
 }
@@ -56,14 +73,26 @@ export async function disableKey(keyId: string) {
 // ===================== Sub-key model bindings =====================
 
 export async function getBindings(keyId: string) {
-  await requireSession();
+  const user = await requireSession();
   const db = await getDb();
+  await requireOwnedKey(db, user.id, keyId);
   return db.select().from(S().keyModelBindings).where(eq(S().keyModelBindings.keyId, keyId));
 }
 
 export async function bindModel(keyId: string, modelId: string) {
-  await requireSession();
+  const user = await requireSession();
   const db = await getDb();
+  await requireOwnedKey(db, user.id, keyId, true);
+  const [model] = await db
+    .select({ id: S().models.id })
+    .from(S().models)
+    .where(and(
+      eq(S().models.id, modelId),
+      eq(S().models.enabled, true),
+      or(eq(S().models.visibility, "public"), eq(S().models.ownerUserId, user.id)),
+    ))
+    .limit(1);
+  if (!model) throw new Error("模型不存在或无权操作");
   // 收敛后绑定只存 modelId(原 scope+globalModelId+userModelId 已废弃)。
   await db.insert(S().keyModelBindings).values({
     keyId,
@@ -73,8 +102,15 @@ export async function bindModel(keyId: string, modelId: string) {
 }
 
 export async function unbindBinding(bindingId: string) {
-  await requireSession();
+  const user = await requireSession();
   const db = await getDb();
+  const [binding] = await db
+    .select({ keyId: S().keyModelBindings.keyId })
+    .from(S().keyModelBindings)
+    .where(eq(S().keyModelBindings.id, bindingId))
+    .limit(1);
+  if (!binding) throw new Error("绑定不存在或无权操作");
+  await requireOwnedKey(db, user.id, binding.keyId);
   await db.delete(S().keyModelBindings).where(eq(S().keyModelBindings.id, bindingId));
   revalidatePath("/panel", "layout");
 }
