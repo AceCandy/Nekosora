@@ -25,7 +25,8 @@
     "07-22-production-dependency-security",
     "07-22-production-dependency-moderate-security",
     "07-22-mcp-connection-timeout-cleanup",
-    "07-22-mcp-qualified-tool-routing"
+    "07-22-mcp-qualified-tool-routing",
+    "07-22-mcp-duplicate-server-routing"
   ],
   "parent": null,
   "relatedFiles": [],

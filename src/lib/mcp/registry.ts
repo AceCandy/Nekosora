@@ -220,12 +220,16 @@ function wrapClient(client: any, transport: string): McpClientHandle {
  */
 export function toIRTools(servers: ResolvedMcpServer[]): IRToolDef[] {
   const tools: IRToolDef[] = [];
+  const qualifiedServerNames = buildQualifiedServerNames(servers);
   for (const server of servers) {
     for (const t of server.tools) {
       tools.push({
         type: "function",
         function: {
-          name: qualifyToolName(server.name, t.name),
+          name: qualifyToolName(
+            qualifiedServerNames.get(server.id) ?? server.name,
+            t.name,
+          ),
           description: t.description ?? `${server.name}.${t.name}`,
           parameters: t.inputSchema ?? { type: "object", properties: {} },
         },
@@ -243,6 +247,25 @@ export function qualifyToolName(serverName: string, toolName: string): string {
 /** 避免 server 名清洗结果包含工具限定名的双下划线分隔符。 */
 function normalizeServerName(serverName: string): string {
   return serverName.replace(/[^a-zA-Z0-9_]/g, "_").replace(/_+/g, "_");
+}
+
+/** 为当前请求内的同名 server 分配确定性唯一前缀。 */
+function buildQualifiedServerNames(
+  servers: ResolvedMcpServer[],
+): Map<string, string> {
+  const names = new Map<string, string>();
+  const used = new Set<string>();
+  for (const server of servers) {
+    const base = normalizeServerName(server.name);
+    let candidate = base;
+    let suffix = 2;
+    while (used.has(candidate)) {
+      candidate = `${base}_${suffix++}`;
+    }
+    used.add(candidate);
+    names.set(server.id, candidate);
+  }
+  return names;
 }
 
 /** 解析限定名回 { serverName, toolName }。 */
@@ -266,9 +289,10 @@ export async function callMcpTool(
   if (!parsed) {
     return { result: `未知工具名格式: ${qualifiedName}`, isError: true };
   }
+  const qualifiedServerNames = buildQualifiedServerNames(servers);
   const server = servers.find(
-    (sv) => normalizeServerName(sv.name) === parsed.serverName || sv.name === parsed.serverName,
-  );
+    (sv) => qualifiedServerNames.get(sv.id) === parsed.serverName,
+  ) ?? servers.find((sv) => sv.name === parsed.serverName);
   if (!server || !server.client) {
     return { result: `MCP server ${parsed.serverName} 不可用`, isError: true };
   }

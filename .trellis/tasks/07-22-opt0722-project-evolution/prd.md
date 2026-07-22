@@ -28,3 +28,4 @@
 - `07-22-production-dependency-moderate-security`：消除剩余生产依赖 moderate 安全告警。
 - `07-22-mcp-connection-timeout-cleanup`：确保 MCP 连接超时后取消并关闭底层资源。
 - `07-22-mcp-qualified-tool-routing`：消除 MCP server 名称与工具限定名分隔符歧义。
+- `07-22-mcp-duplicate-server-routing`：为同请求内同名 MCP server 分配唯一工具前缀。

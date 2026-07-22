@@ -72,6 +72,8 @@ Apply this contract when changing server-name sanitization, IR tool generation, 
 - The normalized server segment must never contain the `__` delimiter.
 - Preserve the original tool name after the first delimiter, including any `__` inside the tool name.
 - Generation and server lookup must use the same normalization function. Raw server-name equality remains a compatibility fallback.
+- Within one resolved server array, assign unique normalized prefixes in order. Keep the first base name, then try `_2`, `_3`, and continue until the candidate is unused.
+- Build the same `server.id -> prefix` map for IR generation and tool-call routing. No cross-request registry is required because both operations share the same ordered server array.
 
 ### 4. Validation & Error Matrix
 
@@ -80,6 +82,8 @@ Apply this contract when changing server-name sanitization, IR tool generation, 
 | `my--server` + `read_file` | `my_server__read_file` |
 | `my__server` + `read_file` | `my_server__read_file` |
 | `my-server` + `read__file` | server=`my_server`, tool=`read__file` |
+| Two `filesystem` servers | `filesystem__read`, `filesystem_2__read` |
+| `x`, duplicate `x`, natural `x_2` | `x`, `x_2`, `x_2_2` prefixes |
 | Unknown normalized server | Existing `MCP server <name> 不可用` result |
 
 ### 5. Good / Base / Bad Cases
@@ -92,6 +96,7 @@ Apply this contract when changing server-name sanitization, IR tool generation, 
 
 - Cover repeated punctuation and original repeated underscores.
 - Cover overlapping short/long server names and assert the intended handle receives the exact tool name and arguments.
+- Cover identical names, normalization collisions, and suffixes already occupied by another server.
 - Assert handle close behavior and the existing unknown-server result.
 
 ### 7. Wrong vs Correct
