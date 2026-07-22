@@ -39,7 +39,8 @@
     "07-22-chat-action-owner-isolation",
     "07-22-share-exclude-deleted-messages",
     "07-22-key-binding-owner-isolation",
-    "07-22-subkey-model-list-visibility"
+    "07-22-subkey-model-list-visibility",
+    "07-22-mcp-subkey-model-list-bindings"
   ],
   "parent": null,
   "relatedFiles": [],

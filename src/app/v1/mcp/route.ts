@@ -18,6 +18,7 @@ import { verifyKey, extractBearer } from "@/lib/keys";
 import { eq, and } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { retrieve } from "@/lib/rag/retrieve";
+import type { CallContext } from "@/lib/providers/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -116,7 +117,7 @@ const TOOL_DEFS = [
 ];
 
 async function handleToolCall(
-  ctx: { userId: string; source: string },
+  ctx: CallContext,
   name: string,
   args: Record<string, unknown>,
 ): Promise<{ content: unknown[]; isError?: boolean }> {
@@ -127,11 +128,22 @@ async function handleToolCall(
       const db = await getDb();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const s = getSchema() as any;
-      // 网关语义 owner-only:只列调用者自己创建的 enabled 模型。
-      const models = await db
-        .select({ name: s.models.name, display: s.models.displayName })
-        .from(s.models)
-        .where(and(eq(s.models.enabled, true), eq(s.models.ownerUserId, ctx.userId)));
+      // 网关语义 owner-only:master key 列出自己的 enabled 模型;sub key 进一步限制为已绑定模型。
+      const selection = { name: s.models.name, display: s.models.displayName };
+      const models = ctx.keyKind === "sub" && ctx.apiKeyId
+        ? await db
+            .select(selection)
+            .from(s.keyModelBindings)
+            .innerJoin(s.models, eq(s.keyModelBindings.modelId, s.models.id))
+            .where(and(
+              eq(s.keyModelBindings.keyId, ctx.apiKeyId),
+              eq(s.models.enabled, true),
+              eq(s.models.ownerUserId, ctx.userId),
+            ))
+        : await db
+            .select(selection)
+            .from(s.models)
+            .where(and(eq(s.models.enabled, true), eq(s.models.ownerUserId, ctx.userId)));
       const text = models
         .map((m: { name: string; display: string }) => `- ${m.name} (${m.display})`)
         .join("\n");
