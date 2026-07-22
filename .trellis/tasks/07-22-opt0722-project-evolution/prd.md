@@ -31,3 +31,4 @@
 - `07-22-mcp-duplicate-server-routing`：为同请求内同名 MCP server 分配唯一工具前缀。
 - `07-22-bounded-multipart-request-body`：为附件与语音转写 multipart 请求增加流式硬上限。
 - `07-22-local-storage-path-traversal`：清洗上传文件名并阻止 LocalDriver 相对 key 越界。
+- `07-22-upload-db-failure-storage-cleanup`：数据库持久化失败时补偿删除已写入的上传对象。

@@ -196,3 +196,68 @@ if (
 }
 return path;
 ```
+
+## Scenario: Upload Storage Compensation
+
+### 1. Scope / Trigger
+
+Apply this contract when `/api/upload` changes the sequence between `StorageDriver` writes and `file_objects` persistence. Object storage and PostgreSQL do not share a transaction, so failures after a successful put require best-effort compensation.
+
+### 2. Signatures
+
+- `StorageDriver.put(storagePath, data, mime)` persists the object first.
+- `db.insert(fileObjects).values(...)` establishes the application-owned reference.
+- `StorageDriver.delete(storagePath)` is the idempotent compensation action.
+
+### 3. Contracts
+
+- After put succeeds, wrap DB acquisition, schema access, and row insertion in one compensation boundary.
+- If that boundary throws, attempt exactly one delete for the same generated storage key, then rethrow the original DB error.
+- If delete also throws, log the cleanup error without replacing the original DB error.
+- A failed put must not reach DB, delete, or queue code. A successful DB insert must not trigger delete.
+- Compensation is best effort, not a distributed transaction. A connection failure after an upstream DB commit can make commit status ambiguous and remains an operational residual risk.
+
+### 4. Validation & Error Matrix
+
+| Condition | Storage compensation | Result |
+| --- | --- | --- |
+| Put fails | None | Original storage error |
+| DB acquisition/schema/insert fails after put | Delete once | Original DB error |
+| DB failure and delete failure | Delete attempted once; log cleanup error | Original DB error |
+| DB insert succeeds | None | Existing queue/synchronous processing flow |
+
+### 5. Good / Base / Bad Cases
+
+- Good: a definite insert rejection deletes the just-written object and preserves the DB error for diagnosis.
+- Base: a normal upload stores one object, inserts one row, and sends one processing job without deletion.
+- Bad: letting an insert error escape immediately leaves an object with no `file_objects` owner or normal cleanup path.
+
+### 6. Tests Required
+
+- Assert DB acquisition and insertion failures delete the exact key once and preserve Error object identity.
+- Assert cleanup failure is logged while the original DB Error still wins.
+- Assert put failure does not call DB, delete, or queue.
+- Keep the success-path assertion that delete is never called.
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong: an insert failure leaves the stored object orphaned.
+await storage.put(storagePath, data, mime);
+await db.insert(fileObjects).values(row);
+
+// Correct: compensate only the pre-persistence failure window.
+await storage.put(storagePath, data, mime);
+try {
+  const db = await getDb();
+  const schema = getSchema();
+  await db.insert(schema.fileObjects).values(row);
+} catch (error) {
+  try {
+    await storage.delete(storagePath);
+  } catch (cleanupError) {
+    console.error("[upload] failed to clean up stored file:", cleanupError);
+  }
+  throw error;
+}
+```

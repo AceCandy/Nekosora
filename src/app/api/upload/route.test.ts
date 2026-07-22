@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
 const mocks = vi.hoisted(() => ({
@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   parseFormData: vi.fn(),
   getStorage: vi.fn(),
   storagePut: vi.fn(),
+  storageDelete: vi.fn(),
   getDb: vi.fn(),
   getSchema: vi.fn(),
   dbValues: vi.fn(),
@@ -52,7 +53,11 @@ describe("POST /api/upload", () => {
     mocks.getSession.mockReset().mockResolvedValue({ id: "user-1" });
     mocks.parseFormData.mockReset().mockResolvedValue(uploadForm());
     mocks.storagePut.mockReset().mockResolvedValue(undefined);
-    mocks.getStorage.mockReset().mockResolvedValue({ put: mocks.storagePut });
+    mocks.storageDelete.mockReset().mockResolvedValue(undefined);
+    mocks.getStorage.mockReset().mockResolvedValue({
+      put: mocks.storagePut,
+      delete: mocks.storageDelete,
+    });
     mocks.dbValues.mockReset().mockResolvedValue(undefined);
     mocks.getDb.mockReset().mockResolvedValue({
       insert: () => ({ values: mocks.dbValues }),
@@ -64,6 +69,10 @@ describe("POST /api/upload", () => {
       send: mocks.queueSend,
     });
     mocks.processFile.mockReset();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("multipart 总体超限时返回标准 413 且不触达后端", async () => {
@@ -121,6 +130,59 @@ describe("POST /api/upload", () => {
       "file-process",
       expect.objectContaining({ mime: "text/plain" }),
     );
+    expect(mocks.storageDelete).not.toHaveBeenCalled();
+  });
+
+  it("DB 插入失败时删除已写入对象并保留原始异常", async () => {
+    const dbError = new Error("db unavailable");
+    mocks.dbValues.mockRejectedValue(dbError);
+
+    await expect(POST(request())).rejects.toBe(dbError);
+
+    const storagePath = mocks.storagePut.mock.calls[0][0] as string;
+    expect(mocks.storageDelete).toHaveBeenCalledOnce();
+    expect(mocks.storageDelete).toHaveBeenCalledWith(storagePath);
+    expect(mocks.getQueue).not.toHaveBeenCalled();
+  });
+
+  it("DB 获取失败时也删除已写入对象", async () => {
+    const dbError = new Error("db unavailable");
+    mocks.getDb.mockRejectedValue(dbError);
+
+    await expect(POST(request())).rejects.toBe(dbError);
+
+    const storagePath = mocks.storagePut.mock.calls[0][0] as string;
+    expect(mocks.storageDelete).toHaveBeenCalledOnce();
+    expect(mocks.storageDelete).toHaveBeenCalledWith(storagePath);
+    expect(mocks.getQueue).not.toHaveBeenCalled();
+  });
+
+  it("补偿删除失败时记录清理错误但仍保留 DB 异常", async () => {
+    const dbError = new Error("db unavailable");
+    const cleanupError = new Error("storage unavailable");
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    mocks.dbValues.mockRejectedValue(dbError);
+    mocks.storageDelete.mockRejectedValue(cleanupError);
+
+    await expect(POST(request())).rejects.toBe(dbError);
+
+    expect(mocks.storageDelete).toHaveBeenCalledOnce();
+    expect(consoleError).toHaveBeenCalledWith(
+      "[upload] failed to clean up stored file:",
+      cleanupError,
+    );
+    expect(mocks.getQueue).not.toHaveBeenCalled();
+  });
+
+  it("存储写入失败时不触达 DB、补偿删除或队列", async () => {
+    const storageError = new Error("storage unavailable");
+    mocks.storagePut.mockRejectedValue(storageError);
+
+    await expect(POST(request())).rejects.toBe(storageError);
+
+    expect(mocks.getDb).not.toHaveBeenCalled();
+    expect(mocks.storageDelete).not.toHaveBeenCalled();
+    expect(mocks.getQueue).not.toHaveBeenCalled();
   });
 
   it.each(["../../../escape.txt", "..\\..\\escape.txt"])(

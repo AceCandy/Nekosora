@@ -71,19 +71,28 @@ export async function POST(req: NextRequest) {
   const storage = await getStorage();
   await storage.put(storagePath, buf, file.type || "application/octet-stream");
 
-  const db = await getDb();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const s = getSchema() as any;
-  await db.insert(s.fileObjects).values({
-    id: fileId,
-    userId: user.id,
-    conversationId: conversationId || null,
-    filename: safeFilename,
-    mime: file.type || "application/octet-stream",
-    storagePath,
-    size: file.size,
-    processingStatus: "pending",
-  });
+  try {
+    const db = await getDb();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const s = getSchema() as any;
+    await db.insert(s.fileObjects).values({
+      id: fileId,
+      userId: user.id,
+      conversationId: conversationId || null,
+      filename: safeFilename,
+      mime: file.type || "application/octet-stream",
+      storagePath,
+      size: file.size,
+      processingStatus: "pending",
+    });
+  } catch (error) {
+    try {
+      await storage.delete(storagePath);
+    } catch (cleanupError) {
+      console.error("[upload] failed to clean up stored file:", cleanupError);
+    }
+    throw error;
+  }
 
   // 入队或同步处理
   const queue = await getQueue();
