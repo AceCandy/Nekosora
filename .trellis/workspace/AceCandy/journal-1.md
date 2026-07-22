@@ -964,3 +964,36 @@ MCP list_models 对 sub key 通过绑定表 join 模型，仅返回当前用户�
 ### Next Steps
 
 - None - task complete
+
+
+## Session 30: 密钥状态写入属主约束
+
+**Date**: 2026-07-22
+**Task**: 密钥状态写入属主约束
+**Branch**: `opt0722`
+
+### Summary
+
+setKeyEnabled 接收 userId 并在更新 SQL 中同时限制 key ID 与属主，保留 action 前置校验形成双层防护；新增低层回归测试并通过 424 项测试、lint、typecheck 与生产构建。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `cddb7d8` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
