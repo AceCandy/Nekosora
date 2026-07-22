@@ -36,7 +36,8 @@
     "07-22-chat-attachment-preview-url-cleanup",
     "07-22-rag-file-owner-isolation",
     "07-22-chat-message-reference-isolation",
-    "07-22-chat-action-owner-isolation"
+    "07-22-chat-action-owner-isolation",
+    "07-22-share-exclude-deleted-messages"
   ],
   "parent": null,
   "relatedFiles": [],

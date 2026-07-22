@@ -1,5 +1,5 @@
 "use server";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { requireSession } from "@/lib/session";
 
@@ -15,7 +15,10 @@ export async function createShare(conversationId: string): Promise<string> {
   if (!conv || conv.userId !== user.id) throw new Error("无权操作");
 
   // 拍快照:当前消息 publicId 列表
-  const msgs = await db.select({ publicId: s.messages.publicId }).from(s.messages).where(eq(s.messages.conversationId, conversationId));
+  const msgs = await db
+    .select({ publicId: s.messages.publicId })
+    .from(s.messages)
+    .where(and(eq(s.messages.conversationId, conversationId), isNull(s.messages.deletedAt)));
   const messageIds = (msgs as { publicId: string }[]).map((m) => m.publicId);
 
   const shareId = crypto.randomUUID();
