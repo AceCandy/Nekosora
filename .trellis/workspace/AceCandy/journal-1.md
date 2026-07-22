@@ -469,3 +469,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 15: 修复 MCP 工具限定名歧义
+
+**Date**: 2026-07-22
+**Task**: 修复 MCP 工具限定名歧义
+**Branch**: `opt0722`
+
+### Summary
+
+统一 MCP server 名称规范化并折叠连续下划线，避免双下划线分隔符出现在 server 片段导致工具误路由；新增 4 条限定名与调用回归测试，完成 lint、typecheck、358 项测试和生产构建验证。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a5db601` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

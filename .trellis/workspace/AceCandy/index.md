@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 14
+- **Total Sessions**: 15
 - **Last Active**: 2026-07-22
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~471 | Active |
+| `journal-1.md` | ~504 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 15 | 2026-07-22 | 修复 MCP 工具限定名歧义 | `a5db601` | `opt0722` |
 | 14 | 2026-07-22 | 修复 MCP 连接超时资源泄漏 | `5b04055` | `opt0722` |
 | 13 | 2026-07-22 | 消除剩余生产依赖中危漏洞 | `5dc27cd` | `opt0722` |
 | 12 | 2026-07-22 | 修复生产依赖高危漏洞 | `0c81194` | `opt0722` |
