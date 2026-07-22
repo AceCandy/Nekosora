@@ -799,3 +799,36 @@ retrieve、文件 context、多模态组装、知识库扩展均强制 userId ow
 ### Next Steps
 
 - None - task complete
+
+
+## Session 25: 限制聊天消息引用在当前会话
+
+**Date**: 2026-07-22
+**Task**: 限制聊天消息引用在当前会话
+**Branch**: `opt0722`
+
+### Summary
+
+新增 conversation-scoped message lookup；/api/chat 的 parent、source、复用 user、continue parent 与 artifact 查询均限制当前会话并校验角色，新 user insert 直接返回 internal id。helper 回归、lint、typecheck、403 个测试与生产构建通过。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1a8247d` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

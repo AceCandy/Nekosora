@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 24
+- **Total Sessions**: 25
 - **Last Active**: 2026-07-22
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~801 | Active |
+| `journal-1.md` | ~834 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 25 | 2026-07-22 | 限制聊天消息引用在当前会话 | `1a8247d` | `opt0722` |
 | 24 | 2026-07-22 | 阻止 RAG 跨用户文件读取 | `c15d99a` | `opt0722` |
 | 23 | 2026-07-22 | 回收聊天附件预览 URL | `8562e91` | `opt0722` |
 | 22 | 2026-07-22 | 清理已消费聊天附件 | `1374c4d` | `opt0722` |
