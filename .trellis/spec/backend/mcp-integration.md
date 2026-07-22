@@ -53,3 +53,53 @@ await withConnectionTimeout(
   timeoutMs,
 );
 ```
+
+## Scenario: Qualified Tool Names
+
+### 1. Scope / Trigger
+
+Apply this contract when changing server-name sanitization, IR tool generation, or tool-call routing. Qualified names use `<normalizedServerName>__<originalToolName>`.
+
+### 2. Signatures
+
+- `qualifyToolName(serverName: string, toolName: string): string`
+- `parseQualifiedToolName(qualified: string): { serverName: string; toolName: string } | null`
+- `callMcpTool(servers, toolCallId, qualifiedName, args)`
+
+### 3. Contracts
+
+- Normalize every non-alphanumeric/non-underscore server character to `_`, then collapse consecutive underscores to one.
+- The normalized server segment must never contain the `__` delimiter.
+- Preserve the original tool name after the first delimiter, including any `__` inside the tool name.
+- Generation and server lookup must use the same normalization function. Raw server-name equality remains a compatibility fallback.
+
+### 4. Validation & Error Matrix
+
+| Input | Result |
+| --- | --- |
+| `my--server` + `read_file` | `my_server__read_file` |
+| `my__server` + `read_file` | `my_server__read_file` |
+| `my-server` + `read__file` | server=`my_server`, tool=`read__file` |
+| Unknown normalized server | Existing `MCP server <name> 不可用` result |
+
+### 5. Good / Base / Bad Cases
+
+- Good: `my` and `my--server` coexist; `my_server__read__file` routes only to `my--server`.
+- Base: an alphanumeric server name produces the same qualified name as before.
+- Bad: replace each `-` independently but keep `__`, causing the parser to split inside the server segment.
+
+### 6. Tests Required
+
+- Cover repeated punctuation and original repeated underscores.
+- Cover overlapping short/long server names and assert the intended handle receives the exact tool name and arguments.
+- Assert handle close behavior and the existing unknown-server result.
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong: repeated punctuation can create the reserved delimiter.
+serverName.replace(/[^a-zA-Z0-9_]/g, "_");
+
+// Correct: collapse underscores before appending the delimiter.
+serverName.replace(/[^a-zA-Z0-9_]/g, "_").replace(/_+/g, "_");
+```

@@ -237,8 +237,12 @@ export function toIRTools(servers: ResolvedMcpServer[]): IRToolDef[] {
 
 /** 限定名:serverName__toolName(双下划线分隔)。 */
 export function qualifyToolName(serverName: string, toolName: string): string {
-  const safe = serverName.replace(/[^a-zA-Z0-9_]/g, "_");
-  return `${safe}__${toolName}`;
+  return `${normalizeServerName(serverName)}__${toolName}`;
+}
+
+/** 避免 server 名清洗结果包含工具限定名的双下划线分隔符。 */
+function normalizeServerName(serverName: string): string {
+  return serverName.replace(/[^a-zA-Z0-9_]/g, "_").replace(/_+/g, "_");
 }
 
 /** 解析限定名回 { serverName, toolName }。 */
@@ -263,7 +267,7 @@ export async function callMcpTool(
     return { result: `未知工具名格式: ${qualifiedName}`, isError: true };
   }
   const server = servers.find(
-    (sv) => sv.name.replace(/[^a-zA-Z0-9_]/g, "_") === parsed.serverName || sv.name === parsed.serverName,
+    (sv) => normalizeServerName(sv.name) === parsed.serverName || sv.name === parsed.serverName,
   );
   if (!server || !server.client) {
     return { result: `MCP server ${parsed.serverName} 不可用`, isError: true };
