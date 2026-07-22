@@ -32,7 +32,8 @@ Use a parent-scoped override when only one consumer requires the replacement. Do
 
 | Condition | Required response |
 | --- | --- |
-| Audit still reports high or critical | Trace the remaining production path; do not declare success. |
+| Audit still reports at the task's required severity | Trace the remaining production path; do not declare success. |
+| The selected fix version matches another advisory | Advance to the first version clear at the required severity, then repeat compatibility checks. |
 | Lockfile update changes unrelated peer versions | Restore the unrelated snapshots, then run a frozen offline install. |
 | Frozen install reports a missing dependency | Restore the complete package and snapshot subtree from the previous lockfile. |
 | Turbopack panics after dependency graph changes | Remove only the ignored `.next` cache and rerun a clean production build. |
@@ -50,7 +51,7 @@ Run and assert all of the following:
 
 ```bash
 pnpm install --frozen-lockfile --offline
-pnpm audit --prod --audit-level high
+pnpm audit --prod --audit-level moderate # Use the threshold required by the task.
 pnpm why <package>
 node -e "require('<native-package>')"
 pnpm lint

@@ -22,3 +22,7 @@
 ## Child Tasks
 
 - `07-22-circuit-breaker-correctness`：修正 provider 熔断状态机与失败计数。
+- `07-22-pdf-worker-static-asset`：将 PDF worker 改为构建期同步的同源静态资源。
+- `07-22-bounded-text-preview`：为文本预览增加端到端有界读取。
+- `07-22-production-dependency-security`：消除生产依赖 high 安全告警。
+- `07-22-production-dependency-moderate-security`：消除剩余生产依赖 moderate 安全告警。
