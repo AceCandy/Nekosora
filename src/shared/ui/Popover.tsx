@@ -152,8 +152,9 @@ export function Popover({
   }, [effectiveOpen, align, side]);
 
   const ctx = close;
+  // data-popover-root:供 useClickOutside 识别 Portal 浮层,避免父菜单误关。
   const floatingContent = (
-    <>
+    <div data-popover-root="">
       {/* click-outside catcher：覆盖全屏，点击即关闭（hover 模式不需要） */}
       {!openOnHover && <div className="fixed inset-0 z-20" onClick={onClose} aria-hidden="true" />}
       <div
@@ -172,7 +173,7 @@ export function Popover({
       >
         {children}
       </div>
-    </>
+    </div>
   );
 
   return (

@@ -57,6 +57,7 @@ interface ChatStreamState {
     opts: SendOptions,
     hooks?: {
       uploadAttachments?: (convId: string) => Promise<string[]>;
+      onAttachmentsConsumed?: (fileIds: string[]) => void;
       onUserMessagePublicId?: (publicId: string) => void;
       onTitleUpdated?: () => void;
       onConversationCreated?: (newConvId: string) => void;
@@ -370,6 +371,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
         signal: controller.signal,
       });
       if (!res.ok || !res.body) throw new Error("请求失败");
+      hooks?.onAttachmentsConsumed?.(fileIds);
 
       const activeKey = resolvedConvId!;
       await consumeChatSSE(res.body, {

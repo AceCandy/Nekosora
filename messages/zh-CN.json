@@ -919,6 +919,17 @@
     "deepProbeRetest": "点击重测",
     "deepProbeNoTestModel": "未配置检测模型",
     "deepProbeFailed": "深度检测失败",
+    "modelMatchTitle": "选择已有模型",
+    "modelMatchDescription": "未找到与上游模型“{name}”完全匹配的模型。请选择一个已有模型添加路由，或新建模型。",
+    "modelMatchEmpty": "没有找到可靠的相似模型，可以直接新建模型。",
+    "modelMatchCreate": "新建模型",
+    "modelRouteCanAdd": "可添加",
+    "modelRouteExists": "已存在",
+    "modelRouteCreated": "已添加",
+    "modelRouteFailed": "添加失败",
+    "modelRouteExistsDetail": "模型“{name}”已存在该路由，未写入数据。",
+    "modelRouteCreatedDetail": "已为模型“{name}”添加路由。",
+    "modelRouteFailedDetail": "未能为模型“{name}”添加路由，请重试。",
     "protocolOpenaiCompatible": "openai(兼容)"
   },
   "filePreview": {

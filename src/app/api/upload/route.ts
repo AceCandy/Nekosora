@@ -18,58 +18,102 @@ import { getSession } from "@/lib/session";
 import { getQueue } from "@/lib/infra/queue";
 import { getStorage } from "@/lib/infra/storage";
 import { processFile } from "@/lib/rag/process";
+import { apiError, ErrorCode } from "@/lib/errors";
+import {
+  parseBoundedMultipartFormData,
+  RequestBodyTooLargeError,
+} from "@/lib/multipart";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+export const MAX_UPLOAD_FILE_BYTES = 10 * 1024 * 1024;
+export const MAX_UPLOAD_BODY_BYTES = MAX_UPLOAD_FILE_BYTES + 1024 * 1024;
+
+function sanitizeUploadFilename(filename: string): string {
+  const basename = filename.replace(/\\/g, "/").split("/").pop() ?? "";
+  const cleaned = basename.replace(/[\u0000-\u001f\u007f]/g, "").trim();
+  return !cleaned || cleaned === "." || cleaned === ".." ? "file" : cleaned;
+}
 
 export async function POST(req: NextRequest) {
   const user = await getSession();
   if (!user) return NextResponse.json({ error: "未登录" }, { status: 401 });
 
-  const formData = await req.formData();
+  let formData: FormData;
+  try {
+    formData = await parseBoundedMultipartFormData(req, MAX_UPLOAD_BODY_BYTES);
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      return apiError(ErrorCode.REQUEST_PAYLOAD_TOO_LARGE, {
+        maxFileBytes: MAX_UPLOAD_FILE_BYTES,
+      });
+    }
+    return NextResponse.json({ error: "上传请求格式非法" }, { status: 400 });
+  }
   const file = formData.get("file");
   const conversationId = String(formData.get("conversationId") ?? "");
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "缺少 file 字段" }, { status: 400 });
   }
-  if (file.size > MAX_SIZE) {
-    return NextResponse.json({ error: "文件超过 10MB 限制" }, { status: 413 });
+  if (file.size > MAX_UPLOAD_FILE_BYTES) {
+    return apiError(ErrorCode.REQUEST_PAYLOAD_TOO_LARGE, {
+      maxFileBytes: MAX_UPLOAD_FILE_BYTES,
+    });
   }
 
   const fileId = crypto.randomUUID();
+  const safeFilename = sanitizeUploadFilename(file.name);
+  const mime = file.type || "application/octet-stream";
   // storage key:driver 无关的相对路径。LocalDriver 拼成 ./uploads/{userId}/...
   // 与历史绝对路径一致;S3 driver 作为 object key。
-  const storagePath = `${user.id}/${fileId}-${file.name}`;
+  const storagePath = `${user.id}/${fileId}-${safeFilename}`;
   const buf = Buffer.from(await file.arrayBuffer());
   const storage = await getStorage();
-  await storage.put(storagePath, buf, file.type || "application/octet-stream");
+  await storage.put(storagePath, buf, mime);
 
-  const db = await getDb();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const s = getSchema() as any;
-  await db.insert(s.fileObjects).values({
-    id: fileId,
-    userId: user.id,
-    conversationId: conversationId || null,
-    filename: file.name,
-    mime: file.type || "application/octet-stream",
-    storagePath,
-    size: file.size,
-    processingStatus: "pending",
-  });
+  try {
+    const db = await getDb();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const s = getSchema() as any;
+    await db.insert(s.fileObjects).values({
+      id: fileId,
+      userId: user.id,
+      conversationId: conversationId || null,
+      filename: safeFilename,
+      mime,
+      storagePath,
+      size: file.size,
+      processingStatus: "pending",
+    });
+  } catch (error) {
+    try {
+      await storage.delete(storagePath);
+    } catch (cleanupError) {
+      console.error("[upload] failed to clean up stored file:", cleanupError);
+    }
+    throw error;
+  }
 
   // 入队或同步处理
-  const queue = await getQueue();
-  if (queue.available) {
-    await queue.send("file-process", { fileId, storagePath, mime: file.type });
-  } else {
-    // 队列不可用时:同步处理(不阻塞响应过多 —— 简单起见在后台 fire-and-forget)
-    processFile(fileId, storagePath, file.type || "application/octet-stream").catch((e) =>
+  let useSyncFallback = false;
+  try {
+    const queue = await getQueue();
+    if (queue.available) {
+      await queue.send("file-process", { fileId, storagePath, mime });
+    } else {
+      useSyncFallback = true;
+    }
+  } catch (queueError) {
+    console.error("[upload] queue dispatch failed, using sync fallback:", queueError);
+    useSyncFallback = true;
+  }
+  if (useSyncFallback) {
+    // 队列不可用或投递失败时:后台 fire-and-forget 处理,不阻塞上传响应。
+    processFile(fileId, storagePath, mime).catch((e) =>
       console.error("[upload] sync process failed:", e),
     );
   }
 
-  return NextResponse.json({ fileId, filename: file.name, status: "processing" });
+  return NextResponse.json({ fileId, filename: safeFilename, status: "processing" });
 }

@@ -11,6 +11,7 @@ import type { ChatMessage, ModelOption } from "@/features/chat/model/types";
 import type { Artifact } from "@/features/artifacts/ArtifactPanel";
 
 import { copyToClipboard } from "@/shared/lib/clipboard";
+import { useClickOutside } from "@/shared/lib/useClickOutside";
 
 /** 用户消息超过此行数才折叠(长消息默认收起,避免撑高会话)。 */
 const USER_MESSAGE_COLLAPSE_LINES = 6;
@@ -134,6 +135,8 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
 
   // 思考块触发区容器(含浮层):用于「点击外部收起」判定
   const reasoningRef = useRef<HTMLDivElement>(null);
+  // 重新生成换模型菜单容器
+  const regenMenuRef = useRef<HTMLDivElement>(null);
   // hover 进/出延迟计时(0.5s):避免鼠标划过误触展开,也给鼠标移动留过渡时间
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clearHoverTimer = () => {
@@ -145,18 +148,12 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
     }
   }, [reasoning]);
 
-  // 思考块展开时,点击触发区(含浮层)以外的任意位置即收起
-  useEffect(() => {
-    if (!reasoningPanelOpen) return;
-    const onPointerDown = (e: MouseEvent) => {
-      if (reasoningRef.current && !reasoningRef.current.contains(e.target as Node)) {
-        clearHoverTimer();
-        setReasoningPanelOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", onPointerDown);
-    return () => document.removeEventListener("mousedown", onPointerDown);
-  }, [reasoningPanelOpen]);
+  // 思考块 / 重生成菜单:document 级外部点击收起(避免 fixed 遮罩被祖先 stacking 影响)
+  useClickOutside(reasoningRef, () => {
+    clearHoverTimer();
+    setReasoningPanelOpen(false);
+  }, reasoningPanelOpen);
+  useClickOutside(regenMenuRef, () => setRegenOpen(false), regenOpen);
 
   // 用户消息折叠测量:基于实际行高计算 6 行高度,scrollHeight 超过则可折叠。
   // content 变化(编辑后)或首次挂载时重测;ResizeObserver 兜底宽度变化导致的换行变化。
@@ -509,7 +506,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
               <span>{copied ? t("copied") : t("copy")}</span>
             </button>
             {!isStreaming && (
-            <div className="relative">
+            <div ref={regenMenuRef} className="relative">
               <button
                 onClick={() => {
                   if (models.length > 1) setRegenOpen((v) => !v);
@@ -524,32 +521,29 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
                 <span>{t("regenerate")}</span>
               </button>
               {regenOpen && models.length > 1 && (
-                <>
-                  <div className="fixed inset-0 z-30" onClick={() => setRegenOpen(false)} />
-                  <div className="absolute bottom-full mb-2 right-0 z-40 w-48 max-h-60 overflow-y-auto rounded-lg border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink py-1 shadow-md">
-                    {models.map((m) => (
-                      <button
-                        key={m.modelId}
-                        type="button"
-                        onClick={() => {
-                          onRegenerate(publicId, m.modelId);
-                          setRegenOpen(false);
-                        }}
-                        className={clsx(
-                          "flex items-center gap-1.5 w-full text-left px-3 py-1.5 text-xs cursor-pointer transition-colors",
-                          m.modelId === model
-                            ? "text-sora-blue font-semibold"
-                            : "text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900",
-                        )}
-                      >
-                        <span className="truncate">{m.displayName ?? m.name}</span>
-                        {m.source === "global" && (
-                          <Badge variant="primary" className="py-0 leading-none shrink-0">{t("globalLabel")}</Badge>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </>
+                <div className="absolute bottom-full mb-2 right-0 z-40 w-48 max-h-60 overflow-y-auto rounded-lg border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink py-1 shadow-md">
+                  {models.map((m) => (
+                    <button
+                      key={m.modelId}
+                      type="button"
+                      onClick={() => {
+                        onRegenerate(publicId, m.modelId);
+                        setRegenOpen(false);
+                      }}
+                      className={clsx(
+                        "flex items-center gap-1.5 w-full text-left px-3 py-1.5 text-xs cursor-pointer transition-colors",
+                        m.modelId === model
+                          ? "text-sora-blue font-semibold"
+                          : "text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900",
+                      )}
+                    >
+                      <span className="truncate">{m.displayName ?? m.name}</span>
+                      {m.source === "global" && (
+                        <Badge variant="primary" className="py-0 leading-none shrink-0">{t("globalLabel")}</Badge>
+                      )}
+                    </button>
+                  ))}
+                </div>
               )}
             </div>
             )}

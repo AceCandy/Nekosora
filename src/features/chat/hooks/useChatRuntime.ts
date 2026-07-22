@@ -14,6 +14,8 @@ interface UseChatRuntimeOptions {
   initialMessages?: ChatMessage[];
   /** 发送前上传附件,返回 fileId 数组(由 useChatAttachments 提供)。 */
   uploadAttachments?: (convId: string) => Promise<string[]>;
+  /** /api/chat 接受附件后清理已消费的上传项。 */
+  onAttachmentsConsumed?: (fileIds: string[]) => void;
   /** 新会话建会后回调(用于上层更新活动会话 id);本 hook 会在此前静默替换 URL。 */
   onConversationCreated?: (newConvId: string) => void;
 }
@@ -29,6 +31,7 @@ export function useChatRuntime({
   conversationId = null,
   initialMessages = [],
   uploadAttachments,
+  onAttachmentsConsumed,
   onConversationCreated,
 }: UseChatRuntimeOptions = {}) {
   const router = useRouter();
@@ -100,6 +103,7 @@ export function useChatRuntime({
         const opts: SendOptions = { model: modelName, modelId, instructionCardIds, webSearch, knowledgeBaseIds, createOptions };
         void actions.send(key, text, opts, {
           uploadAttachments,
+          onAttachmentsConsumed,
           onTitleUpdated: () => { if (!wasNewConversation.current) router.refresh(); },
           // 静默换 URL,不触发 Next.js RSC 导航(避免组件重挂、流式中断);同时通知上层更新活动会话 id。
           onConversationCreated: (newConvId) => {
@@ -108,7 +112,7 @@ export function useChatRuntime({
           },
         });
       },
-    [actions, key, uploadAttachments, router, onConversationCreated],
+    [actions, key, uploadAttachments, onAttachmentsConsumed, router, onConversationCreated],
   );
 
   const regenerate = useMemo(

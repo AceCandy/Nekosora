@@ -21,6 +21,7 @@ export const errorsZhCN: Record<ErrorCodeValue, string> = {
   // request.*
   "request.invalid_json": "请求体不是合法 JSON",
   "request.missing_field": "缺少必填字段",
+  "request.payload_too_large": "请求体过大",
 
   // gateway.*
   "gateway.upstream_error": "上游服务返回错误",

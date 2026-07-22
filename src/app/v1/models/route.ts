@@ -47,7 +47,11 @@ export async function GET(req: NextRequest) {
       const [m] = await db
         .select()
         .from(s.models)
-        .where(and(eq(s.models.id, b.modelId), eq(s.models.enabled, true)))
+        .where(and(
+          eq(s.models.id, b.modelId),
+          eq(s.models.ownerUserId, ctx.userId),
+          eq(s.models.enabled, true),
+        ))
         .limit(1);
       if (m) add(m.name);
     }

@@ -1,5 +1,6 @@
 import {
   listProviders,
+  listModels,
   listRoutes,
   createProvider,
   updateProvider,
@@ -9,6 +10,7 @@ import {
   checkProviderHealth,
   refreshUpstreamModels,
   testProviderModel,
+  attachProviderModelRoute,
 } from "../actions";
 import { revealKeyBundle } from "@/lib/providers/keys";
 import type { ProviderKeyResult } from "@/db/schema/pg";
@@ -19,18 +21,35 @@ import ProvidersManager, {
 import { PROVIDER_PROTOCOLS } from "@/features/providers/protocols";
 import { Server } from "lucide-react";
 import { PageHeader } from "@/shared/components/PageHeader";
+import type { ProviderModelCandidate } from "@/features/providers/types";
 
 export default async function ProvidersPage() {
   const tn = await getTranslations("nav");
   const t = await getTranslations("admin.providers");
-  const rows = await listProviders();
+  const [rows, routeRows, modelRows] = await Promise.all([
+    listProviders(),
+    listRoutes(),
+    listModels(),
+  ]);
   // 已配路由(用于检测模型悬浮窗标注哪些上游模型已配路由)。
-  const routeRows = await listRoutes();
   const routes = routeRows.map((r: Record<string, unknown>) => {
     const route = r.route as Record<string, unknown>;
     return {
+      modelId: route.modelId as string,
       providerId: route.providerId as string,
       upstreamModelName: route.upstreamModelName as string,
+    };
+  });
+  const modelCandidates: ProviderModelCandidate[] = modelRows.map((model: Record<string, unknown>) => {
+    const catalog = model.catalog as Record<string, unknown>;
+    return {
+      id: model.id as string,
+      name: model.name as string,
+      displayName: (model.displayName as string | null) ?? undefined,
+      catalogId: model.catalogId as string,
+      catalogName: catalog.name as string,
+      canonicalModelId: catalog.canonicalModelId as string,
+      aliases: (catalog.aliases as string[] | null) ?? [],
     };
   });
 
@@ -97,6 +116,8 @@ export default async function ProvidersPage() {
           refreshActions={refreshActions}
           modelProbeActions={modelProbeActions}
           routes={routes}
+          modelCandidates={modelCandidates}
+          attachModelRouteAction={attachProviderModelRoute}
           modelCreatePath="/admin/models"
         />
     </div>

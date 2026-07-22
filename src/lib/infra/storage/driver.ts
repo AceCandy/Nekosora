@@ -28,6 +28,12 @@ export interface StorageResult {
   size: number;
 }
 
+/** get 的可选字节闭区间。 */
+export interface GetOpts {
+  start: number;
+  end: number;
+}
+
 /**
  * 存储后端契约 —— 所有 driver 实现。
  *
@@ -39,8 +45,8 @@ export interface StorageDriver {
   /** 上传。返回可访问 URL(无则 null,需走鉴权代理)。 */
   put(key: string, data: Buffer, mime: string, opts?: PutOpts): Promise<StorageResult>;
 
-  /** 读取为 Buffer。key 不存在应抛错(ENOENT / NoSuchKey)。 */
-  get(key: string): Promise<Buffer>;
+  /** 读取为 Buffer；opts 缺省时读取完整对象。key 不存在应抛错(ENOENT / NoSuchKey)。 */
+  get(key: string, opts?: GetOpts): Promise<Buffer>;
 
   /** 删除。key 不存在不视为错误。 */
   delete(key: string): Promise<void>;

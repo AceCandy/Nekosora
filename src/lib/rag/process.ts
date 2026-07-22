@@ -4,7 +4,7 @@
  * 被 worker.ts(队列消费)和 upload 端点(队列不可用时同步 fallback)调用。
  * 每步更新 file_objects 状态,失败时记录 embed_error/rag_reason。
  */
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { extractText } from "./extract";
 import { chunkText } from "./chunk";
@@ -13,19 +13,30 @@ import { isEmbeddingAvailable } from "./embedding";
 
 /**
  * 处理一个文件:提取 → 分块 → 嵌入 → 入库 → 标记 rag_ready。
- * 幂等:重复处理会先删旧块再重插。
+ * 并发保护:仅成功抢占 pending/error 状态的调用者进入流水线,其余调用直接返回。
  */
 export async function processFile(fileId: string, storagePath: string, mime: string): Promise<void> {
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
 
+  const [claimed] = await db
+    .update(s.fileObjects)
+    .set({ processingStatus: "extracting", extractStatus: "running" })
+    .where(
+      and(
+        eq(s.fileObjects.id, fileId),
+        inArray(s.fileObjects.processingStatus, ["pending", "error"]),
+      ),
+    )
+    .returning({ id: s.fileObjects.id });
+  if (!claimed) return;
+
   const update = (patch: Record<string, unknown>) =>
     db.update(s.fileObjects).set(patch).where(eq(s.fileObjects.id, fileId));
 
   try {
     // 1. 提取
-    await update({ processingStatus: "extracting", extractStatus: "running" });
     const extracted = await extractText(storagePath, mime);
     if (!extracted.supported) {
       await update({

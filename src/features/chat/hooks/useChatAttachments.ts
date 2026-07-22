@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { UploadFileItem } from "@/features/chat/model/types";
 
 /**
@@ -17,6 +17,27 @@ import type { UploadFileItem } from "@/features/chat/model/types";
  */
 export function useChatAttachments(conversationId: string | null) {
   const [attached, setAttached] = useState<UploadFileItem[]>([]);
+  const previewUrlsRef = useRef(new Set<string>());
+
+  useEffect(() => {
+    const activeUrls = new Set(
+      attached.flatMap((item) => (item.previewUrl ? [item.previewUrl] : [])),
+    );
+    previewUrlsRef.current.forEach((url) => {
+      if (!activeUrls.has(url)) {
+        URL.revokeObjectURL(url);
+        previewUrlsRef.current.delete(url);
+      }
+    });
+  }, [attached]);
+
+  useEffect(
+    () => () => {
+      previewUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+      previewUrlsRef.current.clear();
+    },
+    [],
+  );
 
   const uploadOne = useCallback(
     async (item: UploadFileItem, targetConvId: string): Promise<string | null> => {
@@ -50,14 +71,18 @@ export function useChatAttachments(conversationId: string | null) {
     async (files: FileList | File[] | null) => {
       if (!files || (files as FileList).length === 0) return;
 
-      const newItems: UploadFileItem[] = Array.from(files).map((file) => ({
-        id: Math.random().toString(36).substring(7),
-        filename: file.name,
-        file,
-        status: conversationId ? "uploading" : "pending",
-        isImage: file.type.startsWith("image/"),
-        previewUrl: file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined,
-      }));
+      const newItems: UploadFileItem[] = Array.from(files).map((file) => {
+        const previewUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined;
+        if (previewUrl) previewUrlsRef.current.add(previewUrl);
+        return {
+          id: Math.random().toString(36).substring(7),
+          filename: file.name,
+          file,
+          status: conversationId ? "uploading" : "pending",
+          isImage: file.type.startsWith("image/"),
+          previewUrl,
+        };
+      });
 
       setAttached((prev) => [...prev, ...newItems]);
 
@@ -93,17 +118,20 @@ export function useChatAttachments(conversationId: string | null) {
   );
 
   const removeAttachment = useCallback((id: string) => {
-    setAttached((prev) => prev.filter((x) => x.id !== id));
+    setAttached((prev) => prev.filter((item) => item.id !== id));
   }, []);
 
-  const resetAttachments = useCallback(() => {
-    // 释放图片预览的 object URL,避免内存泄漏。
-    setAttached((prev) => {
-      prev.forEach((x) => {
-        if (x.previewUrl) URL.revokeObjectURL(x.previewUrl);
-      });
-      return [];
-    });
+  const clearConsumedAttachments = useCallback((fileIds: string[]) => {
+    const consumedIds = new Set(fileIds);
+    setAttached((prev) =>
+      prev.filter((item) => {
+        const consumed =
+          item.status === "uploaded" &&
+          item.fileId !== undefined &&
+          consumedIds.has(item.fileId);
+        return !consumed;
+      }),
+    );
   }, []);
 
   return {
@@ -111,6 +139,6 @@ export function useChatAttachments(conversationId: string | null) {
     handleUpload,
     uploadPending,
     removeAttachment,
-    resetAttachments,
+    clearConsumedAttachments,
   };
 }

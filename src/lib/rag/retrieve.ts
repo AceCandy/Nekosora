@@ -44,6 +44,14 @@ export interface RetrieveResult {
   cached: boolean;
 }
 
+export interface RetrieveOptions {
+  userId: string;
+  topK?: number;
+  minSimilarity?: number;
+  tokenBudget?: number;
+  timeoutMs?: number;
+}
+
 interface RawCandidate {
   chunkId: string;
   fileId: string;
@@ -57,12 +65,7 @@ interface RawCandidate {
 export async function retrieve(
   query: string,
   fileIds: string[],
-  opts: {
-    topK?: number;
-    minSimilarity?: number;
-    tokenBudget?: number;
-    timeoutMs?: number;
-  } = {},
+  opts: RetrieveOptions,
 ): Promise<RetrieveResult> {
   const topK = opts.topK ?? DEFAULT_TOP_K;
   const minSim = opts.minSimilarity ?? DEFAULT_MIN_SIMILARITY;
@@ -78,7 +81,10 @@ export async function retrieve(
   );
 
   try {
-    return await Promise.race([doRetrieve(query, fileIds, topK, minSim, tokenBudget), timeoutPromise]);
+    return await Promise.race([
+      doRetrieve(query, fileIds, opts.userId, topK, minSim, tokenBudget),
+      timeoutPromise,
+    ]);
   } catch (err) {
     console.error("[rag] retrieve error:", err);
     return { chunks: [], status: "rag_error", candidateCount: 0, maxScore: 0, cached: false };
@@ -88,6 +94,7 @@ export async function retrieve(
 async function doRetrieve(
   query: string,
   fileIds: string[],
+  userId: string,
   topK: number,
   minSim: number,
   tokenBudget: number,
@@ -105,9 +112,11 @@ async function doRetrieve(
   const s = getSchema() as any;
 
   // 2. 取候选块(限定文件 + rag_ready)
-  const where = fileIds.length
-    ? and(inArray(s.fileChunks.fileId, fileIds))
-    : undefined;
+  const where = and(
+    eq(s.fileObjects.userId, userId),
+    eq(s.fileObjects.ragReady, true),
+    ...(fileIds.length ? [inArray(s.fileChunks.fileId, fileIds)] : []),
+  );
   // 关联 file_objects 取 filename,且只取 rag_ready 的文件
   const rows = await db
     .select({
@@ -118,9 +127,7 @@ async function doRetrieve(
     .innerJoin(s.fileObjects, eq(s.fileChunks.fileId, s.fileObjects.id))
     .where(where);
 
-  // 过滤 rag_ready
   const candidates: RawCandidate[] = rows
-    .filter((r: Record<string, unknown>) => (r.file as Record<string, unknown>).ragReady)
     .map((r: Record<string, unknown>) => {
       const chunk = r.chunk as Record<string, unknown>;
       const file = r.file as Record<string, unknown>;

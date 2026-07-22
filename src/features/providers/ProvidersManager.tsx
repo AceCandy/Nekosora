@@ -1,13 +1,22 @@
 "use client";
-import { useState, type ReactNode } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import type { FormDataSerializableAction } from "@/features/providers/types";
+import type {
+  AttachProviderModelRouteAction,
+  FormDataSerializableAction,
+  ProviderModelCandidate,
+  ProviderRouteRef,
+} from "@/features/providers/types";
 import type { ProviderKeyResult } from "@/db/schema/pg";
 import type { EditorRow, TestKeyAction } from "@/features/providers/KeyBundleEditor";
 import ProviderFormDialog from "@/features/providers/ProviderFormDialog";
 import ProviderHealthButton, { type HealthAction, type HealthDisplay } from "@/features/providers/ProviderHealthButton";
 import ModelProbeButton, { type ModelProbeAction, type ModelProbeDisplay } from "@/features/providers/ModelProbeButton";
+import ProviderModelMatchDialog, {
+  type ProviderModelMatchCandidate,
+  type ProviderModelMatchFeedback,
+} from "@/features/providers/ProviderModelMatchDialog";
 import ConfirmDialog from "@/shared/ui/ConfirmDialog";
 import Popover from "@/shared/ui/Popover";
 import Input from "@/shared/ui/Input";
@@ -15,6 +24,7 @@ import Select from "@/shared/ui/Select";
 import { Plus, Edit2, Trash2, ShieldAlert, HeartPulse, Loader2, RefreshCw } from "lucide-react";
 import { clsx } from "clsx";
 import { Button } from "@/shared/ui/Button";
+import { rankSimilarModels } from "@/lib/model-catalog";
 
 // 4 种协议各自的彩色块(低饱和填充,与「莫兰迪灰调」管理侧协调);未命中协议回退中性色。
 const PROTOCOL_STYLE: Record<string, { bg: string; text: string }> = {
@@ -29,12 +39,6 @@ export type RefreshAction = (providerId: string) => Promise<{
   models: string[];
   checkedAt: number;
 }>;
-
-/** routes 表中与 provider 关联的上游模型引用(用于标注哪些上游模型已配路由)。 */
-export interface ProviderRouteRef {
-  providerId: string;
-  upstreamModelName: string;
-}
 
 export interface ProviderItem {
   id: string;
@@ -83,8 +87,20 @@ interface ProvidersManagerProps {
   modelProbeActions?: Record<string, ModelProbeAction>;
   /** 已配置的路由引用(用于检测模型悬浮窗标注哪些上游模型已配路由)。 */
   routes?: ProviderRouteRef[];
+  /** 当前操作者可管理的模型，用于完全匹配和相似候选。 */
+  modelCandidates: ProviderModelCandidate[];
+  /** 服务端补路由 action；会重新校验权限和重复路由。 */
+  attachModelRouteAction: AttachProviderModelRouteAction;
   modelCreatePath: "/panel/models" | "/admin/models";
 }
+
+interface ModelMatchState {
+  providerId: string;
+  upstreamModelName: string;
+  candidates: ProviderModelMatchCandidate[];
+}
+
+type RouteFeedbackStatus = "pending" | "created" | "exists" | "error";
 
 export default function ProvidersManager({
   providers,
@@ -98,6 +114,8 @@ export default function ProvidersManager({
   refreshActions,
   modelProbeActions,
   routes,
+  modelCandidates,
+  attachModelRouteAction,
   modelCreatePath,
 }: ProvidersManagerProps) {
   const router = useRouter();
@@ -105,6 +123,12 @@ export default function ProvidersManager({
   const [addOpen, setAddOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [modelMatch, setModelMatch] = useState<ModelMatchState | null>(null);
+  const [modelMatchFeedback, setModelMatchFeedback] = useState<ProviderModelMatchFeedback | null>(null);
+  const [pendingModelId, setPendingModelId] = useState<string | null>(null);
+  const [routeFeedback, setRouteFeedback] = useState<Record<string, RouteFeedbackStatus>>({});
+  const [createdRoutes, setCreatedRoutes] = useState<ProviderRouteRef[]>([]);
+  const [, startRouteTransition] = useTransition();
 
   // 健康度状态上提到此层:既支持单行检测,也支持表头"全部检测"统一刷新所有行。
   // healthMap 只存本次会话的检测结果;未检测的行回显落库值(p.health)。
@@ -269,9 +293,83 @@ export default function ProvidersManager({
     return true;
   });
 
+  const allRoutes = [...(routes ?? []), ...createdRoutes];
+  const routeFeedbackKey = (providerId: string, upstreamModelName: string) =>
+    JSON.stringify([providerId, upstreamModelName]);
+  const hasRoute = (modelId: string, providerId: string, upstreamModelName: string) =>
+    allRoutes.some((route) =>
+      route.modelId === modelId &&
+      route.providerId === providerId &&
+      route.upstreamModelName === upstreamModelName,
+    );
+
+  const openCreateModel = (providerId: string, upstreamModelName: string) => {
+    router.push(`${modelCreatePath}?createModel=1&name=${encodeURIComponent(upstreamModelName)}&providerId=${encodeURIComponent(providerId)}&upstreamModelName=${encodeURIComponent(upstreamModelName)}`);
+  };
+
+  const attachRoute = (
+    model: ProviderModelCandidate,
+    providerId: string,
+    upstreamModelName: string,
+    showDialogFeedback: boolean,
+  ) => {
+    if (pendingModelId) return;
+    const feedbackKey = routeFeedbackKey(providerId, upstreamModelName);
+    setPendingModelId(model.id);
+    setRouteFeedback((previous) => ({ ...previous, [feedbackKey]: "pending" }));
+    if (showDialogFeedback) setModelMatchFeedback(null);
+    startRouteTransition(async () => {
+      try {
+        const result = await attachModelRouteAction(model.id, providerId, upstreamModelName);
+        setCreatedRoutes((previous) => previous.some((route) =>
+          route.modelId === model.id &&
+          route.providerId === providerId &&
+          route.upstreamModelName === upstreamModelName,
+        ) ? previous : [...previous, { modelId: model.id, providerId, upstreamModelName }]);
+        setRouteFeedback((previous) => ({ ...previous, [feedbackKey]: result.status }));
+        if (showDialogFeedback) {
+          setModelMatchFeedback({ status: result.status, modelName: model.name });
+          setModelMatch((current) => current ? {
+            ...current,
+            candidates: current.candidates.map((candidate) =>
+              candidate.id === model.id ? { ...candidate, routeExists: true } : candidate,
+            ),
+          } : current);
+        }
+      } catch {
+        setRouteFeedback((previous) => ({ ...previous, [feedbackKey]: "error" }));
+        if (showDialogFeedback) setModelMatchFeedback({ status: "error", modelName: model.name });
+      } finally {
+        setPendingModelId(null);
+      }
+    });
+  };
+
+  const handleUpstreamModelClick = (providerId: string, rawUpstreamModelName: string) => {
+    if (pendingModelId) return;
+    const upstreamModelName = rawUpstreamModelName.trim();
+    const exact = modelCandidates.find((model) => model.name.trim() === upstreamModelName);
+    if (exact) {
+      attachRoute(exact, providerId, upstreamModelName, false);
+      return;
+    }
+
+    const candidates = rankSimilarModels(modelCandidates, upstreamModelName).map((model) => ({
+      ...model,
+      routeExists: hasRoute(model.id, providerId, upstreamModelName),
+    }));
+    setModelMatch({ providerId, upstreamModelName, candidates });
+    setModelMatchFeedback(null);
+  };
+
+  const selectModelCandidate = (candidate: ProviderModelMatchCandidate) => {
+    if (!modelMatch) return;
+    attachRoute(candidate, modelMatch.providerId, modelMatch.upstreamModelName, true);
+  };
+
   // 按 provider 聚合已配路由的上游模型集合,供悬浮窗标注绿/灰底。
   const configuredByProvider = new Map<string, Set<string>>();
-  for (const r of routes ?? []) {
+  for (const r of allRoutes) {
     let set = configuredByProvider.get(r.providerId);
     if (!set) { set = new Set(); configuredByProvider.set(r.providerId, set); }
     set.add(r.upstreamModelName);
@@ -283,22 +381,39 @@ export default function ProvidersManager({
     const models = modelsFor(p);
     const listed = models.filter((m) => configured?.has(m));
     const rest = models.filter((m) => !configured?.has(m));
-    return [...listed, ...rest].map((m) => (
-      <button
-        type="button"
-        key={m}
-        title={m}
-        onClick={() => router.push(`${modelCreatePath}?createModel=1&name=${encodeURIComponent(m)}&providerId=${encodeURIComponent(p.id)}&upstreamModelName=${encodeURIComponent(m)}`)}
-        className={clsx(
-          "block w-full text-left px-2 py-1 text-xs font-mono truncate hover:bg-sora-blue/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sora-blue",
-          configured?.has(m)
-            ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300"
-            : "bg-neutral-100 dark:bg-neutral-800/60 text-neutral-600 dark:text-neutral-400",
-        )}
-      >
-        {m}
-      </button>
-    ));
+    return [...listed, ...rest].map((m) => {
+      const feedback = routeFeedback[routeFeedbackKey(p.id, m.trim())];
+      return (
+        <button
+          type="button"
+          key={m}
+          title={m}
+          disabled={pendingModelId !== null}
+          onClick={() => handleUpstreamModelClick(p.id, m)}
+          className={clsx(
+            "flex w-full items-center gap-2 px-2 py-1 text-left text-xs font-mono hover:bg-sora-blue/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sora-blue disabled:cursor-not-allowed disabled:opacity-60",
+            configured?.has(m)
+              ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300"
+              : "bg-neutral-100 dark:bg-neutral-800/60 text-neutral-600 dark:text-neutral-400",
+          )}
+        >
+          <span className="min-w-0 flex-1 truncate">{m}</span>
+          {feedback === "pending" ? (
+            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden="true" />
+          ) : feedback ? (
+            <span className={clsx("shrink-0 font-sans text-[11px] font-medium", feedback === "error" && "text-red-600 dark:text-red-300")}>
+              {t(
+                feedback === "created"
+                  ? "modelRouteCreated"
+                  : feedback === "exists"
+                    ? "modelRouteExists"
+                    : "modelRouteFailed",
+              )}
+            </span>
+          ) : null}
+        </button>
+      );
+    });
   };
 
   return (
@@ -575,6 +690,22 @@ export default function ProvidersManager({
             upstreamModels: modelsFor(editing),
             upstreamModelsAt: fetchedAtFor(editing),
           }}
+        />
+      )}
+
+      {modelMatch && (
+        <ProviderModelMatchDialog
+          open={true}
+          upstreamModelName={modelMatch.upstreamModelName}
+          candidates={modelMatch.candidates}
+          pendingModelId={pendingModelId}
+          feedback={modelMatchFeedback}
+          onClose={() => {
+            setModelMatch(null);
+            setModelMatchFeedback(null);
+          }}
+          onSelect={selectModelCandidate}
+          onCreate={() => openCreateModel(modelMatch.providerId, modelMatch.upstreamModelName)}
         />
       )}
 

@@ -49,6 +49,7 @@ export const ErrorCode = {
   // --- 请求校验 (request.*) ---
   REQUEST_INVALID_JSON: "request.invalid_json",
   REQUEST_MISSING_FIELD: "request.missing_field",
+  REQUEST_PAYLOAD_TOO_LARGE: "request.payload_too_large",
 
   // --- 上游/生成 (gateway.*) ---
   GATEWAY_UPSTREAM_ERROR: "gateway.upstream_error",
@@ -131,6 +132,11 @@ export const ERROR_META: Record<ErrorCodeValue, ErrorMeta> = {
     status: 400,
     type: "invalid_request_error",
     i18nKey: "errors.request_missing_field",
+  },
+  [ErrorCode.REQUEST_PAYLOAD_TOO_LARGE]: {
+    status: 413,
+    type: "invalid_request_error",
+    i18nKey: "errors.request_payload_too_large",
   },
 
   // gateway.*

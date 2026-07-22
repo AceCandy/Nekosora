@@ -19,11 +19,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "缺少 query/kbIds" }, { status: 400 });
   }
 
-  const fileIds = await getFileIdsByKnowledgeBases(body.kbIds);
+  const fileIds = await getFileIdsByKnowledgeBases(body.kbIds, user.id);
   if (fileIds.length === 0) {
     return NextResponse.json({ status: "empty", chunks: [] });
   }
 
-  const result = await retrieve(body.query, fileIds, { topK: 5 });
+  const result = await retrieve(body.query, fileIds, { userId: user.id, topK: 5 });
   return NextResponse.json({ status: result.status, chunks: result.chunks, maxScore: result.maxScore });
 }

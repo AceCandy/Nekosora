@@ -62,10 +62,9 @@ function getState(id: string): BreakerState {
  * 查询某 provider 是否允许通过(即不在 open 态)。
  *
  * 若处于 open 但已过冷却期,自动转为 half-open 并放行(试探请求)。
- * half-open 期间只允许通过一次(由调用方配合:试探失败立即重回 open)。
+ * half-open 期间只允许通过一次,结果回报前拒绝其他请求。
  */
 export function isProviderAllowed(providerId: string): boolean {
-  const cfg = DEFAULT_CONFIG;
   const s = getState(providerId);
   const now = Date.now();
 
@@ -77,8 +76,8 @@ export function isProviderAllowed(providerId: string): boolean {
     }
     return false; // 仍在熔断期
   }
-  // closed / half-open 都放行。
-  return true;
+  // half-open 表示探测名额已占用,结果回报前拒绝其他请求。
+  return s.status === "closed";
 }
 
 /**

@@ -311,8 +311,9 @@ export async function* streamChat(
       if (succeeded || routeDone || aborted) break;
 
       // 路由级故障转移。可转移错误(连接/5xx/限流)→ 上报熔断器,尝试下一条。
-      if (i === routes.length - 1 || !isFailoverableError(lastError)) break;
-      if (route.provider.id) recordFailure(route.provider.id);
+      const failoverable = isFailoverableError(lastError);
+      if (failoverable && route.provider.id) recordFailure(route.provider.id);
+      if (i === routes.length - 1 || !failoverable) break;
       console.warn(
         `[streamChat] 路由转移 ${i + 1}/${routes.length} (model=${route.upstreamModelName}):`,
         lastError instanceof Error ? lastError.message : lastError,
@@ -608,8 +609,9 @@ export async function generateChat(opts: StreamChatOptions): Promise<GenerateCha
       }
       if (succeeded || routeDone) break;
 
-      if (i === routes.length - 1 || !isFailoverableError(lastError)) break;
-      if (route.provider.id) recordFailure(route.provider.id);
+      const failoverable = isFailoverableError(lastError);
+      if (failoverable && route.provider.id) recordFailure(route.provider.id);
+      if (i === routes.length - 1 || !failoverable) break;
       console.warn(
         `[generateChat] 路由转移 ${i + 1}/${routes.length} (model=${route.upstreamModelName}):`,
         lastError instanceof Error ? lastError.message : lastError,

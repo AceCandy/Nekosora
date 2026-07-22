@@ -919,6 +919,17 @@
     "deepProbeRetest": "Click to retest",
     "deepProbeNoTestModel": "No test model configured",
     "deepProbeFailed": "Deep probe failed",
+    "modelMatchTitle": "Choose an existing model",
+    "modelMatchDescription": "No exact match was found for upstream model \"{name}\". Choose an existing model to add the route, or create a new model.",
+    "modelMatchEmpty": "No reliable similar models were found. You can create a new model instead.",
+    "modelMatchCreate": "Create model",
+    "modelRouteCanAdd": "Can add",
+    "modelRouteExists": "Exists",
+    "modelRouteCreated": "Added",
+    "modelRouteFailed": "Failed",
+    "modelRouteExistsDetail": "Model \"{name}\" already has this route. No data was written.",
+    "modelRouteCreatedDetail": "Route added to model \"{name}\".",
+    "modelRouteFailedDetail": "Could not add the route to model \"{name}\". Try again.",
     "protocolOpenaiCompatible": "openai (compatible)"
   },
   "filePreview": {

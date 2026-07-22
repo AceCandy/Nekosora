@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { findCatalogMatch, normalizeCatalogModelId } from "@/lib/model-catalog";
+import {
+  findCatalogMatch,
+  normalizeCatalogModelId,
+  normalizeComparableModelId,
+  rankSimilarModels,
+} from "@/lib/model-catalog";
 
 const entries = [
   {
@@ -28,6 +33,110 @@ describe("model catalog matching", () => {
 
   it("does not use generic templates as automatic matches", () => {
     expect(findCatalogMatch(entries, "__generic_chat__")).toBeNull();
+  });
+});
+
+describe("rankSimilarModels", () => {
+  const models = [
+    {
+      id: "model-glm",
+      name: "glm-5.2",
+      catalogId: "catalog-glm",
+      canonicalModelId: "glm-5.2",
+      aliases: ["zai/glm-5.2", "volcengine/glm-5.2"],
+    },
+    {
+      id: "model-sonnet",
+      name: "claude-sonnet-4",
+      catalogId: "catalog-sonnet",
+      canonicalModelId: "claude-sonnet-4",
+      aliases: ["anthropic/claude-sonnet-4"],
+    },
+    {
+      id: "model-opus",
+      name: "claude-opus-4",
+      catalogId: "catalog-opus",
+      canonicalModelId: "claude-opus-4",
+      aliases: [],
+    },
+    {
+      id: "model-llama-8b",
+      name: "llama-3.1-8b",
+      catalogId: "catalog-generic",
+      canonicalModelId: "__generic_chat__",
+      aliases: [],
+    },
+    {
+      id: "model-llama-70b",
+      name: "llama-3.1-70b",
+      catalogId: "catalog-generic",
+      canonicalModelId: "__generic_chat__",
+      aliases: [],
+    },
+    {
+      id: "model-gpt-4o",
+      name: "gpt-4o",
+      catalogId: "catalog-gpt-4o",
+      canonicalModelId: "gpt-4o",
+      aliases: [],
+    },
+    {
+      id: "model-gpt-4-1",
+      name: "gpt-4.1",
+      catalogId: "catalog-gpt-4-1",
+      canonicalModelId: "gpt-4.1",
+      aliases: [],
+    },
+  ];
+
+  it("归一厂商命名空间、大小写和分隔符，但保留模型版本", () => {
+    expect(normalizeComparableModelId(" OpenAI/GLM_5.2 ")).toBe("glm-5.2");
+    expect(normalizeComparableModelId("gpt-4.1-mini")).toBe("gpt-4.1-mini");
+  });
+
+  it("优先返回目录别名或归一 ID 命中的候选", () => {
+    expect(rankSimilarModels(models, "zai/glm-5.2").map((model) => model.id)).toEqual([
+      "model-glm",
+    ]);
+    expect(rankSimilarModels(models, "GLM_5.2").map((model) => model.id)).toEqual([
+      "model-glm",
+    ]);
+  });
+
+  it("将明确发布日期和 latest 后缀视为同模型变体", () => {
+    expect(rankSimilarModels(models, "claude-sonnet-4-20250514")[0]?.id).toBe("model-sonnet");
+    expect(rankSimilarModels(models, "claude-sonnet-4-2025-05-14")[0]?.id).toBe("model-sonnet");
+    expect(rankSimilarModels(models, "claude-sonnet-4-latest")[0]?.id).toBe("model-sonnet");
+  });
+
+  it("支持词元顺序差异和完整 ID 扩展候选", () => {
+    expect(rankSimilarModels(models, "claude-4-sonnet")[0]?.id).toBe("model-sonnet");
+    expect(rankSimilarModels(models, "gpt-4o-mini")[0]?.id).toBe("model-gpt-4o");
+  });
+
+  it("排除不同系列、版本和参数规模的误匹配", () => {
+    expect(rankSimilarModels(models, "claude-sonnet-4").map((model) => model.id)).not.toContain("model-opus");
+    expect(rankSimilarModels(models, "gpt-4o").map((model) => model.id)).not.toContain("model-gpt-4-1");
+    expect(rankSimilarModels(models, "llama-3.1-8b").map((model) => model.id)).not.toContain("model-llama-70b");
+  });
+
+  it("排除严格同名模型并稳定限制为前五条", () => {
+    const many = Array.from({ length: 7 }, (_, index) => ({
+      id: `model-${index}`,
+      name: `qwen2.5-coder-${index + 1}b`,
+      catalogId: "catalog-generic",
+      canonicalModelId: "__generic_chat__",
+      aliases: [],
+    }));
+
+    expect(rankSimilarModels(many, "qwen2.5-coder").map((model) => model.id)).toEqual([
+      "model-0",
+      "model-1",
+      "model-2",
+      "model-3",
+      "model-4",
+    ]);
+    expect(rankSimilarModels(models, "glm-5.2")).toEqual([]);
   });
 });
 

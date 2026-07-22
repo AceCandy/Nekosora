@@ -10,6 +10,7 @@ import { Plus, Settings2, LogOut, Menu, X, Search, Pin, Archive, Trash2, ImageIc
 import { clsx } from "clsx";
 import { useShallow } from "zustand/react/shallow";
 import { useChatStreamStore } from "@/features/chat/store/chatStreamStore";
+import { useClickOutside } from "@/shared/lib/useClickOutside";
 
 interface ConversationItem {
   id: string;
@@ -148,15 +149,12 @@ export default function Sidebar({
   const [isPending, startTransition] = useTransition();
   const displayName = userName.trim() || userEmail;
   const userMenuRef = useRef<HTMLDivElement>(null);
+  // 当前展开的会话操作菜单容器(触发按钮 + 面板),用于点击外部收起。
+  const sessionMenuRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!userMenuOpen) return;
-    const closeOnOutsideClick = (event: PointerEvent) => {
-      if (!userMenuRef.current?.contains(event.target as Node)) setUserMenuOpen(false);
-    };
-    document.addEventListener("pointerdown", closeOnOutsideClick);
-    return () => document.removeEventListener("pointerdown", closeOnOutsideClick);
-  }, [userMenuOpen]);
+  useClickOutside(userMenuRef, () => setUserMenuOpen(false), userMenuOpen);
+  // 会话项「更多操作」:侧栏 aside 带 transform,不能用内部 fixed 遮罩;统一走 useClickOutside。
+  useClickOutside(sessionMenuRef, () => setMenuOpenId(null), Boolean(menuOpenId));
 
   // 当前路由对应的会话 id(/chat/{id});新对话页 /chat 为 null。
   const pathname = usePathname();
@@ -380,24 +378,23 @@ export default function Sidebar({
         {(c.generating || streamingConvIds.includes(c.id)) && <Loader2 className="ml-auto h-3.5 w-3.5 shrink-0 animate-spin text-sora-blue" aria-label="生成中" />}
         {justCompleted && <span className="ml-auto h-2 w-2 shrink-0 rounded-full bg-sora-blue" aria-label="有新回复" />}
       </Link>
-      {/* hover 操作按钮 */}
-      <button
-        type="button"
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          setMenuOpenId((cur) => (cur === c.id ? null : c.id));
-        }}
-        className="touch-target absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
-        aria-label="更多操作"
-        aria-haspopup="menu"
-        aria-expanded={menuOpenId === c.id}
-      >
-        <Settings2 className="w-3.5 h-3.5" aria-hidden="true" />
-      </button>
-      {menuOpenId === c.id && (
-        <>
-          <div className="fixed inset-0 z-20" onClick={() => setMenuOpenId(null)} aria-hidden="true" />
+      {/* 仅包住触发按钮 + 面板;点击标题/其它区域都算外部,可收起菜单 */}
+      <div ref={menuOpenId === c.id ? sessionMenuRef : undefined}>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setMenuOpenId((cur) => (cur === c.id ? null : c.id));
+          }}
+          className="touch-target absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
+          aria-label="更多操作"
+          aria-haspopup="menu"
+          aria-expanded={menuOpenId === c.id}
+        >
+          <Settings2 className="w-3.5 h-3.5" aria-hidden="true" />
+        </button>
+        {menuOpenId === c.id && (
           <div className="absolute right-0 top-full z-30 mt-1 w-36 rounded-md border border-morning-mist dark:border-deep-space bg-white dark:bg-space-ink shadow-lg p-1">
             <button
               type="button"
@@ -424,8 +421,8 @@ export default function Sidebar({
               <span>{actionDeleteText}</span>
             </button>
           </div>
-        </>
-      )}
+        )}
+      </div>
     </div>
     );
   };

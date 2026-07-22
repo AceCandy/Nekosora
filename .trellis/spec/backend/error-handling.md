@@ -46,6 +46,7 @@
   - 命名空间:`auth.*` / `routing.*` / `request.*` / `server.*` …
 - **OpenAI 风格 type**(`ErrorType`):`invalid_request_error` / `authentication_error` / `permission_denied_error` / `not_found_error` / `rate_limit_error` / `server_error`。
 - **错误码 → type + status 映射**:集中在 `ERROR_META: Record<ErrorCodeValue, ErrorMeta>`,新增码必须同时登记 meta。
+- **请求体过大**:`request.payload_too_large` 固定映射 HTTP 413 + `invalid_request_error`;`/v1/*` 用 `apiErrorLocalized`,内部 `/api/*` 用 `apiError`。
 - **RoutingError 历史短码**:`routing.ts` 抛 `RoutingError`(短码如 `model_not_found`),经 `routingCodeToErrorCode()` 映射到点分码,不要在网关层直接用短码。
 
 ---

@@ -1,7 +1,7 @@
 import { getTranslations } from "next-intl/server";
 import {
   getMyProviders,
-  listMyRoutes,
+  getMyModels,
   createMyProvider,
   updateMyProvider,
   toggleMyProvider,
@@ -10,6 +10,7 @@ import {
   checkMyProviderHealth,
   refreshMyUpstreamModels,
   testMyProviderModel,
+  attachMyProviderModelRoute,
 } from "../actions";
 import { revealKeyBundle } from "@/lib/providers/keys";
 import type { ProviderKeyResult } from "@/db/schema/pg";
@@ -19,18 +20,37 @@ import ProvidersManager, {
 import { PROVIDER_PROTOCOLS } from "@/features/providers/protocols";
 import { Server } from "lucide-react";
 import { PageHeader } from "@/shared/components/PageHeader";
+import type { ProviderModelCandidate } from "@/features/providers/types";
 
 export default async function MyProvidersPage() {
   const t = await getTranslations("panel.providers");
   const tn = await getTranslations("nav");
-  const rows = await getMyProviders();
+  const [rows, modelRows] = await Promise.all([
+    getMyProviders(),
+    getMyModels(),
+  ]);
   // 已配路由(用于检测模型悬浮窗标注哪些上游模型已配路由)。
-  const routeRows = await listMyRoutes();
-  const routes = routeRows.map((r: Record<string, unknown>) => {
-    const route = r.route as Record<string, unknown>;
+  const routes = modelRows.flatMap((row: Record<string, unknown>) =>
+    ((row.routes as Record<string, unknown>[]) ?? []).map((r) => {
+      const route = r.route as Record<string, unknown>;
+      return {
+        modelId: route.modelId as string,
+        providerId: route.providerId as string,
+        upstreamModelName: route.upstreamModelName as string,
+      };
+    }),
+  );
+  const modelCandidates: ProviderModelCandidate[] = modelRows.map((row: Record<string, unknown>) => {
+    const model = row.model as Record<string, unknown>;
+    const catalog = model.catalog as Record<string, unknown>;
     return {
-      providerId: route.providerId as string,
-      upstreamModelName: route.upstreamModelName as string,
+      id: model.id as string,
+      name: model.name as string,
+      displayName: (model.displayName as string | null) ?? undefined,
+      catalogId: model.catalogId as string,
+      catalogName: catalog.name as string,
+      canonicalModelId: catalog.canonicalModelId as string,
+      aliases: (catalog.aliases as string[] | null) ?? [],
     };
   });
 
@@ -96,6 +116,8 @@ export default async function MyProvidersPage() {
           refreshActions={refreshActions}
           modelProbeActions={modelProbeActions}
           routes={routes}
+          modelCandidates={modelCandidates}
+          attachModelRouteAction={attachMyProviderModelRoute}
           modelCreatePath="/panel/models"
         />
     </div>

@@ -35,6 +35,30 @@ export function useChatRuntime({ conversationId, initialMessages }) {
 
 **交互控制器的关键模式**：用 `useRef` 缓存最新值，供高频触发的 effect / handler 读取，避免闭包陈旧。`useChatScrollController` 用 `isAtBottomRef` 在滚动 effect 里读，而不是依赖 state。
 
+**资源收集器的 blob URL 生命周期**：调用 `URL.createObjectURL` 后，必须立即登记到未释放 URL Set。附件 state 变化后的 effect 对比当前 active URL，只 revoke 并移出已经离开 state 的资源；hook 卸载时 revoke Set 中剩余资源。state updater 必须保持纯函数，不能在 updater 内 revoke 或修改资源 ref（Strict Mode 可能重复执行 updater）。
+
+```ts
+const previewUrl = URL.createObjectURL(file);
+previewUrlsRef.current.add(previewUrl);
+
+useEffect(() => {
+  const activeUrls = new Set(items.flatMap((item) => item.previewUrl ? [item.previewUrl] : []));
+  previewUrlsRef.current.forEach((url) => {
+    if (!activeUrls.has(url)) {
+      URL.revokeObjectURL(url);
+      previewUrlsRef.current.delete(url);
+    }
+  });
+}, [items]);
+
+useEffect(() => () => {
+  previewUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+  previewUrlsRef.current.clear();
+}, []);
+```
+
+禁止把 `[items]` effect 的 cleanup 写成 revoke 全列表；依赖变化时 React 会先执行旧 cleanup，仍在页面展示的预览会被提前失效。
+
 **滚动到底部的动画选择**：长距离回到底部时，原生 `scrollIntoView({ behavior: "smooth" })` 时长由浏览器决定、偏拖沓。需要更快手感时，用 `requestAnimationFrame` 自定义缓动(easeOutCubic,固定短时长),并对距离为 0 的情况直接瞬时归位:
 ```ts
 function smoothScrollToBottom(el: HTMLElement) {

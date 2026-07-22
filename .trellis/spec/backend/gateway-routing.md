@@ -67,6 +67,64 @@ WebChat 发消息、图像工作室生成(session 鉴权)。前端传 `modelId` 
 - 核心算法 `orderRoutes`/`weightedShuffle`/`filterByCircuitBreaker`/`pickWeightedKey`/`parseKeyBundle` 原样保留,对 route 来源透明。
 - 下游 `streamChat` 拿到 `routes[]` 后逐路由故障转移 × 路由内逐 key 重试,对 `source` 透明。
 
+## Scenario: 熔断状态机与失败上报
+
+### 1. Scope / Trigger
+
+修改 `circuit-breaker.ts` 状态转换，或修改 `streamChat` / `generateChat` 的路由失败处理时，必须保持本节契约。目标是防止 half-open 并发探测冲击刚恢复的 provider，并确保终端路由失败也能更新健康状态。
+
+### 2. Signatures
+
+- `isProviderAllowed(providerId: string): boolean`
+- `recordSuccess(providerId: string): void`
+- `recordFailure(providerId: string): void`
+- `isFailoverableError(err: unknown): boolean`
+
+### 3. Contracts
+
+- `closed`：允许请求；连续可转移失败达到 threshold 后转 `open`。
+- `open`：冷却期内拒绝；到期后的第一个调用转 `half-open` 并放行。
+- `half-open`：表示唯一探测名额已占用；结果回报前其他调用必须拒绝。
+- 探测成功调用 `recordSuccess` 回到 `closed`；探测失败调用 `recordFailure` 立即重新 `open` 并刷新冷却时间。
+- `streamChat` / `generateChat` 必须先判断错误是否可转移；若可转移，先 `recordFailure`，再判断是否存在下一条路由。
+- `model_not_found`、`invalid_request`、context length 等确定性请求错误不计入 provider 失败。
+
+### 4. Validation & Error Matrix
+
+| 条件 | breaker 行为 | 路由行为 |
+|---|---|---|
+| open 且冷却未到 | 拒绝 | 过滤该 provider |
+| open 且冷却到期的首个调用 | 转 half-open，放行 | 执行一次探测 |
+| half-open 且探测未回报 | 拒绝 | 不重复探测 |
+| 可转移错误，仍有后续路由 | 记录失败 | 转移下一路由 |
+| 可转移错误，已是最后/唯一路由 | 记录失败 | 返回生成失败 |
+| 确定性请求错误 | 不记录失败 | 停止转移 |
+
+### 5. Good / Base / Bad Cases
+
+- Good：多个请求在冷却边界并发到达，只有第一个获得 half-open 探测名额。
+- Base：普通 closed provider 成功后保持 closed；可转移失败按 route 一次计数。
+- Bad：唯一 provider 连接超时，因为没有下一条路由而未记录失败，导致 breaker 永远无法达到 threshold。
+
+### 6. Tests Required
+
+- `circuit-breaker.test.ts`：断言 half-open 首次 `true`、再次 `false`；覆盖探测成功恢复和失败重开。
+- `stream-circuit-breaker.test.ts`：分别通过 `generateChat` 和 `streamChat` 断言唯一可转移失败使 `failures + 1`。
+- 两条生成路径都要断言确定性请求错误保持 `failures=0`。
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong:最后一条路由提前退出,失败不会进入 breaker。
+if (i === routes.length - 1 || !isFailoverableError(lastError)) break;
+recordFailure(route.provider.id);
+
+// Correct:健康上报与“是否还有后续路由”解耦。
+const failoverable = isFailoverableError(lastError);
+if (failoverable && route.provider.id) recordFailure(route.provider.id);
+if (i === routes.length - 1 || !failoverable) break;
+```
+
 ---
 
 ## Gotcha

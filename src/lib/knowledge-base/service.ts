@@ -94,7 +94,10 @@ export async function attachFileToKnowledgeBase(kbId: string, fileId: string): P
 /**
  * 收集知识库下全部 ragReady 文件的 fileId(供 retrieve 限定检索范围)。
  */
-export async function getFileIdsByKnowledgeBases(kbIds: string[]): Promise<string[]> {
+export async function getFileIdsByKnowledgeBases(
+  kbIds: string[],
+  userId: string,
+): Promise<string[]> {
   if (kbIds.length === 0) return [];
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -102,6 +105,12 @@ export async function getFileIdsByKnowledgeBases(kbIds: string[]): Promise<strin
   const rows = await db
     .select({ id: s.fileObjects.id })
     .from(s.fileObjects)
-    .where(and(inArray(s.fileObjects.knowledgeBaseId, kbIds), eq(s.fileObjects.ragReady, true)));
+    .where(
+      and(
+        inArray(s.fileObjects.knowledgeBaseId, kbIds),
+        eq(s.fileObjects.userId, userId),
+        eq(s.fileObjects.ragReady, true),
+      ),
+    );
   return rows.map((r: { id: string }) => r.id);
 }

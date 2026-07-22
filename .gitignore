@@ -32,7 +32,8 @@ docs/cankao/
 /data
 /uploads
 
-# pdfjs 第三方产物(cmaps + standard_fonts),由 postinstall 从 pdfjs-dist 同步
+# pdfjs 第三方产物(worker + cmaps + standard_fonts),由 postinstall 从 pdfjs-dist 同步
+/public/pdfjs/pdf.worker.min.mjs
 /public/pdfjs/cmaps
 /public/pdfjs/standard_fonts
 

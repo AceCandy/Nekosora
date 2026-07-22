@@ -26,6 +26,11 @@ Nekusora 是 Next.js 全栈 TypeScript 项目,无独立后端进程(除 `src/wor
 | [Memory System](./memory-system.md) | 三分类生命周期、抽取去重(explicit/weak)、融合向量召回、compact 质量增强、缓存 | Filled |
 | [Prompt Caching](./prompt-caching.md) | 命中前提、AI SDK 边界、按 protocol 注入缓存控制(复刻 pi) | Filled |
 | [Web Search](./web-search.md) | per-user 配置(user_settings JSON)、首个 enabled 生效、provider 字段契约、缓存 | Filled |
+| [File Storage](./file-storage.md) | StorageDriver 全量/Range 读取、私有文件 200/206/302/416 与文本预览有界读取 | Filled |
+| [Dependency Security](./dependency-security.md) | pnpm override 边界、lockfile 审查与原生依赖验证门禁 | Filled |
+| [MCP Integration](./mcp-integration.md) | MCP client transport 连接超时、取消与资源生命周期 | Filled |
+| [Chat Message References](./chat-message-references.md) | 对话消息引用与聊天动作写操作的会话属主隔离 | Filled |
+| [API Key Binding Authorization](./key-binding-authorization.md) | 子密钥模型绑定的 key 属主与模型可见性校验 | Filled |
 
 ---
 

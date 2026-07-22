@@ -2,6 +2,7 @@
 import { eq, inArray, and, isNull } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { requireSession } from "@/lib/session";
+import { findConversationMessage } from "@/lib/chat/message-reference";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const S = () => getSchema() as any;
@@ -41,7 +42,7 @@ export async function getMessageSiblings(messagePublicId: string): Promise<{
   // 同 parentId 下的兄弟(含自己)。必须按 createdAt 升序,与 getVisibleBranch 的版本序号
   // 约定一致:否则无 ORDER BY 时 DB 返回顺序不定,会让版本切换器把最新版本算成第 1 个。
   const siblingsQuery = msg.parentId
-    ? db.select().from(s.messages).where(and(eq(s.messages.parentId, msg.parentId), isNull(s.messages.deletedAt))).orderBy(s.messages.createdAt)
+    ? db.select().from(s.messages).where(and(eq(s.messages.parentId, msg.parentId), eq(s.messages.conversationId, msg.conversationId), isNull(s.messages.deletedAt))).orderBy(s.messages.createdAt)
     : db.select().from(s.messages).where(and(eq(s.messages.conversationId, msg.conversationId), isNull(s.messages.deletedAt))).orderBy(s.messages.createdAt);
 
   const all = (await siblingsQuery) as {
@@ -85,14 +86,14 @@ export async function retryFromMessage(
   const [conv] = await db.select().from(s.conversations).where(eq(s.conversations.id, conversationId)).limit(1);
   if (!conv || conv.userId !== user.id) throw new Error("无权操作");
 
-  const [oldAssistant] = await db.select().from(s.messages).where(eq(s.messages.publicId, assistantPublicId)).limit(1);
+  const oldAssistant = await findConversationMessage(db, s, conversationId, { publicId: assistantPublicId });
   if (!oldAssistant) throw new Error("消息不存在");
 
   // 找到 parent(user 消息)的 publicId
   let parentPublicId: string | null = null;
-  if (oldAssistant.parentId) {
-    const [parent] = await db.select().from(s.messages).where(eq(s.messages.id, oldAssistant.parentId)).limit(1);
-    parentPublicId = parent?.publicId ?? null;
+  if (typeof oldAssistant.parentId === "string") {
+    const parent = await findConversationMessage(db, s, conversationId, { id: oldAssistant.parentId });
+    parentPublicId = typeof parent?.publicId === "string" ? parent.publicId : null;
   }
 
   // 构造历史:从会话开始到 parent(含)沿当前路径
@@ -153,7 +154,7 @@ export async function editMessage(
   const [conv] = await db.select().from(s.conversations).where(eq(s.conversations.id, conversationId)).limit(1);
   if (!conv || conv.userId !== user.id) throw new Error("无权操作");
 
-  const [oldMsg] = await db.select().from(s.messages).where(eq(s.messages.publicId, messagePublicId)).limit(1);
+  const oldMsg = await findConversationMessage(db, s, conversationId, { publicId: messagePublicId });
   if (!oldMsg) throw new Error("消息不存在");
   if (oldMsg.role !== "user") throw new Error("仅支持编辑用户消息");
 
@@ -190,7 +191,7 @@ export async function editMessage(
   // 构造重生成所需历史:沿 parentId 向上回溯到根,再追加改写后的新内容
   const pathMsgs: { role: string; content: string }[] = [];
   const pathIds: string[] = [];
-  let cur: string | null = oldMsg.parentId;
+  let cur: string | null = typeof oldMsg.parentId === "string" ? oldMsg.parentId : null;
   while (cur) {
     pathIds.unshift(cur);
     const node = allMsgs.find((m) => m.id === cur);
@@ -341,15 +342,15 @@ export async function continueMessage(
   const [conv] = await db.select().from(s.conversations).where(eq(s.conversations.id, conversationId)).limit(1);
   if (!conv || conv.userId !== user.id) throw new Error("无权操作");
 
-  const [assistant] = await db.select().from(s.messages).where(eq(s.messages.publicId, assistantPublicId)).limit(1);
+  const assistant = await findConversationMessage(db, s, conversationId, { publicId: assistantPublicId });
   if (!assistant) throw new Error("消息不存在");
   if (assistant.role !== "assistant") throw new Error("仅支持在 assistant 消息上继续生成");
 
   // 沿 parentId 回溯到根(含 user 父消息),构造历史路径
   let parentPublicId: string | null = null;
-  if (assistant.parentId) {
-    const [parent] = await db.select().from(s.messages).where(eq(s.messages.id, assistant.parentId)).limit(1);
-    parentPublicId = parent?.publicId ?? null;
+  if (typeof assistant.parentId === "string") {
+    const parent = await findConversationMessage(db, s, conversationId, { id: assistant.parentId });
+    parentPublicId = typeof parent?.publicId === "string" ? parent.publicId : null;
   }
 
   const allMsgs = (await db

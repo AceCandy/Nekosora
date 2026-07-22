@@ -19,7 +19,7 @@ import type {
   GetObjectCommandInput,
   DeleteObjectCommandInput,
 } from "@aws-sdk/client-s3";
-import type { StorageDriver, StorageKind, StorageResult, PutOpts } from "./driver";
+import type { StorageDriver, StorageKind, StorageResult, PutOpts, GetOpts } from "./driver";
 
 /** S3 兼容 driver 的构造配置(从环境变量读取)。 */
 export interface S3DriverOptions {
@@ -85,10 +85,14 @@ export class S3Driver implements StorageDriver {
     return { key, url, size: data.byteLength };
   }
 
-  async get(key: string): Promise<Buffer> {
+  async get(key: string, opts?: GetOpts): Promise<Buffer> {
     const client = await this.client();
     const { GetObjectCommand } = await import("@aws-sdk/client-s3");
-    const input: GetObjectCommandInput = { Bucket: this.bucket, Key: key };
+    const input: GetObjectCommandInput = {
+      Bucket: this.bucket,
+      Key: key,
+      ...(opts ? { Range: `bytes=${opts.start}-${opts.end}` } : {}),
+    };
     const resp = await client.send(new GetObjectCommand(input));
     const body = resp.Body;
     if (!body) throw new Error(`S3 object 无 body: ${key}`);

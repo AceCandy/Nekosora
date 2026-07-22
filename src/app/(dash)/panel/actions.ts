@@ -47,23 +47,52 @@ export async function newSubKey(name: string) {
   return key;
 }
 
+async function requireOwnedKey(
+  db: Awaited<ReturnType<typeof getDb>>,
+  userId: string,
+  keyId: string,
+  subOnly = false,
+) {
+  const [key] = await db
+    .select({ id: S().apiKeys.id, kind: S().apiKeys.kind })
+    .from(S().apiKeys)
+    .where(and(eq(S().apiKeys.id, keyId), eq(S().apiKeys.userId, userId)))
+    .limit(1);
+  if (!key || (subOnly && key.kind !== "sub")) throw new Error("密钥不存在或无权操作");
+  return key;
+}
+
 export async function disableKey(keyId: string) {
-  await requireSession();
-  await setKeyEnabled(keyId, false);
+  const user = await requireSession();
+  const db = await getDb();
+  await requireOwnedKey(db, user.id, keyId);
+  await setKeyEnabled(user.id, keyId, false);
   revalidatePath("/panel", "layout");
 }
 
 // ===================== Sub-key model bindings =====================
 
 export async function getBindings(keyId: string) {
-  await requireSession();
+  const user = await requireSession();
   const db = await getDb();
+  await requireOwnedKey(db, user.id, keyId);
   return db.select().from(S().keyModelBindings).where(eq(S().keyModelBindings.keyId, keyId));
 }
 
 export async function bindModel(keyId: string, modelId: string) {
-  await requireSession();
+  const user = await requireSession();
   const db = await getDb();
+  await requireOwnedKey(db, user.id, keyId, true);
+  const [model] = await db
+    .select({ id: S().models.id })
+    .from(S().models)
+    .where(and(
+      eq(S().models.id, modelId),
+      eq(S().models.enabled, true),
+      eq(S().models.ownerUserId, user.id),
+    ))
+    .limit(1);
+  if (!model) throw new Error("模型不存在或无权操作");
   // 收敛后绑定只存 modelId(原 scope+globalModelId+userModelId 已废弃)。
   await db.insert(S().keyModelBindings).values({
     keyId,
@@ -73,8 +102,15 @@ export async function bindModel(keyId: string, modelId: string) {
 }
 
 export async function unbindBinding(bindingId: string) {
-  await requireSession();
+  const user = await requireSession();
   const db = await getDb();
+  const [binding] = await db
+    .select({ keyId: S().keyModelBindings.keyId })
+    .from(S().keyModelBindings)
+    .where(eq(S().keyModelBindings.id, bindingId))
+    .limit(1);
+  if (!binding) throw new Error("绑定不存在或无权操作");
+  await requireOwnedKey(db, user.id, binding.keyId);
   await db.delete(S().keyModelBindings).where(eq(S().keyModelBindings.id, bindingId));
   revalidatePath("/panel", "layout");
 }
@@ -693,28 +729,16 @@ export async function toggleMyModel(id: string, enabled: boolean) {
   revalidatePath("/panel", "layout");
 }
 
-/** 可供子 key 绑定的模型列表:public ∪ 我的(byo)。 */
+/** 可供子 key 绑定的模型列表:网关 owner-only,只包含自己的 enabled 模型。 */
 export async function getBindableModels() {
   const user = await requireSession();
   const db = await getDb();
-  const [globals, byos] = await Promise.all([
-    db
-      .select()
-      .from(S().models)
-      .where(and(eq(S().models.visibility, "public"), eq(S().models.enabled, true))),
-    db
-      .select()
-      .from(S().models)
-      .where(
-        and(
-          eq(S().models.ownerUserId, user.id),
-          eq(S().models.visibility, "private"),
-          eq(S().models.enabled, true),
-        ),
-      ),
-  ]);
+  const byos = await db
+    .select()
+    .from(S().models)
+    .where(and(eq(S().models.ownerUserId, user.id), eq(S().models.enabled, true)));
   return {
-    globals: globals as Record<string, unknown>[],
+    globals: [] as Record<string, unknown>[],
     byos: byos as Record<string, unknown>[],
   };
 }
@@ -762,6 +786,48 @@ export async function createMyRoute(modelId: string, formData: FormData) {
     enabled: true,
   });
   revalidatePath("/panel", "layout");
+}
+
+/** 从服务商上游模型列表快速补路由；重复绑定返回 exists，不重复写入。 */
+export async function attachMyProviderModelRoute(
+  modelId: string,
+  providerId: string,
+  upstreamModelName: string,
+): Promise<{ status: "created" | "exists" }> {
+  const user = await requireSession();
+  const db = await getDb();
+  const [model] = await db
+    .select({ id: S().models.id })
+    .from(S().models)
+    .where(and(eq(S().models.id, modelId), eq(S().models.ownerUserId, user.id)))
+    .limit(1);
+  if (!model) throw new Error("模型不存在");
+  const [provider] = await db
+    .select({ id: S().providers.id })
+    .from(S().providers)
+    .where(and(eq(S().providers.id, providerId), eq(S().providers.ownerUserId, user.id)))
+    .limit(1);
+  if (!provider) throw new Error("服务商不存在");
+  const [existing] = await db
+    .select({ id: S().routes.id })
+    .from(S().routes)
+    .where(and(
+      eq(S().routes.modelId, modelId),
+      eq(S().routes.providerId, providerId),
+      eq(S().routes.upstreamModelName, upstreamModelName),
+    ))
+    .limit(1);
+  if (existing) return { status: "exists" };
+
+  await db.insert(S().routes).values({
+    ownerUserId: user.id,
+    modelId,
+    providerId,
+    upstreamModelName,
+    enabled: true,
+  });
+  revalidatePath("/panel", "layout");
+  return { status: "created" };
 }
 
 /** 更新路由(校验归属)。modelId 不可改(路由归属模型固定)。 */

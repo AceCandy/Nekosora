@@ -34,16 +34,22 @@ export default function PreviewText({ url, filename, mime }: PreviewTextProps) {
     setError(null);
     setTruncated(false);
 
-    fetch(url)
+    // 多取 1 字节判断是否截断;API/S3 Range 避免先下载完整文件。
+    fetch(url, { headers: { Range: `bytes=0-${MAX_TEXT_BYTES}` } })
       .then(async (res) => {
+        if (res.status === 416) {
+          if (!cancelled) setContent("");
+          return;
+        }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const buf = await res.arrayBuffer();
-        let text = new TextDecoder("utf-8", { fatal: false }).decode(buf);
-        if (text.length > MAX_TEXT_BYTES) {
-          text = text.slice(0, MAX_TEXT_BYTES);
-          if (!cancelled) setTruncated(true);
+        const isTruncated = buf.byteLength > MAX_TEXT_BYTES;
+        const preview = isTruncated ? buf.slice(0, MAX_TEXT_BYTES) : buf;
+        const text = new TextDecoder("utf-8", { fatal: false }).decode(preview);
+        if (!cancelled) {
+          setTruncated(isTruncated);
+          setContent(text);
         }
-        if (!cancelled) setContent(text);
       })
       .catch((e) => {
         if (!cancelled) setError(e instanceof Error ? e.message : t("loadingFailed"));
@@ -52,7 +58,7 @@ export default function PreviewText({ url, filename, mime }: PreviewTextProps) {
     return () => {
       cancelled = true;
     };
-  }, [url]);
+  }, [url, t]);
 
   if (error) {
     return (

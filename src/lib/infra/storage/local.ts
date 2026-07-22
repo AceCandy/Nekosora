@@ -6,11 +6,11 @@
  * join(process.cwd(), "uploads", ...) 拼出的路径完全一致 —— 现有数据零迁移。
  *
  * 向后兼容:旧 file_objects.storagePath 存的是绝对路径(如 /app/uploads/...)。
- * get/put/delete 内部做一次 isAbsoluteKey 判断:绝对路径直接用,否则拼 root。
+ * 绝对路径直接使用;相对 key 解析到 root 后校验边界,拒绝路径穿越。
  */
-import { readFile, writeFile, mkdir, unlink, stat } from "node:fs/promises";
-import { dirname, join, resolve, isAbsolute } from "node:path";
-import type { StorageDriver, StorageKind, StorageResult, PutOpts } from "./driver";
+import { open, readFile, writeFile, mkdir, unlink, stat } from "node:fs/promises";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import type { StorageDriver, StorageKind, StorageResult, PutOpts, GetOpts } from "./driver";
 
 /** LocalDriver 构造参数。 */
 export interface LocalDriverOptions {
@@ -31,9 +31,18 @@ export class LocalDriver implements StorageDriver {
   }
 
   private resolveKey(key: string): string {
-    // 向后兼容:旧记录是绝对路径,直接用;否则拼到 root 下。
+    // 向后兼容:旧记录是绝对路径,直接用;相对 key 必须留在存储根目录内。
     if (isAbsolute(key)) return key;
-    return join(this.root, key);
+    const path = resolve(this.root, key);
+    const relativePath = relative(this.root, path);
+    if (
+      relativePath === ".." ||
+      relativePath.startsWith(`..${sep}`) ||
+      isAbsolute(relativePath)
+    ) {
+      throw new Error("storage_key_outside_root");
+    }
+    return path;
   }
 
   async put(key: string, data: Buffer, _mime: string, _opts?: PutOpts): Promise<StorageResult> {
@@ -43,9 +52,28 @@ export class LocalDriver implements StorageDriver {
     return { key, url: null, size: data.byteLength };
   }
 
-  async get(key: string): Promise<Buffer> {
+  async get(key: string, opts?: GetOpts): Promise<Buffer> {
     const path = this.resolveKey(key);
-    return readFile(path);
+    if (!opts) return readFile(path);
+
+    const length = opts.end - opts.start + 1;
+    if (
+      !Number.isSafeInteger(opts.start) ||
+      !Number.isSafeInteger(opts.end) ||
+      opts.start < 0 ||
+      length <= 0
+    ) {
+      throw new RangeError("无效的存储读取范围");
+    }
+
+    const file = await open(path, "r");
+    try {
+      const buffer = Buffer.alloc(length);
+      const { bytesRead } = await file.read(buffer, 0, length, opts.start);
+      return buffer.subarray(0, bytesRead);
+    } finally {
+      await file.close();
+    }
   }
 
   async delete(key: string): Promise<void> {

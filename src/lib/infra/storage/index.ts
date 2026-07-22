@@ -12,7 +12,7 @@
 import type { StorageDriver, StorageKind } from "./driver";
 import { LocalDriver } from "./local";
 
-export type { StorageDriver, StorageKind, StorageResult, PutOpts } from "./driver";
+export type { StorageDriver, StorageKind, StorageResult, PutOpts, GetOpts } from "./driver";
 
 /** S3 协议 driver 类型子集(local 不是 S3 协议)。 */
 export type S3LikeKind = "s3" | "r2" | "minio";

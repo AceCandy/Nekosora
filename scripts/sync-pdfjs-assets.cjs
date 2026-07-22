@@ -1,8 +1,8 @@
 /**
- * postinstall 脚本:从 pdfjs-dist 同步 cmaps 和 standard_fonts 到 public/pdfjs。
+ * postinstall 脚本:从 pdfjs-dist 同步 worker、cmaps 和 standard_fonts 到 public/pdfjs。
  *
  * 为什么:中文 PDF 渲染必须加载 cmaps(CJK 字符映射),否则中文显示为方块。
- * 这些文件(169 个 cmap + 16 个字体)体积大、是第三方产物,不应进 git。
+ * 这些文件(1 个 worker + 169 个 cmap + 16 个字体)体积大、是第三方产物,不应进 git。
  * 每次 pnpm install 后自动同步,保证本地/Docker/CI 一致。
  *
  * 失败不阻断 install(打印警告即可),因为开发时不一定需要 PDF 预览。
@@ -65,7 +65,16 @@ const fontCount = copyDir(
   path.join(pdfjsDir, "standard_fonts"),
   path.join(publicPdfjs, "standard_fonts"),
 );
+const workerSource = path.join(pdfjsDir, "build", "pdf.worker.min.mjs");
+let workerCount = 0;
+if (fs.existsSync(workerSource)) {
+  fs.mkdirSync(publicPdfjs, { recursive: true });
+  fs.copyFileSync(workerSource, path.join(publicPdfjs, "pdf.worker.min.mjs"));
+  workerCount = 1;
+} else {
+  console.warn("[postinstall] pdfjs worker 未找到,PDF 预览将不可用");
+}
 
 console.log(
-  `[postinstall] pdfjs cmaps/fonts 已同步:${cmapCount} cmaps + ${fontCount} fonts → public/pdfjs/`,
+  `[postinstall] pdfjs 资源已同步:${workerCount} worker + ${cmapCount} cmaps + ${fontCount} fonts → public/pdfjs/`,
 );

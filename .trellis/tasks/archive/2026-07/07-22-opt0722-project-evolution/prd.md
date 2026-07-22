@@ -1,0 +1,47 @@
+# opt0722 项目螺旋优化
+
+## Goal
+
+在本地 `opt0722` 分支按“审视 -> 执行 -> 提升”循环持续改善项目：每轮从可复现证据出发，完成一个边界清晰的修复或改进，并通过独立复核确定下一轮方向。
+
+## Requirements
+
+- 所有实现工作都由可独立验收的子任务承载；父任务维护原始目标、轮次记录和跨任务复核。
+- 审视阶段优先使用当前源码、测试、命令输出和历史决策定位问题，不凭模型常识猜测项目行为。
+- 执行阶段只修改当前子任务必需的文件，先建立失败证据或回归测试，再做最小修复。
+- 提升阶段执行独立质量复核，记录未解决风险，并按可靠性、安全性、正确性、可维护性的顺序选择下一轮问题。
+- 未经验证不得宣称完成；每轮必须记录已验证项、未验证项和剩余风险。
+
+## Acceptance Criteria
+
+- [x] `opt0722` 是独立本地分支，父任务内所有改动均可追溯到对应子任务。
+- [x] 每个已完成子任务都包含问题证据、实现、自动化验证和独立复核结论。
+- [x] 每轮结束后都有明确的下一轮候选问题及优先级依据。
+- [x] 用户验收前，父任务保留完整的子任务映射和跨轮次风险清单。
+
+## Completion Review
+
+- 父任务登记的 23 个子任务均已归档，且状态为 `completed`。
+- 各实现轮次均执行了与风险匹配的回归测试，并在收尾轮执行 lint、typecheck、完整测试、生产构建与 diff 检查。
+- 剩余验证边界：未连接真实 PostgreSQL 执行集成测试，未执行浏览器端 E2E；这些不阻塞本轮源码与自动化门禁验收。
+- 当前工作树中的前端交互改动不属于本父任务，归档时不纳入提交。
+
+## Child Tasks
+
+- `07-22-circuit-breaker-correctness`：修正 provider 熔断状态机与失败计数。
+- `07-22-pdf-worker-static-asset`：将 PDF worker 改为构建期同步的同源静态资源。
+- `07-22-bounded-text-preview`：为文本预览增加端到端有界读取。
+- `07-22-production-dependency-security`：消除生产依赖 high 安全告警。
+- `07-22-production-dependency-moderate-security`：消除剩余生产依赖 moderate 安全告警。
+- `07-22-mcp-connection-timeout-cleanup`：确保 MCP 连接超时后取消并关闭底层资源。
+- `07-22-mcp-qualified-tool-routing`：消除 MCP server 名称与工具限定名分隔符歧义。
+- `07-22-mcp-duplicate-server-routing`：为同请求内同名 MCP server 分配唯一工具前缀。
+- `07-22-bounded-multipart-request-body`：为附件与语音转写 multipart 请求增加流式硬上限。
+- `07-22-local-storage-path-traversal`：清洗上传文件名并阻止 LocalDriver 相对 key 越界。
+- `07-22-upload-db-failure-storage-cleanup`：数据库持久化失败时补偿删除已写入的上传对象。
+- `07-22-upload-queue-failure-fallback`：队列获取或投递失败时回退本地文件处理。
+- `07-22-file-processing-atomic-claim`：以数据库原子状态抢占避免文件处理并发重复。
+- `07-22-clear-consumed-chat-attachments`：聊天请求接受后只清理本轮已消费附件。
+- `07-22-chat-attachment-preview-url-cleanup`：回收聊天附件手动移除与卸载时的 blob URL。
+- `07-22-rag-file-owner-isolation`：阻止 WebChat、知识库与 MCP 跨用户读取文件。
+- `07-22-chat-message-reference-isolation`：阻止聊天 parent/source/retry/continue 引用跨会话。

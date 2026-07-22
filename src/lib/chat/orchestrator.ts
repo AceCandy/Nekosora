@@ -88,7 +88,7 @@ export async function prepareChatContext(
   // ===== 阶段 1:知识库 fileIds 合并(后续 vision/RAG 链强依赖,先算)=====
   let fileIds = bodyFileIds ?? [];
   if (knowledgeBaseIds && knowledgeBaseIds.length > 0) {
-    const kbFileIds = await getFileIdsByKnowledgeBases(knowledgeBaseIds);
+    const kbFileIds = await getFileIdsByKnowledgeBases(knowledgeBaseIds, userId);
     fileIds = [...new Set([...fileIds, ...kbFileIds])];
   }
 
@@ -113,7 +113,12 @@ export async function prepareChatContext(
         const fileRows = await db
           .select({ id: s.fileObjects.id, mime: s.fileObjects.mime })
           .from(s.fileObjects)
-          .where(inArray(s.fileObjects.id, fileIds));
+          .where(
+            and(
+              inArray(s.fileObjects.id, fileIds),
+              eq(s.fileObjects.userId, userId),
+            ),
+          );
         imageFileIds = fileRows
           .filter((r: { mime: string }) => (r.mime as string).startsWith("image/"))
           .map((r: { id: string }) => r.id);
@@ -162,7 +167,11 @@ export async function prepareChatContext(
             typeof effectiveMessages[lastUserIdx].content === "string"
               ? (effectiveMessages[lastUserIdx].content as string)
               : userContent;
-          effectiveMessages[lastUserIdx] = await buildMultimodalUserMessage(lastContent, imageFileIds);
+          effectiveMessages[lastUserIdx] = await buildMultimodalUserMessage(
+            lastContent,
+            imageFileIds,
+            userId,
+          );
         }
       }
 
@@ -175,6 +184,7 @@ export async function prepareChatContext(
           .limit(1);
         const fileMode = (modeRow?.value as string) ?? "auto";
         const built = await buildMessagesWithFileContext({
+          userId,
           messages: messages,
           fileIds,
           fileMode: fileMode as "auto" | "full_context" | "rag",

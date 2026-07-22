@@ -583,6 +583,43 @@ export async function createRoute(modelIdOrFormData: string | FormData, formData
   revalidatePath("/admin", "layout");
 }
 
+/** 从服务商上游模型列表快速补路由；重复绑定返回 exists，不重复写入。 */
+export async function attachProviderModelRoute(
+  modelId: string,
+  providerId: string,
+  upstreamModelName: string,
+): Promise<{ status: "created" | "exists" }> {
+  const admin = await requireAdmin();
+  const db = await getDb();
+  const model = await assertModelManageable(db, modelId, admin.id);
+  const [provider] = await db
+    .select({ id: S().providers.id })
+    .from(S().providers)
+    .where(and(eq(S().providers.id, providerId), eq(S().providers.ownerUserId, admin.id)))
+    .limit(1);
+  if (!provider) throw new Error("服务商不存在");
+  const [existing] = await db
+    .select({ id: S().routes.id })
+    .from(S().routes)
+    .where(and(
+      eq(S().routes.modelId, modelId),
+      eq(S().routes.providerId, providerId),
+      eq(S().routes.upstreamModelName, upstreamModelName),
+    ))
+    .limit(1);
+  if (existing) return { status: "exists" };
+
+  await db.insert(S().routes).values({
+    ownerUserId: model.ownerUserId,
+    modelId,
+    providerId,
+    upstreamModelName,
+    enabled: true,
+  });
+  revalidatePath("/admin", "layout");
+  return { status: "created" };
+}
+
 /** 更新模型。能力由所选模型模板实时提供。 */
 export async function updateModel(id: string, formData: FormData) {
   const admin = await requireAdmin();

@@ -4,6 +4,7 @@ const mockData = vi.hoisted(() => ({
   models: [] as Record<string, unknown>[],
   catalogs: [{ id: "catalog-chat", canonicalModelId: "__generic_chat__", aliases: [], enabled: true }],
   providers: [] as Record<string, unknown>[],
+  routes: [] as Record<string, unknown>[],
   user: { id: "admin-a", role: "admin" },
 }));
 
@@ -85,6 +86,7 @@ vi.mock("@/lib/infra/db", () => {
       id: "id",
       ownerUserId: "ownerUserId",
       visibility: "visibility",
+      enabled: "enabled",
       sortOrder: "sortOrder",
       createdAt: "createdAt",
       name: "name",
@@ -104,6 +106,14 @@ vi.mock("@/lib/infra/db", () => {
       protocol: "protocol",
       baseUrl: "baseUrl",
     },
+    routes: {
+      __table: "routes",
+      id: "id",
+      ownerUserId: "ownerUserId",
+      modelId: "modelId",
+      providerId: "providerId",
+      upstreamModelName: "upstreamModelName",
+    },
   };
 
   const db = {
@@ -114,7 +124,9 @@ vi.mock("@/lib/infra/db", () => {
             ? mockData.catalogs
             : table.__table === "providers"
               ? mockData.providers
-              : mockData.models;
+              : table.__table === "routes"
+                ? mockData.routes
+                : mockData.models;
         return makeQuery(rows, fields);
       },
     }),
@@ -140,9 +152,13 @@ vi.mock("@/lib/infra/db", () => {
         },
       }),
     }),
-    insert: () => ({
+    insert: (table?: { __table?: string }) => ({
       values: async (row: Record<string, unknown>) => {
-        mockData.models.push({ id: `model-${mockData.models.length + 1}`, ...row });
+        if (table?.__table === "routes") {
+          mockData.routes.push({ id: `route-${mockData.routes.length + 1}`, ...row });
+        } else {
+          mockData.models.push({ id: `model-${mockData.models.length + 1}`, ...row });
+        }
       },
     }),
     transaction: async (callback: (tx: typeof db) => Promise<unknown>) => {
@@ -153,13 +169,14 @@ vi.mock("@/lib/infra/db", () => {
   return { getDb: async () => db, getSchema: () => schema, isPg: false };
 });
 
-import { createMyModel, reorderMyModels, updateMyModel, checkMyProviderHealth, testMyProviderModel, testMyKeyDirect } from "./actions";
+import { attachMyProviderModelRoute, createMyModel, reorderMyModels, updateMyModel, checkMyProviderHealth, testMyProviderModel, testMyKeyDirect, getBindableModels } from "./actions";
 import { probeProviderKey } from "@/lib/providers/probe";
 import { parseKeyBundle, pickWeightedKey } from "@/lib/providers/keys";
 
 beforeEach(() => {
   mockData.user = { id: "admin-a", role: "admin" };
   mockData.providers = [];
+  mockData.routes = [];
   vi.mocked(probeProviderKey).mockReset();
   vi.mocked(parseKeyBundle).mockReset();
   mockData.models = [
@@ -168,6 +185,40 @@ beforeEach(() => {
     { id: "private-a", name: "private-a", ownerUserId: "admin-a", visibility: "private", sortOrder: 5 },
     { id: "private-b", name: "private-b", ownerUserId: "user-b", visibility: "private", sortOrder: 2 },
   ];
+});
+
+describe("attachMyProviderModelRoute", () => {
+  beforeEach(() => {
+    mockData.providers = [{ id: "provider-a", ownerUserId: "admin-a" }];
+  });
+
+  it("首次绑定创建路由，重复绑定返回 exists 且不重复写入", async () => {
+    await expect(attachMyProviderModelRoute("private-a", "provider-a", "upstream-a"))
+      .resolves.toEqual({ status: "created" });
+    await expect(attachMyProviderModelRoute("private-a", "provider-a", "upstream-a"))
+      .resolves.toEqual({ status: "exists" });
+
+    expect(mockData.routes).toEqual([expect.objectContaining({
+      ownerUserId: "admin-a",
+      modelId: "private-a",
+      providerId: "provider-a",
+      upstreamModelName: "upstream-a",
+    })]);
+  });
+
+  it("拒绝给其他用户的模型补路由", async () => {
+    await expect(attachMyProviderModelRoute("private-b", "provider-a", "upstream-a"))
+      .rejects.toThrow("模型不存在");
+    expect(mockData.routes).toHaveLength(0);
+  });
+
+  it("拒绝使用其他用户的服务商", async () => {
+    mockData.providers = [{ id: "provider-b", ownerUserId: "user-b" }];
+
+    await expect(attachMyProviderModelRoute("private-a", "provider-b", "upstream-a"))
+      .rejects.toThrow("服务商不存在");
+    expect(mockData.routes).toHaveLength(0);
+  });
 });
 
 describe("reorderMyModels", () => {
@@ -184,6 +235,18 @@ describe("reorderMyModels", () => {
 
     expect(mockData.models.find((model) => model.id === "private-a")?.sortOrder).toBe(0);
     expect(mockData.models.find((model) => model.id === "private-b")?.sortOrder).toBe(2);
+  });
+});
+
+describe("getBindableModels", () => {
+  it("只返回当前用户自己的 enabled 模型", async () => {
+    mockData.models.forEach((model) => { model.enabled = true; });
+
+    const result = await getBindableModels();
+
+    expect(result.globals).toEqual([]);
+    expect(result.byos.map((model) => model.id)).toEqual(["public-a", "public-b", "private-a"]);
+    expect(result.byos.some((model) => model.id === "private-b")).toBe(false);
   });
 });
 
