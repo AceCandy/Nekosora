@@ -436,3 +436,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 14: 修复 MCP 连接超时资源泄漏
+
+**Date**: 2026-07-22
+**Task**: 修复 MCP 连接超时资源泄漏
+**Branch**: `opt0722`
+
+### Summary
+
+将 MCP 连接硬超时与 AbortSignal、transport close 联动，stdio/SSE/HTTP 三种 connector 统一主动取消；新增 4 条生命周期单测，完成 lint、typecheck、354 项测试和生产构建验证。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5b04055` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
