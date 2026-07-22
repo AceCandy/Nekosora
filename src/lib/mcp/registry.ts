@@ -17,6 +17,10 @@
 import { eq, or, isNull, and } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { decrypt } from "@/lib/infra/crypto";
+import {
+  connectMcpClient,
+  withConnectionTimeout,
+} from "@/lib/mcp/connection";
 import type { CallContext } from "@/lib/providers/types";
 import type { IRToolDef } from "@/lib/providers/types";
 
@@ -102,31 +106,34 @@ export async function resolveMcpServers(ctx: CallContext): Promise<ResolvedMcpSe
 
 /** 带超时连接,超时抛错(上层用 cachedTools 兜底)。 */
 async function connectWithTimeout(row: McpServerRow): Promise<McpClientHandle | null> {
-  const connector = buildConnector(row);
-  return Promise.race([
-    connector,
-    new Promise<McpClientHandle | null>((_, reject) =>
-      setTimeout(() => reject(new Error("mcp_connect_timeout")), CONNECT_TIMEOUT_MS),
-    ),
-  ]);
+  return withConnectionTimeout(
+    (signal) => buildConnector(row, signal),
+    CONNECT_TIMEOUT_MS,
+  );
 }
 
 /** 按 transport 类型构造连接逻辑。 */
-function buildConnector(row: McpServerRow): Promise<McpClientHandle | null> {
+function buildConnector(
+  row: McpServerRow,
+  signal: AbortSignal,
+): Promise<McpClientHandle | null> {
   switch (row.transport) {
     case "stdio":
-      return connectStdio(row);
+      return connectStdio(row, signal);
     case "sse":
-      return connectSse(row);
+      return connectSse(row, signal);
     case "http":
-      return connectHttp(row);
+      return connectHttp(row, signal);
     default:
       return Promise.resolve(null);
   }
 }
 
 /** stdio 连接(带池化)。 */
-async function connectStdio(row: McpServerRow): Promise<McpClientHandle> {
+async function connectStdio(
+  row: McpServerRow,
+  signal: AbortSignal,
+): Promise<McpClientHandle> {
   const cached = stdioPool.get(row.id);
   if (cached) {
     cached.lastUsed = Date.now();
@@ -141,29 +148,35 @@ async function connectStdio(row: McpServerRow): Promise<McpClientHandle> {
     env: env as Record<string, string> | undefined,
   });
   const client = new Client({ name: "nekusora", version: "1.0.0" }, { capabilities: {} });
-  await client.connect(transport);
+  await connectMcpClient(client, transport, signal);
   const handle = wrapClient(client, "stdio");
   stdioPool.set(row.id, { handle, lastUsed: Date.now() });
   return handle;
 }
 
 /** SSE 连接(短连接)。 */
-async function connectSse(row: McpServerRow): Promise<McpClientHandle> {
+async function connectSse(
+  row: McpServerRow,
+  signal: AbortSignal,
+): Promise<McpClientHandle> {
   const { Client } = await import("@modelcontextprotocol/sdk/client/index.js");
   const { SSEClientTransport } = await import("@modelcontextprotocol/sdk/client/sse.js");
   const transport = new SSEClientTransport(new URL(row.url!));
   const client = new Client({ name: "nekusora", version: "1.0.0" }, { capabilities: {} });
-  await client.connect(transport);
+  await connectMcpClient(client, transport, signal);
   return wrapClient(client, "sse");
 }
 
 /** Streamable HTTP 连接(短连接)。 */
-async function connectHttp(row: McpServerRow): Promise<McpClientHandle> {
+async function connectHttp(
+  row: McpServerRow,
+  signal: AbortSignal,
+): Promise<McpClientHandle> {
   const { Client } = await import("@modelcontextprotocol/sdk/client/index.js");
   const { StreamableHTTPClientTransport } = await import("@modelcontextprotocol/sdk/client/streamableHttp.js");
   const transport = new StreamableHTTPClientTransport(new URL(row.url!));
   const client = new Client({ name: "nekusora", version: "1.0.0" }, { capabilities: {} });
-  await client.connect(transport);
+  await connectMcpClient(client, transport, signal);
   return wrapClient(client, "http");
 }
 

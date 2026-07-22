@@ -26,3 +26,4 @@
 - `07-22-bounded-text-preview`：为文本预览增加端到端有界读取。
 - `07-22-production-dependency-security`：消除生产依赖 high 安全告警。
 - `07-22-production-dependency-moderate-security`：消除剩余生产依赖 moderate 安全告警。
+- `07-22-mcp-connection-timeout-cleanup`：确保 MCP 连接超时后取消并关闭底层资源。
