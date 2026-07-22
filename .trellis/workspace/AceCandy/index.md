@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 16
+- **Total Sessions**: 17
 - **Last Active**: 2026-07-22
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~537 | Active |
+| `journal-1.md` | ~570 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 17 | 2026-07-22 | 限制 multipart 请求体内存占用 | `7d34a14` | `opt0722` |
 | 16 | 2026-07-22 | 修复 MCP 同名服务工具误路由 | `5981b5f` | `opt0722` |
 | 15 | 2026-07-22 | 修复 MCP 工具限定名歧义 | `a5db601` | `opt0722` |
 | 14 | 2026-07-22 | 修复 MCP 连接超时资源泄漏 | `5b04055` | `opt0722` |

@@ -535,3 +535,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 17: 限制 multipart 请求体内存占用
+
+**Date**: 2026-07-22
+**Task**: 限制 multipart 请求体内存占用
+**Branch**: `opt0722`
+
+### Summary
+
+为附件上传与语音转写新增实际流字节硬上限，分别限制 10MB/25MB 文件与 11MB/26MB multipart 总体；新增统一 413 错误码、中英文本地化和 10 条边界/route 测试，完成 lint、typecheck、371 项测试和生产构建验证。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7d34a14` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
