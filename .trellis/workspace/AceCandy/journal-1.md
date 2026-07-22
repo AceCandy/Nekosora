@@ -700,3 +700,36 @@ processFile 在流水线前以数据库原子条件 pending/error -> extracting/
 ### Next Steps
 
 - None - task complete
+
+
+## Session 22: 清理已消费聊天附件
+
+**Date**: 2026-07-22
+**Task**: 清理已消费聊天附件
+**Branch**: `opt0722`
+
+### Summary
+
+在 /api/chat 成功响应边界用本轮 fileIds 通知附件消费，Composer 只移除已上传且属于本轮的项并释放预览 URL；失败响应、部分上传失败和并发新增附件保持。新增 store 时序测试，lint、typecheck、396 个测试与生产构建通过。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1374c4d` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
