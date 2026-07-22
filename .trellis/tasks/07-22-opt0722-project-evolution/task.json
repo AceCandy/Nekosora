@@ -30,7 +30,8 @@
     "07-22-bounded-multipart-request-body",
     "07-22-local-storage-path-traversal",
     "07-22-upload-db-failure-storage-cleanup",
-    "07-22-upload-queue-failure-fallback"
+    "07-22-upload-queue-failure-fallback",
+    "07-22-file-processing-atomic-claim"
   ],
   "parent": null,
   "relatedFiles": [],

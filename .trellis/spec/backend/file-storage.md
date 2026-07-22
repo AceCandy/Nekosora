@@ -327,3 +327,62 @@ if (useSyncFallback) {
   processFile(fileId, storagePath, mime).catch(logSyncFailure);
 }
 ```
+
+## Scenario: Atomic File Processing Claim
+
+### 1. Scope / Trigger
+
+Apply this contract when changing `processFile`, the `file-process` worker, or upload fallback processing. Queue and fallback can deliver the same file concurrently.
+
+### 2. Signatures
+
+- `processFile(fileId: string, storagePath: string, mime: string): Promise<void>` claims a file before extraction.
+- The claim updates `file_objects.processing_status` and `extract_status` and returns the claimed row id.
+
+### 3. Contracts
+
+- Claim with one atomic update constrained by `id = fileId` and `processing_status IN ('pending', 'error')`, setting `processing_status='extracting'` and `extract_status='running'`.
+- If `returning()` yields no row, return before extract, chunk, embedding, or chunk persistence; do not overwrite another worker's status.
+- A successful claim preserves existing unsupported, empty-text, embedding, done, and error transitions.
+- This is a database-level claim, not an in-process mutex, so separate worker and web processes share the guard.
+- It does not recover stale `extracting/embedding` rows or deduplicate historical chunks.
+
+### 4. Validation & Error Matrix
+
+| Claim result | Processing behavior |
+| --- | --- |
+| One `pending/error` row returned | Run the existing pipeline |
+| Empty returning set | Immediate no-op |
+| Row in another status / missing row | Immediate no-op |
+| Claim query fails | Propagate to queue/fallback caller for retry handling |
+
+### 5. Good / Base / Bad Cases
+
+- Good: worker and fallback race; one atomically claims, the other exits before deleting or inserting chunks.
+- Base: a pending upload claims once and reaches the existing status transitions.
+- Bad: unconditional `extracting` update lets every concurrent caller delete and reinsert the same file's chunks.
+
+### 6. Tests Required
+
+- Assert the claim where clause combines file id equality with `pending/error` status membership.
+- Assert an empty `returning()` result skips extract, chunk, embedding, delete, and insert calls.
+- Assert a successful claim still handles unsupported files as `done/skipped`.
+- Keep lint, typecheck, full tests, production build, and diff checks green.
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong: every caller enters the pipeline.
+await update({ processingStatus: "extracting", extractStatus: "running" });
+await extractText(storagePath, mime);
+
+// Correct: only the caller that changed pending/error owns the pipeline.
+const [claimed] = await db.update(s.fileObjects)
+  .set({ processingStatus: "extracting", extractStatus: "running" })
+  .where(and(
+    eq(s.fileObjects.id, fileId),
+    inArray(s.fileObjects.processingStatus, ["pending", "error"]),
+  ))
+  .returning({ id: s.fileObjects.id });
+if (!claimed) return;
+```
