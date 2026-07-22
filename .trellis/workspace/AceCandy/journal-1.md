@@ -865,3 +865,36 @@ retrieve、文件 context、多模态组装、知识库扩展均强制 userId ow
 ### Next Steps
 
 - None - task complete
+
+
+## Session 27: 分享排除已删除消息
+
+**Date**: 2026-07-22
+**Task**: 分享排除已删除消息
+**Branch**: `opt0722`
+
+### Summary
+
+创建公开会话分享时仅快照未软删除消息，防止界面已隐藏内容重新公开；新增回归测试并通过 410 项测试、lint、typecheck 与生产构建。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `30d701e` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
