@@ -832,3 +832,36 @@ retrieve、文件 context、多模态组装、知识库扩展均强制 userId ow
 ### Next Steps
 
 - None - task complete
+
+
+## Session 26: 聊天动作属主隔离
+
+**Date**: 2026-07-22
+**Task**: 聊天动作属主隔离
+**Branch**: `opt0722`
+
+### Summary
+
+限制分支动作消息引用在已授权会话内，并要求分享撤销通过关联会话校验属主；新增动作级回归测试并通过 409 项测试、lint、typecheck 与生产构建。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b8c0278` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
