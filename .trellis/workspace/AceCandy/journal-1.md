@@ -733,3 +733,36 @@ processFile 在流水线前以数据库原子条件 pending/error -> extracting/
 ### Next Steps
 
 - None - task complete
+
+
+## Session 23: 回收聊天附件预览 URL
+
+**Date**: 2026-07-22
+**Task**: 回收聊天附件预览 URL
+**Branch**: `opt0722`
+
+### Summary
+
+聊天图片 preview URL 创建时登记到未释放 Set，附件离开 state 后回收，hook 卸载时清理剩余资源；state updater 保持纯函数，避免 Strict Mode 重复副作用。lint、typecheck、396 个测试与生产构建通过。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8562e91` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

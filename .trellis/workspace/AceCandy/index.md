@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 22
+- **Total Sessions**: 23
 - **Last Active**: 2026-07-22
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~735 | Active |
+| `journal-1.md` | ~768 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 23 | 2026-07-22 | 回收聊天附件预览 URL | `8562e91` | `opt0722` |
 | 22 | 2026-07-22 | 清理已消费聊天附件 | `1374c4d` | `opt0722` |
 | 21 | 2026-07-22 | 原子抢占文件处理任务 | `e13b141` | `opt0722` |
 | 20 | 2026-07-22 | 队列失败时回退文件处理 | `617fbe0` | `opt0722` |
