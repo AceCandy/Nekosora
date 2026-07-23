@@ -32,9 +32,6 @@ export default async function ChatConversationPage({
       webSearch: false,
       cardIds: [],
       kbIds: [],
-      temperature: null,
-      topP: null,
-      maxTokens: null,
       reasoningByModelId: {},
     })),
   ]);
@@ -106,7 +103,6 @@ export default async function ChatConversationPage({
           initialWebSearch={composerState.webSearch}
           initialCardIds={composerState.cardIds}
           initialKbIds={composerState.kbIds}
-          initialModelParams={{ temperature: composerState.temperature, topP: composerState.topP, maxTokens: composerState.maxTokens }}
           initialReasoningByModelId={composerState.reasoningByModelId}
           conversationId={id}
           createShareAction={handleCreateShare}

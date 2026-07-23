@@ -2,7 +2,7 @@
 
 import React, { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Loader2, Sparkles, Globe, Library, Wand2, Palette, X, Paperclip, SlidersHorizontal, Brain, ChevronDown, Plus } from "lucide-react";
+import { Loader2, Sparkles, Globe, Library, Wand2, Palette, X, Paperclip, Brain, ChevronDown, Plus } from "lucide-react";
 import { clsx } from "clsx";
 import { OptionPicker, type OptionItem } from "@/shared/ui/OptionPicker";
 import type { ReasoningLevel, ModelCapabilities } from "@/db/types";
@@ -76,11 +76,6 @@ export interface ChatToolbarProps {
   // 联网搜索（纯 toggle，非 listbox）
   webSearch: boolean;
   onWebSearchToggle: () => void;
-
-  // 模型参数（temperature/topP/maxTokens，null=用模型默认）
-  modelParams: { temperature: number | null; topP: number | null; maxTokens: number | null };
-  onModelParamsChange: (p: { temperature?: number | null; topP?: number | null; maxTokens?: number | null }) => void;
-  onModelParamsReset: () => void;
 
   // 推理级别(仅可推理模型露出控件)
   reasoning: ReasoningLevel;
@@ -223,7 +218,7 @@ export function ComposerPlusMenu(props: ChatToolbarProps) {
 
 /**
  * 输入框右侧模型相关控件(内联,无中间层菜单框):
- * 推理档位 / 联网 / 参数图标 + 模型名(点开直接出模型列表)。
+ * 推理档位 / 联网 + 模型名(点开直接出模型列表)。
  */
 export function ModelControlMenu(props: ChatToolbarProps) {
   const t = useTranslations("chat");
@@ -248,13 +243,6 @@ export function ModelControlMenu(props: ChatToolbarProps) {
         >
           <Globe className="h-4 w-4" aria-hidden="true" />
         </button>
-      </div>
-      <div className="hidden sm:block">
-        <ModelParamsPicker
-          params={props.modelParams}
-          onChange={props.onModelParamsChange}
-          onReset={props.onModelParamsReset}
-        />
       </div>
       <OptionPicker
         open={props.modelPickerOpen}
@@ -284,57 +272,6 @@ export function ModelControlMenu(props: ChatToolbarProps) {
           </button>
         }
       />
-    </div>
-  );
-}
-
-/** 模型参数调节:输入栏图标触发,面板上展。 */
-function ModelParamsPicker({
-  params,
-  onChange,
-  onReset,
-}: {
-  params: { temperature: number | null; topP: number | null; maxTokens: number | null };
-  onChange: (p: { temperature?: number | null; topP?: number | null; maxTokens?: number | null }) => void;
-  onReset: () => void;
-}) {
-  const t = useTranslations("chat");
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const hasCustom = params.temperature !== null || params.topP !== null || params.maxTokens !== null;
-  useClickOutside(rootRef, () => setOpen(false), open);
-  return (
-    <div ref={rootRef} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className={clsx(TOOLBAR_ICON, hasCustom && "bg-sora-blue/[0.08] text-sora-blue hover:bg-sora-blue/[0.12] hover:text-sora-blue dark:hover:bg-sora-blue/[0.12] dark:hover:text-sora-blue")}
-        title={t("modelParams")}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-label={t("modelParams")}
-      >
-        <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
-      </button>
-      {open && (
-        <div className="absolute bottom-full right-0 z-40 mb-2 w-64 space-y-2.5 rounded-lg border border-morning-mist bg-white p-3 shadow-md dark:border-deep-space/80 dark:bg-space-ink">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-200">{t("modelParams")}</span>
-            {hasCustom && (
-              <button
-                type="button"
-                onClick={onReset}
-                className="cursor-pointer text-[11px] text-neutral-400 underline underline-offset-2 hover:text-neutral-600 dark:hover:text-neutral-300"
-              >
-                {t("resetDefaults")}
-              </button>
-            )}
-          </div>
-          <ParamInput label={t("temperature")} value={params.temperature} min={0} max={2} step={0.1} onChange={(v) => onChange({ temperature: v })} />
-          <ParamInput label={t("topP")} value={params.topP} min={0} max={1} step={0.05} onChange={(v) => onChange({ topP: v })} />
-          <ParamInput label={t("maxTokens")} value={params.maxTokens} min={1} step={1} onChange={(v) => onChange({ maxTokens: v })} />
-        </div>
-      )}
     </div>
   );
 }
@@ -420,41 +357,6 @@ function reasoningLabelKey(level: ReasoningLevel, fixed: boolean) {
     case "xhigh": return "reasoningXHigh";
     case "max": return "reasoningMax";
   }
-}
-
-function ParamInput({
-  label,
-  value,
-  min,
-  max,
-  step,
-  onChange,
-}: {
-  label: string;
-  value: number | null;
-  min?: number;
-  max?: number;
-  step?: number;
-  onChange: (v: number | null) => void;
-}) {
-  return (
-    <label className="flex items-center justify-between gap-2 text-xs">
-      <span className="text-neutral-500 dark:text-neutral-400">{label}</span>
-      <input
-        type="number"
-        value={value ?? ""}
-        min={min}
-        max={max}
-        step={step}
-        onChange={(e) => {
-          const v = e.target.value;
-          onChange(v === "" ? null : Number(v));
-        }}
-        placeholder="默认"
-        className="w-24 rounded border border-morning-mist dark:border-deep-space/80 bg-transparent px-2 py-1 text-xs text-neutral-700 dark:text-neutral-200 focus:outline-none focus:border-sora-blue"
-      />
-    </label>
-  );
 }
 
 /** 按扩展名粗略推断 mime（从 ChatComposer 原样迁入）。 */
