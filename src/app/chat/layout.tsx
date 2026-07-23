@@ -55,7 +55,7 @@ export default async function ChatLayout({ children }: { children: React.ReactNo
   }));
 
   return (
-    <div className="flex h-[100dvh] overflow-hidden bg-nebula-white text-space-ink dark:bg-twilight-obsidian dark:text-nebula-silver transition-colors duration-200">
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-nebula-white text-space-ink transition-colors duration-200 dark:bg-twilight-obsidian dark:text-nebula-silver md:flex-row">
       <Sidebar
         userName={user.name}
         userEmail={user.email}
@@ -87,7 +87,7 @@ export default async function ChatLayout({ children }: { children: React.ReactNo
         deleteAction={handleDelete}
         getGeneratingStatusesAction={getGeneratingStatuses}
       />
-      <main className="flex-1 flex flex-col min-w-0">
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col">
         {aggregatedStyleCss && <style dangerouslySetInnerHTML={{ __html: aggregatedStyleCss }} />}
         {children}
       </main>

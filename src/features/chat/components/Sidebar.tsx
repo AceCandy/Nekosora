@@ -142,6 +142,7 @@ export default function Sidebar({
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set(["earlier", "archived"]));
   const tSidebar = useTranslations("chat");
+  const tNav = useTranslations("nav");
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -348,6 +349,11 @@ export default function Sidebar({
     });
   };
 
+  const openMobileSidebar = () => {
+    setCollapsed(false);
+    setIsOpen(true);
+  };
+
   const renderItem = (c: ConversationItem) => {
     const isActive = c.id === activeConvId;
     const justCompleted = !isActive && completedIds.has(c.id);
@@ -429,32 +435,46 @@ export default function Sidebar({
 
   return (
     <>
-      {/* Mobile Top Toggle button */}
-      <div className="md:hidden fixed top-3 left-4 z-40">
+      {/* Mobile header */}
+      <header
+        aria-hidden={isOpen ? true : undefined}
+        inert={isOpen ? true : undefined}
+        className="flex h-14 shrink-0 items-center gap-3 border-b border-morning-mist bg-nebula-white px-3 dark:border-deep-space dark:bg-twilight-obsidian md:hidden"
+      >
         <button
           type="button"
-          onClick={() => setIsOpen(true)}
-          className="touch-target inline-flex items-center justify-center w-9 h-9 rounded-md border border-morning-mist dark:border-deep-space bg-nebula-white dark:bg-twilight-obsidian text-neutral-600 dark:text-neutral-355 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
-          aria-label="打开侧边栏"
+          onClick={openMobileSidebar}
+          className="touch-target inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:text-neutral-300 dark:hover:bg-neutral-900 dark:hover:text-neutral-100"
+          aria-controls="chat-sidebar"
+          aria-expanded={isOpen}
+          aria-label={tNav("openSidebar")}
+          title={tNav("openSidebar")}
         >
-          <Menu className="w-5 h-5" aria-hidden="true" />
+          <Menu className="h-5 w-5" aria-hidden="true" />
         </button>
-      </div>
+        <Link
+          href="/chat"
+          className="min-w-0 truncate rounded text-base font-semibold text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:text-white"
+        >
+          Nekusora
+        </Link>
+      </header>
 
       {/* Backdrop overlay for mobile drawer */}
       {isOpen && (
         <div
           onClick={() => setIsOpen(false)}
-          className="fixed inset-0 bg-black/40 z-40 md:hidden animate-in fade-in duration-200"
+          className="fixed inset-0 z-40 bg-black/40 md:hidden"
           aria-hidden="true"
         />
       )}
 
       {/* Actual Sidebar Panel */}
       <aside
+        id="chat-sidebar"
         className={clsx(
-          "fixed inset-y-0 left-0 z-40 flex w-60 min-w-0 max-w-60 shrink-0 flex-col border-r border-morning-mist bg-nebula-white p-3 transform transition-[width,min-width,max-width,transform] duration-250 ease-in-out dark:border-deep-space dark:bg-[#090b0e] md:static md:h-screen md:translate-x-0",
-          collapsed ? "md:w-14 md:min-w-14 md:max-w-14 md:p-2" : "md:w-60 md:min-w-60 md:max-w-60",
+          "fixed inset-y-0 left-0 z-50 flex min-h-0 w-[min(18rem,calc(100vw-3rem))] max-w-72 shrink-0 flex-col border-r border-morning-mist bg-nebula-white p-4 transform transition-transform duration-200 ease-out dark:border-deep-space dark:bg-[#090b0e] md:static md:z-40 md:h-screen md:translate-x-0 md:transition-[width,min-width,max-width,transform] md:duration-250 md:ease-in-out",
+          collapsed ? "md:w-14 md:min-w-14 md:max-w-14 md:p-2" : "md:w-60 md:min-w-60 md:max-w-60 md:p-3",
           isOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
@@ -487,10 +507,11 @@ export default function Sidebar({
             <button
               type="button"
               onClick={() => setIsOpen(false)}
-              className="touch-target md:hidden inline-flex items-center justify-center rounded-md p-2 text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
-              aria-label="关闭侧边栏"
+              className="touch-target inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:hover:bg-neutral-900 dark:hover:text-neutral-100 md:hidden"
+              aria-label={tNav("closeSidebar")}
+              title={tNav("closeSidebar")}
             >
-              <X className="h-4 w-4" aria-hidden="true" />
+              <X className="h-[18px] w-[18px]" aria-hidden="true" />
             </button>
           </div>
         </div>

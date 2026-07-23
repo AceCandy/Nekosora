@@ -33,6 +33,7 @@
 - **收起状态是 client 组件内 `useState`,会话内有效、不持久化**(刷新重置为展开)。后台 `AppShell` 是 server component,收起交互下沉到 client 子组件 `DashSidebar`;登出仍走 server action,由 `AppShell` 模块级定义后透传给 `DashSidebar`,不在 client 侧另写一套。
 - **桌面宽度**:chat 与 dash 都是收起态 `md:w-14`、展开态 `md:w-60`,用 `transition-[width,min-width,max-width,transform] duration-250` 过渡;内边距随状态立即切换,折叠按钮 `PanelLeftClose`/`PanelLeftOpen` 仅桌面显示(`hidden md:inline-flex`)。
 - **移动端统一使用抽屉**:默认关闭,由 `md:hidden` 顶栏菜单按钮打开;侧栏固定覆盖在正文上方,支持关闭按钮、遮罩、`Escape` 与导航后关闭。打开时锁定 body 滚动、将背景顶栏/正文设为 `inert` + `aria-hidden` 并把焦点限制在抽屉内,关闭后焦点返回菜单按钮;关闭态侧栏本身也必须 `inert` + `aria-hidden`,避免离屏导航进入 Tab 顺序。移动端打开后台抽屉时重置桌面 `collapsed`,保证完整标签可见。
+- **移动端几何与入口样式也必须一致**:chat 与 dash 都使用 `h-14` 顶栏和无独立边框的 `h-11 w-11` 菜单按钮,禁止退回覆盖正文的悬浮小按钮;抽屉统一为 `w-[min(18rem,calc(100vw-3rem))] max-w-72 p-4`,并使用 `transition-transform duration-200 ease-out`。所谓「统一抽屉」必须同时核对宽度、顶栏/开关按钮与动效,不能只对齐 transition 参数。
 - **断点类必须互斥**:桌面展开/收起宽度不能同时把 `md:w-60` 写在基础类、再条件追加 `md:w-14`;Tailwind 同断点工具类可能仍由 `w-60` 覆盖。应使用 `collapsed ? "md:w-14 ..." : "md:w-60 ..."`。移动端菜单与关闭按钮固定 `h-11 w-11`(`44×44px`),不能只依赖 coarse-pointer 兜底。
 - **导航项必须有 `icon`**(`shared/nav-config.ts` 的 `NavItem.icon: LucideIcon`):收起态 `SidebarNav` 仅渲染图标,label 与 hotkey 隐藏,靠 `title`/`aria-label` 提供 tooltip。**新增 nav 项漏配 icon 会导致收起态空图标**。
 - **底部统一为用户菜单**:展开/收起态都只显示用户头像入口;点击后展示 `footerLinks`(如回到聊天)、`LanguageSwitcher` 与登出。展开态菜单向上弹出,收起态向侧栏右侧弹出。侧栏自身保持桌面 `z-40` 且不设置 `overflow-y-auto`,滚动只放在上方导航容器,否则收起态菜单会被正文覆盖或被侧栏裁剪。
