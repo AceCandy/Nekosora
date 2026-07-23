@@ -32,9 +32,9 @@ export default async function AdminTemplatesPage() {
 
       <div className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] overflow-hidden shadow-none">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm border-collapse">
+          <table className="w-full text-ui-body border-collapse">
             <thead>
-              <tr className="bg-neutral-50/70 border-b border-neutral-200 text-neutral-500 dark:bg-neutral-900/50 dark:border-neutral-800 dark:text-neutral-400 text-xs uppercase tracking-wider font-semibold">
+              <tr className="bg-neutral-50/70 border-b border-neutral-200 text-neutral-500 dark:bg-neutral-900/50 dark:border-neutral-800 dark:text-neutral-400 text-ui-caption uppercase tracking-wider font-semibold">
                 <th className="text-left px-5 py-3">{t("thName")}</th>
                 <th className="text-left px-5 py-3">{t("thCategory")}</th>
                 <th className="text-left px-5 py-3">{t("thScope")}</th>
@@ -54,29 +54,29 @@ export default async function AdminTemplatesPage() {
                 <tr key={tpl.id as string} className="hover:bg-neutral-50/30 dark:hover:bg-neutral-900/10 transition-colors duration-150">
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-2">
-                      <span className="text-base">{(tpl.icon as string) ?? "📄"}</span>
+                      <span className="text-ui-reading">{(tpl.icon as string) ?? "📄"}</span>
                       <div>
-                        <div className="font-medium text-neutral-900 dark:text-white text-sm">{tpl.name as string}</div>
+                        <div className="font-medium text-neutral-900 dark:text-white text-ui-body">{tpl.name as string}</div>
                         {(tpl.description as string) && (
-                          <div className="text-[11px] text-neutral-400 dark:text-neutral-500 truncate max-w-[280px]">{tpl.description as string}</div>
+                          <div className="text-ui-caption text-neutral-400 dark:text-neutral-500 truncate max-w-[280px]">{tpl.description as string}</div>
                         )}
                       </div>
                     </div>
                   </td>
-                  <td className="px-5 py-3.5 text-xs text-neutral-500 font-mono">{(tpl.category as string) ?? "-"}</td>
+                  <td className="px-5 py-3.5 text-ui-caption text-neutral-500 font-mono">{(tpl.category as string) ?? "-"}</td>
                   <td className="px-5 py-3.5">
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300 border border-neutral-200/50 dark:border-neutral-700/50">
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-ui-caption font-medium bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300 border border-neutral-200/50 dark:border-neutral-700/50">
                       {tpl.scope as string}
                     </span>
                   </td>
                   <td className="px-5 py-3.5 text-center">
                     {tpl.isAgent ? (
-                      <span className="text-sora-blue text-xs">🤖</span>
+                      <span className="text-sora-blue text-ui-caption">🤖</span>
                     ) : (
-                      <span className="text-neutral-300 dark:text-neutral-600 text-xs">—</span>
+                      <span className="text-neutral-300 dark:text-neutral-600 text-ui-caption">—</span>
                     )}
                   </td>
-                  <td className="px-5 py-3.5 text-right font-mono text-xs text-neutral-500">
+                  <td className="px-5 py-3.5 text-right font-mono text-ui-caption text-neutral-500">
                     {Number(tpl.useCount ?? 0).toLocaleString()}
                   </td>
                 </tr>

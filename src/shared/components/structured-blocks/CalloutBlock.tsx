@@ -20,9 +20,9 @@ export function CalloutBlock({ data }: { data: CalloutData }) {
       <style.Icon className={clsx("mt-0.5 h-4 w-4 shrink-0", style.accent)} aria-hidden="true" />
       <div className="min-w-0 flex-1 space-y-0.5">
         {data.title ? (
-          <div className={clsx("text-sm font-medium", style.accent)}>{data.title}</div>
+          <div className={clsx("text-ui-body font-medium", style.accent)}>{data.title}</div>
         ) : null}
-        <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
+        <div className="whitespace-pre-wrap break-words text-ui-body leading-relaxed text-neutral-600 dark:text-neutral-300">
           {data.body}
         </div>
       </div>

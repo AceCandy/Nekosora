@@ -72,7 +72,7 @@ function DefaultFallback({ error, reset, raw }: DefaultFallbackProps) {
   const hasRaw = raw !== undefined && raw !== "";
 
   return (
-    <div className="rounded-md border border-red-200 dark:border-red-900/40 bg-red-50/60 dark:bg-red-950/10 px-3 py-2 text-[11px] text-red-600 dark:text-red-400 animate-in fade-in duration-150">
+    <div className="rounded-md border border-red-200 dark:border-red-900/40 bg-red-50/60 dark:bg-red-950/10 px-3 py-2 text-ui-caption text-red-600 dark:text-red-400 animate-in fade-in duration-150">
       <div className="flex items-center gap-1.5">
         <AlertCircle className="w-3 h-3 shrink-0" aria-hidden="true" />
         <span className="font-semibold">{t("renderFailed")}</span>

@@ -94,15 +94,15 @@ export default async function ModelConfigSection({
   return (
     <div className="space-y-6 max-w-3xl">
       <div>
-        <h2 className="text-base font-semibold text-neutral-900 dark:text-white">{labels.title}</h2>
-        <p className="mt-1 text-sm text-neutral-500">{labels.desc}</p>
+        <h2 className="text-ui-title font-semibold text-neutral-900 dark:text-white">{labels.title}</h2>
+        <p className="mt-1 text-ui-body text-neutral-500">{labels.desc}</p>
       </div>
 
       {/* Embedding 配置 */}
       {providers.length === 0 ? (
         <div className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] p-5 space-y-3">
-          <h3 className="text-sm font-bold text-neutral-800 dark:text-white">{labels.embeddingTitle}</h3>
-          <p className="text-xs text-amber-600 dark:text-amber-400">{labels.noProviders}</p>
+          <h3 className="text-ui-body font-bold text-neutral-800 dark:text-white">{labels.embeddingTitle}</h3>
+          <p className="text-ui-caption text-amber-600 dark:text-amber-400">{labels.noProviders}</p>
         </div>
       ) : (
         <EmbeddingConfigForm
@@ -124,54 +124,54 @@ export default async function ModelConfigSection({
 
       {/* 标题生成模型配置 */}
       <form action={saveTitleModel} className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] p-5 space-y-3">
-        <h3 className="text-sm font-bold text-neutral-800 dark:text-white">{labels.titleTaskTitle}</h3>
+        <h3 className="text-ui-body font-bold text-neutral-800 dark:text-white">{labels.titleTaskTitle}</h3>
         <div className="space-y-1">
-          <label className="text-xs font-medium text-neutral-500">{labels.titleTaskModel}</label>
+          <label className="text-ui-caption font-medium text-neutral-500">{labels.titleTaskModel}</label>
           <input
             name="model"
             defaultValue={task.title_model ?? ""}
             placeholder="gpt-4o-mini"
-            className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-3 py-2 text-sm font-mono focus:outline-none focus:border-sora-blue"
+            className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-3 py-2 text-ui-body font-mono focus:outline-none focus:border-sora-blue"
           />
-          <p className="text-[11px] text-neutral-400">{labels.titleTaskHint}</p>
+          <p className="text-ui-caption text-neutral-400">{labels.titleTaskHint}</p>
         </div>
-        <button type="submit" className="rounded-md bg-sora-blue hover:bg-sora-blue-hover text-white px-4 py-2 text-sm font-semibold cursor-pointer">
+        <button type="submit" className="rounded-md bg-sora-blue hover:bg-sora-blue-hover text-white px-4 py-2 text-ui-body font-semibold cursor-pointer">
           {labels.save}
         </button>
       </form>
 
       {/* 摘要生成模型配置 */}
       <form action={saveCompactModel} className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] p-5 space-y-3">
-        <h3 className="text-sm font-bold text-neutral-800 dark:text-white">{labels.compactTaskTitle}</h3>
+        <h3 className="text-ui-body font-bold text-neutral-800 dark:text-white">{labels.compactTaskTitle}</h3>
         <div className="space-y-1">
-          <label className="text-xs font-medium text-neutral-500">{labels.compactTaskModel}</label>
+          <label className="text-ui-caption font-medium text-neutral-500">{labels.compactTaskModel}</label>
           <input
             name="model"
             defaultValue={task.compact_model ?? ""}
             placeholder="gpt-4o-mini"
-            className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-3 py-2 text-sm font-mono focus:outline-none focus:border-sora-blue"
+            className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-3 py-2 text-ui-body font-mono focus:outline-none focus:border-sora-blue"
           />
-          <p className="text-[11px] text-neutral-400">{labels.compactTaskHint}</p>
+          <p className="text-ui-caption text-neutral-400">{labels.compactTaskHint}</p>
         </div>
-        <button type="submit" className="rounded-md bg-sora-blue hover:bg-sora-blue-hover text-white px-4 py-2 text-sm font-semibold cursor-pointer">
+        <button type="submit" className="rounded-md bg-sora-blue hover:bg-sora-blue-hover text-white px-4 py-2 text-ui-body font-semibold cursor-pointer">
           {labels.save}
         </button>
       </form>
 
       {/* mem0 抽取模型配置 */}
       <form action={saveMem0LlmModel} className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] p-5 space-y-3">
-        <h3 className="text-sm font-bold text-neutral-800 dark:text-white">{labels.mem0LlmTitle}</h3>
+        <h3 className="text-ui-body font-bold text-neutral-800 dark:text-white">{labels.mem0LlmTitle}</h3>
         <div className="space-y-1">
-          <label className="text-xs font-medium text-neutral-500">{labels.mem0LlmModel}</label>
+          <label className="text-ui-caption font-medium text-neutral-500">{labels.mem0LlmModel}</label>
           <input
             name="model"
             defaultValue={rag.mem0_llm_model ?? ""}
             placeholder="Qwen2.5-7B-Instruct"
-            className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-3 py-2 text-sm font-mono focus:outline-none focus:border-sora-blue"
+            className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-3 py-2 text-ui-body font-mono focus:outline-none focus:border-sora-blue"
           />
-          <p className="text-[11px] text-neutral-400">{labels.mem0LlmHint}</p>
+          <p className="text-ui-caption text-neutral-400">{labels.mem0LlmHint}</p>
         </div>
-        <button type="submit" className="rounded-md bg-sora-blue hover:bg-sora-blue-hover text-white px-4 py-2 text-sm font-semibold cursor-pointer">
+        <button type="submit" className="rounded-md bg-sora-blue hover:bg-sora-blue-hover text-white px-4 py-2 text-ui-body font-semibold cursor-pointer">
           {labels.save}
         </button>
       </form>

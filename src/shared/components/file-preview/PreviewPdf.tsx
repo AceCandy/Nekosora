@@ -103,8 +103,8 @@ export default function PreviewPdf({ url, filename }: PreviewPdfProps) {
     return (
       <div className="flex flex-col items-center gap-2 p-8 text-neutral-400">
         <AlertCircle className="w-8 h-8" />
-        <p className="text-xs">{t("loadingFailed")}:{error}</p>
-        <a href={url} download={filename} className="text-xs text-sora-blue underline">
+        <p className="text-ui-caption">{t("loadingFailed")}:{error}</p>
+        <a href={url} download={filename} className="text-ui-caption text-sora-blue underline">
           {t("downloadFile")}
         </a>
       </div>
@@ -114,8 +114,8 @@ export default function PreviewPdf({ url, filename }: PreviewPdfProps) {
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-900/50 shrink-0">
-        <span className="text-[11px] font-mono text-neutral-500 truncate">{filename}</span>
-        <span className="text-[10px] font-mono text-neutral-400">
+        <span className="text-ui-caption font-mono text-neutral-500 truncate">{filename}</span>
+        <span className="text-ui-caption font-mono text-neutral-400">
           {loading ? (
             <span className="inline-flex items-center gap-1">
               <Loader2 className="w-3 h-3 animate-spin" />

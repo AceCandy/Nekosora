@@ -24,14 +24,14 @@ export function Pagination({ page, pageSize, total, buildHref, labels }: Paginat
   const hasNext = page < totalPages;
 
   const btnBase =
-    "touch-target inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium border transition-colors duration-150";
+    "touch-target inline-flex items-center px-2.5 py-1 rounded-md text-ui-caption font-medium border transition-colors duration-150";
   const btnEnabled =
     "border-morning-mist dark:border-deep-space bg-nebula-white dark:bg-twilight-obsidian text-neutral-700 dark:text-neutral-300 hover:text-sora-blue hover:border-sora-blue/40";
   const btnDisabled = "opacity-40 cursor-not-allowed border-transparent text-neutral-400 dark:text-neutral-600 select-none";
 
   return (
     <div className="flex items-center justify-between pt-3">
-      <span className="text-[11px] text-neutral-400 dark:text-neutral-500 font-mono">{labels.summary}</span>
+      <span className="text-ui-caption text-neutral-400 dark:text-neutral-500 font-mono">{labels.summary}</span>
       <div className="flex items-center gap-2">
         {hasPrev ? (
           <Link href={buildHref(page - 1)} className={clsx(btnBase, btnEnabled)} prefetch={false}>

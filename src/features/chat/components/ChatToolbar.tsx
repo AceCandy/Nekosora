@@ -18,10 +18,10 @@ import type { PreviewableFile } from "@/shared/components/file-preview/FilePrevi
 import { getSupportedReasoningLevels } from "@/lib/reasoning";
 import { useClickOutside } from "@/shared/lib/useClickOutside";
 
-const MENU_ROW = "flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:text-neutral-200 dark:hover:bg-neutral-900";
+const MENU_ROW = "flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-ui-caption font-medium text-neutral-700 transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:text-neutral-200 dark:hover:bg-neutral-900";
 /** 输入栏内联控件:与发送按钮同高,无多余描边框。 */
 const TOOLBAR_CHIP =
-  "pointer-events-auto inline-flex h-8 max-w-28 items-center gap-1 rounded-full px-2 text-xs font-medium text-neutral-600 transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none dark:text-neutral-300 dark:hover:bg-neutral-800 sm:max-w-40";
+  "pointer-events-auto inline-flex h-8 max-w-28 items-center gap-1 rounded-full px-2 text-ui-caption font-medium text-neutral-600 transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none dark:text-neutral-300 dark:hover:bg-neutral-800 sm:max-w-40";
 const TOOLBAR_ICON =
   "pointer-events-auto inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200";
 
@@ -100,7 +100,7 @@ export function ChatToolbar(props: ChatToolbarProps) {
         return (
           <span
             key={id}
-            className="inline-flex items-center gap-1.5 rounded-full border border-sora-blue/20 bg-sora-blue/[0.04] px-2.5 py-1 text-[11px] font-medium text-sora-blue"
+            className="inline-flex items-center gap-1.5 rounded-full border border-sora-blue/20 bg-sora-blue/[0.04] px-2.5 py-1 text-ui-caption font-medium text-sora-blue"
           >
             <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
             <span className="max-w-[100px] truncate">{card.title}</span>
@@ -120,7 +120,7 @@ export function ChatToolbar(props: ChatToolbarProps) {
         const kb = knowledgeBases.find((item) => item.id === id);
         if (!kb) return null;
         return (
-          <span key={id} className="inline-flex items-center gap-1.5 rounded-full border border-sora-blue/20 bg-sora-blue/[0.04] px-2.5 py-1 text-[11px] font-medium text-sora-blue">
+          <span key={id} className="inline-flex items-center gap-1.5 rounded-full border border-sora-blue/20 bg-sora-blue/[0.04] px-2.5 py-1 text-ui-caption font-medium text-sora-blue">
             <Library className="h-3.5 w-3.5" aria-hidden="true" />
             <span className="max-w-[100px] truncate">{kb.name}</span>
             <button onClick={() => onKbToggle(id)} className="-m-1 rounded-full p-1.5 hover:opacity-75 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sora-blue" title={t("attachRemove")} aria-label="移除知识库">
@@ -137,7 +137,7 @@ export function ChatToolbar(props: ChatToolbarProps) {
           <span
             key={a.id}
             className={clsx(
-              "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
+              "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-ui-caption font-medium transition-colors",
               a.status === "uploaded" && "bg-sora-blue/[0.04] border-sora-blue/20 text-sora-blue",
               a.status === "uploading" && "bg-neutral-100 dark:bg-neutral-900 border-morning-mist dark:border-deep-space text-neutral-500",
               a.status === "pending" && "bg-neku-amber/[0.04] border-neku-amber/20 text-neku-amber",
@@ -330,7 +330,7 @@ function ReasoningPicker({
                 type="button"
                 onClick={() => { onChange(lvl); setOpen(false); }}
                 className={clsx(
-                  "w-full cursor-pointer rounded px-2.5 py-1.5 text-left text-xs transition-colors",
+                  "w-full cursor-pointer rounded px-2.5 py-1.5 text-left text-ui-caption transition-colors",
                   selected
                     ? "bg-sora-blue/[0.08] font-semibold text-sora-blue"
                     : "text-neutral-600 hover:bg-neutral-50 dark:text-neutral-300 dark:hover:bg-neutral-900",

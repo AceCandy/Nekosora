@@ -51,6 +51,26 @@
 - 布局:三栏(侧栏 + 主区)用 flex;对话区 `max-w-3xl mx-auto`。
 - 状态色:`text-green-600`(启用)、`text-red-600`(危险)、`text-neutral-400`(占位)。
 
+### 语义字号
+
+产品 UI 字号统一使用 `globals.css` `@theme` 注册的语义工具类：
+
+| Class | 字号 / 行高 | 用途 |
+|-------|-------------|------|
+| `text-ui-micro` | `11px / 16px` | 时间戳、代码标识、极次要元信息 |
+| `text-ui-caption` | `12px / 16px` | 标签、小号按钮、附件和次要说明 |
+| `text-ui-body` | `14px / 20px` | 后台正文、表单、菜单和常规说明 |
+| `text-ui-reading` | `16px / 24px` | Chat 正文、输入框和连续阅读内容 |
+| `text-ui-title` | `18px / 28px` | Modal、配置组和局部标题 |
+| `text-ui-subheading` | `20px / 28px` | 页面标题和重要分区标题 |
+| `text-ui-heading` | `24px / 32px` | 大组标题 |
+| `text-ui-display` | `30px / 36px` | 品牌首提和展示标题 |
+
+- 禁止新增 `text-[Npx]` 任意字号，也不要直接使用 `text-xs` / `text-sm` / `text-base` 表达产品语义。
+- `text-ui-micro` 不得用于正文、表单标签或主要操作；可阅读、可操作信息至少使用 `text-ui-caption`。
+- Chat 连续正文使用 `text-ui-reading leading-7`；管理后台默认使用 `text-ui-body`，不要为了“统一”牺牲数据密度。
+- Recharts、语法高亮器等只接受 `fontSize` 属性的第三方边界，使用组件内具名常量，并与语义档位数值对齐；不要散落 `9/10/11px` 字面量。
+
 ### 设计 Token(品牌色)
 
 颜色一律用 `src/app/globals.css` `@theme` 注册的语义名,严禁裸 hex / `gray-500` 这类非品牌色:

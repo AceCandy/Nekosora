@@ -50,7 +50,7 @@ export default function CardsManager({ initialCards }: { initialCards: Instructi
       {cards.length === 0 ? (
         <div className="text-center py-16 text-neutral-400">
           <Sparkles className="w-8 h-8 mx-auto mb-2 opacity-50" />
-          <p className="text-sm">{t("empty")}</p>
+          <p className="text-ui-body">{t("empty")}</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -126,14 +126,14 @@ function CardItem({
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <h3 className="text-sm font-semibold text-neutral-800 dark:text-neutral-200 truncate">
+            <h3 className="text-ui-body font-semibold text-neutral-800 dark:text-neutral-200 truncate">
               {card.title}
             </h3>
-            <span className={clsx("text-[10px] px-1.5 py-0.5 rounded font-medium", scopeStyle[card.scope])}>
+            <span className={clsx("text-ui-caption px-1.5 py-0.5 rounded font-medium", scopeStyle[card.scope])}>
               {t(scopeLabelKey[card.scope])}
             </span>
           </div>
-          <code className="text-[11px] text-neutral-400 font-mono">/{card.trigger}</code>
+          <code className="text-ui-caption text-neutral-400 font-mono">/{card.trigger}</code>
         </div>
         {isMine && (
           <div className="flex items-center gap-1 shrink-0">
@@ -147,13 +147,13 @@ function CardItem({
         )}
       </div>
       {card.description && (
-        <p className="text-xs text-neutral-500 mb-2 line-clamp-2">{card.description}</p>
+        <p className="text-ui-caption text-neutral-500 mb-2 line-clamp-2">{card.description}</p>
       )}
-      <pre className="text-[11px] text-neutral-600 dark:text-neutral-400 bg-neutral-50 dark:bg-neutral-900/50 rounded p-2 max-h-24 overflow-auto whitespace-pre-wrap break-words font-mono">
+      <pre className="text-ui-caption text-neutral-600 dark:text-neutral-400 bg-neutral-50 dark:bg-neutral-900/50 rounded p-2 max-h-24 overflow-auto whitespace-pre-wrap break-words font-mono">
         {card.markdown.slice(0, 200)}
         {card.markdown.length > 200 && "\n…"}
       </pre>
-      <div className="mt-2 text-[10px] text-neutral-400">
+      <div className="mt-2 text-ui-caption text-neutral-400">
         {t("useCount", { count: card.useCount })}
       </div>
     </div>
@@ -214,26 +214,26 @@ function CardEditor({
     <Modal open onClose={onClose} title={title} dialogClassName="m-auto w-[min(640px,92vw)] rounded-lg border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/40 dark:border-deep-space dark:bg-twilight-obsidian dark:text-nebula-silver" bodyClassName="p-0">
       <div className="p-5 space-y-3 max-h-[80vh] overflow-y-auto">
         {readOnly && (
-          <p className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 rounded p-2">
+          <p className="text-ui-caption text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 rounded p-2">
             {t("builtinReadonly")}
           </p>
         )}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-xs font-semibold text-neutral-600 dark:text-neutral-400 mb-1 block">
+            <label className="text-ui-caption font-semibold text-neutral-600 dark:text-neutral-400 mb-1 block">
               {t("trigger")}
             </label>
             <Input value={trigger} onChange={(e) => setTrigger(e.target.value)} disabled={readOnly} placeholder={t("triggerPlaceholder")} />
           </div>
           <div>
-            <label className="text-xs font-semibold text-neutral-600 dark:text-neutral-400 mb-1 block">
+            <label className="text-ui-caption font-semibold text-neutral-600 dark:text-neutral-400 mb-1 block">
               {t("scope")}
             </label>
             <select
               value={scope}
               onChange={(e) => setScope(e.target.value as Exclude<CardScope, "builtin">)}
               disabled={readOnly}
-              className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 px-3 py-2 text-sm disabled:opacity-50"
+              className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 px-3 py-2 text-ui-body disabled:opacity-50"
             >
               <option value="private">{t("scopePrivate")}</option>
               <option value="shared">{t("scopeShared")}</option>
@@ -241,19 +241,19 @@ function CardEditor({
           </div>
         </div>
         <div>
-          <label className="text-xs font-semibold text-neutral-600 dark:text-neutral-400 mb-1 block">
+          <label className="text-ui-caption font-semibold text-neutral-600 dark:text-neutral-400 mb-1 block">
             {t("cardTitle")}
           </label>
           <Input value={cardTitle} onChange={(e) => setCardTitle(e.target.value)} disabled={readOnly} placeholder={t("titlePlaceholder")} />
         </div>
         <div>
-          <label className="text-xs font-semibold text-neutral-600 dark:text-neutral-400 mb-1 block">
+          <label className="text-ui-caption font-semibold text-neutral-600 dark:text-neutral-400 mb-1 block">
             {t("description")}
           </label>
           <Input value={description} onChange={(e) => setDescription(e.target.value)} disabled={readOnly} placeholder={t("descPlaceholder")} />
         </div>
         <div>
-          <label className="text-xs font-semibold text-neutral-600 dark:text-neutral-400 mb-1 block">
+          <label className="text-ui-caption font-semibold text-neutral-600 dark:text-neutral-400 mb-1 block">
             {t("content")}
           </label>
           <textarea
@@ -261,12 +261,12 @@ function CardEditor({
             onChange={(e) => setMarkdown(e.target.value)}
             disabled={readOnly}
             rows={10}
-            className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 px-3 py-2 text-xs font-mono resize-y disabled:opacity-50"
+            className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 px-3 py-2 text-ui-caption font-mono resize-y disabled:opacity-50"
             placeholder={t("contentPlaceholder")}
           />
-          <div className="text-[10px] text-neutral-400 mt-0.5 text-right">{markdown.length} / 10000</div>
+          <div className="text-ui-caption text-neutral-400 mt-0.5 text-right">{markdown.length} / 10000</div>
         </div>
-        {error && <p className="text-xs text-red-500">{error}</p>}
+        {error && <p className="text-ui-caption text-red-500">{error}</p>}
       </div>
       <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-neutral-200 dark:border-neutral-800">
         <Button variant="ghost" onClick={onClose}>{tc("cancel")}</Button>

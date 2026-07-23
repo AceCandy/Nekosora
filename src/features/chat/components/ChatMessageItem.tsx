@@ -15,8 +15,8 @@ import { useClickOutside } from "@/shared/lib/useClickOutside";
 
 /** 用户消息超过此行数才折叠(长消息默认收起,避免撑高会话)。 */
 const USER_MESSAGE_COLLAPSE_LINES = 6;
-/** lineHeight 取不到时的兜底折叠高度(6 行 × 2rem × 16px)。 */
-const USER_MESSAGE_COLLAPSE_FALLBACK_HEIGHT = USER_MESSAGE_COLLAPSE_LINES * 2 * 16;
+/** lineHeight 取不到时的兜底折叠高度(6 行 × 1.75rem × 16px)。 */
+const USER_MESSAGE_COLLAPSE_FALLBACK_HEIGHT = USER_MESSAGE_COLLAPSE_LINES * 1.75 * 16;
 
 interface ChatMessageItemProps {
   message: ChatMessage;
@@ -229,7 +229,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
                 if (e.key === "Escape") setEditing(false);
               }}
               rows={Math.min(8, Math.max(2, draft.split("\n").length))}
-              className="w-full rounded-2xl bg-neutral-900 text-white dark:bg-white dark:text-black px-4 py-2.5 text-sm leading-relaxed resize-none border border-sora-blue/40 focus:outline-none focus:border-sora-blue"
+              className="w-full rounded-2xl bg-neutral-900 text-white dark:bg-white dark:text-black px-4 py-2.5 text-ui-reading leading-7 resize-none border border-sora-blue/40 focus:outline-none focus:border-sora-blue"
               autoFocus
             />
             <div className="flex items-center justify-end gap-2">
@@ -239,7 +239,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
                   setDraft(content);
                   setEditing(false);
                 }}
-                className="inline-flex items-center gap-1 text-[11px] font-semibold text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1 text-ui-caption font-semibold text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors cursor-pointer"
               >
                 <X className="w-3 h-3" aria-hidden="true" />
                 <span>{t("editCancel")}</span>
@@ -253,7 +253,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
                     setEditing(false);
                   }
                 }}
-                className="inline-flex items-center gap-1 text-[11px] font-semibold text-sora-blue hover:opacity-80 disabled:opacity-40 transition-opacity cursor-pointer"
+                className="inline-flex items-center gap-1 text-ui-caption font-semibold text-sora-blue hover:opacity-80 disabled:opacity-40 transition-opacity cursor-pointer"
               >
                 <Check className="w-3 h-3" aria-hidden="true" />
                 <span>{t("editSaveAndResend")}</span>
@@ -277,7 +277,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
                 setUserMsgExpanded((v) => !v);
               }}
               className={clsx(
-                "relative rounded-2xl bg-neutral-900 text-white px-4 py-2.5 dark:bg-white dark:text-black shadow-none border border-transparent text-sm leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere] overflow-hidden transition-[max-height] duration-300 ease-out",
+                "relative rounded-2xl bg-neutral-900 text-white px-4 py-2.5 dark:bg-white dark:text-black shadow-none border border-transparent text-ui-reading leading-7 whitespace-pre-wrap [overflow-wrap:anywhere] overflow-hidden transition-[max-height] duration-300 ease-out",
                 userMsgCanCollapse && "cursor-pointer",
               )}
               style={
@@ -295,7 +295,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
               <button
                 type="button"
                 onClick={() => setUserMsgExpanded((v) => !v)}
-                className="mt-1 flex w-fit ml-auto items-center gap-1 text-[11px] font-semibold text-white/70 dark:text-black/60 hover:text-white dark:hover:text-black transition-colors cursor-pointer"
+                className="mt-1 flex w-fit ml-auto items-center gap-1 text-ui-caption font-semibold text-white/70 dark:text-black/60 hover:text-white dark:hover:text-black transition-colors cursor-pointer"
                 aria-expanded={userMsgExpanded}
               >
                 {userMsgExpanded ? (
@@ -337,7 +337,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
         ) : (
           /* Assistant 消息: 流式 markdown 渲染 */
           (<div className={clsx(
-            "text-neutral-800 dark:text-neutral-200 text-sm leading-relaxed",
+            "text-neutral-800 dark:text-neutral-200 text-ui-reading leading-7",
             renderStyleClass && `rs-${renderStyleClass}`,
           )}>
             {hasReasoning && (
@@ -359,7 +359,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
                     }
                   }}
                   className={clsx(
-                    "relative inline-flex items-center gap-1.5 max-w-full rounded-md px-2.5 py-1 text-[11px] font-mono select-none text-neutral-400 dark:text-neutral-500 transition-colors hover:bg-neutral-50/70 dark:hover:bg-[#0d0f14]/20 cursor-pointer",
+                    "relative inline-flex items-center gap-1.5 max-w-full rounded-md px-2.5 py-1 text-ui-caption font-mono select-none text-neutral-400 dark:text-neutral-500 transition-colors hover:bg-neutral-50/70 dark:hover:bg-[#0d0f14]/20 cursor-pointer",
                     reasoningPanelOpen && "bg-neutral-50/70 dark:bg-[#0d0f14]/20",
                   )}
                 >
@@ -390,7 +390,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
                   {reasoningPanelOpen && (
                     <div className="absolute z-40 left-0 top-full mt-1 w-max max-w-[min(75ch,90vw)] max-h-[50vh] overflow-y-auto rounded-lg border border-morning-mist dark:border-deep-space/60 bg-white dark:bg-space-ink p-3 shadow-sm animate-in fade-in slide-in-from-top-1 zoom-in-95 duration-150">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-[11px] font-mono text-neutral-400 dark:text-neutral-500">
+                        <span className="text-ui-caption font-mono text-neutral-400 dark:text-neutral-500">
                           {reasoningDone ? t("thoughtFor", { seconds: elapsed }) : t("thinking")}
                         </span>
                         <button
@@ -402,7 +402,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
                           <X className="w-3.5 h-3.5" />
                         </button>
                       </div>
-                      <div className="text-[12px] text-neutral-500 dark:text-neutral-400 whitespace-pre-wrap break-words leading-relaxed">
+                      <div className="text-ui-caption text-neutral-500 dark:text-neutral-400 whitespace-pre-wrap break-words leading-relaxed">
                         {reasoning}
                       </div>
                     </div>
@@ -427,7 +427,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
                     <details
                       open={tc.status === "calling"}
                       className="rounded-md border border-morning-mist dark:border-deep-space/80 bg-neutral-50/40 dark:bg-[#0d0f14]/15 overflow-hidden">
-                      <summary className="cursor-pointer hover:text-neutral-600 dark:hover:text-neutral-300 px-3 py-1.5 text-[11px] font-mono select-none flex items-center gap-1.5 text-neutral-500 dark:text-neutral-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue">
+                      <summary className="cursor-pointer hover:text-neutral-600 dark:hover:text-neutral-300 px-3 py-1.5 text-ui-caption font-mono select-none flex items-center gap-1.5 text-neutral-500 dark:text-neutral-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue">
                         {tc.status === "calling" ? (
                           <Loader2 className="w-3 h-3 animate-spin text-sora-blue" aria-hidden="true" />
                         ) : tc.status === "error" ? (
@@ -439,7 +439,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
                         <span>{tc.toolName}</span>
                       </summary>
                       {tc.args !== undefined && (
-                        <div className="px-3 pb-1.5 pt-1 text-[11px] text-neutral-500 dark:text-neutral-400 border-t border-morning-mist dark:border-deep-space/60 font-mono break-all">
+                        <div className="px-3 pb-1.5 pt-1 text-ui-caption text-neutral-500 dark:text-neutral-400 border-t border-morning-mist dark:border-deep-space/60 font-mono break-all">
                           {typeof tc.args === "string" ? tc.args : JSON.stringify(tc.args)}
                         </div>
                       )}
@@ -470,7 +470,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
         {role === "assistant" && publicId && !(isStreaming && isLast) && (
           <div className="flex items-center gap-3 flex-wrap">
             {versionInfo && versionInfo.total > 1 && onSwitchVersion && (
-              <div className="inline-flex items-center gap-1 text-[11px] font-semibold text-neutral-400">
+              <div className="inline-flex items-center gap-1 text-ui-caption font-semibold text-neutral-400">
                 <button
                   onClick={() => onSwitchVersion(publicId, "prev")}
                   className="p-0.5 rounded hover:text-neutral-600 dark:hover:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-900 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer disabled:opacity-30"
@@ -495,7 +495,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
             <button
               onClick={handleCopy}
               disabled={!content}
-              className="inline-flex items-center gap-1 text-[11px] font-semibold text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue rounded cursor-pointer disabled:opacity-40"
+              className="inline-flex items-center gap-1 text-ui-caption font-semibold text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue rounded cursor-pointer disabled:opacity-40"
               aria-label={t("copy")}
             >
               {copied ? (
@@ -512,7 +512,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
                   if (models.length > 1) setRegenOpen((v) => !v);
                   else onRegenerate(publicId, model);
                 }}
-                className="inline-flex items-center gap-1 text-[11px] font-semibold text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue rounded cursor-pointer"
+                className="inline-flex items-center gap-1 text-ui-caption font-semibold text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue rounded cursor-pointer"
                 aria-label={t("regenerate")}
                 aria-haspopup={models.length > 1 ? "listbox" : undefined}
                 aria-expanded={models.length > 1 ? regenOpen : undefined}
@@ -531,7 +531,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
                         setRegenOpen(false);
                       }}
                       className={clsx(
-                        "flex items-center gap-1.5 w-full text-left px-3 py-1.5 text-xs cursor-pointer transition-colors",
+                        "flex items-center gap-1.5 w-full text-left px-3 py-1.5 text-ui-caption cursor-pointer transition-colors",
                         m.modelId === model
                           ? "text-sora-blue font-semibold"
                           : "text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900",
@@ -551,7 +551,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
               <button
                 type="button"
                 onClick={() => onContinue?.(publicId)}
-                className="inline-flex items-center gap-1 text-[11px] font-semibold text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue rounded cursor-pointer"
+                className="inline-flex items-center gap-1 text-ui-caption font-semibold text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue rounded cursor-pointer"
                 aria-label={t("continueGenerating")}
                 title={t("continueGenerating")}
               >
@@ -564,7 +564,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
 
 
         {role === "assistant" && searchResults && searchResults.length > 0 && (
-          <details className="text-[11px] border border-morning-mist dark:border-deep-space/80 rounded-md bg-neutral-50/30 dark:bg-[#0d0f14]/10 overflow-hidden">
+          <details className="text-ui-caption border border-morning-mist dark:border-deep-space/80 rounded-md bg-neutral-50/30 dark:bg-[#0d0f14]/10 overflow-hidden">
             <summary className="cursor-pointer hover:text-neutral-600 dark:hover:text-neutral-300 px-3 py-1.5 select-none flex items-center gap-1.5 text-neutral-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue">
               <ExternalLink className="w-3 h-3" aria-hidden="true" />
               <span>{t("webSources")} ({searchResults.length})</span>
@@ -583,7 +583,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
                     <span className="text-neutral-700 dark:text-neutral-300 font-medium truncate">{r.title}</span>
                     <ExternalLink className="w-2.5 h-2.5 text-neutral-400 opacity-0 group-hover/source:opacity-100 shrink-0" aria-hidden="true" />
                   </span>
-                  <span className="text-[10px] text-neutral-400 dark:text-neutral-500 block truncate ml-5">{r.url}</span>
+                  <span className="text-ui-caption text-neutral-400 dark:text-neutral-500 block truncate ml-5">{r.url}</span>
                 </a>
               ))}
             </div>
@@ -591,7 +591,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
         )}
 
         {role === "assistant" && trace && (
-          <details className="text-[11px] text-neutral-400 border border-morning-mist dark:border-deep-space/80 rounded-md bg-neutral-50/30 dark:bg-[#0d0f14]/10 overflow-hidden">
+          <details className="text-ui-caption text-neutral-400 border border-morning-mist dark:border-deep-space/80 rounded-md bg-neutral-50/30 dark:bg-[#0d0f14]/10 overflow-hidden">
             <summary className="cursor-pointer hover:text-neutral-600 dark:hover:text-neutral-300 px-3 py-1.5 font-mono select-none flex items-center gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue">
               <span>
                 🔍 {t("routeTrace")} (
@@ -601,7 +601,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
                 {t("contextCount")} · {trace.sentTokenEstimate ?? trace.totalTokenEstimate ?? 0} {t("tokensUsed")})
               </span>
             </summary>
-            <div className="px-3 pb-2 pt-0.5 space-y-1 font-mono text-[10px] text-neutral-450 dark:text-neutral-500 border-t border-morning-mist dark:border-deep-space/60 mt-1">
+            <div className="px-3 pb-2 pt-0.5 space-y-1 font-mono text-ui-caption text-neutral-450 dark:text-neutral-500 border-t border-morning-mist dark:border-deep-space/60 mt-1">
               {trace.blocks?.map((b, bi) => (
                 <div key={bi} className="flex justify-between gap-4">
                   <span>
@@ -627,7 +627,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
               <button
                 type="button"
                 onClick={() => { setMenuOpen(false); setDraft(content); setEditing(true); }}
-                className="flex items-center gap-2 w-full px-3 py-2 text-sm text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-900 rounded-lg transition-colors cursor-pointer"
+                className="flex items-center gap-2 w-full px-3 py-2 text-ui-body text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-900 rounded-lg transition-colors cursor-pointer"
               >
                 <Pencil className="w-4 h-4" aria-hidden="true" />
                 <span>{t("edit")}</span>
@@ -637,7 +637,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
               <button
                 type="button"
                 onClick={() => { setMenuOpen(false); if (publicId) onRequestDelete?.(publicId); }}
-                className="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
+                className="flex items-center gap-2 w-full px-3 py-2 text-ui-body text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
               >
                 <Trash2 className="w-4 h-4" aria-hidden="true" />
                 <span>{t("delete")}</span>

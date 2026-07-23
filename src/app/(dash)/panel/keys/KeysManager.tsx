@@ -152,15 +152,15 @@ export default function KeysManager({
             <div className="flex items-start gap-2.5 text-amber-600 dark:text-amber-400">
               <ShieldAlert className="w-5 h-5 mt-0.5 shrink-0" />
               <div>
-                <h3 className="text-sm font-semibold">{t("saveSubkeyPrompt")}</h3>
-                <p className="text-xs text-amber-600/85 dark:text-amber-400/80 mt-0.5">
+                <h3 className="text-ui-body font-semibold">{t("saveSubkeyPrompt")}</h3>
+                <p className="text-ui-caption text-amber-600/85 dark:text-amber-400/80 mt-0.5">
                   {t("subkeyWarning", { name: newRawKey.name })}
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-2 bg-white dark:bg-[#0f121a] border border-amber-500/20 rounded px-3 py-2">
-              <code className="text-xs font-mono select-all break-all flex-1 text-neutral-800 dark:text-neutral-200">
+              <code className="text-ui-caption font-mono select-all break-all flex-1 text-neutral-800 dark:text-neutral-200">
                 {newRawKey.key}
               </code>
               <button
@@ -185,11 +185,11 @@ export default function KeysManager({
 
         {/* Master Key Section */}
         <div className="space-y-3">
-          <h2 className="text-sm font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">{t("masterKey")}</h2>
+          <h2 className="text-ui-body font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">{t("masterKey")}</h2>
           {master ? (
             <div className="rounded-lg border border-morning-mist dark:border-deep-space bg-nebula-white dark:bg-twilight-obsidian p-4 flex items-center justify-between transition-colors duration-150">
               <div className="space-y-1.5 max-w-[75%]">
-                <div className="flex items-center gap-1.5 font-mono text-sm font-semibold text-neutral-800 dark:text-neutral-200">
+                <div className="flex items-center gap-1.5 font-mono text-ui-body font-semibold text-neutral-800 dark:text-neutral-200">
                   <Key className="w-4 h-4 text-sora-blue shrink-0" />
                   <span>{master.keyPrefix}</span>
                   <button
@@ -200,7 +200,7 @@ export default function KeysManager({
                     {copiedId === master.id ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
                   </button>
                 </div>
-                <div className="text-xs text-neutral-400 leading-normal">
+                <div className="text-ui-caption text-neutral-400 leading-normal">
                   {t("masterKeyDesc")}
                 </div>
               </div>
@@ -218,7 +218,7 @@ export default function KeysManager({
               variant="primary"
               loading={isPending}
               onClick={handleCreateMaster}
-              className="w-full py-2.5 text-sm"
+              className="w-full py-2.5 text-ui-body"
             >
               {t("generateMaster")}
             </Button>
@@ -227,7 +227,7 @@ export default function KeysManager({
 
         {/* Sub Keys Section */}
         <div className="space-y-3">
-          <h2 className="text-sm font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">{t("subKeys")}</h2>
+          <h2 className="text-ui-body font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">{t("subKeys")}</h2>
 
           {/* Create Subkey Inline Form */}
           <form onSubmit={handleCreateSubKey} className="flex gap-2">
@@ -252,7 +252,7 @@ export default function KeysManager({
           {/* Subkeys list */}
           <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1">
             {subKeys.length === 0 ? (
-              <p className="text-xs text-neutral-400 py-6 text-center border border-dashed border-neutral-200 dark:border-neutral-800 rounded-lg">
+              <p className="text-ui-caption text-neutral-400 py-6 text-center border border-dashed border-neutral-200 dark:border-neutral-800 rounded-lg">
                 {t("emptySubkeys")}
               </p>
             ) : (
@@ -270,8 +270,8 @@ export default function KeysManager({
                     )}
                   >
                     <div className="space-y-1">
-                      <div className="font-semibold text-sm">{sk.name}</div>
-                      <div className="flex items-center gap-1 font-mono text-[11px] text-neutral-400 dark:text-neutral-500">
+                      <div className="font-semibold text-ui-body">{sk.name}</div>
+                      <div className="flex items-center gap-1 font-mono text-ui-caption text-neutral-400 dark:text-neutral-500">
                         <span>{sk.keyPrefix}</span>
                         <button
                           onClick={(e) => {
@@ -309,8 +309,8 @@ export default function KeysManager({
         {!selectedSubKey ? (
           <div className="rounded-xl border-2 border-dashed border-neutral-200 dark:border-neutral-800 p-12 text-center flex flex-col items-center justify-center min-h-[300px]">
             <Key className="w-10 h-10 text-neutral-300 dark:text-neutral-700 mb-3" />
-            <h3 className="text-sm font-semibold text-neutral-500 dark:text-neutral-400">{t("noSubkeySelected")}</h3>
-            <p className="text-xs text-neutral-400 mt-1 max-w-[240px]">
+            <h3 className="text-ui-body font-semibold text-neutral-500 dark:text-neutral-400">{t("noSubkeySelected")}</h3>
+            <p className="text-ui-caption text-neutral-400 mt-1 max-w-[240px]">
               {t("noSubkeySelectedDesc")}
             </p>
           </div>
@@ -318,10 +318,10 @@ export default function KeysManager({
           <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#0d0f14] p-6 space-y-6 transition-colors duration-150 animate-in fade-in duration-200">
             {/* Panel Header */}
             <div className="border-b border-neutral-100 dark:border-neutral-800 pb-4">
-              <div className="text-xs font-medium text-neutral-400 uppercase tracking-wider mb-1">{t("bindingManagement")}</div>
-              <h3 className="text-base font-bold text-neutral-800 dark:text-white flex items-center gap-2">
+              <div className="text-ui-caption font-medium text-neutral-400 uppercase tracking-wider mb-1">{t("bindingManagement")}</div>
+              <h3 className="text-ui-title font-bold text-neutral-800 dark:text-white flex items-center gap-2">
                 <span>{selectedSubKey.name}</span>
-                <span className="font-mono text-xs text-neutral-400 dark:text-neutral-500 bg-neutral-50 dark:bg-[#0f121a] px-2 py-0.5 rounded border border-neutral-200/50 dark:border-neutral-800/50">
+                <span className="font-mono text-ui-caption text-neutral-400 dark:text-neutral-500 bg-neutral-50 dark:bg-[#0f121a] px-2 py-0.5 rounded border border-neutral-200/50 dark:border-neutral-800/50">
                   {selectedSubKey.keyPrefix}
                 </span>
               </h3>
@@ -329,11 +329,11 @@ export default function KeysManager({
 
             {/* Bindings List */}
             <div className="space-y-3">
-              <div className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">{t("boundModels", { count: selectedSubKey.bindings.length })}</div>
+              <div className="text-ui-caption font-semibold text-neutral-400 uppercase tracking-wider">{t("boundModels", { count: selectedSubKey.bindings.length })}</div>
 
               <div className="flex flex-wrap gap-2 min-h-[50px] p-4 rounded-lg bg-neutral-50 dark:bg-[#0f121a]/50 border border-neutral-100 dark:border-neutral-900">
                 {selectedSubKey.bindings.length === 0 ? (
-                  <span className="text-xs text-neutral-400">{t("noBindings")}</span>
+                  <span className="text-ui-caption text-neutral-400">{t("noBindings")}</span>
                 ) : (
                   selectedSubKey.bindings.map((b) => {
                     const inGlobals = bindable.globals.some((m) => m.id === b.modelId);
@@ -344,9 +344,9 @@ export default function KeysManager({
                       <Badge
                         key={b.id}
                         variant={inGlobals ? "primary" : "warning"}
-                        className="rounded-full px-2.5 py-1 text-xs hover:border-red-500/30 hover:bg-red-500/[0.04] cursor-pointer"
+                        className="rounded-full px-2.5 py-1 text-ui-caption hover:border-red-500/30 hover:bg-red-500/[0.04] cursor-pointer"
                       >
-                        <span className="opacity-70 text-[10px] font-mono tracking-wider font-semibold uppercase mr-1">{scope}</span>
+                        <span className="opacity-70 text-ui-caption font-mono tracking-wider font-semibold uppercase mr-1">{scope}</span>
                         <span className="font-medium">{modelName}</span>
                         <button
                           onClick={() => handleUnbind(b.id)}
@@ -364,7 +364,7 @@ export default function KeysManager({
 
             {/* Bind New Model Form */}
             <form onSubmit={handleBindModel} className="space-y-3 pt-2">
-              <div className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">{t("bindNewModel")}</div>
+              <div className="text-ui-caption font-semibold text-neutral-400 uppercase tracking-wider">{t("bindNewModel")}</div>
 
               <div className="flex gap-2">
                 <Select
@@ -375,7 +375,7 @@ export default function KeysManager({
                   <option value="">{t("selectModelPlaceholder")}</option>
 
                   {bindable.globals.length > 0 && (
-                    <optgroup label={t("globalModels")} className="font-semibold text-xs text-neutral-400">
+                    <optgroup label={t("globalModels")} className="font-semibold text-ui-caption text-neutral-400">
                       {bindable.globals.map((m) => (
                         <option key={m.id} value={m.id}>
                           {m.name}
@@ -385,7 +385,7 @@ export default function KeysManager({
                   )}
 
                   {bindable.byos.length > 0 && (
-                    <optgroup label={t("byoModels")} className="font-semibold text-xs text-neutral-400">
+                    <optgroup label={t("byoModels")} className="font-semibold text-ui-caption text-neutral-400">
                       {bindable.byos.map((m) => (
                         <option key={m.id} value={m.id}>
                           {m.name}
@@ -406,7 +406,7 @@ export default function KeysManager({
                   <span>{t("bind")}</span>
                 </Button>
               </div>
-              <p className="text-[11px] text-neutral-400">
+              <p className="text-ui-caption text-neutral-400">
                 {t("bindHint")}
               </p>
             </form>

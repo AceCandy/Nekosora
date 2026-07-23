@@ -34,9 +34,9 @@ interface ModelFormDialogProps {
   catalog: ModelCatalogOption[];
 }
 
-const labelCls = "block text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-1";
+const labelCls = "block text-ui-caption font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-1";
 const inputCls =
-  "mt-1 w-full rounded-md border border-morning-mist dark:border-deep-space px-3.5 py-2 text-sm bg-white dark:bg-[#0f121a] focus:outline-none focus:border-sora-blue dark:focus:border-sora-blue focus-visible:ring-2 focus-visible:ring-sora-blue/20 transition-colors duration-150 text-space-ink dark:text-nebula-silver";
+  "mt-1 w-full rounded-md border border-morning-mist dark:border-deep-space px-3.5 py-2 text-ui-body bg-white dark:bg-[#0f121a] focus:outline-none focus:border-sora-blue dark:focus:border-sora-blue focus-visible:ring-2 focus-visible:ring-sora-blue/20 transition-colors duration-150 text-space-ink dark:text-nebula-silver";
 
 export default function ModelFormDialog({
   open,
@@ -93,7 +93,7 @@ export default function ModelFormDialog({
         <div className="grid grid-cols-2 gap-4">
           <label className="block">
             <span className={labelCls}>
-              {t("externalModelNameLabel")} <span className="text-[10px] lowercase font-normal text-neutral-400">{t("externalModelNameHint")}</span>
+              {t("externalModelNameLabel")} <span className="text-ui-caption lowercase font-normal text-neutral-400">{t("externalModelNameHint")}</span>
             </span>
             <input
               name="name"
@@ -112,7 +112,7 @@ export default function ModelFormDialog({
 
           <label className="block">
             <span className={labelCls}>
-              {t("displayNameLabel")} <span className="text-[10px] font-normal text-neutral-400">{t("displayNameHint")}</span>
+              {t("displayNameLabel")} <span className="text-ui-caption font-normal text-neutral-400">{t("displayNameHint")}</span>
             </span>
             <input
               name="displayName"
@@ -148,7 +148,7 @@ export default function ModelFormDialog({
                     disabled={!previewCatalog}
                     onClick={() => setPreviewOpen(true)}
                     title={t("catalogPreview")}
-                    className="mt-1 inline-flex shrink-0 items-center gap-1 rounded-md border border-neutral-200 dark:border-neutral-800 px-2.5 py-2 text-xs font-medium text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800/50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    className="mt-1 inline-flex shrink-0 items-center gap-1 rounded-md border border-neutral-200 dark:border-neutral-800 px-2.5 py-2 text-ui-caption font-medium text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800/50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                   >
                     <Eye className="h-3.5 w-3.5" />
                     {t("catalogPreview")}
@@ -159,7 +159,7 @@ export default function ModelFormDialog({
               </Popover>
             </div>
             {formError && (
-              <p className="mt-1.5 text-xs leading-normal text-red-600 dark:text-red-400">
+              <p className="mt-1.5 text-ui-caption leading-normal text-red-600 dark:text-red-400">
                 {formError === "duplicate" ? t("modelAlreadyExists") : t("catalogMatchFailedHint")}
               </p>
             )}
@@ -182,19 +182,19 @@ export default function ModelFormDialog({
 
         <label className="block">
           <span className={labelCls}>
-            {t("systemPromptLabel")} <span className="text-[10px] font-normal text-neutral-400">{t("optionalHint")}</span>
+            {t("systemPromptLabel")} <span className="text-ui-caption font-normal text-neutral-400">{t("optionalHint")}</span>
           </span>
           <textarea
             name="systemPrompt"
             rows={3}
             defaultValue={ini?.systemPrompt ?? ""}
-            className="mt-1 w-full rounded-md border border-morning-mist dark:border-deep-space px-3.5 py-2 text-sm bg-white dark:bg-[#0f121a] focus:outline-none focus:border-sora-blue dark:focus:border-sora-blue focus-visible:ring-2 focus-visible:ring-sora-blue/20 transition-colors duration-150 resize-none text-space-ink dark:text-nebula-silver"
+            className="mt-1 w-full rounded-md border border-morning-mist dark:border-deep-space px-3.5 py-2 text-ui-body bg-white dark:bg-[#0f121a] focus:outline-none focus:border-sora-blue dark:focus:border-sora-blue focus-visible:ring-2 focus-visible:ring-sora-blue/20 transition-colors duration-150 resize-none text-space-ink dark:text-nebula-silver"
             placeholder={t("systemPromptPlaceholder")}
           />
         </label>
         <label className="block">
           <span className={labelCls}>
-            {t("descriptionLabel")} <span className="text-[10px] font-normal text-neutral-400">{t("optionalHint")}</span>
+            {t("descriptionLabel")} <span className="text-ui-caption font-normal text-neutral-400">{t("optionalHint")}</span>
           </span>
           <input
             name="description"
@@ -209,7 +209,7 @@ export default function ModelFormDialog({
             type="button"
             variant="secondary"
             onClick={handleClose}
-            className="px-4 py-2 text-xs font-semibold"
+            className="px-4 py-2 text-ui-caption font-semibold"
           >
             {t("cancel")}
           </Button>
@@ -218,7 +218,7 @@ export default function ModelFormDialog({
             variant="contrast"
             loading={pending}
             disabled={pending}
-            className="px-4 py-2 text-xs font-semibold"
+            className="px-4 py-2 text-ui-caption font-semibold"
           >
             {isEdit ? t("save") : t("create")}
           </Button>

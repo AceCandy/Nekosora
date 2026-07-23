@@ -70,7 +70,7 @@ export function ChatInputBox({
     if (!collapsedMeasure || !expandedMeasure) return;
 
     const syncLayout = () => {
-      const multiline = value.includes("\n") || collapsedMeasure.scrollHeight > 20;
+      const multiline = value.includes("\n") || collapsedMeasure.scrollHeight > 24;
       const height = multiline
         ? Math.min(expandedMeasure.scrollHeight + 60, window.innerHeight * 0.33)
         : 48;
@@ -103,14 +103,14 @@ export function ChatInputBox({
     >
       <div
         ref={collapsedMeasureRef}
-        className="pointer-events-none invisible absolute left-12 right-40 top-0 whitespace-pre-wrap break-words text-sm leading-5 sm:right-72"
+        className="pointer-events-none invisible absolute left-12 right-40 top-0 whitespace-pre-wrap break-words text-ui-reading leading-6 sm:right-72"
         aria-hidden="true"
       >
         {`${value || " "}\u200b`}
       </div>
       <div
         ref={expandedMeasureRef}
-        className="pointer-events-none invisible absolute left-3 right-3 top-0 whitespace-pre-wrap break-words text-sm leading-5"
+        className="pointer-events-none invisible absolute left-3 right-3 top-0 whitespace-pre-wrap break-words text-ui-reading leading-6"
         aria-hidden="true"
       >
         {`${value || " "}\u200b`}
@@ -126,7 +126,7 @@ export function ChatInputBox({
                 onClick={() => applySlash(c)}
                 onMouseEnter={() => setSlashIndex(i)}
                 className={clsx(
-                  "flex items-center gap-2 w-full text-left px-3 py-1.5 text-xs transition-colors cursor-pointer",
+                  "flex items-center gap-2 w-full text-left px-3 py-1.5 text-ui-caption transition-colors cursor-pointer",
                   i === slashIndex
                     ? "bg-sora-blue/[0.06] text-sora-blue"
                     : "text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900",
@@ -203,7 +203,7 @@ export function ChatInputBox({
           placeholder={t("placeholder")}
           rows={1}
           className={clsx(
-            "scrollbar-hidden block h-full w-full resize-none overflow-y-auto border-0 bg-transparent py-3 text-sm leading-5 text-neutral-800 outline-none transition-[padding] duration-200 ease-out placeholder-neutral-400 focus:ring-0 focus-visible:outline-none focus-visible:ring-0 motion-reduce:transition-none dark:text-neutral-200",
+            "scrollbar-hidden block h-full w-full resize-none overflow-y-auto border-0 bg-transparent py-3 text-ui-reading leading-6 text-neutral-800 outline-none transition-[padding] duration-200 ease-out placeholder-neutral-400 focus:ring-0 focus-visible:outline-none focus-visible:ring-0 motion-reduce:transition-none dark:text-neutral-200",
             layout.multiline ? "px-3 pb-12" : "pl-12 pr-40 sm:pr-72",
           )}
           disabled={disabled}

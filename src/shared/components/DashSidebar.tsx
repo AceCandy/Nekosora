@@ -138,7 +138,7 @@ export default function DashSidebar({
         </button>
         <Link
           href={brandHref}
-          className="min-w-0 truncate rounded text-base font-semibold text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:text-white"
+          className="min-w-0 truncate rounded text-ui-reading font-semibold text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:text-white"
         >
           Nekusora
         </Link>
@@ -177,7 +177,7 @@ export default function DashSidebar({
               <div className="min-w-0 flex-1">
                 <Link
                   href={brandHref}
-                  className="block truncate rounded text-2xl font-bold text-neutral-900 transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:text-white"
+                  className="block truncate rounded text-ui-heading font-bold text-neutral-900 transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:text-white"
                 >
                   Nekusora
                 </Link>
@@ -226,7 +226,7 @@ export default function DashSidebar({
                     setUserMenuOpen(false);
                     setMobileOpen(false);
                   }}
-                  className="touch-target flex items-center gap-2 rounded-md px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-900"
+                  className="touch-target flex items-center gap-2 rounded-md px-3 py-2 text-ui-body text-neutral-700 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-900"
                 >
                   <MessageSquare className="h-4 w-4" aria-hidden="true" />
                   {link.label}
@@ -236,7 +236,7 @@ export default function DashSidebar({
               <form action={logoutAction}>
                 <button
                   type="submit"
-                  className="touch-target flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20"
+                  className="touch-target flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-ui-body text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20"
                 >
                   <LogOut className="h-4 w-4" aria-hidden="true" />
                   {t("logout")}
@@ -253,12 +253,12 @@ export default function DashSidebar({
             )}
             aria-expanded={userMenuOpen}
           >
-            <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sora-blue/10 text-xs font-semibold text-sora-blue">
+            <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sora-blue/10 text-ui-caption font-semibold text-sora-blue">
               {displayName.slice(0, 1).toUpperCase()}
             </span>
             <span className={clsx("min-w-0 flex-1", collapsed && "md:hidden")}>
-              <span className="block truncate text-sm font-semibold text-neutral-800 dark:text-neutral-100">{displayName}</span>
-              <span className="mt-0.5 block truncate font-mono text-[10px] text-neutral-450 dark:text-neutral-500">
+              <span className="block truncate text-ui-body font-semibold text-neutral-800 dark:text-neutral-100">{displayName}</span>
+              <span className="mt-0.5 block truncate font-mono text-ui-caption text-neutral-450 dark:text-neutral-500">
                 {user.email}{brandBadge ? ` (${brandBadge})` : ""}
               </span>
             </span>

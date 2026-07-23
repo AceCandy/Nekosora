@@ -374,7 +374,7 @@ export default function Sidebar({
         onClick={handleClick}
         aria-current={isActive ? "page" : undefined}
         className={clsx(
-          "inline-flex min-w-0 max-w-full w-full items-center gap-2 overflow-hidden rounded-md px-3 py-2 pr-8 text-xs font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue",
+          "inline-flex min-w-0 max-w-full w-full items-center gap-2 overflow-hidden rounded-md px-3 py-2 pr-8 text-ui-body font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue",
           isActive
             ? "bg-sora-blue/[0.08] text-neutral-900 dark:text-white font-semibold"
             : "text-neutral-600 dark:text-neutral-450 hover:text-neutral-900 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-900",
@@ -405,7 +405,7 @@ export default function Sidebar({
             <button
               type="button"
               onClick={() => runAction(togglePinnedAction, c.id)}
-              className="touch-target w-full text-left rounded px-2 py-1.5 text-xs text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900 flex items-center gap-1.5 cursor-pointer"
+              className="touch-target w-full text-left rounded px-2 py-1.5 text-ui-caption text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900 flex items-center gap-1.5 cursor-pointer"
             >
               <Pin className="w-3 h-3" aria-hidden="true" />
               <span>{c.pinned ? actionUnpinText : actionPinText}</span>
@@ -413,7 +413,7 @@ export default function Sidebar({
             <button
               type="button"
               onClick={() => runAction(toggleArchivedAction, c.id)}
-              className="touch-target w-full text-left rounded px-2 py-1.5 text-xs text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900 flex items-center gap-1.5 cursor-pointer"
+              className="touch-target w-full text-left rounded px-2 py-1.5 text-ui-caption text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900 flex items-center gap-1.5 cursor-pointer"
             >
               <Archive className="w-3 h-3" aria-hidden="true" />
               <span>{c.archived ? actionUnarchiveText : actionArchiveText}</span>
@@ -421,7 +421,7 @@ export default function Sidebar({
             <button
               type="button"
               onClick={() => runAction(deleteAction, c.id, true)}
-              className="touch-target w-full text-left rounded px-2 py-1.5 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 flex items-center gap-1.5 cursor-pointer"
+              className="touch-target w-full text-left rounded px-2 py-1.5 text-ui-caption text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 flex items-center gap-1.5 cursor-pointer"
             >
               <Trash2 className="w-3 h-3" aria-hidden="true" />
               <span>{actionDeleteText}</span>
@@ -454,7 +454,7 @@ export default function Sidebar({
         </button>
         <Link
           href="/chat"
-          className="min-w-0 truncate rounded text-base font-semibold text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:text-white"
+          className="min-w-0 truncate rounded text-ui-reading font-semibold text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:text-white"
         >
           Nekusora
         </Link>
@@ -484,7 +484,7 @@ export default function Sidebar({
             <Link
               href="/"
               onClick={() => setIsOpen(false)}
-              className="block rounded text-2xl font-bold text-neutral-900 hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:text-white"
+              className="block rounded text-ui-heading font-bold text-neutral-900 hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:text-white"
             >
               Nekusora
             </Link>
@@ -533,7 +533,7 @@ export default function Sidebar({
           <Link
             href="/chat"
             onClick={() => setIsOpen(false)}
-            className="touch-target mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-morning-mist dark:border-deep-space hover:bg-neutral-50 dark:hover:bg-neutral-900 px-3 py-2 text-sm font-semibold text-neutral-700 dark:text-neutral-200 transition-[background-color,color,border-color,box-shadow] duration-150 ease-out shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
+            className="touch-target mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-morning-mist dark:border-deep-space hover:bg-neutral-50 dark:hover:bg-neutral-900 px-3 py-2 text-ui-body font-semibold text-neutral-700 dark:text-neutral-200 transition-[background-color,color,border-color,box-shadow] duration-150 ease-out shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
           >
             <Plus className="w-4 h-4 text-sora-blue" aria-hidden="true" />
             <span>{newConversationText}</span>
@@ -543,25 +543,25 @@ export default function Sidebar({
         <Link
           href="/image"
           onClick={() => setIsOpen(false)}
-          className="touch-target inline-flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs font-medium text-neutral-500 dark:text-neutral-450 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
+          className="touch-target inline-flex w-full items-center gap-2 rounded-md px-3 py-2 text-ui-body font-medium text-neutral-500 dark:text-neutral-450 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
         >
           <ImageIcon className="w-3.5 h-3.5 text-neutral-400 dark:text-neutral-500" aria-hidden="true" />
           <span>{imageText}</span>
         </Link>
 
         {/* Conversations List Label */}
-        <div className="mt-3 px-3 py-1.5 text-[10px] font-semibold text-neutral-400 dark:text-neutral-500 uppercase tracking-wider shrink-0 select-none">
+        <div className="mt-3 px-3 py-1.5 text-ui-caption font-semibold text-neutral-400 dark:text-neutral-500 uppercase tracking-wider shrink-0 select-none">
           {conversationsText}
         </div>
 
         {/* Scrollable Conversation List */}
         <div className="scroll-fade-y flex-1 overflow-y-auto -mx-1 px-1 space-y-3">
           {sections.length === 0 ? (
-            <p className="text-xs text-neutral-400 px-3 py-2">{noConversationsText}</p>
+            <p className="text-ui-body text-neutral-400 px-3 py-2">{noConversationsText}</p>
           ) : (
             sections.map((section) => (
               <div key={section.key}>
-                <button type="button" onClick={() => toggleGroup(section.key)} className="touch-target flex w-full items-center gap-2 px-3 py-2 text-[11px] font-medium text-neutral-450 hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sora-blue dark:text-neutral-500 dark:hover:text-neutral-300" aria-expanded={!collapsedGroups.has(section.key)}>
+                <button type="button" onClick={() => toggleGroup(section.key)} className="touch-target flex w-full items-center gap-2 px-3 py-2 text-ui-caption font-medium text-neutral-450 hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sora-blue dark:text-neutral-500 dark:hover:text-neutral-300" aria-expanded={!collapsedGroups.has(section.key)}>
                   <span>{section.label}</span>
                   <span className="h-px min-w-4 flex-1 bg-morning-mist/80 dark:bg-deep-space/70" aria-hidden="true" />
                   <span className="text-neutral-300 dark:text-neutral-700">{section.items.length}</span>
@@ -579,12 +579,12 @@ export default function Sidebar({
         <div ref={userMenuRef} className="relative pt-3 mt-2 border-t border-morning-mist dark:border-deep-space shrink-0">
           {userMenuOpen && (
             <div className={clsx("absolute bottom-full left-0 right-0 z-30 mb-2 rounded-lg border border-morning-mist bg-white p-1 shadow-lg dark:border-deep-space dark:bg-space-ink", collapsed && "md:bottom-0 md:left-full md:right-auto md:mb-0 md:ml-2 md:w-48")}>
-              <Link href="/panel" onClick={() => { setUserMenuOpen(false); setIsOpen(false); }} className="touch-target flex items-center gap-2 rounded-md px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-900">
+              <Link href="/panel" onClick={() => { setUserMenuOpen(false); setIsOpen(false); }} className="touch-target flex items-center gap-2 rounded-md px-3 py-2 text-ui-body text-neutral-700 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-900">
                 <Settings2 className="h-4 w-4" aria-hidden="true" />
                 {settingsText}
               </Link>
               <form onSubmit={handleSignOut}>
-                <button type="submit" disabled={isPending} className="touch-target flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-red-500 hover:bg-red-50 disabled:opacity-50 dark:hover:bg-red-950/20">
+                <button type="submit" disabled={isPending} className="touch-target flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-ui-body text-red-500 hover:bg-red-50 disabled:opacity-50 dark:hover:bg-red-950/20">
                   <LogOut className="h-4 w-4" aria-hidden="true" />
                   {logoutText}
                 </button>
@@ -592,8 +592,8 @@ export default function Sidebar({
             </div>
           )}
           <button type="button" onClick={() => setUserMenuOpen((value) => !value)} className={clsx("touch-target flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left hover:bg-neutral-100 dark:hover:bg-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue", collapsed && "md:justify-center")} aria-expanded={userMenuOpen}>
-            <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sora-blue/10 text-xs font-semibold text-sora-blue">{displayName.slice(0, 1).toUpperCase()}</span>
-            <span className={clsx("min-w-0 flex-1", collapsed && "md:hidden")}><span className="block truncate text-sm font-semibold text-neutral-800 dark:text-neutral-100">{displayName}</span><span className="mt-0.5 block truncate text-[10px] font-mono text-neutral-450 dark:text-neutral-500">{userEmail}</span></span>
+            <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sora-blue/10 text-ui-caption font-semibold text-sora-blue">{displayName.slice(0, 1).toUpperCase()}</span>
+            <span className={clsx("min-w-0 flex-1", collapsed && "md:hidden")}><span className="block truncate text-ui-body font-semibold text-neutral-800 dark:text-neutral-100">{displayName}</span><span className="mt-0.5 block truncate text-ui-caption font-mono text-neutral-450 dark:text-neutral-500">{userEmail}</span></span>
             <ChevronDown className={clsx("h-4 w-4 shrink-0 text-neutral-400 transition-transform", userMenuOpen && "rotate-180", collapsed && "md:hidden")} aria-hidden="true" />
           </button>
         </div>
@@ -603,10 +603,10 @@ export default function Sidebar({
         <div className="space-y-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" aria-hidden="true" />
-            <input autoFocus type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={searchText} aria-label={searchText} className="w-full rounded-lg border border-morning-mist bg-white py-3 pl-10 pr-3 text-sm text-space-ink outline-none focus:border-sora-blue dark:border-deep-space dark:bg-space-ink dark:text-nebula-silver" />
+            <input autoFocus type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={searchText} aria-label={searchText} className="w-full rounded-lg border border-morning-mist bg-white py-3 pl-10 pr-3 text-ui-body text-space-ink outline-none focus:border-sora-blue dark:border-deep-space dark:bg-space-ink dark:text-nebula-silver" />
           </div>
           <div className="scroll-fade-y max-h-[min(55vh,460px)] overflow-y-auto">
-            {!query.trim() ? <p className="py-8 text-center text-sm text-neutral-400">{searchText}</p> : searching ? <p className="flex items-center justify-center gap-2 py-8 text-sm text-neutral-400"><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />{tSidebar("searching")}</p> : searchResults.length === 0 ? <p className="py-8 text-center text-sm text-neutral-400">{tSidebar("noSearchResults")}</p> : <div className="space-y-1">{searchResults.map((r) => <Link key={`${r.conversationId}-${r.messagePublicId}-${r.createdAt}`} href={`/chat/${r.conversationId}`} onClick={() => setSearchOpen(false)} className="block rounded-lg px-3 py-3 hover:bg-neutral-100 dark:hover:bg-neutral-900"><div className="truncate text-sm font-medium">{r.conversationTitle}</div><div className="mt-1 line-clamp-2 text-xs text-neutral-500 dark:text-neutral-400">{highlightSnippet(r.snippet, query.trim())}</div></Link>)}</div>}
+            {!query.trim() ? <p className="py-8 text-center text-ui-body text-neutral-400">{searchText}</p> : searching ? <p className="flex items-center justify-center gap-2 py-8 text-ui-body text-neutral-400"><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />{tSidebar("searching")}</p> : searchResults.length === 0 ? <p className="py-8 text-center text-ui-body text-neutral-400">{tSidebar("noSearchResults")}</p> : <div className="space-y-1">{searchResults.map((r) => <Link key={`${r.conversationId}-${r.messagePublicId}-${r.createdAt}`} href={`/chat/${r.conversationId}`} onClick={() => setSearchOpen(false)} className="block rounded-lg px-3 py-3 hover:bg-neutral-100 dark:hover:bg-neutral-900"><div className="truncate text-ui-body font-medium">{r.conversationTitle}</div><div className="mt-1 line-clamp-2 text-ui-caption text-neutral-500 dark:text-neutral-400">{highlightSnippet(r.snippet, query.trim())}</div></Link>)}</div>}
           </div>
         </div>
       </Modal>

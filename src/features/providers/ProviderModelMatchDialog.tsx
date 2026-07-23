@@ -57,7 +57,7 @@ export default function ProviderModelMatchDialog({
       dialogClassName="m-auto w-[min(560px,92vw)] rounded-lg border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/40 dark:border-deep-space dark:bg-twilight-obsidian dark:text-nebula-silver"
     >
       <div className="space-y-4">
-        <p className="text-sm leading-6 text-neutral-600 dark:text-neutral-300">
+        <p className="text-ui-body leading-6 text-neutral-600 dark:text-neutral-300">
           {t("modelMatchDescription", { name: upstreamModelName })}
         </p>
 
@@ -75,10 +75,10 @@ export default function ProviderModelMatchDialog({
                 >
                   <GitBranchPlus className="h-4 w-4 shrink-0 text-neutral-400" aria-hidden="true" />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate font-mono text-xs font-semibold text-neutral-800 dark:text-neutral-200">
+                    <span className="block truncate font-mono text-ui-caption font-semibold text-neutral-800 dark:text-neutral-200">
                       {candidate.name}
                     </span>
-                    <span className="block truncate text-xs text-neutral-500 dark:text-neutral-400">
+                    <span className="block truncate text-ui-caption text-neutral-500 dark:text-neutral-400">
                       {candidate.displayName && candidate.displayName !== candidate.name
                         ? `${candidate.displayName} · ${candidate.catalogName}`
                         : candidate.catalogName}
@@ -87,11 +87,11 @@ export default function ProviderModelMatchDialog({
                   {pending ? (
                     <Loader2 className="h-4 w-4 shrink-0 animate-spin text-sora-blue" aria-hidden="true" />
                   ) : candidate.routeExists ? (
-                    <span className="shrink-0 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                    <span className="shrink-0 text-ui-caption font-medium text-emerald-700 dark:text-emerald-300">
                       {t("modelRouteExists")}
                     </span>
                   ) : (
-                    <span className="shrink-0 text-xs text-neutral-500 dark:text-neutral-400">
+                    <span className="shrink-0 text-ui-caption text-neutral-500 dark:text-neutral-400">
                       {t("modelRouteCanAdd")}
                     </span>
                   )}
@@ -100,7 +100,7 @@ export default function ProviderModelMatchDialog({
             })}
           </div>
         ) : (
-          <p className="rounded-md bg-neutral-50 px-3 py-2.5 text-sm text-neutral-600 dark:bg-neutral-900/40 dark:text-neutral-300">
+          <p className="rounded-md bg-neutral-50 px-3 py-2.5 text-ui-body text-neutral-600 dark:bg-neutral-900/40 dark:text-neutral-300">
             {t("modelMatchEmpty")}
           </p>
         )}
@@ -108,7 +108,7 @@ export default function ProviderModelMatchDialog({
         {feedbackText && (
           <div
             role="status"
-            className={`flex items-start gap-2 rounded-md px-3 py-2.5 text-sm ${
+            className={`flex items-start gap-2 rounded-md px-3 py-2.5 text-ui-body ${
               feedback?.status === "error"
                 ? "bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300"
                 : "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"

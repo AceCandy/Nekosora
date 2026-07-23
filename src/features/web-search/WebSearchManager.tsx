@@ -118,7 +118,7 @@ export default function WebSearchManager({
       {/* 左:已配置的 provider 列表 */}
       <div className="lg:col-span-2 space-y-3">
         {providers.length === 0 && (
-          <div className="rounded-lg border border-dashed border-morning-mist dark:border-deep-space p-10 text-center text-xs text-neutral-400 dark:text-neutral-500">
+          <div className="rounded-lg border border-dashed border-morning-mist dark:border-deep-space p-10 text-center text-ui-caption text-neutral-400 dark:text-neutral-500">
             {t("empty")}
           </div>
         )}
@@ -134,7 +134,7 @@ export default function WebSearchManager({
                 <div className="flex items-center gap-2 min-w-0">
                   <span
                     className={clsx(
-                      "rounded-full px-2 py-0.5 text-[10px] font-medium border shrink-0",
+                      "rounded-full px-2 py-0.5 text-ui-caption font-medium border shrink-0",
                       p.type === "searxng"
                         ? "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300"
                         : "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300",
@@ -143,11 +143,11 @@ export default function WebSearchManager({
                     {t(`type_${p.type}`)}
                   </span>
                   {isActive && (
-                    <span className="rounded-full px-2 py-0.5 text-[10px] font-medium border bg-sora-blue/[0.03] border-sora-blue/20 text-sora-blue shrink-0">
+                    <span className="rounded-full px-2 py-0.5 text-ui-caption font-medium border bg-sora-blue/[0.03] border-sora-blue/20 text-sora-blue shrink-0">
                       {t("activeBadge")}
                     </span>
                   )}
-                  <span className="text-sm font-medium text-neutral-800 dark:text-neutral-200 truncate">
+                  <span className="text-ui-body font-medium text-neutral-800 dark:text-neutral-200 truncate">
                     {p.name}
                   </span>
                 </div>
@@ -161,7 +161,7 @@ export default function WebSearchManager({
                 </div>
               </div>
 
-              <div className="text-[11px] text-neutral-400 dark:text-neutral-500 font-mono break-all">
+              <div className="text-ui-caption text-neutral-400 dark:text-neutral-500 font-mono break-all">
                 {p.type === "searxng"
                   ? p.baseUrl || `${t("baseUrlLabel")}: -`
                   : p.apiKey
@@ -189,7 +189,7 @@ export default function WebSearchManager({
       {/* 右:添加/编辑表单 */}
       <div className="lg:col-span-1 rounded-lg border border-morning-mist dark:border-deep-space bg-white dark:bg-[#0d0f14] p-5 space-y-4">
         <div className="border-b border-neutral-100 dark:border-neutral-800/80 pb-3">
-          <h3 className="text-sm font-bold text-neutral-800 dark:text-white flex items-center gap-1.5">
+          <h3 className="text-ui-body font-bold text-neutral-800 dark:text-white flex items-center gap-1.5">
             {editingId ? <Edit2 className="w-4 h-4 text-blue-500" /> : <Plus className="w-4 h-4 text-blue-500" />}
             <span>{editingId ? t("editTitle") : t("addTitle")}</span>
           </h3>
@@ -197,7 +197,7 @@ export default function WebSearchManager({
 
         <form onSubmit={handleSubmit} className="space-y-3">
           <label className="block">
-            <span className="block text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-1">
+            <span className="block text-ui-caption font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-1">
               {t("typeLabel")}
             </span>
             <Select value={type} onChange={(e) => setType(e.target.value as WebSearchProviderType)} className="w-full">
@@ -207,11 +207,11 @@ export default function WebSearchManager({
                 </option>
               ))}
             </Select>
-            <span className="block text-[10px] text-neutral-400 dark:text-neutral-500 mt-1">{t(`hint_${type}`)}</span>
+            <span className="block text-ui-caption text-neutral-400 dark:text-neutral-500 mt-1">{t(`hint_${type}`)}</span>
           </label>
 
           <label className="block">
-            <span className="block text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-1">
+            <span className="block text-ui-caption font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-1">
               {t("nameLabel")}
             </span>
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("namePlaceholder")} />
@@ -219,7 +219,7 @@ export default function WebSearchManager({
 
           {needsApiKey && (
             <label className="block">
-              <span className="block text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-1">
+              <span className="block text-ui-caption font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-1">
                 {t("apiKeyLabel")}
               </span>
               <Input
@@ -233,7 +233,7 @@ export default function WebSearchManager({
 
           {needsModel && (
             <label className="block">
-              <span className="block text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-1">
+              <span className="block text-ui-caption font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-1">
                 {t("modelLabel")}
               </span>
               <Input value={model} onChange={(e) => setModel(e.target.value)} placeholder={t("modelPlaceholder")} />
@@ -242,7 +242,7 @@ export default function WebSearchManager({
 
           {needsBaseUrl && (
             <label className="block">
-              <span className="block text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-1">
+              <span className="block text-ui-caption font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-1">
                 {t("baseUrlLabel")}
               </span>
               <Input
@@ -265,7 +265,7 @@ export default function WebSearchManager({
           </div>
         </form>
 
-        <div className="rounded p-3 bg-neutral-50 dark:bg-neutral-900/30 text-[10px] text-neutral-400 dark:text-neutral-500 leading-normal space-y-1">
+        <div className="rounded p-3 bg-neutral-50 dark:bg-neutral-900/30 text-ui-caption text-neutral-400 dark:text-neutral-500 leading-normal space-y-1">
           <p className="font-semibold text-neutral-500 dark:text-neutral-400">{t("guideTitle")}</p>
           <p>{t("guide1")}</p>
           <p>{t("guide2")}</p>

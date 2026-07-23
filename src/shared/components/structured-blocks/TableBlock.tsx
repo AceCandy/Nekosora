@@ -14,7 +14,7 @@ function alignClass(align?: string): string {
 export function TableBlock({ data }: { data: TableData }) {
   return (
     <div className="my-2 overflow-x-auto rounded-lg border border-morning-mist dark:border-deep-space/70">
-      <table className="w-full text-sm border-collapse">
+      <table className="w-full text-ui-body border-collapse">
         <thead>
           <tr className="bg-morning-mist/50 dark:bg-deep-space/40">
             {data.columns.map((col) => (

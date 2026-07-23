@@ -14,7 +14,7 @@ export function StatusDot({ className, enabled, label, enabledLabel, disabledLab
   return (
     <span
       className={clsx(
-        "inline-flex items-center gap-1.5 text-xs font-semibold select-none",
+        "inline-flex items-center gap-1.5 text-ui-caption font-semibold select-none",
         enabled ? "text-green-600 dark:text-green-500" : "text-neutral-400 dark:text-neutral-500",
         className
       )}

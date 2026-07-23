@@ -97,7 +97,7 @@ export default function ImageStudio({ models }: { models: ImageModel[] }) {
       <div className="flex-1 flex items-center justify-center text-neutral-400 p-8">
         <div className="text-center space-y-2 max-w-sm">
           <ImageIcon className="w-8 h-8 mx-auto text-neutral-300 dark:text-neutral-700" aria-hidden="true" />
-          <p className="text-xs leading-relaxed">{t("noModels")}</p>
+          <p className="text-ui-caption leading-relaxed">{t("noModels")}</p>
         </div>
       </div>
     );
@@ -108,11 +108,11 @@ export default function ImageStudio({ models }: { models: ImageModel[] }) {
       {/* 左侧:控制区 */}
       <div className="lg:w-80 shrink-0 space-y-4">
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-neutral-600 dark:text-neutral-400">{t("model")}</label>
+          <label className="text-ui-caption font-semibold text-neutral-600 dark:text-neutral-400">{t("model")}</label>
           <select
             value={model}
             onChange={(e) => setModel(e.target.value)}
-            className="w-full rounded-md border border-morning-mist dark:border-deep-space bg-white dark:bg-space-ink px-3 py-2 text-sm text-neutral-700 dark:text-neutral-200 focus:outline-none focus:border-sora-blue cursor-pointer"
+            className="w-full rounded-md border border-morning-mist dark:border-deep-space bg-white dark:bg-space-ink px-3 py-2 text-ui-body text-neutral-700 dark:text-neutral-200 focus:outline-none focus:border-sora-blue cursor-pointer"
           >
             {models.map((m) => (
               <option key={m.modelId} value={m.modelId}>
@@ -123,23 +123,23 @@ export default function ImageStudio({ models }: { models: ImageModel[] }) {
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-neutral-600 dark:text-neutral-400">{t("prompt")}</label>
+          <label className="text-ui-caption font-semibold text-neutral-600 dark:text-neutral-400">{t("prompt")}</label>
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             placeholder={t("promptPlaceholder")}
             rows={5}
-            className="w-full rounded-md border border-morning-mist dark:border-deep-space bg-white dark:bg-space-ink px-3 py-2 text-sm text-neutral-700 dark:text-neutral-200 focus:outline-none focus:border-sora-blue resize-none"
+            className="w-full rounded-md border border-morning-mist dark:border-deep-space bg-white dark:bg-space-ink px-3 py-2 text-ui-body text-neutral-700 dark:text-neutral-200 focus:outline-none focus:border-sora-blue resize-none"
           />
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-neutral-600 dark:text-neutral-400">{t("count")}</label>
+            <label className="text-ui-caption font-semibold text-neutral-600 dark:text-neutral-400">{t("count")}</label>
             <select
               value={n}
               onChange={(e) => setN(Number(e.target.value))}
-              className="w-full rounded-md border border-morning-mist dark:border-deep-space bg-white dark:bg-space-ink px-3 py-2 text-sm text-neutral-700 dark:text-neutral-200 focus:outline-none focus:border-sora-blue cursor-pointer"
+              className="w-full rounded-md border border-morning-mist dark:border-deep-space bg-white dark:bg-space-ink px-3 py-2 text-ui-body text-neutral-700 dark:text-neutral-200 focus:outline-none focus:border-sora-blue cursor-pointer"
             >
               {[1, 2, 3, 4].map((v) => (
                 <option key={v} value={v}>{v}</option>
@@ -147,11 +147,11 @@ export default function ImageStudio({ models }: { models: ImageModel[] }) {
             </select>
           </div>
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-neutral-600 dark:text-neutral-400">{t("size")}</label>
+            <label className="text-ui-caption font-semibold text-neutral-600 dark:text-neutral-400">{t("size")}</label>
             <select
               value={size}
               onChange={(e) => setSize(e.target.value)}
-              className="w-full rounded-md border border-morning-mist dark:border-deep-space bg-white dark:bg-space-ink px-3 py-2 text-sm text-neutral-700 dark:text-neutral-200 focus:outline-none focus:border-sora-blue cursor-pointer"
+              className="w-full rounded-md border border-morning-mist dark:border-deep-space bg-white dark:bg-space-ink px-3 py-2 text-ui-body text-neutral-700 dark:text-neutral-200 focus:outline-none focus:border-sora-blue cursor-pointer"
             >
               {SIZES.map((s) => (
                 <option key={s} value={s}>{s}</option>
@@ -163,7 +163,7 @@ export default function ImageStudio({ models }: { models: ImageModel[] }) {
         <button
           onClick={handleGenerate}
           disabled={!prompt.trim() || generating}
-          className="touch-target w-full inline-flex items-center justify-center gap-1.5 rounded-md bg-sora-blue hover:bg-sora-blue-hover text-white px-4 py-2.5 text-sm font-semibold disabled:opacity-40 transition-[background-color,box-shadow,opacity,transform] duration-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
+          className="touch-target w-full inline-flex items-center justify-center gap-1.5 rounded-md bg-sora-blue hover:bg-sora-blue-hover text-white px-4 py-2.5 text-ui-body font-semibold disabled:opacity-40 transition-[background-color,box-shadow,opacity,transform] duration-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
         >
           {generating ? (
             <>
@@ -178,7 +178,7 @@ export default function ImageStudio({ models }: { models: ImageModel[] }) {
           )}
         </button>
 
-        {error && <p className="text-xs text-red-500">{error}</p>}
+        {error && <p className="text-ui-caption text-red-500">{error}</p>}
       </div>
 
       {/* 右侧:结果 + 历史 */}
@@ -186,7 +186,7 @@ export default function ImageStudio({ models }: { models: ImageModel[] }) {
         {/* 当前结果 */}
         {currentUrls.length > 0 && (
           <div className="space-y-3">
-            <h3 className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">{t("currentResult")}</h3>
+            <h3 className="text-ui-caption font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">{t("currentResult")}</h3>
             <div className="grid grid-cols-2 gap-3">
               {currentUrls.map((url, i) => (
                 <div key={i} className="relative group rounded-lg overflow-hidden border border-morning-mist dark:border-deep-space bg-neutral-50 dark:bg-neutral-900">
@@ -210,9 +210,9 @@ export default function ImageStudio({ models }: { models: ImageModel[] }) {
 
         {/* 历史 */}
         <div className="space-y-3">
-          <h3 className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">{t("history")}</h3>
+          <h3 className="text-ui-caption font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">{t("history")}</h3>
           {history.length === 0 ? (
-            <p className="text-xs text-neutral-400 py-8 text-center">{t("emptyHistory")}</p>
+            <p className="text-ui-caption text-neutral-400 py-8 text-center">{t("emptyHistory")}</p>
           ) : (
             <div className="grid grid-cols-3 md:grid-cols-4 gap-3">
               {history
@@ -223,7 +223,7 @@ export default function ImageStudio({ models }: { models: ImageModel[] }) {
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={item.url} alt={item.prompt} className="w-full h-full object-cover" />
                     <div className={clsx("absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2")}>
-                      <p className="text-[10px] text-white line-clamp-3">{item.prompt}</p>
+                      <p className="text-ui-caption text-white line-clamp-3">{item.prompt}</p>
                     </div>
                   </div>
                 ))}

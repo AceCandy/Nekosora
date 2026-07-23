@@ -391,7 +391,7 @@ export default function ProvidersManager({
           disabled={pendingModelId !== null}
           onClick={() => handleUpstreamModelClick(p.id, m)}
           className={clsx(
-            "flex w-full items-center gap-2 px-2 py-1 text-left text-xs font-mono hover:bg-sora-blue/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sora-blue disabled:cursor-not-allowed disabled:opacity-60",
+            "flex w-full items-center gap-2 px-2 py-1 text-left text-ui-caption font-mono hover:bg-sora-blue/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sora-blue disabled:cursor-not-allowed disabled:opacity-60",
             configured?.has(m)
               ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300"
               : "bg-neutral-100 dark:bg-neutral-800/60 text-neutral-600 dark:text-neutral-400",
@@ -401,7 +401,7 @@ export default function ProvidersManager({
           {feedback === "pending" ? (
             <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden="true" />
           ) : feedback ? (
-            <span className={clsx("shrink-0 font-sans text-[11px] font-medium", feedback === "error" && "text-red-600 dark:text-red-300")}>
+            <span className={clsx("shrink-0 font-sans text-ui-caption font-medium", feedback === "error" && "text-red-600 dark:text-red-300")}>
               {t(
                 feedback === "created"
                   ? "modelRouteCreated"
@@ -419,7 +419,7 @@ export default function ProvidersManager({
   return (
     <div className="flex flex-col min-h-0 flex-1 gap-4">
       <div className="flex items-center justify-between shrink-0">
-        <span className="text-xs font-mono text-neutral-400 dark:text-neutral-500 uppercase tracking-wider">
+        <span className="text-ui-caption font-mono text-neutral-400 dark:text-neutral-500 uppercase tracking-wider">
           {t("configuredCount", { count: providers.length })}
         </span>
         <Button
@@ -438,30 +438,30 @@ export default function ProvidersManager({
           placeholder={t("filterNamePlaceholder")}
           value={filter.name}
           onChange={(e) => setFilter((f) => ({ ...f, name: e.target.value }))}
-          className="h-8 w-32 text-xs"
+          className="h-8 w-32 text-ui-caption"
         />
         <Input
           placeholder={t("filterBaseUrlPlaceholder")}
           value={filter.baseUrl}
           onChange={(e) => setFilter((f) => ({ ...f, baseUrl: e.target.value }))}
-          className="h-8 w-36 text-xs"
+          className="h-8 w-36 text-ui-caption"
         />
         <Input
           placeholder={t("filterKeyPlaceholder")}
           value={filter.key}
           onChange={(e) => setFilter((f) => ({ ...f, key: e.target.value }))}
-          className="h-8 w-36 text-xs"
+          className="h-8 w-36 text-ui-caption"
         />
         <Input
           placeholder={t("filterModelPlaceholder")}
           value={filter.model}
           onChange={(e) => setFilter((f) => ({ ...f, model: e.target.value }))}
-          className="h-8 w-32 text-xs"
+          className="h-8 w-32 text-ui-caption"
         />
         <Select
           value={filter.status}
           onChange={(e) => setFilter((f) => ({ ...f, status: e.target.value as typeof filter.status }))}
-          className="h-8 w-24 text-xs"
+          className="h-8 w-24 text-ui-caption"
         >
           <option value="all">{t("filterStatusAll")}</option>
           <option value="enabled">{t("filterStatusEnabled")}</option>
@@ -470,8 +470,8 @@ export default function ProvidersManager({
       </div>
 
       <div className="rounded-lg border border-morning-mist dark:border-deep-space bg-nebula-white dark:bg-twilight-obsidian overflow-auto transition-colors duration-150 flex-1 min-h-0">
-        <table className="w-full text-sm border-collapse text-left">
-          <thead className="bg-neutral-50 dark:bg-neutral-900 border-b border-morning-mist dark:border-deep-space text-neutral-500 dark:text-neutral-400 font-mono text-xs uppercase sticky top-0 z-10">
+        <table className="w-full text-ui-body border-collapse text-left">
+          <thead className="bg-neutral-50 dark:bg-neutral-900 border-b border-morning-mist dark:border-deep-space text-neutral-500 dark:text-neutral-400 font-mono text-ui-caption uppercase sticky top-0 z-10">
             <tr>
               <th className="p-3.5 font-medium">{t("colName")}</th>
               <th className="p-3.5 font-medium">{t("colBaseUrl")}</th>
@@ -503,7 +503,7 @@ export default function ProvidersManager({
           <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800/60">
             {filteredProviders.length === 0 ? (
               <tr>
-                <td colSpan={6} className="p-10 text-center text-xs text-neutral-400 dark:text-neutral-500">
+                <td colSpan={6} className="p-10 text-center text-ui-caption text-neutral-400 dark:text-neutral-500">
                   {providers.length === 0 ? t("emptyState") : t("filterNoMatch")}
                 </td>
               </tr>
@@ -521,15 +521,15 @@ export default function ProvidersManager({
                   </td>
                   <td className="p-3.5 max-w-[220px]">
                     <div className="space-y-1.5">
-                      <div className="font-mono text-xs text-neutral-500 dark:text-neutral-400 truncate">
+                      <div className="font-mono text-ui-caption text-neutral-500 dark:text-neutral-400 truncate">
                         {p.baseUrl}
                       </div>
-                      <span className={clsx("inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-medium", protocolStyle.bg, protocolStyle.text)}>
+                      <span className={clsx("inline-flex items-center rounded-md px-1.5 py-0.5 text-ui-caption font-medium", protocolStyle.bg, protocolStyle.text)}>
                         {p.protocol}
                       </span>
                     </div>
                   </td>
-                  <td className="p-3.5 text-center font-mono text-xs">
+                  <td className="p-3.5 text-center font-mono text-ui-caption">
                     <div className="flex flex-col items-center gap-1.5">
                       <span>{p.keys.length}</span>
                       {healthActions?.[p.id] && (
@@ -545,7 +545,7 @@ export default function ProvidersManager({
                   <td className="p-3.5">
                     <div className="space-y-1.5">
                       <div className="flex items-center gap-1.5">
-                        <div className={clsx("truncate text-xs font-medium max-w-[14rem]", p.testModel ? "text-neutral-700 dark:text-neutral-300" : "text-amber-600 dark:text-amber-400")}>
+                        <div className={clsx("truncate text-ui-caption font-medium max-w-[14rem]", p.testModel ? "text-neutral-700 dark:text-neutral-300" : "text-amber-600 dark:text-amber-400")}>
                           {p.testModel || t("testModelPlaceholder")}
                         </div>
                         {modelProbeActions?.[p.id] && (
@@ -567,7 +567,7 @@ export default function ProvidersManager({
                             align="left"
                             panelClassName="p-0"
                             trigger={
-                              <span className="text-[11px] text-neutral-400 dark:text-neutral-500 font-mono cursor-default">
+                              <span className="text-ui-caption text-neutral-400 dark:text-neutral-500 font-mono cursor-default">
                                 {t.rich("modelsCount", {
                                   count: modelsFor(p).length,
                                   num: (chunks: ReactNode) => (
@@ -582,7 +582,7 @@ export default function ProvidersManager({
                             </div>
                           </Popover>
                         ) : (
-                          <span className="text-[11px] text-neutral-400 dark:text-neutral-500 font-mono">
+                          <span className="text-ui-caption text-neutral-400 dark:text-neutral-500 font-mono">
                             {t("modelsEmpty")}
                           </span>
                         )}
@@ -716,11 +716,11 @@ export default function ProvidersManager({
           onClose={() => setDeleteId(null)}
           title={t("deleteTitle")}
           message={
-            <div className="flex gap-3 text-sm text-neutral-600 dark:text-neutral-400 mt-2">
+            <div className="flex gap-3 text-ui-body text-neutral-600 dark:text-neutral-400 mt-2">
               <ShieldAlert className="w-5 h-5 text-red-500 shrink-0" />
               <div>
                 {t("deleteConfirm", { name: deleting.name })}
-                <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1 leading-normal">
+                <p className="text-ui-caption text-neutral-400 dark:text-neutral-500 mt-1 leading-normal">
                   {t("deleteWarning")}
                 </p>
               </div>

@@ -248,7 +248,7 @@ function MarkdownCodeBlock({
     <div className="group relative">
       {isPaper ? (
         // paper:右上角语言标签小块(半透明白底适配深色 pre),hover/触屏切换为复制/预览按钮。
-        <div className="absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded-md bg-white/15 px-1.5 py-0.5 text-[11px] font-mono backdrop-blur-sm">
+        <div className="absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded-md bg-white/15 px-1.5 py-0.5 text-ui-caption font-mono backdrop-blur-sm">
           <span className="text-white/60 group-hover:hidden [@media(pointer:coarse)]:hidden">
             {language || "text"}
           </span>
@@ -356,7 +356,7 @@ function MarkdownCodeBlock({
           <button
             type="button"
             onClick={() => setExpandedCodeHash((value) => value === codeHash ? null : codeHash)}
-            className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium text-neutral-500 hover:bg-neutral-950/5 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-white transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-ui-caption font-medium text-neutral-500 hover:bg-neutral-950/5 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-white transition-colors cursor-pointer"
           >
             {expanded ? (
               <ChevronUp className="w-3.5 h-3.5" aria-hidden="true" />
@@ -447,7 +447,7 @@ function MermaidInlineBlock({ code, isStreaming }: { code: string; isStreaming: 
       </div>
       <div className="overflow-x-auto rounded-lg border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink p-3">
         {showSource ? (
-          <pre className="text-xs leading-relaxed font-mono text-neutral-700 dark:text-neutral-300 whitespace-pre">
+          <pre className="text-ui-caption leading-relaxed font-mono text-neutral-700 dark:text-neutral-300 whitespace-pre">
             <code>{code}</code>
           </pre>
         ) : (

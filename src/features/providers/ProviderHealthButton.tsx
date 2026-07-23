@@ -73,7 +73,7 @@ export default function ProviderHealthButton({
         <>
           {display.networkOk === false && (
             <span
-              className="text-[11px] font-medium text-red-500 dark:text-red-400"
+              className="text-ui-caption font-medium text-red-500 dark:text-red-400"
               title={t("networkDown")}
             >
               {t("networkDown")}
@@ -132,7 +132,7 @@ function HealthBadge({
         {keyResults.map((r) => (
           <div
             key={r.index}
-            className="px-2 py-1 text-xs flex items-center justify-between gap-2"
+            className="px-2 py-1 text-ui-caption flex items-center justify-between gap-2"
           >
             <span className="text-neutral-500 dark:text-neutral-400 font-mono">
               {t("keyResultTitle", { index: r.index })}

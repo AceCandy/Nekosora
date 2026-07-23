@@ -228,7 +228,7 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
                   disabled={noKey}
                   value={row.key}
                   onChange={(e) => update(i, "key", e.target.value)}
-                  className="pr-9 font-mono text-xs"
+                  className="pr-9 font-mono text-ui-caption"
                   placeholder={t("keyPlaceholder", { index: i + 1 })}
                   autoComplete="off"
                 />
@@ -243,7 +243,7 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
                 </button>
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
-                <span className="text-xs font-semibold text-neutral-500 dark:text-neutral-400">{t("weight")}</span>
+                <span className="text-ui-caption font-semibold text-neutral-500 dark:text-neutral-400">{t("weight")}</span>
                 <Input
                   name="keys[].weight"
                   type="number"
@@ -252,7 +252,7 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
                   disabled={noKey}
                   value={row.weight}
                   onChange={(e) => update(i, "weight", e.target.value)}
-                  className="w-16 font-mono text-xs"
+                  className="w-16 font-mono text-ui-caption"
                 />
               </div>
               {canTest && (
@@ -291,7 +291,7 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
             type="button"
             onClick={addRow}
             disabled={noKey}
-            className="inline-flex items-center gap-1 text-xs font-semibold text-sora-blue hover:text-sora-blue-hover transition-colors disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-sora-blue"
+            className="inline-flex items-center gap-1 text-ui-caption font-semibold text-sora-blue hover:text-sora-blue-hover transition-colors disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-sora-blue"
           >
             <Plus size={14} />
             <span>{t("addApiKey")}</span>
@@ -312,12 +312,12 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
         </div>
 
         {duplicateInfo && (
-          <p className="text-xs text-red-600 dark:text-red-400 leading-normal">
+          <p className="text-ui-caption text-red-600 dark:text-red-400 leading-normal">
             {t("duplicateKeyHint", { dup: duplicateInfo.dup + 1, first: duplicateInfo.first + 1 })}
           </p>
         )}
 
-        <p className="text-xs text-neutral-400 dark:text-neutral-500 leading-normal flex items-start gap-1">
+        <p className="text-ui-caption text-neutral-400 dark:text-neutral-500 leading-normal flex items-start gap-1">
           <span className="text-sora-blue shrink-0">※</span>
           <span>{t("keyHintRequired")}</span>
         </p>
@@ -325,7 +325,7 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
         {/* 批量设置弹窗(嵌套于编辑服务商弹窗;原生 <dialog> 支持叠层展示)。 */}
         <Modal open={batchOpen} onClose={() => setBatchOpen(false)} title={t("batchAddTitle")}>
           <div className="space-y-3">
-            <p className="text-xs text-neutral-500 dark:text-neutral-400 leading-normal">
+            <p className="text-ui-caption text-neutral-500 dark:text-neutral-400 leading-normal">
               {t("batchAddHint")}
             </p>
             <textarea
@@ -335,7 +335,7 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
               autoFocus
               spellCheck={false}
               placeholder={t("batchAddPlaceholder")}
-              className="mt-1 w-full rounded-md border border-morning-mist dark:border-deep-space px-3.5 py-2 text-xs bg-white dark:bg-[#0f121a] focus:outline-none focus:border-sora-blue dark:focus:border-sora-blue focus-visible:ring-2 focus-visible:ring-sora-blue/20 transition-colors duration-150 resize-y font-mono text-space-ink dark:text-nebula-silver"
+              className="mt-1 w-full rounded-md border border-morning-mist dark:border-deep-space px-3.5 py-2 text-ui-caption bg-white dark:bg-[#0f121a] focus:outline-none focus:border-sora-blue dark:focus:border-sora-blue focus-visible:ring-2 focus-visible:ring-sora-blue/20 transition-colors duration-150 resize-y font-mono text-space-ink dark:text-nebula-silver"
             />
             <div className="flex justify-end gap-2.5 pt-1">
               <Button

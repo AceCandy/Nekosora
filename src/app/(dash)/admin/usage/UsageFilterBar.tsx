@@ -41,7 +41,7 @@ interface UsageFilterBarProps {
 }
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
-  return <span className="text-[11px] text-neutral-400 dark:text-neutral-500">{children}</span>;
+  return <span className="text-ui-caption text-neutral-400 dark:text-neutral-500">{children}</span>;
 }
 
 export function UsageFilterBar({ variant, values, labels, basePath, tab }: UsageFilterBarProps) {
@@ -100,7 +100,7 @@ export function UsageFilterBar({ variant, values, labels, basePath, tab }: Usage
         <button
           type="button"
           onClick={() => router.refresh()}
-          className="ml-auto inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#12141a] text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 transition-colors"
+          className="ml-auto inline-flex items-center gap-1 px-2 py-1 rounded text-ui-caption border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#12141a] text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 transition-colors"
         >
           <RefreshCw className="size-3" />
           {t("filters.refresh")}
@@ -127,7 +127,7 @@ export function UsageFilterBar({ variant, values, labels, basePath, tab }: Usage
           <Select
             value={values.source}
             onChange={(e) => update({ source: e.target.value })}
-            className="w-28 py-1.5 text-xs"
+            className="w-28 py-1.5 text-ui-caption"
           >
             {sourceOptions.map((o) => (
               <option key={o.value} value={o.value}>

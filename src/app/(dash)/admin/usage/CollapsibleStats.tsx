@@ -50,7 +50,7 @@ export function CollapsibleStats({ children }: { children: React.ReactNode }) {
         aria-expanded={!collapsed}
         className="flex items-center justify-between w-full px-4 py-2.5 text-left hover:bg-neutral-50/60 dark:hover:bg-neutral-900/20 transition-colors"
       >
-        <span className="text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+        <span className="text-ui-caption font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
           {t("statsOverview")}
         </span>
         <ChevronDown className={clsx("size-4 text-neutral-400 transition-transform duration-200", !collapsed && "rotate-180")} />

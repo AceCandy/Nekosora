@@ -31,15 +31,16 @@ const PIE_COLORS = [
   "var(--color-chart-5)",
   "var(--color-chart-6)",
 ];
+const CHART_CAPTION_FONT_SIZE = 12;
 
 const tooltipStyle = {
-  fontSize: 11,
+  fontSize: CHART_CAPTION_FONT_SIZE,
   borderRadius: 6,
   border: "1px solid var(--color-chart-tooltip-border)",
   backgroundColor: "var(--color-chart-tooltip-bg)",
   color: "var(--color-chart-tooltip-text)",
 };
-const legendStyle = { fontSize: 11 };
+const legendStyle = { fontSize: CHART_CAPTION_FONT_SIZE };
 
 // recharts v3 formatter 类型严格(value 可能为 undefined/非 number),用宽类型兼容。
 const formatNumber = (v: unknown): string => Number(v ?? 0).toLocaleString();
@@ -72,8 +73,8 @@ export function RequestsTrendChart({ data }: { data: TimeSeriesPoint[] }) {
           </linearGradient>
         </defs>
         <CartesianGrid strokeDasharray="3 3" stroke="var(--color-chart-grid)" vertical={false} />
-        <XAxis dataKey="bucket" tick={{ fontSize: 10, fill: "var(--color-chart-axis)" }} interval="preserveStartEnd" minTickGap={32} />
-        <YAxis tick={{ fontSize: 10, fill: "var(--color-chart-axis)" }} width={48} />
+        <XAxis dataKey="bucket" tick={{ fontSize: CHART_CAPTION_FONT_SIZE, fill: "var(--color-chart-axis)" }} interval="preserveStartEnd" minTickGap={32} />
+        <YAxis tick={{ fontSize: CHART_CAPTION_FONT_SIZE, fill: "var(--color-chart-axis)" }} width={48} />
         <Tooltip
           contentStyle={tooltipStyle}
           formatter={formatNumber}
@@ -98,8 +99,8 @@ export function ModelTokensChart({ data }: { data: ModelRow[] }) {
     <ResponsiveContainer width="100%" height={260}>
       <BarChart data={top} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="var(--color-chart-grid)" vertical={false} />
-        <XAxis dataKey="model" tick={{ fontSize: 10, fill: "var(--color-chart-axis)" }} interval={0} />
-        <YAxis tick={{ fontSize: 10, fill: "var(--color-chart-axis)" }} width={48} />
+        <XAxis dataKey="model" tick={{ fontSize: CHART_CAPTION_FONT_SIZE, fill: "var(--color-chart-axis)" }} interval={0} />
+        <YAxis tick={{ fontSize: CHART_CAPTION_FONT_SIZE, fill: "var(--color-chart-axis)" }} width={48} />
         <Tooltip
           contentStyle={tooltipStyle}
           formatter={formatNumber}
@@ -135,7 +136,7 @@ export function ModelCallsPie({ data }: { data: ModelRow[] }) {
           contentStyle={tooltipStyle}
           formatter={formatNumber}
         />
-        <Legend wrapperStyle={{ fontSize: 10 }} />
+        <Legend wrapperStyle={legendStyle} />
       </PieChart>
     </ResponsiveContainer>
   );
@@ -147,8 +148,8 @@ export function SourceBar({ data }: { data: SourceRow[] }) {
     <ResponsiveContainer width="100%" height={180}>
       <BarChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="var(--color-chart-grid)" vertical={false} />
-        <XAxis dataKey="source" tick={{ fontSize: 11, fill: "var(--color-chart-axis)" }} />
-        <YAxis tick={{ fontSize: 10, fill: "var(--color-chart-axis)" }} width={48} />
+        <XAxis dataKey="source" tick={{ fontSize: CHART_CAPTION_FONT_SIZE, fill: "var(--color-chart-axis)" }} />
+        <YAxis tick={{ fontSize: CHART_CAPTION_FONT_SIZE, fill: "var(--color-chart-axis)" }} width={48} />
         <Tooltip
           contentStyle={tooltipStyle}
           formatter={formatNumber}

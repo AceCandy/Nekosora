@@ -52,12 +52,12 @@ export default function ConfirmDialog({
   return (
     <Modal open={open} onClose={onClose} title={title}>
       <div className="space-y-4">
-        <div className="text-sm text-neutral-600 dark:text-neutral-300">{message}</div>
+        <div className="text-ui-body text-neutral-600 dark:text-neutral-300">{message}</div>
         <div className="flex justify-end gap-2">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-neutral-300 px-4 py-2 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+            className="rounded-md border border-neutral-300 px-4 py-2 text-ui-body hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
           >
             {cancelLabel}
           </button>
@@ -65,7 +65,7 @@ export default function ConfirmDialog({
             <form action={action} onSubmit={() => setTimeout(onClose, 0)}>
               <button
                 type="submit"
-                className={`rounded-md px-4 py-2 text-sm font-medium ${confirmCls}`}
+                className={`rounded-md px-4 py-2 text-ui-body font-medium ${confirmCls}`}
               >
                 {confirmLabel}
               </button>
@@ -74,7 +74,7 @@ export default function ConfirmDialog({
             <button
               type="button"
               onClick={handleConfirm}
-              className={`rounded-md px-4 py-2 text-sm font-medium ${confirmCls}`}
+              className={`rounded-md px-4 py-2 text-ui-body font-medium ${confirmCls}`}
             >
               {confirmLabel}
             </button>

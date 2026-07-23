@@ -33,9 +33,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           variant === "contrast" && "bg-neutral-900 hover:bg-neutral-800 text-white dark:bg-white dark:text-black dark:hover:bg-neutral-100",
 
           // Sizes
-          size === "xs" && "px-2 py-1 text-xs",
-          size === "sm" && "px-2.5 py-1.5 text-xs",
-          size === "md" && "px-3.5 py-2 text-sm",
+          size === "xs" && "px-2 py-1 text-ui-caption",
+          size === "sm" && "px-2.5 py-1.5 text-ui-caption",
+          size === "md" && "px-3.5 py-2 text-ui-body",
           
           className
         )}

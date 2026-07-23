@@ -39,11 +39,11 @@ export default function ChatHeader({
   return (
     <div className="flex items-center justify-between pl-14 pr-6 md:px-6 py-3.5 border-b border-morning-mist dark:border-deep-space bg-nebula-white dark:bg-twilight-obsidian">
       <div className="flex items-center gap-3">
-        <span className="text-xs font-mono text-neutral-400 dark:text-neutral-500 uppercase tracking-wider">
+        <span className="text-ui-caption font-mono text-neutral-400 dark:text-neutral-500 uppercase tracking-wider">
           {t("messageCount", { count: messageCount })}
         </span>
         {totalTokens != null && totalTokens > 0 && (
-          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-neutral-450 dark:text-neutral-500 bg-neutral-100 dark:bg-neutral-900 px-2 py-0.5 rounded-full">
+          <span className="inline-flex items-center gap-1 text-ui-caption font-medium text-neutral-450 dark:text-neutral-500 bg-neutral-100 dark:bg-neutral-900 px-2 py-0.5 rounded-full">
             <Coins className="w-3 h-3" aria-hidden="true" />
             {t("totalTokens", { count: totalTokens })}
           </span>
@@ -52,7 +52,7 @@ export default function ChatHeader({
       <button
         onClick={handleShare}
         disabled={isPending || !conversationId}
-        className="inline-flex items-center gap-1.5 text-xs font-semibold text-sora-blue hover:text-sora-blue-hover transition-colors px-2.5 py-1.5 rounded-md hover:bg-neutral-50 dark:hover:bg-neutral-900/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
+        className="inline-flex items-center gap-1.5 text-ui-caption font-semibold text-sora-blue hover:text-sora-blue-hover transition-colors px-2.5 py-1.5 rounded-md hover:bg-neutral-50 dark:hover:bg-neutral-900/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
         aria-label={t("shareThisConversation")}
       >
         {copied ? (

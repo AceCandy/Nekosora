@@ -36,7 +36,7 @@ interface ProviderFormDialogProps {
   };
 }
 
-const labelCls = "block text-xs font-semibold text-neutral-500 dark:text-neutral-400 mb-1.5";
+const labelCls = "block text-ui-caption font-semibold text-neutral-500 dark:text-neutral-400 mb-1.5";
 // 下拉按钮的拉取缓存窗口:5 分钟内不重复请求上游 /models。
 const UPSTREAM_MODELS_STALE_MS = 5 * 60 * 1000;
 
@@ -199,7 +199,7 @@ export default function ProviderFormDialog({
             />
             <div className="mt-1.5 flex items-center justify-between gap-2">
               {modelsUrlPreview ? (
-                <span className="text-[11px] text-neutral-400 dark:text-neutral-500 font-mono truncate">
+                <span className="text-ui-caption text-neutral-400 dark:text-neutral-500 font-mono truncate">
                   {t("modelsUrlPreview")}: {modelsUrlPreview}
                 </span>
               ) : (
@@ -209,7 +209,7 @@ export default function ProviderFormDialog({
                 <button
                   type="button"
                   onClick={resetBaseUrlToDefault}
-                  className="text-[11px] font-semibold text-sora-blue hover:text-sora-blue-hover shrink-0 transition-colors"
+                  className="text-ui-caption font-semibold text-sora-blue hover:text-sora-blue-hover shrink-0 transition-colors"
                 >
                   {t("resetDefault")}
                 </button>
@@ -219,7 +219,7 @@ export default function ProviderFormDialog({
           <label className="block col-span-2">
             <span className={labelCls}>
               {t("testModelLabel")}{" "}
-              <span className="text-[10px] font-normal text-neutral-400">{t("testModelHint")}</span>
+              <span className="text-ui-caption font-normal text-neutral-400">{t("testModelHint")}</span>
             </span>
             <div className="flex items-center gap-2">
               <Input
@@ -266,11 +266,11 @@ export default function ProviderFormDialog({
                     </div>
                     <div className="max-h-52 overflow-auto py-1">
                       {refreshing && upstreamModels.length === 0 ? (
-                        <div className="px-3 py-2 text-xs text-neutral-400 dark:text-neutral-500">
+                        <div className="px-3 py-2 text-ui-caption text-neutral-400 dark:text-neutral-500">
                           {t("modelsLoading")}
                         </div>
                       ) : filteredModels.length === 0 ? (
-                        <div className="px-3 py-2 text-xs text-neutral-400 dark:text-neutral-500">
+                        <div className="px-3 py-2 text-ui-caption text-neutral-400 dark:text-neutral-500">
                           {upstreamModels.length === 0 ? t("modelsEmpty") : t("modelSearchNoMatch")}
                         </div>
                       ) : (
@@ -282,7 +282,7 @@ export default function ProviderFormDialog({
                               setTestModel(m);
                               closeModelsPopover();
                             }}
-                            className="block w-full px-3 py-1.5 text-left text-xs font-mono text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800/60 truncate"
+                            className="block w-full px-3 py-1.5 text-left text-ui-caption font-mono text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800/60 truncate"
                           >
                             {m}
                           </button>
@@ -296,18 +296,18 @@ export default function ProviderFormDialog({
           </label>
           <div className="block col-span-2">
             <div className="mb-1.5 flex items-center justify-between">
-              <span className="text-xs font-semibold text-neutral-500 dark:text-neutral-400">{t("fieldApiKey")}</span>
+              <span className="text-ui-caption font-semibold text-neutral-500 dark:text-neutral-400">{t("fieldApiKey")}</span>
               <div className="flex items-center gap-3">
                 <button
                   type="button"
                   onClick={() => editorRef.current?.openBatch()}
                   disabled={noKey}
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-sora-blue hover:text-sora-blue-hover transition-colors disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-sora-blue"
+                  className="inline-flex items-center gap-1 text-ui-caption font-semibold text-sora-blue hover:text-sora-blue-hover transition-colors disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-sora-blue"
                 >
                   <ListPlus size={14} />
                   <span>{t("batchAddKey")}</span>
                 </button>
-                <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 cursor-pointer select-none">
+                <label className="inline-flex items-center gap-1.5 text-ui-caption font-semibold text-neutral-500 dark:text-neutral-400 cursor-pointer select-none">
                   <input
                     type="checkbox"
                     checked={noKey}

@@ -33,8 +33,8 @@ export default async function AdminHomePage() {
   return (
     <div className="space-y-10">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-neutral-900 dark:text-white">{t("title")}</h1>
-        <p className="mt-1 text-sm text-neutral-500">{t("desc")}</p>
+        <h1 className="text-ui-heading font-bold tracking-tight text-neutral-900 dark:text-white">{t("title")}</h1>
+        <p className="mt-1 text-ui-body text-neutral-500">{t("desc")}</p>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -44,15 +44,15 @@ export default async function AdminHomePage() {
             href={s.href}
             className="group block rounded-lg border border-morning-mist bg-white p-5 hover:border-sora-blue/30 hover:bg-neutral-50/50 dark:border-deep-space dark:bg-twilight-obsidian dark:hover:border-sora-blue/20 dark:hover:bg-neutral-900/30 transition-[background-color,border-color,box-shadow] duration-200 shadow-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.03)]"
           >
-            <div className="text-xs font-medium text-neutral-400 dark:text-neutral-500 group-hover:text-sora-blue transition-colors">{t(s.labelKey)}</div>
-            <div className="mt-2 text-3xl font-semibold tracking-tight text-neutral-900 dark:text-white font-mono">{s.value}</div>
-            <div className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">{t(s.subKey, { count: s.subCount })}</div>
+            <div className="text-ui-caption font-medium text-neutral-400 dark:text-neutral-500 group-hover:text-sora-blue transition-colors">{t(s.labelKey)}</div>
+            <div className="mt-2 text-ui-display font-semibold tracking-tight text-neutral-900 dark:text-white font-mono">{s.value}</div>
+            <div className="mt-1 text-ui-caption text-neutral-400 dark:text-neutral-500">{t(s.subKey, { count: s.subCount })}</div>
           </Link>
         ))}
       </div>
 
       <div className="space-y-4">
-        <h2 className="text-base font-semibold text-neutral-900 dark:text-white">{t("quickLinks")}</h2>
+        <h2 className="text-ui-title font-semibold text-neutral-900 dark:text-white">{t("quickLinks")}</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {quickLinks.map((q) => (
             <Link
@@ -60,14 +60,14 @@ export default async function AdminHomePage() {
               href={q.href}
               className="block rounded-lg border border-morning-mist bg-white p-5 hover:border-sora-blue/30 hover:bg-neutral-50/50 dark:border-deep-space dark:bg-twilight-obsidian dark:hover:border-sora-blue/20 dark:hover:bg-neutral-900/30 transition-[background-color,border-color,box-shadow] duration-200 shadow-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.03)]"
             >
-              <div className="text-sm font-semibold text-neutral-800 dark:text-neutral-200">{t(q.titleKey)}</div>
-              <div className="mt-1 text-xs text-neutral-400 dark:text-neutral-500 leading-relaxed">{t(q.descKey)}</div>
+              <div className="text-ui-body font-semibold text-neutral-800 dark:text-neutral-200">{t(q.titleKey)}</div>
+              <div className="mt-1 text-ui-caption text-neutral-400 dark:text-neutral-500 leading-relaxed">{t(q.descKey)}</div>
             </Link>
           ))}
         </div>
       </div>
 
-      <div className="rounded-lg border border-blue-500/10 bg-blue-50/30 dark:bg-blue-950/10 p-4 text-xs text-blue-800 dark:text-blue-200 leading-relaxed flex items-center gap-2">
+      <div className="rounded-lg border border-blue-500/10 bg-blue-50/30 dark:bg-blue-950/10 p-4 text-ui-caption text-blue-800 dark:text-blue-200 leading-relaxed flex items-center gap-2">
         <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0"></span>
         <span>
           {t.rich("gatewayHint", {

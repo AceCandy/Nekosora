@@ -23,7 +23,7 @@ interface OutputModeFormDialogProps {
   initial?: Partial<OutputMode>;
 }
 
-const labelCls = "block text-xs font-semibold text-neutral-550 dark:text-neutral-400 mb-1.5";
+const labelCls = "block text-ui-caption font-semibold text-neutral-550 dark:text-neutral-400 mb-1.5";
 
 export default function OutputModeFormDialog({
   open,
@@ -82,7 +82,7 @@ export default function OutputModeFormDialog({
             />
           </label>
           {isEdit && (
-            <label className="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-400 pt-6 cursor-pointer select-none">
+            <label className="flex items-center gap-2 text-ui-body text-neutral-600 dark:text-neutral-400 pt-6 cursor-pointer select-none">
               <input
                 name="enabled"
                 type="checkbox"
@@ -100,7 +100,7 @@ export default function OutputModeFormDialog({
               rows={6}
               defaultValue={initial?.systemPrompt ?? ""}
               placeholder={t("promptPlaceholder")}
-              className="w-full rounded-md border border-morning-mist dark:border-deep-space bg-white dark:bg-[#0f121a] px-3 py-2 text-sm text-space-ink dark:text-nebula-silver focus:outline-none focus:border-sora-blue dark:focus:border-sora-blue focus-visible:ring-2 focus-visible:ring-sora-blue transition-[background-color,color,border-color,box-shadow] duration-150 font-mono resize-y"
+              className="w-full rounded-md border border-morning-mist dark:border-deep-space bg-white dark:bg-[#0f121a] px-3 py-2 text-ui-body text-space-ink dark:text-nebula-silver focus:outline-none focus:border-sora-blue dark:focus:border-sora-blue focus-visible:ring-2 focus-visible:ring-sora-blue transition-[background-color,color,border-color,box-shadow] duration-150 font-mono resize-y"
             />
           </label>
         </div>

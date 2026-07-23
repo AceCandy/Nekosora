@@ -70,7 +70,7 @@ export default async function OperationsPage() {
 
       {/* 系统依赖状态 */}
       <div className="space-y-4">
-        <h2 className="text-base font-semibold text-neutral-900 dark:text-white">{t("depsTitle")}</h2>
+        <h2 className="text-ui-title font-semibold text-neutral-900 dark:text-white">{t("depsTitle")}</h2>
         <div className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] overflow-hidden shadow-none">
           <div className="divide-y divide-neutral-100 dark:divide-neutral-800">
             <DepRow name={t("metricDb")} value="PostgreSQL + pgvector" ok />
@@ -93,12 +93,12 @@ export default async function OperationsPage() {
 
       {/* Provider 健康(最近成功率) */}
       <div className="space-y-4">
-        <h2 className="text-base font-semibold text-neutral-900 dark:text-white">{t("providerHealthTitle")}</h2>
+        <h2 className="text-ui-title font-semibold text-neutral-900 dark:text-white">{t("providerHealthTitle")}</h2>
         <div className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] overflow-hidden shadow-none">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm border-collapse">
+            <table className="w-full text-ui-body border-collapse">
               <thead>
-                <tr className="bg-neutral-50/70 border-b border-neutral-200 text-neutral-500 dark:bg-neutral-900/50 dark:border-neutral-800 dark:text-neutral-400 text-xs uppercase tracking-wider font-semibold">
+                <tr className="bg-neutral-50/70 border-b border-neutral-200 text-neutral-500 dark:bg-neutral-900/50 dark:border-neutral-800 dark:text-neutral-400 text-ui-caption uppercase tracking-wider font-semibold">
                   <th className="text-left px-5 py-3">Provider</th>
                   <th className="text-right px-5 py-3">{t("thCalls")}</th>
                   <th className="text-right px-5 py-3">{t("thSuccessRate")}</th>
@@ -121,18 +121,18 @@ export default async function OperationsPage() {
                   const healthy = rate >= 95;
                   return (
                     <tr key={r.providerRef as string} className="hover:bg-neutral-50/30 dark:hover:bg-neutral-900/10 transition-colors duration-150">
-                      <td className="px-5 py-3.5 font-mono text-xs font-medium text-neutral-900 dark:text-white">
+                      <td className="px-5 py-3.5 font-mono text-ui-caption font-medium text-neutral-900 dark:text-white">
                         {r.providerRef as string}
                       </td>
-                      <td className="px-5 py-3.5 text-right font-mono text-xs text-neutral-700 dark:text-neutral-300">
+                      <td className="px-5 py-3.5 text-right font-mono text-ui-caption text-neutral-700 dark:text-neutral-300">
                         {total.toLocaleString()}
                       </td>
-                      <td className="px-5 py-3.5 text-right font-mono text-xs">
+                      <td className="px-5 py-3.5 text-right font-mono text-ui-caption">
                         <span className={healthy ? "text-green-600 dark:text-green-400" : "text-amber-600 dark:text-amber-400"}>
                           {rate.toFixed(1)}%
                         </span>
                       </td>
-                      <td className="px-5 py-3.5 text-right font-mono text-xs text-neutral-500 dark:text-neutral-400">
+                      <td className="px-5 py-3.5 text-right font-mono text-ui-caption text-neutral-500 dark:text-neutral-400">
                         {avgLat}ms
                       </td>
                     </tr>
@@ -150,9 +150,9 @@ export default async function OperationsPage() {
 function InfoCard({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] p-4 shadow-none">
-      <div className="text-[11px] uppercase tracking-wider text-neutral-400 dark:text-neutral-500 font-semibold">{label}</div>
-      <div className="mt-1.5 text-lg font-bold font-mono text-neutral-900 dark:text-white">{value}</div>
-      {hint && <div className="mt-0.5 text-[11px] text-neutral-400 dark:text-neutral-500">{hint}</div>}
+      <div className="text-ui-caption uppercase tracking-wider text-neutral-400 dark:text-neutral-500 font-semibold">{label}</div>
+      <div className="mt-1.5 text-ui-title font-bold font-mono text-neutral-900 dark:text-white">{value}</div>
+      {hint && <div className="mt-0.5 text-ui-caption text-neutral-400 dark:text-neutral-500">{hint}</div>}
     </div>
   );
 }
@@ -162,9 +162,9 @@ function DepRow({ name, value, ok }: { name: string; value: string; ok: boolean 
     <div className="flex items-center justify-between px-5 py-3.5">
       <div className="flex items-center gap-2.5">
         <span className={`w-1.5 h-1.5 rounded-full ${ok ? "bg-green-500" : "bg-amber-500"}`} />
-        <span className="text-sm font-medium text-neutral-700 dark:text-neutral-200">{name}</span>
+        <span className="text-ui-body font-medium text-neutral-700 dark:text-neutral-200">{name}</span>
       </div>
-      <span className="text-xs font-mono text-neutral-500 dark:text-neutral-400">{value}</span>
+      <span className="text-ui-caption font-mono text-neutral-500 dark:text-neutral-400">{value}</span>
     </div>
   );
 }

@@ -70,7 +70,7 @@ export default async function MemoryPage() {
           >
             <button
               type="submit"
-              className="inline-flex items-center gap-1.5 rounded-md border border-red-200 dark:border-red-900/40 bg-red-50/50 dark:bg-red-950/10 px-3 py-1.5 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-950/20 transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-md border border-red-200 dark:border-red-900/40 bg-red-50/50 dark:bg-red-950/10 px-3 py-1.5 text-ui-caption font-semibold text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-950/20 transition-colors"
               title={t("clearAll")}
             >
               <Eraser className="w-3.5 h-3.5" />
@@ -84,7 +84,7 @@ export default async function MemoryPage() {
         {/* 左:按分类分组的记忆卡片 */}
         <div className="lg:col-span-2 space-y-8">
           {memories.length === 0 && (
-            <div className="rounded-lg border border-dashed border-neutral-200 dark:border-neutral-800 p-10 text-center text-xs text-neutral-400 dark:text-neutral-500">
+            <div className="rounded-lg border border-dashed border-neutral-200 dark:border-neutral-800 p-10 text-center text-ui-caption text-neutral-400 dark:text-neutral-500">
               {t("empty")}
             </div>
           )}
@@ -95,7 +95,7 @@ export default async function MemoryPage() {
             return (
               <section key={scope} className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
+                  <h2 className="text-ui-caption font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
                     {scopeLabel(scope)}
                     <span className="ml-2 text-neutral-300 dark:text-neutral-600 font-normal normal-case">
                       {t("scopeCount", { count: items.length })}
@@ -110,7 +110,7 @@ export default async function MemoryPage() {
                   >
                     <button
                       type="submit"
-                      className="inline-flex items-center gap-1 text-[11px] text-neutral-400 hover:text-red-500 transition-colors"
+                      className="inline-flex items-center gap-1 text-ui-caption text-neutral-400 hover:text-red-500 transition-colors"
                       title={t("clearScope")}
                     >
                       <Eraser className="w-3 h-3" />
@@ -129,7 +129,7 @@ export default async function MemoryPage() {
                         <div className="flex items-center gap-1.5">
                           <span
                             className={clsx(
-                              "rounded-full px-1.5 py-0.5 text-[9px] font-medium border",
+                              "rounded-full px-1.5 py-0.5 text-ui-caption font-medium border",
                               m.source === "ai"
                                 ? "bg-sora-blue/[0.03] border-sora-blue/20 text-sora-blue"
                                 : "bg-neutral-50 dark:bg-neutral-900 border-neutral-200 dark:border-neutral-700 text-neutral-400",
@@ -157,7 +157,7 @@ export default async function MemoryPage() {
                       </div>
 
                       <details>
-                        <summary className="cursor-pointer list-none text-xs text-neutral-700 dark:text-neutral-300 leading-relaxed break-words">
+                        <summary className="cursor-pointer list-none text-ui-caption text-neutral-700 dark:text-neutral-300 leading-relaxed break-words">
                           {m.content}
                         </summary>
                         <form action={handleUpdateMemory.bind(null, m.id)} className="mt-2 space-y-2">
@@ -165,18 +165,18 @@ export default async function MemoryPage() {
                             name="content"
                             defaultValue={m.content}
                             rows={3}
-                            className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-2 py-1.5 text-xs focus:outline-none focus:border-sora-blue resize-none"
+                            className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-2 py-1.5 text-ui-caption focus:outline-none focus:border-sora-blue resize-none"
                           />
                           <button
                             type="submit"
-                            className="rounded-md bg-sora-blue hover:bg-sora-blue-hover text-white px-3 py-1 text-xs font-semibold cursor-pointer"
+                            className="rounded-md bg-sora-blue hover:bg-sora-blue-hover text-white px-3 py-1 text-ui-caption font-semibold cursor-pointer"
                           >
                             {t("save")}
                           </button>
                         </form>
                       </details>
 
-                      <div className="text-[10px] text-neutral-400 dark:text-neutral-500 font-mono pt-1 mt-auto border-t border-neutral-100 dark:border-neutral-800/60">
+                      <div className="text-ui-caption text-neutral-400 dark:text-neutral-500 font-mono pt-1 mt-auto border-t border-neutral-100 dark:border-neutral-800/60">
                         {t("createdAt")}: {formatDate(m.createdAt)}
                       </div>
                     </div>
@@ -190,7 +190,7 @@ export default async function MemoryPage() {
         {/* 右:添加新记忆表单 */}
         <div className="lg:col-span-1 rounded-lg border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#0d0f14] p-5 space-y-4">
           <div className="border-b border-neutral-100 dark:border-neutral-800/80 pb-3">
-            <h3 className="text-sm font-bold text-neutral-800 dark:text-white flex items-center gap-1.5">
+            <h3 className="text-ui-body font-bold text-neutral-800 dark:text-white flex items-center gap-1.5">
               <Plus className="w-4 h-4 text-blue-500" />
               <span>{t("addTitle")}</span>
             </h3>
@@ -209,12 +209,12 @@ export default async function MemoryPage() {
             className="space-y-4"
           >
             <label className="block">
-              <span className="block text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-1">
+              <span className="block text-ui-caption font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-1">
                 {t("scopeLabel")}
               </span>
               <select
                 name="scope"
-                className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#0f121a] px-3.5 py-2 text-sm focus:outline-none focus:border-blue-500 dark:focus:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500 text-neutral-800 dark:text-neutral-200 transition-[background-color,color,border-color,box-shadow] duration-150"
+                className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#0f121a] px-3.5 py-2 text-ui-body focus:outline-none focus:border-blue-500 dark:focus:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500 text-neutral-800 dark:text-neutral-200 transition-[background-color,color,border-color,box-shadow] duration-150"
               >
                 <option value="preference">{t("scopePreferenceOpt")}</option>
                 <option value="profile">{t("scopeProfileOpt")}</option>
@@ -223,7 +223,7 @@ export default async function MemoryPage() {
             </label>
 
             <label className="block">
-              <span className="block text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-1">
+              <span className="block text-ui-caption font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-1">
                 {t("contentLabel")}
               </span>
               <textarea
@@ -231,20 +231,20 @@ export default async function MemoryPage() {
                 required
                 placeholder={t("contentPlaceholder")}
                 rows={4}
-                className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#0f121a] px-3.5 py-2 text-sm focus:outline-none focus:border-blue-500 dark:focus:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500 text-neutral-800 dark:text-neutral-200 transition-[background-color,color,border-color,box-shadow] duration-150 resize-none"
+                className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#0f121a] px-3.5 py-2 text-ui-body focus:outline-none focus:border-blue-500 dark:focus:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500 text-neutral-800 dark:text-neutral-200 transition-[background-color,color,border-color,box-shadow] duration-150 resize-none"
               />
             </label>
 
             <button
               type="submit"
-              className="w-full rounded-md bg-neutral-900 dark:bg-white dark:text-black font-semibold text-white hover:bg-neutral-800 dark:hover:bg-neutral-100 py-2.5 text-xs transition-colors shadow-none flex items-center justify-center gap-1"
+              className="w-full rounded-md bg-neutral-900 dark:bg-white dark:text-black font-semibold text-white hover:bg-neutral-800 dark:hover:bg-neutral-100 py-2.5 text-ui-caption transition-colors shadow-none flex items-center justify-center gap-1"
             >
               <Plus className="w-4 h-4" />
               <span>{t("addBtn")}</span>
             </button>
           </form>
 
-          <div className="rounded p-3 bg-neutral-50 dark:bg-neutral-900/30 text-[10px] text-neutral-400 dark:text-neutral-500 leading-normal space-y-1">
+          <div className="rounded p-3 bg-neutral-50 dark:bg-neutral-900/30 text-ui-caption text-neutral-400 dark:text-neutral-500 leading-normal space-y-1">
             <p className="font-semibold text-neutral-500 dark:text-neutral-400">{t("guideTitle")}</p>
             <p>{t("guide1")}</p>
             <p>{t("guide2")}</p>

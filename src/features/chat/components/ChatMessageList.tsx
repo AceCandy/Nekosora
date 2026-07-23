@@ -307,7 +307,7 @@ export function ChatMessageList({
                 setSelection(null);
                 window.getSelection()?.removeAllRanges();
               }}
-              className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-semibold text-neutral-500 hover:text-neutral-800 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-900 cursor-pointer"
+              className="inline-flex items-center gap-1 rounded px-2 py-1 text-ui-caption font-semibold text-neutral-500 hover:text-neutral-800 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-900 cursor-pointer"
               title={t("copy")}
             >
               <Copy className="w-3 h-3" aria-hidden="true" />{t("copy")}
@@ -326,7 +326,7 @@ export function ChatMessageList({
                 }
               }}
               className={clsx(
-                "inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed",
+                "inline-flex items-center gap-1 rounded px-2 py-1 text-ui-caption font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed",
                 isSelectionSpeaking
                   ? "text-sora-blue"
                   : "text-neutral-500 hover:text-neutral-800 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-900",
@@ -345,7 +345,7 @@ export function ChatMessageList({
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => { onQuote(selection.text); setSelection(null); window.getSelection()?.removeAllRanges(); }}
-                className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-semibold text-neutral-500 hover:text-neutral-800 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-900 cursor-pointer"
+                className="inline-flex items-center gap-1 rounded px-2 py-1 text-ui-caption font-semibold text-neutral-500 hover:text-neutral-800 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-900 cursor-pointer"
                 title={t("quote")}
               >
                 <Reply className="w-3 h-3" aria-hidden="true" />{t("quote")}
@@ -356,7 +356,7 @@ export function ChatMessageList({
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => { onAsk(selection.text); setSelection(null); window.getSelection()?.removeAllRanges(); }}
-                className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-semibold text-sora-blue hover:bg-sora-blue/[0.06] cursor-pointer"
+                className="inline-flex items-center gap-1 rounded px-2 py-1 text-ui-caption font-semibold text-sora-blue hover:bg-sora-blue/[0.06] cursor-pointer"
                 title={t("askFollowup")}
               >
                 <MessagesSquare className="w-3 h-3" aria-hidden="true" />{t("askFollowup")}
@@ -369,7 +369,7 @@ export function ChatMessageList({
         <MessageScroller.Button
           direction="end"
           style={{ bottom: (bottomInset ?? 8) + 8 }}
-          className="touch-target absolute left-1/2 -translate-x-1/2 z-20 inline-flex items-center gap-1.5 rounded-full border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink px-3 py-1.5 text-xs font-semibold text-neutral-600 dark:text-neutral-300 shadow-sm hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-[background-color,opacity,transform] duration-300 ease-out data-[active=false]:pointer-events-none data-[active=false]:opacity-0 data-[active=false]:translate-y-4 data-[active=false]:scale-95 data-[active=true]:opacity-100 data-[active=true]:translate-y-0 data-[active=true]:scale-100"
+          className="touch-target absolute left-1/2 -translate-x-1/2 z-20 inline-flex items-center gap-1.5 rounded-full border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink px-3 py-1.5 text-ui-caption font-semibold text-neutral-600 dark:text-neutral-300 shadow-sm hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-[background-color,opacity,transform] duration-300 ease-out data-[active=false]:pointer-events-none data-[active=false]:opacity-0 data-[active=false]:translate-y-4 data-[active=false]:scale-95 data-[active=true]:opacity-100 data-[active=true]:translate-y-0 data-[active=true]:scale-100"
         >
           <ChevronDown className="w-3.5 h-3.5 animate-[scroll-hint_1.6s_ease-in-out_infinite]" aria-hidden="true" />
           <span>{t("scrollToLatest")}</span>

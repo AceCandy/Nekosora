@@ -84,7 +84,7 @@ export function MermaidDiagram({ id, content }: { id: string; content: string })
     return () => { cancelled = true; };
   }, [id, content, isDark]);
 
-  if (error) return <div className="text-xs text-neutral-450 dark:text-neutral-500 p-3">{t("mermaidFailed")} {error}</div>;
-  if (!svg) return <div className="text-xs text-neutral-450 dark:text-neutral-500 animate-pulse">{t("rendering")}</div>;
+  if (error) return <div className="text-ui-caption text-neutral-450 dark:text-neutral-500 p-3">{t("mermaidFailed")} {error}</div>;
+  if (!svg) return <div className="text-ui-caption text-neutral-450 dark:text-neutral-500 animate-pulse">{t("rendering")}</div>;
   return <div className="flex items-center justify-center min-h-full" dangerouslySetInnerHTML={{ __html: svg }} />;
 }

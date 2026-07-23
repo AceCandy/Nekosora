@@ -86,7 +86,7 @@ function OptionList({
             onClick={handleClick}
             aria-label={ariaLabel ? `${ariaLabel}: ${opt.label}` : opt.label}
             className={clsx(
-              "w-full text-left rounded px-2 py-1.5 text-xs transition-colors flex items-start gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue",
+              "w-full text-left rounded px-2 py-1.5 text-ui-caption transition-colors flex items-start gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue",
               isSelected
                 ? "bg-sora-blue/[0.06] text-sora-blue"
                 : "text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900",
@@ -105,11 +105,11 @@ function OptionList({
               ) : (
                 <>
                   <span className="font-semibold block truncate">{opt.label}</span>
-                  {opt.badge && <span className="text-[10px] text-neutral-400 font-mono">{opt.badge}</span>}
+                  {opt.badge && <span className="text-ui-caption text-neutral-400 font-mono">{opt.badge}</span>}
                 </>
               )}
               {opt.description && (
-                <span className="text-[10px] text-neutral-400 block truncate">{opt.description}</span>
+                <span className="text-ui-caption text-neutral-400 block truncate">{opt.description}</span>
               )}
             </span>
           </button>

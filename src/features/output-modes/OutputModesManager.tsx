@@ -85,7 +85,7 @@ export default function OutputModesManager({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-mono text-neutral-400 dark:text-neutral-500 uppercase tracking-wider">
+        <span className="text-ui-caption font-mono text-neutral-400 dark:text-neutral-500 uppercase tracking-wider">
           {t("configuredCount", { count: optimisticModes.length })}
         </span>
         <Button
@@ -101,8 +101,8 @@ export default function OutputModesManager({
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <div className="rounded-lg border border-morning-mist dark:border-deep-space bg-nebula-white dark:bg-twilight-obsidian overflow-hidden transition-colors duration-150">
-          <table className="w-full text-sm border-collapse text-left">
-            <thead className="bg-neutral-50/70 dark:bg-neutral-900/50 border-b border-morning-mist dark:border-deep-space text-neutral-500 dark:text-neutral-400 font-mono text-xs uppercase">
+          <table className="w-full text-ui-body border-collapse text-left">
+            <thead className="bg-neutral-50/70 dark:bg-neutral-900/50 border-b border-morning-mist dark:border-deep-space text-neutral-500 dark:text-neutral-400 font-mono text-ui-caption uppercase">
               <tr>
                 <th className="p-3.5 w-8" />
                 <th className="p-3.5 font-medium">{t("colName")}</th>
@@ -115,7 +115,7 @@ export default function OutputModesManager({
             <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800/60">
               {optimisticModes.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-10 text-center text-xs text-neutral-400 dark:text-neutral-500">
+                  <td colSpan={6} className="p-10 text-center text-ui-caption text-neutral-400 dark:text-neutral-500">
                     {t("empty")}
                   </td>
                 </tr>
@@ -163,11 +163,11 @@ export default function OutputModesManager({
           onClose={() => setDeleteId(null)}
           title={t("deleteTitle")}
           message={
-            <div className="flex gap-3 text-sm text-neutral-600 dark:text-neutral-400 mt-2">
+            <div className="flex gap-3 text-ui-body text-neutral-600 dark:text-neutral-400 mt-2">
               <ShieldAlert className="w-5 h-5 text-red-500 shrink-0" />
               <div>
                 {t("deleteConfirm", { name: deleting.name })}
-                <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1 leading-normal">
+                <p className="text-ui-caption text-neutral-400 dark:text-neutral-500 mt-1 leading-normal">
                   {t("deleteWarning")}
                 </p>
               </div>
@@ -223,16 +223,16 @@ function SortableOutputModeRow({
       <td className="p-3.5 font-semibold text-neutral-800 dark:text-white">
         {mode.name}
       </td>
-      <td className="p-3.5 font-mono text-xs">
+      <td className="p-3.5 font-mono text-ui-caption">
         {mode.icon ? (
-          <Badge variant="neutral" className="font-mono text-xs py-0.5">
+          <Badge variant="neutral" className="font-mono text-ui-caption py-0.5">
             {mode.icon}
           </Badge>
         ) : (
           <span className="text-neutral-400 dark:text-neutral-600">-</span>
         )}
       </td>
-      <td className="p-3.5 text-xs text-neutral-500 dark:text-neutral-400 max-w-[240px] truncate" title={mode.description ?? ""}>
+      <td className="p-3.5 text-ui-caption text-neutral-500 dark:text-neutral-400 max-w-[240px] truncate" title={mode.description ?? ""}>
         {mode.description || <span className="text-neutral-400 dark:text-neutral-600">-</span>}
       </td>
       <td className="p-3.5">

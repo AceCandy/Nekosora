@@ -27,7 +27,7 @@ interface RouteFormDialogProps {
 }
 
 const inputCls =
-  "mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900";
+  "mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-ui-body dark:border-neutral-700 dark:bg-neutral-900";
 
 /**
  * 路由(模型 → Provider)新增/编辑弹窗。
@@ -103,7 +103,7 @@ export default function RouteFormDialog({
         className="space-y-4"
       >
         <label className="block">
-          <span className="text-sm font-medium">{t("upstreamProviderLabel")}</span>
+          <span className="text-ui-body font-medium">{t("upstreamProviderLabel")}</span>
           <select
             name="providerId"
             required
@@ -119,8 +119,8 @@ export default function RouteFormDialog({
         </label>
 
         <label className="block">
-          <span className="text-sm font-medium">
-            {t("upstreamModelNameShortLabel")} <span className="text-xs font-normal text-neutral-400">{t("upstreamModelShortHint")}</span>
+          <span className="text-ui-body font-medium">
+            {t("upstreamModelNameShortLabel")} <span className="text-ui-caption font-normal text-neutral-400">{t("upstreamModelShortHint")}</span>
           </span>
           <div className="flex items-center gap-2">
             <input
@@ -144,7 +144,7 @@ export default function RouteFormDialog({
 
         <div className="grid grid-cols-2 gap-4">
           <label className="block">
-            <span className="text-sm font-medium" title={t("priorityTitle")}>
+            <span className="text-ui-body font-medium" title={t("priorityTitle")}>
               {t("priorityLabel")}
             </span>
             <input
@@ -155,7 +155,7 @@ export default function RouteFormDialog({
             />
           </label>
           <label className="block">
-            <span className="text-sm font-medium" title={t("weightTitle")}>
+            <span className="text-ui-body font-medium" title={t("weightTitle")}>
               {t("weightLabel")}
             </span>
             <input
@@ -167,7 +167,7 @@ export default function RouteFormDialog({
             />
           </label>
         </div>
-        <p className="text-xs text-neutral-400">
+        <p className="text-ui-caption text-neutral-400">
           {t("priorityWeightExplanation")}
         </p>
 
@@ -175,13 +175,13 @@ export default function RouteFormDialog({
           <button
             type="button"
             onClick={handleClose}
-            className="rounded-md border border-neutral-300 px-4 py-2 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+            className="rounded-md border border-neutral-300 px-4 py-2 text-ui-body hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
           >
             {t("cancel")}
           </button>
           <button
             type="submit"
-            className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-white dark:text-black"
+            className="rounded-md bg-neutral-900 px-4 py-2 text-ui-body font-medium text-white hover:bg-neutral-700 dark:bg-white dark:text-black"
           >
             {isEdit ? t("save") : t("create")}
           </button>

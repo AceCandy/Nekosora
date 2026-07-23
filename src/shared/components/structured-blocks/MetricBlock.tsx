@@ -21,13 +21,13 @@ function MetricCard({ item }: { item: MetricItem }) {
   const trend = item.trend ? TREND_STYLES[item.trend] : null;
   return (
     <div className="inline-flex flex-col gap-1 rounded-lg border border-morning-mist dark:border-deep-space/70 bg-nebula-white dark:bg-twilight-obsidian px-4 py-3">
-      <span className="text-xs text-neutral-500 dark:text-neutral-400">{item.label}</span>
+      <span className="text-ui-caption text-neutral-500 dark:text-neutral-400">{item.label}</span>
       <div className="flex items-baseline gap-1.5">
-        <span className="text-2xl font-semibold text-space-ink dark:text-nebula-silver tabular-nums">
+        <span className="text-ui-heading font-semibold text-space-ink dark:text-nebula-silver tabular-nums">
           {String(item.value)}
         </span>
         {item.unit ? (
-          <span className="text-sm text-neutral-500 dark:text-neutral-400">{item.unit}</span>
+          <span className="text-ui-body text-neutral-500 dark:text-neutral-400">{item.unit}</span>
         ) : null}
         {trend ? (
           "dot" in trend ? (
@@ -37,7 +37,7 @@ function MetricCard({ item }: { item: MetricItem }) {
           )
         ) : null}
         {item.delta ? (
-          <span className={clsx("text-xs", trend?.className ?? "text-neutral-500 dark:text-neutral-400")}>
+          <span className={clsx("text-ui-caption", trend?.className ?? "text-neutral-500 dark:text-neutral-400")}>
             {item.delta}
           </span>
         ) : null}

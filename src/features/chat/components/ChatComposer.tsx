@@ -267,8 +267,8 @@ export default function ChatComposer({
       <div className="flex-1 flex items-center justify-center text-neutral-400 p-8">
         <div className="text-center space-y-2 max-w-sm">
           <Cpu className="w-8 h-8 mx-auto text-neutral-300 dark:text-neutral-700 animate-pulse" aria-hidden="true" />
-          <h3 className="text-sm font-semibold">{t("noModels")}</h3>
-          <p className="text-xs text-neutral-450 dark:text-neutral-500 leading-relaxed">
+          <h3 className="text-ui-body font-semibold">{t("noModels")}</h3>
+          <p className="text-ui-caption text-neutral-450 dark:text-neutral-500 leading-relaxed">
             {t("noModelsDesc")}
           </p>
         </div>
@@ -369,7 +369,7 @@ export default function ChatComposer({
             )}
           >
             {isEmptyConversation && (
-              <h1 className="mb-6 text-center text-2xl font-semibold text-space-ink dark:text-nebula-silver">
+              <h1 className="mb-6 text-center text-ui-heading font-semibold text-space-ink dark:text-nebula-silver">
                 {t("welcomeTitle")}
               </h1>
             )}

@@ -105,13 +105,13 @@ export default function UpstreamModelPicker({
           </div>
 
           {error ? (
-            <div className="text-sm text-red-500 dark:text-red-400 py-6 text-center">
+            <div className="text-ui-body text-red-500 dark:text-red-400 py-6 text-center">
               {t("fetchError")}: {error}
             </div>
           ) : isPending ? (
-            <div className="text-sm text-neutral-400 py-6 text-center">{t("fetching")}</div>
+            <div className="text-ui-body text-neutral-400 py-6 text-center">{t("fetching")}</div>
           ) : filtered.length === 0 ? (
-            <div className="text-sm text-neutral-400 py-6 text-center">{t("fetchModelsEmpty")}</div>
+            <div className="text-ui-body text-neutral-400 py-6 text-center">{t("fetchModelsEmpty")}</div>
           ) : (
             <div className="max-h-72 overflow-y-auto rounded-md border border-morning-mist dark:border-deep-space divide-y divide-neutral-100 dark:divide-neutral-800/60">
               {filtered.map((m) => (
@@ -119,7 +119,7 @@ export default function UpstreamModelPicker({
                   key={m.id}
                   type="button"
                   onClick={() => handleSelect(m.id)}
-                  className="w-full text-left px-3 py-2 text-xs font-mono hover:bg-neutral-50 dark:hover:bg-neutral-900/40 transition-colors"
+                  className="w-full text-left px-3 py-2 text-ui-caption font-mono hover:bg-neutral-50 dark:hover:bg-neutral-900/40 transition-colors"
                 >
                   {m.id}
                 </button>
@@ -127,7 +127,7 @@ export default function UpstreamModelPicker({
             </div>
           )}
 
-          <p className="text-xs text-neutral-400 dark:text-neutral-500 leading-normal">
+          <p className="text-ui-caption text-neutral-400 dark:text-neutral-500 leading-normal">
             {t("fetchModelsHint")}
           </p>
         </div>

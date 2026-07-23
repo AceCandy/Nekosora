@@ -100,14 +100,19 @@ components:
 **Character:** 纯粹、中性且严密对齐。依靠字重的对比和行高的松紧来区分层级，绝不使用夸张的装饰性字体。
 
 ### Hierarchy
-- **Display** (Semi-bold, `32px` / `2rem`, `1.25`): 用于 Nekusora 首页大标题及关键登录界面的品牌首提。
-- **Headline** (Semi-bold, `24px` / `1.5rem`, `1.3`): 用于对话窗顶栏及卡片大组标题。
-- **Title** (Semi-bold, `16px` / `1.125rem`, `1.4`): 用于 Modal 标题、配置表单组标题。
-- **Body** (Regular, `14px` / `0.875rem`, `1.5`): 用于对话消息正文、详细文字描述。段落最大宽度控制在 `65-75ch` 以内以保障阅读连续性。
-- **Label** (Medium, `12px` / `0.75rem`, `1.2`): 用于次要数据说明、按钮文字、附件标签、表单 Label。
+- **Display** (`text-ui-display`, `30px / 36px`): 用于关键页面的品牌首提和大标题。
+- **Heading** (`text-ui-heading`, `24px / 32px`): 用于页面主标题和大组标题。
+- **Subheading** (`text-ui-subheading`, `20px / 28px`): 用于后台页面标题和重要分区标题。
+- **Title** (`text-ui-title`, `18px / 28px`): 用于 Modal、配置组和局部标题。
+- **Reading** (`text-ui-reading`, `16px / 24px`): 用于 Chat 消息、输入框和连续阅读内容；Chat 正文可用 `leading-7` 扩展到 `28px` 行高。
+- **Body** (`text-ui-body`, `14px / 20px`): 用于管理后台正文、表单控件、菜单和常规说明。
+- **Caption** (`text-ui-caption`, `12px / 16px`): 用于标签、按钮小号、附件信息和次要说明。
+- **Micro** (`text-ui-micro`, `11px / 16px`): 仅用于时间戳、代码标识和极次要元信息；不得用于正文、表单标签或主要操作。
 
 ### Named Rules
 **克制缩放规则 (Static Scale Rule).** 作为功能性 Product 界面，所有字号大小在不同视口下均使用固定的 rem 比例，绝不使用流式 CSS clamp() 自动缩放，保证开发者调试网关参数时的精确度。
+
+**语义字号规则 (Semantic Type Rule).** 产品 UI 必须使用 `text-ui-*` 语义字号，不再直接使用 `text-xs` / `text-sm` / `text-base` 或 `text-[Npx]`。新增小字不得低于 `11px`；若信息重要到需要用户阅读或操作，至少使用 `text-ui-caption`。
 
 ## 4. Elevation
 

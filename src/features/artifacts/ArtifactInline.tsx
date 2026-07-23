@@ -24,7 +24,7 @@ export function ArtifactInline({
     <div className="border border-morning-mist dark:border-deep-space/80 rounded-md bg-neutral-50/30 dark:bg-[#0d0f14]/10 overflow-hidden max-w-[75ch]">
       <button
         onClick={() => setExpanded((v) => !v)}
-        className="w-full flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-mono text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors"
+        className="w-full flex items-center gap-1.5 px-3 py-1.5 text-ui-caption font-mono text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors"
       >
         {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
         <Code2 className="w-3 h-3" />
@@ -38,12 +38,12 @@ export function ArtifactInline({
           {artifacts.map((a, i) => (
             <div key={i} className="rounded border border-neutral-200/50 dark:border-neutral-800/50 overflow-hidden">
               <div className="flex items-center justify-between px-2 py-1 bg-neutral-100/50 dark:bg-neutral-900/30">
-                <span className="text-[10px] font-mono text-neutral-500">
+                <span className="text-ui-caption font-mono text-neutral-500">
                   [{a.kind}] {a.title}
                 </span>
                 <button
                   onClick={() => onOpenPanel(a)}
-                  className="inline-flex items-center gap-1 text-[10px] text-sora-blue hover:underline"
+                  className="inline-flex items-center gap-1 text-ui-caption text-sora-blue hover:underline"
                 >
                   <PanelRight className="w-3 h-3" />
                   {t("openPanel")}
@@ -52,7 +52,7 @@ export function ArtifactInline({
               <SyntaxHighlighter
                 language={a.language || "text"}
                 style={oneDark}
-                customStyle={{ margin: 0, fontSize: "11px", padding: "8px", maxHeight: "120px" }}
+                customStyle={{ margin: 0, fontSize: "12px", padding: "8px", maxHeight: "120px" }}
               >
                 {a.content.slice(0, 500) + (a.content.length > 500 ? "\n…" : "")}
               </SyntaxHighlighter>

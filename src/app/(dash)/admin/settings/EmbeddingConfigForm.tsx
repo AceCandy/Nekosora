@@ -46,15 +46,15 @@ export default function EmbeddingConfigForm({
       action={action}
       className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] p-5 space-y-3"
     >
-      <h3 className="text-sm font-bold text-neutral-800 dark:text-white">{labels.embeddingTitle}</h3>
+      <h3 className="text-ui-body font-bold text-neutral-800 dark:text-white">{labels.embeddingTitle}</h3>
 
       <div className="space-y-1">
-        <label className="text-xs font-medium text-neutral-500">{labels.embeddingProvider}</label>
+        <label className="text-ui-caption font-medium text-neutral-500">{labels.embeddingProvider}</label>
         <select
           name="provider_id"
           value={providerId}
           onChange={(e) => setProviderId(e.target.value)}
-          className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-3 py-2 text-sm focus:outline-none focus:border-sora-blue cursor-pointer"
+          className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-3 py-2 text-ui-body focus:outline-none focus:border-sora-blue cursor-pointer"
         >
           <option value="">{labels.selectProvider}</option>
           {providers.map((p) => (
@@ -66,7 +66,7 @@ export default function EmbeddingConfigForm({
       </div>
 
       <div className="space-y-1">
-        <label className="text-xs font-medium text-neutral-500">{labels.embeddingModel}</label>
+        <label className="text-ui-caption font-medium text-neutral-500">{labels.embeddingModel}</label>
         <div className="flex items-center gap-2">
           <input
             ref={modelInputRef}
@@ -74,7 +74,7 @@ export default function EmbeddingConfigForm({
             value={model}
             onChange={(e) => setModel(e.target.value)}
             placeholder="bge-m3"
-            className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-3 py-2 text-sm font-mono focus:outline-none focus:border-sora-blue"
+            className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-3 py-2 text-ui-body font-mono focus:outline-none focus:border-sora-blue"
           />
           <UpstreamModelPicker
             fetchAction={fetchAction}
@@ -83,12 +83,12 @@ export default function EmbeddingConfigForm({
             filter={(m) => EMBEDDING_NAME_RE.test(m.id)}
           />
         </div>
-        <p className="text-[11px] text-neutral-400">{labels.embeddingHint}</p>
+        <p className="text-ui-caption text-neutral-400">{labels.embeddingHint}</p>
       </div>
 
       <button
         type="submit"
-        className="rounded-md bg-sora-blue hover:bg-sora-blue-hover text-white px-4 py-2 text-sm font-semibold cursor-pointer"
+        className="rounded-md bg-sora-blue hover:bg-sora-blue-hover text-white px-4 py-2 text-ui-body font-semibold cursor-pointer"
       >
         {labels.save}
       </button>

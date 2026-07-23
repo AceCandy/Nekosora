@@ -23,7 +23,7 @@ const SyntaxHighlighter = dynamic(
   () => import("react-syntax-highlighter").then((mod) => mod.Prism),
   {
     ssr: false,
-    loading: () => <pre className="text-xs p-4 animate-pulse text-neutral-400 font-mono">Loading code highlighter...</pre>,
+    loading: () => <pre className="text-ui-caption p-4 animate-pulse text-neutral-400 font-mono">Loading code highlighter...</pre>,
   }
 );
 
@@ -82,10 +82,10 @@ export function ArtifactPanel({
       {/* Toolbar */}
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-morning-mist dark:border-deep-space/80 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-[10px] font-mono uppercase tracking-wider text-neutral-400 dark:text-neutral-500 shrink-0">
+          <span className="text-ui-caption font-mono uppercase tracking-wider text-neutral-400 dark:text-neutral-500 shrink-0">
             {artifact.kind}
           </span>
-          <span className="text-xs font-medium text-neutral-700 dark:text-neutral-200 truncate" title={artifact.title}>
+          <span className="text-ui-caption font-medium text-neutral-700 dark:text-neutral-200 truncate" title={artifact.title}>
             {artifact.title}
           </span>
         </div>

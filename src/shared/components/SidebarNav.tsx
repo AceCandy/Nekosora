@@ -100,7 +100,7 @@ export default function SidebarNav({ groups, matchMode = "exact", collapsed = fa
       {groups.map((group, groupIdx) => (
         <div key={group.titleKey ?? groupIdx} className="space-y-1">
           {group.titleKey && !collapsed && (
-            <div className="px-3 pb-1 text-[10px] font-medium uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
+            <div className="px-3 pb-1 text-ui-caption font-medium uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
               {t(group.titleKey)}
             </div>
           )}
@@ -118,7 +118,7 @@ export default function SidebarNav({ groups, matchMode = "exact", collapsed = fa
                 title={collapsed ? t(item.labelKey) : undefined}
                 aria-label={collapsed ? t(item.labelKey) : undefined}
                 className={clsx(
-                  "touch-target group/nav flex items-center rounded-md text-sm font-medium transition-[background-color,color,padding] duration-150 ease-out",
+                  "touch-target group/nav flex items-center rounded-md text-ui-body font-medium transition-[background-color,color,padding] duration-150 ease-out",
                   collapsed ? "justify-center p-2" : "gap-2 px-3 py-2",
                   isActive
                     ? "bg-sora-blue/8 text-sora-blue dark:bg-sora-blue/10"
@@ -128,7 +128,7 @@ export default function SidebarNav({ groups, matchMode = "exact", collapsed = fa
                 <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
                 {!collapsed && <span className="flex-1 truncate">{t(item.labelKey)}</span>}
                 {!collapsed && (
-                  <span className="hidden border border-neutral-200 px-1.5 py-0.5 font-mono text-[10px] text-neutral-400 opacity-0 transition-opacity group-hover/nav:opacity-100 dark:border-neutral-800 dark:text-neutral-500 sm:inline-block">
+                  <span className="hidden border border-neutral-200 px-1.5 py-0.5 font-mono text-ui-caption text-neutral-400 opacity-0 transition-opacity group-hover/nav:opacity-100 dark:border-neutral-800 dark:text-neutral-500 sm:inline-block">
                     {hotkey}
                   </span>
                 )}

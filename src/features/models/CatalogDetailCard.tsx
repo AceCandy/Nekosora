@@ -38,14 +38,14 @@ export default function CatalogDetailCard({ catalog }: { catalog: ModelCatalogOp
   ].filter((x) => x.on);
 
   return (
-    <div className="w-72 space-y-2.5 text-xs">
+    <div className="w-72 space-y-2.5 text-ui-caption">
       <div className="flex items-center justify-between gap-2">
         <span className="truncate font-semibold text-neutral-800 dark:text-neutral-100">{catalog.name}</span>
         <Badge variant="neutral">{typeMap[catalog.modelType] ?? catalog.modelType}</Badge>
       </div>
 
       <div>
-        <div className="mb-1 text-[10px] uppercase tracking-wider text-neutral-500">{t("capabilities")}</div>
+        <div className="mb-1 text-ui-caption uppercase tracking-wider text-neutral-500">{t("capabilities")}</div>
         {caps.length > 0 ? (
           <div className="flex flex-wrap gap-1">
             {caps.map(({ key, label, Icon }) => (
@@ -56,12 +56,12 @@ export default function CatalogDetailCard({ catalog }: { catalog: ModelCatalogOp
             ))}
           </div>
         ) : (
-          <span className="text-[10px] text-neutral-500">—</span>
+          <span className="text-ui-caption text-neutral-500">—</span>
         )}
       </div>
 
       <div>
-        <div className="mb-1 text-[10px] uppercase tracking-wider text-neutral-500">{t("reasoning")}</div>
+        <div className="mb-1 text-ui-caption uppercase tracking-wider text-neutral-500">{t("reasoning")}</div>
         {c.reasoning ? (
           <div className="space-y-1">
             <div className="flex flex-wrap gap-1">
@@ -71,7 +71,7 @@ export default function CatalogDetailCard({ catalog }: { catalog: ModelCatalogOp
                   <span
                     key={lv}
                     className={clsx(
-                      "rounded border px-1.5 py-0.5 text-[10px]",
+                      "rounded border px-1.5 py-0.5 text-ui-caption",
                       supported
                         ? "border-sora-blue/30 bg-sora-blue/10 text-sora-blue"
                         : "border-neutral-200 bg-neutral-50 text-neutral-400 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-600",
@@ -83,13 +83,13 @@ export default function CatalogDetailCard({ catalog }: { catalog: ModelCatalogOp
               })}
             </div>
             {c.thinkingFormat && (
-              <div className="text-[10px] text-neutral-500">
+              <div className="text-ui-caption text-neutral-500">
                 {t("reasoningFormat")}: <span className="font-mono text-neutral-500 dark:text-neutral-300">{c.thinkingFormat}</span>
               </div>
             )}
           </div>
         ) : (
-          <span className="text-[10px] text-neutral-500">{t("reasoningNotSupported")}</span>
+          <span className="text-ui-caption text-neutral-500">{t("reasoningNotSupported")}</span>
         )}
       </div>
     </div>

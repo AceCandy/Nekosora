@@ -208,8 +208,8 @@ export default function ModelsManager({
     const tableReorderable = Boolean(visibility ? groupedReorderAction : reorderAction);
     const table = (
       <div className="rounded-lg border border-morning-mist dark:border-deep-space bg-nebula-white dark:bg-twilight-obsidian overflow-x-auto transition-colors duration-150">
-        <table className="w-full min-w-[680px] text-sm border-collapse text-left">
-          <thead className="bg-neutral-50/70 dark:bg-neutral-900/50 border-b border-morning-mist dark:border-deep-space text-neutral-500 dark:text-neutral-400 font-mono text-xs uppercase">
+        <table className="w-full min-w-[680px] text-ui-body border-collapse text-left">
+          <thead className="bg-neutral-50/70 dark:bg-neutral-900/50 border-b border-morning-mist dark:border-deep-space text-neutral-500 dark:text-neutral-400 font-mono text-ui-caption uppercase">
             <tr>
               {reorderable && <th className="p-3.5 w-8" />}
               <th className="p-3.5 font-medium">{t("colExternalName")}</th>
@@ -222,7 +222,7 @@ export default function ModelsManager({
           <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800/60">
             {groupModels.length === 0 ? (
               <tr>
-                <td colSpan={colCount} className="p-10 text-center text-xs text-neutral-500">
+                <td colSpan={colCount} className="p-10 text-center text-ui-caption text-neutral-500">
                   {visibility ? t("emptyGroup") : t("emptyState")}
                 </td>
               </tr>
@@ -313,7 +313,7 @@ export default function ModelsManager({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-mono text-neutral-500 uppercase tracking-wider">
+        <span className="text-ui-caption font-mono text-neutral-500 uppercase tracking-wider">
           {t("configuredCount", { count: optimisticModels.length })}
         </span>
         <Button
@@ -330,13 +330,13 @@ export default function ModelsManager({
       {groupedReorderable ? (
         <div className="space-y-6">
           <section className="space-y-2">
-            <h2 className="text-sm font-semibold text-neutral-800 dark:text-neutral-200">
+            <h2 className="text-ui-body font-semibold text-neutral-800 dark:text-neutral-200">
               {t("privateGroup")}
             </h2>
             {renderTable(optimisticModels.filter((model) => model.visibility !== "public"), "private")}
           </section>
           <section className="space-y-2">
-            <h2 className="text-sm font-semibold text-neutral-800 dark:text-neutral-200">
+            <h2 className="text-ui-body font-semibold text-neutral-800 dark:text-neutral-200">
               {t("publicGroup")}
             </h2>
             {renderTable(optimisticModels.filter((model) => model.visibility === "public"), "public")}
@@ -409,11 +409,11 @@ export default function ModelsManager({
           onClose={() => setDeleteId(null)}
           title={t("deleteModelTitle")}
           message={
-            <div className="flex gap-3 text-sm text-neutral-600 dark:text-neutral-400 mt-2">
+            <div className="flex gap-3 text-ui-body text-neutral-600 dark:text-neutral-400 mt-2">
               <ShieldAlert className="w-5 h-5 text-red-500 shrink-0" />
               <div>
                 {t("deleteModelConfirm", { name: deleting.name })}
-                <p className="text-xs text-neutral-500 mt-1 leading-normal">
+                <p className="text-ui-caption text-neutral-500 mt-1 leading-normal">
                   {t("deleteModelWarning")}
                 </p>
               </div>
@@ -443,11 +443,11 @@ export default function ModelsManager({
           onClose={() => setRouteDeleteId(null)}
           title={t("deleteRouteTitle")}
           message={
-            <div className="flex gap-3 text-sm text-neutral-600 dark:text-neutral-400 mt-2">
+            <div className="flex gap-3 text-ui-body text-neutral-600 dark:text-neutral-400 mt-2">
               <ShieldAlert className="w-5 h-5 text-red-500 shrink-0" />
               <div>
                 {t("deleteRouteConfirm", { name: routeDeleting.providerName })}
-                <p className="text-xs text-neutral-500 mt-1 leading-normal font-mono">
+                <p className="text-ui-caption text-neutral-500 mt-1 leading-normal font-mono">
                   {t("upstreamModelLabel", { name: routeDeleting.upstreamModelName })}
                 </p>
               </div>
@@ -493,17 +493,17 @@ function ModelRowCells({
     <>
       <td className="p-3.5">
         <div className="flex flex-col gap-0.5 min-w-0">
-          <span className="font-mono text-xs font-semibold text-neutral-800 dark:text-neutral-200 max-w-[16rem] truncate" title={model.name}>
+          <span className="font-mono text-ui-caption font-semibold text-neutral-800 dark:text-neutral-200 max-w-[16rem] truncate" title={model.name}>
             {model.name}
           </span>
           {model.displayName && model.displayName !== model.name ? (
-            <span className="text-xs text-neutral-500 dark:text-neutral-400 max-w-[16rem] truncate" title={model.displayName}>
+            <span className="text-ui-caption text-neutral-500 dark:text-neutral-400 max-w-[16rem] truncate" title={model.displayName}>
               {model.displayName}
             </span>
           ) : null}
         </div>
       </td>
-      <td className="p-3.5 text-xs">
+      <td className="p-3.5 text-ui-caption">
         {catalogOption ? (
           <Popover
             openOnHover
@@ -522,30 +522,30 @@ function ModelRowCells({
         )}
       </td>
       {hasVisibility && (
-        <td className="p-3.5 text-xs">
+        <td className="p-3.5 text-ui-caption">
           {visibilityAction ? (
             model.visibility === "public" ? (
               <form action={visibilityAction.makePrivate} className="inline-flex rounded-md border border-morning-mist dark:border-deep-space overflow-hidden" aria-label={t("visibilityLabel")}>
                 <button
                   type="submit"
-                  className="px-2.5 py-1.5 text-[11px] font-medium text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sora-blue"
+                  className="px-2.5 py-1.5 text-ui-caption font-medium text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sora-blue"
                   title={t("makePrivate")}
                 >
                   {t("visibilityPrivate")}
                 </button>
-                <span className="px-2.5 py-1.5 text-[11px] font-semibold bg-sora-blue text-white" aria-current="true">
+                <span className="px-2.5 py-1.5 text-ui-caption font-semibold bg-sora-blue text-white" aria-current="true">
                   {t("visibilityPublic")}
                 </span>
               </form>
             ) : (
               <div role="group" className="inline-flex rounded-md border border-morning-mist dark:border-deep-space overflow-hidden" aria-label={t("visibilityLabel")}>
-                <span className="px-2.5 py-1.5 text-[11px] font-semibold bg-neutral-800 text-white dark:bg-neutral-100 dark:text-neutral-900" aria-current="true">
+                <span className="px-2.5 py-1.5 text-ui-caption font-semibold bg-neutral-800 text-white dark:bg-neutral-100 dark:text-neutral-900" aria-current="true">
                   {t("visibilityPrivate")}
                 </span>
                 <button
                   type="button"
                   onClick={onPublish}
-                  className="px-2.5 py-1.5 text-[11px] font-medium text-neutral-500 hover:bg-sora-blue/10 hover:text-sora-blue dark:text-neutral-400 dark:hover:bg-sora-blue/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sora-blue"
+                  className="px-2.5 py-1.5 text-ui-caption font-medium text-neutral-500 hover:bg-sora-blue/10 hover:text-sora-blue dark:text-neutral-400 dark:hover:bg-sora-blue/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sora-blue"
                   title={t("publishModel")}
                 >
                   {t("visibilityPublic")}
@@ -791,7 +791,7 @@ function RouteListPanel({
     <div className="space-y-3 p-4 rounded-lg bg-neutral-50/50 dark:bg-neutral-950/20 border border-neutral-200/65 dark:border-neutral-800/80">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
+          <span className="text-ui-caption font-medium text-neutral-500 dark:text-neutral-400">
             {t("routePanelHint")}
           </span>
           {fetchModelsAction && routes.length > 0 && (
@@ -815,13 +815,13 @@ function RouteListPanel({
       </div>
 
       {routes.length === 0 ? (
-        <p className="text-xs text-neutral-500 py-3 text-center border border-dashed border-neutral-200 dark:border-neutral-800 rounded">
+        <p className="text-ui-caption text-neutral-500 py-3 text-center border border-dashed border-neutral-200 dark:border-neutral-800 rounded">
           {t("noRoutesHint")}
         </p>
       ) : (
         <div className="rounded-md border border-morning-mist dark:border-deep-space overflow-x-auto bg-nebula-white dark:bg-twilight-obsidian">
-          <table className="w-full min-w-[560px] text-xs text-left">
-            <thead className="bg-neutral-50 dark:bg-neutral-900 text-neutral-500 dark:text-neutral-400 font-mono text-[10px] uppercase border-b border-morning-mist dark:border-deep-space">
+          <table className="w-full min-w-[560px] text-ui-caption text-left">
+            <thead className="bg-neutral-50 dark:bg-neutral-900 text-neutral-500 dark:text-neutral-400 font-mono text-ui-caption uppercase border-b border-morning-mist dark:border-deep-space">
               <tr>
                 <th className="p-2.5 font-medium">{t("colUpstreamProvider")}</th>
                 <th className="p-2.5 font-medium">{t("colUpstreamModelName")}</th>
@@ -838,7 +838,7 @@ function RouteListPanel({
                   className="hover:bg-neutral-50/50 dark:hover:bg-neutral-900/10 transition-colors"
                 >
                   <td className="p-2.5 font-medium text-neutral-850 dark:text-neutral-200">{r.providerName}</td>
-                  <td className="p-2.5 font-mono text-[11px] text-neutral-500 dark:text-neutral-400">
+                  <td className="p-2.5 font-mono text-ui-caption text-neutral-500 dark:text-neutral-400">
                     <span className="inline-flex items-center gap-1.5">
                       {r.upstreamModelName}
                       {syncMap[r.id] === "synced" && (
@@ -849,8 +849,8 @@ function RouteListPanel({
                       )}
                     </span>
                   </td>
-                  <td className="p-2.5 text-center font-mono text-[11px] font-semibold">{r.priority}</td>
-                  <td className="p-2.5 text-center font-mono text-[11px] font-semibold">{r.weight}</td>
+                  <td className="p-2.5 text-center font-mono text-ui-caption font-semibold">{r.priority}</td>
+                  <td className="p-2.5 text-center font-mono text-ui-caption font-semibold">{r.weight}</td>
                   <td className="p-2.5">
                     <StatusDot enabled={r.enabled} enabledLabel={t("statusEnabled")} disabledLabel={t("statusDisabled")} />
                   </td>
@@ -908,7 +908,7 @@ function RouteListPanel({
           </table>
         </div>
       )}
-      <p className="text-[11px] text-neutral-500">
+      <p className="text-ui-caption text-neutral-500">
         {t("priorityWeightTip")}
       </p>
     </div>

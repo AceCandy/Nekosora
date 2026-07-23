@@ -17,9 +17,9 @@ export default async function UsersPage() {
 
       <div className="rounded-lg border border-morning-mist bg-nebula-white dark:border-deep-space dark:bg-twilight-obsidian overflow-hidden shadow-none">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm border-collapse">
+          <table className="w-full text-ui-body border-collapse">
             <thead>
-              <tr className="bg-neutral-50/70 border-b border-morning-mist text-neutral-500 dark:bg-neutral-900/50 dark:border-deep-space dark:text-neutral-400 text-xs uppercase tracking-wider font-semibold">
+              <tr className="bg-neutral-50/70 border-b border-morning-mist text-neutral-500 dark:bg-neutral-900/50 dark:border-deep-space dark:text-neutral-400 text-ui-caption uppercase tracking-wider font-semibold">
                 <th className="text-left px-5 py-3 font-semibold">{t("thEmail")}</th>
                 <th className="text-left px-5 py-3 font-semibold">{t("thName")}</th>
                 <th className="text-left px-5 py-3 font-semibold">{t("thRole")}</th>
@@ -40,7 +40,7 @@ export default async function UsersPage() {
                   key={u.id as string} 
                   className="hover:bg-neutral-50/30 dark:hover:bg-neutral-900/10 transition-colors duration-150"
                 >
-                  <td className="px-5 py-3.5 font-medium text-neutral-900 dark:text-white font-mono text-xs">
+                  <td className="px-5 py-3.5 font-medium text-neutral-900 dark:text-white font-mono text-ui-caption">
                     {u.email as string}
                   </td>
                   <td className="px-5 py-3.5 text-neutral-700 dark:text-neutral-300">
@@ -48,11 +48,11 @@ export default async function UsersPage() {
                   </td>
                   <td className="px-5 py-3.5">
                     {u.role === "admin" ? (
-                      <Badge variant="primary" className="rounded-full px-2 py-0.5 text-xs font-semibold">
+                      <Badge variant="primary" className="rounded-full px-2 py-0.5 text-ui-caption font-semibold">
                         {t("roleAdminLabel")}
                       </Badge>
                     ) : (
-                      <Badge variant="neutral" className="rounded-full px-2 py-0.5 text-xs">
+                      <Badge variant="neutral" className="rounded-full px-2 py-0.5 text-ui-caption">
                         {t("roleUserLabel")}
                       </Badge>
                     )}
@@ -71,7 +71,7 @@ export default async function UsersPage() {
                         </Button>
                       </form>
                     ) : (
-                      <span className="text-xs text-neutral-400 dark:text-neutral-600 select-none">-</span>
+                      <span className="text-ui-caption text-neutral-400 dark:text-neutral-600 select-none">-</span>
                     )}
                   </td>
                 </tr>
@@ -80,7 +80,7 @@ export default async function UsersPage() {
           </table>
         </div>
       </div>
-      <div className="rounded-lg border border-neutral-100 bg-neutral-50/50 p-4 text-xs text-neutral-500 dark:border-neutral-800 dark:bg-neutral-950/20 dark:text-neutral-500 leading-relaxed">
+      <div className="rounded-lg border border-neutral-100 bg-neutral-50/50 p-4 text-ui-caption text-neutral-500 dark:border-neutral-800 dark:bg-neutral-950/20 dark:text-neutral-500 leading-relaxed">
         {t("footerNote")}
       </div>
     </div>

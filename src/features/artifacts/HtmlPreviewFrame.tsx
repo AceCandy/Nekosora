@@ -70,7 +70,7 @@ export function HtmlPreviewFrame({ html, title, onOpenPanel, className }: HtmlPr
     >
       {hasHeader && (
         <div className="flex items-center justify-between px-3 py-1.5 border-b border-morning-mist dark:border-deep-space/60 bg-neutral-50/50 dark:bg-[#0d0f14]/20">
-          <span className="text-[11px] font-mono text-neutral-400 truncate">{title}</span>
+          <span className="text-ui-caption font-mono text-neutral-400 truncate">{title}</span>
           <div className="flex items-center gap-1 shrink-0">
             {onOpenPanel && (
               <button

@@ -94,10 +94,10 @@ export function ErrorDetailDrawer({ row, attempts, open, onClose }: ErrorDetailD
         {/* 重试链:同 requestId 的全部尝试(attempt 升序),当前行高亮 */}
         {attempts && attempts.length > 1 && (
           <div className="space-y-1.5">
-            <div className="text-[10px] uppercase tracking-wider text-neutral-400 dark:text-neutral-500 font-semibold">
+            <div className="text-ui-caption uppercase tracking-wider text-neutral-400 dark:text-neutral-500 font-semibold">
               {t("errors.detailRetryChain")}
             </div>
-            <div className="rounded-md border border-morning-mist dark:border-deep-space bg-neutral-50/60 dark:bg-neutral-900/30 px-3 py-2 space-y-1 text-xs font-mono">
+            <div className="rounded-md border border-morning-mist dark:border-deep-space bg-neutral-50/60 dark:bg-neutral-900/30 px-3 py-2 space-y-1 text-ui-caption font-mono">
               {attempts.map((a) => (
                 <div
                   key={a.id}
@@ -107,7 +107,7 @@ export function ErrorDetailDrawer({ row, attempts, open, onClose }: ErrorDetailD
                   )}
                 >
                   <span className="shrink-0 w-6">{a.attempt != null ? `#${a.attempt}` : "·"}</span>
-                  <span className="shrink-0 inline-flex items-center justify-center rounded bg-neutral-200/70 dark:bg-neutral-700/50 px-1.5 py-0.5 text-[10px] text-neutral-600 dark:text-neutral-300">
+                  <span className="shrink-0 inline-flex items-center justify-center rounded bg-neutral-200/70 dark:bg-neutral-700/50 px-1.5 py-0.5 text-ui-caption text-neutral-600 dark:text-neutral-300">
                     {a.httpStatus ?? "-"}
                   </span>
                   <span className="truncate">{a.upstreamKeyMasked ?? a.providerName ?? "-"}</span>
@@ -118,10 +118,10 @@ export function ErrorDetailDrawer({ row, attempts, open, onClose }: ErrorDetailD
           </div>
         )}
 
-        <dl className="grid grid-cols-3 gap-x-4 gap-y-3 text-xs">
+        <dl className="grid grid-cols-3 gap-x-4 gap-y-3 text-ui-caption">
           {rows.map((r) => (
             <div key={r.label} className="contents">
-              <dt className="text-neutral-400 dark:text-neutral-500 uppercase tracking-wider font-semibold text-[10px] self-center">
+              <dt className="text-neutral-400 dark:text-neutral-500 uppercase tracking-wider font-semibold text-ui-caption self-center">
                 {r.label}
               </dt>
               <dd className="col-span-2 font-mono text-neutral-800 dark:text-neutral-200 break-all">{r.value}</dd>
@@ -132,10 +132,10 @@ export function ErrorDetailDrawer({ row, attempts, open, onClose }: ErrorDetailD
         {/* errorMessage 长文块 */}
         {row.errorMessage && (
           <div className="space-y-1.5">
-            <div className="text-[10px] uppercase tracking-wider text-neutral-400 dark:text-neutral-500 font-semibold">
+            <div className="text-ui-caption uppercase tracking-wider text-neutral-400 dark:text-neutral-500 font-semibold">
               {t("errors.detailErrorMessage")}
             </div>
-            <pre className="whitespace-pre-wrap break-all rounded-md border border-morning-mist dark:border-deep-space bg-neutral-50/60 dark:bg-neutral-900/30 px-3 py-2 text-xs text-neutral-700 dark:text-neutral-300 font-mono">
+            <pre className="whitespace-pre-wrap break-all rounded-md border border-morning-mist dark:border-deep-space bg-neutral-50/60 dark:bg-neutral-900/30 px-3 py-2 text-ui-caption text-neutral-700 dark:text-neutral-300 font-mono">
               {row.errorMessage}
             </pre>
           </div>

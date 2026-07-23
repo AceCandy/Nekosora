@@ -21,7 +21,7 @@ export function MarkdownImage({ src, alt, title, node: _node, ...rest }: Markdow
   // 无 src(罕见):退化为失败占位,避免渲染空 img。
   if (!src) {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-md border border-morning-mist dark:border-deep-space/80 bg-neutral-50 dark:bg-neutral-900 px-2 py-1 text-xs text-neutral-500">
+      <span className="inline-flex items-center gap-1.5 rounded-md border border-morning-mist dark:border-deep-space/80 bg-neutral-50 dark:bg-neutral-900 px-2 py-1 text-ui-caption text-neutral-500">
         <ImageOff className="w-3.5 h-3.5" aria-hidden="true" />
         {alt || t("imageFailed")}
       </span>
@@ -50,7 +50,7 @@ export function MarkdownImage({ src, alt, title, node: _node, ...rest }: Markdow
           <div className="absolute inset-0 rounded-xl bg-neutral-100 dark:bg-neutral-900 animate-pulse" aria-hidden="true" />
         )}
         {status === "error" && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 rounded-xl border border-morning-mist dark:border-deep-space/80 bg-neutral-50 dark:bg-neutral-900 p-3 text-center text-xs text-neutral-500">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 rounded-xl border border-morning-mist dark:border-deep-space/80 bg-neutral-50 dark:bg-neutral-900 p-3 text-center text-ui-caption text-neutral-500">
             <ImageOff className="w-5 h-5" aria-hidden="true" />
             <span className="line-clamp-2">{alt || t("imageFailed")}</span>
           </div>

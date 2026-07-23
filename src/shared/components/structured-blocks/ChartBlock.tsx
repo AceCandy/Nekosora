@@ -31,7 +31,8 @@ const CHART_PALETTE = [
   "var(--color-chart-5)",
 ];
 
-const AXIS_TICK = { fontSize: 11, fill: "var(--color-deep-space)" };
+const CHART_CAPTION_FONT_SIZE = 12;
+const AXIS_TICK = { fontSize: CHART_CAPTION_FONT_SIZE, fill: "var(--color-deep-space)" };
 const GRID_STROKE = "var(--color-morning-mist)";
 
 function colorAt(i: number): string {
@@ -117,7 +118,7 @@ function PieView({ data }: { data: ChartData }) {
         <PieChart>
           <Tooltip />
           {valueKey ? (
-            <Pie data={data.data} dataKey={valueKey} nameKey={nameKey} outerRadius={80} label={{ fontSize: 11 }}>
+            <Pie data={data.data} dataKey={valueKey} nameKey={nameKey} outerRadius={80} label={{ fontSize: CHART_CAPTION_FONT_SIZE }}>
               {data.data.map((_, i) => (
                 <Cell key={i} fill={colorAt(i)} />
               ))}

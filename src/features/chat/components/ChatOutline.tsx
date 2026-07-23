@@ -131,7 +131,7 @@ export function ChatOutline({ messages, streaming }: ChatOutlineProps) {
                   type="button"
                   onClick={() => handleJump(turn.userIndex)}
                   className={clsx(
-                    "w-full text-left rounded-md px-2 py-1.5 text-xs transition-colors line-clamp-1",
+                    "w-full text-left rounded-md px-2 py-1.5 text-ui-caption transition-colors line-clamp-1",
                     i === scrubIdx
                       ? "bg-sora-blue/20 text-neutral-800 dark:text-white font-medium"
                       : i === activeTurnIdx

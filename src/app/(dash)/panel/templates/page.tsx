@@ -34,13 +34,13 @@ export default async function PanelTemplatesPage() {
 
       {templates.length === 0 && (
         <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#12141a] p-10 text-center shadow-none">
-          <p className="text-sm text-neutral-400">{tt("empty")}</p>
+          <p className="text-ui-body text-neutral-400">{tt("empty")}</p>
         </div>
       )}
 
       {Array.from(groups.entries()).map(([category, items]) => (
         <div key={category} className="space-y-3">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
+          <h2 className="text-ui-caption font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
             {category}
           </h2>
           <div className="grid sm:grid-cols-2 gap-3">
@@ -51,28 +51,28 @@ export default async function PanelTemplatesPage() {
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <span className="text-lg">{t.icon ?? "📄"}</span>
+                    <span className="text-ui-title">{t.icon ?? "📄"}</span>
                     <div>
-                      <div className="font-semibold text-sm text-neutral-900 dark:text-white flex items-center gap-1.5">
+                      <div className="font-semibold text-ui-body text-neutral-900 dark:text-white flex items-center gap-1.5">
                         {t.name}
                         {t.isAgent && (
-                          <span className="text-[10px] px-1 py-0.5 rounded bg-sora-blue/10 text-sora-blue border border-sora-blue/20 font-medium">Agent</span>
+                          <span className="text-ui-caption px-1 py-0.5 rounded bg-sora-blue/10 text-sora-blue border border-sora-blue/20 font-medium">Agent</span>
                         )}
                       </div>
                     </div>
                   </div>
-                  <span className="text-[10px] text-neutral-400 font-mono">{t.scope}</span>
+                  <span className="text-ui-caption text-neutral-400 font-mono">{t.scope}</span>
                 </div>
                 {t.description && (
-                  <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400 leading-relaxed line-clamp-2">{t.description}</p>
+                  <p className="mt-2 text-ui-caption text-neutral-500 dark:text-neutral-400 leading-relaxed line-clamp-2">{t.description}</p>
                 )}
                 <div className="mt-3 flex items-center justify-between">
-                  <span className="text-[10px] text-neutral-400">
+                  <span className="text-ui-caption text-neutral-400">
                     {t.variables.length > 0 ? tt("varCount", { count: t.variables.length }) : tt("noVars")}
                   </span>
                   <Link
                     href={`/chat?templateId=${t.id}`}
-                    className="text-xs font-medium text-sora-blue hover:underline"
+                    className="text-ui-caption font-medium text-sora-blue hover:underline"
                   >
                     {tt("use")}
                   </Link>

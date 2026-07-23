@@ -34,7 +34,7 @@ export default function PreviewMedia({ url, mime, filename }: PreviewMediaProps)
         <audio controls className="w-full" preload="metadata">
           <source src={url} type={mime} />
         </audio>
-        <p className="mt-2 text-xs text-center text-neutral-400 truncate">{filename}</p>
+        <p className="mt-2 text-ui-caption text-center text-neutral-400 truncate">{filename}</p>
       </div>
     );
   }

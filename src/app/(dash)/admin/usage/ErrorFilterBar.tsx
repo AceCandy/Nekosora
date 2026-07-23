@@ -45,7 +45,7 @@ interface ErrorFilterBarProps {
 }
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
-  return <span className="text-[11px] text-neutral-400 dark:text-neutral-500">{children}</span>;
+  return <span className="text-ui-caption text-neutral-400 dark:text-neutral-500">{children}</span>;
 }
 
 export function ErrorFilterBar({ variant, values, labels, basePath }: ErrorFilterBarProps) {
@@ -118,7 +118,7 @@ export function ErrorFilterBar({ variant, values, labels, basePath }: ErrorFilte
         <button
           type="button"
           onClick={() => router.refresh()}
-          className="ml-auto inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#12141a] text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 transition-colors"
+          className="ml-auto inline-flex items-center gap-1 px-2 py-1 rounded text-ui-caption border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#12141a] text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 transition-colors"
         >
           <RefreshCw className="size-3" />
           {t("filters.refresh")}
@@ -145,7 +145,7 @@ export function ErrorFilterBar({ variant, values, labels, basePath }: ErrorFilte
           <Select
             value={values.source}
             onChange={(e) => update({ source: e.target.value })}
-            className="w-28 py-1.5 text-xs"
+            className="w-28 py-1.5 text-ui-caption"
           >
             {sourceOptions.map((o) => (
               <option key={o.value} value={o.value}>
@@ -170,7 +170,7 @@ export function ErrorFilterBar({ variant, values, labels, basePath }: ErrorFilte
           <Select
             value={values.phase}
             onChange={(e) => update({ phase: e.target.value })}
-            className="w-32 py-1.5 text-xs"
+            className="w-32 py-1.5 text-ui-caption"
           >
             {phaseOptions.map((o) => (
               <option key={o.value} value={o.value}>
@@ -187,7 +187,7 @@ export function ErrorFilterBar({ variant, values, labels, basePath }: ErrorFilte
             value={values.httpStatus}
             onChange={(e) => update({ httpStatus: e.target.value.replace(/[^0-9]/g, "") })}
             placeholder="500"
-            className="w-24 px-2 py-1.5 text-xs rounded border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#12141a] text-neutral-700 dark:text-neutral-300"
+            className="w-24 px-2 py-1.5 text-ui-caption rounded border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#12141a] text-neutral-700 dark:text-neutral-300"
           />
         </div>
         <label className="flex items-center gap-1.5 pb-1.5 cursor-pointer select-none">
@@ -197,7 +197,7 @@ export function ErrorFilterBar({ variant, values, labels, basePath }: ErrorFilte
             onChange={(e) => update({ showAuth: e.target.checked ? "1" : "" })}
             className="size-3.5 accent-sora-blue"
           />
-          <span className="text-[11px] text-neutral-500 dark:text-neutral-400">{t("filters.showAuth")}</span>
+          <span className="text-ui-caption text-neutral-500 dark:text-neutral-400">{t("filters.showAuth")}</span>
         </label>
       </div>
       {/* 第三排:服务商 / 模型 / 上游key */}

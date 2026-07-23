@@ -105,7 +105,7 @@ export function Combobox({
             disabled={disabled}
             onClick={onTriggerClick}
             className={clsx(
-              "flex w-full items-center justify-between gap-1.5 px-2.5 py-1.5 text-xs rounded-md border bg-white dark:bg-[#12141a]",
+              "flex w-full items-center justify-between gap-1.5 px-2.5 py-1.5 text-ui-caption rounded-md border bg-white dark:bg-[#12141a]",
               "border-neutral-200 dark:border-neutral-800 text-neutral-700 dark:text-neutral-300",
               "hover:border-neutral-300 dark:hover:border-neutral-700 transition-colors",
               disabled && "opacity-50 cursor-not-allowed",
@@ -130,13 +130,13 @@ export function Combobox({
               value={q}
               onChange={(e) => onQueryChange(e.target.value)}
               placeholder={searchPlaceholder}
-              className="w-full pl-6 pr-2 py-1 text-xs rounded border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#12141a] text-neutral-700 dark:text-neutral-300 focus:outline-none focus:ring-1 focus:ring-sora-blue/40"
+              className="w-full pl-6 pr-2 py-1 text-ui-caption rounded border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#12141a] text-neutral-700 dark:text-neutral-300 focus:outline-none focus:ring-1 focus:ring-sora-blue/40"
             />
           </div>
           <div className="max-h-56 overflow-y-auto">
-            {loading && <div className="px-2 py-1.5 text-xs text-neutral-400">…</div>}
+            {loading && <div className="px-2 py-1.5 text-ui-caption text-neutral-400">…</div>}
             {!loading && options.length === 0 && (
-              <div className="px-2 py-1.5 text-xs text-neutral-400">{emptyText}</div>
+              <div className="px-2 py-1.5 text-ui-caption text-neutral-400">{emptyText}</div>
             )}
             {!loading &&
               options.map((o) => (
@@ -145,14 +145,14 @@ export function Combobox({
                   type="button"
                   onClick={() => onSelect(o)}
                   className={clsx(
-                    "w-full text-left px-2 py-1.5 text-xs rounded transition-colors",
+                    "w-full text-left px-2 py-1.5 text-ui-caption rounded transition-colors",
                     o.id === value
                       ? "bg-sora-blue/[0.06] text-sora-blue"
                       : "text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900",
                   )}
                 >
                   <span className="block truncate">{o.label}</span>
-                  {o.sub && <span className="block text-[10px] text-neutral-400 truncate">{o.sub}</span>}
+                  {o.sub && <span className="block text-ui-caption text-neutral-400 truncate">{o.sub}</span>}
                 </button>
               ))}
           </div>
