@@ -17,18 +17,21 @@ export const metadata: Metadata = {
     title: "Nekusora",
   },
   icons: {
-    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
-    apple: [{ url: "/icon.svg" }],
-    shortcut: [{ url: "/icon.svg" }],
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml", sizes: "any" },
+      { url: "/favicon.ico", type: "image/x-icon", sizes: "16x16 32x32 48x48" },
+      { url: "/icons/icon-192.png", type: "image/png", sizes: "192x192" },
+    ],
+    apple: [
+      { url: "/apple-touch-icon.png", type: "image/png", sizes: "180x180" },
+    ],
+    shortcut: [{ url: "/favicon.ico", type: "image/x-icon" }],
   },
   formatDetection: { telephone: false },
 };
 
 export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#fcfdff" },
-    { media: "(prefers-color-scheme: dark)", color: "#0d0f14" },
-  ],
+  themeColor: "#fcfdff",
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
@@ -36,10 +39,7 @@ export const viewport: Viewport = {
 
 const themeScript = `
 (() => {
-  const query = window.matchMedia("(prefers-color-scheme: dark)");
-  const syncTheme = () => document.documentElement.classList.toggle("dark", query.matches);
-  syncTheme();
-  query.addEventListener("change", syncTheme);
+  document.documentElement.classList.remove("dark");
 })();`;
 
 export default async function RootLayout({

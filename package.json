@@ -22,7 +22,8 @@
     "auth:migrate": "better-auth-cli migrate --config=src/auth.ts",
     "seed": "tsx --env-file-if-exists=.env.local src/db/seed.ts",
     "worker": "tsx --env-file-if-exists=.env.local src/worker.ts",
-    "postinstall": "node scripts/sync-pdfjs-assets.cjs"
+    "postinstall": "node scripts/sync-pdfjs-assets.cjs",
+    "icons:generate": "node scripts/generate-icons.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.16",

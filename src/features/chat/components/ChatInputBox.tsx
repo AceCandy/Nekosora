@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Send } from "lucide-react";
+import { ArrowUp, AudioLines, Square } from "lucide-react";
 import { clsx } from "clsx";
 import type { CardOption } from "@/features/chat/model/types";
 
@@ -47,6 +47,7 @@ export function ChatInputBox({
   trailingControl,
 }: ChatInputBoxProps) {
   const t = useTranslations("chat");
+  const hasContent = value.trim().length > 0;
 
   // 斜杠命令:输入以 / 开头(单行,无空格隔断)时弹出指令卡列表,模糊匹配 trigger / title
   const slashActive = !disabled && cards.length > 0 && value.startsWith("/") && !value.includes("\n");
@@ -217,24 +218,33 @@ export function ChatInputBox({
         {trailingControl}
         {disabled ? (
           <button
+            type="button"
             onClick={onStop}
-            className="touch-target pointer-events-auto inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-red-500 text-white transition-[background-color,box-shadow,opacity,transform] duration-200 hover:bg-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+            className="group touch-target pointer-events-auto inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-transparent text-red-500 transition-[background-color,color,transform] duration-200 ease-out hover:-translate-y-px hover:bg-red-500/10 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 active:translate-y-0 active:scale-95 motion-reduce:transition-none motion-reduce:hover:transform-none dark:text-red-400 dark:hover:bg-red-400/10 dark:hover:text-red-300"
             title={t("stopGeneration")}
             aria-label={t("stopGeneration")}
           >
-            <svg className="h-3.5 w-3.5 fill-current" viewBox="0 0 24 24" aria-hidden="true">
-              <rect x="5" y="5" width="14" height="14" rx="1" />
-            </svg>
+            <Square strokeWidth={2.5} className="h-4 w-4 transition-transform duration-200 ease-out group-hover:scale-90 motion-reduce:transition-none motion-reduce:group-hover:transform-none" aria-hidden="true" />
           </button>
         ) : (
           <button
-            onClick={onSend}
-            disabled={!value.trim()}
-            className="touch-target pointer-events-auto inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-transparent text-neutral-700 transition-[background-color,color,box-shadow,opacity,transform] duration-200 hover:bg-neutral-100 disabled:cursor-default disabled:text-neutral-300 disabled:hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none dark:text-neutral-200 dark:hover:bg-neutral-800 dark:disabled:text-neutral-600 dark:disabled:hover:bg-transparent"
-            title={t("send")}
-            aria-label={t("send")}
+            type="button"
+            onClick={hasContent ? onSend : undefined}
+            aria-disabled={!hasContent}
+            className={clsx(
+              "group touch-target pointer-events-auto inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-transparent transition-[background-color,color,transform] duration-200 ease-out hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue active:translate-y-0 active:scale-95 motion-reduce:transition-none motion-reduce:hover:transform-none",
+              hasContent
+                ? "cursor-pointer text-sora-blue hover:bg-sora-blue/[0.08] hover:text-sora-blue-hover dark:hover:bg-sora-blue/[0.12]"
+                : "cursor-default text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800",
+            )}
+            title={hasContent ? t("send") : t("voicePlaceholder")}
+            aria-label={hasContent ? t("send") : t("voicePlaceholder")}
           >
-            <Send className="h-4 w-4" aria-hidden="true" />
+            {hasContent ? (
+              <ArrowUp strokeWidth={2.5} className="h-4 w-4 transition-transform duration-200 ease-out group-hover:-translate-y-px motion-reduce:transition-none motion-reduce:group-hover:transform-none" aria-hidden="true" />
+            ) : (
+              <AudioLines className="h-4 w-4 transition-transform duration-200 ease-out group-hover:scale-105 motion-reduce:transition-none motion-reduce:group-hover:transform-none" aria-hidden="true" />
+            )}
           </button>
         )}
       </div>

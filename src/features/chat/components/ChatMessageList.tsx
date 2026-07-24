@@ -232,7 +232,7 @@ export function ChatMessageList({
         <MessageScroller.Viewport
           ref={viewportRef}
           onScroll={handleViewportScroll}
-          className="scroll-fade-y scrollbar-hidden h-full overflow-y-auto px-6 pt-8 md:pt-12 [overflow-anchor:none]"
+          className="scrollbar-hidden h-full overflow-y-auto px-6 pt-8 [overflow-anchor:none] md:pt-12"
           style={{ paddingBottom: bottomInset ?? 8 }}
           preserveScrollOnPrepend
         >
@@ -268,6 +268,11 @@ export function ChatMessageList({
             ))}
           </MessageScroller.Content>
         </MessageScroller.Viewport>
+
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 top-0 z-10 h-12 bg-gradient-to-b from-nebula-white via-nebula-white/70 to-transparent dark:from-twilight-obsidian dark:via-twilight-obsidian/70"
+        />
 
         {/* 对话大纲:贴消息区右边缘(滚动条左侧),hover 整列弹出完整轮次列表。
             高亮/跳转由其内部 useMessageScrollerVisibility/useMessageScroller 承载(在 Provider 内)。 */}

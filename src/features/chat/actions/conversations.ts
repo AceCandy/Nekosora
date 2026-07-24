@@ -179,8 +179,9 @@ export async function toggleArchivedConversation(id: string) {
   revalidatePath("/chat", "layout");
 }
 
-/** 会话级输入区状态聚合视图(供 SSR 回填选择器)。 */
+/** 会话级标题与输入区状态聚合视图(供 SSR 回填头部及选择器)。 */
 export interface ConversationComposerState {
+  title: string;
   modelName: string | null;
   outputModeId: string | null;
   renderStyleId: string | null;
@@ -356,6 +357,7 @@ export async function getConversationComposerState(
   const [conv] = await db
     .select({
       userId: S().conversations.userId,
+      title: S().conversations.title,
       modelName: S().conversations.modelName,
       outputModeId: S().conversations.outputModeId,
       renderStyleId: S().conversations.renderStyleId,
@@ -366,10 +368,11 @@ export async function getConversationComposerState(
     .where(eq(S().conversations.id, conversationId))
     .limit(1);
   if (!conv || conv.userId !== user.id) {
-    return { modelName: null, outputModeId: null, renderStyleId: null, webSearch: false, cardIds: [], kbIds: [], reasoningByModelId: {} };
+    return { title: "新会话", modelName: null, outputModeId: null, renderStyleId: null, webSearch: false, cardIds: [], kbIds: [], reasoningByModelId: {} };
   }
   const composer = (conv.composerState as { cardIds?: string[]; kbIds?: string[]; reasoningByModelId?: Record<string, ReasoningLevel> } | null) ?? {};
   return {
+    title: conv.title,
     modelName: (conv.modelName as string | null) ?? null,
     outputModeId: (conv.outputModeId as string | null) ?? null,
     renderStyleId: (conv.renderStyleId as string | null) ?? null,

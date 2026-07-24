@@ -26,6 +26,7 @@ export default async function ChatConversationPage({
     listEnabledOutputModes().catch(() => []),
     listEnabledRenderStyles().catch(() => []),
     getConversationComposerState(id).catch(() => ({
+      title: "新会话",
       modelName: null,
       outputModeId: null,
       renderStyleId: null,
@@ -97,6 +98,7 @@ export default async function ChatConversationPage({
           knowledgeBases={knowledgeBases}
           outputModes={modes}
           renderStyles={styles}
+          initialTitle={composerState.title}
           initialModelName={composerState.modelName}
           initialOutputModeId={composerState.outputModeId}
           initialRenderStyleId={composerState.renderStyleId}

@@ -94,6 +94,7 @@
     "stopReading": "Stop reading",
     "readAloudUnsupported": "Speech synthesis is not supported in this browser",
     "send": "Send message",
+    "voicePlaceholder": "Voice input (coming soon)",
     "stopGeneration": "Stop generating",
     "scrollToLatest": "Scroll to latest",
     "scrollToReplyTop": "Back to reply start",

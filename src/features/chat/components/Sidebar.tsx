@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState, useTransition, useEffect, useRef } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -454,9 +455,10 @@ export default function Sidebar({
         </button>
         <Link
           href="/chat"
-          className="min-w-0 truncate rounded text-ui-reading font-semibold text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:text-white"
+          className="inline-flex shrink-0 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
+          aria-label="Nekusora"
         >
-          Nekusora
+          <Image src="/icon.svg" alt="" width={36} height={36} className="brightness-0 dark:invert" priority />
         </Link>
       </header>
 
@@ -484,9 +486,10 @@ export default function Sidebar({
             <Link
               href="/"
               onClick={() => setIsOpen(false)}
-              className="block rounded text-ui-heading font-bold text-neutral-900 hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:text-white"
+              className="inline-flex rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
+              aria-label="Nekusora"
             >
-              Nekusora
+              <Image src="/icon.svg" alt="" width={42} height={42} className="brightness-0 dark:invert" priority />
             </Link>
           </div>
           <div className="flex items-center gap-1">

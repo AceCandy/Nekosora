@@ -2,19 +2,16 @@
 
 import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
-import { Share2, Check, Coins } from "lucide-react";
+import { Share2, Check } from "lucide-react";
 
 export default function ChatHeader({
+  title,
   conversationId,
-  messageCount,
-  totalTokens,
   createShareAction,
 }: {
+  title: string;
   /** 当前会话 id;新会话(未建会)为 undefined,分享按钮禁用。 */
   conversationId?: string;
-  messageCount: number;
-  /** 本会话累计发送 token(从各 assistant 消息的 trace 聚合)。 */
-  totalTokens?: number;
   createShareAction: (id: string) => Promise<string>;
 }) {
   const t = useTranslations("chat");
@@ -37,37 +34,24 @@ export default function ChatHeader({
   };
 
   return (
-    <div className="flex items-center justify-between pl-14 pr-6 md:px-6 py-3.5 border-b border-morning-mist dark:border-deep-space bg-nebula-white dark:bg-twilight-obsidian">
-      <div className="flex items-center gap-3">
-        <span className="text-ui-caption font-mono text-neutral-400 dark:text-neutral-500 uppercase tracking-wider">
-          {t("messageCount", { count: messageCount })}
-        </span>
-        {totalTokens != null && totalTokens > 0 && (
-          <span className="inline-flex items-center gap-1 text-ui-caption font-medium text-neutral-450 dark:text-neutral-500 bg-neutral-100 dark:bg-neutral-900 px-2 py-0.5 rounded-full">
-            <Coins className="w-3 h-3" aria-hidden="true" />
-            {t("totalTokens", { count: totalTokens })}
-          </span>
-        )}
-      </div>
+    <header className="flex h-14 shrink-0 items-center justify-between bg-nebula-white pl-14 pr-4 dark:bg-twilight-obsidian md:px-6">
+      <h1 className="min-w-0 truncate text-ui-reading font-semibold text-space-ink dark:text-nebula-silver" title={title}>
+        {title}
+      </h1>
       <button
+        type="button"
         onClick={handleShare}
         disabled={isPending || !conversationId}
-        className="inline-flex items-center gap-1.5 text-ui-caption font-semibold text-sora-blue hover:text-sora-blue-hover transition-colors px-2.5 py-1.5 rounded-md hover:bg-neutral-50 dark:hover:bg-neutral-900/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
-        aria-label={t("shareThisConversation")}
+        className="touch-target ml-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-space-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transition-none dark:text-neutral-300 dark:hover:bg-neutral-900 dark:hover:text-nebula-silver"
+        aria-label={copied ? t("shareCopied") : t("shareThisConversation")}
+        title={copied ? t("shareCopied") : t("shareThisConversation")}
       >
         {copied ? (
-          <>
-            <Check className="w-3.5 h-3.5 text-green-600 dark:text-green-500" aria-hidden="true" />
-            <span className="text-green-600 dark:text-green-500">{t("shareCopied")}</span>
-          </>
+          <Check className="h-5 w-5 text-green-600 dark:text-green-500" aria-hidden="true" />
         ) : (
-          <>
-            <Share2 className="w-3.5 h-3.5" aria-hidden="true" />
-            <span>{t("shareThisConversation")}</span>
-          </>
+          <Share2 className="h-5 w-5" aria-hidden="true" />
         )}
       </button>
-    </div>
+    </header>
   );
 }
-

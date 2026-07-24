@@ -9,12 +9,22 @@
  *
  * 版本号升级时(VERSION 常量)会触发 activate 清理旧缓存。
  */
-const VERSION = "v1.0.0";
+const VERSION = "v1.1.0";
 const APP_SHELL_CACHE = `nekusora-shell-${VERSION}`;
 const RUNTIME_CACHE = `nekusora-runtime-${VERSION}`;
 
 // 预缓存:应用壳资源(体积小,变更少)。
-const APP_SHELL = ["/", "/manifest.json", "/icon.svg"];
+const APP_SHELL = [
+  "/",
+  "/manifest.json",
+  "/icon.svg",
+  "/favicon.ico",
+  "/apple-touch-icon.png",
+  "/icons/icon-192.png",
+  "/icons/icon-512.png",
+  "/icons/icon-maskable-512.png",
+  "/icons/shortcut-96.png",
+];
 
 // ===== Install:预缓存应用壳 =====
 self.addEventListener("install", (event) => {

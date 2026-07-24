@@ -1,5 +1,6 @@
 "use client";
-import { useState, useEffect, useMemo, useRef, useTransition } from "react";
+import { useState, useEffect, useRef, useTransition } from "react";
+import Image from "next/image";
 import { useTranslations } from "next-intl";
 import { Cpu } from "lucide-react";
 import { clsx } from "clsx";
@@ -11,6 +12,7 @@ import { ChatMessageList } from "@/features/chat/components/ChatMessageList";
 import { ChatToolbar, ComposerPlusMenu, ModelControlMenu, type ChatToolbarProps } from "@/features/chat/components/ChatToolbar";
 import { ChatInputBox } from "@/features/chat/components/ChatInputBox";
 import ChatHeader from "@/features/chat/components/ChatHeader";
+import { useChatStreamStore } from "@/features/chat/store/chatStreamStore";
 import { setConversationOutputMode, setConversationRenderStyle, setConversationModel, setConversationWebSearch, setConversationComposerState, setConversationModelReasoning } from "@/features/chat/actions/conversations";
 import type { ChatMessage, ModelOption, CardOption, KnowledgeBaseOption, OutputModeOption, RenderStyleOption } from "@/features/chat/model/types";
 import type { ReasoningLevel } from "@/db/types";
@@ -44,6 +46,8 @@ interface ChatComposerProps {
   initialReasoningByModelId?: Record<string, ReasoningLevel>;
   /** 当前会话 ID(切换输出模式时持久化用;新会话无)。 */
   conversationId?: string;
+  /** 当前会话标题;新会话未传时使用既有翻译。 */
+  initialTitle?: string;
   /** 分享当前会话的 server action(由 page 提供,ChatHeader 用)。 */
   createShareAction: (id: string) => Promise<string>;
   initialMessages?: ChatMessage[];
@@ -71,6 +75,7 @@ export default function ChatComposer({
   initialKbIds = [],
   initialReasoningByModelId = {},
   conversationId: initialConvId,
+  initialTitle,
   createShareAction,
   initialMessages = [],
 }: ChatComposerProps) {
@@ -102,6 +107,12 @@ export default function ChatComposer({
   const [, startModeTransition] = useTransition();
   // 活动会话 id:历史会话来自路由参数;新会话建会后由 useChatRuntime 回写,使订阅键与持久化目标跟随切换。
   const [activeConvId, setActiveConvId] = useState<string | undefined>(initialConvId);
+  const optimisticTitle = useChatStreamStore((state) =>
+    activeConvId && state.optimisticConversation?.id === activeConvId
+      ? state.optimisticConversation.title
+      : null,
+  );
+  const conversationTitle = optimisticTitle || initialTitle || t("newConversation");
 
   // 浮动输入区高度:ResizeObserver 测量,用于消息区底部留白与"回到最新"按钮定位
   const composerRef = useRef<HTMLDivElement>(null);
@@ -130,12 +141,6 @@ export default function ChatComposer({
     onAttachmentsConsumed: clearConsumedAttachments,
     onConversationCreated: setActiveConvId,
   });
-  // 本会话累计发送 token(从各 assistant 消息的 trace 聚合),供 ChatHeader 实时显示。
-  const totalTokens = useMemo(
-    () => runtime.messages.reduce((sum, m) => sum + (m.trace?.sentTokenEstimate ?? 0), 0),
-    [runtime.messages],
-  );
-
   // 流式结束后,刷新有 publicId 的 assistant 消息版本信息(用于版本切换器)
   useEffect(() => {
     if (runtime.streaming) return;
@@ -323,12 +328,13 @@ export default function ChatComposer({
     <div className="flex-1 flex h-full bg-nebula-white dark:bg-twilight-obsidian transition-colors duration-250">
       {/* 主区:消息 + 输入(可被 artifact 面板挤压) */}
       <div className={clsx("relative flex flex-col h-full min-w-0 flex-1", activeArtifact && "lg:flex-[3] lg:border-r lg:border-morning-mist lg:dark:border-deep-space/80")}>
-        <ChatHeader
-          conversationId={activeConvId}
-          messageCount={runtime.messages.length}
-          totalTokens={totalTokens}
-          createShareAction={createShareAction}
-        />
+        {activeConvId && (
+          <ChatHeader
+            title={conversationTitle}
+            conversationId={activeConvId}
+            createShareAction={createShareAction}
+          />
+        )}
         <ChatMessageList
           messages={runtime.messages}
           streaming={runtime.streaming}
@@ -369,7 +375,8 @@ export default function ChatComposer({
             )}
           >
             {isEmptyConversation && (
-              <h1 className="mb-6 text-center text-ui-heading font-semibold text-space-ink dark:text-nebula-silver">
+              <h1 className="mb-6 flex items-center justify-center gap-2 text-center text-ui-heading font-semibold text-space-ink dark:text-nebula-silver">
+                <Image src="/icon.svg" alt="" width={56} height={56} className="brightness-0 dark:invert" priority />
                 {t("welcomeTitle")}
               </h1>
             )}
