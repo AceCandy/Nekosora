@@ -1096,3 +1096,37 @@ setKeyEnabled 接收 userId 并在更新 SQL 中同时限制 key ID 与属主，
 ### Next Steps
 
 - None - task complete
+
+
+## Session 34: 完成 WebChat run 生命周期与可恢复 SSE 设计
+
+**Date**: 2026-07-25
+**Task**: 完成 WebChat run 生命周期与可恢复 SSE 设计
+**Branch**: `main`
+
+### Summary
+
+接入 WebChat run 与 tool call 审计生命周期，修复取消竞态导致 run 未收敛的问题；完成可恢复 SSE 与请求幂等的 A/B 分阶段设计，并归档两个任务。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5801dc9` | (see git log) |
+| `004433d` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

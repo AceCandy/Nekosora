@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 33
-- **Last Active**: 2026-07-22
+- **Total Sessions**: 34
+- **Last Active**: 2026-07-25
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1098 | Active |
+| `journal-1.md` | ~1132 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 34 | 2026-07-25 | 完成 WebChat run 生命周期与可恢复 SSE 设计 | `5801dc9`, `004433d` | `main` |
 | 33 | 2026-07-22 | 归档 opt0722 项目优化任务 | `e056569` | `opt0722` |
 | 32 | 2026-07-22 | 服务商模型相似匹配与路由复用 | `e056569` | `opt0722` |
 | 31 | 2026-07-22 | 网关模型属主边界收敛 | `9b810ee` | `opt0722` |
