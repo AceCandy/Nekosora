@@ -61,15 +61,8 @@
     {
       "idx": 8,
       "version": "7",
-      "when": 1784960819328,
-      "tag": "0008_sticky_star_brand",
-      "breakpoints": true
-    },
-    {
-      "idx": 9,
-      "version": "7",
       "when": 1784985600000,
-      "tag": "0009_model_catalog_configured",
+      "tag": "0008_model_catalog_configured",
       "breakpoints": true
     }
   ]
