@@ -11,6 +11,7 @@ Apply this contract when `/api/chat`, branch actions, or message-tree traversal 
 - `createShare(conversationId): Promise<string>`
 - `getShare(shareId): Promise<{ title; model; messages } | null>`
 - `revokeShare(shareId): Promise<void>`
+- `softDeleteMessage(messagePublicId): Promise<string[]>`
 - Exactly one identifier is supplied; the result is a message row or `null`.
 
 ## 3. Contracts
@@ -22,6 +23,7 @@ Apply this contract when `/api/chat`, branch actions, or message-tree traversal 
 - Reused user references require `role='user'`; continuation targets require `role='assistant'` and a same-conversation user parent.
 - New user inserts return their internal ID. Assistant persistence uses that verified ID directly instead of re-querying a bare public ID.
 - Missing and cross-conversation references return the same 400-class behavior and do not reveal whether the identifier exists elsewhere.
+- `softDeleteMessage` resolves the target with one query that joins `messages.conversation_id = conversations.id` and filters `conversations.user_id = session.user.id`; missing and foreign targets therefore use the same query path and throw `消息不存在` before role validation.
 - Share creation snapshots only message public IDs where both `messages.conversation_id = conversationId` and `messages.deleted_at IS NULL`.
 - Public share reads apply the same `conversationId + deletedAt IS NULL` scope before restoring snapshot order; messages soft-deleted after share creation must disappear from existing share links.
 - Share revocation resolves the share, loads its associated conversation, and verifies `conversation.userId === session.user.id` before updating the share row.
@@ -36,6 +38,7 @@ Apply this contract when `/api/chat`, branch actions, or message-tree traversal 
 | continuation parent ID | Current conversation + user role | 400 before generation |
 | generated assistant artifact lookup | Current conversation | Skip when absent |
 | branch retry / edit / continue target | Authorized current conversation | Throw `消息不存在` before mutation |
+| soft-delete target | `publicId` + conversation owned by session user, then `role='user'` | Missing/foreign: `消息不存在`; owned non-user: `仅支持删除用户消息`; no update |
 | sibling `parentId` query | Original message conversation | Return only same-conversation siblings |
 | share message snapshot | Owned conversation + `deletedAt IS NULL` | Exclude deleted message IDs |
 | public share message read | Share conversation + `deletedAt IS NULL` | Skip deleted snapshot IDs; keep the share valid |
@@ -45,11 +48,13 @@ Apply this contract when `/api/chat`, branch actions, or message-tree traversal 
 
 - Good: a leaked public ID from another conversation cannot become a parent or source in the current message tree.
 - Good: an authenticated user cannot revoke a share belonging to another user's conversation.
+- Good: deleting a foreign message ID and deleting a missing ID execute the same owner-scoped lookup and return the same error.
 - Good: creating a share after soft deletion publishes only messages still visible in the conversation.
 - Good: deleting a message after share creation removes it from the existing public link.
 - Base: normal send, retry, edit, continue, sibling lookup, and owner share revocation preserve existing behavior.
 - Bad: querying by globally unique public ID alone allows cross-conversation edges that branch traversal can later follow.
 - Bad: treating `requireSession()` alone as authorization allows any authenticated user to mutate another user's share by `shareId`.
+- Bad: loading a message globally and checking its conversation in a second query still leaks existence through query count/timing, even if both paths use the same error text.
 - Bad: selecting share message IDs by `conversationId` alone republishes soft-deleted content.
 - Bad: filtering only at share creation leaves later soft-deleted content readable through existing links.
 
@@ -57,6 +62,7 @@ Apply this contract when `/api/chat`, branch actions, or message-tree traversal 
 
 - Helper tests cover public and internal identifiers and assert both identifier + conversation SQL conditions.
 - Branch action tests assert retry/edit/continue use the scoped helper and that cross-conversation edit targets trigger no update or delete.
+- Soft-delete tests assert the target query joins conversations with the current `userId`, missing/foreign user/foreign non-user IDs all throw `消息不存在` without update, and owner role/subtree behavior remains unchanged.
 - Sibling tests assert the parent query includes the original message's `conversationId`.
 - Share creation tests assert the message query combines `conversationId` with `isNull(deletedAt)` and both stored ID lists contain only returned visible messages.
 - Public share read tests assert the message query combines the share conversation ID with `isNull(deletedAt)` and preserves snapshot order for returned visible messages.
@@ -111,4 +117,24 @@ const messages = await db.select().from(s.messages)
     eq(s.messages.conversationId, conversationId),
     isNull(s.messages.deletedAt),
   ));
+```
+
+```typescript
+// Wrong:same error text does not hide the different one-query/two-query paths.
+const [message] = await db.select().from(s.messages)
+  .where(eq(s.messages.publicId, messagePublicId));
+if (!message) throw new Error("消息不存在");
+const [conversation] = await db.select().from(s.conversations)
+  .where(eq(s.conversations.id, message.conversationId));
+if (conversation?.userId !== user.id) throw new Error("消息不存在");
+
+// Correct:one owner-scoped query makes missing and foreign targets indistinguishable.
+const [message] = await db.select({ id: s.messages.id, role: s.messages.role })
+  .from(s.messages)
+  .innerJoin(s.conversations, and(
+    eq(s.conversations.id, s.messages.conversationId),
+    eq(s.conversations.userId, user.id),
+  ))
+  .where(eq(s.messages.publicId, messagePublicId));
+if (!message) throw new Error("消息不存在");
 ```

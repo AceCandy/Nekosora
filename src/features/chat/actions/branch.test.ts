@@ -29,15 +29,17 @@ import {
   getMessageSiblings,
   getVisibleBranch,
   retryFromMessage,
+  softDeleteMessage,
 } from "./branch";
 
 const schema = {
-  conversations: { id: "conversations.id" },
+  conversations: { id: "conversations.id", userId: "conversations.userId" },
   messages: {
     id: "messages.id",
     publicId: "messages.publicId",
     conversationId: "messages.conversationId",
     parentId: "messages.parentId",
+    role: "messages.role",
     createdAt: "messages.createdAt",
     deletedAt: "messages.deletedAt",
     runId: "messages.runId",
@@ -117,6 +119,110 @@ describe("聊天分支消息属主隔离", () => {
     );
     expect(update).not.toHaveBeenCalled();
     expect(remove).not.toHaveBeenCalled();
+  });
+
+  it("删除其他用户的 assistant 消息时不泄露消息角色", async () => {
+    const update = vi.fn();
+    const db = {
+      select: selectQueue([[]]),
+      update,
+    };
+    mocks.getDb.mockResolvedValue(db);
+
+    await expect(softDeleteMessage("assistant-public-1")).rejects.toThrow("消息不存在");
+
+    expect(mocks.and).toHaveBeenCalledWith(
+      { op: "eq", left: schema.conversations.id, right: schema.messages.conversationId },
+      { op: "eq", left: schema.conversations.userId, right: "user-1" },
+    );
+    expect(mocks.eq).toHaveBeenCalledWith(schema.messages.publicId, "assistant-public-1");
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("删除其他用户的 user 消息时不泄露消息是否存在", async () => {
+    const update = vi.fn();
+    const select = selectQueue([[]]);
+    const db = {
+      select,
+      update,
+    };
+    mocks.getDb.mockResolvedValue(db);
+
+    await expect(softDeleteMessage("user-public-1")).rejects.toThrow("消息不存在");
+
+    expect(select).toHaveBeenCalledTimes(1);
+    expect(mocks.and).toHaveBeenCalledWith(
+      { op: "eq", left: schema.conversations.id, right: schema.messages.conversationId },
+      { op: "eq", left: schema.conversations.userId, right: "user-1" },
+    );
+    expect(mocks.eq).toHaveBeenCalledWith(schema.messages.publicId, "user-public-1");
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("删除不存在的消息时返回相同错误且不写库", async () => {
+    const update = vi.fn();
+    const select = selectQueue([[]]);
+    mocks.getDb.mockResolvedValue({ select, update });
+
+    await expect(softDeleteMessage("missing-message")).rejects.toThrow("消息不存在");
+
+    expect(select).toHaveBeenCalledTimes(1);
+    expect(mocks.and).toHaveBeenCalledWith(
+      { op: "eq", left: schema.conversations.id, right: schema.messages.conversationId },
+      { op: "eq", left: schema.conversations.userId, right: "user-1" },
+    );
+    expect(mocks.eq).toHaveBeenCalledWith(schema.messages.publicId, "missing-message");
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("会话属主删除 assistant 消息时保留角色校验", async () => {
+    const update = vi.fn();
+    const select = selectQueue([
+      [{ id: "assistant-1", conversationId: "conversation-1", role: "assistant" }],
+    ]);
+    mocks.getDb.mockResolvedValue({
+      select,
+      update,
+    });
+
+    await expect(softDeleteMessage("assistant-public-1"))
+      .rejects.toThrow("仅支持删除用户消息");
+
+    expect(select).toHaveBeenCalledTimes(1);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("会话属主删除 user 消息时保留子树软删除行为", async () => {
+    const allMessages = [
+      { id: "user-1", publicId: "user-public-1", parentId: null },
+      { id: "assistant-1", publicId: "assistant-public-1", parentId: "user-1" },
+      { id: "user-2", publicId: "user-public-2", parentId: "assistant-1" },
+      { id: "other-root", publicId: "other-public", parentId: null },
+    ];
+    const where = vi.fn().mockResolvedValue(undefined);
+    const set = vi.fn(() => ({ where }));
+    const update = vi.fn(() => ({ set }));
+    mocks.getDb.mockResolvedValue({
+      select: selectQueue([
+        [{ id: "user-1", conversationId: "conversation-1", role: "user" }],
+        allMessages,
+      ]),
+      update,
+    });
+
+    await expect(softDeleteMessage("user-public-1")).resolves.toEqual([
+      "user-public-1",
+      "assistant-public-1",
+      "user-public-2",
+    ]);
+
+    expect(update).toHaveBeenCalledWith(schema.messages);
+    expect(set).toHaveBeenCalledWith({ deletedAt: expect.any(Date) });
+    expect(mocks.inArray).toHaveBeenCalledWith(
+      schema.messages.id,
+      expect.arrayContaining(["user-1", "assistant-1", "user-2"]),
+    );
+    expect(where).toHaveBeenCalledTimes(1);
   });
 
   it("查询同父兄弟时额外限制消息所属会话", async () => {

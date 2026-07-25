@@ -479,12 +479,24 @@ export async function softDeleteMessage(messagePublicId: string): Promise<string
   const db = await getDb();
   const s = S();
 
-  const [msg] = await db.select().from(s.messages).where(eq(s.messages.publicId, messagePublicId)).limit(1);
+  const [msg] = await db
+    .select({
+      id: s.messages.id,
+      conversationId: s.messages.conversationId,
+      role: s.messages.role,
+    })
+    .from(s.messages)
+    .innerJoin(
+      s.conversations,
+      and(
+        eq(s.conversations.id, s.messages.conversationId),
+        eq(s.conversations.userId, user.id),
+      ),
+    )
+    .where(eq(s.messages.publicId, messagePublicId))
+    .limit(1);
   if (!msg) throw new Error("消息不存在");
   if (msg.role !== "user") throw new Error("仅支持删除用户消息");
-
-  const [conv] = await db.select().from(s.conversations).where(eq(s.conversations.id, msg.conversationId)).limit(1);
-  if (!conv || conv.userId !== user.id) throw new Error("无权操作");
 
   // 收集该 user 消息及其全部后代(对应 AI 回复 + 之后所有消息)
   const allMsgs = (await db
