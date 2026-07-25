@@ -126,7 +126,7 @@ vi.mock("@/lib/stream", () => ({
   }),
 }));
 
-import { maybeCompact, resetCompactModelConfig } from "./service";
+import { maybeCompact, resetCompactModelConfig, retainRecentTurns } from "./service";
 import { streamChat } from "@/lib/stream";
 
 beforeEach(() => {
@@ -165,6 +165,19 @@ function makeMessages(nUserTurns: number) {
 const LONG_SUMMARY = "本次对话涵盖了多个主题:用户首先询问了项目架构,助手详细解释了前后端分离的设计方案,包括数据库选型、API 路由设计以及前端状态管理。随后用户进一步追问了部署相关的问题,助手介绍了容器化方案和 CI/CD 流程,涵盖镜像构建、环境变量管理、健康检查与滚动更新等细节。最后双方讨论了测试策略,确认采用单元测试与集成测试并重的方式,并对端到端测试的覆盖范围做了明确约定。整体讨论围绕工程实践展开,产出了若干关键决策与后续待办事项,需要团队在下一次评审会上同步。";
 
 const PREV_SUMMARY = "这是先前对话的摘要内容,包含了早期讨论的关键信息。";
+
+describe("retainRecentTurns", () => {
+  it("丢弃超出保留轮数的旧消息,保留最近 N 个 user 轮", () => {
+    const msgs = makeMessages(12); // 24 条
+    const kept = retainRecentTurns(msgs, 8);
+    // 与 maybeCompact 窗口一致:满 8 user 后在更早 user 处截断
+    expect(kept.some((m) => m.content === "用户消息1")).toBe(false);
+    expect(kept.some((m) => m.content === "用户消息4")).toBe(false);
+    expect(kept.some((m) => m.content === "用户消息5")).toBe(true);
+    expect(kept.some((m) => m.content === "用户消息12")).toBe(true);
+    expect(kept.length).toBeLessThan(msgs.length);
+  });
+});
 
 describe("maybeCompact 链式摘要", () => {
   it("有 previousSummary 时 prompt 含旧摘要(在其基础上合并更新)", async () => {

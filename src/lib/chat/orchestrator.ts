@@ -29,6 +29,34 @@ import { getCardsByIds, renderCardContext, incUseCount as incCardUseCount } from
 import { assembleContext } from "@/lib/context-assembler";
 import { buildTrace } from "@/lib/trace";
 
+/** 兼容默认:model_catalog 缺失时的上下文窗口与输出上限。 */
+const DEFAULT_CONTEXT_WINDOW = 32_000;
+const DEFAULT_MAX_OUTPUT_TOKENS = 16_384;
+/** 至少为输入预留的 token,避免输出把窗口吃光。 */
+const MIN_INPUT_TOKEN_BUDGET = 2_048;
+
+/** 在模型窗口内同时为输入与输出保留正数预算。 */
+export function calculateTokenBudgets(
+  contextWindow: number,
+  requestedMaxOutputTokens: number,
+): { inputBudget: number; maxOutputTokens: number } {
+  const safeContextWindow = Number.isFinite(contextWindow) && contextWindow >= 2
+    ? Math.floor(contextWindow)
+    : DEFAULT_CONTEXT_WINDOW;
+  const safeRequestedOutput = Number.isFinite(requestedMaxOutputTokens) && requestedMaxOutputTokens > 0
+    ? Math.floor(requestedMaxOutputTokens)
+    : DEFAULT_MAX_OUTPUT_TOKENS;
+  const inputReserve = Math.min(MIN_INPUT_TOKEN_BUDGET, safeContextWindow - 1);
+  const maxOutputTokens = Math.min(
+    Math.max(1, safeRequestedOutput),
+    safeContextWindow - inputReserve,
+  );
+  return {
+    inputBudget: safeContextWindow - maxOutputTokens,
+    maxOutputTokens,
+  };
+}
+
 /** route 已建立的 DB 连接与 schema(透传,避免重复 getDb)。 */
 
 export interface PrepareContextInput {
@@ -44,6 +72,8 @@ export interface PrepareContextInput {
   modelId?: string;
   /** 原始 messages(会被 RAG / vision 改写)。 */
   messages: IRRequest["messages"];
+  /** 本轮所在分支的叶消息 publicId,压缩只沿该节点的 parent 链取历史。 */
+  branchLeafPublicId: string;
   /** 附件 fileIds。 */
   fileIds?: string[];
   /** 挂载的知识库 ID。 */
@@ -79,7 +109,7 @@ export async function prepareChatContext(
   input: PrepareContextInput,
 ): Promise<PrepareContextResult | { error: NextResponse }> {
   const {
-    userId, conversationId, conv, userContent, model, modelId, messages,
+    userId, conversationId, conv, userContent, model, modelId, messages, branchLeafPublicId,
     fileIds: bodyFileIds, knowledgeBaseIds, webSearch: webSearchOn,
     templateId, templateVars, instructionCardIds,
     db, schema: s,
@@ -185,7 +215,7 @@ export async function prepareChatContext(
         const fileMode = (modeRow?.value as string) ?? "auto";
         const built = await buildMessagesWithFileContext({
           userId,
-          messages: messages,
+          messages: effectiveMessages,
           fileIds,
           fileMode: fileMode as "auto" | "full_context" | "rag",
           query: userContent,
@@ -219,13 +249,14 @@ export async function prepareChatContext(
         .from(s.messages)
         .where(and(eq(s.messages.conversationId, conversationId), isNull(s.messages.deletedAt)))
         .orderBy(s.messages.createdAt);
-      const compactionMsgs = (existingMsgs as Record<string, unknown>[]).map((m) => ({
+      const allCompactionMsgs = (existingMsgs as Record<string, unknown>[]).map((m) => ({
         id: m.id as string,
         publicId: m.publicId as string,
         parentId: (m.parentId as string) ?? null,
         role: m.role as string,
         content: typeof m.content === "string" ? m.content : String(m.content ?? ""),
       }));
+      const compactionMsgs = selectCurrentBranchMessages(allCompactionMsgs, branchLeafPublicId);
       let compaction: CompactionResult | null = null;
       try {
         compaction = await maybeCompact(conversationId, compactionMsgs);
@@ -271,13 +302,16 @@ export async function prepareChatContext(
   let effectiveMessages = fileChain.effectiveMessages;
   const ragStatus = fileChain.ragStatus;
 
-  // template 的 userMessage 覆盖最后一条 user(在 vision/RAG 之后,保持原顺序)
+  // template 的 userMessage 覆盖最后一条 user 的文本,保留图片 part。
   if (templateResult.userMessage && effectiveMessages.length > 0) {
     const lastIdx = effectiveMessages.length - 1;
     effectiveMessages = [...effectiveMessages];
     effectiveMessages[lastIdx] = {
       ...effectiveMessages[lastIdx],
-      content: templateResult.userMessage,
+      content: replaceMessageText(
+        effectiveMessages[lastIdx].content,
+        templateResult.userMessage,
+      ) as IRRequest["messages"][number]["content"],
     };
   }
 
@@ -292,7 +326,16 @@ export async function prepareChatContext(
   const mergedSystemPrompt =
     extraSystemParts.length > 0 ? extraSystemParts.join("\n\n") : null;
 
-  // 槽位组装
+  // 输入预算 = 上下文窗口 − 输出预留;不把 maxOutput 当输入预算
+  const { inputBudget, maxOutputTokens } = await resolveInputTokenBudget({
+    db,
+    schema: s,
+    userId,
+    model,
+    modelId,
+  });
+
+  // 槽位组装(内部:压缩后丢弃旧历史 + trimToTokenBudget)
   const assembled = assembleContext({
     messages: effectiveMessages as { role: string; content: string | unknown[] }[],
     memories: memoryResult.allMemories,
@@ -300,7 +343,7 @@ export async function prepareChatContext(
     compaction: compactionResult.compaction,
     fileContext: null, // RAG 已在分支 A 直接注入到 messages
     templateSystemPrompt: mergedSystemPrompt,
-    maxTokens: 32000,
+    maxTokens: inputBudget,
   });
 
   const trace = buildTrace(assembled, compactionResult.compactionMsgs.length);
@@ -309,7 +352,7 @@ export async function prepareChatContext(
     model,
     messages: assembled as IRRequest["messages"],
     stream: true,
-    max_tokens: 16384,
+    max_tokens: maxOutputTokens,
   };
 
   return {
@@ -320,4 +363,94 @@ export async function prepareChatContext(
     compaction: compactionResult.compaction,
     originalMessageCount: compactionResult.compactionMsgs.length,
   };
+}
+
+interface BranchMessage {
+  id: string;
+  publicId: string;
+  parentId: string | null;
+}
+
+/** 从叶节点沿 parentId 回溯,隔离重试/编辑产生的兄弟分支。 */
+export function selectCurrentBranchMessages<T extends BranchMessage>(
+  messages: T[],
+  leafPublicId: string,
+): T[] {
+  const byId = new Map(messages.map((message) => [message.id, message]));
+  let current = messages.find((message) => message.publicId === leafPublicId);
+  const branch: T[] = [];
+  const visited = new Set<string>();
+
+  while (current && !visited.has(current.id)) {
+    branch.push(current);
+    visited.add(current.id);
+    current = current.parentId ? byId.get(current.parentId) : undefined;
+  }
+
+  return branch.reverse();
+}
+
+/** 模板只替换文本 part,避免覆盖同一消息里的图片。 */
+export function replaceMessageText(
+  content: string | unknown[],
+  text: string,
+): string | unknown[] {
+  if (typeof content === "string") return text;
+
+  const nonTextParts = content.filter(
+    (part) => (part as { type?: string } | null)?.type !== "text",
+  );
+  return [{ type: "text", text }, ...nonTextParts];
+}
+
+/**
+ * 从 model_catalog 读取 contextWindow / maxOutputTokens,计算输入预算。
+ * 查询失败或字段缺失时回退兼容默认值;始终为输出预留空间。
+ */
+async function resolveInputTokenBudget(args: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  schema: any;
+  userId: string;
+  model: string;
+  modelId?: string;
+}): Promise<{ inputBudget: number; maxOutputTokens: number }> {
+  const { db, schema: s, userId, model, modelId } = args;
+  let contextWindow = DEFAULT_CONTEXT_WINDOW;
+  let maxOutputTokens = DEFAULT_MAX_OUTPUT_TOKENS;
+
+  try {
+    const visibility = or(eq(s.models.visibility, "public"), eq(s.models.ownerUserId, userId));
+    const [row] = modelId
+      ? await db
+          .select({
+            contextWindow: s.modelCatalog.contextWindow,
+            maxOutputTokens: s.modelCatalog.maxOutputTokens,
+          })
+          .from(s.models)
+          .innerJoin(s.modelCatalog, eq(s.models.catalogId, s.modelCatalog.id))
+          .where(and(eq(s.models.id, modelId), eq(s.models.enabled, true), visibility))
+          .limit(1)
+      : await db
+          .select({
+            contextWindow: s.modelCatalog.contextWindow,
+            maxOutputTokens: s.modelCatalog.maxOutputTokens,
+          })
+          .from(s.models)
+          .innerJoin(s.modelCatalog, eq(s.models.catalogId, s.modelCatalog.id))
+          .where(and(eq(s.models.name, model), eq(s.models.enabled, true), visibility))
+          .limit(1);
+
+    if (typeof row?.contextWindow === "number" && row.contextWindow > 0) {
+      contextWindow = row.contextWindow;
+    }
+    if (typeof row?.maxOutputTokens === "number" && row.maxOutputTokens > 0) {
+      maxOutputTokens = row.maxOutputTokens;
+    }
+  } catch {
+    /* catalog 查询失败:使用兼容默认值 */
+  }
+
+  return calculateTokenBudgets(contextWindow, maxOutputTokens);
 }

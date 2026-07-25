@@ -17,7 +17,8 @@ import { getSetting } from "@/lib/system-settings/service";
 
 const DEFAULT_MAX_TURNS = 16;
 const DEFAULT_COMPACT_TRIGGER_TOKENS = 12000;
-const DEFAULT_PRESERVE_RECENT = 8;
+/** 压缩后保留的最近 user 轮数;assembleContext 丢弃旧历史时复用同一窗口。 */
+export const DEFAULT_PRESERVE_RECENT = 8;
 const MAX_COMPACT_FAILURES = 3;
 const FAILURE_COOLDOWN_MS = 5 * 60 * 1000;
 /** 摘要质量兜底:LLM 产出低于此字数视为退化(如「收到✅」),拒绝覆盖旧摘要。 */
@@ -268,7 +269,7 @@ function splitByPreservedTurns(messages: CompactionMessage[], preserveTurns: num
 }
 
 /** 从末尾向前数,保留 N 个 user 轮对应的消息数。 */
-function countRecentTurns(messages: CompactionMessage[], preserveTurns: number): number {
+function countRecentTurns(messages: { role: string }[], preserveTurns: number): number {
   let turns = 0;
   let count = 0;
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -279,6 +280,20 @@ function countRecentTurns(messages: CompactionMessage[], preserveTurns: number):
     count++;
   }
   return count;
+}
+
+/**
+ * 压缩摘要注入后保留最近 N 个 user 轮原文,丢弃被摘要覆盖的旧历史。
+ * 与 maybeCompact 的保留窗口一致;仅按 role 计数,不依赖消息 id/parentId。
+ */
+export function retainRecentTurns<T extends { role: string }>(
+  messages: T[],
+  preserveTurns: number = DEFAULT_PRESERVE_RECENT,
+): T[] {
+  if (messages.length === 0 || preserveTurns <= 0) return messages;
+  const recentCount = countRecentTurns(messages, preserveTurns);
+  if (recentCount >= messages.length) return messages;
+  return messages.slice(messages.length - recentCount);
 }
 
 /**

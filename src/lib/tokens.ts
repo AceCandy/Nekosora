@@ -65,24 +65,111 @@ export function trimToTokenBudget(
   preserveRecent = 8,
 ): { role: string; content: string | unknown[] }[] {
   if (messages.length === 0) return messages;
+  if (maxTokens <= 0) return [];
+
+  if (estimateMessagesTokens(messages) <= maxTokens) return messages;
 
   const systemMsgs = messages.filter((m) => m.role === "system");
   const nonSystem = messages.filter((m) => m.role !== "system");
-  const recent = nonSystem.slice(-preserveRecent);
-  const candidates = nonSystem.slice(0, -preserveRecent);
+  if (nonSystem.length === 0) return fitMessagesToBudget(systemMsgs, maxTokens);
 
-  // 从最近向前累加,直到超预算
-  const kept: typeof messages = [...systemMsgs];
-  let budget = maxTokens - estimateMessagesTokens(systemMsgs) - estimateMessagesTokens(recent);
-  if (budget <= 0) return [...systemMsgs, ...recent];
+  const recentCount = Math.max(1, preserveRecent);
+  let recent = nonSystem.slice(-recentCount);
+  let keptSystem = systemMsgs;
 
-  // 倒序加入候选(优先保留较新的)
+  // 先牺牲较旧的“最近消息”,再压缩 system,最后才压缩最新消息。
+  while (
+    recent.length > 1
+    && estimateMessagesTokens([...keptSystem, ...recent]) > maxTokens
+  ) {
+    recent = recent.slice(1);
+  }
+
+  if (estimateMessagesTokens([...keptSystem, ...recent]) > maxTokens) {
+    const latestCost = estimateMessagesTokens([recent[recent.length - 1]]);
+    keptSystem = fitMessagesToBudget(systemMsgs, Math.max(0, maxTokens - latestCost));
+  }
+
+  if (estimateMessagesTokens([...keptSystem, ...recent]) > maxTokens) {
+    const latest = trimMessageToBudget(
+      recent[recent.length - 1],
+      maxTokens - estimateMessagesTokens(keptSystem),
+    );
+    recent = latest ? [latest] : [];
+  }
+
+  const candidates = nonSystem.slice(0, nonSystem.length - recent.length);
+  let budget = maxTokens - estimateMessagesTokens([...keptSystem, ...recent]);
+
+  const keptMiddle: typeof messages = [];
   for (let i = candidates.length - 1; i >= 0; i--) {
     const cost = estimateMessagesTokens([candidates[i]]);
-    if (cost > budget) break;
+    if (cost > budget) continue;
     budget -= cost;
-    kept.unshift(candidates[i]); // 插到 system 之后、recent 之前
+    keptMiddle.unshift(candidates[i]);
   }
-  kept.push(...recent);
+  return [...keptSystem, ...keptMiddle, ...recent];
+}
+
+type BudgetMessage = { role: string; content: string | unknown[] };
+
+function fitMessagesToBudget(messages: BudgetMessage[], maxTokens: number): BudgetMessage[] {
+  const kept: BudgetMessage[] = [];
+  let budget = maxTokens;
+  for (const message of messages) {
+    const cost = estimateMessagesTokens([message]);
+    if (cost <= budget) {
+      kept.push(message);
+      budget -= cost;
+      continue;
+    }
+    const trimmed = trimMessageToBudget(message, budget);
+    if (trimmed) kept.push(trimmed);
+    break;
+  }
   return kept;
+}
+
+function trimMessageToBudget(message: BudgetMessage, maxTokens: number): BudgetMessage | null {
+  const contentBudget = maxTokens - 4;
+  if (contentBudget < 0) return null;
+  if (typeof message.content === "string") {
+    return { ...message, content: trimTextToBudget(message.content, contentBudget) };
+  }
+
+  const parts = message.content;
+  const keptImages = new Set<number>();
+  let remaining = contentBudget;
+  for (let i = 0; i < parts.length && remaining >= 255; i++) {
+    if ((parts[i] as { type?: string } | null)?.type === "image_url") {
+      keptImages.add(i);
+      remaining -= 255;
+    }
+  }
+
+  const content = parts.flatMap((part, index) => {
+    const typed = part as { type?: string; text?: string } | null;
+    if (typed?.type === "image_url") return keptImages.has(index) ? [part] : [];
+    if (typed?.type !== "text") return [part];
+    const text = trimTextToBudget(typed.text ?? "", remaining);
+    remaining -= estimateTokens(text);
+    return text ? [{ ...typed, text }] : [];
+  });
+
+  return { ...message, content };
+}
+
+function trimTextToBudget(text: string, maxTokens: number): string {
+  if (maxTokens <= 0 || !text) return "";
+  if (estimateTokens(text) <= maxTokens) return text;
+
+  const chars = Array.from(text);
+  let low = 0;
+  let high = chars.length;
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    if (estimateTokens(chars.slice(0, mid).join("")) <= maxTokens) low = mid;
+    else high = mid - 1;
+  }
+  return chars.slice(0, low).join("");
 }

@@ -238,6 +238,7 @@ export async function POST(req: NextRequest) {
     model: body.model,
     modelId: body.modelId,
     messages: body.messages,
+    branchLeafPublicId: isContinue ? body.continueFromPublicId! : userPublicId,
     fileIds: body.fileIds,
     knowledgeBaseIds: body.knowledgeBaseIds,
     webSearch: body.webSearch,
