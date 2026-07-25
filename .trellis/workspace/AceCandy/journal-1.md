@@ -1397,3 +1397,36 @@ setKeyEnabled 接收 userId 并在更新 SQL 中同时限制 key ID 与属主，
 ### Next Steps
 
 - None - task complete
+
+
+## Session 43: MAGI 项目进化第 8 轮
+
+**Date**: 2026-07-26
+**Task**: MAGI 项目进化第 8 轮
+**Branch**: `opt0725`
+
+### Summary
+
+修复 Drizzle journal 时间漂移导致的迁移重复执行；增加同连接 advisory lock、账本安全协调与拒绝矩阵测试；全量测试、构建及真实数据库启动验证通过。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d926c3e` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
