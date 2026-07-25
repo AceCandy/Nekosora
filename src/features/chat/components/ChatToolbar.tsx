@@ -1,11 +1,13 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Loader2, Sparkles, Globe, Library, Wand2, Palette, X, Paperclip, Brain, ChevronDown, Plus } from "lucide-react";
+import { Loader2, Sparkles, Globe, Library, Wand2, Palette, X, Paperclip, Brain, ChevronDown, Plus, Search, Check } from "lucide-react";
 import { clsx } from "clsx";
 import { OptionPicker, type OptionItem } from "@/shared/ui/OptionPicker";
-import type { ReasoningLevel, ModelCapabilities } from "@/db/types";
+import { Popover } from "@/shared/ui/Popover";
+import { Badge } from "@/shared/ui/Badge";
+import type { ReasoningLevel } from "@/db/types";
 import type {
   ModelOption,
   CardOption,
@@ -21,7 +23,7 @@ import { useClickOutside } from "@/shared/lib/useClickOutside";
 const MENU_ROW = "flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-ui-caption font-medium text-neutral-700 transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:text-neutral-200 dark:hover:bg-neutral-900";
 /** 输入栏内联控件:与发送按钮同高,无多余描边框。 */
 const TOOLBAR_CHIP =
-  "pointer-events-auto inline-flex h-8 max-w-28 items-center gap-1 rounded-full px-2 text-ui-caption font-medium text-neutral-600 transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none dark:text-neutral-300 dark:hover:bg-neutral-800 sm:max-w-40";
+  "pointer-events-auto inline-flex h-8 max-w-28 items-center gap-1 rounded-full px-2 text-ui-caption font-medium text-neutral-600 transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none dark:text-neutral-300 dark:hover:bg-neutral-800 sm:max-w-52";
 const TOOLBAR_ICON =
   "pointer-events-auto inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200";
 
@@ -217,21 +219,14 @@ export function ComposerPlusMenu(props: ChatToolbarProps) {
 }
 
 /**
- * 输入框右侧模型相关控件(内联,无中间层菜单框):
- * 推理档位 / 联网 + 模型名(点开直接出模型列表)。
+ * 输入框右侧模型相关控件:联网独立开关 + 模型配置入口。
+ * 推理档位从属于具体模型,统一收进模型浮层。
  */
 export function ModelControlMenu(props: ChatToolbarProps) {
   const t = useTranslations("chat");
   const current = props.models.find((item) => item.modelId === props.model);
   return (
     <div className="flex shrink-0 items-center gap-0.5">
-      <div className="hidden sm:block">
-        <ReasoningPicker
-          capabilities={current?.capabilities}
-          value={props.reasoning}
-          onChange={props.onReasoningChange}
-        />
-      </div>
       <div className="hidden sm:block">
         <button
           type="button"
@@ -244,118 +239,223 @@ export function ModelControlMenu(props: ChatToolbarProps) {
           <Globe className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
-      <OptionPicker
-        open={props.modelPickerOpen}
-        onClose={props.onModelPickerClose}
-        options={props.models.map((item): OptionItem => ({
-          id: item.modelId,
-          label: item.displayName ?? item.name,
-          badge: item.source === "global" ? t("globalLabel") : undefined,
-          badgeVariant: item.source === "global" ? "primary" : undefined,
-        }))}
-        selectedIds={props.model ? [props.model] : []}
-        mode="single"
-        onToggle={props.onModelChange}
-        side="top"
-        align="right"
-        panelClassName="w-64 max-h-72 overflow-y-auto"
-        trigger={
-          <button
-            type="button"
-            onClick={props.onModelPickerToggle}
-            className={clsx(TOOLBAR_CHIP, "text-neutral-700 dark:text-neutral-200")}
-            aria-label={t("selectModel")}
-            aria-expanded={props.modelPickerOpen}
-          >
-            <span className="truncate">{current?.displayName ?? current?.name ?? t("selectModel")}</span>
-            <ChevronDown className="h-3 w-3 shrink-0 opacity-60" aria-hidden="true" />
-          </button>
-        }
+      <ModelConfigPicker
+        {...props}
+        current={current}
       />
     </div>
   );
 }
 
-/** 推理档位:输入栏紧凑 chip,仅可推理模型显示。 */
-function ReasoningPicker({
-  capabilities,
-  value,
-  onChange,
-}: {
-  capabilities?: ModelCapabilities;
-  value: ReasoningLevel;
-  onChange: (v: ReasoningLevel) => void;
-}) {
+interface ModelConfigPickerProps extends ChatToolbarProps {
+  current?: ModelOption;
+}
+
+function ModelConfigPicker(props: ModelConfigPickerProps) {
   const t = useTranslations("chat");
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const levels = getSupportedReasoningLevels(capabilities);
-  // hooks 须在 early return 前调用;不支持推理时 enabled=false,不挂监听。
-  const visible =
-    Boolean(capabilities?.reasoning) &&
+  const [query, setQuery] = useState("");
+  const [reasoningDraft, setReasoningDraft] = useState<{ modelId: string; index: number } | null>(null);
+  const pendingReasoningRef = useRef<{ modelId: string; level: ReasoningLevel } | null>(null);
+  const levels = getSupportedReasoningLevels(props.current?.capabilities);
+  const reasoningVisible =
+    Boolean(props.current?.capabilities?.reasoning) &&
     levels.length > 0 &&
     !(levels.length === 1 && levels[0] === "off");
-  useClickOutside(rootRef, () => setOpen(false), open && visible);
-  if (!visible) return null;
   const fixed = levels.length === 1;
-  const active = value !== "off";
-  const labelKey = reasoningLabelKey(value, fixed);
+  const filteredModels = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase();
+    if (!normalized) return props.models;
+    return props.models.filter((item) => {
+      const label = item.displayName ?? item.name;
+      return label.toLocaleLowerCase().includes(normalized)
+        || item.name.toLocaleLowerCase().includes(normalized);
+    });
+  }, [props.models, query]);
+  const close = () => {
+    setQuery("");
+    setReasoningDraft(null);
+    props.onModelPickerClose();
+  };
+  const statusLabel = reasoningVisible
+    ? t(reasoningShortLabelKey(props.reasoning, fixed))
+    : null;
+  const selectedReasoningIndex = Math.max(0, levels.indexOf(props.reasoning));
+  const draftReasoningIndex = reasoningDraft?.modelId === props.model
+    ? reasoningDraft.index
+    : selectedReasoningIndex;
+  const displayedReasoningIndex = Math.max(0, Math.min(draftReasoningIndex, Math.max(0, levels.length - 1)));
+  const displayedReasoning = levels[displayedReasoningIndex];
+  const reasoningProgress = levels.length > 1
+    ? (displayedReasoningIndex / (levels.length - 1)) * 100
+    : 0;
+  const commitReasoning = (index: number) => {
+    const level = levels[Math.max(0, Math.min(index, levels.length - 1))];
+    setReasoningDraft(null);
+    if (!level || level === props.reasoning) return;
+    const pending = pendingReasoningRef.current;
+    if (pending?.modelId === props.model && pending.level === level) return;
+    pendingReasoningRef.current = { modelId: props.model, level };
+    props.onReasoningChange(level);
+  };
+  useEffect(() => {
+    const pending = pendingReasoningRef.current;
+    if (pending?.modelId !== props.model || pending?.level === props.reasoning) {
+      pendingReasoningRef.current = null;
+    }
+  }, [props.model, props.reasoning]);
+
   return (
-    <div ref={rootRef} className="relative">
-      <button
-        type="button"
-        onClick={() => { if (!fixed) setOpen((v) => !v); }}
-        disabled={fixed}
-        className={clsx(
-          TOOLBAR_CHIP,
-          fixed ? "cursor-default opacity-80" : "cursor-pointer",
-          active && "bg-sora-blue/[0.08] text-sora-blue hover:bg-sora-blue/[0.12] dark:hover:bg-sora-blue/[0.12]",
-        )}
-        title={t("reasoning")}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-label={t("reasoning")}
-      >
-        <Brain className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-        <span className="truncate">{t(labelKey)}</span>
-      </button>
-      {open && (
-        <div className="absolute bottom-full right-0 z-40 mb-2 w-40 rounded-lg border border-morning-mist bg-white p-1.5 shadow-md dark:border-deep-space/80 dark:bg-space-ink">
-          {levels.map((lvl) => {
-            const key = reasoningLabelKey(lvl, false);
-            const selected = value === lvl;
+    <Popover
+      open={props.modelPickerOpen}
+      onClose={close}
+      side="top"
+      align="right"
+      panelZ="z-40"
+      panelClassName="w-80 max-w-[calc(100vw-1rem)] overflow-hidden p-0"
+      trigger={
+        <button
+          type="button"
+          onClick={() => { if (props.modelPickerOpen) close(); else props.onModelPickerToggle(); }}
+          className={clsx(TOOLBAR_CHIP, "cursor-pointer text-neutral-700 dark:text-neutral-200")}
+          aria-label={t("modelSettings")}
+          aria-haspopup="dialog"
+          aria-expanded={props.modelPickerOpen}
+        >
+          <span className="truncate">{props.current?.displayName ?? props.current?.name ?? t("selectModel")}</span>
+          {statusLabel && (
+            <span className="hidden shrink-0 text-neutral-400 dark:text-neutral-500 sm:inline">
+              · {statusLabel}
+            </span>
+          )}
+          <ChevronDown className="h-3 w-3 shrink-0 opacity-60" aria-hidden="true" />
+        </button>
+      }
+    >
+      <div role="dialog" aria-label={t("modelSettings")}>
+        <div className="relative border-b border-morning-mist p-2 dark:border-deep-space/80">
+          <Search className="pointer-events-none absolute left-4 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-400" aria-hidden="true" />
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={t("modelSearchPlaceholder")}
+            aria-label={t("modelSearchPlaceholder")}
+            className="h-8 w-full rounded-md border border-morning-mist bg-nebula-white pl-8 pr-3 text-ui-caption text-space-ink outline-none transition-colors placeholder:text-neutral-500 focus:border-sora-blue focus-visible:ring-2 focus-visible:ring-sora-blue/20 dark:border-deep-space dark:bg-twilight-obsidian dark:text-nebula-silver"
+          />
+        </div>
+
+        <div role="listbox" aria-label={t("selectModel")} className="max-h-56 overflow-y-auto p-1.5">
+          {filteredModels.length > 0 ? filteredModels.map((item) => {
+            const selected = item.modelId === props.model;
             return (
               <button
-                key={lvl}
+                key={item.modelId}
                 type="button"
-                onClick={() => { onChange(lvl); setOpen(false); }}
+                role="option"
+                aria-selected={selected}
+                onClick={() => {
+                  setReasoningDraft(null);
+                  props.onModelChange(item.modelId);
+                }}
                 className={clsx(
-                  "w-full cursor-pointer rounded px-2.5 py-1.5 text-left text-ui-caption transition-colors",
+                  "touch-target flex min-h-9 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-ui-caption transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue",
                   selected
-                    ? "bg-sora-blue/[0.08] font-semibold text-sora-blue"
+                    ? "bg-sora-blue/[0.06] font-semibold text-sora-blue"
                     : "text-neutral-600 hover:bg-neutral-50 dark:text-neutral-300 dark:hover:bg-neutral-900",
                 )}
               >
-                {t(key)}
+                <Check className={clsx("h-3.5 w-3.5 shrink-0", selected ? "opacity-100" : "opacity-0")} aria-hidden="true" />
+                <span className="min-w-0 flex-1 truncate">{item.displayName ?? item.name}</span>
+                {item.source === "global" && (
+                  <Badge variant="primary" className="shrink-0 py-0 leading-none">{t("globalLabel")}</Badge>
+                )}
               </button>
             );
-          })}
+          }) : (
+            <div className="px-3 py-8 text-center text-ui-caption text-neutral-500 dark:text-neutral-400">
+              {t("modelSearchNoMatch")}
+            </div>
+          )}
         </div>
-      )}
-    </div>
+
+        {reasoningVisible && (
+          <div className="border-t border-morning-mist bg-neutral-50/80 px-2 py-1.5 dark:border-deep-space dark:bg-twilight-obsidian/60">
+            <div className="flex items-center gap-2">
+              <span className="mt-2 inline-flex shrink-0 items-center self-start text-neutral-600 dark:text-neutral-300" title={t("reasoning")}>
+                <Brain className="h-3.5 w-3.5" aria-hidden="true" />
+              </span>
+              {fixed && (
+                <span className="ml-auto text-ui-caption text-neutral-500 dark:text-neutral-400">
+                  {t("reasoningFixedShort")}
+                </span>
+              )}
+              {!fixed && (
+                <div className="relative h-11 min-w-0 flex-1">
+                  <div className="pointer-events-none absolute inset-x-3 top-3 h-1.5 rounded-full" style={{ background: "linear-gradient(to right, var(--color-nebula-white), var(--color-sora-blue), var(--color-neku-amber))" }}>
+                    <span
+                      className="absolute top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-md dark:border-space-ink"
+                      style={{
+                        left: `${reasoningProgress}%`,
+                        background: "linear-gradient(to bottom, var(--color-nebula-white) 55%, var(--color-neku-amber))",
+                      }}
+                    />
+                  </div>
+                  <div className="pointer-events-none absolute inset-x-3 bottom-0 h-4">
+                    {levels.map((level, index) => (
+                      <span
+                        key={level}
+                        className={clsx(
+                          "absolute top-0 whitespace-nowrap text-ui-micro font-medium",
+                          index === 0 ? "text-left" : index === levels.length - 1 ? "-translate-x-full text-right" : "-translate-x-1/2 text-center",
+                          index === displayedReasoningIndex
+                            ? "text-space-ink dark:text-nebula-silver"
+                            : "text-neutral-500 dark:text-neutral-400",
+                        )}
+                        style={{ left: `${(index / (levels.length - 1)) * 100}%` }}
+                      >
+                        {t(reasoningShortLabelKey(level, false))}
+                      </span>
+                    ))}
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={levels.length - 1}
+                    step={1}
+                    value={displayedReasoningIndex}
+                    onChange={(event) => setReasoningDraft({ modelId: props.model, index: Number(event.currentTarget.value) })}
+                    onPointerUp={(event) => commitReasoning(Number(event.currentTarget.value))}
+                    onPointerCancel={() => setReasoningDraft(null)}
+                    onKeyUp={(event) => {
+                      if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"].includes(event.key)) {
+                        commitReasoning(Number(event.currentTarget.value));
+                      }
+                    }}
+                    onBlur={(event) => commitReasoning(Number(event.currentTarget.value))}
+                    aria-label={t("reasoningLevel")}
+                    aria-valuetext={displayedReasoning ? t(reasoningShortLabelKey(displayedReasoning, false)) : undefined}
+                    className="touch-target absolute inset-x-0 top-0 h-7 w-full cursor-pointer appearance-none bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue [&::-moz-range-thumb]:h-6 [&::-moz-range-thumb]:w-6 [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:opacity-0 [&::-moz-range-track]:h-6 [&::-moz-range-track]:bg-transparent [&::-webkit-slider-runnable-track]:h-6 [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:opacity-0"
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </Popover>
   );
 }
 
-function reasoningLabelKey(level: ReasoningLevel, fixed: boolean) {
-  if (fixed) return "reasoningFixed";
+function reasoningShortLabelKey(level: ReasoningLevel, fixed: boolean) {
+  if (fixed) return "reasoningFixedShort";
   switch (level) {
-    case "off": return "reasoningOff";
-    case "minimal": return "reasoningMinimal";
-    case "low": return "reasoningLow";
-    case "medium": return "reasoningMedium";
-    case "high": return "reasoningHigh";
-    case "xhigh": return "reasoningXHigh";
-    case "max": return "reasoningMax";
+    case "off": return "reasoningOffShort";
+    case "minimal": return "reasoningMinimalShort";
+    case "low": return "reasoningLowShort";
+    case "medium": return "reasoningMediumShort";
+    case "high": return "reasoningHighShort";
+    case "xhigh": return "reasoningXHighShort";
+    case "max": return "reasoningMaxShort";
   }
 }
 
