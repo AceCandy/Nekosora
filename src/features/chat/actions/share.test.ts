@@ -17,7 +17,7 @@ vi.mock("drizzle-orm", () => ({
 vi.mock("@/lib/session", () => ({ requireSession: mocks.requireSession }));
 vi.mock("@/lib/infra/db", () => ({ getDb: mocks.getDb, getSchema: mocks.getSchema }));
 
-import { createShare, revokeShare } from "./share";
+import { createShare, getShare, revokeShare } from "./share";
 
 const schema = {
   conversations: { id: "conversations.id" },
@@ -69,6 +69,74 @@ describe("聊天分享动作", () => {
       messageIdsJson: ["visible-message"],
       defaultMessageIdsJson: ["visible-message"],
     }));
+  });
+
+  it("读取公开分享时排除已软删除的消息", async () => {
+    const selectedRows = [
+      [{
+        shareId: "share-1",
+        conversationId: "conversation-1",
+        status: "active",
+        revokedAt: null,
+        titleSnapshot: "title",
+        modelSnapshot: "model",
+        messageIdsJson: ["assistant-message", "deleted-message", "user-message"],
+      }],
+      [
+        { publicId: "user-message", role: "user", content: "question" },
+        { publicId: "assistant-message", role: "assistant", content: "answer" },
+      ],
+    ];
+    const where = vi.fn().mockResolvedValue(undefined);
+    const set = vi.fn(() => ({ where }));
+    mocks.getDb.mockResolvedValue({
+      select: vi.fn(() => selectReturning(selectedRows.shift() ?? [])),
+      update: vi.fn(() => ({ set })),
+    });
+
+    await expect(getShare("share-1")).resolves.toEqual({
+      title: "title",
+      model: "model",
+      messages: [
+        { role: "assistant", content: "answer" },
+        { role: "user", content: "question" },
+      ],
+    });
+    expect(mocks.and).toHaveBeenCalledWith(
+      { op: "eq", left: schema.messages.conversationId, right: "conversation-1" },
+      { op: "isNull", field: schema.messages.deletedAt },
+    );
+  });
+
+  it("全部快照消息软删除后仍返回分享元数据", async () => {
+    const selectedRows = [
+      [{
+        shareId: "share-1",
+        conversationId: "conversation-1",
+        status: "active",
+        revokedAt: null,
+        titleSnapshot: "title",
+        modelSnapshot: "model",
+        messageIdsJson: ["deleted-message"],
+      }],
+      [],
+    ];
+    const where = vi.fn().mockResolvedValue(undefined);
+    const set = vi.fn(() => ({ where }));
+    mocks.getDb.mockResolvedValue({
+      select: vi.fn(() => selectReturning(selectedRows.shift() ?? [])),
+      update: vi.fn(() => ({ set })),
+    });
+
+    await expect(getShare("share-1")).resolves.toEqual({
+      title: "title",
+      model: "model",
+      messages: [],
+    });
+    expect(set).toHaveBeenCalledWith({ lastAccessedAt: expect.any(Date) });
+    expect(where).toHaveBeenCalledWith(
+      { op: "eq", left: schema.conversationShares.shareId, right: "share-1" },
+    );
   });
 
   it("不能撤销其他用户会话的分享", async () => {

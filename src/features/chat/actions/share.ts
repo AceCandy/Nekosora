@@ -51,7 +51,13 @@ export async function getShare(shareId: string): Promise<{
   if (messageIds.length === 0) return null;
 
   // 取这些消息(按顺序)
-  const allMsgs = await db.select().from(s.messages).where(eq(s.messages.conversationId, share.conversationId));
+  const allMsgs = await db
+    .select()
+    .from(s.messages)
+    .where(and(
+      eq(s.messages.conversationId, share.conversationId),
+      isNull(s.messages.deletedAt),
+    ));
   const byPublicId = new Map((allMsgs as { publicId: string; role: string; content: string }[]).map((m) => [m.publicId, m]));
   const ordered = messageIds
     .map((id) => byPublicId.get(id))

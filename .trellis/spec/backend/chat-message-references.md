@@ -9,6 +9,7 @@ Apply this contract when `/api/chat`, branch actions, or message-tree traversal 
 - `findConversationMessage(db, schema, conversationId, { publicId })`
 - `findConversationMessage(db, schema, conversationId, { id })`
 - `createShare(conversationId): Promise<string>`
+- `getShare(shareId): Promise<{ title; model; messages } | null>`
 - `revokeShare(shareId): Promise<void>`
 - Exactly one identifier is supplied; the result is a message row or `null`.
 
@@ -21,7 +22,8 @@ Apply this contract when `/api/chat`, branch actions, or message-tree traversal 
 - Reused user references require `role='user'`; continuation targets require `role='assistant'` and a same-conversation user parent.
 - New user inserts return their internal ID. Assistant persistence uses that verified ID directly instead of re-querying a bare public ID.
 - Missing and cross-conversation references return the same 400-class behavior and do not reveal whether the identifier exists elsewhere.
-- Share creation snapshots only message public IDs where both `messages.conversation_id = conversationId` and `messages.deleted_at IS NULL`; hidden soft-deleted content must not re-enter a public share.
+- Share creation snapshots only message public IDs where both `messages.conversation_id = conversationId` and `messages.deleted_at IS NULL`.
+- Public share reads apply the same `conversationId + deletedAt IS NULL` scope before restoring snapshot order; messages soft-deleted after share creation must disappear from existing share links.
 - Share revocation resolves the share, loads its associated conversation, and verifies `conversation.userId === session.user.id` before updating the share row.
 
 ## 4. Validation & Error Matrix
@@ -36,6 +38,7 @@ Apply this contract when `/api/chat`, branch actions, or message-tree traversal 
 | branch retry / edit / continue target | Authorized current conversation | Throw `消息不存在` before mutation |
 | sibling `parentId` query | Original message conversation | Return only same-conversation siblings |
 | share message snapshot | Owned conversation + `deletedAt IS NULL` | Exclude deleted message IDs |
+| public share message read | Share conversation + `deletedAt IS NULL` | Skip deleted snapshot IDs; keep the share valid |
 | share revocation | Share conversation owned by session user | Throw `无权操作` before update |
 
 ## 5. Good / Base / Bad Cases
@@ -43,10 +46,12 @@ Apply this contract when `/api/chat`, branch actions, or message-tree traversal 
 - Good: a leaked public ID from another conversation cannot become a parent or source in the current message tree.
 - Good: an authenticated user cannot revoke a share belonging to another user's conversation.
 - Good: creating a share after soft deletion publishes only messages still visible in the conversation.
+- Good: deleting a message after share creation removes it from the existing public link.
 - Base: normal send, retry, edit, continue, sibling lookup, and owner share revocation preserve existing behavior.
 - Bad: querying by globally unique public ID alone allows cross-conversation edges that branch traversal can later follow.
 - Bad: treating `requireSession()` alone as authorization allows any authenticated user to mutate another user's share by `shareId`.
 - Bad: selecting share message IDs by `conversationId` alone republishes soft-deleted content.
+- Bad: filtering only at share creation leaves later soft-deleted content readable through existing links.
 
 ## 6. Tests Required
 
@@ -54,6 +59,7 @@ Apply this contract when `/api/chat`, branch actions, or message-tree traversal 
 - Branch action tests assert retry/edit/continue use the scoped helper and that cross-conversation edit targets trigger no update or delete.
 - Sibling tests assert the parent query includes the original message's `conversationId`.
 - Share creation tests assert the message query combines `conversationId` with `isNull(deletedAt)` and both stored ID lists contain only returned visible messages.
+- Public share read tests assert the message query combines the share conversation ID with `isNull(deletedAt)` and preserves snapshot order for returned visible messages.
 - Share action tests cover both foreign-owner rejection without update and successful owner revocation.
 - Search `/api/chat` for direct message public-ID lookups; none may remain outside the helper.
 - Typecheck must preserve explicit row-field narrowing from `Record<string, unknown>`.
@@ -95,11 +101,11 @@ if (!conversation || conversation.userId !== user.id) {
 ```
 
 ```typescript
-// Wrong:soft-deleted messages remain eligible for public sharing.
+// Wrong:soft-deleted messages remain eligible for creating or reading a share.
 const messages = await db.select().from(s.messages)
   .where(eq(s.messages.conversationId, conversationId));
 
-// Correct:snapshot the conversation's current visible message set.
+// Correct:use the conversation's current visible message set at both boundaries.
 const messages = await db.select().from(s.messages)
   .where(and(
     eq(s.messages.conversationId, conversationId),
