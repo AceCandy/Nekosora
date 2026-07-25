@@ -1331,3 +1331,36 @@ setKeyEnabled 接收 userId 并在更新 SQL 中同时限制 key ID 与属主，
 ### Next Steps
 
 - None - task complete
+
+
+## Session 41: MAGI 项目进化第 6 轮
+
+**Date**: 2026-07-26
+**Task**: MAGI 项目进化第 6 轮
+**Branch**: `opt0725`
+
+### Summary
+
+区分分享消息的软删除墓碑与编辑导致的物理缺失：显式删除继续撤回公开内容，编辑后代仍保留冻结正文，历史分享保持动态读取。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4351a78` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
