@@ -7,6 +7,10 @@ import { requireSession } from "@/lib/session";
 
 const shareMessageIdsSchema = z.array(z.string().min(1)).min(1);
 
+interface CurrentShareMessage extends ConversationShareMessageSnapshot {
+  deletedAt: Date | null;
+}
+
 /** 创建分享(拍快照:当前消息正文与 ID 列表 + 标题/模型)。返回 shareId。 */
 export async function createShare(conversationId: string, messagePublicIds: string[]): Promise<string> {
   const user = await requireSession();
@@ -73,21 +77,27 @@ export async function getShare(shareId: string): Promise<{
   const messageIds = (share.messageIdsJson ?? []) as string[];
   if (messageIds.length === 0) return null;
 
-  // 取这些消息(按顺序)
+  // 保留软删除状态,以区分显式撤回与编辑流程造成的物理缺失。
   const allMsgs = await db
-    .select()
+    .select({
+      publicId: s.messages.publicId,
+      role: s.messages.role,
+      content: s.messages.content,
+      deletedAt: s.messages.deletedAt,
+    })
     .from(s.messages)
     .where(and(
       eq(s.messages.conversationId, share.conversationId),
-      isNull(s.messages.deletedAt),
+      inArray(s.messages.publicId, messageIds),
     ));
-  const currentMessages = allMsgs as ConversationShareMessageSnapshot[];
+  const currentMessages = allMsgs as CurrentShareMessage[];
   const byPublicId = new Map(currentMessages.map((message) => [message.publicId, message]));
   const snapshots = share.messageSnapshotsJson as ConversationShareMessageSnapshot[] | null | undefined;
-  const ordered = (snapshots ?? messageIds.map((id) => byPublicId.get(id)).filter(Boolean))
-    .filter((message): message is ConversationShareMessageSnapshot =>
-      !!message && byPublicId.has(message.publicId),
-    )
+  const ordered = (snapshots
+    ? snapshots.filter((message) => !byPublicId.get(message.publicId)?.deletedAt)
+    : messageIds
+      .map((id) => byPublicId.get(id))
+      .filter((message): message is CurrentShareMessage => !!message && !message.deletedAt))
     .map((m) => ({ role: m.role, content: typeof m.content === "string" ? m.content : String(m.content) }));
 
   // 更新最后访问时间(失败忽略)

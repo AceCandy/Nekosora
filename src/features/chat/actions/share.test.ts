@@ -168,14 +168,16 @@ describe("聊天分享动作", () => {
         ],
       }],
       [
-        { publicId: "user-message", role: "user", content: "edited question" },
-        { publicId: "assistant-message", role: "assistant", content: "continued answer" },
+        { publicId: "user-message", role: "user", content: "edited question", deletedAt: null },
+        { publicId: "deleted-message", role: "assistant", content: "deleted answer", deletedAt: new Date() },
+        { publicId: "assistant-message", role: "assistant", content: "continued answer", deletedAt: null },
       ],
     ];
     const where = vi.fn().mockResolvedValue(undefined);
     const set = vi.fn(() => ({ where }));
+    const select = vi.fn(() => selectReturning(selectedRows.shift() ?? []));
     mocks.getDb.mockResolvedValue({
-      select: vi.fn(() => selectReturning(selectedRows.shift() ?? [])),
+      select,
       update: vi.fn(() => ({ set })),
     });
 
@@ -189,8 +191,54 @@ describe("聊天分享动作", () => {
     });
     expect(mocks.and).toHaveBeenCalledWith(
       { op: "eq", left: schema.messages.conversationId, right: "conversation-1" },
-      { op: "isNull", field: schema.messages.deletedAt },
+      {
+        op: "inArray",
+        field: schema.messages.publicId,
+        values: ["assistant-message", "deleted-message", "user-message"],
+      },
     );
+    expect(select).toHaveBeenNthCalledWith(2, {
+      publicId: schema.messages.publicId,
+      role: schema.messages.role,
+      content: schema.messages.content,
+      deletedAt: schema.messages.deletedAt,
+    });
+  });
+
+  it("编辑物理删除后代后仍返回新分享的冻结正文", async () => {
+    const selectedRows = [
+      [{
+        shareId: "share-edited",
+        conversationId: "conversation-1",
+        status: "active",
+        revokedAt: null,
+        titleSnapshot: "title",
+        modelSnapshot: "model",
+        messageIdsJson: ["user-message", "assistant-message"],
+        messageSnapshotsJson: [
+          { publicId: "user-message", role: "user", content: "shared question" },
+          { publicId: "assistant-message", role: "assistant", content: "shared answer" },
+        ],
+      }],
+      [
+        { publicId: "user-message", role: "user", content: "edited question", deletedAt: null },
+      ],
+    ];
+    const where = vi.fn().mockResolvedValue(undefined);
+    const set = vi.fn(() => ({ where }));
+    mocks.getDb.mockResolvedValue({
+      select: vi.fn(() => selectReturning(selectedRows.shift() ?? [])),
+      update: vi.fn(() => ({ set })),
+    });
+
+    await expect(getShare("share-edited")).resolves.toEqual({
+      title: "title",
+      model: "model",
+      messages: [
+        { role: "user", content: "shared question" },
+        { role: "assistant", content: "shared answer" },
+      ],
+    });
   });
 
   it("全部快照消息软删除后仍返回分享元数据", async () => {
@@ -207,7 +255,9 @@ describe("聊天分享动作", () => {
           { publicId: "deleted-message", role: "assistant", content: "deleted answer" },
         ],
       }],
-      [],
+      [
+        { publicId: "deleted-message", role: "assistant", content: "deleted answer", deletedAt: new Date() },
+      ],
     ];
     const where = vi.fn().mockResolvedValue(undefined);
     const set = vi.fn(() => ({ where }));
@@ -236,12 +286,13 @@ describe("聊天分享动作", () => {
         revokedAt: null,
         titleSnapshot: null,
         modelSnapshot: null,
-        messageIdsJson: ["user-message", "assistant-message"],
+        messageIdsJson: ["user-message", "missing-message", "deleted-message", "assistant-message"],
         messageSnapshotsJson: null,
       }],
       [
-        { publicId: "assistant-message", role: "assistant", content: "continued answer" },
-        { publicId: "user-message", role: "user", content: "edited question" },
+        { publicId: "assistant-message", role: "assistant", content: "continued answer", deletedAt: null },
+        { publicId: "deleted-message", role: "assistant", content: "deleted answer", deletedAt: new Date() },
+        { publicId: "user-message", role: "user", content: "edited question", deletedAt: null },
       ],
     ];
     const where = vi.fn().mockResolvedValue(undefined);

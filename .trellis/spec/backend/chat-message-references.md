@@ -30,7 +30,7 @@ Apply this contract when `/api/chat`, branch actions, or message-tree traversal 
 - Database result order is validation-only. Both snapshot ID arrays preserve the client-visible order so a switched assistant version replaces, rather than accompanies, its hidden sibling.
 - New shares persist ordered message bodies from the validated database rows in `message_snapshots_json`; later user edits and assistant continuations must not change the shared body.
 - `message_snapshots_json IS NULL` identifies historical shares and keeps their existing dynamic body lookup. Do not backfill current message bodies as if they were creation-time snapshots.
-- Public share reads apply the same `conversationId + deletedAt IS NULL` scope before restoring snapshot order; messages soft-deleted after share creation must disappear from existing share links.
+- Public share reads query the stored public IDs inside the share conversation without discarding `deletedAt`. For new body snapshots, an existing row with non-null `deletedAt` hides the snapshot, while a physically missing row remains frozen because branch editing deletes descendants. Historical null snapshots still require an existing row with null `deletedAt`.
 - Share revocation resolves the share, loads its associated conversation, and verifies `conversation.userId === session.user.id` before updating the share row.
 
 ## 4. Validation & Error Matrix
@@ -46,7 +46,7 @@ Apply this contract when `/api/chat`, branch actions, or message-tree traversal 
 | soft-delete target | `publicId` + conversation owned by session user, then `role='user'` | Missing/foreign: `消息不存在`; owned non-user: `仅支持删除用户消息`; no update |
 | sibling `parentId` query | Original message conversation | Return only same-conversation siblings |
 | share message snapshot | Owned conversation + non-empty unique visible IDs, all matching `conversationId + deletedAt IS NULL` | Throw `分享消息无效`; no insert |
-| public share message read | Share conversation + `deletedAt IS NULL`; frozen body for non-null body snapshots, dynamic body for historical null snapshots | Skip deleted snapshot IDs; keep the share valid |
+| public share message read | Share conversation + stored public IDs; distinguish existing active, existing soft-deleted, and physically missing rows | New snapshot: hide only explicit soft-delete tombstones; historical null snapshot: return only existing active rows |
 | share revocation | Share conversation owned by session user | Throw `无权操作` before update |
 
 ## 5. Good / Base / Bad Cases
@@ -56,6 +56,7 @@ Apply this contract when `/api/chat`, branch actions, or message-tree traversal 
 - Good: deleting a foreign message ID and deleting a missing ID execute the same owner-scoped lookup and return the same error.
 - Good: creating a share publishes only the ordered message versions visible when the user clicks Share; hidden regenerated siblings stay private.
 - Good: editing or continuing a message after creating a new share does not rewrite that share's body.
+- Good: editing a shared user message may physically delete its assistant descendants, but the new share keeps those frozen descendant bodies.
 - Base: a historical share with `message_snapshots_json IS NULL` remains readable through its stored message IDs and current bodies.
 - Good: deleting a message after share creation removes it from the existing public link.
 - Base: normal send, retry, edit, continue, sibling lookup, and owner share revocation preserve existing behavior.
@@ -65,6 +66,7 @@ Apply this contract when `/api/chat`, branch actions, or message-tree traversal 
 - Bad: selecting every message by `conversationId` publishes regenerated siblings hidden from the current UI.
 - Bad: accepting the subset returned by an owner-scoped query creates a partial or cross-conversation snapshot; the validated set must exactly match the submitted set.
 - Bad: filtering only at share creation leaves later soft-deleted content readable through existing links.
+- Bad: querying only `deletedAt IS NULL` makes explicit soft deletes and branch-edit hard deletes both look absent, so frozen descendant bodies disappear.
 - Bad: backfilling historical shares with current bodies falsely labels upgrade-time content as a creation-time snapshot.
 
 ## 6. Tests Required
@@ -75,9 +77,10 @@ Apply this contract when `/api/chat`, branch actions, or message-tree traversal 
 - Sibling tests assert the parent query includes the original message's `conversationId`.
 - Share creation tests assert the message query combines `conversationId`, `isNull(deletedAt)`, and `inArray(publicId, submittedIds)`; database result order may differ, but both stored ID lists retain submitted order.
 - Share creation tests reject empty, duplicate, partial/foreign, and foreign-owner inputs before insert. Store tests prove version switching replaces the runtime `publicId` consumed by the share caller.
-- Public share read tests assert the message query combines the share conversation ID with `isNull(deletedAt)` and preserves snapshot order for returned visible messages.
+- Public share read tests assert the state query combines the share conversation ID with `inArray(publicId, storedIds)` and explicitly selects `deletedAt`.
 - Public share read tests use different snapshot and live bodies for both user and assistant messages, assert the snapshot bodies win for new shares, and assert soft-deleted snapshot entries remain hidden.
-- Compatibility tests set `message_snapshots_json` to null and assert historical shares still return live bodies in stored ID order.
+- Public share read tests omit a snapshotted assistant row to model branch-edit hard deletion and assert its frozen body remains in order.
+- Compatibility tests set `message_snapshots_json` to null and assert historical shares return only existing, non-deleted live bodies in stored ID order.
 - Share action tests cover both foreign-owner rejection without update and successful owner revocation.
 - Search `/api/chat` for direct message public-ID lookups; none may remain outside the helper.
 - Typecheck must preserve explicit row-field narrowing from `Record<string, unknown>`.
@@ -147,6 +150,18 @@ await db.insert(s.conversationShares).values({ messageIdsJson: messageIds });
 const snapshotsById = new Map(visibleMessages.map((message) => [message.publicId, message]));
 const messageSnapshotsJson = messageIds.map((id) => snapshotsById.get(id));
 await db.insert(s.conversationShares).values({ messageIdsJson: messageIds, messageSnapshotsJson });
+```
+
+```typescript
+// Wrong:both soft-deleted and physically missing rows disappear from this result.
+const current = await db.select().from(s.messages)
+  .where(and(eq(s.messages.conversationId, conversationId), isNull(s.messages.deletedAt)));
+
+// Correct:retain deletion state; only an explicit tombstone retracts a new frozen snapshot.
+const current = await db.select({ publicId: s.messages.publicId, deletedAt: s.messages.deletedAt })
+  .from(s.messages)
+  .where(and(eq(s.messages.conversationId, conversationId), inArray(s.messages.publicId, messageIds)));
+const visibleSnapshots = snapshots.filter((snapshot) => !byPublicId.get(snapshot.publicId)?.deletedAt);
 ```
 
 ```typescript
