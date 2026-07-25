@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "复核迁移链和 DB 访问"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "复核唯一终态日志与敏感信息边界"}
+{"file": ".trellis/spec/backend/chat-message-references.md", "reason": "复核 feedback/branch 越权防护"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "复核前端类型、i18n 与测试门禁"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "复核 store 字段保留与回滚"}

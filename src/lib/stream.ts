@@ -17,7 +17,7 @@ import { buildLanguageModelWithKey } from "@/lib/providers/registry";
 import { getChatUA } from "@/lib/system-settings/ua";
 import { orderedWeightedKeys } from "@/lib/providers/keys";
 import { recordSuccess, recordFailure } from "@/lib/circuit-breaker";
-import { logUsage, maskKey } from "@/lib/usage";
+import { logUsage, maskKey, type LogUsageParams } from "@/lib/usage";
 import { classifyError, NETWORK_KEYWORDS } from "@/lib/error-classify";
 import { buildReasoningProviderOptions, getDefaultReasoningLevel } from "@/lib/reasoning";
 import type {
@@ -54,6 +54,26 @@ export interface StreamChatOptions {
    * 注入到 registry 的 customFetch,覆盖 AI SDK 默认 UA。
    */
   userAgent?: string;
+  /** Agent loop 内部步骤收集终态用量,由外层统一记录。 */
+  suppressFinalUsageLog?: boolean;
+  /** 仅与 suppressFinalUsageLog 配合使用,接收步骤终态信息。 */
+  onFinalUsage?: (result: StreamChatFinalUsage) => void;
+}
+
+interface StreamChatFinalUsage {
+  params: LogUsageParams;
+  firstTokenAt?: number;
+}
+
+function reportFinalUsage(
+  opts: StreamChatOptions,
+  result: StreamChatFinalUsage,
+): Promise<void> | void {
+  if (opts.suppressFinalUsageLog) {
+    opts.onFinalUsage?.(result);
+    return;
+  }
+  return logUsage(result.params);
 }
 
 /** 判断错误是否值得路由级故障转移(连接/5xx/限流类),而非确定性失败。 */
@@ -238,16 +258,18 @@ export async function* streamChat(
     const errCode = err instanceof RoutingError ? err.code : "routing_error";
     const errMsg = err instanceof Error ? err.message : "路由解析失败";
     yield { type: "error", error: errMsg, code: errCode };
-    await logUsage({
-      ctx, runId, model: request.model, usage: {},
-      latencyMs: Date.now() - startedAt, status: "failed", errorCode: errCode,
-      errorMessage: errMsg,
-      errorPhase: classifyError({ errorCode: errCode }).phase,
-      errorType: errCode,
-      httpStatus: SHORT_HTTP_STATUS[errCode] ?? 503,
-      stream: true,
-      taskKind: opts.taskKind,
-      upstreamKeyMasked: maskKey(usedRoute?.provider.apiKey),
+    await reportFinalUsage(opts, {
+      params: {
+        ctx, runId, model: request.model, usage: {},
+        latencyMs: Date.now() - startedAt, status: "failed", errorCode: errCode,
+        errorMessage: errMsg,
+        errorPhase: classifyError({ errorCode: errCode }).phase,
+        errorType: errCode,
+        httpStatus: SHORT_HTTP_STATUS[errCode] ?? 503,
+        stream: true,
+        taskKind: opts.taskKind,
+        upstreamKeyMasked: maskKey(usedRoute?.provider.apiKey),
+      },
     });
     return;
   }
@@ -331,27 +353,52 @@ export async function* streamChat(
       timing.firstTokenAt !== undefined ? timing.firstTokenAt - startedAt : undefined;
     if (succeeded || aborted) {
       // 成功 / 中断:记最终结果(usage_logs 或 ops_error_logs interrupted)+ metrics 埋点。
-      await logUsage({
-        ctx,
-        runId,
-        model: request.model,
-        providerRef: usedRoute ? `${usedRoute.source}:${usedRoute.provider.id}` : undefined,
-        usage: finalUsage,
-        latencyMs: Date.now() - startedAt,
-        status: succeeded ? "success" : "interrupted",
-        // 路由可读信息快照(provider 改名不影响历史行)。
-        providerName: usedRoute?.provider.name,
-        routeId: usedRoute?.routeId,
-        routeName: usedRoute
-          ? `${usedRoute.provider.name} · ${usedRoute.upstreamModelName}`
-          : undefined,
-        upstreamModel: usedRoute?.upstreamModelName,
-        firstTokenLatencyMs,
-        stream: true,
-        taskKind: opts.taskKind,
-        upstreamKeyMasked: maskKey(usedRoute?.provider.apiKey),
+      await reportFinalUsage(opts, {
+        params: {
+          ctx,
+          runId,
+          model: request.model,
+          providerRef: usedRoute ? `${usedRoute.source}:${usedRoute.provider.id}` : undefined,
+          usage: finalUsage,
+          latencyMs: Date.now() - startedAt,
+          status: succeeded ? "success" : "interrupted",
+          // 路由可读信息快照(provider 改名不影响历史行)。
+          providerName: usedRoute?.provider.name,
+          routeId: usedRoute?.routeId,
+          routeName: usedRoute
+            ? `${usedRoute.provider.name} · ${usedRoute.upstreamModelName}`
+            : undefined,
+          upstreamModel: usedRoute?.upstreamModelName,
+          firstTokenLatencyMs,
+          stream: true,
+          taskKind: opts.taskKind,
+          upstreamKeyMasked: maskKey(usedRoute?.provider.apiKey),
+        },
+        firstTokenAt: timing.firstTokenAt,
       });
     } else {
+      if (opts.suppressFinalUsageLog) {
+        await reportFinalUsage(opts, {
+          params: {
+            ctx,
+            runId,
+            model: request.model,
+            providerRef: usedRoute ? `${usedRoute.source}:${usedRoute.provider.id}` : undefined,
+            usage: finalUsage,
+            latencyMs: Date.now() - startedAt,
+            status: "failed",
+            errorCode: "generation_failed",
+            errorMessage: lastError instanceof Error ? lastError.message : "生成失败",
+            errorPhase: classifyError({ errorCode: "generation_failed" }).phase,
+            errorType: "generation_failed",
+            stream: true,
+            taskKind: opts.taskKind,
+            upstreamKeyMasked: maskKey(usedRoute?.provider.apiKey),
+          },
+          firstTokenAt: timing.firstTokenAt,
+        });
+        return;
+      }
       // 方案 X:每次尝试失败已在 catch 记 ops_error_logs(attempt=1..N),此处不重复记库,只补 metrics 埋点。
       try {
         const { observeRequest } = await import("@/lib/infra/metrics");
@@ -690,44 +737,75 @@ export interface StreamChatWithToolsOptions extends StreamChatOptions {
 /**
  * 带 agent loop 的流式生成:模型调工具 → 执行 → 回填 → 继续,直到模型不再调工具。
  * 复用 streamChat 做单步生成,callMcpTool 执行工具。
- * 透传全部 StreamEvent(text-delta / tool-call / tool-result / finish / error)。
+ *
+ * 事件契约:
+ *   - text-delta / reasoning-delta / usage / tool-call / tool-result 按发生顺序透传
+ *   - 中间轮 streamChat 的 finish 仅用于循环控制,不向外层 yield
+ *   - 整个 agent loop 最多向外层发一次最终 finish(usage/finishReason 取最终一轮)
+ *   - error 原样透传并立即终止 loop(不伪造 success finish)
+ *
+ * 用量日志契约:每个 Agent run 只由外层写一条聚合终态日志;
+ * 步骤内的 key/路由尝试失败日志仍独立保留。
  */
 export async function* streamChatWithTools(
   opts: StreamChatWithToolsOptions,
 ): AsyncGenerator<import("@/lib/providers/types").StreamEvent, void, unknown> {
   const { maxSteps = 5, mcpServers = [] } = opts;
-  // 合并工具集(来自 MCP)。
-  let tools = opts.request.tools;
-  if (mcpServers.length > 0) {
-    const { toIRTools } = await import("@/lib/mcp/registry");
-    tools = [...(tools ?? []), ...toIRTools(mcpServers)];
-  }
-  if (!tools || tools.length === 0) {
-    // 无工具:退化为普通 streamChat。
-    yield* streamChat(opts);
-    return;
-  }
-
-  const { callMcpTool } = await import("@/lib/mcp/registry");
+  const agentRunId = opts.runId ?? `run_${crypto.randomUUID()}`;
+  const startedAt = Date.now();
+  let aggregateUsage: IRUsage = {};
+  const finalUsages: StreamChatFinalUsage[] = [];
+  let firstTokenAt: number | undefined;
+  let terminalStatus: LogUsageParams["status"] = "interrupted";
+  let terminalError: unknown;
+  let delegatedToPlainStream = false;
+  let shouldLogAgentUsage = false;
+  const collectFinalUsage = (result: StreamChatFinalUsage) => {
+    aggregateUsage = addUsage(aggregateUsage, result.params.usage);
+    finalUsages.push(result);
+    if (firstTokenAt === undefined) firstTokenAt = result.firstTokenAt;
+  };
   // working messages:每轮追加 tool 结果,进入下一轮。
-  let messages = [...opts.request.messages];
+  let messages: IRMessage[] = [];
 
-  for (let step = 0; step < maxSteps; step++) {
+  try {
+    // 工具转换/registry 初始化也属于 Agent run；失败必须由 finally 写唯一终态。
+    let tools = opts.request.tools;
+    if (mcpServers.length > 0) {
+      const { toIRTools } = await import("@/lib/mcp/registry");
+      tools = [...(tools ?? []), ...toIRTools(mcpServers)];
+    }
+    if (!tools || tools.length === 0) {
+      delegatedToPlainStream = true;
+      yield* streamChat(opts);
+      return;
+    }
+
+    shouldLogAgentUsage = true;
+    const { callMcpTool } = await import("@/lib/mcp/registry");
+    messages = [...opts.request.messages];
+    for (let step = 0; step < maxSteps; step++) {
     const pendingToolCalls: {
       toolCallId: string;
       toolName: string;
       args: unknown;
     }[] = [];
-    let lastFinishReason = "stop";
+    // 仅缓存本轮 finish;是否向外 yield 取决于是否已到 agent loop 终点。
+    let stepFinish: Extract<StreamEvent, { type: "finish" }> | null = null;
+    let sawError = false;
 
-    for await (const ev of streamChat({
-      ctx: opts.ctx,
-      runId: opts.runId,
-      request: { ...opts.request, messages, tools },
-      modelId: opts.modelId,
-      abortSignal: opts.abortSignal,
-      userAgent: opts.userAgent,
-    })) {
+      for await (const ev of streamChat({
+        ctx: opts.ctx,
+        runId: agentRunId,
+        request: { ...opts.request, messages, tools },
+        modelId: opts.modelId,
+        cacheKey: opts.cacheKey,
+        taskKind: opts.taskKind,
+        abortSignal: opts.abortSignal,
+        userAgent: opts.userAgent,
+        suppressFinalUsageLog: true,
+        onFinalUsage: collectFinalUsage,
+      })) {
       if (ev.type === "tool-call") {
         pendingToolCalls.push({
           toolCallId: ev.toolCallId,
@@ -736,47 +814,145 @@ export async function* streamChatWithTools(
         });
         yield ev; // 透传给 UI
       } else if (ev.type === "finish") {
-        lastFinishReason = ev.finishReason;
-        // finish 也透传(每轮一个 finish 事件,UI 可选展示)。
-      } else if (ev.type !== "error") {
-        yield ev; // text-delta / usage 透传
+        stepFinish = ev;
+      } else if (ev.type === "error") {
+        // 上游/路由错误必须可观察;不发伪造 finish,route 保持 interrupted。
+        sawError = true;
+        yield ev;
+      } else {
+        yield ev; // text-delta / reasoning-delta / usage 透传
       }
     }
 
-    // 无工具调用或模型已结束 → 完成整个 agent loop。
-    if (pendingToolCalls.length === 0 || lastFinishReason !== "tool-calls") {
-      return;
-    }
+      if (sawError) {
+        terminalStatus = "failed";
+        return;
+      }
+
+    // 无工具调用或模型已结束 → 向外层发唯一最终 finish,完成整个 agent loop。
+      if (
+        pendingToolCalls.length === 0
+        || !stepFinish
+        || stepFinish.finishReason !== "tool-calls"
+      ) {
+        terminalStatus = stepFinish
+          ? "success"
+          : finalUsages.at(-1)?.params.status ?? "interrupted";
+        if (stepFinish) {
+          yield stepFinish;
+        }
+        return;
+      }
 
     // 执行工具,把结果作为 tool message 追加,进入下一轮。
-    for (const tc of pendingToolCalls) {
-      const { result, isError } = await callMcpTool(
-        mcpServers, tc.toolCallId, tc.toolName, tc.args,
-      ).catch((e) => ({
-        result: e instanceof Error ? e.message : "tool_error",
-        isError: true,
-      }));
-      yield {
-        type: "tool-result",
-        toolCallId: tc.toolCallId,
-        toolName: tc.toolName,
-        result,
-        isError,
-      };
+    // 本轮 finish 已消费为循环控制信号,不向外 yield。
+      for (const tc of pendingToolCalls) {
+        const { result, isError } = await callMcpTool(
+          mcpServers, tc.toolCallId, tc.toolName, tc.args,
+        ).catch((e) => ({
+          result: e instanceof Error ? e.message : "tool_error",
+          isError: true,
+        }));
+        yield {
+          type: "tool-result",
+          toolCallId: tc.toolCallId,
+          toolName: tc.toolName,
+          result,
+          isError,
+        };
       // 追加 assistant 的 tool_call + 对应 tool 结果(OpenAI 多轮格式)。
-      messages = [
-        ...messages,
-        {
-          role: "assistant" as const,
-          content: "",
-          tool_calls: [{ id: tc.toolCallId, type: "function", function: { name: tc.toolName, arguments: JSON.stringify(tc.args) } }],
-        },
-        {
-          role: "tool" as const,
-          tool_call_id: tc.toolCallId,
-          content: typeof result === "string" ? result : JSON.stringify(result),
-        },
-      ];
+        messages = [
+          ...messages,
+          {
+            role: "assistant" as const,
+            content: "",
+            tool_calls: [{ id: tc.toolCallId, type: "function", function: { name: tc.toolName, arguments: JSON.stringify(tc.args) } }],
+          },
+          {
+            role: "tool" as const,
+            tool_call_id: tc.toolCallId,
+            content: typeof result === "string" ? result : JSON.stringify(result),
+          },
+        ];
+      }
+    }
+  } catch (err) {
+    if (delegatedToPlainStream) throw err;
+    terminalError = err;
+    terminalStatus = opts.abortSignal?.aborted ? "interrupted" : "failed";
+    shouldLogAgentUsage = true;
+    throw err;
+  } finally {
+    if (shouldLogAgentUsage) {
+      const finalUsage = finalUsages.at(-1);
+      if (finalUsage) {
+        const errorCode = terminalStatus === "success"
+          ? finalUsage.params.errorCode
+          : terminalStatus === "interrupted"
+            ? "interrupted"
+            : finalUsage.params.errorCode ?? "generation_failed";
+        await logUsage({
+          ...finalUsage.params,
+          runId: agentRunId,
+          usage: aggregateUsage,
+          status: terminalStatus,
+          errorCode,
+          errorMessage: terminalStatus === "failed"
+            ? finalUsage.params.errorMessage
+              ?? (terminalError instanceof Error ? terminalError.message : undefined)
+            : finalUsage.params.errorMessage,
+          errorPhase: terminalStatus === "failed"
+            ? finalUsage.params.errorPhase ?? classifyError({ errorCode }).phase
+            : finalUsage.params.errorPhase,
+          errorType: terminalStatus === "success"
+            ? finalUsage.params.errorType
+            : errorCode,
+          latencyMs: Date.now() - startedAt,
+          firstTokenLatencyMs: firstTokenAt === undefined ? undefined : firstTokenAt - startedAt,
+        });
+      } else {
+        const failed = terminalStatus === "failed";
+        await logUsage({
+          ctx: opts.ctx,
+          runId: agentRunId,
+          model: opts.request.model,
+          providerRef: undefined,
+          usage: {
+            inputTokens: 0,
+            outputTokens: 0,
+            totalTokens: 0,
+            reasoningTokens: 0,
+            cachedInputTokens: 0,
+          },
+          latencyMs: Date.now() - startedAt,
+          status: terminalStatus,
+          errorCode: failed ? "generation_failed" : "interrupted",
+          errorMessage: failed
+            ? terminalError instanceof Error ? terminalError.message : "生成失败"
+            : undefined,
+          errorPhase: failed ? classifyError({ errorCode: "generation_failed" }).phase : undefined,
+          errorType: failed ? "generation_failed" : "interrupted",
+          providerName: undefined,
+          routeId: undefined,
+          routeName: undefined,
+          upstreamModel: undefined,
+          firstTokenLatencyMs: undefined,
+          stream: true,
+          taskKind: opts.taskKind,
+          upstreamKeyMasked: undefined,
+        });
+      }
     }
   }
+  // maxSteps 耗尽且仍停在 tool-calls:finally 记 interrupted,不发最终 finish。
+}
+
+function addUsage(total: IRUsage, usage: IRUsage): IRUsage {
+  return {
+    inputTokens: (total.inputTokens ?? 0) + (usage.inputTokens ?? 0),
+    outputTokens: (total.outputTokens ?? 0) + (usage.outputTokens ?? 0),
+    totalTokens: (total.totalTokens ?? 0) + (usage.totalTokens ?? 0),
+    reasoningTokens: (total.reasoningTokens ?? 0) + (usage.reasoningTokens ?? 0),
+    cachedInputTokens: (total.cachedInputTokens ?? 0) + (usage.cachedInputTokens ?? 0),
+  };
 }

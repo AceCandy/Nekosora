@@ -117,6 +117,54 @@ stream 层 failed 行 `httpStatus` 由 `SHORT_HTTP_STATUS`（stream 内部短码
 - ❌ 完整 request body / response body（错误表只存脱敏摘要 / requestPath）。
 - ❌ 凭证、Authorization header、api key 明文（上游 key 只存脱敏快照 `upstreamKeyMasked`）。
 
+## Scenario: MCP Agent 聚合用量
+
+### 1. Scope / Trigger
+
+- `streamChatWithTools` 通过多轮 `streamChat` 完成一条用户可见的 Agent 回复时。
+
+### 2. Signatures
+
+- `streamChat(opts: StreamChatOptions)`：内部步骤可传 `suppressFinalUsageLog` 与 `onFinalUsage`。
+- `streamChatWithTools(opts: StreamChatWithToolsOptions)`：Agent 外层负责唯一的 `logUsage` 调用。
+
+### 3. Contracts
+
+- 同一 Agent run 只写一条最终 `usage_logs` 或 `ops_error_logs`，token 按步骤聚合，耗时从 Agent 开始计算。
+- key/路由尝试失败仍由 `logAttemptFailure` 独立写入 `ops_error_logs`，且 `skipMetrics=true`。
+- 终轮路由信息作为聚合记录的路由快照；首 token 使用整个 Agent 内最早的 token 时刻。
+
+### 4. Validation & Error Matrix
+
+| 条件 | 聚合终态 | 日志 / 指标 |
+|---|---|---|
+| 最终模型停止调用工具 | success | 一条聚合 success + 一次指标 |
+| 上游或路由失败 | failed | 一条聚合 failed；尝试失败日志保留 |
+| 客户端中止或 maxSteps 耗尽 | interrupted | 一条聚合 interrupted + 一次指标 |
+
+### 5. Good / Base / Bad Cases
+
+- Good：两轮工具链只生成一条 success，prompt/completion token 为两轮之和。
+- Base：无工具时退化为单次 `streamChat`，保持原日志行为。
+- Bad：每个步骤各写一条 success，会把同一用户回复重复计量。
+
+### 6. Tests Required
+
+- `stream-agent-loop.test.ts` 断言多轮仅一条 success、聚合 token 正确。
+- 断言 `maxSteps` 耗尽不发 finish 且记录一条 interrupted。
+- 失败链测试须保留步骤级 attempt 日志与唯一终态指标的边界。
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong:每个 Agent 步骤各自写最终成功日志。
+for await (const event of streamChat(stepOptions)) yield event;
+
+// Correct:步骤只上报终态，Agent 外层汇总后写一次。
+for await (const event of streamChat({ ...stepOptions, suppressFinalUsageLog: true })) yield event;
+await logUsage(aggregatedFinalUsage);
+```
+
 ---
 
 ## 用户端隔离（panel）

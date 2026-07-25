@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移 SQL、journal 与 snapshot 必须同步"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Agent 多轮聚合终态、attempt 与 metrics 边界"}
+{"file": ".trellis/spec/backend/chat-message-references.md", "reason": "消息反馈与分支查询的属主隔离"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "反馈乐观状态、版本切换与多会话隔离"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "useClickOutside 与 React 运行时兼容边界"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "DB 到 UI 的反馈数据流与流式日志契约"}

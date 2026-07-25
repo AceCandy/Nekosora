@@ -1,0 +1,41 @@
+{
+  "id": "pending-changes-cleanup",
+  "name": "pending-changes-cleanup",
+  "title": "未提交改动收尾",
+  "description": "修复三组遗留改动的提交阻塞，按反馈/上下文/用量聚合拆分验证并推送",
+  "status": "in_progress",
+  "dev_type": "fix",
+  "scope": "chat cleanup",
+  "package": null,
+  "priority": "P2",
+  "creator": "AceCandy",
+  "assignee": "AceCandy",
+  "createdAt": "2026-07-25",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "src/features/chat/",
+    "src/lib/chat/orchestrator.ts",
+    "src/lib/context-assembler.ts",
+    "src/lib/compact/service.ts",
+    "src/lib/tokens.ts",
+    "src/lib/stream.ts",
+    "src/db/schema/pg.ts",
+    "drizzle/pg/"
+  ],
+  "notes": "只整理当前工作树已有三组功能；先修阻塞，再独立暂存、复核、提交和推送。",
+  "meta": {
+    "commitBatches": [
+      "feedback",
+      "context-budget",
+      "agent-usage"
+    ]
+  }
+}
