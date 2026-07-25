@@ -108,3 +108,59 @@ serverName.replace(/[^a-zA-Z0-9_]/g, "_");
 // Correct: collapse underscores before appending the delimiter.
 serverName.replace(/[^a-zA-Z0-9_]/g, "_").replace(/_+/g, "_");
 ```
+
+## Scenario: Atomic Multi-Tool Turns
+
+### 1. Scope / Trigger
+
+Apply this contract when changing `streamChatWithTools`, tool-call event translation, or the working messages sent to the next Agent step.
+
+### 2. Signatures
+
+- `streamChatWithTools(opts: StreamChatWithToolsOptions): AsyncGenerator<StreamEvent>`
+- `IRMessage.tool_calls?: IRToolCall[]`
+- Tool result message: `{ role: "tool", tool_call_id, content }`
+
+### 3. Contracts
+
+- All tool calls emitted by one model step belong to one assistant message.
+- Append that assistant message once with the complete ordered `tool_calls` array, then append all matching tool result messages in the same order.
+- Tool execution and outward `tool-result` events remain sequential.
+- A failed tool still produces its matching tool result message and does not split the assistant turn.
+
+### 4. Validation & Error Matrix
+
+| Condition | Next-step message sequence |
+| --- | --- |
+| One tool call | `assistant(call-1), tool(call-1)` |
+| Two tool calls | `assistant(call-1, call-2), tool(call-1), tool(call-2)` |
+| Second tool fails | Same sequence; second tool content carries the failure result |
+| No tool calls | No assistant/tool messages are appended by the Agent loop |
+
+### 5. Good / Base / Bad Cases
+
+- Good: two calls are represented by one assistant message followed by two ordered results.
+- Base: a single call retains the existing one-assistant/one-tool shape.
+- Bad: append `assistant(call-1), tool(call-1), assistant(call-2), tool(call-2)`; providers may reject the second step because one model turn was split.
+
+### 6. Tests Required
+
+- `stream-agent-loop.test.ts` must inspect the second `streamText` request, not only outward events.
+- Assert one assistant message contains every call id, name, and serialized argument in order.
+- Assert each following tool message has the matching `tool_call_id` and serialized result.
+- Keep single-tool, tool-failure, terminal finish, and aggregate usage tests green.
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong: each call creates a separate assistant turn.
+for (const call of pendingToolCalls) {
+  messages.push(assistantMessage([call]), toolMessage(call));
+}
+
+// Correct: one model step remains one assistant turn.
+messages.push(
+  assistantMessage(pendingToolCalls),
+  ...toolMessages,
+);
+```

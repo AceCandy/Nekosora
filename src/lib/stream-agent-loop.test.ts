@@ -222,6 +222,61 @@ describe("streamChatWithTools agent loop finish signal", () => {
     );
   });
 
+  it("同轮多个工具调用聚合为一条 assistant 消息后再追加全部结果", async () => {
+    vi.mocked(streamText)
+      .mockReturnValueOnce(mockStreamResult(
+        [
+          {
+            type: "tool-call",
+            toolCallId: "tc1",
+            toolName: "demo__echo",
+            input: { q: "1" },
+          },
+          {
+            type: "tool-call",
+            toolCallId: "tc2",
+            toolName: "demo__echo",
+            input: { q: "2" },
+          },
+        ],
+        "tool-calls",
+      ))
+      .mockReturnValueOnce(mockStreamResult(
+        [{ type: "text-delta", text: "done" }],
+        "stop",
+      ));
+    callMcpTool
+      .mockResolvedValueOnce({ result: "first", isError: false })
+      .mockResolvedValueOnce({ result: { value: "second" }, isError: false });
+
+    await collect(streamChatWithTools(baseOpts));
+
+    const secondRequest = vi.mocked(streamText).mock.calls[1]?.[0] as {
+      messages?: unknown[];
+    };
+    expect(secondRequest.messages).toEqual([
+      { role: "user", content: "hello" },
+      {
+        role: "assistant",
+        content: "",
+        tool_calls: [
+          {
+            id: "tc1",
+            type: "function",
+            function: { name: "demo__echo", arguments: JSON.stringify({ q: "1" }) },
+          },
+          {
+            id: "tc2",
+            type: "function",
+            function: { name: "demo__echo", arguments: JSON.stringify({ q: "2" }) },
+          },
+        ],
+      },
+      { role: "tool", tool_call_id: "tc1", content: "first" },
+      { role: "tool", tool_call_id: "tc2", content: JSON.stringify({ value: "second" }) },
+    ]);
+  });
+
   it("上游 error 透传且不伪造最终 finish", async () => {
     vi.mocked(streamText).mockReturnValue({
       stream: (async function* () {

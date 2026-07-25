@@ -844,8 +844,9 @@ export async function* streamChatWithTools(
         return;
       }
 
-    // 执行工具,把结果作为 tool message 追加,进入下一轮。
+    // 执行工具并收集结果。本轮全部 tool_calls 必须归属于同一条 assistant 消息。
     // 本轮 finish 已消费为循环控制信号,不向外 yield。
+      const toolMessages: IRMessage[] = [];
       for (const tc of pendingToolCalls) {
         const { result, isError } = await callMcpTool(
           mcpServers, tc.toolCallId, tc.toolName, tc.args,
@@ -860,21 +861,25 @@ export async function* streamChatWithTools(
           result,
           isError,
         };
-      // 追加 assistant 的 tool_call + 对应 tool 结果(OpenAI 多轮格式)。
-        messages = [
-          ...messages,
-          {
-            role: "assistant" as const,
-            content: "",
-            tool_calls: [{ id: tc.toolCallId, type: "function", function: { name: tc.toolName, arguments: JSON.stringify(tc.args) } }],
-          },
-          {
-            role: "tool" as const,
-            tool_call_id: tc.toolCallId,
-            content: typeof result === "string" ? result : JSON.stringify(result),
-          },
-        ];
+        toolMessages.push({
+          role: "tool",
+          tool_call_id: tc.toolCallId,
+          content: typeof result === "string" ? result : JSON.stringify(result),
+        });
       }
+      messages = [
+        ...messages,
+        {
+          role: "assistant",
+          content: "",
+          tool_calls: pendingToolCalls.map((tc) => ({
+            id: tc.toolCallId,
+            type: "function",
+            function: { name: tc.toolName, arguments: JSON.stringify(tc.args) },
+          })),
+        },
+        ...toolMessages,
+      ];
     }
   } catch (err) {
     if (delegatedToPlainStream) throw err;
