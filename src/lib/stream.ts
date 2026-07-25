@@ -11,7 +11,7 @@
  * 用量记录在 streamChat 层(持有 ctx),不塞进 streamText 的 onFinish 闭包。
  * 借鉴 DEEIX:run_id 标识一次生成;用量含 cache 拆分。
  */
-import { streamText, generateText } from "ai";
+import { streamText, generateText, Output } from "ai";
 import { resolveRoutes, resolveRoutesById, RoutingError } from "@/lib/routing";
 import { buildLanguageModelWithKey } from "@/lib/providers/registry";
 import { getChatUA } from "@/lib/system-settings/ua";
@@ -509,13 +509,18 @@ export interface GenerateChatResult {
   error?: string;
 }
 
+export interface GenerateChatOptions extends StreamChatOptions {
+  /** 副任务需要结构化 JSON 时启用;缺省保持普通文本。 */
+  output?: "text" | "json";
+}
+
 /**
  * 非流式生成。与 streamChat 共享路由解析、key 加权、熔断、用量记录,
  * 但内部用 generateText 一次性返回(不产出可见 reasoning,thinking 默认关闭)。
  *
  * 适用于标题生成、记忆抽取等「只要最终文本」的轻量副任务。
  */
-export async function generateChat(opts: StreamChatOptions): Promise<GenerateChatResult> {
+export async function generateChat(opts: GenerateChatOptions): Promise<GenerateChatResult> {
   const { ctx, request, runId = `run_${crypto.randomUUID()}` } = opts;
   const startedAt = Date.now();
   // 副任务统一用聊天 UA(opts.userAgent 缺省时读配置);注入 registry customFetch 覆盖 AI SDK 默认 UA。
@@ -535,7 +540,9 @@ export async function generateChat(opts: StreamChatOptions): Promise<GenerateCha
 
   let routes: ResolvedRoute[];
   try {
-    routes = await resolveRoutes(ctx, request.model);
+    routes = opts.modelId
+      ? await resolveRoutesById(ctx, opts.modelId)
+      : await resolveRoutes(ctx, request.model);
   } catch (err) {
     const errCode = err instanceof RoutingError ? err.code : "routing_error";
     const errMsg = err instanceof Error ? err.message : "路由解析失败";
@@ -580,6 +587,8 @@ export async function generateChat(opts: StreamChatOptions): Promise<GenerateCha
             temperature: request.temperature,
             maxOutputTokens: request.max_tokens,
             topP: request.top_p,
+            // Mem0 等后台任务要求 JSON object;由 AI SDK 统一翻译到各 provider。
+            output: opts.output === "json" ? Output.json() : undefined,
           });
           text = result.text;
           const u = result.usage;

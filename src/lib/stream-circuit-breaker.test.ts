@@ -3,6 +3,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 vi.mock("ai", () => ({
   generateText: vi.fn(),
   streamText: vi.fn(),
+  Output: { json: vi.fn(() => ({ kind: "json-output" })) },
 }));
 
 import { generateText, streamText } from "ai";
@@ -19,7 +20,14 @@ let encryptedKeys = "";
 
 function makeSingleRouteRepository(): RouteRepository {
   return {
-    findEnabledModelById: async () => null,
+    findEnabledModelById: async (id) => id === "model-a" ? ({
+      id: "model-a",
+      name: "test-model",
+      ownerUserId: "user-a",
+      visibility: "public",
+      enabled: true,
+      capabilities: {},
+    }) : null,
     findEnabledModelByNameForOwner: async () => ({
       id: "model-a",
       name: "test-model",
@@ -109,6 +117,29 @@ describe("chat generation circuit breaker reporting", () => {
       status: "closed",
       failures: 0,
     });
+  });
+
+  it("generateChat 传 modelId 时走 byId 路由并映射 JSON output", async () => {
+    vi.mocked(generateText).mockResolvedValue({
+      text: '{"memory":[]}',
+      usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 },
+    } as never);
+
+    const result = await generateChat({
+      ctx: { userId: "user-a", keyKind: null, source: "chat" },
+      modelId: "model-a",
+      output: "json",
+      request: {
+        model: "test-model",
+        messages: [{ role: "user", content: "hello" }],
+      },
+      userAgent: "Nekusora-Test",
+    });
+
+    expect(result.text).toBe('{"memory":[]}');
+    expect(generateText).toHaveBeenCalledWith(expect.objectContaining({
+      output: { kind: "json-output" },
+    }));
   });
 
   it("流式唯一路由发生可转移错误时仍记录 provider 失败", async () => {

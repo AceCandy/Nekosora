@@ -45,32 +45,75 @@ function recordSuccess() {
   consecutiveFailures = 0;
 }
 
-/** 摘要模型配置缓存(配置变更后由 resetCompactModelConfig 清除)。 */
-let _compactModel: string | null | undefined;
+interface ResolvedCompactModel {
+  id?: string;
+  name: string;
+}
 
 /**
- * 读取摘要模型(带缓存):system_settings(task.compact_model) > 第一个 public+enabled 模型名。
- * 配置为空时回退到第一个 public+enabled 模型(design §4.3)。
+ * 读取摘要模型：modelId 配置优先，兼容旧 name，最后回退首个 public+enabled。
+ * 不永久缓存设置值，保证多进程部署下配置最终收敛。
  */
-async function resolveCompactModel(): Promise<string | null> {
-  if (_compactModel === undefined) {
-    _compactModel = await getSetting("task", "compact_model");
+async function resolveCompactModel(): Promise<ResolvedCompactModel | null> {
+  const configuredId = await getSetting("task", "compact_model_id");
+  if (configuredId) {
+    const configured = await findPublicModelById(configuredId);
+    if (configured) return configured;
   }
-  if (_compactModel) return _compactModel;
+
+  const legacyName = await getSetting("task", "compact_model");
+  if (legacyName) {
+    const configured = await findPublicModelByName(legacyName);
+    if (configured) return configured;
+    return { name: legacyName };
+  }
+
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
   const [model] = await db
-    .select({ name: s.models.name })
+    .select({ id: s.models.id, name: s.models.name })
     .from(s.models)
     .where(and(eq(s.models.visibility, "public"), eq(s.models.enabled, true)))
     .limit(1);
-  return model?.name ?? null;
+  return model ? { id: String(model.id), name: String(model.name) } : null;
 }
 
-/** 配置变更后清除缓存(admin 保存摘要模型配置时调用)。 */
+/** 保留兼容导出；配置已改为每次读取，无进程内缓存需要清理。 */
 export function resetCompactModelConfig(): void {
-  _compactModel = undefined;
+  // no-op
+}
+
+async function findPublicModelById(id: string): Promise<ResolvedCompactModel | null> {
+  const db = await getDb();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const s = getSchema() as any;
+  const [model] = await db
+    .select({ id: s.models.id, name: s.models.name })
+    .from(s.models)
+    .where(and(
+      eq(s.models.id, id),
+      eq(s.models.visibility, "public"),
+      eq(s.models.enabled, true),
+    ))
+    .limit(1);
+  return model ? { id: String(model.id), name: String(model.name) } : null;
+}
+
+async function findPublicModelByName(name: string): Promise<ResolvedCompactModel | null> {
+  const db = await getDb();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const s = getSchema() as any;
+  const [model] = await db
+    .select({ id: s.models.id, name: s.models.name })
+    .from(s.models)
+    .where(and(
+      eq(s.models.name, name),
+      eq(s.models.visibility, "public"),
+      eq(s.models.enabled, true),
+    ))
+    .limit(1);
+  return model ? { id: String(model.id), name: String(model.name) } : null;
 }
 
 export interface CompactionResult {
@@ -302,12 +345,13 @@ async function llmSummarize(
 
   // 用 streamChat 聚合全文(非流式消费)
   let result = "";
-  const ctx = { userId: "system", keyKind: null as null, source: "chat" as const };
+  const ctx = { userId: "", keyKind: null as null, source: "chat" as const };
   for await (const ev of streamChat({
     ctx,
+    modelId: target.id,
     taskKind: "compact",
     request: {
-      model: target,
+      model: target.name,
       messages: [
         { role: "system", content: "你是一个对话摘要助手。" },
         { role: "user", content: prompt },

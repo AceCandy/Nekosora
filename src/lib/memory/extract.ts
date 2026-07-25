@@ -39,7 +39,7 @@ export async function extractMemories(
   }));
 
   try {
-    const memory = await getMemory();
+    const memory = await getMemory({ refreshModel: true });
     const expirationDate = toProjectExpirationDate(); // project 记忆 7 天过期(mem0 软过滤 + 懒硬删)
     await memory.add(messages, {
       userId,

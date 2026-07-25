@@ -19,7 +19,10 @@ import { getChatUA } from "@/lib/system-settings/ua";
 import { resolveMcpServers } from "@/lib/mcp/registry";
 import { extractArtifacts } from "@/lib/artifacts/extract";
 import { getQueue } from "@/lib/infra/queue";
-import { maybeGenerateTitle } from "@/lib/conversation-title/service";
+import {
+  writeFallbackTitle,
+  type ConversationTitleJob,
+} from "@/lib/conversation-title/service";
 import { prepareChatContext } from "@/lib/chat/orchestrator";
 import { findConversationMessage } from "@/lib/chat/message-reference";
 import type { IRRequest } from "@/lib/providers/types";
@@ -190,6 +193,26 @@ export async function POST(req: NextRequest) {
       })
       .returning({ id: s.messages.id });
     userMessageInternalId = insertedUser.id as string;
+
+    // 首条消息只同步写可读 fallback；标题任务立即并行入队，不阻塞 Chat。
+    try {
+      const fallbackTitle = await writeFallbackTitle(user.id, body.conversationId, userContent);
+      if (fallbackTitle) {
+        const titleJob: ConversationTitleJob = {
+          userId: user.id,
+          conversationId: body.conversationId,
+          firstUserMessage: userContent,
+          fallbackTitle,
+          chatModel: body.model,
+          chatModelId: body.modelId,
+        };
+        void getQueue()
+          .then((q) => q.send("conversation-title", titleJob))
+          .catch((error) => console.error("[chat] conversation-title enqueue failed:", error));
+      }
+    } catch {
+      /* fallback 写入失败不阻断主回答 */
+    }
   }
 
   // ===== 段 A:上下文准备(抽到 orchestrator,纯输入→输出)=====
@@ -313,7 +336,6 @@ export async function POST(req: NextRequest) {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "error", error: ev.error, code: ev.code })}\n\n`));
           }
         }
-        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
       } catch (err) {
         // 客户端断开引发的中止不发 error 帧:客户端已不接收,且向已关闭流 enqueue 会抛。
         if (!abortCtl.signal.aborted) {
@@ -322,101 +344,109 @@ export async function POST(req: NextRequest) {
           );
         }
       } finally {
-        if (isContinue && continueAssistantInternalId) {
-          // 续写:update 既有 assistant 行,prefix + 新增内容
-          await db
-            .update(s.messages)
-            .set({
-              content: continuePrefixText + assistantText,
+        try {
+          if (isContinue && continueAssistantInternalId) {
+            // 续写:update 既有 assistant 行,prefix + 新增内容
+            await db
+              .update(s.messages)
+              .set({
+                content: continuePrefixText + assistantText,
+                reasoning: assistantReasoning || null,
+                status: finished ? "success" : "interrupted",
+                processTrace: trace,
+              })
+              .where(eq(s.messages.id, continueAssistantInternalId));
+          } else {
+            // 持久化 assistant 消息;parentId 指向本轮 user 消息;附 process_trace
+            await db.insert(s.messages).values({
+              conversationId: body.conversationId,
+              publicId: assistantPublicId,
+              parentId: userMessageInternalId,
+              role: "assistant",
+              content: assistantText,
               reasoning: assistantReasoning || null,
               status: finished ? "success" : "interrupted",
               processTrace: trace,
-            })
-            .where(eq(s.messages.id, continueAssistantInternalId));
-        } else {
-          // 持久化 assistant 消息;parentId 指向本轮 user 消息;附 process_trace
-          await db.insert(s.messages).values({
-            conversationId: body.conversationId,
-            publicId: assistantPublicId,
-            parentId: userMessageInternalId,
-            role: "assistant",
-            content: assistantText,
-            reasoning: assistantReasoning || null,
-            status: finished ? "success" : "interrupted",
-            processTrace: trace,
-          });
-        }
-
-        // P1-B:抽取 artifact(代码块/Mermaid/SVG 等)并持久化。
-        if (assistantText && !isContinue) {
-          try {
-            const { artifacts: parsed } = extractArtifacts(assistantText);
-            if (parsed.length > 0) {
-              const assistantMsgRow = await findConversationMessage(
-                db,
-                s,
-                body.conversationId,
-                { publicId: assistantPublicId },
-              );
-              if (assistantMsgRow) {
-                await db.insert(s.artifacts).values(
-                  parsed.map((a) => ({
-                    messageId: assistantMsgRow.id,
-                    conversationId: body.conversationId,
-                    userId: user.id,
-                    kind: a.kind,
-                    title: a.title,
-                    language: a.language,
-                    content: a.content,
-                  })),
-                );
-              }
-            }
-          } catch {
-            /* artifact 抽取失败不阻断主流程 */
-          }
-        }
-        // 更新会话时间 + 清除「生成中」标记
-        await db
-          .update(s.conversations)
-          .set({ updatedAt: new Date(), generating: false })
-          .where(eq(s.conversations.id, body.conversationId));
-
-        // 异步提取记忆(入队 pg-boss,由 worker 消费,抗重启)+ 自动生成会话标题(不阻塞响应;失败静默)
-        if (assistantText && !isContinue) {
-          const recentMessages = [...body.messages, { role: "assistant", content: assistantText }]
-            .map((m) => ({ role: m.role, content: typeof m.content === "string" ? m.content : String(m.content ?? "") }));
-          getQueue()
-            .then((q) =>
-              q.send("memory-extract", {
-                userId: user.id,
-                conversationId: body.conversationId,
-                recentMessages,
-                model: body.model,
-              }),
-            )
-            .catch(() => {});
-
-          // 首条 user 消息触发标题自动生成(service 内判断仅默认标题才生成)。
-          // 通过 onTitle 回调推送 title_updated 帧(fallback 和最终标题各一次),
-          // 由前端 router.refresh 刷新会话列表。
-          try {
-            await maybeGenerateTitle(user.id, body.conversationId, userContent, body.model, (title) => {
-              safeEnqueue(
-                encoder.encode(
-                  `data: ${JSON.stringify({ type: "title_updated", title, conversationId: body.conversationId })}\n\n`,
-                ),
-              );
             });
-          } catch {
-            /* 标题生成失败不阻断主流程 */
           }
-        }
-        req.signal.removeEventListener("abort", onRequestAbort);
-        try {
-          controller.close();
-        } catch {
-          /* 客户端断开已取消流,忽略重复关闭 */
+
+          // P1-B:抽取 artifact(代码块/Mermaid/SVG 等)并持久化。
+          if (assistantText && !isContinue) {
+            try {
+              const { artifacts: parsed } = extractArtifacts(assistantText);
+              if (parsed.length > 0) {
+                const assistantMsgRow = await findConversationMessage(
+                  db,
+                  s,
+                  body.conversationId,
+                  { publicId: assistantPublicId },
+                );
+                if (assistantMsgRow) {
+                  await db.insert(s.artifacts).values(
+                    parsed.map((a) => ({
+                      messageId: assistantMsgRow.id,
+                      conversationId: body.conversationId,
+                      userId: user.id,
+                      kind: a.kind,
+                      title: a.title,
+                      language: a.language,
+                      content: a.content,
+                    })),
+                  );
+                }
+              }
+            } catch {
+              /* artifact 抽取失败不阻断主流程 */
+            }
+          }
+
+          // 更新会话时间 + 清除「生成中」标记
+          await db
+            .update(s.conversations)
+            .set({ updatedAt: new Date(), generating: false })
+            .where(eq(s.conversations.id, body.conversationId));
+
+          // 异步提取记忆(入队 pg-boss,由 worker 消费,抗重启)。
+          if (assistantText && !isContinue) {
+            const recentMessages = [...body.messages, { role: "assistant", content: assistantText }]
+              .map((m) => ({ role: m.role, content: typeof m.content === "string" ? m.content : String(m.content ?? "") }));
+            getQueue()
+              .then((q) =>
+                q.send("memory-extract", {
+                  userId: user.id,
+                  conversationId: body.conversationId,
+                  recentMessages,
+                }),
+              )
+              .catch(() => {});
+          }
+
+          // DONE 是可靠完成信号：assistant/Artifact/generating 均已持久化。
+          safeEnqueue(encoder.encode("data: [DONE]\n\n"));
+        } catch (err) {
+          // 收尾失败也必须尽力清除生成标记，避免侧栏永久转圈；失败仍不发送 DONE。
+          try {
+            await db
+              .update(s.conversations)
+              .set({ updatedAt: new Date(), generating: false })
+              .where(eq(s.conversations.id, body.conversationId));
+          } catch {
+            /* DB 不可用时无法继续收敛 */
+          }
+          if (!abortCtl.signal.aborted) {
+            safeEnqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({ type: "error", error: err instanceof Error ? err.message : "收尾持久化失败" })}\n\n`,
+              ),
+            );
+          }
+        } finally {
+          req.signal.removeEventListener("abort", onRequestAbort);
+          try {
+            controller.close();
+          } catch {
+            /* 客户端断开已取消流,忽略重复关闭 */
+          }
         }
       }
     },

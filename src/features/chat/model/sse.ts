@@ -93,7 +93,8 @@ export async function consumeChatSSE(
         const trimmed = line.trim();
         if (!trimmed.startsWith("data: ")) continue;
         const data = trimmed.slice(6);
-        if (data === "[DONE]") continue;
+        // 服务端保证 DONE 仅在 assistant 与必要会话状态持久化后发送。
+        if (data === "[DONE]") return;
         try {
           const ev = JSON.parse(data) as SSEEvent;
           if (ev.type === "delta" && ev.text !== undefined) {

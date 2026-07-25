@@ -8,7 +8,30 @@ import { resetCompactModelConfig } from "@/lib/compact/service";
 import { resetMemoryClient } from "@/lib/memory/mem0";
 import { requireAdmin } from "@/lib/session";
 import EmbeddingConfigForm from "./EmbeddingConfigForm";
+import BackgroundModelConfigForm from "./BackgroundModelConfigForm";
 import { listUpstreamModelsCached } from "../actions";
+
+/** Server Action 边界校验：后台任务只允许选择可路由的公共模型。 */
+async function assertBackgroundModelId(modelId: string): Promise<void> {
+  if (!modelId) return;
+  const db = await getDb();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const s = getSchema() as any;
+  const [model] = await db
+    .select({ id: s.models.id })
+    .from(s.models)
+    .innerJoin(s.routes, eq(s.routes.modelId, s.models.id))
+    .innerJoin(s.providers, eq(s.providers.id, s.routes.providerId))
+    .where(and(
+      eq(s.models.id, modelId),
+      eq(s.models.visibility, "public"),
+      eq(s.models.enabled, true),
+      eq(s.routes.enabled, true),
+      eq(s.providers.enabled, true),
+    ))
+    .limit(1);
+  if (!model) throw new Error("所选模型不存在或不可用于后台任务");
+}
 
 /**
  * 模型配置区 —— embedding / 标题生成的系统级配置。
@@ -29,12 +52,15 @@ export default async function ModelConfigSection({
     titleTaskTitle: string;
     titleTaskModel: string;
     titleTaskHint: string;
+    titleTaskAuto: string;
     compactTaskTitle: string;
     compactTaskModel: string;
     compactTaskHint: string;
+    compactTaskAuto: string;
     mem0LlmTitle: string;
     mem0LlmModel: string;
     mem0LlmHint: string;
+    mem0LlmAuto: string;
     save: string;
     saved: string;
     selectProvider: string;
@@ -52,11 +78,35 @@ export default async function ModelConfigSection({
     .where(and(eq(s.providers.enabled, true), eq(s.providers.ownerUserId, admin.id)))
     .orderBy(s.providers.createdAt);
 
-  const rag = await getSettings("rag");
-  const task = await getSettings("task");
+  const backgroundModelRows = await db
+    .select({ id: s.models.id, name: s.models.name, displayName: s.models.displayName })
+    .from(s.models)
+    .innerJoin(s.routes, eq(s.routes.modelId, s.models.id))
+    .innerJoin(s.providers, eq(s.providers.id, s.routes.providerId))
+    .where(and(
+      eq(s.models.visibility, "public"),
+      eq(s.models.enabled, true),
+      eq(s.routes.enabled, true),
+      eq(s.providers.enabled, true),
+    ))
+    .orderBy(s.models.sortOrder);
+  const backgroundModels = Array.from(
+    new Map(
+      (backgroundModelRows as { id: string; name: string; displayName: string | null }[])
+        .map((model) => [model.id, model]),
+    ).values(),
+  );
+  const [rag, task] = await Promise.all([getSettings("rag"), getSettings("task")]);
+  const titleModelId =
+    task.title_model_id ?? backgroundModels.find((model) => model.name === task.title_model)?.id ?? "";
+  const compactModelId =
+    task.compact_model_id ?? backgroundModels.find((model) => model.name === task.compact_model)?.id ?? "";
+  const mem0ModelId =
+    rag.mem0_llm_model_id ?? backgroundModels.find((model) => model.name === rag.mem0_llm_model)?.id ?? "";
 
   async function saveEmbedding(formData: FormData) {
     "use server";
+    await requireAdmin();
     const providerId = String(formData.get("provider_id") ?? "");
     const model = String(formData.get("model") ?? "").trim();
     await upsertSettings("rag", {
@@ -69,24 +119,30 @@ export default async function ModelConfigSection({
 
   async function saveTitleModel(formData: FormData) {
     "use server";
-    const model = String(formData.get("model") ?? "").trim();
-    await upsertSettings("task", { title_model: model });
+    await requireAdmin();
+    const modelId = String(formData.get("model_id") ?? "").trim();
+    await assertBackgroundModelId(modelId);
+    await upsertSettings("task", { title_model_id: modelId, title_model: "" });
     resetTitleModelConfig();
     revalidatePath("/admin/settings");
   }
 
   async function saveCompactModel(formData: FormData) {
     "use server";
-    const model = String(formData.get("model") ?? "").trim();
-    await upsertSettings("task", { compact_model: model });
+    await requireAdmin();
+    const modelId = String(formData.get("model_id") ?? "").trim();
+    await assertBackgroundModelId(modelId);
+    await upsertSettings("task", { compact_model_id: modelId, compact_model: "" });
     resetCompactModelConfig();
     revalidatePath("/admin/settings");
   }
 
   async function saveMem0LlmModel(formData: FormData) {
     "use server";
-    const model = String(formData.get("model") ?? "").trim();
-    await upsertSettings("rag", { mem0_llm_model: model });
+    await requireAdmin();
+    const modelId = String(formData.get("model_id") ?? "").trim();
+    await assertBackgroundModelId(modelId);
+    await upsertSettings("rag", { mem0_llm_model_id: modelId, mem0_llm_model: "" });
     resetMemoryClient();
     revalidatePath("/admin/settings");
   }
@@ -122,59 +178,44 @@ export default async function ModelConfigSection({
         />
       )}
 
-      {/* 标题生成模型配置 */}
-      <form action={saveTitleModel} className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] p-5 space-y-3">
-        <h3 className="text-ui-body font-bold text-neutral-800 dark:text-white">{labels.titleTaskTitle}</h3>
-        <div className="space-y-1">
-          <label className="text-ui-caption font-medium text-neutral-500">{labels.titleTaskModel}</label>
-          <input
-            name="model"
-            defaultValue={task.title_model ?? ""}
-            placeholder="gpt-4o-mini"
-            className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-3 py-2 text-ui-body font-mono focus:outline-none focus:border-sora-blue"
-          />
-          <p className="text-ui-caption text-neutral-400">{labels.titleTaskHint}</p>
-        </div>
-        <button type="submit" className="rounded-md bg-sora-blue hover:bg-sora-blue-hover text-white px-4 py-2 text-ui-body font-semibold cursor-pointer">
-          {labels.save}
-        </button>
-      </form>
+      <BackgroundModelConfigForm
+        key={`title:${titleModelId}`}
+        id="title-model-id"
+        title={labels.titleTaskTitle}
+        modelLabel={labels.titleTaskModel}
+        hint={labels.titleTaskHint}
+        autoLabel={labels.titleTaskAuto}
+        saveLabel={labels.save}
+        models={backgroundModels}
+        initialModelId={titleModelId}
+        action={saveTitleModel}
+      />
 
-      {/* 摘要生成模型配置 */}
-      <form action={saveCompactModel} className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] p-5 space-y-3">
-        <h3 className="text-ui-body font-bold text-neutral-800 dark:text-white">{labels.compactTaskTitle}</h3>
-        <div className="space-y-1">
-          <label className="text-ui-caption font-medium text-neutral-500">{labels.compactTaskModel}</label>
-          <input
-            name="model"
-            defaultValue={task.compact_model ?? ""}
-            placeholder="gpt-4o-mini"
-            className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-3 py-2 text-ui-body font-mono focus:outline-none focus:border-sora-blue"
-          />
-          <p className="text-ui-caption text-neutral-400">{labels.compactTaskHint}</p>
-        </div>
-        <button type="submit" className="rounded-md bg-sora-blue hover:bg-sora-blue-hover text-white px-4 py-2 text-ui-body font-semibold cursor-pointer">
-          {labels.save}
-        </button>
-      </form>
+      <BackgroundModelConfigForm
+        key={`compact:${compactModelId}`}
+        id="compact-model-id"
+        title={labels.compactTaskTitle}
+        modelLabel={labels.compactTaskModel}
+        hint={labels.compactTaskHint}
+        autoLabel={labels.compactTaskAuto}
+        saveLabel={labels.save}
+        models={backgroundModels}
+        initialModelId={compactModelId}
+        action={saveCompactModel}
+      />
 
-      {/* mem0 抽取模型配置 */}
-      <form action={saveMem0LlmModel} className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] p-5 space-y-3">
-        <h3 className="text-ui-body font-bold text-neutral-800 dark:text-white">{labels.mem0LlmTitle}</h3>
-        <div className="space-y-1">
-          <label className="text-ui-caption font-medium text-neutral-500">{labels.mem0LlmModel}</label>
-          <input
-            name="model"
-            defaultValue={rag.mem0_llm_model ?? ""}
-            placeholder="Qwen2.5-7B-Instruct"
-            className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-3 py-2 text-ui-body font-mono focus:outline-none focus:border-sora-blue"
-          />
-          <p className="text-ui-caption text-neutral-400">{labels.mem0LlmHint}</p>
-        </div>
-        <button type="submit" className="rounded-md bg-sora-blue hover:bg-sora-blue-hover text-white px-4 py-2 text-ui-body font-semibold cursor-pointer">
-          {labels.save}
-        </button>
-      </form>
+      <BackgroundModelConfigForm
+        key={`mem0:${mem0ModelId}`}
+        id="mem0-model-id"
+        title={labels.mem0LlmTitle}
+        modelLabel={labels.mem0LlmModel}
+        hint={labels.mem0LlmHint}
+        autoLabel={labels.mem0LlmAuto}
+        saveLabel={labels.save}
+        models={backgroundModels}
+        initialModelId={mem0ModelId}
+        action={saveMem0LlmModel}
+      />
     </div>
   );
 }

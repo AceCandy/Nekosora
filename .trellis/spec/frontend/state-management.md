@@ -110,6 +110,61 @@ store 的 `migrate(临时key → 真实id)` 先于回写执行，活动 id 一�
 - 写：Server Action 完成后调用 `revalidatePath(path)` 让 Server Component 重取。
 - DB 行类型是 `Record<string, unknown>`，传给 Client 前转成显式 DTO（见 type-safety）。
 
+## Scenario: Server Action 配置表单保存后保持当前值
+
+### 1. Scope / Trigger
+
+- 使用 React 19 `<form action={serverAction}>` 保存配置，且提交成功后选择器或输入值必须留在最新服务端值时，适用本节。
+
+### 2. Signatures
+
+- Server Action：`(formData: FormData) => Promise<void>`，写入后调用 `revalidatePath(containerPath)`。
+- Client 表单接收 `initialValue`、Server Action 与候选项；Server Component 以已保存值组成 React `key`。
+
+### 3. Contracts
+
+- React 19 在 Action 成功后会 reset 原生表单；`defaultValue` 只定义挂载默认值，不能负责保存后的 current value。
+- 需要留值的选择器使用 `value + useState + onChange` 维持提交期间交互状态。
+- 仅受控值仍不够：原生 reset 可直接改 DOM，state 未变化时 React 不会再次写回。Action 必须写库并 revalidate，Server Component 用新已保存值改变 Client 表单 `key`，重建 DOM/state 后收敛。
+- 清空配置也必须改变 key（例如 `task:${savedId}`，空值仍参与字符串），确保自动模式正确重建。
+
+### 4. Validation & Error Matrix
+
+| 条件 | 预期行为 |
+|---|---|
+| 保存不同值成功 | revalidate 返回新值，key 变化，控件保持新值 |
+| 清空成功 | key 变化到空值，控件保持自动/空状态 |
+| 保存相同值成功 | reset 回到相同已保存值，无视觉回退 |
+| Action 失败 | 不把失败值伪装成已保存；错误交给现有 Action 边界处理 |
+| 忘记 revalidate | RSC 不返回新已保存值，key 不变化，属于契约违例 |
+
+### 5. Good / Base / Bad Cases
+
+- Good：Client 受控选择器 + Server Action 写库/revalidate + 服务端已保存值 key。
+- Base：保存当前已有值，提交前后显示不变。
+- Bad：只给 Server Component `<select>` 写 `defaultValue`，Action reset 后回旧值，整页刷新才正确。
+- Bad：只改成受控选择器但 key 恒定；reset 直接改 DOM 后可能仍显示旧值。
+
+### 6. Tests Required
+
+- 浏览器集成至少覆盖：选择另一个值并保存、清空为自动并保存、随后刷新仍一致。
+- 断言提交前后的 DOM `select.value`，不能只断言数据库或 Server Action 返回成功。
+- lint/typecheck 只能验证边界类型，不能替代 React form reset 的运行时检查。
+
+### 7. Wrong vs Correct
+
+```tsx
+// Wrong：revalidate 虽正确，但非受控 current value 会被 Action reset。
+<select name="model_id" defaultValue={savedModelId} />
+
+// Correct：客户端维持交互值，服务端新值通过 key 强制重新收敛。
+<ModelConfigForm
+  key={`model:${savedModelId}`}
+  initialModelId={savedModelId}
+  action={saveModel}
+/>
+```
+
 ---
 
 ## ChatMessage.status 状态机（续写触发）

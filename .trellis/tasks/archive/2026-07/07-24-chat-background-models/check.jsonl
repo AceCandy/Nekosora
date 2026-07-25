@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/gateway-routing.md","reason":"复核 byId 可见性、路由故障转移和生成核心行为未回归"}
+{"file":".trellis/spec/backend/memory-system.md","reason":"复核 Mem0 公共 API、记忆隔离、抽取与缓存契约未回归"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"复核 i18n、设计 token、SSE 单测、lint 与 typecheck 门槛"}
+{"file":".trellis/tasks/07-24-chat-background-models/research/mem0-unified-model.md","reason":"核对实现没有退回 HTTP 自调用或绑定 Embedding Provider"}

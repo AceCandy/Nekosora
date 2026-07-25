@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/gateway-routing.md","reason":"后台模型必须按 modelId 复用 public 可见性、故障转移和 Provider 协议转换契约"}
+{"file":".trellis/spec/backend/memory-system.md","reason":"保持 Mem0 infer=true、project scope、过期与公开 MemoryConfig 接入契约"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"管理端模型选择控件遵循 Server Component、设计 token、可访问性和流式 UI 契约"}
+{"file":".trellis/tasks/07-24-chat-background-models/research/mem0-unified-model.md","reason":"说明 Mem0 langchain invoke 适配器和 AI SDK Output.json 的已验证能力边界"}

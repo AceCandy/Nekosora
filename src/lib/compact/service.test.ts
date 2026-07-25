@@ -17,6 +17,7 @@ const mockData = vi.hoisted(() => ({
   models: [] as Record<string, unknown>[],
   llmResponse: "" as string,
   compactModelSetting: null as string | null,
+  compactModelIdSetting: null as string | null,
 }));
 
 // ---- mock drizzle-orm ----
@@ -88,7 +89,7 @@ vi.mock("@/lib/infra/db", () => {
       strategy: "strategy",
       createdAt: "createdAt",
     },
-    models: { __table: "models", name: "name", visibility: "visibility", enabled: "enabled" },
+    models: { __table: "models", id: "id", name: "name", visibility: "visibility", enabled: "enabled" },
   };
 
   return {
@@ -114,7 +115,8 @@ vi.mock("@/lib/infra/db", () => {
 
 // ---- mock @/lib/system-settings/service ----
 vi.mock("@/lib/system-settings/service", () => ({
-  getSetting: vi.fn(async (_ns: string, _key: string) => mockData.compactModelSetting),
+  getSetting: vi.fn(async (_ns: string, key: string) =>
+    key === "compact_model_id" ? mockData.compactModelIdSetting : mockData.compactModelSetting),
 }));
 
 // ---- mock @/lib/stream:返回配置好的 LLM 响应 ----
@@ -132,6 +134,7 @@ beforeEach(() => {
   mockData.models = [];
   mockData.llmResponse = "";
   mockData.compactModelSetting = null;
+  mockData.compactModelIdSetting = null;
   resetCompactModelConfig();
   vi.mocked(streamChat).mockClear();
 });
@@ -271,15 +274,16 @@ describe("maybeCompact 摘要模型可配", () => {
     mockData.snapshots = [];
     mockData.compactModelSetting = null; // 未配置
     mockData.models = [
-      { name: "private-model", visibility: "private", enabled: true },
-      { name: "fallback-model", visibility: "public", enabled: true },
+      { id: "private-id", name: "private-model", visibility: "private", enabled: true },
+      { id: "fallback-id", name: "fallback-model", visibility: "public", enabled: true },
     ];
     mockData.llmResponse = LONG_SUMMARY;
 
     await maybeCompact("c1", makeMessages(20));
 
-    const call = vi.mocked(streamChat).mock.calls[0][0] as { request: { model: string } };
+    const call = vi.mocked(streamChat).mock.calls[0][0] as { modelId?: string; request: { model: string } };
     expect(call.request.model).toBe("fallback-model");
+    expect(call.modelId).toBe("fallback-id");
   });
 
   it("配置后优先用配置模型", async () => {
@@ -291,5 +295,23 @@ describe("maybeCompact 摘要模型可配", () => {
 
     const call = vi.mocked(streamChat).mock.calls[0][0] as { request: { model: string } };
     expect(call.request.model).toBe("configured-compact-model");
+  });
+
+  it("modelId 配置优先于旧模型名", async () => {
+    mockData.compactModelIdSetting = "configured-id";
+    mockData.compactModelSetting = "legacy-model";
+    mockData.models = [{
+      id: "configured-id",
+      name: "configured-by-id",
+      visibility: "public",
+      enabled: true,
+    }];
+    mockData.llmResponse = LONG_SUMMARY;
+
+    await maybeCompact("c1", makeMessages(20));
+
+    const call = vi.mocked(streamChat).mock.calls[0][0] as { modelId?: string; request: { model: string } };
+    expect(call.modelId).toBe("configured-id");
+    expect(call.request.model).toBe("configured-by-id");
   });
 });

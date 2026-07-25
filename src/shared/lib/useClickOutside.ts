@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type RefObject } from "react";
+import { useEffect, useEffectEvent, type RefObject } from "react";
 
 /** Popover 等 Portal 浮层根节点标记,useClickOutside 忽略其内部点击以免拆掉父菜单。 */
 export const POPOVER_ROOT_ATTR = "data-popover-root";
@@ -24,8 +24,7 @@ export function useClickOutside(
   onOutside: () => void,
   enabled: boolean,
 ): void {
-  const onOutsideRef = useRef(onOutside);
-  onOutsideRef.current = onOutside;
+  const onOutsideEvent = useEffectEvent(onOutside);
   const refs = Array.isArray(ref) ? ref : [ref];
 
   useEffect(() => {
@@ -36,7 +35,7 @@ export function useClickOutside(
       if (refs.some((r) => r.current?.contains(target))) return;
       // Portal 浮层:点面板选项时由 Popover 自己处理,不连坐父菜单。
       if (target instanceof Element && target.closest(`[${POPOVER_ROOT_ATTR}]`)) return;
-      onOutsideRef.current();
+      onOutsideEvent();
     };
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);

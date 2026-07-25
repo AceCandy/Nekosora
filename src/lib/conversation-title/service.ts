@@ -1,15 +1,10 @@
 /**
- * 会话标题自动生成 —— 仅在会话首条消息后,把"新会话"替换为简短摘要。
+ * 会话标题自动生成 —— 首条用户消息先写 fallback，最终标题由后台 worker 生成。
  *
- * 策略:
- *   - 先用首条 user 消息截断生成即时 Fallback 标题(用户立刻可见)
- *   - 再用非流式 generateChat 跑一次轻量生成,产出更准确的摘要
- *   - 两步都通过 onTitle 回调通知调用方(典型:推送 SSE 帧刷新 Sidebar)
- *   - 仅当当前 title 为默认值时触发,避免覆盖用户已改的标题
- *
- * 模型优先级:system_settings(namespace=task, key=title_model) > 对话模型 > gpt-4o-mini
+ * 模型优先级：task.title_model_id > 旧 task.title_model > 当前对话模型。
+ * 最终更新带标题条件，避免后台任务覆盖用户手动改名。
  */
-import { eq } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { generateChat } from "@/lib/stream";
 import { getSetting } from "@/lib/system-settings/service";
@@ -20,29 +15,114 @@ const TITLE_MODEL_FALLBACK = "gpt-4o-mini";
 const MAX_TITLE_LEN = 30;
 const FALLBACK_MAX_LEN = 16;
 
-/** 标题模型配置缓存(配置变更后由 resetTitleModelConfig 清除)。 */
-let _titleModel: string | null | undefined;
-
-/** 读取标题生成模型(带缓存):配置 > 对话模型 > 内置回退。 */
-async function resolveTitleModel(chatModel?: string): Promise<string> {
-  if (_titleModel === undefined) {
-    _titleModel = await getSetting("task", "title_model");
-  }
-  return _titleModel || chatModel || TITLE_MODEL_FALLBACK;
+export interface ConversationTitleJob {
+  userId: string;
+  conversationId: string;
+  firstUserMessage: string;
+  fallbackTitle: string;
+  chatModel?: string;
+  chatModelId?: string;
 }
 
-/** 配置变更后清除缓存(admin 保存标题模型配置时调用)。 */
+interface ResolvedTitleModel {
+  name: string;
+  id?: string;
+}
+
+/** 保留兼容导出。配置不再永久缓存，独立 worker 可在下个任务读取新值。 */
 export function resetTitleModelConfig(): void {
-  _titleModel = undefined;
+  // no-op
 }
 
-/**
- * 若会话标题仍为默认值,则生成标题并写库。
- * 每次标题变化(fallback / 最终)通过 onTitle 回调通知调用方。
- * 不抛错(失败时保留 fallback 标题,调用方仍能收到 fallback 的回调)。
- *
- * @param onTitle 每次标题更新时调用(fallback 和最终标题各一次)
- */
+/** 首条消息同步写入可读 fallback；标题已修改时返回 null，不创建后台任务。 */
+export async function writeFallbackTitle(
+  userId: string,
+  conversationId: string,
+  firstUserMessage: string,
+): Promise<string | null> {
+  if (!firstUserMessage.trim()) return null;
+
+  const db = await getDb();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const s = getSchema() as any;
+  const fallback = truncateFallbackTitle(firstUserMessage);
+  const updated = await db
+    .update(s.conversations)
+    .set({ title: fallback })
+    .where(and(
+      eq(s.conversations.id, conversationId),
+      eq(s.conversations.userId, userId),
+      eq(s.conversations.title, DEFAULT_TITLE),
+    ))
+    .returning({ id: s.conversations.id });
+
+  return updated.length > 0 ? fallback : null;
+}
+
+/** Worker 调用：读取当前配置生成最终标题，并仅覆盖本轮 fallback。 */
+export async function generateConversationTitle(job: ConversationTitleJob): Promise<string | null> {
+  if (!job.firstUserMessage.trim()) return null;
+
+  const db = await getDb();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const s = getSchema() as any;
+
+  const [conv] = await db
+    .select({ title: s.conversations.title })
+    .from(s.conversations)
+    .where(and(
+      eq(s.conversations.id, job.conversationId),
+      eq(s.conversations.userId, job.userId),
+    ))
+    .limit(1);
+  if (!conv || (conv.title !== DEFAULT_TITLE && conv.title !== job.fallbackTitle)) return null;
+
+  const target = await resolveTitleModel(job.chatModel, job.chatModelId);
+  const prompt =
+    "请把下面这段用户提问概括成一个简短的对话标题(不超过 " +
+    MAX_TITLE_LEN +
+    " 字,纯文本,不要引号、不要标点结尾、不要\"标题:\"前缀):\n\n" +
+    job.firstUserMessage.slice(0, 500);
+  const ctx = { userId: job.userId, keyKind: null as null, source: "chat" as const };
+  const request: IRRequest = {
+    model: target.name,
+    messages: [{ role: "user", content: prompt }],
+    max_tokens: 64,
+  };
+
+  let result;
+  try {
+    result = await generateChat({
+      ctx,
+      request,
+      modelId: target.id,
+      taskKind: "title",
+    });
+  } catch {
+    return null;
+  }
+  if (result.error || !result.text) return null;
+
+  const title = sanitizeTitle(result.text);
+  if (!title) return null;
+
+  const updated = await db
+    .update(s.conversations)
+    .set({ title })
+    .where(and(
+      eq(s.conversations.id, job.conversationId),
+      eq(s.conversations.userId, job.userId),
+      or(
+        eq(s.conversations.title, DEFAULT_TITLE),
+        eq(s.conversations.title, job.fallbackTitle),
+      ),
+    ))
+    .returning({ id: s.conversations.id });
+
+  return updated.length > 0 ? title : null;
+}
+
+/** 兼容旧调用：fallback 与最终标题仍依次回调。Chat 主链路不再使用。 */
 export async function maybeGenerateTitle(
   userId: string,
   conversationId: string,
@@ -50,77 +130,86 @@ export async function maybeGenerateTitle(
   chatModel?: string,
   onTitle?: (title: string) => void,
 ): Promise<void> {
-  if (!firstUserMessage.trim()) return;
+  const fallbackTitle = await writeFallbackTitle(userId, conversationId, firstUserMessage);
+  if (!fallbackTitle) return;
+  onTitle?.(fallbackTitle);
+  const title = await generateConversationTitle({
+    userId,
+    conversationId,
+    firstUserMessage,
+    fallbackTitle,
+    chatModel,
+  });
+  if (title) onTitle?.(title);
+}
 
+/** 配置 ID 优先；旧 name 保持 owner by-name 路由语义；最后回退当前对话模型。 */
+async function resolveTitleModel(
+  chatModel?: string,
+  chatModelId?: string,
+): Promise<ResolvedTitleModel> {
+  const configuredId = await getSetting("task", "title_model_id");
+  if (configuredId) {
+    const configured = await findPublicModelById(configuredId);
+    if (configured) return configured;
+  }
+
+  const legacyName = await getSetting("task", "title_model");
+  if (legacyName) {
+    const configured = await findPublicModelByName(legacyName);
+    if (configured) return configured;
+    return { name: legacyName };
+  }
+
+  return {
+    name: chatModel || TITLE_MODEL_FALLBACK,
+    ...(chatModelId ? { id: chatModelId } : {}),
+  };
+}
+
+async function findPublicModelById(id: string): Promise<ResolvedTitleModel | null> {
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
-
-  // 仅当标题仍是默认值时触发(尊重用户手动改名)
-  const [conv] = await db
-    .select({ title: s.conversations.title })
-    .from(s.conversations)
-    .where(eq(s.conversations.id, conversationId))
+  const [model] = await db
+    .select({ id: s.models.id, name: s.models.name })
+    .from(s.models)
+    .where(and(
+      eq(s.models.id, id),
+      eq(s.models.visibility, "public"),
+      eq(s.models.enabled, true),
+    ))
     .limit(1);
-  if (!conv || conv.title !== DEFAULT_TITLE) return;
-
-  // 1. 先写 Fallback 标题(首条消息截断),用户立刻可见,不等 LLM
-  const fallback = truncateFallbackTitle(firstUserMessage);
-  await db.update(s.conversations).set({ title: fallback }).where(eq(s.conversations.id, conversationId));
-  onTitle?.(fallback);
-
-  // 2. 非流式生成更准确的摘要(不思考、不流式,轻量任务)
-  const model = await resolveTitleModel(chatModel);
-  const prompt = `请把下面这段用户提问概括成一个简短的对话标题(不超过 ${MAX_TITLE_LEN} 字,纯文本,不要引号、不要标点结尾、不要"标题:"前缀):\n\n${firstUserMessage.slice(0, 500)}`;
-
-  const ctx = { userId, keyKind: null as null, source: "chat" as const };
-  const request: IRRequest = {
-    model,
-    messages: [{ role: "user", content: prompt }],
-    max_tokens: 64,
-  };
-
-  let result;
-  try {
-    result = await generateChat({ ctx, request, taskKind: "title" });
-  } catch {
-    return; // 生成失败,保留 fallback
-  }
-  if (result.error || !result.text) return;
-
-  const title = sanitizeTitle(result.text);
-  if (!title) return;
-
-  // 更新前再次校验(并发保护):仍是默认值或仍是本轮 fallback 才更新
-  const [recheck] = await db
-    .select({ title: s.conversations.title })
-    .from(s.conversations)
-    .where(eq(s.conversations.id, conversationId))
-    .limit(1);
-  if (!recheck || (recheck.title !== DEFAULT_TITLE && recheck.title !== fallback)) return;
-
-  await db.update(s.conversations).set({ title }).where(eq(s.conversations.id, conversationId));
-  onTitle?.(title);
+  return model ? { id: String(model.id), name: String(model.name) } : null;
 }
 
-/** Fallback 标题:截断首条消息到指定长度,折叠空白。 */
+async function findPublicModelByName(name: string): Promise<ResolvedTitleModel | null> {
+  const db = await getDb();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const s = getSchema() as any;
+  const [model] = await db
+    .select({ id: s.models.id, name: s.models.name })
+    .from(s.models)
+    .where(and(
+      eq(s.models.name, name),
+      eq(s.models.visibility, "public"),
+      eq(s.models.enabled, true),
+    ))
+    .limit(1);
+  return model ? { id: String(model.id), name: String(model.name) } : null;
+}
+
+/** Fallback 标题：截断首条消息到指定长度，折叠空白。 */
 function truncateFallbackTitle(raw: string): string {
   const t = raw.trim().replace(/\s+/g, " ");
-  // 按字符数截断,超长追加省略号
-  if (t.length > FALLBACK_MAX_LEN) {
-    return t.slice(0, FALLBACK_MAX_LEN) + "…";
-  }
-  return t || DEFAULT_TITLE;
+  return t.length > FALLBACK_MAX_LEN ? t.slice(0, FALLBACK_MAX_LEN) + "…" : t || DEFAULT_TITLE;
 }
 
-/** 清洗 LLM 输出为干净标题:去引号/前缀/换行,截断长度。 */
+/** 清洗 LLM 输出为干净标题：去引号/前缀/换行并截断。 */
 function sanitizeTitle(raw: string): string {
   let t = raw.trim();
-  // 去常见包裹引号
   t = t.replace(/^["'“”‘’《「]+|["'“”‘’》」]+$/g, "");
-  // 去"标题:"类前缀
   t = t.replace(/^(标题|title)[:：]\s*/i, "");
-  // 折叠换行
   t = t.replace(/\s+/g, " ").trim();
   if (t.length > MAX_TITLE_LEN) t = t.slice(0, MAX_TITLE_LEN);
   return t;
