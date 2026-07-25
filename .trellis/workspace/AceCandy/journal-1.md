@@ -1364,3 +1364,36 @@ setKeyEnabled 接收 userId 并在更新 SQL 中同时限制 key ID 与属主，
 ### Next Steps
 
 - None - task complete
+
+
+## Session 42: MAGI 项目进化第 7 轮
+
+**Date**: 2026-07-26
+**Task**: MAGI 项目进化第 7 轮
+**Branch**: `opt0725`
+
+### Summary
+
+统一在消息引用 helper 与兄弟版本入口排除软删除墓碑，阻止已删除消息继续作为父节点、分支源、编辑、重试、续写或版本切换目标。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0ea398d` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
