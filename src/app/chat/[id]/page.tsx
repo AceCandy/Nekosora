@@ -86,9 +86,9 @@ export default async function ChatConversationPage({
   }));
 
   // Server action wrapper for sharing
-  async function handleCreateShare(convId: string) {
+  async function handleCreateShare(convId: string, messagePublicIds: string[]) {
     "use server";
-    return createShare(convId);
+    return createShare(convId, messagePublicIds);
   }
 
   // 历史会话列表已上移至 chat/layout 的单栏侧栏,此处只渲染会话头部与聊天区。

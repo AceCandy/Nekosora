@@ -45,9 +45,9 @@ export default async function ChatPage() {
     icon: s.icon,
   }));
 
-  async function handleCreateShare(convId: string) {
+  async function handleCreateShare(convId: string, messagePublicIds: string[]) {
     "use server";
-    return createShare(convId);
+    return createShare(convId, messagePublicIds);
   }
 
   return (

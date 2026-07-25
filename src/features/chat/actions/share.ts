@@ -1,11 +1,18 @@
 "use server";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
+import { z } from "zod";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { requireSession } from "@/lib/session";
 
+const shareMessageIdsSchema = z.array(z.string().min(1)).min(1);
+
 /** 创建分享(拍快照:当前消息 ID 列表 + 标题/模型)。返回 shareId。 */
-export async function createShare(conversationId: string): Promise<string> {
+export async function createShare(conversationId: string, messagePublicIds: string[]): Promise<string> {
   const user = await requireSession();
+  const parsedMessageIds = shareMessageIdsSchema.safeParse(messagePublicIds);
+  if (!parsedMessageIds.success) throw new Error("分享消息无效");
+  const messageIds = parsedMessageIds.data;
+
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
@@ -14,12 +21,18 @@ export async function createShare(conversationId: string): Promise<string> {
   const [conv] = await db.select().from(s.conversations).where(eq(s.conversations.id, conversationId)).limit(1);
   if (!conv || conv.userId !== user.id) throw new Error("无权操作");
 
-  // 拍快照:当前消息 publicId 列表
-  const msgs = await db
+  // 校验客户端提交的可见消息均属于当前会话且未删除。
+  const visibleMessages = await db
     .select({ publicId: s.messages.publicId })
     .from(s.messages)
-    .where(and(eq(s.messages.conversationId, conversationId), isNull(s.messages.deletedAt)));
-  const messageIds = (msgs as { publicId: string }[]).map((m) => m.publicId);
+    .where(and(
+      eq(s.messages.conversationId, conversationId),
+      isNull(s.messages.deletedAt),
+      inArray(s.messages.publicId, messageIds),
+    ));
+  if ((visibleMessages as { publicId: string }[]).length !== messageIds.length) {
+    throw new Error("分享消息无效");
+  }
 
   const shareId = crypto.randomUUID();
   await db.insert(s.conversationShares).values({

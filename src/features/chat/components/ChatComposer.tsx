@@ -49,7 +49,7 @@ interface ChatComposerProps {
   /** 当前会话标题;新会话未传时使用既有翻译。 */
   initialTitle?: string;
   /** 分享当前会话的 server action(由 page 提供,ChatHeader 用)。 */
-  createShareAction: (id: string) => Promise<string>;
+  createShareAction: (id: string, messagePublicIds: string[]) => Promise<string>;
   initialMessages?: ChatMessage[];
 }
 
@@ -323,6 +323,9 @@ export default function ChatComposer({
     onReasoningChange: handleReasoningChange,
   };
   const isEmptyConversation = runtime.messages.length === 0;
+  const shareMessagePublicIds = runtime.streaming || runtime.messages.some((message) => !message.publicId)
+    ? []
+    : runtime.messages.map((message) => message.publicId!);
 
   return (
     <div className="flex-1 flex h-full bg-nebula-white dark:bg-twilight-obsidian transition-colors duration-250">
@@ -332,6 +335,7 @@ export default function ChatComposer({
           <ChatHeader
             title={conversationTitle}
             conversationId={activeConvId}
+            messagePublicIds={shareMessagePublicIds}
             createShareAction={createShareAction}
           />
         )}

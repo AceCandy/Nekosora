@@ -4,16 +4,21 @@ import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { Share2, Check } from "lucide-react";
 
-export default function ChatHeader({
-  title,
-  conversationId,
-  createShareAction,
-}: {
+interface ChatHeaderProps {
   title: string;
   /** 当前会话 id;新会话(未建会)为 undefined,分享按钮禁用。 */
   conversationId?: string;
-  createShareAction: (id: string) => Promise<string>;
-}) {
+  /** 点击时可完整快照的当前可见消息 ID;空数组表示暂不可分享。 */
+  messagePublicIds: string[];
+  createShareAction: (id: string, messagePublicIds: string[]) => Promise<string>;
+}
+
+export default function ChatHeader({
+  title,
+  conversationId,
+  messagePublicIds,
+  createShareAction,
+}: ChatHeaderProps) {
   const t = useTranslations("chat");
   const [isPending, startTransition] = useTransition();
   const [copied, setCopied] = useState(false);
@@ -22,7 +27,7 @@ export default function ChatHeader({
     if (!conversationId) return;
     startTransition(async () => {
       try {
-        const shareId = await createShareAction(conversationId);
+        const shareId = await createShareAction(conversationId, messagePublicIds);
         const shareUrl = `${window.location.origin}/share/${shareId}`;
         await navigator.clipboard.writeText(shareUrl);
         setCopied(true);
@@ -41,7 +46,7 @@ export default function ChatHeader({
       <button
         type="button"
         onClick={handleShare}
-        disabled={isPending || !conversationId}
+        disabled={isPending || !conversationId || messagePublicIds.length === 0}
         className="touch-target ml-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-space-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transition-none dark:text-neutral-300 dark:hover:bg-neutral-900 dark:hover:text-nebula-silver"
         aria-label={copied ? t("shareCopied") : t("shareThisConversation")}
         title={copied ? t("shareCopied") : t("shareThisConversation")}

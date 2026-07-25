@@ -7,12 +7,14 @@ const mocks = vi.hoisted(() => ({
   eq: vi.fn((left: unknown, right: unknown) => ({ op: "eq", left, right })),
   and: vi.fn((...conditions: unknown[]) => ({ op: "and", conditions })),
   isNull: vi.fn((field: unknown) => ({ op: "isNull", field })),
+  inArray: vi.fn((field: unknown, values: unknown[]) => ({ op: "inArray", field, values })),
 }));
 
 vi.mock("drizzle-orm", () => ({
   eq: mocks.eq,
   and: mocks.and,
   isNull: mocks.isNull,
+  inArray: mocks.inArray,
 }));
 vi.mock("@/lib/session", () => ({ requireSession: mocks.requireSession }));
 vi.mock("@/lib/infra/db", () => ({ getDb: mocks.getDb, getSchema: mocks.getSchema }));
@@ -48,10 +50,10 @@ describe("聊天分享动作", () => {
     mocks.getSchema.mockReturnValue(schema);
   });
 
-  it("创建分享时只记录当前会话中未删除的消息", async () => {
+  it("创建分享时按客户端可见顺序记录指定消息", async () => {
     const selectedRows = [
       [{ id: "conversation-1", userId: "user-1", title: "title", modelName: "model" }],
-      [{ publicId: "visible-message" }],
+      [{ publicId: "assistant-new" }, { publicId: "user-message" }],
     ];
     const values = vi.fn().mockResolvedValue(undefined);
     mocks.getDb.mockResolvedValue({
@@ -59,16 +61,85 @@ describe("聊天分享动作", () => {
       insert: vi.fn(() => ({ values })),
     });
 
-    await createShare("conversation-1");
+    await createShare("conversation-1", ["user-message", "assistant-new"]);
 
     expect(mocks.and).toHaveBeenCalledWith(
       { op: "eq", left: schema.messages.conversationId, right: "conversation-1" },
       { op: "isNull", field: schema.messages.deletedAt },
+      {
+        op: "inArray",
+        field: schema.messages.publicId,
+        values: ["user-message", "assistant-new"],
+      },
     );
     expect(values).toHaveBeenCalledWith(expect.objectContaining({
-      messageIdsJson: ["visible-message"],
-      defaultMessageIdsJson: ["visible-message"],
+      messageIdsJson: ["user-message", "assistant-new"],
+      defaultMessageIdsJson: ["user-message", "assistant-new"],
     }));
+  });
+
+  it("任一可见消息不属于当前会话时整体拒绝", async () => {
+    const selectedRows = [
+      [{ id: "conversation-1", userId: "user-1", title: "title", modelName: "model" }],
+      [{ publicId: "user-message" }],
+    ];
+    const insert = vi.fn();
+    mocks.getDb.mockResolvedValue({
+      select: vi.fn(() => selectReturning(selectedRows.shift() ?? [])),
+      insert,
+    });
+
+    await expect(createShare("conversation-1", ["user-message", "foreign-message"]))
+      .rejects.toThrow("分享消息无效");
+
+    expect(insert).not.toHaveBeenCalled();
+  });
+
+  it("可见消息列表为空时拒绝创建分享", async () => {
+    const selectedRows = [
+      [{ id: "conversation-1", userId: "user-1", title: "title", modelName: "model" }],
+      [],
+    ];
+    const insert = vi.fn();
+    mocks.getDb.mockResolvedValue({
+      select: vi.fn(() => selectReturning(selectedRows.shift() ?? [])),
+      insert,
+    });
+
+    await expect(createShare("conversation-1", [])).rejects.toThrow("分享消息无效");
+
+    expect(insert).not.toHaveBeenCalled();
+  });
+
+  it("可见消息列表包含重复 ID 时拒绝创建分享", async () => {
+    const selectedRows = [
+      [{ id: "conversation-1", userId: "user-1", title: "title", modelName: "model" }],
+      [{ publicId: "same-message" }],
+    ];
+    const insert = vi.fn();
+    mocks.getDb.mockResolvedValue({
+      select: vi.fn(() => selectReturning(selectedRows.shift() ?? [])),
+      insert,
+    });
+
+    await expect(createShare("conversation-1", ["same-message", "same-message"]))
+      .rejects.toThrow("分享消息无效");
+
+    expect(insert).not.toHaveBeenCalled();
+  });
+
+  it("不能为其他用户的会话创建分享", async () => {
+    const select = vi.fn(() => selectReturning([
+      { id: "conversation-2", userId: "user-2", title: "foreign", modelName: "model" },
+    ]));
+    const insert = vi.fn();
+    mocks.getDb.mockResolvedValue({ select, insert });
+
+    await expect(createShare("conversation-2", ["foreign-message"]))
+      .rejects.toThrow("无权操作");
+
+    expect(select).toHaveBeenCalledTimes(1);
+    expect(insert).not.toHaveBeenCalled();
   });
 
   it("读取公开分享时排除已软删除的消息", async () => {
