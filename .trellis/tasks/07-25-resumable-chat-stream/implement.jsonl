@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "run_events 迁移、getDb/getSchema、journal/snapshot 同提交"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "事件/幂等日志脱敏，不落密钥与完整 prompt"}
+{"file": ".trellis/spec/backend/chat-message-references.md", "reason": "run/events API 会话属主隔离"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "401/403/404/409 与幂等冲突错误契约"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "zustand 多 runtime 隔离与流式状态"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "useChatRuntime 适配层边界"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "SSE 信封跨 API/DB/前端契约"}

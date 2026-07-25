@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "校验迁移与 DB 访问模式"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "校验脱敏与用量日志边界"}
+{"file": ".trellis/spec/backend/chat-message-references.md", "reason": "校验属主隔离"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "校验 store seq 去重与多会话"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "实现期质量门槛"}
+{"file": ".trellis/tasks/07-25-resumable-chat-stream/design.md", "reason": "A/B 边界与事件契约验收对照"}
+{"file": ".trellis/tasks/07-25-resumable-chat-stream/prd.md", "reason": "需求与不做项验收对照"}
