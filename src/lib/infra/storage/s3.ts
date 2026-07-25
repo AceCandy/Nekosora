@@ -10,8 +10,8 @@
  * 把它拉入 Edge instrumentation bundle(aws-sdk 体积大,且依赖 node 内置模块)。
  *
  * 公网直链:配了 S3_PUBLIC_BASE_URL(CDN/公开 bucket 前缀)时 publicReadable=true,
- * put 返回的 url 即 `${PUBLIC_BASE}/${key}`,vision 调用可直接传该 URL。
- * 否则 publicReadable=false,下载走 signedUrl(预签名,默认 7 天上限)。
+ * put 返回的 url 即 `${PUBLIC_BASE}/${key}`,供明确的公共产物使用。
+ * signedUrl 始终生成临时预签名 URL,不能把私有读取降级为永久公网链接。
  */
 import type { S3Client } from "@aws-sdk/client-s3";
 import type {
@@ -29,7 +29,7 @@ export interface S3DriverOptions {
   bucket: string;
   accessKeyId: string;
   secretAccessKey: string;
-  /** 公网直链前缀(配 CDN 或公开 bucket);空=走 signedUrl。 */
+  /** 明确公共产物的 URL 前缀；私有读取始终走 signedUrl 或鉴权代理。 */
   publicBaseUrl?: string;
   /** forcePathStyle:MinIO / 自部署 S3 通常需要(true);R2/AWS 用 false。 */
   forcePathStyle?: boolean;
@@ -111,8 +111,6 @@ export class S3Driver implements StorageDriver {
   }
 
   async signedUrl(key: string, ttlSeconds: number): Promise<string | null> {
-    // 已配公网直链则无需签名。
-    if (this.publicBaseUrl) return `${this.publicBaseUrl}/${key}`;
     const client = await this.client();
     const { getSignedUrl } = await import("@aws-sdk/s3-request-presigner");
     const { GetObjectCommand } = await import("@aws-sdk/client-s3");

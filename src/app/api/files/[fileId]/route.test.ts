@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   getSchema: vi.fn(),
   getStorage: vi.fn(),
   storageGet: vi.fn(),
+  storageSignedUrl: vi.fn(),
 }));
 
 vi.mock("drizzle-orm", () => ({
@@ -50,10 +51,46 @@ describe("GET /api/files/[fileId]", () => {
       }),
     });
     mocks.storageGet.mockReset().mockResolvedValue(Buffer.from("2345"));
+    mocks.storageSignedUrl.mockReset();
     mocks.getStorage.mockReset().mockResolvedValue({
       kind: "local",
+      publicReadable: false,
       get: mocks.storageGet,
+      signedUrl: mocks.storageSignedUrl,
     });
+  });
+
+  it("未登录时返回 401 且不访问数据库或存储", async () => {
+    mocks.getSession.mockResolvedValue(null);
+
+    const response = await GET(request(), {
+      params: Promise.resolve({ fileId: "file-a" }),
+    });
+
+    expect(response.status).toBe(401);
+    expect(mocks.getDb).not.toHaveBeenCalled();
+    expect(mocks.getStorage).not.toHaveBeenCalled();
+  });
+
+  it("非属主访问时返回 404 且不读取存储", async () => {
+    mocks.getDb.mockResolvedValue({
+      select: () => ({
+        from: () => ({
+          where: () => ({
+            limit: async () => [{ ...file, userId: "other-user" }],
+          }),
+        }),
+      }),
+    });
+
+    const response = await GET(request(), {
+      params: Promise.resolve({ fileId: "file-a" }),
+    });
+
+    expect(response.status).toBe(404);
+    expect(mocks.getStorage).not.toHaveBeenCalled();
+    expect(mocks.storageGet).not.toHaveBeenCalled();
+    expect(mocks.storageSignedUrl).not.toHaveBeenCalled();
   });
 
   it("合法单段 Range 返回 206 和对应字节", async () => {
@@ -99,11 +136,14 @@ describe("GET /api/files/[fileId]", () => {
   });
 
   it("S3 类存储的合法 Range 仍走预签名重定向", async () => {
-    const signedUrl = vi.fn().mockResolvedValue("https://storage.example.com/sample.txt");
+    mocks.storageSignedUrl.mockResolvedValue(
+      "https://storage.example.com/sample.txt?X-Amz-Signature=signed",
+    );
     mocks.getStorage.mockResolvedValue({
       kind: "s3",
+      publicReadable: false,
       get: mocks.storageGet,
-      signedUrl,
+      signedUrl: mocks.storageSignedUrl,
     });
 
     const response = await GET(request("bytes=2-5"), {
@@ -111,8 +151,53 @@ describe("GET /api/files/[fileId]", () => {
     });
 
     expect(response.status).toBe(302);
-    expect(response.headers.get("Location")).toBe("https://storage.example.com/sample.txt");
-    expect(signedUrl).toHaveBeenCalledWith("user-a/sample.txt", 3600);
+    expect(response.headers.get("Location")).toBe(
+      "https://storage.example.com/sample.txt?X-Amz-Signature=signed",
+    );
+    expect(mocks.storageSignedUrl).toHaveBeenCalledWith("user-a/sample.txt", 3600);
     expect(mocks.storageGet).not.toHaveBeenCalled();
+  });
+
+  it("配置公共产物 URL 的 S3 私有文件由应用代理完整读取", async () => {
+    mocks.storageGet.mockResolvedValue(Buffer.from("0123456789"));
+    mocks.getStorage.mockResolvedValue({
+      kind: "s3",
+      publicReadable: true,
+      get: mocks.storageGet,
+      signedUrl: mocks.storageSignedUrl,
+    });
+
+    const response = await GET(request(), {
+      params: Promise.resolve({ fileId: "file-a" }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Location")).toBeNull();
+    expect(await response.text()).toBe("0123456789");
+    expect(mocks.storageSignedUrl).not.toHaveBeenCalled();
+    expect(mocks.storageGet).toHaveBeenCalledWith("user-a/sample.txt");
+  });
+
+  it("配置公共产物 URL 的 S3 私有文件由应用代理 Range 读取", async () => {
+    mocks.getStorage.mockResolvedValue({
+      kind: "s3",
+      publicReadable: true,
+      get: mocks.storageGet,
+      signedUrl: mocks.storageSignedUrl,
+    });
+
+    const response = await GET(request("bytes=2-5"), {
+      params: Promise.resolve({ fileId: "file-a" }),
+    });
+
+    expect(response.status).toBe(206);
+    expect(response.headers.get("Location")).toBeNull();
+    expect(response.headers.get("Content-Range")).toBe("bytes 2-5/10");
+    expect(await response.text()).toBe("2345");
+    expect(mocks.storageSignedUrl).not.toHaveBeenCalled();
+    expect(mocks.storageGet).toHaveBeenCalledWith("user-a/sample.txt", {
+      start: 2,
+      end: 5,
+    });
   });
 });

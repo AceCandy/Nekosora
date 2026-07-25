@@ -5,7 +5,7 @@
  *   { role: "user", content: [{type:"text",text:...}, {type:"image_url",image_url:{url:...}}] }
  *
  * 图片 URL 策略(决定上游能否拉取):
- *   - StorageDriver 公网直链(S3+CDN)→ 用公网 URL,省 token
+ *   - StorageDriver 配置公共产物 URL(S3+CDN)→ 用临时预签名 URL,省 token
  *   - 否则(本地 / 私有 bucket)→ base64 内联(data URL),避开外网拉取问题
  *
  * 大图压缩:用 sharp(已在 onlyBuiltDependencies)压缩到 ≤512KB 后内联,
@@ -67,7 +67,7 @@ export async function buildMultimodalUserMessage(
     if (!isImageMime(mime)) continue;
     const safeMime = MIME_OK[mime] ? mime : "image/png";
 
-    // 公网直链(S3+CDN):用 URL,省 token。
+    // 配置公共产物 URL 的 S3:用临时预签名 URL,省 token。
     if (storage.publicReadable) {
       const url = await storage.signedUrl(file.storagePath, 3600);
       if (url) {

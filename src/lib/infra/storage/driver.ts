@@ -22,7 +22,7 @@ export interface PutOpts {
 export interface StorageResult {
   /** 实际存储的 key(一般与入参一致)。 */
   key: string;
-  /** 公网可访问 URL;null 表示无直链,需走鉴权代理(/api/files/[fileId])。 */
+  /** 明确公共产物的公网 URL;null 表示未配置公共产物 URL。 */
   url: string | null;
   /** 字节数。 */
   size: number;
@@ -52,14 +52,14 @@ export interface StorageDriver {
   delete(key: string): Promise<void>;
 
   /**
-   * 生成预签名下载 URL(私有 bucket 临时访问)。
+   * 生成临时预签名下载 URL，不受公共产物 URL 配置影响。
    * Local driver 无此能力,返回 null。
    */
   signedUrl(key: string, ttlSeconds: number): Promise<string | null>;
 
   /**
-   * 是否支持公网直链(决定 P1-C vision 调用走 url 还是 base64 内联)。
-   * S3 配了 CDN/S3_PUBLIC_BASE_URL 时为 true;否则 false。
+   * 是否配置公共产物 URL 能力，决定 P1-C vision 使用临时 URL 还是 base64。
+   * 此值不表示私有文件可绕过鉴权直接读取。
    */
   readonly publicReadable: boolean;
 }

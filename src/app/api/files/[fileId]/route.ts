@@ -9,8 +9,9 @@
  * 流程:
  *   1. session 鉴权
  *   2. 查 file_objects,校验属主(userId === 当前用户)
- *   3. S3 driver + 公网直链 → 302 重定向到 signedUrl(省应用带宽)
- *   4. 否则 storage.get → 流式返回,带正确 Content-Type / Content-Disposition
+ *   3. 私有 S3 driver → 302 重定向到 signedUrl(省应用带宽)
+ *   4. 配置公共 CDN 的 S3 driver → 应用代理读取,避免泄露永久公开的对象 key
+ *   5. 否则 storage.get → 流式返回,带正确 Content-Type / Content-Disposition
  *
  * 仅文件属主可访问(非公开分享场景;分享走 message 文本快照,不涉及文件)。
  */
@@ -58,14 +59,14 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ fileId: str
 
   const storage = await getStorage();
 
-  // S3 类 driver:优先 302 重定向到预签名 URL,省应用带宽。
-  // (publicReadable 已配 CDN 的情况,signedUrl 也会返回公网直链。)
-  if (storage.kind !== "local") {
+  // 私有 S3 类 driver 走临时预签名 URL。配置公共 CDN 时改由应用代理，
+  // 避免把 storagePath 暴露后可绕过属主鉴权永久访问。
+  if (storage.kind !== "local" && !storage.publicReadable) {
     const url = await storage.signedUrl(file.storagePath, 3600);
     if (url) return NextResponse.redirect(url, { status: 302 });
   }
 
-  // Local / S3 无直链:读字节流式返回。
+  // Local / 配置公共产物 URL 的 S3 / 无签名能力的 fallback:由应用读取。
   let buf: Buffer;
   try {
     buf = range

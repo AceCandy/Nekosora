@@ -538,17 +538,18 @@ export interface StorageDriver {
   readonly kind: "local" | "s3" | "r2" | "minio";
   /** 上传(key 由调用方给,driver 负责存)。返回可访问的公开 URL(或 null=需鉴权代理)。 */
   put(key: string, data: Buffer, mime: string, opts?: PutOpts): Promise<StorageResult>;
-  /** 读取为 Buffer。 */
-  get(key: string): Promise<Buffer>;
+  /** 读取完整对象或指定字节闭区间。 */
+  get(key: string, opts?: GetOpts): Promise<Buffer>;
   /** 删除。 */
   delete(key: string): Promise<void>;
-  /** 生成预签名下载 URL(私有 bucket 临时访问)。 */
-  signedUrl(key: string, ttlSeconds: number): Promise<string>;
-  /** 是否支持公网直链(决定 vision 调用走 url 还是 base64)。 */
+  /** 生成临时预签名下载 URL，不受公共产物 URL 配置影响。 */
+  signedUrl(key: string, ttlSeconds: number): Promise<string | null>;
+  /** 是否配置公共产物 URL 能力(决定 vision 使用临时 URL 还是 base64)。 */
   readonly publicReadable: boolean;
 }
 
 interface StorageResult { key: string; url: string | null; size: number; }
+interface GetOpts { start: number; end: number; }
 ```
 
 **driver 工厂** `src/lib/infra/storage/index.ts`(对标 `db/index.ts` 的方言工厂):
@@ -575,12 +576,13 @@ export async function getStorage(): Promise<StorageDriver>;
 | `rag/process.ts:18` | `processFile(fileId, storagePath, mime)` | 改为 `processFile(fileId, key, mime)`,内部用 `storage.get` |
 | `rag/retrieve.ts` | 无直接存储访问 | 不变 |
 | P1-D image-gen | — | `storage.put` 存生成图,返回 url |
-| P1-C vision | — | 检查 `storage.publicReadable`,决定 base64 内联还是传 url |
+| P1-C vision | — | 检查 `storage.publicReadable`,决定 base64 内联还是传临时签名 URL |
 
 新增 `src/app/api/files/[fileId]/route.ts`:
 
 - session 鉴权 + 校验文件属主
-- 调 `storage.get` 流式返回(或 `signedUrl` 302 重定向,私有 bucket 场景)
+- 未配置公共产物 URL 的 S3 类存储通过 `signedUrl` 302 重定向
+- 配置公共产物 URL 时由应用调用 `storage.get` 代理，避免泄露私有对象 key
 
 ### 环境变量(.env.example 增量)
 
@@ -593,7 +595,8 @@ S3_REGION="auto"               # R2 用 "auto"
 S3_BUCKET=""
 S3_ACCESS_KEY_ID=""
 S3_SECRET_ACCESS_KEY=""
-S3_PUBLIC_BASE_URL=""          # 公网直链前缀(配 CDN 时填);空=走 signedUrl
+# 仅用于明确公共产物；CDN/公开 bucket 不得暴露私有上传对象路径
+S3_PUBLIC_BASE_URL=""          # 公共产物 URL 前缀;空=不返回公共 URL
 ```
 
 ### 降级

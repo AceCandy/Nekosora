@@ -49,4 +49,36 @@ describe("多模态文件属主隔离", () => {
     expect(signedUrl).not.toHaveBeenCalled();
     expect(message.content).toEqual([{ type: "text", text: "question" }]);
   });
+
+  it("配置公共产物 URL 时仍通过临时签名 URL 传递图片", async () => {
+    const get = vi.fn();
+    const signedUrl = vi.fn().mockResolvedValue(
+      "https://s3.example.com/user-1/image.png?X-Amz-Signature=signed",
+    );
+    const where = vi.fn().mockResolvedValue([
+      { mime: "image/png", storagePath: "user-1/image.png" },
+    ]);
+    mocks.getStorage.mockResolvedValue({ publicReadable: true, get, signedUrl });
+    mocks.getDb.mockResolvedValue({
+      select: vi.fn(() => ({ from: vi.fn(() => ({ where })) })),
+    });
+
+    const message = await buildMultimodalUserMessage(
+      "question",
+      ["owned-file"],
+      "user-1",
+    );
+
+    expect(signedUrl).toHaveBeenCalledWith("user-1/image.png", 3600);
+    expect(get).not.toHaveBeenCalled();
+    expect(message.content).toEqual([
+      { type: "text", text: "question" },
+      {
+        type: "image_url",
+        image_url: {
+          url: "https://s3.example.com/user-1/image.png?X-Amz-Signature=signed",
+        },
+      },
+    ]);
+  });
 });

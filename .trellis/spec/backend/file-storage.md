@@ -14,6 +14,8 @@ interface GetOpts {
 
 interface StorageDriver {
   get(key: string, opts?: GetOpts): Promise<Buffer>;
+  signedUrl(key: string, ttlSeconds: number): Promise<string | null>;
+  readonly publicReadable: boolean;
 }
 ```
 
@@ -27,7 +29,10 @@ interface StorageDriver {
 - LocalDriver 使用 positional read，只分配目标区间长度；S3Driver 翻译为 GetObject `Range: bytes=start-end`。
 - 文件 API 必须先鉴权和校验属主，再解析 Range；非法或不可满足范围不得读取 storage。
 - local/fallback 的合法范围返回 206、`Content-Range`、`Accept-Ranges`、实际 `Content-Length`。
-- S3/R2/MinIO 有预签名 URL 时保持 302；客户端的单段 Range 由对象存储处理。
+- `signedUrl()` 始终生成有 TTL 的临时预签名 URL；`S3_PUBLIC_BASE_URL` 只供 `put().url` 返回明确公共产物，不能改变该语义。
+- 未配置公共产物 URL 的 S3/R2/MinIO 保持 302；客户端的单段 Range 由对象存储处理。
+- 配置公共产物 URL 时，私有文件 API 必须在属主校验后由应用代理 200/206，不能在 `Location` 暴露 `storagePath`。
+- `publicReadable` 只表示 driver 配置了公共产物 URL 能力，不表示私有文件可以绕过鉴权读取。
 - PreviewText 多取 1 字节判断截断，只解码前 512KB；固定合法范围收到 416 时按空文件处理，不依赖跨域暴露 `Content-Range`。
 
 ## 4. Validation & Error Matrix
@@ -38,7 +43,8 @@ interface StorageDriver {
 | 文件不存在或非属主 | 404 | 不读取 |
 | 无 Range，local/fallback | 200 | `get(key)` |
 | 合法单段 Range，local/fallback | 206 | `get(key, {start,end})` |
-| 合法单段 Range，S3 有签名 URL | 302 | 不读取应用内 Buffer |
+| 合法单段 Range，S3 无公共产物 URL | 302 | 不读取应用内 Buffer |
+| 合法单段 Range，S3 有公共产物 URL | 206 | 应用代理有界读取，不调用 `signedUrl` |
 | 非法、多段、反向或越界 Range | 416 | 不读取；`Content-Range: bytes */size` |
 | storage 读取失败 | 500 | 返回既有内部错误 |
 
@@ -54,8 +60,9 @@ interface StorageDriver {
 
 - `http-range.test.ts`：明确区间、开放结尾、suffix、边界夹取、非法/多段/越界。
 - `local.test.ts`：有界读取返回指定字节；无 opts 保持全量。
-- `s3.test.ts`：opts 转成 GetObject Range；无 opts 不带 Range。
-- `route.test.ts`：206 headers/body/storage 参数、416 不读 storage、200 全量兼容、S3 302。
+- `s3.test.ts`：opts 转成 GetObject Range；无 opts 不带 Range；公共产物 URL 配置不能绕过 presigner，且 `put().url` 保持公共 URL。
+- `route.test.ts`：206 headers/body/storage 参数、416 不读 storage、200 全量兼容、私有 S3 302、配置公共产物 URL 的 S3 代理 200/206。
+- `assemble.test.ts`：`publicReadable=true` 时调用 `signedUrl()`，不读取完整对象做 base64 内联。
 - 全量运行 lint、typecheck、vitest；本地测试产生的临时目录必须在 `afterEach` 删除。
 
 ## 7. Wrong vs Correct
