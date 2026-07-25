@@ -3,9 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   eq: vi.fn(),
   and: vi.fn(),
+  isNull: vi.fn(),
 }));
 
-vi.mock("drizzle-orm", () => ({ eq: mocks.eq, and: mocks.and }));
+vi.mock("drizzle-orm", () => ({ eq: mocks.eq, and: mocks.and, isNull: mocks.isNull }));
 
 import { findConversationMessage } from "@/lib/chat/message-reference";
 
@@ -14,6 +15,7 @@ const schema = {
     id: "messages.id",
     publicId: "messages.publicId",
     conversationId: "messages.conversationId",
+    deletedAt: "messages.deletedAt",
   },
 };
 
@@ -22,6 +24,7 @@ describe("findConversationMessage", () => {
     vi.clearAllMocks();
     mocks.eq.mockImplementation((left, right) => ({ op: "eq", left, right }));
     mocks.and.mockImplementation((...conditions) => ({ op: "and", conditions }));
+    mocks.isNull.mockImplementation((field) => ({ op: "isNull", field }));
   });
 
   it.each([
@@ -40,6 +43,14 @@ describe("findConversationMessage", () => {
 
     expect(mocks.eq).toHaveBeenCalledWith(field, value);
     expect(mocks.eq).toHaveBeenCalledWith(schema.messages.conversationId, "conversation-1");
-    expect(where).toHaveBeenCalledWith(mocks.and.mock.results[0].value);
+    expect(mocks.isNull).toHaveBeenCalledWith(schema.messages.deletedAt);
+    expect(where).toHaveBeenCalledWith({
+      op: "and",
+      conditions: [
+        { op: "eq", left: field, right: value },
+        { op: "eq", left: schema.messages.conversationId, right: "conversation-1" },
+        { op: "isNull", field: schema.messages.deletedAt },
+      ],
+    });
   });
 });

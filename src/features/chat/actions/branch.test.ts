@@ -225,22 +225,42 @@ describe("聊天分支消息属主隔离", () => {
     expect(where).toHaveBeenCalledTimes(1);
   });
 
-  it("查询同父兄弟时额外限制消息所属会话", async () => {
-    const selectRows = [
-      [{ id: "assistant-1", publicId: "public-1", conversationId: "conversation-1", parentId: "parent-1" }],
-      [{ id: "conversation-1", userId: "user-1" }],
-      [],
+  it("查询同父兄弟时排除软删除目标并限制消息所属会话", async () => {
+    const queries = [
+      queryReturning([{ id: "assistant-1", publicId: "public-1", conversationId: "conversation-1", parentId: "parent-1" }]),
+      queryReturning([{ id: "conversation-1", userId: "user-1" }]),
+      queryReturning([]),
     ];
+    const firstQuery = queries[0];
     const db = {
       select: vi.fn(() => ({
-        from: vi.fn(() => queryReturning(selectRows.shift() ?? [])),
+        from: vi.fn(() => queries.shift() ?? queryReturning([])),
       })),
     };
     mocks.getDb.mockResolvedValue(db);
 
     await getMessageSiblings("public-1");
 
+    expect(firstQuery.where).toHaveBeenCalledWith({
+      op: "and",
+      conditions: [
+        { op: "eq", left: schema.messages.publicId, right: "public-1" },
+        { op: "isNull", field: schema.messages.deletedAt },
+      ],
+    });
     expect(mocks.eq).toHaveBeenCalledWith(schema.messages.conversationId, "conversation-1");
+  });
+
+  it("兄弟版本目标不可见时不继续读取关联数据", async () => {
+    const select = selectQueue([[]]);
+    mocks.getDb.mockResolvedValue({ select });
+
+    await expect(getMessageSiblings("deleted-public-1")).resolves.toEqual({
+      current: null,
+      siblings: [],
+    });
+
+    expect(select).toHaveBeenCalledTimes(1);
   });
 
   it.each([

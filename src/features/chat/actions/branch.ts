@@ -132,7 +132,7 @@ export async function getMessageSiblings(messagePublicId: string): Promise<{
   const [msg] = await db
     .select()
     .from(s.messages)
-    .where(eq(s.messages.publicId, messagePublicId))
+    .where(and(eq(s.messages.publicId, messagePublicId), isNull(s.messages.deletedAt)))
     .limit(1);
   if (!msg) return { current: null, siblings: [] };
 

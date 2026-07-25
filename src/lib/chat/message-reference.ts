@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 type MessageIdentifier = { publicId: string } | { id: string };
 
@@ -20,6 +20,7 @@ export async function findConversationMessage(
       and(
         eq(field, value),
         eq(schema.messages.conversationId, conversationId),
+        isNull(schema.messages.deletedAt),
       ),
     )
     .limit(1);

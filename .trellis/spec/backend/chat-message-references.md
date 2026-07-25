@@ -17,10 +17,11 @@ Apply this contract when `/api/chat`, branch actions, or message-tree traversal 
 
 ## 3. Contracts
 
-- The lookup SQL always combines the identifier with `messages.conversation_id = currentConversationId`.
+- The lookup SQL always combines the identifier with `messages.conversation_id = currentConversationId` and `messages.deleted_at IS NULL`; missing, foreign, and soft-deleted references share the same `null` result.
 - Parent, source, reused user, continuation target, continuation parent, and artifact message lookups use the scoped helper.
 - Branch actions resolve retry, edit, continue, and parent message references through the scoped helper after authorizing the conversation.
 - Sibling queries with a non-null `parentId` also constrain `messages.conversation_id`; malformed cross-conversation tree edges must not widen reads.
+- `getMessageSiblings` applies `deletedAt IS NULL` to its initial public-ID lookup before loading the conversation or sibling metadata, so a tombstone cannot remain the current version.
 - Reused user references require `role='user'`; continuation targets require `role='assistant'` and a same-conversation user parent.
 - New user inserts return their internal ID. Assistant persistence uses that verified ID directly instead of re-querying a bare public ID.
 - Missing and cross-conversation references return the same 400-class behavior and do not reveal whether the identifier exists elsewhere.
@@ -37,10 +38,10 @@ Apply this contract when `/api/chat`, branch actions, or message-tree traversal 
 
 | Reference | Required scope / role | Invalid result |
 | --- | --- | --- |
-| parent / source public ID | Current conversation | 400 before generation |
-| reused user public ID | Current conversation + user role | 400 before generation |
-| continue public ID | Current conversation + assistant role | 400 before generation |
-| continuation parent ID | Current conversation + user role | 400 before generation |
+| parent / source public ID | Current conversation + `deletedAt IS NULL` | 400 before generation |
+| reused user public ID | Current conversation + user role + `deletedAt IS NULL` | 400 before generation |
+| continue public ID | Current conversation + assistant role + `deletedAt IS NULL` | 400 before generation |
+| continuation parent ID | Current conversation + user role + `deletedAt IS NULL` | 400 before generation |
 | generated assistant artifact lookup | Current conversation | Skip when absent |
 | branch retry / edit / continue target | Authorized current conversation | Throw `消息不存在` before mutation |
 | soft-delete target | `publicId` + conversation owned by session user, then `role='user'` | Missing/foreign: `消息不存在`; owned non-user: `仅支持删除用户消息`; no update |
@@ -52,6 +53,7 @@ Apply this contract when `/api/chat`, branch actions, or message-tree traversal 
 ## 5. Good / Base / Bad Cases
 
 - Good: a leaked public ID from another conversation cannot become a parent or source in the current message tree.
+- Good: a soft-deleted message cannot be reused as a parent, source, edit, retry, continue, or version-switch target.
 - Good: an authenticated user cannot revoke a share belonging to another user's conversation.
 - Good: deleting a foreign message ID and deleting a missing ID execute the same owner-scoped lookup and return the same error.
 - Good: creating a share publishes only the ordered message versions visible when the user clicks Share; hidden regenerated siblings stay private.
@@ -71,10 +73,11 @@ Apply this contract when `/api/chat`, branch actions, or message-tree traversal 
 
 ## 6. Tests Required
 
-- Helper tests cover public and internal identifiers and assert both identifier + conversation SQL conditions.
+- Helper tests cover public and internal identifiers and assert identifier + conversation + `isNull(deletedAt)` SQL conditions as one `and(...)` predicate.
 - Branch action tests assert retry/edit/continue use the scoped helper and that cross-conversation edit targets trigger no update or delete.
 - Soft-delete tests assert the target query joins conversations with the current `userId`, missing/foreign user/foreign non-user IDs all throw `消息不存在` without update, and owner role/subtree behavior remains unchanged.
 - Sibling tests assert the parent query includes the original message's `conversationId`.
+- Sibling tests assert the initial target lookup excludes `deletedAt` tombstones and stops before conversation, tool-call, or feedback queries when absent.
 - Share creation tests assert the message query combines `conversationId`, `isNull(deletedAt)`, and `inArray(publicId, submittedIds)`; database result order may differ, but both stored ID lists retain submitted order.
 - Share creation tests reject empty, duplicate, partial/foreign, and foreign-owner inputs before insert. Store tests prove version switching replaces the runtime `publicId` consumed by the share caller.
 - Public share read tests assert the state query combines the share conversation ID with `inArray(publicId, storedIds)` and explicitly selects `deletedAt`.
