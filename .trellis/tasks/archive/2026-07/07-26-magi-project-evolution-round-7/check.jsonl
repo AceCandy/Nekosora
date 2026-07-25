@@ -1,0 +1,2 @@
+{"file":".trellis/spec/backend/chat-message-references.md","reason":"复核全部引用入口与软删除隔离"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"复核 DB 行与 action 返回边界"}
