@@ -40,46 +40,75 @@
 ### Scenario: Startup Drizzle Migrate(PG)
 
 #### 1. Scope / Trigger
-- `bootstrapDatabase()` 启动时跑 Drizzle `migrate()`,消费 `drizzle/pg/*.sql`(幂等)。
+- `bootstrapDatabase()` 启动时跑 Drizzle `migrate()`,消费 `drizzle/pg/*.sql`。
+- 修改迁移 SQL、`meta/_journal.json`，或应用可能多进程并发启动时，必须遵守本场景。
 - DB 连不上 / 建表失败 / 管理员创建失败 → throw 阻断启动。
 
 #### 2. Signatures
+- `runMigrations(db)`：从 `db.$client` 取得专用 `PoolClient`，持锁完成协调与迁移。
 - `migrate(db, { migrationsFolder: "drizzle/pg" })`
+- `pg_advisory_lock(hashtext(current_database()), hashtext('drizzle.__drizzle_migrations'))`
 - 迁移产物:`drizzle/pg/0000_*.sql`、`meta/_journal.json`、`meta/0000_snapshot.json`。
 
 #### 3. Contracts
 - `drizzle/pg/meta/**` 必须与 SQL 文件一起提交;`.gitignore` 不得忽略 `meta`。
+- **已发布并可能在任一数据库执行过的 SQL、journal `when/tag/idx` 均不可改写**；结构变更必须追加新迁移。
 - PG baseline enum 用 `DO ... EXCEPTION WHEN duplicate_object` 幂等。
 - 全部 PG 表/enum 存在但 `drizzle.__drizzle_migrations` 为空 → 启动补基线记录后继续。
 - 只有 enum 残留 → 继续幂等建表。
 - 部分表存在 → throw 明确的 partial-schema 错误(不猜测)。
+- 历史 journal 时间漂移只允许协调“相同 SQL hash 已按旧时间登记”的单一安全场景：前序 canonical 时间完整、目标时间未占用、没有后续或未知记录；`0000` 的历史 hash 只能通过代码中的显式白名单兼容。
+- advisory lock、协调事务和官方 migrator 必须共用同一条连接；协调事务内对迁移账本加 `SHARE ROW EXCLUSIVE` 表锁。
+- 协调 UPDATE 必须同时匹配 `id/hash/旧时间`、确认目标时间空闲，并严格要求 `rowCount === 1`；否则回滚并阻断启动。
+- 解锁失败时销毁连接，不能把可能仍持锁的连接归还连接池。
 - 连通性探测:`db.execute(sql\`select 1\`)`。
 
 #### 4. Validation & Error Matrix
 - 缺 `meta/_journal.json` → migrate throw `Can't find meta/_journal.json file`。
-- SQL 文件存在但 journal tag 与文件名不符 → 迁移序列错乱。
+- journal 时间非严格递增、hash 重复或值非法 → 协调事务回滚并阻断启动。
+- canonical 时间上的 hash 不匹配当前迁移且不在 `0000` 白名单 → 阻断启动。
+- 相同 hash 位于旧时间且完整连续前缀可证明 → 条件修正 `created_at`，再由官方 migrator 执行尾部迁移。
+- 前序缺失、后续提前登记、未知记录、重复 id/hash/时间或目标时间冲突 → 不 UPDATE、不调用 migrator。
+- 条件 UPDATE 未命中或无明确 `rowCount` → 视为并发变化，回滚并阻断启动。
+- advisory lock 获取/释放失败 → 阻断启动；无法确认解锁时销毁连接。
 - 全表存在无 Drizzle 记录 → 补基线记录后 migrate 继续。
 - 部分表存在无记录 → throw partial-schema 错误,需重置或 `BOOTSTRAP_SKIP_MIGRATE=1`。
 
 #### 5. Good / Base / Bad Cases
 - Good: SQL + `_journal.json` + snapshot 一起生成并提交。
+- Good: 已发布迁移需要调整时追加下一个迁移，不修改旧 SQL 或旧 journal entry。
+- Base: 空账本或正常连续前缀不产生协调 UPDATE，直接进入官方 migrator。
+- Base: 已核实的同 hash 旧时间记录只修正账本时间，不重跑该 SQL。
 - Bad: 只提交 `0000_*.sql`,忽略 `meta/**`。
 - Bad: 把 partial schema 标记为已迁移。
+- Bad: 为整理编号、文件名或时间线而改写已发布 journal 的 `when/tag/idx`。
+- Bad: 在 Pool 上先拿 advisory lock，再调用可能切换连接的 migrator。
 
 #### 6. Tests Required
 - PG 迁移单测:complete-existing-schema adoption + partial-schema rejection(见 `src/lib/infra/db/bootstrap.test.ts`)。
-- 断言点:`insert into drizzle.__drizzle_migrations` 触发、`migrate` 以 `{ migrationsFolder: "drizzle/pg" }` 调用、partial 时 throw。
+- 协调单测:安全重定时、连续前缀/空账本、journal 与 ledger 重复、断层、未知记录、baseline 白名单、UPDATE `rowCount`。
+- 连接生命周期单测:锁获取失败、migrate 失败、unlock 返回 false/抛错，断言 unlock 与 `release(destroy)`。
+- 断言点:`insert/update drizzle.__drizzle_migrations`、表锁与 advisory lock 顺序、错误路径不调用 migrator。
+- 真实启动验证:启动日志只协调目标 hash，尾部迁移新增账本记录，目标 schema 对象存在，健康检查通过，调试服务关闭。
 
 #### 7. Wrong vs Correct
 Wrong:
 ```gitignore
 /drizzle/pg/meta
 ```
+Wrong:
+```json
+{"idx": 9, "when": 1784988074784, "tag": "renamed_existing_migration"}
+```
 Correct:
 ```text
 drizzle/pg/0000_*.sql
 drizzle/pg/meta/_journal.json
 drizzle/pg/meta/0000_snapshot.json
+```
+Correct:
+```json
+{"idx": 10, "when": 1785003843594, "tag": "new_follow_up_migration"}
 ```
 
 ## Timestamps(时区)

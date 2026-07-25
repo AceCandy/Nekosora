@@ -73,9 +73,22 @@ export async function runMigrations(db: unknown): Promise<void> {
     return;
   }
   try {
-    await adoptExistingPgBaselineIfNeeded(db);
-    const { migrate } = await import("drizzle-orm/node-postgres/migrator");
-    await migrate(db as never, { migrationsFolder: "drizzle/pg" });
+    const migrationsFolder = "drizzle/pg";
+    await withPgMigrationLock(db, async (migrationDb) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (migrationDb as any).transaction(async (tx: unknown) => {
+        await ensurePgMigrationTable(tx);
+        await pgExecute(
+          tx,
+          "lock table drizzle.__drizzle_migrations in share row exclusive mode",
+        );
+        await adoptExistingPgBaselineIfNeeded(tx);
+        await reconcileRetimedPgMigrations(tx, migrationsFolder);
+      });
+
+      const { migrate } = await import("drizzle-orm/node-postgres/migrator");
+      await migrate(migrationDb as never, { migrationsFolder });
+    });
     console.log(`[bootstrap] ✅ 数据库表已就绪(pg migrate 完成)`);
   } catch (e) {
     throw new Error(
@@ -90,6 +103,16 @@ const PG_BASELINE_TYPES = [
   "model_visibility",
   "provider_protocol",
 ] as const;
+
+// 0000 发布后只做过幂等化修订；存量数据库仍保留原始 SQL 的迁移 hash。
+const PG_LEGACY_BASELINE_HASHES = new Set([
+  "0f852461b32b9e206d15e4229ea861c7143efe9b220e341d3bcb0dcee8f6511c",
+]);
+
+const PG_MIGRATION_LOCK_SQL =
+  "select pg_advisory_lock(hashtext(current_database()), hashtext('drizzle.__drizzle_migrations'))";
+const PG_MIGRATION_UNLOCK_SQL =
+  "select pg_advisory_unlock(hashtext(current_database()), hashtext('drizzle.__drizzle_migrations')) as unlocked";
 
 const PG_BASELINE_TABLES = [
   "account",
@@ -129,8 +152,6 @@ const PG_BASELINE_TABLES = [
  * 若只存在部分对象,说明库处于半初始化状态,必须显式重置或外部接管,不能静默跳过。
  */
 async function adoptExistingPgBaselineIfNeeded(db: unknown): Promise<void> {
-  await ensurePgMigrationTable(db);
-
   const existingMigrations = await pgRows<{ created_at: string | number }>(
     db,
     "select id, hash, created_at from drizzle.__drizzle_migrations order by created_at desc limit 1",
@@ -181,6 +202,57 @@ async function adoptExistingPgBaselineIfNeeded(db: unknown): Promise<void> {
   console.log("[bootstrap] ✅ 已收养现有 PG 基线 schema,补写 Drizzle 迁移记录");
 }
 
+/**
+ * 迁移全程固定在同一条池连接上。会话锁跨越协调事务与 Drizzle 自带事务，
+ * 避免多进程启动时并发读取或改写同一迁移账本。
+ */
+async function withPgMigrationLock<T>(
+  db: unknown,
+  callback: (migrationDb: unknown) => Promise<T>,
+): Promise<T> {
+  const pool = (db as { $client?: { connect?: () => Promise<unknown> } }).$client;
+  if (!pool || typeof pool.connect !== "function") {
+    throw new Error("[bootstrap] PostgreSQL 迁移连接池不可用");
+  }
+
+  const client = await pool.connect() as { release: (destroy?: boolean) => void };
+  let destroyClient = false;
+
+  try {
+    const { drizzle } = await import("drizzle-orm/node-postgres");
+    const migrationDb = drizzle(client as never);
+    let lockAcquired = false;
+
+    try {
+      try {
+        await pgExecute(migrationDb, PG_MIGRATION_LOCK_SQL);
+        lockAcquired = true;
+      } catch (error) {
+        destroyClient = true;
+        throw error;
+      }
+      return await callback(migrationDb);
+    } finally {
+      try {
+        if (lockAcquired) {
+          const [result] = await pgRows<{ unlocked: boolean }>(
+            migrationDb,
+            PG_MIGRATION_UNLOCK_SQL,
+          );
+          if (result?.unlocked !== true) {
+            throw new Error("[bootstrap] PostgreSQL 迁移锁释放失败");
+          }
+        }
+      } catch (error) {
+        destroyClient = true;
+        throw error;
+      }
+    }
+  } finally {
+    client.release(destroyClient);
+  }
+}
+
 async function ensurePgMigrationTable(db: unknown): Promise<void> {
   await pgExecute(db, "create schema if not exists drizzle");
   await pgExecute(
@@ -203,6 +275,164 @@ async function readFirstMigrationMeta(
     throw new Error(`[bootstrap] 迁移 hash 异常:${first.hash}`);
   }
   return { hash: first.hash, folderMillis: first.folderMillis };
+}
+
+interface PgMigrationLedgerRow {
+  id: number;
+  hash: string;
+  createdAt: number;
+}
+
+interface PgMigrationReconciliation {
+  id: number;
+  hash: string;
+  from: number;
+  to: number;
+}
+
+/**
+ * Drizzle 只按最新 created_at 判断待执行迁移。若已发布 migration 的 journal 时间被
+ * 改写,同一 SQL 会被当成新迁移重复执行。这里只在完整连续前缀可证明安全时校正账本,
+ * 其余漂移一律阻断,避免把未执行 SQL 伪装成已完成。
+ */
+async function reconcileRetimedPgMigrations(db: unknown, migrationsFolder: string): Promise<void> {
+  const { readMigrationFiles } = await import("drizzle-orm/migrator");
+  const migrations = readMigrationFiles({ migrationsFolder }).map((migration, index) => ({
+    index,
+    hash: validateMigrationHash(migration.hash, `journal[${index}]`),
+    folderMillis: validatePositiveInteger(migration.folderMillis, `journal[${index}].when`),
+  }));
+  if (migrations.length === 0) throw new Error("[bootstrap] 未找到 PostgreSQL 迁移");
+
+  for (let index = 1; index < migrations.length; index += 1) {
+    if (migrations[index].folderMillis <= migrations[index - 1].folderMillis) {
+      throw new Error(`[bootstrap] PostgreSQL 迁移 journal 时间必须严格递增:index=${index}`);
+    }
+  }
+  if (new Set(migrations.map((migration) => migration.hash)).size !== migrations.length) {
+    throw new Error("[bootstrap] PostgreSQL 迁移 journal 存在重复 hash");
+  }
+
+  const rawRows = await pgRows<{ id: unknown; hash: unknown; created_at: unknown }>(
+    db,
+    "select id, hash, created_at from drizzle.__drizzle_migrations order by id",
+  );
+  if (rawRows.length === 0) return;
+
+  const ledger = rawRows.map((row, index): PgMigrationLedgerRow => ({
+    id: validatePositiveInteger(row.id, `ledger[${index}].id`),
+    hash: validateMigrationHash(row.hash, `ledger[${index}]`),
+    createdAt: validatePositiveInteger(row.created_at, `ledger[${index}].created_at`),
+  }));
+  if (new Set(ledger.map((row) => row.id)).size !== ledger.length) {
+    throw new Error("[bootstrap] PostgreSQL 迁移账本存在重复 id");
+  }
+  if (new Set(ledger.map((row) => row.createdAt)).size !== ledger.length) {
+    throw new Error("[bootstrap] PostgreSQL 迁移账本存在重复 created_at");
+  }
+  if (new Set(ledger.map((row) => row.hash)).size !== ledger.length) {
+    throw new Error("[bootstrap] PostgreSQL 迁移账本存在重复 hash");
+  }
+
+  const expectedTimes = new Set(migrations.map((migration) => migration.folderMillis));
+  const reconciliations: PgMigrationReconciliation[] = [];
+
+  for (const migration of migrations) {
+    const atCanonicalTime = ledger.find((row) => row.createdAt === migration.folderMillis);
+    const withSameHash = ledger.find((row) => row.hash === migration.hash);
+
+    if (atCanonicalTime) {
+      const isKnownLegacyBaseline = migration.index === 0
+        && PG_LEGACY_BASELINE_HASHES.has(atCanonicalTime.hash);
+      if (atCanonicalTime.hash !== migration.hash && !isKnownLegacyBaseline) {
+        throw new Error(
+          `[bootstrap] PostgreSQL 迁移账本 hash 与 journal 不一致:index=${migration.index}`,
+        );
+      }
+      if (withSameHash && withSameHash.id !== atCanonicalTime.id) {
+        throw new Error(
+          `[bootstrap] PostgreSQL 迁移 hash 同时占用多个时间:index=${migration.index}`,
+        );
+      }
+      continue;
+    }
+
+    if (!withSameHash) {
+      const laterApplied = migrations.slice(migration.index + 1).some((later) =>
+        ledger.some((row) => row.createdAt === later.folderMillis || row.hash === later.hash),
+      );
+      if (laterApplied) {
+        throw new Error(
+          `[bootstrap] PostgreSQL 迁移账本存在断层:index=${migration.index}`,
+        );
+      }
+      break;
+    }
+
+    if (expectedTimes.has(withSameHash.createdAt)) {
+      throw new Error(
+        `[bootstrap] PostgreSQL 迁移旧时间占用当前 journal:index=${migration.index}`,
+      );
+    }
+    const laterApplied = migrations.slice(migration.index + 1).some((later) =>
+      ledger.some((row) => row.createdAt === later.folderMillis || row.hash === later.hash),
+    );
+    if (laterApplied) {
+      throw new Error(
+        `[bootstrap] PostgreSQL 迁移在账本协调前已有后续记录:index=${migration.index}`,
+      );
+    }
+
+    reconciliations.push({
+      id: withSameHash.id,
+      hash: withSameHash.hash,
+      from: withSameHash.createdAt,
+      to: migration.folderMillis,
+    });
+    withSameHash.createdAt = migration.folderMillis;
+  }
+
+  const unknownRows = ledger.filter((row) => !expectedTimes.has(row.createdAt));
+  if (unknownRows.length > 0) {
+    throw new Error("[bootstrap] PostgreSQL 迁移账本存在未知记录,拒绝自动协调");
+  }
+
+  for (const reconciliation of reconciliations) {
+    const result = await pgExecute(
+      db,
+      `update drizzle.__drizzle_migrations as target ` +
+        `set created_at = ${reconciliation.to} ` +
+        `where target.id = ${reconciliation.id} and target.hash = '${reconciliation.hash}' ` +
+        `and target.created_at = ${reconciliation.from} ` +
+        `and not exists (` +
+        `select 1 from drizzle.__drizzle_migrations as occupied ` +
+        `where occupied.created_at = ${reconciliation.to})`,
+    );
+    const rowCount = result && typeof result === "object"
+      ? (result as { rowCount?: unknown }).rowCount
+      : undefined;
+    if (rowCount !== 1) {
+      throw new Error("[bootstrap] PostgreSQL 迁移账本并发变化,协调失败");
+    }
+    console.log(
+      `[bootstrap] ✅ 已协调迁移账本时间:${reconciliation.from} → ${reconciliation.to}`,
+    );
+  }
+}
+
+function validateMigrationHash(value: unknown, label: string): string {
+  if (typeof value !== "string" || !/^[a-f0-9]{64}$/i.test(value)) {
+    throw new Error(`[bootstrap] PostgreSQL 迁移 hash 异常:${label}`);
+  }
+  return value.toLowerCase();
+}
+
+function validatePositiveInteger(value: unknown, label: string): number {
+  const number = Number(value);
+  if (!Number.isSafeInteger(number) || number <= 0) {
+    throw new Error(`[bootstrap] PostgreSQL 迁移整数异常:${label}`);
+  }
+  return number;
 }
 
 async function pgNameSet(db: unknown, query: string): Promise<Set<string>> {
