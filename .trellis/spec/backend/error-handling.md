@@ -95,6 +95,61 @@ stream 生成失败时,从 AI SDK 错误提取**真实上游 statusCode** 归类
 - 发给前端的 `error` 帧 `code` 保持粗码 `generation_failed`(前端契约不变);只落库用细码。
 - `isFailoverableError`:429 仍判可转移(换不同 provider 路由有用;换同 provider key 由 `isKeyAuthError` 挡住)。
 
+## Scenario: Gateway SSE Cancellation
+
+### 1. Scope / Trigger
+
+Apply this contract when changing `/v1/chat/completions` streaming, `ReadableStream` ownership, gateway user-agent loading, or `streamChat` abort propagation.
+
+### 2. Signatures
+
+- `POST(req: NextRequest): Promise<Response>`
+- `streamResponse(...): Response`
+- `streamChat({ abortSignal, ... }): AsyncGenerator<StreamEvent>`
+
+### 3. Contracts
+
+- The response stream owns one `AbortController`; `ReadableStream.cancel()` aborts it.
+- Pass the same signal to `streamChat` so the AI SDK can cancel the upstream request and Agent routing stops failover.
+- If cancellation occurs while gateway setup is awaiting, do not start `streamChat` after that await returns.
+- After cancellation, do not enqueue data, `[DONE]`, or an error frame, and do not close the already-cancelled controller.
+- Normal completion still emits `[DONE]`; non-cancellation failures still emit one SSE `server_error` frame.
+
+### 4. Validation & Error Matrix
+
+| Condition | Upstream action | Response action |
+| --- | --- | --- |
+| Normal finish | Complete normally | Emit final chunks, `[DONE]`, close |
+| Generation throws | Stop iteration | Emit `server_error`, close |
+| Consumer cancels during generation | Abort signal | Emit nothing else; do not close again |
+| Consumer cancels while gateway UA loads | Do not start `streamChat` | Emit nothing else; do not close again |
+
+### 5. Good / Base / Bad Cases
+
+- Good: cancelling the body marks the exact signal passed to `streamChat` as aborted and causes zero later controller writes.
+- Base: a completed stream retains OpenAI-compatible chunks and `[DONE]`.
+- Bad: abort only a local flag while upstream generation continues, then enqueue `[DONE]` into a closed controller and turn that failure into another error-frame write.
+
+### 6. Tests Required
+
+- Exercise cancellation through exported `POST`, not by exporting `streamResponse` for tests.
+- Assert the signal received by `streamChat` is aborted.
+- Observe the Web Streams controller boundary and assert no `enqueue` or `close` occurs after cancellation.
+- Cover cancellation during an awaited gateway setup step and assert `streamChat` is not invoked.
+- Keep normal completion and ordinary exception SSE characterization tests.
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong: cancellation does not reach upstream, and terminal writes race a closed stream.
+for await (const event of streamChat({ ctx, request })) consume(event);
+controller.enqueue(doneFrame);
+
+// Correct: share the signal and suppress all terminal writes after cancellation.
+for await (const event of streamChat({ ctx, request, abortSignal })) consume(event);
+if (!abortSignal.aborted) controller.enqueue(doneFrame);
+```
+
 ---
 
 ## Common Mistakes

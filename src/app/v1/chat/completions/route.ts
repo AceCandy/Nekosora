@@ -103,7 +103,15 @@ function streamResponse(
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
 
       try {
-        for await (const ev of streamChat({ ctx, request, cacheKey: ctx.apiKeyId ?? undefined, userAgent: await getGatewayUA() })) {
+        const userAgent = await getGatewayUA();
+        if (abortController.signal.aborted) return;
+        for await (const ev of streamChat({
+          ctx,
+          request,
+          cacheKey: ctx.apiKeyId ?? undefined,
+          abortSignal: abortController.signal,
+          userAgent,
+        })) {
           if (abortController.signal.aborted) break;
           switch (ev.type) {
             case "text-delta":
@@ -146,20 +154,26 @@ function streamResponse(
               break; // tool-call / usage 中间事件暂不转发
           }
         }
-        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        if (!abortController.signal.aborted) {
+          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        }
       } catch (err) {
-        controller.enqueue(
-          encoder.encode(
-            `data: ${JSON.stringify({
-              error: {
-                message: err instanceof Error ? err.message : "内部错误",
-                type: "server_error",
-              },
-            })}\n\n`,
-          ),
-        );
+        if (!abortController.signal.aborted) {
+          controller.enqueue(
+            encoder.encode(
+              `data: ${JSON.stringify({
+                error: {
+                  message: err instanceof Error ? err.message : "内部错误",
+                  type: "server_error",
+                },
+              })}\n\n`,
+            ),
+          );
+        }
       } finally {
-        controller.close();
+        if (!abortController.signal.aborted) {
+          controller.close();
+        }
       }
     },
     cancel() {
