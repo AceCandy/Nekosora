@@ -1,96 +1,286 @@
 #!/usr/bin/env node
 /**
- * 同步 pi 模型配置到 model_catalog(运行入口 + IO)。
- * 纯逻辑见 src/lib/sync-pi-models.ts。三不变量见该文件头部。
+ * 同步 / 导入 pi 模型配置到 model_catalog(运行入口 + IO)。
+ * 纯逻辑见 src/lib/sync-pi-models.ts。
  *
- * 用法:
- *   pnpm tsx scripts/sync-pi-models.ts            # dry-run,仅打印差异报告
- *   pnpm tsx scripts/sync-pi-models.ts --write    # 生成 drizzle 迁移 0001_sync_pi_models.sql
+ * 数据源: https://pi.dev/api/models
+ *   - PI_MODELS_URL  覆盖 API 地址
+ *   - PI_MODELS_FILE 改读本地 JSON 快照(离线/测试)
+ *
+ * 两种模式:
+ *   1) 默认:只对照「已有 catalog 行」做更新(ctx/max/capabilities)
+ *   2) --import-missing:把 pi 里我们还没有的型号去重后全量导入
+ *
+ * 用法(脚本会自动加载 .env.local / .env):
+ *   pnpm tsx scripts/sync-pi-models.ts                              # dry-run 已有行差异
+ *   pnpm tsx scripts/sync-pi-models.ts --import-missing             # dry-run 缺失导入清单
+ *   pnpm tsx scripts/sync-pi-models.ts --import-missing --apply     # 执行全量导入缺失型号
+ *   pnpm tsx scripts/sync-pi-models.ts --write --apply              # 更新已有匹配行
+ *   pnpm tsx scripts/sync-pi-models.ts --import-missing --write --apply  # 导入+更新
  */
-import { eq } from "drizzle-orm";
-import { getDb, getSchema, closeDb } from "@/lib/infra/db";
-import {
-  match, translate, passesInvariants, diffCaps, buildUpsert,
-  type PiModel, type CatalogRow,
-} from "@/lib/sync-pi-models";
-import { writeFileSync, readFileSync, copyFileSync } from "node:fs";
+import { eq, sql } from "drizzle-orm";
+import { mkdirSync, writeFileSync, readFileSync, copyFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { getDb, getSchema, closeDb } from "@/lib/infra/db";
+import {
+  parsePiModelsApi,
+  planCatalogSync,
+  planMissingImports,
+  match,
+  translate,
+  passesInvariants,
+  buildUpsert,
+  buildImportUpsert,
+  nextSyncMigrationSlot,
+  type CatalogRow,
+  type JournalEntry,
+  type PiCatalog,
+  type ImportCandidate,
+} from "@/lib/sync-pi-models";
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+
+function loadEnvFiles(): void {
+  for (const name of [".env.local", ".env"]) {
+    const path = join(ROOT, name);
+    if (!existsSync(path)) continue;
+    const text = readFileSync(path, "utf8");
+    for (const line of text.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const eqIdx = trimmed.indexOf("=");
+      if (eqIdx <= 0) continue;
+      const key = trimmed.slice(0, eqIdx).trim();
+      if (!key || process.env[key] !== undefined) continue;
+      let value = trimmed.slice(eqIdx + 1).trim();
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+      process.env[key] = value;
+    }
+  }
+}
+
+loadEnvFiles();
 
 const WRITE = process.argv.includes("--write");
+const APPLY = process.argv.includes("--apply");
+const IMPORT_MISSING = process.argv.includes("--import-missing");
+const PI_API = process.env.PI_MODELS_URL ?? "https://pi.dev/api/models";
+const PI_FILE = process.env.PI_MODELS_FILE;
+
+async function loadPiCatalog(root: string): Promise<PiCatalog> {
+  if (PI_FILE) {
+    console.error(`pi 数据: 本地文件 ${PI_FILE}`);
+    return parsePiModelsApi(JSON.parse(readFileSync(PI_FILE, "utf8")) as unknown);
+  }
+
+  const cacheDir = join(root, "scripts", ".cache");
+  const cachePath = join(cacheDir, "pi-models.json");
+  console.error(`pi 数据: GET ${PI_API}`);
+
+  try {
+    const res = await fetch(PI_API, { headers: { accept: "application/json" } });
+    if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+    const raw = (await res.json()) as unknown;
+    mkdirSync(cacheDir, { recursive: true });
+    writeFileSync(cachePath, JSON.stringify(raw));
+    console.error(`已缓存 → ${cachePath}`);
+    return parsePiModelsApi(raw);
+  } catch (err) {
+    if (existsSync(cachePath)) {
+      console.error(`拉取失败(${err instanceof Error ? err.message : err}),回退缓存 ${cachePath}`);
+      return parsePiModelsApi(JSON.parse(readFileSync(cachePath, "utf8")) as unknown);
+    }
+    throw err;
+  }
+}
+
+function buildMatchedUpserts(rows: CatalogRow[], PI: PiCatalog): string[] {
+  const stmts: string[] = [];
+  for (const row of rows) {
+    if (row.canonicalModelId.startsWith("__generic_")) continue;
+    const m = match(row.canonicalModelId, row.aliases ?? [], PI);
+    if (!m) continue;
+    const next = translate(row.capabilities ?? {}, m.pi);
+    if (!passesInvariants(next)) {
+      next.thinkingLevelMap = row.capabilities?.thinkingLevelMap;
+    }
+    stmts.push(
+      buildUpsert(
+        row.canonicalModelId,
+        row.name,
+        next,
+        m.pi.contextWindow ?? null,
+        m.pi.maxTokens ?? null,
+      ),
+    );
+  }
+  return stmts;
+}
+
+function buildImportUpserts(imports: ImportCandidate[], baseSort: number): string[] {
+  return imports.map((item, i) =>
+    buildImportUpsert(
+      item.canonicalModelId,
+      item.name,
+      item.aliases,
+      item.capabilities,
+      item.contextWindow,
+      item.maxOutputTokens,
+      baseSort + i,
+    ),
+  );
+}
+
+function writeMigration(tag: string, idx: number, stmts: string[], kind: string): string {
+  const migDir = join(ROOT, "drizzle", "pg");
+  const jp = join(migDir, "meta", "_journal.json");
+  const journal = JSON.parse(readFileSync(jp, "utf8")) as { entries: JournalEntry[] };
+  const sqlPath = join(migDir, `${tag}.sql`);
+  const sql =
+    `-- ${kind}(由 scripts/sync-pi-models.ts 生成,幂等 upsert)\n` +
+    `-- 数据源: https://pi.dev/api/models\n\n` +
+    stmts.join("\n--> statement-breakpoint\n") +
+    "\n";
+  writeFileSync(sqlPath, sql);
+
+  if (!journal.entries.some((e) => e.tag === tag)) {
+    journal.entries.push({
+      idx,
+      version: "7",
+      when: Date.now(),
+      tag,
+      breakpoints: true,
+    });
+    writeFileSync(jp, `${JSON.stringify(journal, null, 2)}\n`);
+  }
+
+  const prevIdx = String(Math.max(0, idx - 1)).padStart(4, "0");
+  const nextIdx = String(idx).padStart(4, "0");
+  const prevSnap = join(migDir, "meta", `${prevIdx}_snapshot.json`);
+  const nextSnap = join(migDir, "meta", `${nextIdx}_snapshot.json`);
+  if (existsSync(prevSnap) && !existsSync(nextSnap)) {
+    copyFileSync(prevSnap, nextSnap);
+  }
+  return sqlPath;
+}
 
 async function main(): Promise<void> {
-  // pi 参考项目位于 docs/(tsconfig 已 exclude),用变量路径动态 import,
-  // tsc 不静态解析其类型链,运行时由 tsx 解析。
-  const piModelsPath = "../docs/cankao/pi/packages/ai/src/models.generated.ts";
-  const PI = ((await import(piModelsPath)) as { MODELS: unknown })
-    .MODELS as Record<string, Record<string, PiModel>>;
+  if (!process.env.DATABASE_URL) {
+    throw new Error(
+      "未配置 DATABASE_URL。请在项目根目录提供 .env.local(含 DATABASE_URL),或先 export DATABASE_URL=...",
+    );
+  }
+  const PI = await loadPiCatalog(ROOT);
+
   const db = await getDb();
   const tbl = getSchema().modelCatalog;
-  const rows = await db.select({
-    id: tbl.id,
+  const rows = (await db.select({
     canonicalModelId: tbl.canonicalModelId,
     name: tbl.name,
     aliases: tbl.aliases,
     capabilities: tbl.capabilities,
     contextWindow: tbl.contextWindow,
     maxOutputTokens: tbl.maxOutputTokens,
-  }).from(tbl).where(eq(tbl.modelType, "chat"));
-  await closeDb();
+  }).from(tbl).where(eq(tbl.modelType, "chat"))) as CatalogRow[];
 
-  const lines: string[] = [];
   const stmts: string[] = [];
-  let matched = 0, unchanged = 0, unmatched = 0;
+  let migrationKind = "";
 
-  for (const row of rows as CatalogRow[]) {
-    const m = match(row.canonicalModelId, row.aliases ?? [], PI);
-    if (!m) { lines.push(`• ${row.canonicalModelId} — 未匹配,跳过`); unmatched++; continue; }
-    matched++;
-    const cur = row.capabilities ?? {};
-    const next = translate(cur, m.pi);
-    if (!passesInvariants(next)) {
-      lines.push(`• ${row.canonicalModelId} (${m.via}) — ⚠ 闸门拦截:刷后无可显档,回退 thinkingLevelMap`);
-      next.thinkingLevelMap = cur.thinkingLevelMap;
+  // ---- 模式 A: 导入 pi 中缺失的型号 ----
+  if (IMPORT_MISSING) {
+    const { imports, groupCount, skippedExisting } = planMissingImports(rows, PI);
+    console.log("## 缺失导入 (--import-missing)\n");
+    for (const item of imports.slice(0, 50)) {
+      console.log(
+        `+ ${item.canonicalModelId}  (${item.via})  ctx=${item.contextWindow ?? "-"} max=${item.maxOutputTokens ?? "-"}  aliases=${item.aliases.length}`,
+      );
     }
-    const capCh = diffCaps(cur, next);
-    const ctxNew = m.pi.contextWindow ?? null;
-    const maxNew = m.pi.maxTokens ?? null;
-    const ctxCh = ctxNew != null && ctxNew !== row.contextWindow ? `${row.contextWindow} → ${ctxNew}` : null;
-    const maxCh = maxNew != null && maxNew !== row.maxOutputTokens ? `${row.maxOutputTokens} → ${maxNew}` : null;
-    // 迁移对所有匹配模型全量 upsert(保证新库重放也达目标态,非仅运行库差异)。
-    if (WRITE) stmts.push(buildUpsert(row.canonicalModelId, row.name, next, ctxNew, maxNew));
-    if (capCh.length === 0 && !ctxCh && !maxCh) { unchanged++; continue; }
-    const seg = [`• ${row.canonicalModelId} (${m.via})`];
-    if (capCh.length) seg.push(`    cap  ${capCh.join("; ")}`);
-    if (ctxCh) seg.push(`    ctx  ${ctxCh}`);
-    if (maxCh) seg.push(`    max  ${maxCh}`);
-    lines.push(seg.join("\n"));
+    if (imports.length > 50) {
+      console.log(`... 另有 ${imports.length - 50} 条未展开`);
+    }
+    console.log(
+      `\n导入候选 ${imports.length}(pi 去重组 ${groupCount},已存在跳过 ${skippedExisting})`,
+    );
+
+    if (WRITE || APPLY) {
+      const [maxRow] = await db
+        .select({ maxSort: sql<number>`coalesce(max(${tbl.sortOrder}), 0)` })
+        .from(tbl);
+      const baseSort = Math.max(2000, Number(maxRow?.maxSort ?? 0) + 1);
+      stmts.push(...buildImportUpserts(imports, baseSort));
+      migrationKind = "全量导入 pi 缺失模型到 model_catalog";
+    }
+  } else {
+    // ---- 模式 B: 仅同步已有 catalog 行 ----
+    const plan = planCatalogSync(rows, PI);
+    const lines: string[] = [];
+    for (const id of plan.unmatched) lines.push(`• ${id} — 未匹配,跳过`);
+    for (const ch of plan.changes) {
+      const seg = [`• ${ch.canonicalModelId} (${ch.via})`];
+      if (ch.gateFallback) seg.push("    ⚠ 闸门拦截:刷后无可显档,已回退 thinkingLevelMap");
+      if (ch.capChanges.length) seg.push(`    cap  ${ch.capChanges.join("; ")}`);
+      if (ch.ctxChange) seg.push(`    ctx  ${ch.ctxChange}`);
+      if (ch.maxChange) seg.push(`    max  ${ch.maxChange}`);
+      lines.push(seg.join("\n"));
+    }
+    console.log(lines.join("\n"));
+    console.log(
+      `\n合计:匹配 ${plan.matched}(其中已一致 ${plan.unchanged},需改 ${plan.changes.length}),未匹配 ${plan.unmatched.length}`,
+    );
+    console.log(
+      `\n提示:若要导入 pi 中「我们还没有」的型号,请加 --import-missing\n` +
+        `  例: pnpm tsx scripts/sync-pi-models.ts --import-missing\n` +
+        `      pnpm tsx scripts/sync-pi-models.ts --import-missing --apply`,
+    );
+
+    if (WRITE || APPLY) {
+      stmts.push(...buildMatchedUpserts(rows, PI));
+      migrationKind = "同步 pi 配置到已有 model_catalog 行";
+    }
   }
 
-  console.log(lines.join("\n"));
-  console.log(`\n合计:匹配 ${matched}(其中已一致 ${unchanged},需改 ${matched - unchanged}),未匹配 ${unmatched}`);
-
-  if (WRITE && stmts.length) {
-    const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-    const migDir = join(root, "drizzle", "pg");
-    const sql =
-      "-- 同步 pi 模型配置到 model_catalog(由 scripts/sync-pi-models.ts 生成,幂等 upsert)\n" +
-      "-- 不改 schema;仅对齐主流 chat 模型的 reasoning/thinkingLevelMap/reasoningEffort/vision/context_window/max_output_tokens\n\n" +
-      stmts.join("\n--> statement-breakpoint\n") + "\n";
-    writeFileSync(join(migDir, "0001_sync_pi_models.sql"), sql);
-    const jp = join(migDir, "meta", "_journal.json");
-    const journal = JSON.parse(readFileSync(jp, "utf8")) as { entries: Array<Record<string, unknown>> };
-    if (!journal.entries.some((e) => e.tag === "0001_sync_pi_models")) {
-      journal.entries.push({
-        idx: 1, version: "7", when: Date.now(),
-        tag: "0001_sync_pi_models", breakpoints: true,
-      });
-      writeFileSync(jp, JSON.stringify(journal, null, 2));
-    }
-    copyFileSync(join(migDir, "meta", "0000_snapshot.json"), join(migDir, "meta", "0001_snapshot.json"));
-    console.log(`\n已写入 ${stmts.length} 条 upsert → drizzle/pg/0001_sync_pi_models.sql(已更新 _journal.json、复制 0001_snapshot.json)`);
+  // 同时指定时:在 import 之外再追加已有行更新
+  if (IMPORT_MISSING && (WRITE || APPLY) && process.argv.includes("--also-update")) {
+    stmts.push(...buildMatchedUpserts(rows, PI));
+    migrationKind += " + 更新已有行";
   }
-  if (WRITE && stmts.length === 0) console.log("\n--write 模式但无改动需落盘。");
+
+  if (!WRITE && !APPLY) {
+    await closeDb();
+    return;
+  }
+
+  if (stmts.length === 0) {
+    console.log("\n无 SQL 需要落盘/执行。");
+    await closeDb();
+    return;
+  }
+
+  if (WRITE) {
+    const jp = join(ROOT, "drizzle", "pg", "meta", "_journal.json");
+    const journal = JSON.parse(readFileSync(jp, "utf8")) as { entries: JournalEntry[] };
+    const tagBase = IMPORT_MISSING ? "import_pi_models" : "sync_pi_models";
+    const { idx, tag } = nextSyncMigrationSlot(journal.entries, tagBase);
+    const sqlPath = writeMigration(tag, idx, stmts, migrationKind);
+    console.log(`\n已写入 ${stmts.length} 条 SQL → ${sqlPath}`);
+  }
+
+  if (APPLY) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const stmt of stmts) await (db as any).execute(stmt);
+    console.log(`--apply:已对当前 DB 执行 ${stmts.length} 条 SQL`);
+  }
+
+  await closeDb();
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});
