@@ -1,0 +1,1 @@
+{"file":".trellis/spec/backend/chat-message-references.md","reason":"复核分享读取是否排除软删除消息并保持既有隔离与测试要求。"}
