@@ -1298,3 +1298,36 @@ setKeyEnabled 接收 userId 并在更新 SQL 中同时限制 key ID 与属主，
 ### Next Steps
 
 - None - task complete
+
+
+## Session 40: MAGI 项目进化第 5 轮
+
+**Date**: 2026-07-26
+**Task**: MAGI 项目进化第 5 轮
+**Branch**: `opt0725`
+
+### Summary
+
+新分享冻结创建时消息正文，保留软删除撤回；历史分享继续动态读取，并补齐 PostgreSQL 迁移、回归测试与消息引用规范。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f98c671` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
