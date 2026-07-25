@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"后端测试与质量门禁"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"复核迁移、journal 与 snapshot 一致性"}
+{"file":".trellis/spec/backend/chat-message-references.md","reason":"复核分享顺序、历史兼容与软删除隐私语义"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"复核跨层数据类型和不安全断言"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"复核完整数据流和兼容分支"}
