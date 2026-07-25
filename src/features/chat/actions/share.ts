@@ -1,12 +1,13 @@
 "use server";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
+import type { ConversationShareMessageSnapshot } from "@/db/types";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { requireSession } from "@/lib/session";
 
 const shareMessageIdsSchema = z.array(z.string().min(1)).min(1);
 
-/** 创建分享(拍快照:当前消息 ID 列表 + 标题/模型)。返回 shareId。 */
+/** 创建分享(拍快照:当前消息正文与 ID 列表 + 标题/模型)。返回 shareId。 */
 export async function createShare(conversationId: string, messagePublicIds: string[]): Promise<string> {
   const user = await requireSession();
   const parsedMessageIds = shareMessageIdsSchema.safeParse(messagePublicIds);
@@ -23,16 +24,24 @@ export async function createShare(conversationId: string, messagePublicIds: stri
 
   // 校验客户端提交的可见消息均属于当前会话且未删除。
   const visibleMessages = await db
-    .select({ publicId: s.messages.publicId })
+    .select({
+      publicId: s.messages.publicId,
+      role: s.messages.role,
+      content: s.messages.content,
+    })
     .from(s.messages)
     .where(and(
       eq(s.messages.conversationId, conversationId),
       isNull(s.messages.deletedAt),
       inArray(s.messages.publicId, messageIds),
     ));
-  if ((visibleMessages as { publicId: string }[]).length !== messageIds.length) {
+  const visibleByPublicId = new Map(
+    (visibleMessages as ConversationShareMessageSnapshot[]).map((message) => [message.publicId, message]),
+  );
+  if (visibleByPublicId.size !== messageIds.length) {
     throw new Error("分享消息无效");
   }
+  const messageSnapshots = messageIds.map((publicId) => visibleByPublicId.get(publicId)!);
 
   const shareId = crypto.randomUUID();
   await db.insert(s.conversationShares).values({
@@ -43,6 +52,7 @@ export async function createShare(conversationId: string, messagePublicIds: stri
     modelSnapshot: conv.modelName,
     messageIdsJson: messageIds,
     defaultMessageIdsJson: messageIds,
+    messageSnapshotsJson: messageSnapshots,
   });
   return shareId;
 }
@@ -71,10 +81,13 @@ export async function getShare(shareId: string): Promise<{
       eq(s.messages.conversationId, share.conversationId),
       isNull(s.messages.deletedAt),
     ));
-  const byPublicId = new Map((allMsgs as { publicId: string; role: string; content: string }[]).map((m) => [m.publicId, m]));
-  const ordered = messageIds
-    .map((id) => byPublicId.get(id))
-    .filter((m): m is { publicId: string; role: string; content: string } => !!m)
+  const currentMessages = allMsgs as ConversationShareMessageSnapshot[];
+  const byPublicId = new Map(currentMessages.map((message) => [message.publicId, message]));
+  const snapshots = share.messageSnapshotsJson as ConversationShareMessageSnapshot[] | null | undefined;
+  const ordered = (snapshots ?? messageIds.map((id) => byPublicId.get(id)).filter(Boolean))
+    .filter((message): message is ConversationShareMessageSnapshot =>
+      !!message && byPublicId.has(message.publicId),
+    )
     .map((m) => ({ role: m.role, content: typeof m.content === "string" ? m.content : String(m.content) }));
 
   // 更新最后访问时间(失败忽略)

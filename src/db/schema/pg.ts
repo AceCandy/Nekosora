@@ -23,6 +23,7 @@ import type {
   ContextPolicy,
   TokenUsage,
   ProcessTrace,
+  ConversationShareMessageSnapshot,
 } from "@/db/types";
 
 // ===========================================================================
@@ -496,6 +497,7 @@ export const conversationShares = pgTable("conversation_shares", {
   modelSnapshot: text("model_snapshot"),
   messageIdsJson: jsonb("message_ids_json").$type<string[]>(),
   defaultMessageIdsJson: jsonb("default_message_ids_json").$type<string[]>(),
+  messageSnapshotsJson: jsonb("message_snapshots_json").$type<ConversationShareMessageSnapshot[]>(),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
   regeneratedAt: timestamp("regenerated_at", { withTimezone: true }),
   lastAccessedAt: timestamp("last_accessed_at", { withTimezone: true }),

@@ -71,6 +71,13 @@
       "when": 1784988074784,
       "tag": "0009_lethal_killmonger",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1785003843594,
+      "tag": "0010_lazy_gorgon",
+      "breakpoints": true
     }
   ]
 }

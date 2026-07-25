@@ -96,6 +96,13 @@ export interface ProcessTrace {
   blocks?: ProcessTraceBlock[];
 }
 
+/** 分享创建时冻结的单条消息正文。 */
+export interface ConversationShareMessageSnapshot {
+  publicId: string;
+  role: string;
+  content: unknown;
+}
+
 // 枚举字面量类型(pg 用 pgEnum 存储)。
 export type ApiKeyKind = "master" | "sub";
 export type ProviderProtocol =

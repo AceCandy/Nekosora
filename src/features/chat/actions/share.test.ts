@@ -28,6 +28,8 @@ const schema = {
     publicId: "messages.publicId",
     conversationId: "messages.conversationId",
     deletedAt: "messages.deletedAt",
+    role: "messages.role",
+    content: "messages.content",
   },
 };
 
@@ -53,7 +55,10 @@ describe("聊天分享动作", () => {
   it("创建分享时按客户端可见顺序记录指定消息", async () => {
     const selectedRows = [
       [{ id: "conversation-1", userId: "user-1", title: "title", modelName: "model" }],
-      [{ publicId: "assistant-new" }, { publicId: "user-message" }],
+      [
+        { publicId: "assistant-new", role: "assistant", content: "answer" },
+        { publicId: "user-message", role: "user", content: "question" },
+      ],
     ];
     const values = vi.fn().mockResolvedValue(undefined);
     mocks.getDb.mockResolvedValue({
@@ -75,6 +80,10 @@ describe("聊天分享动作", () => {
     expect(values).toHaveBeenCalledWith(expect.objectContaining({
       messageIdsJson: ["user-message", "assistant-new"],
       defaultMessageIdsJson: ["user-message", "assistant-new"],
+      messageSnapshotsJson: [
+        { publicId: "user-message", role: "user", content: "question" },
+        { publicId: "assistant-new", role: "assistant", content: "answer" },
+      ],
     }));
   });
 
@@ -152,10 +161,15 @@ describe("聊天分享动作", () => {
         titleSnapshot: "title",
         modelSnapshot: "model",
         messageIdsJson: ["assistant-message", "deleted-message", "user-message"],
+        messageSnapshotsJson: [
+          { publicId: "assistant-message", role: "assistant", content: "shared answer" },
+          { publicId: "deleted-message", role: "assistant", content: "deleted answer" },
+          { publicId: "user-message", role: "user", content: "shared question" },
+        ],
       }],
       [
-        { publicId: "user-message", role: "user", content: "question" },
-        { publicId: "assistant-message", role: "assistant", content: "answer" },
+        { publicId: "user-message", role: "user", content: "edited question" },
+        { publicId: "assistant-message", role: "assistant", content: "continued answer" },
       ],
     ];
     const where = vi.fn().mockResolvedValue(undefined);
@@ -169,8 +183,8 @@ describe("聊天分享动作", () => {
       title: "title",
       model: "model",
       messages: [
-        { role: "assistant", content: "answer" },
-        { role: "user", content: "question" },
+        { role: "assistant", content: "shared answer" },
+        { role: "user", content: "shared question" },
       ],
     });
     expect(mocks.and).toHaveBeenCalledWith(
@@ -189,6 +203,9 @@ describe("聊天分享动作", () => {
         titleSnapshot: "title",
         modelSnapshot: "model",
         messageIdsJson: ["deleted-message"],
+        messageSnapshotsJson: [
+          { publicId: "deleted-message", role: "assistant", content: "deleted answer" },
+        ],
       }],
       [],
     ];
@@ -208,6 +225,40 @@ describe("聊天分享动作", () => {
     expect(where).toHaveBeenCalledWith(
       { op: "eq", left: schema.conversationShares.shareId, right: "share-1" },
     );
+  });
+
+  it("历史分享缺少正文快照时继续读取实时消息", async () => {
+    const selectedRows = [
+      [{
+        shareId: "share-legacy",
+        conversationId: "conversation-1",
+        status: "active",
+        revokedAt: null,
+        titleSnapshot: null,
+        modelSnapshot: null,
+        messageIdsJson: ["user-message", "assistant-message"],
+        messageSnapshotsJson: null,
+      }],
+      [
+        { publicId: "assistant-message", role: "assistant", content: "continued answer" },
+        { publicId: "user-message", role: "user", content: "edited question" },
+      ],
+    ];
+    const where = vi.fn().mockResolvedValue(undefined);
+    const set = vi.fn(() => ({ where }));
+    mocks.getDb.mockResolvedValue({
+      select: vi.fn(() => selectReturning(selectedRows.shift() ?? [])),
+      update: vi.fn(() => ({ set })),
+    });
+
+    await expect(getShare("share-legacy")).resolves.toEqual({
+      title: "分享的对话",
+      model: null,
+      messages: [
+        { role: "user", content: "edited question" },
+        { role: "assistant", content: "continued answer" },
+      ],
+    });
   });
 
   it("不能撤销其他用户会话的分享", async () => {
