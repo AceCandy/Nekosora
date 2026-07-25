@@ -148,3 +148,58 @@ panel **不做字段级脱敏**——错误日志均为用户自己调用产生�
 - **panel 防越权靠字段置空** → 靠查询层 `userId` 强制 where（`listErrorLogs` / `getErrorLog`）；字段级脱敏会让用户无法定位自己的错误。
 - **`logUsage` 抛错阻断主流程** → 永不抛错，失败只 `console.error`。
 - **副任务调 streamChat/generateChat 不传 `taskKind`** → 与主回复混在 source=chat，用量明细出现「一请求多日志」；标题/记忆/压缩必须透传。
+
+## Scenario: WebChat Run 审计生命周期
+
+### 1. Scope / Trigger
+
+- `/api/chat` 创建一次用户可见生成时，将现有 `runs`、`tool_calls` 与 `messages.runId` 接入审计链路。
+- 不在该场景新增 schema；请求幂等与事件重放另行设计。
+
+### 2. Signatures
+
+- `startRun({ runId, conversationId, userId, platformModelName })`
+- `recordToolCallStart({ runId, toolCallId, toolName, args })`
+- `recordToolCallResult({ runId, toolCallId, result, isError })`
+- `finalizeRun({ runId, status, tokenUsage })`
+- `resolveRunTerminalStatus({ finished, aborted, sawError, persistenceFailed })`
+
+### 3. Contracts
+
+- 普通发送、重试、编辑重发与续写每轮生成唯一 `runId`；同一 Agent 多轮必须共享该值。
+- 新建 user 与本轮新建/续写 assistant 写入 `runId`；复用历史 user 时不得改写其归属。
+- run/tool DB 写入均为 best-effort，失败只记录短错误，不阻断模型流或记录工具敏感参数。
+- 所有 SSE 帧必须经取消安全的 `safeEnqueue` 写入；run 必须在最内层 `finally` 从 `running` 收敛。
+- `finish` 是权威完成信号；完成后的客户端 abort 不得把成功 run 降级，收尾持久化失败除外。
+
+### 4. Validation & Error Matrix
+
+| 条件 | `runs.status` | assistant 状态 |
+|---|---|---|
+| 收到 `finish` 且收尾持久化成功 | `success` | `success` |
+| 未收到 `finish` 的显式流错误 / 抛出异常 | `failed` | `interrupted` |
+| abort 或 maxSteps 未收到 finish | `interrupted` | `interrupted` |
+| assistant / 会话收尾持久化失败 | `failed` | 未可靠持久化 |
+
+### 5. Good / Base / Bad Cases
+
+- Good：Agent 两轮的 tool-call/tool-result 与最终 assistant 都关联同一 run。
+- Base：无工具的普通生成仍创建并收敛一条 run，SSE 载荷不变。
+- Bad：直接 `controller.enqueue` 在客户端取消后抛错，使收尾 `finally` 未执行并留下 `running` run。
+
+### 6. Tests Required
+
+- `run-lifecycle.test.ts` 覆盖终态优先级、usage 映射、敏感 JSONB 规范化与 DB 失败隔离。
+- Agent loop 测试断言每轮 `streamChat` 接收同一 `runId`。
+- route 接线复核须覆盖 send/retry/edit/continue 的消息 `runId` 规则与 abort/error/finalize 边界。
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong:取消竞态可抛出并跳过 run 收尾。
+controller.enqueue(frame);
+
+// Correct:丢弃已关闭流的帧,终态仍由 finally 收敛。
+safeEnqueue(frame);
+await finalizeRun({ runId, status, tokenUsage });
+```

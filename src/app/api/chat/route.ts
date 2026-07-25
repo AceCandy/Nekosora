@@ -25,7 +25,16 @@ import {
 } from "@/lib/conversation-title/service";
 import { prepareChatContext } from "@/lib/chat/orchestrator";
 import { findConversationMessage } from "@/lib/chat/message-reference";
-import type { IRRequest } from "@/lib/providers/types";
+import {
+  createRunId,
+  finalizeRun,
+  irUsageToTokenUsage,
+  recordToolCallResult,
+  recordToolCallStart,
+  resolveRunTerminalStatus,
+  startRun,
+} from "@/lib/chat/run-lifecycle";
+import type { IRRequest, IRUsage } from "@/lib/providers/types";
 import type { ReasoningLevel } from "@/db/types";
 
 export const runtime = "nodejs";
@@ -157,9 +166,13 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // 本轮生成唯一 runId:Agent 多轮共享;与 streamChat / usage 日志 requestId 对齐。
+  const runId = createRunId();
+
   // user 消息:
-  // - send 流程(无 userPublicId):生成并插入新 user 消息。
-  // - edit/retry 流程(传入 userPublicId):跳过插入,复用既有的 user 消息。
+  // - send 流程(无 userPublicId):生成并插入新 user 消息(带本轮 runId)。
+  // - edit/retry 流程(传入 userPublicId):跳过插入,复用既有 user,不篡改历史 runId 归属。
+  // - continue:沿用原 user 父消息,不改其 runId。
   let userPublicId: string;
   let userMessageInternalId: string | null = null;
   if (isContinue) {
@@ -187,6 +200,7 @@ export async function POST(req: NextRequest) {
         parentId: parentIdInternal,
         sourceId: sourceIdInternal,
         branchReason: body.branchReason ?? null,
+        runId,
         role: "user",
         content: userContent,
         status: "success",
@@ -248,6 +262,13 @@ export async function POST(req: NextRequest) {
   const encoder = new TextEncoder();
   // 标记会话为「生成中」(供侧栏转圈标识;在 finally 中清除)
   await db.update(s.conversations).set({ generating: true }).where(eq(s.conversations.id, body.conversationId));
+  // 流开始前落 runs(running);DB 失败不阻断后续流式生成。
+  await startRun({
+    runId,
+    conversationId: body.conversationId,
+    userId: user.id,
+    platformModelName: body.model,
+  });
   // 提前生成 assistant 消息 publicId:在流首帧回传给前端,使生成期间即可显示操作按钮;
   // finally 落库时复用同一标识。
   const assistantPublicId = isContinue ? body.continueFromPublicId! : crypto.randomUUID();
@@ -274,21 +295,24 @@ export async function POST(req: NextRequest) {
       };
       let assistantText = "";
       let assistantReasoning = "";
-      let finished = false; // 正常收到 finish 事件才判 success,否则 interrupted
+      let finished = false; // 正常收到 finish 事件才判 success,否则 interrupted/failed
+      let sawStreamError = false;
+      let persistenceFailed = false;
+      let finalUsage: IRUsage | undefined;
       // 回传本轮 user 消息的 publicId,供前端回填后支持编辑重发。
       // 续写模式下 user 沿用原消息,前端无需回填,跳过该帧。
       if (!isContinue) {
-        controller.enqueue(
+        safeEnqueue(
           encoder.encode(`data: ${JSON.stringify({ type: "user_message", publicId: userPublicId })}\n\n`),
         );
       }
       // 回传本轮 assistant 占位消息的 publicId,供前端回填后无需刷新即可显示操作按钮。
-      controller.enqueue(
+      safeEnqueue(
         encoder.encode(`data: ${JSON.stringify({ type: "assistant_message", publicId: assistantPublicId })}\n\n`),
       );
       // 如有联网搜索结果,发 search_result 事件供 UI 展示引用
       if (searchBundle?.hit) {
-        controller.enqueue(
+        safeEnqueue(
           encoder.encode(
             `data: ${JSON.stringify({ type: "search_result", results: searchBundle.results })}\n\n`,
           ),
@@ -296,18 +320,18 @@ export async function POST(req: NextRequest) {
       }
       // 如有 RAG 检索结果,先发一个 rag_search 事件供 UI 显示
       if (ragStatus) {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "rag_search", status: ragStatus })}\n\n`));
+        safeEnqueue(encoder.encode(`data: ${JSON.stringify({ type: "rag_search", status: ragStatus })}\n\n`));
       }
       // 如触发了压缩,发 compact 事件
       if (compaction?.compacted) {
-        controller.enqueue(
+        safeEnqueue(
           encoder.encode(
             `data: ${JSON.stringify({ type: "compact", strategy: compaction.strategy, level: compaction.fallbackLevel })}\n\n`,
           ),
         );
       }
       // 发 process_trace 事件(供 UI 调试折叠面板)
-      controller.enqueue(
+      safeEnqueue(
         encoder.encode(`data: ${JSON.stringify({ type: "trace", trace })}\n\n`),
       );
       try {
@@ -315,30 +339,64 @@ export async function POST(req: NextRequest) {
         const mcpServers = await resolveMcpServers(ctx).catch(() => []);
         const hasTools = mcpServers.some((sv) => sv.tools.length > 0);
         const chatUA = await getChatUA();
+        // 同一 agent 多轮共享 runId(streamChatWithTools 透传给每轮 streamChat)。
         const gen = hasTools
-          ? streamChatWithTools({ ctx, request: irRequest, mcpServers, cacheKey: body.conversationId, modelId: body.modelId, abortSignal: abortCtl.signal, userAgent: chatUA })
-          : streamChat({ ctx, request: irRequest, cacheKey: body.conversationId, modelId: body.modelId, abortSignal: abortCtl.signal, userAgent: chatUA });
+          ? streamChatWithTools({
+              ctx,
+              request: irRequest,
+              mcpServers,
+              runId,
+              cacheKey: body.conversationId,
+              modelId: body.modelId,
+              abortSignal: abortCtl.signal,
+              userAgent: chatUA,
+            })
+          : streamChat({
+              ctx,
+              request: irRequest,
+              runId,
+              cacheKey: body.conversationId,
+              modelId: body.modelId,
+              abortSignal: abortCtl.signal,
+              userAgent: chatUA,
+            });
         for await (const ev of gen) {
           if (ev.type === "text-delta") {
             assistantText += ev.text;
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "delta", text: ev.text })}\n\n`));
+            safeEnqueue(encoder.encode(`data: ${JSON.stringify({ type: "delta", text: ev.text })}\n\n`));
           } else if (ev.type === "reasoning-delta") {
             assistantReasoning += ev.text;
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "reasoning", text: ev.text })}\n\n`));
+            safeEnqueue(encoder.encode(`data: ${JSON.stringify({ type: "reasoning", text: ev.text })}\n\n`));
           } else if (ev.type === "finish") {
             finished = true;
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "finish", usage: ev.usage })}\n\n`));
+            finalUsage = ev.usage;
+            safeEnqueue(encoder.encode(`data: ${JSON.stringify({ type: "finish", usage: ev.usage })}\n\n`));
           } else if (ev.type === "tool-call") {
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "tool_call", toolName: ev.toolName, args: ev.args })}\n\n`));
+            // 审计落库 best-effort(内部吞错);SSE 载荷保持兼容(仅 toolName/args)。
+            await recordToolCallStart({
+              runId,
+              toolCallId: ev.toolCallId,
+              toolName: ev.toolName,
+              args: ev.args,
+            });
+            safeEnqueue(encoder.encode(`data: ${JSON.stringify({ type: "tool_call", toolName: ev.toolName, args: ev.args })}\n\n`));
           } else if (ev.type === "tool-result") {
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "tool_result", toolName: ev.toolName, isError: ev.isError })}\n\n`));
+            await recordToolCallResult({
+              runId,
+              toolCallId: ev.toolCallId,
+              result: ev.result,
+              isError: ev.isError,
+            });
+            safeEnqueue(encoder.encode(`data: ${JSON.stringify({ type: "tool_result", toolName: ev.toolName, isError: ev.isError })}\n\n`));
           } else if (ev.type === "error") {
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "error", error: ev.error, code: ev.code })}\n\n`));
+            sawStreamError = true;
+            safeEnqueue(encoder.encode(`data: ${JSON.stringify({ type: "error", error: ev.error, code: ev.code })}\n\n`));
           }
         }
       } catch (err) {
         // 客户端断开引发的中止不发 error 帧:客户端已不接收,且向已关闭流 enqueue 会抛。
         if (!abortCtl.signal.aborted) {
+          sawStreamError = true;
           safeEnqueue(
             encoder.encode(`data: ${JSON.stringify({ type: "error", error: err instanceof Error ? err.message : "内部错误" })}\n\n`),
           );
@@ -346,7 +404,7 @@ export async function POST(req: NextRequest) {
       } finally {
         try {
           if (isContinue && continueAssistantInternalId) {
-            // 续写:update 既有 assistant 行,prefix + 新增内容
+            // 续写:update 既有 assistant 行,prefix + 新增内容;关联本轮 runId。
             await db
               .update(s.messages)
               .set({
@@ -354,14 +412,16 @@ export async function POST(req: NextRequest) {
                 reasoning: assistantReasoning || null,
                 status: finished ? "success" : "interrupted",
                 processTrace: trace,
+                runId,
               })
               .where(eq(s.messages.id, continueAssistantInternalId));
           } else {
-            // 持久化 assistant 消息;parentId 指向本轮 user 消息;附 process_trace
+            // 持久化 assistant 消息;parentId 指向本轮 user 消息;附 process_trace + runId
             await db.insert(s.messages).values({
               conversationId: body.conversationId,
               publicId: assistantPublicId,
               parentId: userMessageInternalId,
+              runId,
               role: "assistant",
               content: assistantText,
               reasoning: assistantReasoning || null,
@@ -424,6 +484,7 @@ export async function POST(req: NextRequest) {
           // DONE 是可靠完成信号：assistant/Artifact/generating 均已持久化。
           safeEnqueue(encoder.encode("data: [DONE]\n\n"));
         } catch (err) {
+          persistenceFailed = true;
           // 收尾失败也必须尽力清除生成标记，避免侧栏永久转圈；失败仍不发送 DONE。
           try {
             await db
@@ -441,6 +502,17 @@ export async function POST(req: NextRequest) {
             );
           }
         } finally {
+          // 无论消息落库是否成功,都必须把 runs 从 running 收敛到终态。
+          await finalizeRun({
+            runId,
+            status: resolveRunTerminalStatus({
+              finished,
+              aborted: abortCtl.signal.aborted,
+              sawError: sawStreamError,
+              persistenceFailed,
+            }),
+            tokenUsage: irUsageToTokenUsage(finalUsage),
+          });
           req.signal.removeEventListener("abort", onRequestAbort);
           try {
             controller.close();

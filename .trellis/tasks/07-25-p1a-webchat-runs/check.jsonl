@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "verify DB patterns"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "verify no secret logging"}
