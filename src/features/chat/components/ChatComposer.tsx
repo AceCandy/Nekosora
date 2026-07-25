@@ -355,6 +355,7 @@ export default function ChatComposer({
           onOpenArtifact={setActiveArtifact}
           onDelete={runtime.deleteMessage}
           onContinue={(id) => runtime.continueGeneration(id, modelName, model)}
+          onFeedbackChange={runtime.setMessageFeedbackLocal}
           models={models}
           onQuote={handleSelectionQuote}
           onAsk={handleSelectionAsk}

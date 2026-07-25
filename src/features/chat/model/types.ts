@@ -5,6 +5,9 @@
  */
 import type { Artifact } from "@/features/artifacts/ArtifactPanel";
 import type { ModelCapabilities } from "@/db/types";
+import type { MessageFeedback } from "@/features/chat/model/feedback";
+
+export type { FeedbackReason, FeedbackRating, MessageFeedback } from "@/features/chat/model/feedback";
 
 /** 单条聊天消息(含可选的追踪/产物元数据)。 */
 export interface ChatMessage {
@@ -20,6 +23,8 @@ export interface ChatMessage {
   searchResults?: { title: string; url: string; snippet: string }[];
   /** 版本信息:当前消息的同级兄弟数(>1 时显示切换器)。 */
   versionInfo?: { current: number; total: number };
+  /** 当前用户对该 assistant 回复的质量反馈(无记录时缺省)。 */
+  feedback?: MessageFeedback;
   trace?: {
     totalTokenEstimate?: number;
     sentTokenEstimate?: number;

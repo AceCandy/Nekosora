@@ -3,9 +3,112 @@ import { eq, inArray, and, isNull } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { requireSession } from "@/lib/session";
 import { findConversationMessage } from "@/lib/chat/message-reference";
+import {
+  normalizeMessageFeedback,
+  type MessageFeedback,
+} from "@/features/chat/model/feedback";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const S = () => getSchema() as any;
+
+/** UI 侧 ToolCallRecord 的 status 子集。 */
+type ToolCallUiStatus = "calling" | "done" | "error";
+type ToolCallRecord = { toolName: string; args?: unknown; status: ToolCallUiStatus };
+
+/** DB tool_calls.status → UI ToolCallRecord.status。 */
+function mapDbToolCallStatus(status: string): ToolCallUiStatus {
+  if (status === "pending" || status === "running") return "calling";
+  if (status === "failed") return "error";
+  return "done";
+}
+
+/**
+ * 按 runId 批量加载本会话的 tool_calls,映射为 UI ToolCallRecord。
+ * 必须 join runs 并用 conversationId 限定,避免跨会话串数据。
+ */
+async function loadToolCallsByRunIds(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  s: any,
+  conversationId: string,
+  runIds: string[],
+): Promise<Map<string, ToolCallRecord[]>> {
+  const toolCallsByRunId = new Map<string, ToolCallRecord[]>();
+  if (runIds.length === 0) return toolCallsByRunId;
+
+  const toolRows = (await db
+    .select({
+      runId: s.toolCalls.runId,
+      toolName: s.toolCalls.toolName,
+      status: s.toolCalls.status,
+      inputJson: s.toolCalls.inputJson,
+      createdAt: s.toolCalls.createdAt,
+    })
+    .from(s.toolCalls)
+    .innerJoin(s.runs, eq(s.toolCalls.runId, s.runs.runId))
+    .where(and(eq(s.runs.conversationId, conversationId), inArray(s.toolCalls.runId, runIds)))
+    .orderBy(s.toolCalls.createdAt)) as Array<{
+    runId: string;
+    toolName: string;
+    status: string;
+    inputJson: unknown;
+    createdAt: string | Date;
+  }>;
+
+  for (const row of toolRows) {
+    const rec: ToolCallRecord = {
+      toolName: row.toolName,
+      status: mapDbToolCallStatus(row.status),
+    };
+    // 仅恢复 inputJson 为 args;不向 UI 暴露 outputJson/errorJson
+    if (row.inputJson !== undefined && row.inputJson !== null) {
+      rec.args = row.inputJson;
+    }
+    const list = toolCallsByRunId.get(row.runId);
+    if (list) list.push(rec);
+    else toolCallsByRunId.set(row.runId, [rec]);
+  }
+  return toolCallsByRunId;
+}
+
+/**
+ * 批量加载当前用户对指定消息的反馈。
+ * 同时限定 userId + conversationId + messageIds,禁止跨会话。
+ */
+async function loadFeedbackByMessageIds(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  s: any,
+  userId: string,
+  conversationId: string,
+  messageIds: string[],
+): Promise<Map<string, MessageFeedback>> {
+  const byMessageId = new Map<string, MessageFeedback>();
+  if (messageIds.length === 0) return byMessageId;
+
+  const rows = (await db
+    .select({
+      messageId: s.messageFeedback.messageId,
+      rating: s.messageFeedback.rating,
+      reason: s.messageFeedback.reason,
+    })
+    .from(s.messageFeedback)
+    .where(
+      and(
+        eq(s.messageFeedback.userId, userId),
+        eq(s.messageFeedback.conversationId, conversationId),
+        inArray(s.messageFeedback.messageId, messageIds),
+      ),
+    )) as Array<{ messageId: string; rating: string; reason: string | null }>;
+
+  for (const row of rows) {
+    const feedback = normalizeMessageFeedback(row.rating, row.reason);
+    if (feedback) byMessageId.set(row.messageId, feedback);
+  }
+  return byMessageId;
+}
 
 /**
  * 获取一条消息在分支树中的兄弟(同一 parent 下的其他 assistant 消息)。
@@ -18,6 +121,8 @@ export async function getMessageSiblings(messagePublicId: string): Promise<{
     content: string;
     reasoning: string | null;
     branchReason: string | null;
+    toolCalls?: ToolCallRecord[];
+    feedback?: MessageFeedback;
   }[];
 }> {
   const user = await requireSession();
@@ -46,19 +151,61 @@ export async function getMessageSiblings(messagePublicId: string): Promise<{
     : db.select().from(s.messages).where(and(eq(s.messages.conversationId, msg.conversationId), isNull(s.messages.deletedAt))).orderBy(s.messages.createdAt);
 
   const all = (await siblingsQuery) as {
+    id: string;
     publicId: string;
     parentId: string | null;
     content: string;
     reasoning: string | null;
     role: string;
     branchReason: string | null;
+    runId: string | null;
   }[];
-  const siblings = all.filter((m) => m.role === "assistant").map((m) => ({
-    publicId: m.publicId,
-    content: typeof m.content === "string" ? m.content : String(m.content ?? ""),
-    reasoning: m.reasoning,
-    branchReason: m.branchReason,
-  }));
+  const assistantSiblings = all.filter((m) => m.role === "assistant");
+
+  // P1-B: 各兄弟版本按自身 runId 批量回填 toolCalls,切换版本时不丢工具记录。
+  const runIds = Array.from(
+    new Set(
+      assistantSiblings
+        .filter((m) => typeof m.runId === "string" && m.runId.length > 0)
+        .map((m) => m.runId as string),
+    ),
+  );
+  const toolCallsByRunId = await loadToolCallsByRunIds(db, s, msg.conversationId, runIds);
+
+  // P2-A: 各兄弟版本批量回填当前用户 feedback。
+  const siblingIds = assistantSiblings
+    .map((m) => m.id)
+    .filter((id): id is string => typeof id === "string" && id.length > 0);
+  const feedbackByMessageId = await loadFeedbackByMessageIds(
+    db,
+    s,
+    user.id,
+    msg.conversationId,
+    siblingIds,
+  );
+
+  const siblings = assistantSiblings.map((m) => {
+    const base: {
+      publicId: string;
+      content: string;
+      reasoning: string | null;
+      branchReason: string | null;
+      toolCalls?: ToolCallRecord[];
+      feedback?: MessageFeedback;
+    } = {
+      publicId: m.publicId,
+      content: typeof m.content === "string" ? m.content : String(m.content ?? ""),
+      reasoning: m.reasoning,
+      branchReason: m.branchReason,
+    };
+    if (typeof m.runId === "string") {
+      const toolCalls = toolCallsByRunId.get(m.runId);
+      if (toolCalls && toolCalls.length > 0) base.toolCalls = toolCalls;
+    }
+    const feedback = typeof m.id === "string" ? feedbackByMessageId.get(m.id) : undefined;
+    if (feedback) base.feedback = feedback;
+    return base;
+  });
 
   return {
     current: { publicId: msg.publicId, parentId: msg.parentId },
@@ -280,7 +427,46 @@ export async function getVisibleBranch(conversationId: string): Promise<{
     versionMap[latestSibling.id as string] = { current: siblings.length, total: siblings.length };
   }
 
-  return { messages: mainMessages, versionMap };
+  // P1-B: 主线 assistant 的 MCP 工具调用按 runId 批量回填,刷新后恢复 toolCalls。
+  // 必须 join runs 并用 conversationId 限定本会话,不能只按客户端/消息上的 runId 列表过滤。
+  const runIds = Array.from(
+    new Set(
+      mainMessages
+        .filter(
+          (m) =>
+            m.role === "assistant" &&
+            typeof m.runId === "string" &&
+            (m.runId as string).length > 0,
+        )
+        .map((m) => m.runId as string),
+    ),
+  );
+  const toolCallsByRunId = await loadToolCallsByRunIds(db, s, conversationId, runIds);
+
+  // P2-A: 主线消息批量回填当前用户 feedback(userId + conversationId + messageIds)。
+  const mainMessageIds = mainMessages
+    .map((m) => m.id as string)
+    .filter((id): id is string => typeof id === "string" && id.length > 0);
+  const feedbackByMessageId = await loadFeedbackByMessageIds(
+    db,
+    s,
+    user.id,
+    conversationId,
+    mainMessageIds,
+  );
+
+  const messages = mainMessages.map((m) => {
+    let next = m;
+    if (m.role === "assistant" && typeof m.runId === "string") {
+      const toolCalls = toolCallsByRunId.get(m.runId);
+      if (toolCalls && toolCalls.length > 0) next = { ...next, toolCalls };
+    }
+    const feedback = feedbackByMessageId.get(m.id as string);
+    if (feedback) next = { ...next, feedback };
+    return next;
+  });
+
+  return { messages, versionMap };
 }
 
 /**

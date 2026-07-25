@@ -47,7 +47,7 @@ export default async function ChatConversationPage({
     source: m.visibility === "public" ? ("global" as const) : ("byo" as const),
   }));
 
-  // Convert messages to ChatComposer format(P1-B:关联 artifacts)
+  // Convert messages to ChatComposer format(P1-B:关联 artifacts; 历史 toolCalls 由 getVisibleBranch 按 runId 回填; P2-A: feedback)
   const artifactsByMsg = artifactsMap as Record<string, { id: string; kind: string; title: string; language: string | null; content: string }[]>;
   const initialMessages = (msgs as Record<string, unknown>[]).map((m) => ({
     role: m.role as "user" | "assistant",
@@ -56,6 +56,9 @@ export default async function ChatConversationPage({
     publicId: m.publicId as string | undefined,
     status: m.status as ChatMessage["status"] | undefined,
     trace: m.processTrace as ChatMessage["trace"] | undefined,
+    toolCalls: Array.isArray(m.toolCalls) ? (m.toolCalls as ChatMessage["toolCalls"]) : undefined,
+    // 无反馈时必须为 undefined,避免把旧版本反馈残留到前端
+    feedback: (m.feedback as ChatMessage["feedback"] | undefined) ?? undefined,
     versionInfo: versionMap[m.id as string],
     artifacts: (artifactsByMsg[m.id as string] ?? []) as
       | { id: string; kind: "code" | "mermaid" | "svg" | "html" | "katex" | "markdown"; title: string; language: string | null; content: string }[]

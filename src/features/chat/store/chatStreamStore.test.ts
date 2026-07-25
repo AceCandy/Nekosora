@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   consumeChatSSE: vi.fn(),
   handleStreamError: vi.fn(),
   createConversation: vi.fn(),
+  getMessageSiblings: vi.fn(),
 }));
 
 vi.mock("@/features/chat/model/sse", () => ({
@@ -16,12 +17,13 @@ vi.mock("@/features/chat/actions/conversations", () => ({
 vi.mock("@/features/chat/actions/branch", () => ({
   retryFromMessage: vi.fn(),
   editMessage: vi.fn(),
-  getMessageSiblings: vi.fn(),
+  getMessageSiblings: mocks.getMessageSiblings,
   softDeleteMessage: vi.fn(),
   continueMessage: vi.fn(),
 }));
 
 import { useChatStreamStore } from "@/features/chat/store/chatStreamStore";
+import type { ChatMessage, ToolCallRecord } from "@/features/chat/model/types";
 
 const sendOptions = { model: "model-a", modelId: "model-id-a" };
 
@@ -84,5 +86,199 @@ describe("chatStreamStore 附件消费边界", () => {
     });
 
     expect(onAttachmentsConsumed).toHaveBeenCalledWith(["file-1"]);
+  });
+});
+
+describe("chatStreamStore switchVersion toolCalls", () => {
+  const key = "conversation-switch";
+  const oldToolCalls: ToolCallRecord[] = [
+    { toolName: "old-search", status: "done", args: { q: "old" } },
+  ];
+  const targetToolCalls: ToolCallRecord[] = [
+    { toolName: "web-search", status: "done", args: { q: "v2" } },
+  ];
+
+  function seedAssistant(extra?: Partial<ChatMessage>) {
+    useChatStreamStore.setState({
+      runtimes: {
+        [key]: {
+          messages: [
+            {
+              role: "assistant",
+              publicId: "pub-v1",
+              content: "version 1",
+              toolCalls: oldToolCalls,
+              reasoning: "old-reason",
+              trace: { totalTokenEstimate: 1 },
+              searchResults: [{ title: "t", url: "https://x", snippet: "s" }],
+              ...extra,
+            },
+          ],
+          streaming: false,
+          abortController: null,
+        },
+      },
+      activeConversationId: key,
+      optimisticConversation: null,
+    });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    seedAssistant();
+  });
+
+  it("目标版本带 toolCalls 时恢复到 assistant", async () => {
+    mocks.getMessageSiblings.mockResolvedValue({
+      current: { publicId: "pub-v1", parentId: "user-1" },
+      siblings: [
+        { publicId: "pub-v1", content: "version 1", reasoning: null, branchReason: null },
+        {
+          publicId: "pub-v2",
+          content: "version 2",
+          reasoning: "think-v2",
+          branchReason: "retry",
+          toolCalls: targetToolCalls,
+        },
+      ],
+    });
+
+    await useChatStreamStore.getState().switchVersion(key, "pub-v1", "next");
+
+    const msg = useChatStreamStore.getState().runtimes[key].messages[0];
+    expect(msg.publicId).toBe("pub-v2");
+    expect(msg.content).toBe("version 2");
+    expect(msg.reasoning).toBe("think-v2");
+    expect(msg.toolCalls).toEqual(targetToolCalls);
+    expect(msg.trace).toBeUndefined();
+    expect(msg.searchResults).toBeUndefined();
+    expect(msg.versionInfo).toEqual({ current: 2, total: 2 });
+  });
+
+  it("目标版本不带 toolCalls 时为 undefined", async () => {
+    mocks.getMessageSiblings.mockResolvedValue({
+      current: { publicId: "pub-v1", parentId: "user-1" },
+      siblings: [
+        {
+          publicId: "pub-v1",
+          content: "version 1",
+          reasoning: null,
+          branchReason: null,
+          toolCalls: oldToolCalls,
+        },
+        { publicId: "pub-v2", content: "version 2 plain", reasoning: null, branchReason: "retry" },
+      ],
+    });
+
+    await useChatStreamStore.getState().switchVersion(key, "pub-v1", "next");
+
+    const msg = useChatStreamStore.getState().runtimes[key].messages[0];
+    expect(msg.publicId).toBe("pub-v2");
+    expect(msg.toolCalls).toBeUndefined();
+  });
+
+  it("不能保留旧版本的 toolCalls", async () => {
+    mocks.getMessageSiblings.mockResolvedValue({
+      current: { publicId: "pub-v1", parentId: "user-1" },
+      siblings: [
+        {
+          publicId: "pub-v1",
+          content: "version 1",
+          reasoning: null,
+          branchReason: null,
+          toolCalls: oldToolCalls,
+        },
+        {
+          publicId: "pub-v2",
+          content: "version 2",
+          reasoning: null,
+          branchReason: "retry",
+          toolCalls: targetToolCalls,
+        },
+      ],
+    });
+
+    await useChatStreamStore.getState().switchVersion(key, "pub-v1", "next");
+
+    const msg = useChatStreamStore.getState().runtimes[key].messages[0];
+    expect(msg.toolCalls).toEqual(targetToolCalls);
+    expect(msg.toolCalls).not.toEqual(oldToolCalls);
+    expect(msg.toolCalls?.some((c) => c.toolName === "old-search")).toBe(false);
+  });
+
+  it("切换到有 feedback 的版本时正确替换", async () => {
+    seedAssistant({ feedback: { rating: "up" } });
+    mocks.getMessageSiblings.mockResolvedValue({
+      current: { publicId: "pub-v1", parentId: "user-1" },
+      siblings: [
+        {
+          publicId: "pub-v1",
+          content: "version 1",
+          reasoning: null,
+          branchReason: null,
+          feedback: { rating: "up" },
+        },
+        {
+          publicId: "pub-v2",
+          content: "version 2",
+          reasoning: null,
+          branchReason: "retry",
+          feedback: { rating: "down", reason: "incorrect" },
+        },
+      ],
+    });
+
+    await useChatStreamStore.getState().switchVersion(key, "pub-v1", "next");
+
+    const msg = useChatStreamStore.getState().runtimes[key].messages[0];
+    expect(msg.publicId).toBe("pub-v2");
+    expect(msg.feedback).toEqual({ rating: "down", reason: "incorrect" });
+  });
+
+  it("切换到无反馈版本时清空旧 feedback", async () => {
+    seedAssistant({ feedback: { rating: "down", reason: "outdated" } });
+    mocks.getMessageSiblings.mockResolvedValue({
+      current: { publicId: "pub-v1", parentId: "user-1" },
+      siblings: [
+        {
+          publicId: "pub-v1",
+          content: "version 1",
+          reasoning: null,
+          branchReason: null,
+          feedback: { rating: "down", reason: "outdated" },
+        },
+        { publicId: "pub-v2", content: "version 2", reasoning: null, branchReason: "retry" },
+      ],
+    });
+
+    await useChatStreamStore.getState().switchVersion(key, "pub-v1", "next");
+
+    const msg = useChatStreamStore.getState().runtimes[key].messages[0];
+    expect(msg.publicId).toBe("pub-v2");
+    expect(msg.feedback).toBeUndefined();
+  });
+
+  it("setMessageFeedbackLocal 只更新目标消息", () => {
+    seedAssistant({ feedback: { rating: "up" } });
+    useChatStreamStore.setState((s) => ({
+      runtimes: {
+        [key]: {
+          ...s.runtimes[key],
+          messages: [
+            ...s.runtimes[key].messages,
+            { role: "assistant", publicId: "pub-other", content: "other", feedback: { rating: "down" } },
+          ],
+        },
+      },
+    }));
+
+    useChatStreamStore.getState().setMessageFeedbackLocal(key, "pub-v1", {
+      rating: "down",
+      reason: "unsafe",
+    });
+
+    const msgs = useChatStreamStore.getState().runtimes[key].messages;
+    expect(msgs[0].feedback).toEqual({ rating: "down", reason: "unsafe" });
+    expect(msgs[1].feedback).toEqual({ rating: "down" });
   });
 });

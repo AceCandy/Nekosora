@@ -4,7 +4,7 @@ import { create } from "zustand";
 import { createConversation, type CreateConversationOptions } from "@/features/chat/actions/conversations";
 import { retryFromMessage, editMessage, getMessageSiblings, softDeleteMessage, continueMessage } from "@/features/chat/actions/branch";
 import { consumeChatSSE, handleStreamError } from "@/features/chat/model/sse";
-import type { ChatMessage, ToolCallRecord } from "@/features/chat/model/types";
+import type { ChatMessage, MessageFeedback, ToolCallRecord } from "@/features/chat/model/types";
 import type { ReasoningLevel } from "@/db/types";
 
 /** 新会话(尚无会话 id)在 store 内使用的隔离键。 */
@@ -69,6 +69,8 @@ interface ChatStreamState {
   continueGeneration: (key: string, assistantPublicId: string, model: string, modelId: string) => Promise<void>;
   switchVersion: (key: string, publicId: string, direction: "prev" | "next") => Promise<void>;
   refreshVersionInfo: (key: string, publicId: string) => Promise<void>;
+  /** 同步某条消息的反馈(乐观更新 / 失败回滚由调用方控制)。 */
+  setMessageFeedbackLocal: (key: string, publicId: string, feedback: MessageFeedback | undefined) => void;
   stopGeneration: (key: string) => void;
 }
 
@@ -630,8 +632,11 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
           reasoning: target.reasoning ?? undefined,
           artifacts: undefined,
           trace: undefined,
-          toolCalls: undefined,
+          // P1-B: 用目标版本自身的 toolCalls 覆盖,无则清掉旧版本残留。
+          toolCalls: target.toolCalls,
           searchResults: undefined,
+          // P2-A: 必须用目标版本 feedback 覆盖;无反馈时显式清空,不能残留旧版本。
+          feedback: target.feedback,
           versionInfo: { current: nextIdx + 1, total: siblings.length },
         };
         return { ...r, messages: [...r.messages.slice(0, idx), replaced] };
@@ -656,6 +661,17 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
     } catch {
       /* 忽略 */
     }
+  },
+
+  setMessageFeedbackLocal: (key, publicId, feedback) => {
+    set((s) =>
+      patchRuntime(s, key, (r) => ({
+        ...r,
+        messages: r.messages.map((x) =>
+          x.publicId === publicId ? { ...x, feedback } : x,
+        ),
+      })),
+    );
   },
 
   stopGeneration: (key) => {

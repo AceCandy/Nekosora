@@ -361,6 +361,32 @@ export const messages = pgTable(
   ],
 );
 
+/** 用户对 assistant 回复的质量反馈；每个用户对每条消息最多一条，可覆盖或撤销。 */
+export const messageFeedback = pgTable(
+  "message_feedback",
+  {
+    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
+    messageId: text("message_id")
+      .notNull()
+      .references(() => messages.id, { onDelete: "cascade" }),
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    rating: text("rating").notNull(), // "up" | "down"；写入入口负责校验
+    reason: text("reason"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("message_feedback_user_message_unique_idx").on(t.userId, t.messageId),
+    index("message_feedback_conversation_idx").on(t.conversationId),
+    index("message_feedback_rating_idx").on(t.rating),
+  ],
+);
+
 export const runs = pgTable("runs", {
   id: text("id").primaryKey().default(sql`gen_random_uuid()`),
   runId: text("run_id").notNull().unique(),

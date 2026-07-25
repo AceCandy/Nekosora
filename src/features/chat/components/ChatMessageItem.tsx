@@ -2,13 +2,15 @@
 
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Sparkles, RefreshCw, Loader2, Pencil, X, Check, Wrench, CheckCircle2, AlertCircle, ExternalLink, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Copy, Trash2, CornerDownRight } from "lucide-react";
+import { Sparkles, RefreshCw, Loader2, Pencil, X, Check, Wrench, CheckCircle2, AlertCircle, ExternalLink, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Copy, Trash2, CornerDownRight, ThumbsUp, ThumbsDown } from "lucide-react";
 import { clsx } from "clsx";
 import { Markdown } from "@/shared/components/markdown/Markdown";
 import { ErrorBoundary } from "@/shared/components/ErrorBoundary";
 import { Badge } from "@/shared/ui/Badge";
-import type { ChatMessage, ModelOption } from "@/features/chat/model/types";
+import type { ChatMessage, MessageFeedback, ModelOption } from "@/features/chat/model/types";
 import type { Artifact } from "@/features/artifacts/ArtifactPanel";
+import { FEEDBACK_REASONS, type FeedbackReason } from "@/features/chat/model/feedback";
+import { setMessageFeedback } from "@/features/chat/actions/feedback";
 
 import { copyToClipboard } from "@/shared/lib/clipboard";
 import { useClickOutside } from "@/shared/lib/useClickOutside";
@@ -17,6 +19,14 @@ import { useClickOutside } from "@/shared/lib/useClickOutside";
 const USER_MESSAGE_COLLAPSE_LINES = 6;
 /** lineHeight 取不到时的兜底折叠高度(6 行 × 1.75rem × 16px)。 */
 const USER_MESSAGE_COLLAPSE_FALLBACK_HEIGHT = USER_MESSAGE_COLLAPSE_LINES * 1.75 * 16;
+
+const FEEDBACK_REASON_I18N: Record<FeedbackReason, string> = {
+  incorrect: "feedbackReasonIncorrect",
+  irrelevant: "feedbackReasonIrrelevant",
+  outdated: "feedbackReasonOutdated",
+  unsafe: "feedbackReasonUnsafe",
+  other: "feedbackReasonOther",
+};
 
 interface ChatMessageItemProps {
   message: ChatMessage;
@@ -39,6 +49,8 @@ interface ChatMessageItemProps {
   conversationStreaming?: boolean;
   /** 在 assistant 消息末尾续写生成。 */
   onContinue?: (publicId: string) => void;
+  /** 反馈变更后同步到 store(乐观结果/失败回滚)。 */
+  onFeedbackChange?: (publicId: string, feedback: MessageFeedback | undefined) => void;
   /** 可用模型列表(>1 时重新生成弹出换模型选择)。 */
   models?: ModelOption[];
   /** 挂到最外层的 DOM id,供外部跳转定位(scrollIntoView)。 */
@@ -59,11 +71,12 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
   onRequestDelete,
   conversationStreaming,
   onContinue,
+  onFeedbackChange,
   models = [],
   domId,
 }: ChatMessageItemProps) {
   const t = useTranslations("chat");
-  const { role, content, reasoning, publicId, status, trace, toolCalls, searchResults, versionInfo } = message;
+  const { role, content, reasoning, publicId, status, trace, toolCalls, searchResults, versionInfo, feedback } = message;
   const hasReasoning = Boolean(reasoning);
 
   // 用户消息编辑态
@@ -75,6 +88,19 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
 
   // 重新生成换模型选择弹层(仅多模型时启用)
   const [regenOpen, setRegenOpen] = useState(false);
+
+  // 质量反馈:本地乐观态 + 踩后原因菜单
+  const [localFeedback, setLocalFeedback] = useState<MessageFeedback | undefined>(feedback);
+  const [feedbackPending, setFeedbackPending] = useState(false);
+  const [feedbackFailed, setFeedbackFailed] = useState(false);
+  const [reasonMenuOpen, setReasonMenuOpen] = useState(false);
+  const feedbackMenuRef = useRef<HTMLDivElement>(null);
+  const feedbackRequestRef = useRef(0);
+  const feedbackPublicIdRef = useRef(publicId);
+  if (feedbackPublicIdRef.current !== publicId) {
+    feedbackPublicIdRef.current = publicId;
+    feedbackRequestRef.current += 1;
+  }
 
   // 思考样式条弹层状态:点击样式条打开侧边浮层查看完整思考内容
   const [reasoningPanelOpen, setReasoningPanelOpen] = useState(false);
@@ -103,6 +129,17 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
     reasoningEndRef.current = null;
     setElapsed(null);
     setReasoningPanelOpen(false);
+  }, [publicId]);
+
+  // 版本切换 / SSR 回填时同步 feedback,并关闭原因菜单
+  useEffect(() => {
+    setLocalFeedback(feedback);
+    setReasonMenuOpen(false);
+    setFeedbackFailed(false);
+  }, [publicId, feedback]);
+
+  useEffect(() => {
+    setFeedbackPending(false);
   }, [publicId]);
 
   // 记录思考开始/结束时间,并计算耗时
@@ -148,12 +185,13 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
     }
   }, [reasoning]);
 
-  // 思考块 / 重生成菜单:document 级外部点击收起(避免 fixed 遮罩被祖先 stacking 影响)
+  // 思考块 / 重生成菜单 / 踩原因菜单:document 级外部点击收起(避免 fixed 遮罩被祖先 stacking 影响)
   useClickOutside(reasoningRef, () => {
     clearHoverTimer();
     setReasoningPanelOpen(false);
   }, reasoningPanelOpen);
   useClickOutside(regenMenuRef, () => setRegenOpen(false), regenOpen);
+  useClickOutside(feedbackMenuRef, () => setReasonMenuOpen(false), reasonMenuOpen);
 
   // 用户消息折叠测量:基于实际行高计算 6 行高度,scrollHeight 超过则可折叠。
   // content 变化(编辑后)或首次挂载时重测;ResizeObserver 兜底宽度变化导致的换行变化。
@@ -178,6 +216,83 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
     ro.observe(el);
     return () => ro.disconnect();
   }, [content]);
+
+  const applyFeedback = async (
+    nextRating: "up" | "down" | null,
+    nextReason: FeedbackReason | null = null,
+    openReasonMenu = false,
+  ) => {
+    if (!publicId || feedbackPending) return;
+    const requestId = feedbackRequestRef.current + 1;
+    feedbackRequestRef.current = requestId;
+    const requestPublicId = publicId;
+    const isCurrentRequest = () => (
+      feedbackRequestRef.current === requestId
+      && feedbackPublicIdRef.current === requestPublicId
+    );
+    const prev = localFeedback;
+    // 与服务端契约对齐:up 无 reason;down 仅在传入 reason 时带上
+    const optimistic: MessageFeedback | undefined =
+      nextRating === null
+        ? undefined
+        : nextRating === "up"
+          ? { rating: "up" }
+          : nextReason
+            ? { rating: "down", reason: nextReason }
+            : { rating: "down" };
+    // 乐观更新
+    setLocalFeedback(optimistic);
+    onFeedbackChange?.(requestPublicId, optimistic);
+    setFeedbackPending(true);
+    setFeedbackFailed(false);
+    if (openReasonMenu) setReasonMenuOpen(true);
+    else if (nextRating !== "down") setReasonMenuOpen(false);
+
+    try {
+      const saved = await setMessageFeedback(requestPublicId, nextRating, nextReason);
+      if (!isCurrentRequest()) return;
+      const normalized = saved ?? undefined;
+      setLocalFeedback(normalized);
+      onFeedbackChange?.(requestPublicId, normalized);
+    } catch {
+      if (!isCurrentRequest()) return;
+      setLocalFeedback(prev);
+      onFeedbackChange?.(requestPublicId, prev);
+      setFeedbackFailed(true);
+      if (openReasonMenu) setReasonMenuOpen(false);
+    } finally {
+      if (isCurrentRequest()) setFeedbackPending(false);
+    }
+  };
+
+  const handleThumbsUp = () => {
+    if (!publicId || feedbackPending) return;
+    if (localFeedback?.rating === "up") {
+      void applyFeedback(null);
+      return;
+    }
+    void applyFeedback("up");
+  };
+
+  const handleThumbsDown = () => {
+    if (!publicId || feedbackPending) return;
+    if (localFeedback?.rating === "down") {
+      void applyFeedback(null);
+      return;
+    }
+    void applyFeedback("down", null, true);
+  };
+
+  const handleReasonSelect = (reason: FeedbackReason) => {
+    if (!publicId || feedbackPending) return;
+    // 再次点已选原因:仅关闭菜单,不撤销评分
+    if (localFeedback?.rating === "down" && localFeedback.reason === reason) {
+      setReasonMenuOpen(false);
+      return;
+    }
+    setReasonMenuOpen(false);
+    void applyFeedback("down", reason);
+  };
 
   const handleCopy = async () => {
     if (!content) return;
@@ -505,6 +620,104 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
               )}
               <span>{copied ? t("copied") : t("copy")}</span>
             </button>
+            {/* 质量反馈:icon-only 赞/踩,紧邻原因菜单,不改变其它操作语义 */}
+            <div ref={feedbackMenuRef} className="relative inline-flex items-center gap-0.5">
+              <button
+                type="button"
+                onClick={handleThumbsUp}
+                disabled={feedbackPending}
+                className={clsx(
+                  "touch-target inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed",
+                  localFeedback?.rating === "up"
+                    ? "text-sora-blue bg-sora-blue/10"
+                    : "text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-900",
+                )}
+                aria-label={localFeedback?.rating === "up" ? t("feedbackClear") : t("feedbackUp")}
+                title={
+                  feedbackFailed
+                    ? t("feedbackFailed")
+                    : feedbackPending
+                      ? t("feedbackPending")
+                      : localFeedback?.rating === "up"
+                        ? t("feedbackClear")
+                        : t("feedbackUp")
+                }
+                aria-pressed={localFeedback?.rating === "up"}
+                aria-busy={feedbackPending || undefined}
+              >
+                <ThumbsUp className="w-3.5 h-3.5" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                onClick={handleThumbsDown}
+                disabled={feedbackPending}
+                className={clsx(
+                  "touch-target inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed",
+                  localFeedback?.rating === "down"
+                    ? "text-red-600 dark:text-red-400 bg-red-500/10"
+                    : "text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-900",
+                )}
+                aria-label={localFeedback?.rating === "down" ? t("feedbackClear") : t("feedbackDown")}
+                title={
+                  feedbackFailed
+                    ? t("feedbackFailed")
+                    : feedbackPending
+                      ? t("feedbackPending")
+                      : localFeedback?.rating === "down"
+                        ? t("feedbackClear")
+                        : t("feedbackDown")
+                }
+                aria-pressed={localFeedback?.rating === "down"}
+                // 首次点踩会打开原因菜单;已踩后 ThumbsDown 仅负责撤销,重开交给旁侧 Chevron
+                aria-haspopup={localFeedback?.rating === "down" ? undefined : "menu"}
+                aria-expanded={localFeedback?.rating === "down" ? undefined : reasonMenuOpen}
+                aria-busy={feedbackPending || undefined}
+              >
+                <ThumbsDown className="w-3.5 h-3.5" aria-hidden="true" />
+              </button>
+              {/* 已踩且菜单关闭:独立入口重开/改选原因,不触碰 rating / DB */}
+              {localFeedback?.rating === "down" && !reasonMenuOpen && (
+                <button
+                  type="button"
+                  onClick={() => setReasonMenuOpen((open) => !open)}
+                  className="touch-target inline-flex h-8 w-8 items-center justify-center rounded-md text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-900 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
+                  aria-label={t("feedbackReasons")}
+                  title={t("feedbackReasons")}
+                  aria-haspopup="menu"
+                  aria-expanded={reasonMenuOpen}
+                >
+                  <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
+                </button>
+              )}
+              {reasonMenuOpen && (
+                <div
+                  role="menu"
+                  className="absolute bottom-full mb-1.5 left-0 z-40 min-w-[9.5rem] rounded-md border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink py-1 transition-opacity duration-150"
+                >
+                  {FEEDBACK_REASONS.map((reason) => {
+                    const selected = localFeedback?.rating === "down" && localFeedback.reason === reason;
+                    return (
+                      <button
+                        key={reason}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={selected}
+                        disabled={feedbackPending}
+                        onClick={() => handleReasonSelect(reason)}
+                        className={clsx(
+                          "flex w-full items-center px-3 py-1.5 text-left text-ui-caption transition-colors duration-150 cursor-pointer disabled:opacity-40",
+                          selected
+                            ? "text-sora-blue font-semibold"
+                            : "text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900",
+                        )}
+                      >
+                        {t(FEEDBACK_REASON_I18N[reason])}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
             {!isStreaming && (
             <div ref={regenMenuRef} className="relative">
               <button

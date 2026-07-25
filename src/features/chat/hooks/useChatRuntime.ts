@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useShallow } from "zustand/react/shallow";
 import { useChatStreamStore, NEW_CONVERSATION_KEY, type SendOptions } from "@/features/chat/store/chatStreamStore";
-import type { ChatMessage } from "@/features/chat/model/types";
+import type { ChatMessage, MessageFeedback } from "@/features/chat/model/types";
 import type { ReasoningLevel } from "@/db/types";
 
 interface UseChatRuntimeOptions {
@@ -85,6 +85,7 @@ export function useChatRuntime({
       continueGeneration: s.continueGeneration,
       switchVersion: s.switchVersion,
       refreshVersionInfo: s.refreshVersionInfo,
+      setMessageFeedbackLocal: s.setMessageFeedbackLocal,
       stopGeneration: s.stopGeneration,
     })),
   );
@@ -164,6 +165,13 @@ export function useChatRuntime({
     [actions, key],
   );
 
+  const setMessageFeedbackLocal = useMemo(
+    () => (publicId: string, feedback: MessageFeedback | undefined) => {
+      actions.setMessageFeedbackLocal(key, publicId, feedback);
+    },
+    [actions, key],
+  );
+
   return {
     messages,
     streaming,
@@ -175,6 +183,7 @@ export function useChatRuntime({
     continueGeneration,
     switchVersion,
     refreshVersionInfo,
+    setMessageFeedbackLocal,
     stopGeneration,
   };
 }

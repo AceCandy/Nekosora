@@ -64,6 +64,13 @@
       "when": 1784985600000,
       "tag": "0008_model_catalog_configured",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1784988074784,
+      "tag": "0009_lethal_killmonger",
+      "breakpoints": true
     }
   ]
 }

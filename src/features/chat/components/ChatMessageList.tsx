@@ -9,7 +9,7 @@ import { ChatMessageItem } from "@/features/chat/components/ChatMessageItem";
 import { ChatOutline } from "@/features/chat/components/ChatOutline";
 import { ErrorBoundary } from "@/shared/components/ErrorBoundary";
 import ConfirmDialog from "@/shared/ui/ConfirmDialog";
-import type { ChatMessage, ModelOption } from "@/features/chat/model/types";
+import type { ChatMessage, MessageFeedback, ModelOption } from "@/features/chat/model/types";
 import type { Artifact } from "@/features/artifacts/ArtifactPanel";
 import { copyToClipboard } from "@/shared/lib/clipboard";
 import { useMessageSpeech } from "@/features/chat/hooks/useMessageSpeech";
@@ -34,6 +34,8 @@ interface ChatMessageListProps {
   onDelete?: (publicId: string) => void;
   /** 在 assistant 消息末尾续写。 */
   onContinue?: (publicId: string) => void;
+  /** 反馈乐观结果同步到 store。 */
+  onFeedbackChange?: (publicId: string, feedback: MessageFeedback | undefined) => void;
   /** 可用模型列表(传给 ChatMessageItem 供重新生成换模型)。 */
   models?: ModelOption[];
   /** 选中文本「引用」：插入输入框。 */
@@ -147,6 +149,7 @@ export function ChatMessageList({
   onOpenArtifact,
   onDelete,
   onContinue,
+  onFeedbackChange,
   models,
   onQuote,
   onAsk,
@@ -261,6 +264,7 @@ export function ChatMessageList({
                     onRequestDelete={(pid) => setPendingDelete(pid)}
                     conversationStreaming={streaming}
                     onContinue={onContinue}
+                    onFeedbackChange={onFeedbackChange}
                     models={models}
                   />
                 </ErrorBoundary>

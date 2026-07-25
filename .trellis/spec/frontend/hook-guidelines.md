@@ -91,4 +91,5 @@ function smoothScrollToBottom(el: HTMLElement) {
 - **在 selector 里返回新对象/数组字面量** → 无限重渲染。用 `useShallow` + 模块级常量兜底（见 state-management）。
 - **effect 依赖里漏掉「应只在 key 变化时执行」的意图** → 误把会变的数据列进依赖，导致流式被覆盖。需要时加 `eslint-disable-next-line react-hooks/exhaustive-deps` 并写注释说明原因（chat hook 已有先例）。
 - **闭包陈旧值** → 高频 handler（滚动、resize）读 state 会拿到旧值，改读 ref。
+- **只按顶层 `react` 类型/导出使用新 hook** → Next 15 客户端实际加载 `next/dist/compiled/react`，两者导出可能不同；例如顶层 React 19.2 有 `useEffectEvent`，Next 内置运行时却没有，类型检查通过但浏览器报 `is not a function`。共享 hook 应使用当前 Next 运行时已支持的稳定 API；稳定事件回调采用 `useRef` 保存最新函数，并可用 `node -e "console.log(typeof require('next/dist/compiled/react').<api>)"` 核验运行时导出。
 - **把应该进 store 的状态留在 hook 本地** → 切路由丢失。跨路由要存活的必须进 zustand。
