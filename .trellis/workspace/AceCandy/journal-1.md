@@ -1130,3 +1130,38 @@ setKeyEnabled 接收 userId 并在更新 SQL 中同时限制 key ID 与属主，
 ### Next Steps
 
 - None - task complete
+
+
+## Session 35: 完成遗留聊天改动收尾
+
+**Date**: 2026-07-25
+**Task**: 完成遗留聊天改动收尾
+**Branch**: `main`
+
+### Summary
+
+修复反馈迁移链、分支上下文预算与多模态 system 保留，并完成 Agent 多轮用量唯一终态聚合。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `05759f4` | (see git log) |
+| `f261f7f` | (see git log) |
+| `0e77b4d` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
