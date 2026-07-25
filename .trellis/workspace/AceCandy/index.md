@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 35
+- **Total Sessions**: 36
 - **Last Active**: 2026-07-25
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1167 | Active |
+| `journal-1.md` | ~1201 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 36 | 2026-07-25 | MAGI 首轮流式可靠性优化 | `397c11e`, `a852f17` | `opt0725` |
 | 35 | 2026-07-25 | 完成遗留聊天改动收尾 | `05759f4`, `f261f7f`, `0e77b4d` | `main` |
 | 34 | 2026-07-25 | 完成 WebChat run 生命周期与可恢复 SSE 设计 | `5801dc9`, `004433d` | `main` |
 | 33 | 2026-07-22 | 归档 opt0722 项目优化任务 | `e056569` | `opt0722` |

@@ -1165,3 +1165,37 @@ setKeyEnabled 接收 userId 并在更新 SQL 中同时限制 key ID 与属主，
 ### Next Steps
 
 - None - task complete
+
+
+## Session 36: MAGI 首轮流式可靠性优化
+
+**Date**: 2026-07-25
+**Task**: MAGI 首轮流式可靠性优化
+**Branch**: `opt0725`
+
+### Summary
+
+修正 Agent 同轮多工具消息序列，向网关上游传播流式取消并阻止取消后写流；新增回归测试与后端契约，lint、typecheck、536 个测试通过。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `397c11e` | (see git log) |
+| `a852f17` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
