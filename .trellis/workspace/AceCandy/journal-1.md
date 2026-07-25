@@ -1199,3 +1199,36 @@ setKeyEnabled 接收 userId 并在更新 SQL 中同时限制 key ID 与属主，
 ### Next Steps
 
 - None - task complete
+
+
+## Session 37: MAGI 第二轮：公开分享软删除隔离
+
+**Date**: 2026-07-26
+**Task**: MAGI 第二轮：公开分享软删除隔离
+**Branch**: `opt0725`
+
+### Summary
+
+修复 getShare 未过滤软删除消息导致旧分享链接泄露正文的问题；新增部分删除、全删空列表、快照顺序与访问时间回归测试。lint、typecheck、61 个测试文件共 538 项测试及 pnpm build 通过，两轮独立复核无阻断。未运行真实 PostgreSQL 集成测试，下一轮优先审视 softDeleteMessage 跨用户消息存在性枚举。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `84d43f8` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
