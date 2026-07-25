@@ -1232,3 +1232,36 @@ setKeyEnabled 接收 userId 并在更新 SQL 中同时限制 key ID 与属主，
 ### Next Steps
 
 - None - task complete
+
+
+## Session 38: MAGI 项目进化第 3 轮
+
+**Date**: 2026-07-26
+**Task**: MAGI 项目进化第 3 轮
+**Branch**: `opt0725`
+
+### Summary
+
+修复 softDeleteMessage 跨用户消息存在性与角色枚举：将目标读取收敛为单次 owner-scoped join，授权后再校验角色；补齐权限矩阵与子树删除回归测试，更新消息引用隔离规范。lint、typecheck、543 项测试及生产构建通过。下一轮优先审视分享快照是否混入重生成产生的旧分支。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8af1eee` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
