@@ -442,7 +442,7 @@ Apply this contract when changing `processFile`, file chunks, the `file-process`
 - `file_objects.processing_lease_id`: nullable text fencing token, replaced on every claim.
 - `file_objects.processing_lease_expires_at`: nullable `timestamptz`, compared with PostgreSQL time.
 - `processFile(fileId: string, storagePath: string, mime: string): Promise<void>` atomically claims and processes one file.
-- `recoverStaleFileProcessing(): Promise<void>` scans and sequentially processes at most 25 stale active rows.
+- `recoverStaleFileProcessing(): Promise<void>` scans and sequentially processes at most 25 pending or stale active rows.
 - `startFileProcessingRecovery(recover?): () => Promise<void>` starts immediate and 60-second single-flight scans and returns an asynchronous stop function.
 - `startWorker(runtime?): Promise<void>` registers queue handlers, starts recovery, and owns startup/shutdown cleanup.
 
@@ -454,7 +454,8 @@ Apply this contract when changing `processFile`, file chunks, the `file-process`
 - Extraction and embedding APIs currently have no cancellation signal. Lease loss fences their late results; it does not claim to cancel external computation.
 - Unsupported, empty-text, and ordinary error terminal writes clear both lease fields only while still owned. Embedding API failure keeps text chunks but sets `rag_ready=false` and `rag_reason='embedding_failed'`.
 - Chunk replacement runs in one transaction: renew and lock the parent row, delete old chunks, insert batches of 50, then mark `done` and clear the lease. The final predicate uses `statement_timestamp()` so an overlong transaction rolls back delete, inserts, and terminal state together.
-- Stale scanning selects active rows with NULL/expired leases, orders NULL first then by lease and creation time, limits to 25, and processes sequentially. One candidate failure is redacted and does not stop later candidates; a SELECT failure rejects the round.
+- Recovery scanning selects `pending`, or active rows with NULL/expired leases; it excludes `error` and terminal rows. Order the combined candidates by `created_at, id`, limit to 25, and process sequentially through the existing atomic claim. One candidate failure is redacted and does not stop later candidates; a SELECT failure rejects the round.
+- Keep partial indexes for both branches: stale active rows by lease/creation time and pending rows by `(created_at, id)`. Add schema changes through a new migration with matching journal and snapshot metadata; do not rewrite released migrations.
 - Recovery scheduling runs immediately and every 60 seconds without overlap. Its stop function clears the timer and waits for the active scan. The worker stops recovery before the queue; repeated signals reuse one shutdown promise.
 - Worker startup failure stops any started recovery and queue while preserving the original error. Shutdown continues remaining cleanup after a failure and exits non-zero when cleanup was incomplete.
 - Deploy the migration before the new runtime, drain old workers/Web fallback executors, then start the scanner. A token-aware scanner must not run beside an old runtime that can still write chunks by file id alone.
@@ -463,29 +464,31 @@ Apply this contract when changing `processFile`, file chunks, the `file-process`
 
 | Condition | Required behavior |
 | --- | --- |
-| Pending/error or stale active claim wins | New token and fresh database-time lease; pipeline runs |
+| Direct processing of pending/error, or recovery of pending/stale active, wins the claim | New token and fresh database-time lease; pipeline runs |
 | Fresh active row, terminal row, missing row, or concurrent loser | Immediate no-op before extraction |
 | Heartbeat/update returns zero rows or heartbeat rejects | Mark local ownership lost; discard late results and stop later writes |
 | Embedding call fails while ownership remains | Persist text chunks, `embed_status=error`, `rag_ready=false` |
 | Chunk insert fails | Roll back replacement, keep old chunks, then write owned `error` terminal state |
 | Final statement-time freshness check fails | Roll back replacement and leave the row for later stale recovery |
-| Stale SELECT fails | Log a redacted scheduler error; retry on the next tick |
-| One stale candidate throws | Log file id plus redacted error; continue the same batch |
+| Recovery SELECT fails | Log a redacted scheduler error; retry on the next tick |
+| One recovery candidate throws | Log file id plus redacted error; continue the same batch |
 | Worker startup or shutdown cleanup fails | Continue available cleanup; preserve startup error or exit non-zero |
 
 ### 5. Good / Base / Bad Cases
 
 - Good: an old executor resumes after another worker took over; its token cannot update status or enter the chunk transaction.
 - Good: a process dies during embedding; after expiry the scanner claims it and atomically replaces the previous chunks.
+- Good: queue dispatch fails and the Web process exits before its fire-and-forget fallback claims the row; the next worker scan claims the durable `pending` row.
 - Base: a pending upload claims once, heartbeats during long external work, and clears its lease at a terminal state.
 - Bad: reset stale rows to pending and enqueue separately; queue dispatch is not atomic with the database reset.
+- Bad: scan only active leases and assume a fire-and-forget Web fallback must reach its first database claim before process exit.
 - Bad: delete chunks outside the fenced transaction, or use transaction-start `now()` as the final freshness check.
 
 ### 6. Tests Required
 
 - Unit tests must cover pending/error/stale claim, fresh rejection, heartbeat single-flight and failure, all owned status stages, unsupported/empty/error paths, embedding failure, transaction entry fencing, scheduler retry/single-flight/limit, and worker startup/shutdown failure cleanup.
-- Migration tests must assert nullable text/timestamptz columns, active-row NULL backfill with `now()`, partial-index predicate, journal order, and snapshot `prevId` continuity.
-- A harness-created, fixed-prefix random PostgreSQL database must run full migrations and prove concurrent single-winner claim, parent-row lock waiting plus predicate re-evaluation, old-token rejection, explicit chunk-insert rollback, final `statement_timestamp()` rollback, stale scanning, candidate isolation, and the 25-row limit.
+- Migration tests must assert nullable text/timestamptz columns, active-row NULL backfill with `now()`, stale-active and pending partial-index predicates, journal order, and snapshot `prevId` continuity.
+- A harness-created, fixed-prefix random PostgreSQL database must run full migrations and prove concurrent single-winner claim, parent-row lock waiting plus predicate re-evaluation, old-token rejection, explicit chunk-insert rollback, final `statement_timestamp()` rollback, pending and stale-active scanning, candidate isolation, stable `(created_at, id)` ordering, non-retry of `error`/terminal rows, and the mixed-candidate 25-row limit.
 - The harness must construct `TEST_DATABASE_URL` internally, close pools/processes, terminate only sessions for the generated database, and force-drop it in `finally` without printing connection strings.
 - Keep upload fallback, queue lifecycle, lint, typecheck, full tests, production build, Trellis validation, and diff checks green.
 

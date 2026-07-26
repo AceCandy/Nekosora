@@ -1,4 +1,4 @@
-import { and, asc, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { redactErrorMessage } from "@/lib/redaction";
 import { processFile } from "./process";
@@ -7,7 +7,7 @@ const DATABASE_NOW = sql`now()`;
 const STALE_FILE_SCAN_LIMIT = 25;
 const STALE_FILE_SCAN_INTERVAL_MS = 60_000;
 
-/** 顺序恢复租约为空或已过期的文件处理任务。 */
+/** 顺序恢复 pending 或租约为空/已过期的文件处理任务。 */
 export async function recoverStaleFileProcessing(): Promise<void> {
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -20,18 +20,18 @@ export async function recoverStaleFileProcessing(): Promise<void> {
     })
     .from(s.fileObjects)
     .where(
-      and(
-        inArray(s.fileObjects.processingStatus, ["extracting", "embedding"]),
-        or(
-          isNull(s.fileObjects.processingLeaseExpiresAt),
-          lte(s.fileObjects.processingLeaseExpiresAt, DATABASE_NOW),
+      or(
+        eq(s.fileObjects.processingStatus, "pending"),
+        and(
+          inArray(s.fileObjects.processingStatus, ["extracting", "embedding"]),
+          or(
+            isNull(s.fileObjects.processingLeaseExpiresAt),
+            lte(s.fileObjects.processingLeaseExpiresAt, DATABASE_NOW),
+          ),
         ),
       ),
     )
-    .orderBy(
-      sql`${s.fileObjects.processingLeaseExpiresAt} ASC NULLS FIRST`,
-      asc(s.fileObjects.createdAt),
-    )
+    .orderBy(asc(s.fileObjects.createdAt), asc(s.fileObjects.id))
     .limit(STALE_FILE_SCAN_LIMIT);
 
   for (const file of files) {

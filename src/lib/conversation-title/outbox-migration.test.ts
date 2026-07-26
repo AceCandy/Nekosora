@@ -33,8 +33,13 @@ describe("0014 conversation title outbox migration", () => {
     ) as {
       entries: Array<{ idx: number; when: number; tag: string; breakpoints: boolean }>;
     };
-    const previousEntry = journal.entries.at(-2)!;
-    const currentEntry = journal.entries.at(-1)!;
+    const currentIndex = journal.entries.findIndex(
+      (entry) => entry.idx === 14 && entry.tag === "0014_conversation_title_outbox",
+    );
+    expect(currentIndex).toBeGreaterThan(0);
+    const previousEntry = journal.entries[currentIndex - 1];
+    const currentEntry = journal.entries[currentIndex];
+    expect(previousEntry.idx).toBe(13);
     expect(currentEntry).toEqual(expect.objectContaining({
       idx: 14,
       tag: "0014_conversation_title_outbox",

@@ -622,6 +622,9 @@ export const fileObjects = pgTable(
     index("file_objects_stale_processing_idx")
       .on(t.processingLeaseExpiresAt, t.createdAt)
       .where(sql`${t.processingStatus} IN ('extracting', 'embedding')`),
+    index("file_objects_pending_processing_idx")
+      .on(t.createdAt, t.id)
+      .where(sql`${t.processingStatus} = 'pending'`),
   ],
 );
 

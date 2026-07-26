@@ -409,6 +409,52 @@ describePg("processFile PostgreSQL lease", () => {
     });
   });
 
+  it("扫描并恢复尚未被 queue 或 Web fallback claim 的 pending 文件", async () => {
+    const fileId = randomUUID();
+    await pool.query(
+      `INSERT INTO "file_objects" (
+        "id", "user_id", "filename", "mime", "storage_path", "size", "processing_status"
+      ) VALUES ($1, $2, $3, $4, $5, $6, 'pending')`,
+      [fileId, userId, "pending.txt", "text/plain", `${userId}/pending.txt`, 12],
+    );
+
+    await recoverStaleFileProcessing();
+
+    const result = await pool.query<{ processing_status: string; extract_status: string | null }>(
+      'SELECT "processing_status", "extract_status" FROM "file_objects" WHERE "id" = $1',
+      [fileId],
+    );
+    expect(result.rows[0]).toEqual({
+      processing_status: "done",
+      extract_status: "skipped",
+    });
+  });
+
+  it("scanner 与直接处理并发时只有一个调用者进入提取", async () => {
+    const fileId = randomUUID();
+    await pool.query(
+      `INSERT INTO "file_objects" (
+        "id", "user_id", "filename", "mime", "storage_path", "size", "processing_status"
+      ) VALUES ($1, $2, $3, $4, $5, $6, 'pending')`,
+      [fileId, userId, "concurrent-pending.txt", "text/plain", `${userId}/concurrent-pending.txt`, 12],
+    );
+    const extraction = deferred<{ supported: false; reason: string }>();
+    mocks.extractText.mockReturnValue(extraction.promise);
+
+    const direct = processFile(fileId, `${userId}/concurrent-pending.txt`, "text/plain");
+    const recovery = recoverStaleFileProcessing();
+    await vi.waitFor(() => expect(mocks.extractText).toHaveBeenCalledOnce());
+    extraction.resolve({ supported: false, reason: "unsupported" });
+    await Promise.all([direct, recovery]);
+
+    expect(mocks.extractText).toHaveBeenCalledOnce();
+    const result = await pool.query<{ processing_status: string }>(
+      'SELECT "processing_status" FROM "file_objects" WHERE "id" = $1',
+      [fileId],
+    );
+    expect(result.rows[0]?.processing_status).toBe("done");
+  });
+
   it("单个 stale 文件 claim 失败时继续恢复后续文件", async () => {
     const failedFileId = randomUUID();
     const recoverableFileId = randomUUID();
@@ -473,17 +519,32 @@ describePg("processFile PostgreSQL lease", () => {
     }
   });
 
-  it("单轮扫描最多恢复 25 个 stale 文件", async () => {
-    const fileIds = Array.from({ length: 26 }, () => randomUUID());
+  it("单轮扫描最多恢复 25 个混合候选且排除 error 和 done", async () => {
+    const fileIds = Array.from({ length: 26 }, () => randomUUID()).sort();
     for (const [index, fileId] of fileIds.entries()) {
+      const status = index % 2 === 0 ? "pending" : "extracting";
       await pool.query(
         `INSERT INTO "file_objects" (
           "id", "user_id", "filename", "mime", "storage_path", "size",
-          "processing_status", "processing_lease_id", "processing_lease_expires_at", "extract_status"
-        ) VALUES ($1, $2, $3, 'text/plain', $4, 12, 'extracting', 'stale-owner', now() - interval '1 minute', 'running')`,
-        [fileId, userId, `limit-${index}.txt`, `${userId}/limit-${index}.txt`],
+          "processing_status", "processing_lease_id", "processing_lease_expires_at", "extract_status",
+          "created_at"
+        ) VALUES ($1, $2, $3, 'text/plain', $4, 12, $5,
+          CASE WHEN $5 = 'extracting' THEN 'stale-owner' END,
+          CASE WHEN $5 = 'extracting' THEN now() - interval '1 minute' END,
+          CASE WHEN $5 = 'extracting' THEN 'running' END,
+          '2026-01-01 00:00:00+00')`,
+        [fileId, userId, `limit-${index}.txt`, `${userId}/limit-${index}.txt`, status],
       );
     }
+    const excludedIds = [randomUUID(), randomUUID()];
+    await pool.query(
+      `INSERT INTO "file_objects" (
+        "id", "user_id", "filename", "mime", "storage_path", "size", "processing_status"
+      ) VALUES
+        ($1, $3, 'error.txt', 'text/plain', $4, 12, 'error'),
+        ($2, $3, 'done.txt', 'text/plain', $5, 12, 'done')`,
+      [excludedIds[0], excludedIds[1], userId, `${userId}/error.txt`, `${userId}/done.txt`],
+    );
 
     await recoverStaleFileProcessing();
 
@@ -495,9 +556,27 @@ describePg("processFile PostgreSQL lease", () => {
     );
     expect(result.rows).toEqual(expect.arrayContaining([
       { processing_status: "done", count: "25" },
-      { processing_status: "extracting", count: "1" },
     ]));
+    expect(result.rows.reduce((total, row) => total + Number(row.count), 0)).toBe(26);
     expect(mocks.extractText).toHaveBeenCalledTimes(25);
+    const remaining = await pool.query<{ id: string; processing_status: string }>(
+      `SELECT "id", "processing_status" FROM "file_objects"
+       WHERE "id" = ANY($1::text[]) AND "processing_status" <> 'done'`,
+      [fileIds],
+    );
+    expect(remaining.rows).toEqual([
+      { id: fileIds[25], processing_status: "extracting" },
+    ]);
+    const excluded = await pool.query<{ processing_status: string }>(
+      `SELECT "processing_status" FROM "file_objects"
+       WHERE "id" = ANY($1::text[]) ORDER BY "processing_status"`,
+      [excludedIds],
+    );
+    expect(excluded.rows).toEqual([
+      { processing_status: "done" },
+      { processing_status: "error" },
+    ]);
     await pool.query('DELETE FROM "file_objects" WHERE "id" = ANY($1::text[])', [fileIds]);
+    await pool.query('DELETE FROM "file_objects" WHERE "id" = ANY($1::text[])', [excludedIds]);
   });
 });
