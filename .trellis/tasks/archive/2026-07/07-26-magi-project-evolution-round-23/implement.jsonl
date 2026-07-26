@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/file-storage.md","reason":"文件上传、租约 claim、stale recovery、PG harness 与 worker 生命周期权威契约"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"PostgreSQL 时间、部分索引、追加迁移与 journal/snapshot 约束"}
+{"file":".trellis/spec/backend/directory-structure.md","reason":"upload route、RAG 领域和 worker 的层次边界"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"跨 Web producer、数据库 durable state、queue 与 worker 的完整数据流检查"}
+{"file":".trellis/tasks/07-26-magi-project-evolution-round-23/research/pending-file-recovery.md","reason":"已确认失败链、现有幂等原语与选定修复边界"}
