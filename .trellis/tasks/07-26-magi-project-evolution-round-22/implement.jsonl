@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/index.md","reason":"后端入口与预开发检查清单"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"PostgreSQL 事务、迁移、pg-boss producer/worker 与恢复契约"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"标题副任务日志归属和敏感错误边界"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"fallback、outbox、queue 和 worker 的跨层一致性"}
+{"file":".trellis/tasks/07-26-magi-project-evolution-round-22/research/conversation-title-outbox.md","reason":"失败链、数据模型、投递状态机与方案取舍"}

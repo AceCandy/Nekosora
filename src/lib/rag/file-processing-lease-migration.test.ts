@@ -33,13 +33,18 @@ describe("0013 file processing lease migration", () => {
         breakpoints: boolean;
       }>;
     };
-    const previousEntry = journal.entries.at(-2)!;
-    const currentEntry = journal.entries.at(-1)!;
+    const currentIndex = journal.entries.findIndex(
+      (entry) => entry.idx === 13 && entry.tag === "0013_add_file_processing_lease",
+    );
+    expect(currentIndex).toBeGreaterThan(0);
+    const previousEntry = journal.entries[currentIndex - 1];
+    const currentEntry = journal.entries[currentIndex];
     expect(currentEntry).toEqual(expect.objectContaining({
       idx: 13,
       tag: "0013_add_file_processing_lease",
       breakpoints: true,
     }));
+    expect(previousEntry.idx).toBe(12);
     expect(currentEntry.when).toBeGreaterThan(previousEntry.when);
 
     const previousSnapshot = JSON.parse(

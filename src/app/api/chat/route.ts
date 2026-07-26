@@ -20,10 +20,8 @@ import { getChatUA } from "@/lib/system-settings/ua";
 import { resolveMcpServers } from "@/lib/mcp/registry";
 import { extractArtifacts } from "@/lib/artifacts/extract";
 import { getQueue } from "@/lib/infra/queue";
-import {
-  writeFallbackTitle,
-  type ConversationTitleJob,
-} from "@/lib/conversation-title/service";
+import { writeFallbackTitle } from "@/lib/conversation-title/service";
+import { dispatchConversationTitleJob } from "@/lib/conversation-title/dispatch";
 import { prepareChatContext } from "@/lib/chat/orchestrator";
 import {
   findConversationMessage,
@@ -257,23 +255,20 @@ export async function POST(req: NextRequest) {
     }
     userMessageInternalId = insertedUser.id;
 
-    // 首条消息只同步写可读 fallback；标题任务立即并行入队，不阻塞 Chat。
+    // fallback 与 outbox 原子提交；即时投递失败由 worker 周期扫描恢复。
     try {
-      const fallbackTitle = await writeFallbackTitle(user.id, body.conversationId, userContent);
-      if (fallbackTitle) {
-        const titleJob: ConversationTitleJob = {
-          userId: user.id,
-          conversationId: body.conversationId,
-          firstUserMessage: userContent,
-          fallbackTitle,
-          chatModel: body.model,
-          chatModelId: body.modelId,
-        };
-        void getQueue()
-          .then((q) => q.send("conversation-title", titleJob))
+      const titleJob = await writeFallbackTitle(
+        user.id,
+        body.conversationId,
+        userContent,
+        body.model,
+        body.modelId,
+      );
+      if (titleJob) {
+        void dispatchConversationTitleJob(titleJob.id)
           .catch((error) =>
             console.error(
-              "[chat] conversation-title enqueue failed:",
+              "[chat] conversation-title dispatch failed:",
               redactErrorMessage(error),
             ),
           );

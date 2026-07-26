@@ -105,6 +105,72 @@ try {
 await generateConversationTitle(data);
 ```
 
+## Scenario: Conversation Title Durable Outbox
+
+### 1. Scope / Trigger
+
+Apply this contract when changing conversation fallback titles, `conversation-title` producers or workers, queue recovery, or the `conversation_title_jobs` schema. The outbox closes the process-exit gap between the visible fallback write and pg-boss persistence.
+
+### 2. Signatures
+
+- `writeFallbackTitle(userId, conversationId, firstUserMessage, chatModel?, chatModelId?): Promise<ConversationTitleJob | null>`
+- `ConversationTitleJob`: `id`, `userId`, `conversationId`, `firstUserMessage`, `fallbackTitle`, optional `chatModel` / `chatModelId`
+- `dispatchConversationTitleJob(jobId): Promise<boolean>`
+- `recoverConversationTitleJobs(): Promise<void>`
+- `startConversationTitleRecovery(): () => Promise<void>`
+- `conversation_title_jobs`: one row per `conversation_id`, with random `id` as the fencing token and `dispatch_after` as the database-clock claim boundary
+
+### 3. Contracts
+
+- Update the fallback and upsert the complete outbox payload in one transaction. A failed update creates no job; a failed upsert rolls back the fallback.
+- Claim only with one conditional `UPDATE ... WHERE id = ? AND dispatch_after <= now() RETURNING ...`, then move `dispatch_after` 15 minutes forward. Queue send success or failure never deletes the row.
+- Delivery is durable at-least-once. The worker checks the current job id before model generation and checks it again in the final short transaction.
+- The final transaction locks the owned conversation before reading the current outbox row, updates only the default/current fallback title, and deletes only the matching job id. This lock order matches the producer transaction.
+- Success and explicit business no-op delete the matching job. Generation or persistence failure preserves it and rejects the queue callback.
+- Recovery runs immediately and every 60 seconds, single-flight, in stable database-time order, at most 25 rows per scan. It processes rows sequentially, isolates per-row send failures, and its stop function waits for the active scan.
+- Outbox payloads and logs must not contain credentials, provider headers, connection strings, or complete request objects.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required result |
+| --- | --- |
+| Fallback update misses | Return `null`; do not insert outbox |
+| Outbox upsert fails | Roll back fallback and reject |
+| Job not due or another dispatcher claimed it | Return `false`; do not send |
+| Queue send fails or producer exits after claim | Keep row; retry after the claim window |
+| Stale job id or completed row | Resolve no-op; do not call the model or delete a newer row |
+| User renamed the conversation | Delete only the matching old job; preserve the title |
+| Job replaced while the model runs | Final transaction returns no-op; preserve the replacement and current title |
+| Model or final persistence fails | Keep matching outbox row and reject for pg-boss retry |
+
+### 5. Good / Base / Bad Cases
+
+- Good: the Web process commits fallback + outbox and exits before queue send; a worker scan later claims and sends the same job.
+- Good: an old queue message finishes after a replacement job was written; final fencing prevents both title overwrite and replacement deletion.
+- Base: immediate dispatch succeeds, worker writes the title and atomically removes the outbox row.
+- Bad: deleting the outbox after `queue.send()` treats transport acceptance as business completion and loses recovery state.
+- Bad: validating job id only before the model call lets a replaced job overwrite the title after a slow generation.
+
+### 6. Tests Required
+
+- Migration tests assert SQL, journal, snapshot, primary key, conversation uniqueness, both cascade FKs, and `(dispatch_after, created_at)` index.
+- Service tests assert fallback/outbox rollback, payload replacement, preflight and final fencing, user rename no-op, atomic success cleanup, and failure preservation.
+- Dispatcher tests assert one winner for concurrent claims, not-due no-op, send failure preservation/reclaim, stable limit 25 scanning, per-item isolation, scheduler single-flight, and stop waiting.
+- Route tests assert complete model context enters `writeFallbackTitle` and immediate dispatch uses the returned job id.
+- Worker tests assert both recovery schedulers start after handler registration, stop in reverse order before queue stop, and all cleanup continues after an individual stop failure.
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong: fallback and queue persistence are unrelated writes with no recovery state.
+await updateFallback();
+void queue.send("conversation-title", job);
+
+// Correct: commit durable intent first; immediate dispatch is only a latency optimization.
+const job = await writeFallbackTitle(userId, conversationId, message, model, modelId);
+if (job) void dispatchConversationTitleJob(job.id);
+```
+
 ## Query Patterns
 
 - `getDb()` 返回 `any`(drizzle 跨表联合时 query builder 类型不互通,弱化类型换取可调用性)。业务通过 schema 表引用驱动查询。

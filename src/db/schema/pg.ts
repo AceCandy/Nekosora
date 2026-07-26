@@ -324,6 +324,30 @@ export const conversations = pgTable(
   (t) => [index("conversations_user_idx").on(t.userId)],
 );
 
+/** 会话标题任务 outbox；业务完成前保留，供 worker 周期重投。 */
+export const conversationTitleJobs = pgTable(
+  "conversation_title_jobs",
+  {
+    id: text("id").primaryKey(),
+    conversationId: text("conversation_id")
+      .notNull()
+      .unique()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    firstUserMessage: text("first_user_message").notNull(),
+    fallbackTitle: text("fallback_title").notNull(),
+    chatModel: text("chat_model"),
+    chatModelId: text("chat_model_id"),
+    dispatchAfter: timestamp("dispatch_after", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("conversation_title_jobs_dispatch_idx").on(t.dispatchAfter, t.createdAt),
+  ],
+);
+
 export const messageStatus = pgEnum("message_status", [
   "pending",
   "streaming",

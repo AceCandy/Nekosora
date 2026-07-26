@@ -19,8 +19,10 @@ export async function startWorker(runtime: WorkerRuntime = process): Promise<voi
   const { startFileProcessingRecovery } = await import("@/lib/rag/recovery");
   const { extractMemories } = await import("@/lib/memory/extract");
   const { generateConversationTitle } = await import("@/lib/conversation-title/service");
+  const { startConversationTitleRecovery } = await import("@/lib/conversation-title/dispatch");
   const queue = await getQueue();
-  let stopRecovery: (() => Promise<void>) | null = null;
+  let stopFileRecovery: (() => Promise<void>) | null = null;
+  let stopTitleRecovery: (() => Promise<void>) | null = null;
   try {
     await queue.start();
     console.log("[worker] pg-boss 已启动,等待任务…");
@@ -57,10 +59,12 @@ export async function startWorker(runtime: WorkerRuntime = process): Promise<voi
     );
     console.log("[worker] 已注册 conversation-title handler");
 
-    stopRecovery = startFileProcessingRecovery();
+    stopFileRecovery = startFileProcessingRecovery();
+    stopTitleRecovery = startConversationTitleRecovery();
 
     // 优雅关闭
-    const recoveryStop = stopRecovery;
+    const fileRecoveryStop = stopFileRecovery;
+    const titleRecoveryStop = stopTitleRecovery;
     let shutdownPromise: Promise<void> | null = null;
     const shutdown = () => {
       if (shutdownPromise) return shutdownPromise;
@@ -68,7 +72,13 @@ export async function startWorker(runtime: WorkerRuntime = process): Promise<voi
         console.log("[worker] 正在关闭…");
         let failed = false;
         try {
-          await recoveryStop();
+          await titleRecoveryStop();
+        } catch {
+          failed = true;
+          console.error("[worker] 标题恢复调度停止失败");
+        }
+        try {
+          await fileRecoveryStop();
         } catch {
           failed = true;
           console.error("[worker] 文件恢复调度停止失败");
@@ -86,9 +96,16 @@ export async function startWorker(runtime: WorkerRuntime = process): Promise<voi
     runtime.on("SIGINT", shutdown);
     runtime.on("SIGTERM", shutdown);
   } catch (error) {
-    if (stopRecovery) {
+    if (stopTitleRecovery) {
       try {
-        await stopRecovery();
+        await stopTitleRecovery();
+      } catch {
+        console.error("[worker] 启动失败后无法停止标题恢复调度");
+      }
+    }
+    if (stopFileRecovery) {
+      try {
+        await stopFileRecovery();
       } catch {
         console.error("[worker] 启动失败后无法停止文件恢复调度");
       }

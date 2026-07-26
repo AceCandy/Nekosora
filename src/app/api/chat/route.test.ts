@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   extractArtifacts: vi.fn(),
   getQueue: vi.fn(),
   writeFallbackTitle: vi.fn(),
+  dispatchConversationTitleJob: vi.fn(),
   prepareChatContext: vi.fn(),
   createRunId: vi.fn(),
   finalizeRun: vi.fn(),
@@ -44,6 +45,9 @@ vi.mock("@/lib/artifacts/extract", () => ({ extractArtifacts: mocks.extractArtif
 vi.mock("@/lib/infra/queue", () => ({ getQueue: mocks.getQueue }));
 vi.mock("@/lib/conversation-title/service", () => ({
   writeFallbackTitle: mocks.writeFallbackTitle,
+}));
+vi.mock("@/lib/conversation-title/dispatch", () => ({
+  dispatchConversationTitleJob: mocks.dispatchConversationTitleJob,
 }));
 vi.mock("@/lib/chat/orchestrator", () => ({ prepareChatContext: mocks.prepareChatContext }));
 vi.mock("@/lib/chat/run-lifecycle", () => ({
@@ -227,6 +231,7 @@ describe("POST /api/chat 消息引用并发收敛", () => {
     mocks.finalizeRun.mockResolvedValue(undefined);
     mocks.heartbeatRun.mockResolvedValue(undefined);
     mocks.writeFallbackTitle.mockResolvedValue(null);
+    mocks.dispatchConversationTitleJob.mockResolvedValue(true);
     mocks.extractArtifacts.mockReturnValue({ artifacts: [] });
     mocks.getQueue.mockResolvedValue({ send: vi.fn().mockResolvedValue("job-1") });
     mocks.irUsageToTokenUsage.mockReturnValue(undefined);
@@ -470,6 +475,14 @@ describe("POST /api/chat 消息引用并发收敛", () => {
       update: vi.fn(() => ({ set: updateSet })),
       transaction,
     });
+    mocks.writeFallbackTitle.mockResolvedValue({
+      id: "title-job-1",
+      userId: "user-1",
+      conversationId: "conversation-1",
+      firstUserMessage: "next question",
+      fallbackTitle: "next question",
+      chatModel: "model-1",
+    });
 
     const response = await POST(request({
       conversationId: "conversation-1",
@@ -505,6 +518,14 @@ describe("POST /api/chat 消息引用并发收敛", () => {
     expect(payload).toContain("[DONE]");
     expect(payload).not.toContain('"type":"error"');
     expect(transaction).toHaveBeenCalledTimes(2);
+    expect(mocks.writeFallbackTitle).toHaveBeenCalledWith(
+      "user-1",
+      "conversation-1",
+      "next question",
+      "model-1",
+      undefined,
+    );
+    expect(mocks.dispatchConversationTitleJob).toHaveBeenCalledWith("title-job-1");
     expect(userValues).toHaveBeenCalledWith(
       expect.objectContaining({ parentId: "assistant-1", role: "user" }),
     );

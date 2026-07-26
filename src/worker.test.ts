@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   extractMemories: vi.fn(),
   generateConversationTitle: vi.fn(),
   startFileProcessingRecovery: vi.fn(),
+  startConversationTitleRecovery: vi.fn(),
 }));
 
 vi.mock("@/lib/infra/queue", () => ({ getQueue: mocks.getQueue }));
@@ -16,6 +17,9 @@ vi.mock("@/lib/conversation-title/service", () => ({
 }));
 vi.mock("@/lib/rag/recovery", () => ({
   startFileProcessingRecovery: mocks.startFileProcessingRecovery,
+}));
+vi.mock("@/lib/conversation-title/dispatch", () => ({
+  startConversationTitleRecovery: mocks.startConversationTitleRecovery,
 }));
 
 describe("worker lifecycle", () => {
@@ -36,13 +40,20 @@ describe("worker lifecycle", () => {
         calls.push("queue.stop");
       }),
     };
-    const stopRecovery = vi.fn(async () => {
-      calls.push("recovery.stop");
+    const stopFileRecovery = vi.fn(async () => {
+      calls.push("file-recovery.stop");
+    });
+    const stopTitleRecovery = vi.fn(async () => {
+      calls.push("title-recovery.stop");
     });
     mocks.getQueue.mockResolvedValue(queue);
     mocks.startFileProcessingRecovery.mockImplementation(() => {
-      calls.push("recovery.start");
-      return stopRecovery;
+      calls.push("file-recovery.start");
+      return stopFileRecovery;
+    });
+    mocks.startConversationTitleRecovery.mockImplementation(() => {
+      calls.push("title-recovery.start");
+      return stopTitleRecovery;
     });
     const handlers = new Map<string, () => Promise<void>>();
     const runtime = {
@@ -62,17 +73,20 @@ describe("worker lifecycle", () => {
       "queue.work:file-process",
       "queue.work:memory-extract",
       "queue.work:conversation-title",
-      "recovery.start",
+      "file-recovery.start",
+      "title-recovery.start",
     ]);
     const firstShutdown = handlers.get("SIGINT")!();
     const secondShutdown = handlers.get("SIGTERM")!();
     await Promise.all([firstShutdown, secondShutdown]);
-    expect(calls.slice(-3)).toEqual([
-      "recovery.stop",
+    expect(calls.slice(-4)).toEqual([
+      "title-recovery.stop",
+      "file-recovery.stop",
       "queue.stop",
       "runtime.exit",
     ]);
-    expect(stopRecovery).toHaveBeenCalledOnce();
+    expect(stopFileRecovery).toHaveBeenCalledOnce();
+    expect(stopTitleRecovery).toHaveBeenCalledOnce();
     expect(queue.stop).toHaveBeenCalledOnce();
     expect(runtime.exit).toHaveBeenCalledOnce();
   });
@@ -88,6 +102,7 @@ describe("worker lifecycle", () => {
     };
     mocks.getQueue.mockResolvedValue(queue);
     mocks.startFileProcessingRecovery.mockReturnValue(vi.fn());
+    mocks.startConversationTitleRecovery.mockReturnValue(vi.fn());
     const runtime = {
       on: vi.fn(),
       exit: vi.fn(),
@@ -99,6 +114,7 @@ describe("worker lifecycle", () => {
 
     await expect(taskHandlers.get("conversation-title")!({
       userId: "u1",
+      id: "job-1",
       conversationId: "c1",
       firstUserMessage: "问题",
       fallbackTitle: "问题",
@@ -116,6 +132,7 @@ describe("worker lifecycle", () => {
     mocks.startFileProcessingRecovery.mockImplementation(() => {
       throw startupError;
     });
+    mocks.startConversationTitleRecovery.mockReturnValue(vi.fn());
     const runtime = {
       on: vi.fn(),
       exit: vi.fn(),
@@ -125,6 +142,7 @@ describe("worker lifecycle", () => {
     await expect(startWorker(runtime)).rejects.toBe(startupError);
 
     expect(queue.stop).toHaveBeenCalledOnce();
+    expect(mocks.startConversationTitleRecovery).not.toHaveBeenCalled();
     expect(runtime.on).not.toHaveBeenCalled();
     expect(runtime.exit).not.toHaveBeenCalled();
   });
@@ -140,6 +158,7 @@ describe("worker lifecycle", () => {
     };
     mocks.getQueue.mockResolvedValue(queue);
     mocks.startFileProcessingRecovery.mockReturnValue(vi.fn());
+    mocks.startConversationTitleRecovery.mockReturnValue(vi.fn());
     const runtime = {
       on: vi.fn(),
       exit: vi.fn(),
@@ -160,9 +179,11 @@ describe("worker lifecycle", () => {
       work: vi.fn().mockResolvedValue(undefined),
       stop: vi.fn().mockResolvedValue(undefined),
     };
-    const stopRecovery = vi.fn().mockRejectedValue(shutdownError);
+    const stopFileRecovery = vi.fn().mockRejectedValue(shutdownError);
+    const stopTitleRecovery = vi.fn().mockResolvedValue(undefined);
     mocks.getQueue.mockResolvedValue(queue);
-    mocks.startFileProcessingRecovery.mockReturnValue(stopRecovery);
+    mocks.startFileProcessingRecovery.mockReturnValue(stopFileRecovery);
+    mocks.startConversationTitleRecovery.mockReturnValue(stopTitleRecovery);
     const handlers = new Map<string, () => Promise<void>>();
     const runtime = {
       on: vi.fn((signal: string, handler: () => Promise<void>) => {
@@ -176,7 +197,8 @@ describe("worker lifecycle", () => {
 
     await expect(handlers.get("SIGTERM")!()).resolves.toBeUndefined();
 
-    expect(stopRecovery).toHaveBeenCalledOnce();
+    expect(stopTitleRecovery).toHaveBeenCalledOnce();
+    expect(stopFileRecovery).toHaveBeenCalledOnce();
     expect(queue.stop).toHaveBeenCalledOnce();
     expect(runtime.exit).toHaveBeenCalledWith(1);
   });

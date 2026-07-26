@@ -4,7 +4,7 @@
  * 模型优先级：task.title_model_id > 旧 task.title_model > 当前对话模型。
  * 最终更新带标题条件，避免后台任务覆盖用户手动改名。
  */
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, or, sql } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { generateChat } from "@/lib/stream";
 import { getSetting } from "@/lib/system-settings/service";
@@ -24,6 +24,7 @@ class ConversationTitleGenerationError extends Error {
 }
 
 export interface ConversationTitleJob {
+  id: string;
   userId: string;
   conversationId: string;
   firstUserMessage: string;
@@ -42,38 +43,84 @@ export function resetTitleModelConfig(): void {
   // no-op
 }
 
-/** 首条消息同步写入可读 fallback；标题已修改时返回 null，不创建后台任务。 */
+/** 在同一事务中写入可读 fallback 与待投递任务；标题已修改时不创建任务。 */
 export async function writeFallbackTitle(
   userId: string,
   conversationId: string,
   firstUserMessage: string,
-): Promise<string | null> {
+  chatModel?: string,
+  chatModelId?: string,
+): Promise<ConversationTitleJob | null> {
   if (!firstUserMessage.trim()) return null;
 
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
   const fallback = truncateFallbackTitle(firstUserMessage);
-  const updated = await db
-    .update(s.conversations)
-    .set({ title: fallback })
-    .where(and(
-      eq(s.conversations.id, conversationId),
-      eq(s.conversations.userId, userId),
-      eq(s.conversations.title, DEFAULT_TITLE),
-    ))
-    .returning({ id: s.conversations.id });
+  const job: ConversationTitleJob = {
+    id: globalThis.crypto.randomUUID(),
+    userId,
+    conversationId,
+    firstUserMessage,
+    fallbackTitle: fallback,
+    ...(chatModel ? { chatModel } : {}),
+    ...(chatModelId ? { chatModelId } : {}),
+  };
 
-  return updated.length > 0 ? fallback : null;
+  return db.transaction(async (tx: typeof db) => {
+    const updated = await tx
+      .update(s.conversations)
+      .set({ title: fallback })
+      .where(and(
+        eq(s.conversations.id, conversationId),
+        eq(s.conversations.userId, userId),
+        eq(s.conversations.title, DEFAULT_TITLE),
+      ))
+      .returning({ id: s.conversations.id });
+    if (updated.length === 0) return null;
+
+    const values = {
+      id: job.id,
+      userId,
+      conversationId,
+      firstUserMessage,
+      fallbackTitle: fallback,
+      chatModel: chatModel ?? null,
+      chatModelId: chatModelId ?? null,
+    };
+    await tx
+      .insert(s.conversationTitleJobs)
+      .values(values)
+      .onConflictDoUpdate({
+        target: s.conversationTitleJobs.conversationId,
+        set: {
+          ...values,
+          dispatchAfter: sql`now()`,
+          createdAt: sql`now()`,
+        },
+      });
+    return job;
+  });
 }
 
-/** Worker 调用：读取当前配置生成最终标题，并仅覆盖本轮 fallback。 */
+/** Worker 调用：用 job id 双重 fencing，并仅覆盖本轮 fallback。 */
 export async function generateConversationTitle(job: ConversationTitleJob): Promise<string | null> {
   if (!job.firstUserMessage.trim()) return null;
 
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
+
+  const [currentJob] = await db
+    .select({ id: s.conversationTitleJobs.id })
+    .from(s.conversationTitleJobs)
+    .where(and(
+      eq(s.conversationTitleJobs.id, job.id),
+      eq(s.conversationTitleJobs.conversationId, job.conversationId),
+      eq(s.conversationTitleJobs.userId, job.userId),
+    ))
+    .limit(1);
+  if (!currentJob) return null;
 
   const [conv] = await db
     .select({ title: s.conversations.title })
@@ -83,7 +130,10 @@ export async function generateConversationTitle(job: ConversationTitleJob): Prom
       eq(s.conversations.userId, job.userId),
     ))
     .limit(1);
-  if (!conv || (conv.title !== DEFAULT_TITLE && conv.title !== job.fallbackTitle)) return null;
+  if (!conv || !canReplaceTitle(conv.title, job.fallbackTitle)) {
+    await deleteTitleJob(db, s, job.id);
+    return null;
+  }
 
   const target = await resolveTitleModel(job.chatModel, job.chatModelId);
   const prompt =
@@ -114,20 +164,52 @@ export async function generateConversationTitle(job: ConversationTitleJob): Prom
   const title = sanitizeTitle(result.text);
   if (!title) throw new ConversationTitleGenerationError();
 
-  const updated = await db
-    .update(s.conversations)
-    .set({ title })
-    .where(and(
-      eq(s.conversations.id, job.conversationId),
-      eq(s.conversations.userId, job.userId),
-      or(
-        eq(s.conversations.title, DEFAULT_TITLE),
-        eq(s.conversations.title, job.fallbackTitle),
-      ),
-    ))
-    .returning({ id: s.conversations.id });
+  return db.transaction(async (tx: typeof db) => {
+    // 与 fallback 事务保持相同的 conversations -> outbox 锁顺序，避免交叉等待。
+    const [lockedConversation] = await tx
+      .select({ title: s.conversations.title })
+      .from(s.conversations)
+      .where(and(
+        eq(s.conversations.id, job.conversationId),
+        eq(s.conversations.userId, job.userId),
+      ))
+      .limit(1)
+      .for("update");
+    if (!lockedConversation) {
+      await deleteTitleJob(tx, s, job.id);
+      return null;
+    }
 
-  return updated.length > 0 ? title : null;
+    const [stillCurrent] = await tx
+      .select({ id: s.conversationTitleJobs.id })
+      .from(s.conversationTitleJobs)
+      .where(and(
+        eq(s.conversationTitleJobs.id, job.id),
+        eq(s.conversationTitleJobs.conversationId, job.conversationId),
+        eq(s.conversationTitleJobs.userId, job.userId),
+      ))
+      .limit(1);
+    if (!stillCurrent) return null;
+    if (!canReplaceTitle(lockedConversation.title, job.fallbackTitle)) {
+      await deleteTitleJob(tx, s, job.id);
+      return null;
+    }
+
+    const updated = await tx
+      .update(s.conversations)
+      .set({ title })
+      .where(and(
+        eq(s.conversations.id, job.conversationId),
+        eq(s.conversations.userId, job.userId),
+        or(
+          eq(s.conversations.title, DEFAULT_TITLE),
+          eq(s.conversations.title, job.fallbackTitle),
+        ),
+      ))
+      .returning({ id: s.conversations.id });
+    await deleteTitleJob(tx, s, job.id);
+    return updated.length > 0 ? title : null;
+  });
 }
 
 /** 兼容旧调用：fallback 与最终标题仍依次回调。Chat 主链路不再使用。 */
@@ -138,23 +220,26 @@ export async function maybeGenerateTitle(
   chatModel?: string,
   onTitle?: (title: string) => void,
 ): Promise<void> {
-  const fallbackTitle = await writeFallbackTitle(userId, conversationId, firstUserMessage);
-  if (!fallbackTitle) return;
-  onTitle?.(fallbackTitle);
+  const job = await writeFallbackTitle(userId, conversationId, firstUserMessage, chatModel);
+  if (!job) return;
+  onTitle?.(job.fallbackTitle);
   let title: string | null;
   try {
-    title = await generateConversationTitle({
-      userId,
-      conversationId,
-      firstUserMessage,
-      fallbackTitle,
-      chatModel,
-    });
+    title = await generateConversationTitle(job);
   } catch (error) {
     if (error instanceof ConversationTitleGenerationError) return;
     throw error;
   }
   if (title) onTitle?.(title);
+}
+
+function canReplaceTitle(title: unknown, fallbackTitle: string): boolean {
+  return title === DEFAULT_TITLE || title === fallbackTitle;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function deleteTitleJob(db: any, s: any, jobId: string): Promise<void> {
+  await db.delete(s.conversationTitleJobs).where(eq(s.conversationTitleJobs.id, jobId));
 }
 
 /** 配置 ID 优先；旧 name 保持 owner by-name 路由语义；最后回退当前对话模型。 */
