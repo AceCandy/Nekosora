@@ -1628,3 +1628,36 @@ setKeyEnabled 接收 userId 并在更新 SQL 中同时限制 key ID 与属主，
 ### Next Steps
 
 - None - task complete
+
+
+## Session 50: MAGI 项目进化第 15 轮：修复流式输出后故障转移
+
+**Date**: 2026-07-26
+**Task**: MAGI 项目进化第 15 轮：修复流式输出后故障转移
+**Branch**: `opt0725`
+
+### Summary
+
+为 streamChat 增加不可撤回响应提交边界，正文、推理或工具调用输出后禁止继续切换 key/route，同时保留失败日志、breaker、Abort 和未输出时容灾；新增多路由、多 key、三类事件及反向回归测试，更新 Gateway Routing 规范。聚焦 14 项、全量 652 项、lint、typecheck、生产构建、Trellis 校验和双路独立复核均通过。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e8ed29d` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
