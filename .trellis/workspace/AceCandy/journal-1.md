@@ -1562,3 +1562,36 @@ setKeyEnabled 接收 userId 并在更新 SQL 中同时限制 key ID 与属主，
 ### Next Steps
 
 - None - task complete
+
+
+## Session 48: MAGI 项目进化第 13 轮：修复服务商属主授权缺口
+
+**Date**: 2026-07-26
+**Task**: MAGI 项目进化第 13 轮：修复服务商属主授权缺口
+**Branch**: `opt0725`
+
+### Summary
+
+统一管理端模型与路由的 Provider 属主校验，阻止 foreign provider 关联和未授权私有路由探测；补齐 15 项授权回归、Gateway Routing 契约与跨层检查。lint、typecheck、66 个测试文件共 642 项测试及生产构建通过。下一轮优先修复 Embedding 设置可绑定 foreign Provider 的独立 P1 缺口。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d1a1e02` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
