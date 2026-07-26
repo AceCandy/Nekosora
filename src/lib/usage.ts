@@ -9,6 +9,7 @@
  * 失败不抛错(日志记录不应阻断主流程)。
  */
 import { getDb, getSchema } from "@/lib/infra/db";
+import { redactErrorMessage, redactSensitiveText } from "@/lib/redaction";
 import type { CallContext, IRUsage } from "@/lib/providers/types";
 
 export interface LogUsageParams {
@@ -128,7 +129,7 @@ export async function logUsage(params: LogUsageParams): Promise<void> {
         stream: params.stream ?? false,
         httpStatus: params.httpStatus ?? null,
         errorCode: params.errorCode ?? "unknown",
-        errorMessage: params.errorMessage ?? null,
+        errorMessage: params.errorMessage ? redactSensitiveText(params.errorMessage) : null,
         errorPhase: params.errorPhase ?? null,
         errorType: params.errorType ?? null,
         promptTokens: params.usage.inputTokens ?? 0,
@@ -159,6 +160,6 @@ export async function logUsage(params: LogUsageParams): Promise<void> {
     }
   } catch (err) {
     // 日志记录失败不应影响主流程。
-    console.error("[logUsage] 记录失败:", err);
+    console.error("[logUsage] 记录失败:", redactErrorMessage(err));
   }
 }

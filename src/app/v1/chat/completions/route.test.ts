@@ -117,13 +117,14 @@ describe("POST /v1/chat/completions 流式取消", () => {
 
   it("普通异常时保留 SSE server_error 帧", async () => {
     mocks.streamChat.mockReturnValue((async function* () {
-      throw new Error("upstream down");
+      throw new Error("upstream down Authorization: Bearer ROUTE_SECRET");
     })());
 
     const response = await POST(request());
     const body = await response.text();
 
-    expect(body).toContain('"message":"upstream down"');
+    expect(body).toContain('"message":"upstream down Authorization: Bearer [REDACTED]"');
+    expect(body).not.toContain("ROUTE_SECRET");
     expect(body).toContain('"type":"server_error"');
     expect(body).not.toContain("data: [DONE]");
   });

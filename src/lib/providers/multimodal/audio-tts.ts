@@ -8,6 +8,7 @@ import { generateSpeech as generateSpeech } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import type { CallContext } from "@/lib/providers/types";
 import { resolveRoutesByCapability, RoutingError } from "@/lib/routing";
+import { redactErrorMessage } from "@/lib/redaction";
 import { maskKey } from "@/lib/usage";
 
 export interface SynthesizeOptions {
@@ -50,35 +51,45 @@ export async function synthesizeViaRoute(
 ): Promise<SynthesizeResult> {
   const routes = await resolveRoutesByCapability(ctx, modelName, "audioSynthesis");
   const route = routes[0];
-  const format = opts.outputFormat ?? "mp3";
-  const provider = createOpenAI({
-    baseURL: route.provider.baseUrl,
-    apiKey: route.provider.apiKey,
-    name: route.provider.id,
-    headers: route.provider.headers,
-  });
-  const model = provider.speech(route.upstreamModelName);
+  try {
+    const format = opts.outputFormat ?? "mp3";
+    const provider = createOpenAI({
+      baseURL: route.provider.baseUrl,
+      apiKey: route.provider.apiKey,
+      name: route.provider.id,
+      headers: route.provider.headers,
+    });
+    const model = provider.speech(route.upstreamModelName);
 
-  const result = await generateSpeech({
-    model,
-    text: opts.text,
-    voice: opts.voice,
-    providerOptions: { openai: { response_format: format } },
-  });
+    const result = await generateSpeech({
+      model,
+      text: opts.text,
+      voice: opts.voice,
+      providerOptions: { openai: { response_format: format } },
+    });
 
-  // AI SDK v5 的 SpeechResult.audio 是 GeneratedAudioFile(含 uint8Array + format)。
-  const u8 = result.audio.uint8Array;
-  if (!u8) throw new Error("TTS 上游未返回音频数据");
-  return {
-    audioBuffer: Buffer.from(u8),
-    mime: FORMAT_MIME[format] ?? "audio/mpeg",
-    providerRef: `${route.source}:${route.provider.id}`,
-    providerName: route.provider.name,
-    routeId: route.routeId,
-    routeName: `${route.provider.name} · ${route.upstreamModelName}`,
-    upstreamModel: route.upstreamModelName,
-    upstreamKeyMasked: maskKey(route.provider.apiKey),
-  };
+    // AI SDK v5 的 SpeechResult.audio 是 GeneratedAudioFile(含 uint8Array + format)。
+    const u8 = result.audio.uint8Array;
+    if (!u8) throw new Error("TTS 上游未返回音频数据");
+    return {
+      audioBuffer: Buffer.from(u8),
+      mime: FORMAT_MIME[format] ?? "audio/mpeg",
+      providerRef: `${route.source}:${route.provider.id}`,
+      providerName: route.provider.name,
+      routeId: route.routeId,
+      routeName: `${route.provider.name} · ${route.upstreamModelName}`,
+      upstreamModel: route.upstreamModelName,
+      upstreamKeyMasked: maskKey(route.provider.apiKey),
+    };
+  } catch (error) {
+    throw new Error(
+      redactErrorMessage(
+        error,
+        [route.provider.apiKey, ...Object.values(route.provider.headers ?? {})],
+        "语音合成失败",
+      ),
+    );
+  }
 }
 
 export { RoutingError };

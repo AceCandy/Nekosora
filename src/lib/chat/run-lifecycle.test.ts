@@ -51,15 +51,26 @@ describe("toSafeJsonb / irUsageToTokenUsage", () => {
     const long = "x".repeat(5_000);
     const out = toSafeJsonb({
       authorization: "Bearer secret-token",
+      key: "generic-secret",
       apiKey: "sk-abc",
       nested: { password: "p@ss", ok: 1 },
+      diagnostic: "fetch failed: https://example.test/models?key=QUERY_SECRET",
+      error: new Error("Authorization: Bearer HEADER_SECRET"),
       body: long,
     }) as Record<string, unknown>;
 
     expect(out.authorization).toBe("[REDACTED]");
+    expect(out.key).toBe("[REDACTED]");
     expect(out.apiKey).toBe("[REDACTED]");
     expect((out.nested as Record<string, unknown>).password).toBe("[REDACTED]");
     expect((out.nested as Record<string, unknown>).ok).toBe(1);
+    expect(out.diagnostic).toBe(
+      "fetch failed: https://example.test/models?key=[REDACTED]",
+    );
+    expect(out.error).toEqual({
+      name: "Error",
+      message: "Authorization: Bearer [REDACTED]",
+    });
     expect(String(out.body)).toContain("[truncated");
   });
 

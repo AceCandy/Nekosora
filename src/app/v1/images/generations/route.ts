@@ -22,6 +22,7 @@ import {
   ERROR_META,
 } from "@/lib/errors";
 import { classifyError } from "@/lib/error-classify";
+import { redactErrorMessage } from "@/lib/redaction";
 import type { CallContext } from "@/lib/providers/types";
 
 export const runtime = "nodejs";
@@ -120,16 +121,17 @@ export async function POST(req: NextRequest) {
       data,
     });
   } catch (err) {
+    const safeMessage = redactErrorMessage(err);
     // 路由/能力解析失败(适配器内部抛 RoutingError):补写 ops_error_logs。
     if (err instanceof RoutingError) {
       const code = routingCodeToErrorCode(err.code);
       await logRouteError({
         startedAt, ctx, model, code,
-        errorMessage: err.message,
+        errorMessage: safeMessage,
       });
       return apiErrorLocalized(code, req);
     }
-    console.error("[/v1/images/generations] 失败:", err);
+    console.error("[/v1/images/generations] 失败:", safeMessage);
     const code = ErrorCode.MEDIA_IMAGE_GEN_FAILED;
     await safeLogUsage({
       ctx,
@@ -139,7 +141,7 @@ export async function POST(req: NextRequest) {
       latencyMs: Date.now() - startedAt,
       status: "failed",
       errorCode: code,
-      errorMessage: err instanceof Error ? err.message : String(err),
+      errorMessage: safeMessage,
       httpStatus: ERROR_META[code].status,
       requestPath: REQUEST_PATH,
       errorPhase: classifyError({ errorCode: code, httpStatus: ERROR_META[code].status }).phase,
@@ -148,7 +150,7 @@ export async function POST(req: NextRequest) {
     return apiErrorLocalized(
       code,
       req,
-      err instanceof Error ? { message: err.message } : undefined,
+      err instanceof Error ? { message: safeMessage } : undefined,
     );
   }
 }

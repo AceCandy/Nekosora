@@ -15,6 +15,7 @@ import { getGatewayUA } from "@/lib/system-settings/ua";
 import { verifyKey, extractBearer } from "@/lib/keys";
 import { apiErrorLocalized, ErrorCode, ERROR_META } from "@/lib/errors";
 import { classifyError } from "@/lib/error-classify";
+import { redactErrorMessage } from "@/lib/redaction";
 import { logUsage } from "@/lib/usage";
 import type { IRRequest, CallContext } from "@/lib/providers/types";
 import { resolveReasoningLevel } from "@/lib/reasoning";
@@ -163,7 +164,7 @@ function streamResponse(
             encoder.encode(
               `data: ${JSON.stringify({
                 error: {
-                  message: err instanceof Error ? err.message : "内部错误",
+                  message: redactErrorMessage(err, [], "内部错误"),
                   type: "server_error",
                 },
               })}\n\n`,

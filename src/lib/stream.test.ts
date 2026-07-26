@@ -223,4 +223,17 @@ describe("classifyStreamError", () => {
   it("message 保留原 Error.message", () => {
     expect(classifyStreamError(new Error("Too Many Requests")).message).toBe("Too Many Requests");
   });
+
+  it("脱敏返回消息但仍按原始 statusCode 分类", () => {
+    expect(
+      classifyStreamError(
+        makeApiError(401, "upstream rejected SECRET"),
+        ["SECRET"],
+      ),
+    ).toEqual({
+      statusCode: 401,
+      errorCode: "auth_error",
+      message: "upstream rejected [REDACTED]",
+    });
+  });
 });

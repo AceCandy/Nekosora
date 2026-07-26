@@ -1,5 +1,21 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { probeProviderKey } from "./probe";
+
+vi.mock("ai", () => ({
+  generateText: vi.fn(),
+  streamText: vi.fn(),
+}));
+
+const mocks = vi.hoisted(() => ({
+  buildLanguageModelWithKey: vi.fn(() => ({})),
+}));
+
+vi.mock("@/lib/providers/registry", () => ({
+  buildLanguageModelWithKey: (...args: unknown[]) =>
+    mocks.buildLanguageModelWithKey(...args),
+}));
+
+import { generateText, streamText } from "ai";
+import { fetchUpstreamModels, probeProviderKey } from "./probe";
 
 const baseOpts = {
   protocol: "openai" as const,
@@ -14,7 +30,12 @@ function mockFetch(
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => impl(url, init)));
 }
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.mocked(generateText).mockReset();
+  vi.mocked(streamText).mockReset();
+  mocks.buildLanguageModelWithKey.mockReset().mockReturnValue({});
+});
 
 describe("probeProviderKey 连通性探测(errorKind 分级)", () => {
   it("fetch 抛网络错 -> errorKind network, ok false", async () => {
@@ -158,5 +179,130 @@ describe("probeProviderKey gemini /models 无效 key 识别", () => {
     );
     const r = await probeProviderKey(baseOpts);
     expect(r.ok).toBe(true);
+  });
+
+  it("Gemini fetch 错误不会返回 URL key 或自定义 header 值", async () => {
+    const apiKey = "GEMINI_SECRET";
+    const headerSecret = "HEADER_SECRET";
+    mockFetch((url) =>
+      Promise.reject(
+        new Error(`fetch failed: ${url} x-custom-auth=${headerSecret}`),
+      ),
+    );
+
+    const r = await probeProviderKey({
+      ...baseOpts,
+      protocol: "gemini",
+      apiKey,
+      headers: { "x-custom-auth": headerSecret },
+    });
+
+    expect(r.ok).toBe(false);
+    expect(r.errorKind).toBe("network");
+    expect(r.error).toContain("fetch failed");
+    expect(r.error).not.toContain(apiKey);
+    expect(r.error).not.toContain(headerSecret);
+  });
+});
+
+describe("probeProviderKey 模型深度探测脱敏", () => {
+  it("provider model 构造失败也收敛为安全 ProbeResult", async () => {
+    const apiKey = "MODEL_BUILD_SECRET";
+    const headerSecret = "MODEL_BUILD_HEADER_SECRET";
+    mocks.buildLanguageModelWithKey.mockImplementationOnce(() => {
+      throw new Error(`model build failed for ${apiKey} and ${headerSecret}`);
+    });
+
+    const r = await probeProviderKey({
+      ...baseOpts,
+      apiKey,
+      upstreamModelName: "demo-model",
+      headers: { "x-custom": headerSecret },
+    });
+
+    expect(r.ok).toBe(false);
+    expect(r.errorKind).toBe("unknown");
+    expect(r.error).toBe("model build failed for [REDACTED] and [REDACTED]");
+  });
+
+  it("流式回退成功时 nonStreamError 不含当前 key 或 header 值", async () => {
+    const apiKey = "MODEL_SECRET";
+    const headerSecret = "CUSTOM_HEADER_SECRET";
+    vi.mocked(generateText).mockRejectedValue(
+      new Error(`upstream failed apiKey=${apiKey} x-custom=${headerSecret}`),
+    );
+    vi.mocked(streamText).mockReturnValue({
+      consumeStream: vi.fn().mockResolvedValue(undefined),
+    } as never);
+
+    const r = await probeProviderKey({
+      ...baseOpts,
+      apiKey,
+      upstreamModelName: "demo-model",
+      headers: { "x-custom": headerSecret },
+    });
+
+    expect(r).toMatchObject({ ok: true, mode: "stream" });
+    expect(r.nonStreamError).toContain("upstream failed");
+    expect(r.nonStreamError).not.toContain(apiKey);
+    expect(r.nonStreamError).not.toContain(headerSecret);
+  });
+
+  it("非流式与流式均失败时组合 error 只保留安全诊断", async () => {
+    const apiKey = "MODEL_SECRET";
+    const headerSecret = "CUSTOM_HEADER_SECRET";
+    vi.mocked(generateText).mockRejectedValue(
+      new Error(`non-stream failed for ${apiKey}`),
+    );
+    vi.mocked(streamText).mockReturnValue({
+      consumeStream: vi.fn(async ({
+        onError,
+      }: { onError?: (error: unknown) => void }) => {
+        onError?.(new Error(`stream failed for ${headerSecret}`));
+      }),
+    } as never);
+
+    const r = await probeProviderKey({
+      ...baseOpts,
+      apiKey,
+      upstreamModelName: "demo-model",
+      headers: { "x-custom": headerSecret },
+    });
+
+    expect(r.ok).toBe(false);
+    expect(r.error).toBe(
+      "非流式: non-stream failed for [REDACTED]; 流式: stream failed for [REDACTED]",
+    );
+    expect(r.error).not.toContain(apiKey);
+    expect(r.error).not.toContain(headerSecret);
+  });
+});
+
+describe("fetchUpstreamModels 脱敏边界", () => {
+  it("Gemini fetch 异常离开持 key 边界前会重建为安全 Error", async () => {
+    const apiKey = "LIST_SECRET";
+    const headerSecret = "LIST_HEADER_SECRET";
+    mockFetch((url) =>
+      Promise.reject(new Error(`fetch failed: ${url} x-custom=${headerSecret}`)),
+    );
+
+    let caught: Error | undefined;
+    try {
+      await fetchUpstreamModels({
+        protocol: "gemini",
+        baseUrl: baseOpts.baseUrl,
+        apiKey,
+        headers: { "x-custom": headerSecret },
+      });
+    } catch (error) {
+      caught = error as Error;
+    }
+
+    expect(caught).toBeInstanceOf(Error);
+    expect(caught?.message).toContain("fetch failed");
+    expect(caught?.message).not.toContain(apiKey);
+    expect(caught?.message).not.toContain(headerSecret);
+    expect(caught?.stack).not.toContain(apiKey);
+    expect(caught?.stack).not.toContain(headerSecret);
   });
 });

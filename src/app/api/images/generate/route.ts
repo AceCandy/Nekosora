@@ -8,8 +8,9 @@ import { type NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { getSession } from "@/lib/session";
-import { generateImageViaRoute, RoutingError } from "@/lib/providers/multimodal/image-gen";
+import { generateImageViaRoute } from "@/lib/providers/multimodal/image-gen";
 import { getStorage } from "@/lib/infra/storage";
+import { redactErrorMessage } from "@/lib/redaction";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -77,7 +78,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ jobId: job.id, urls });
   } catch (err) {
-    const errorMsg = err instanceof RoutingError ? err.message : err instanceof Error ? err.message : "生成失败";
+    const errorMsg = redactErrorMessage(err, [], "生成失败");
     await db
       .update(s.imageJobs)
       .set({ status: "failed", error: errorMsg })

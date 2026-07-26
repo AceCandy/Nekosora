@@ -24,6 +24,7 @@
 - **传 upstreamModelName(测具体模型可用性)** -> 先用极小 `generateText`(`maxOutputTokens:1`)测非流式；非流式出现非鉴权、非网络失败时再用 `streamText` 完整消费流复核。任一模式成功即路由可用，结果用 `mode` 标明通过方式并保留 `nonStreamError`。鉴权或网络失败不重复请求。
 - 流式兼容性属于 route/provider 组合，不写入模型目录。禁止从模型名推断 stream 支持，也禁止把所有模型强制改为流式测试。
 - **编辑页逐 key 检测**(`testKeyDirect`/`testMyKeyDirect`): 配 key 时(尚未保存)即测,用表单当前值,**不读 DB、不落库**(区别于列表存活检测/深度检测落库回显)。有 `testModel` -> 传 `upstreamModelName` 走深度(极小生成验全链路);无 -> 空 body 验 key。与列表存活检测「先空 body 失败回退深度」不同:编辑页有 `testModel` 直接深度(用户填了模型即意图验模型,省一次空 body 请求)。
+- **错误脱敏边界**: `probeProviderKey`、`probeModelAvailability`、`probeKeyAuth` 与 `fetchUpstreamModels` 必须用 `[apiKey, ...Object.values(headers ?? {})]` 作为精确 secrets。模型构造和上游调用都必须位于同一 `try/catch` 内，确保同步构造异常也只能形成脱敏后的 `error` / `nonStreamError`。原始 `Error`、key、header 值不得进入 `ProbeResult`、健康字段或 UI。
 
 ### 4. 为什么用 POST chat 空 body 验证 key(而非 GET /models)
 很多中转站/聚合站 `/models` 端点公开不校验 key,无效 key 也返 200,GET /models 无法判定 key 有效性。chat 端点(`/chat/completions`、`/messages`)一定校验 key:valid key 缺字段返 400,invalid 返 401/403。空 body `{}` 不指定 model、不产生生成,既不计费也不依赖具体模型,避免聚合站 "/models 第一个是 voice/image" 或 "预扣费 quota" 误判(对齐 AQBot anthropic 的 /messages 空 body;openai 系 AQBot 仍用 GET /models,本仓统一改用 POST chat 空 body 更严格)。gemini chat 端点要带 model 路径,空 body 不便,退回 GET /models。
@@ -40,9 +41,11 @@
 - gemini 无效 key 返 400+`API key not valid` body,却套用通用"400=有效"判通过(误判有效,需解析 body 纠正)。
 - 验证 key 发带 model 的 chat 请求(指定 voice/image 模型触发计费/quota/`model_not_found` 误判)。
 - 把 5xx 或 quota 403 归为 `auth`(误导成密钥错)。
+- 在 `try` 外构造 language model，或直接把 fetch/SDK 的 `error.message` 写入 `ProbeResult`（错误可能包含完整 key/query/header）。
 #### Correct
 - 验证 key 用 POST chat 空 body(不指定 model、不计费),看 401/403 判无效;测模型才发极小生成请求。
 - `401/403`->auth,`5xx`->unknown,其余->key 有效。
+- 在持有 key/header 的 catch 内调用共享 `redactErrorMessage(error, secrets)`，仅返回 safe message；详见 [Error Handling](./error-handling.md#scenario-provider-error-credential-redaction)。
 
 ### 7. 相关
 - `src/lib/providers/probe.ts`(`probeProviderKey` 双路 + `buildKeyAuthRequest` + `buildModelsRequest` + `fetchUpstreamModels`)是探测的唯一中枢。

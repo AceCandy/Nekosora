@@ -15,6 +15,7 @@ import { generateImage as generateImage } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import type { CallContext, ResolvedRoute } from "@/lib/providers/types";
 import { resolveRoutes, resolveRoutesById, RoutingError } from "@/lib/routing";
+import { redactErrorMessage } from "@/lib/redaction";
 import { maskKey } from "@/lib/usage";
 
 export interface ImageGenOptions {
@@ -72,17 +73,27 @@ export async function generateImageViaRoute(
   const route = routes[0];
   const { baseURL, apiKey, headers } = buildOpenAICompatConfig(route);
 
-  // 图像生成用 @ai-sdk/openai 的 image 模型(指向任意 OpenAI 兼容 baseURL)。
-  const provider = createOpenAI({ baseURL, apiKey, name: route.provider.id, headers });
-  const model = provider.image(route.upstreamModelName);
-
-  const result = await generateImage({
-    model,
-    prompt: opts.prompt,
-    n: opts.n ?? 1,
-    // AI SDK v5 size 透传(providerOptions)。
-    providerOptions: opts.size ? { openai: { size: opts.size } } : undefined,
-  });
+  let result: Awaited<ReturnType<typeof generateImage>>;
+  try {
+    // 图像生成用 @ai-sdk/openai 的 image 模型(指向任意 OpenAI 兼容 baseURL)。
+    const provider = createOpenAI({ baseURL, apiKey, name: route.provider.id, headers });
+    const model = provider.image(route.upstreamModelName);
+    result = await generateImage({
+      model,
+      prompt: opts.prompt,
+      n: opts.n ?? 1,
+      // AI SDK v5 size 透传(providerOptions)。
+      providerOptions: opts.size ? { openai: { size: opts.size } } : undefined,
+    });
+  } catch (error) {
+    throw new Error(
+      redactErrorMessage(
+        error,
+        [apiKey, ...Object.values(headers ?? {})],
+        "图像生成失败",
+      ),
+    );
+  }
 
   const images: GeneratedImage[] = [];
   for (const img of result.images) {

@@ -8,6 +8,7 @@ import { transcribe as transcribe } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import type { CallContext } from "@/lib/providers/types";
 import { resolveRoutesByCapability, RoutingError } from "@/lib/routing";
+import { redactErrorMessage } from "@/lib/redaction";
 import { maskKey } from "@/lib/usage";
 
 export interface TranscribeOptions {
@@ -42,35 +43,45 @@ export async function transcribeViaRoute(
 ): Promise<TranscribeResult> {
   const routes = await resolveRoutesByCapability(ctx, modelName, "audioTranscription");
   const route = routes[0];
-  const provider = createOpenAI({
-    baseURL: route.provider.baseUrl,
-    apiKey: route.provider.apiKey,
-    name: route.provider.id,
-    headers: route.provider.headers,
-  });
-  const model = provider.transcription(route.upstreamModelName);
+  try {
+    const provider = createOpenAI({
+      baseURL: route.provider.baseUrl,
+      apiKey: route.provider.apiKey,
+      name: route.provider.id,
+      headers: route.provider.headers,
+    });
+    const model = provider.transcription(route.upstreamModelName);
 
-  const result = await transcribe({
-    model,
-    // AI SDK v5 DataContent 接受 Uint8Array / ArrayBuffer / Buffer / URL。
-    audio: new Uint8Array(opts.audio),
-    providerOptions: {
-      openai: {
-        ...(opts.language ? { language: opts.language } : {}),
-        ...(opts.prompt ? { prompt: opts.prompt } : {}),
+    const result = await transcribe({
+      model,
+      // AI SDK v5 DataContent 接受 Uint8Array / ArrayBuffer / Buffer / URL。
+      audio: new Uint8Array(opts.audio),
+      providerOptions: {
+        openai: {
+          ...(opts.language ? { language: opts.language } : {}),
+          ...(opts.prompt ? { prompt: opts.prompt } : {}),
+        },
       },
-    },
-  });
+    });
 
-  return {
-    text: result.text,
-    providerRef: `${route.source}:${route.provider.id}`,
-    providerName: route.provider.name,
-    routeId: route.routeId,
-    routeName: `${route.provider.name} · ${route.upstreamModelName}`,
-    upstreamModel: route.upstreamModelName,
-    upstreamKeyMasked: maskKey(route.provider.apiKey),
-  };
+    return {
+      text: result.text,
+      providerRef: `${route.source}:${route.provider.id}`,
+      providerName: route.provider.name,
+      routeId: route.routeId,
+      routeName: `${route.provider.name} · ${route.upstreamModelName}`,
+      upstreamModel: route.upstreamModelName,
+      upstreamKeyMasked: maskKey(route.provider.apiKey),
+    };
+  } catch (error) {
+    throw new Error(
+      redactErrorMessage(
+        error,
+        [route.provider.apiKey, ...Object.values(route.provider.headers ?? {})],
+        "语音转写失败",
+      ),
+    );
+  }
 }
 
 export { RoutingError };

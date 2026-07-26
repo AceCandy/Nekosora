@@ -19,6 +19,7 @@ import { orderedWeightedKeys } from "@/lib/providers/keys";
 import { recordSuccess, recordFailure } from "@/lib/circuit-breaker";
 import { logUsage, maskKey, type LogUsageParams } from "@/lib/usage";
 import { classifyError, NETWORK_KEYWORDS } from "@/lib/error-classify";
+import { redactErrorMessage, redactSensitiveText } from "@/lib/redaction";
 import { buildReasoningProviderOptions, getDefaultReasoningLevel } from "@/lib/reasoning";
 import type {
   CallContext,
@@ -143,6 +144,10 @@ const SHORT_HTTP_STATUS: Record<string, number> = {
   network_error: 503,
 };
 
+function providerSecrets(route: ResolvedRoute, apiKey: string): string[] {
+  return [apiKey, ...Object.values(route.provider.headers ?? {})];
+}
+
 /**
  * 从生成错误提取真实上游 statusCode 与分类短码,供落库 httpStatus/errorCode/errorPhase 使用。
  *
@@ -150,7 +155,10 @@ const SHORT_HTTP_STATUS: Record<string, number> = {
  * 直接抛出的 AI_APICallError 自带 statusCode。duck-typing 提取,不依赖错误类 import。
  * 优先按真实 statusCode 分类(429/401/403/5xx),无 statusCode 时按 message 网络关键字,最后兜底 generation_failed。
  */
-export function classifyStreamError(err: unknown): {
+export function classifyStreamError(
+  err: unknown,
+  secrets: readonly (string | null | undefined)[] = [],
+): {
   statusCode?: number;
   errorCode: string;
   message: string;
@@ -159,12 +167,13 @@ export function classifyStreamError(err: unknown): {
   const lastError = (err as { lastError?: unknown } | null)?.lastError;
   const source = (lastError ?? err) as { statusCode?: number };
   const statusCode = typeof source?.statusCode === "number" ? source.statusCode : undefined;
-  const message = err instanceof Error ? err.message : err != null ? String(err) : "生成失败";
+  const rawMessage = err instanceof Error ? err.message : err != null ? String(err) : "生成失败";
+  const message = redactSensitiveText(rawMessage, secrets);
 
   if (statusCode === 429) return { statusCode, errorCode: "rate_limited", message };
   if (statusCode === 401 || statusCode === 403) return { statusCode, errorCode: "auth_error", message };
   if (statusCode !== undefined && statusCode >= 500) return { statusCode, errorCode: "upstream_error", message };
-  if (NETWORK_KEYWORDS.test(message)) return { statusCode, errorCode: "network_error", message };
+  if (NETWORK_KEYWORDS.test(rawMessage)) return { statusCode, errorCode: "network_error", message };
   // 其余(400/404/402 等 4xx 或无 statusCode 的未知错误):归 generation_failed。
   return { statusCode, errorCode: "generation_failed", message };
 }
@@ -188,7 +197,7 @@ async function logAttemptFailure(opts: {
   stream: boolean;
   taskKind?: string;
 }): Promise<void> {
-  const classified = classifyStreamError(opts.err);
+  const classified = classifyStreamError(opts.err, providerSecrets(opts.route, opts.apiKey));
   const phase = classifyError({
     errorCode: classified.errorCode,
     httpStatus: classified.statusCode,
@@ -256,7 +265,7 @@ export async function* streamChat(
       : await resolveRoutes(ctx, request.model);
   } catch (err) {
     const errCode = err instanceof RoutingError ? err.code : "routing_error";
-    const errMsg = err instanceof Error ? err.message : "路由解析失败";
+    const errMsg = redactErrorMessage(err, [], "路由解析失败");
     yield { type: "error", error: errMsg, code: errCode };
     await reportFinalUsage(opts, {
       params: {
@@ -276,6 +285,7 @@ export async function* streamChat(
 
   // 2. 逐条路由尝试(故障转移);路由内再按 key 加权顺序重试(认证类错误换 key)
   let lastError: unknown = null;
+  let lastSafeError = "生成失败";
   let succeeded = false;
   // 尝试序号(跨路由连续递增):每次 key 失败记一条 ops_error_logs(attempt=N),供前端重试链排序。
   let attemptCount = 0;
@@ -304,6 +314,11 @@ export async function* streamChat(
           break; // 正常完成
         } catch (err) {
           lastError = err;
+          lastSafeError = redactErrorMessage(
+            err,
+            providerSecrets(route, tryKey),
+            "生成失败",
+          );
           // 客户端中止:不重试 key、不转移路由,直接结束(用量记 interrupted)。
           if (isAbortError(err)) {
             aborted = true;
@@ -322,7 +337,7 @@ export async function* streamChat(
           if (hasMoreAttempts && isRetryableForKey(err)) {
             console.warn(
               `[streamChat] key 重试 ${k + 2}/${maxAttempts} (model=${route.upstreamModelName}):`,
-              err instanceof Error ? err.message : err,
+              lastSafeError,
             );
             continue;
           }
@@ -338,13 +353,12 @@ export async function* streamChat(
       if (i === routes.length - 1 || !failoverable) break;
       console.warn(
         `[streamChat] 路由转移 ${i + 1}/${routes.length} (model=${route.upstreamModelName}):`,
-        lastError instanceof Error ? lastError.message : lastError,
+        lastSafeError,
       );
     }
 
     if (!succeeded && !aborted) {
-      const errMsg = lastError instanceof Error ? lastError.message : "生成失败";
-      yield { type: "error", error: errMsg, code: "generation_failed" };
+      yield { type: "error", error: lastSafeError, code: "generation_failed" };
     }
   } finally {
     releaseStream();
@@ -388,7 +402,7 @@ export async function* streamChat(
             latencyMs: Date.now() - startedAt,
             status: "failed",
             errorCode: "generation_failed",
-            errorMessage: lastError instanceof Error ? lastError.message : "生成失败",
+            errorMessage: lastSafeError,
             errorPhase: classifyError({ errorCode: "generation_failed" }).phase,
             errorType: "generation_failed",
             stream: true,
@@ -592,7 +606,7 @@ export async function generateChat(opts: GenerateChatOptions): Promise<GenerateC
       : await resolveRoutes(ctx, request.model);
   } catch (err) {
     const errCode = err instanceof RoutingError ? err.code : "routing_error";
-    const errMsg = err instanceof Error ? err.message : "路由解析失败";
+    const errMsg = redactErrorMessage(err, [], "路由解析失败");
     await logUsage({
       ctx, runId, model: request.model, usage: {},
       latencyMs: Date.now() - startedAt, status: "failed", errorCode: errCode,
@@ -608,6 +622,7 @@ export async function generateChat(opts: GenerateChatOptions): Promise<GenerateC
   }
 
   let lastError: unknown = null;
+  let lastSafeError = "生成失败";
   let succeeded = false;
   let text = "";
   // 尝试序号(跨路由连续递增):每次 key 失败记一条 ops_error_logs(attempt=N),供前端重试链排序。
@@ -652,6 +667,11 @@ export async function generateChat(opts: GenerateChatOptions): Promise<GenerateC
           break;
         } catch (err) {
           lastError = err;
+          lastSafeError = redactErrorMessage(
+            err,
+            providerSecrets(route, tryKey),
+            "生成失败",
+          );
           // 方案 X:每次尝试失败各记一条 ops_error_logs(带 attempt,不走 metrics)。
           attemptCount += 1;
           await logAttemptFailure({
@@ -670,13 +690,12 @@ export async function generateChat(opts: GenerateChatOptions): Promise<GenerateC
       if (i === routes.length - 1 || !failoverable) break;
       console.warn(
         `[generateChat] 路由转移 ${i + 1}/${routes.length} (model=${route.upstreamModelName}):`,
-        lastError instanceof Error ? lastError.message : lastError,
+        lastSafeError,
       );
     }
 
     if (!succeeded) {
-      const errMsg = lastError instanceof Error ? lastError.message : "生成失败";
-      return { text: "", usage: finalUsage, error: errMsg };
+      return { text: "", usage: finalUsage, error: lastSafeError };
     }
     return { text, usage: finalUsage };
   } finally {
@@ -851,7 +870,7 @@ export async function* streamChatWithTools(
         const { result, isError } = await callMcpTool(
           mcpServers, tc.toolCallId, tc.toolName, tc.args,
         ).catch((e) => ({
-          result: e instanceof Error ? e.message : "tool_error",
+          result: redactErrorMessage(e, [], "tool_error"),
           isError: true,
         }));
         yield {
@@ -904,7 +923,7 @@ export async function* streamChatWithTools(
           errorCode,
           errorMessage: terminalStatus === "failed"
             ? finalUsage.params.errorMessage
-              ?? (terminalError instanceof Error ? terminalError.message : undefined)
+              ?? (terminalError == null ? undefined : redactErrorMessage(terminalError))
             : finalUsage.params.errorMessage,
           errorPhase: terminalStatus === "failed"
             ? finalUsage.params.errorPhase ?? classifyError({ errorCode }).phase
@@ -933,7 +952,7 @@ export async function* streamChatWithTools(
           status: terminalStatus,
           errorCode: failed ? "generation_failed" : "interrupted",
           errorMessage: failed
-            ? terminalError instanceof Error ? terminalError.message : "生成失败"
+            ? redactErrorMessage(terminalError, [], "生成失败")
             : undefined,
           errorPhase: failed ? classifyError({ errorCode: "generation_failed" }).phase : undefined,
           errorType: failed ? "generation_failed" : "interrupted",

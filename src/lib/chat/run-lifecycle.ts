@@ -13,6 +13,11 @@
  */
 import { and, eq } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
+import {
+  isSensitiveFieldName,
+  redactErrorMessage,
+  redactSensitiveText,
+} from "@/lib/redaction";
 import type { TokenUsage } from "@/db/types";
 import type { IRUsage } from "@/lib/providers/types";
 
@@ -35,9 +40,6 @@ export function irUsageToTokenUsage(usage?: IRUsage | null): TokenUsage | null {
   if (usage.reasoningTokens != null) out.reasoningTokens = usage.reasoningTokens;
   return Object.keys(out).length > 0 ? out : null;
 }
-
-const SENSITIVE_KEY_RE =
-  /^(authorization|auth|api[_-]?key|access[_-]?token|refresh[_-]?token|secret|password|passwd|cookie|set-cookie|x-api-key|bearer)$/i;
 
 const MAX_JSON_DEPTH = 8;
 const MAX_ARRAY_ITEMS = 50;
@@ -78,9 +80,10 @@ function normalizeJsonValue(
 ): unknown {
   if (value === null || value === undefined) return null;
   if (typeof value === "string") {
+    const safeValue = redactSensitiveText(value);
     return value.length > MAX_STRING_LEN
-      ? `${value.slice(0, MAX_STRING_LEN)}…[truncated ${value.length}]`
-      : value;
+      ? `${safeValue.slice(0, MAX_STRING_LEN)}…[truncated ${value.length}]`
+      : safeValue;
   }
   if (typeof value === "number") {
     return Number.isFinite(value) ? value : String(value);
@@ -98,7 +101,7 @@ function normalizeJsonValue(
   if (value instanceof Error) {
     return {
       name: value.name,
-      message: value.message.slice(0, MAX_STRING_LEN),
+      message: redactSensitiveText(value.message).slice(0, MAX_STRING_LEN),
     };
   }
 
@@ -125,7 +128,7 @@ function normalizeJsonValue(
         out._truncatedKeys = entries.length - MAX_OBJECT_KEYS;
         break;
       }
-      if (SENSITIVE_KEY_RE.test(key)) {
+      if (isSensitiveFieldName(key)) {
         out[key] = "[REDACTED]";
       } else {
         out[key] = normalizeJsonValue(child, depth + 1, seen);
@@ -139,7 +142,7 @@ function normalizeJsonValue(
 }
 
 function logRunDbFailure(op: string, err: unknown): void {
-  const msg = err instanceof Error ? err.message : String(err);
+  const msg = redactErrorMessage(err);
   // 只记操作名 + 短错误,不附带 args/result/密钥。
   console.error(`[run-lifecycle] ${op} failed:`, msg.slice(0, 200));
 }

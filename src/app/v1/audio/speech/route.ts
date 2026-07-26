@@ -19,6 +19,7 @@ import {
   ERROR_META,
 } from "@/lib/errors";
 import { classifyError } from "@/lib/error-classify";
+import { redactErrorMessage } from "@/lib/redaction";
 import { logUsage } from "@/lib/usage";
 import type { CallContext } from "@/lib/providers/types";
 
@@ -111,13 +112,14 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (err) {
+    const safeMessage = redactErrorMessage(err);
     // 路由/能力解析失败(适配器内部抛 RoutingError):补写 ops_error_logs。
     if (err instanceof RoutingError) {
       const code = routingCodeToErrorCode(err.code);
-      await logRouteError({ startedAt, ctx, model, code, errorMessage: err.message });
+      await logRouteError({ startedAt, ctx, model, code, errorMessage: safeMessage });
       return apiErrorLocalized(code, req);
     }
-    console.error("[/v1/audio/speech] 失败:", err);
+    console.error("[/v1/audio/speech] 失败:", safeMessage);
     const code = ErrorCode.MEDIA_TTS_FAILED;
     await safeLogUsage({
       ctx,
@@ -127,7 +129,7 @@ export async function POST(req: NextRequest) {
       latencyMs: Date.now() - startedAt,
       status: "failed",
       errorCode: code,
-      errorMessage: err instanceof Error ? err.message : String(err),
+      errorMessage: safeMessage,
       httpStatus: ERROR_META[code].status,
       requestPath: REQUEST_PATH,
       errorPhase: classifyError({ errorCode: code, httpStatus: ERROR_META[code].status }).phase,
@@ -136,7 +138,7 @@ export async function POST(req: NextRequest) {
     return apiErrorLocalized(
       code,
       req,
-      err instanceof Error ? { message: err.message } : undefined,
+      err instanceof Error ? { message: safeMessage } : undefined,
     );
   }
 }

@@ -22,6 +22,7 @@ vi.mock("@ai-sdk/openai", () => ({
   }),
 }));
 
+import { generateImage } from "ai";
 import { generateImageViaRoute, RoutingError } from "@/lib/providers/multimodal/image-gen";
 import {
   setRouteRepository,
@@ -60,6 +61,7 @@ interface MockProvider {
   protocol: string;
   baseUrl: string;
   apiKeysEnc: string;
+  headersJson?: Record<string, string>;
   enabled: boolean;
 }
 
@@ -101,7 +103,8 @@ function makeMockRepo(data: MockData): RouteRepository {
 function makeDefaultData(): MockData {
   const provider: MockProvider = {
     id: "PA", name: "上游A", protocol: "openai",
-    baseUrl: "https://a.example.com/v1", apiKeysEnc: ENC_KEY, enabled: true,
+    baseUrl: "https://a.example.com/v1", apiKeysEnc: ENC_KEY,
+    headersJson: { "x-custom-auth": "HEADER_SECRET" }, enabled: true,
   };
   const pubModel: MockModel = {
     id: "M_PUB", name: "dalle-pub", ownerUserId: "U_A", visibility: "public",
@@ -196,5 +199,24 @@ describe("generateImageViaRoute (image byId 可见性)", () => {
 
   it("RoutingError 仍被导出(调用方依赖此类型)", () => {
     expect(RoutingError).toBeInstanceOf(Function);
+  });
+
+  it("上游异常离开适配器前会移除 key/header 与原始 stack", async () => {
+    vi.mocked(generateImage).mockRejectedValueOnce(
+      new Error("image failed for sk-test-fake and HEADER_SECRET"),
+    );
+    const ctx: CallContext = { userId: "U_A", keyKind: null, source: "gateway" };
+
+    let caught: Error | undefined;
+    try {
+      await generateImageViaRoute(ctx, "dalle-pub", { prompt: "一只猫" });
+    } catch (error) {
+      caught = error as Error;
+    }
+
+    expect(caught).toBeInstanceOf(Error);
+    expect(caught?.message).toBe("image failed for [REDACTED] and [REDACTED]");
+    expect(caught?.stack).not.toContain("sk-test-fake");
+    expect(caught?.stack).not.toContain("HEADER_SECRET");
   });
 });

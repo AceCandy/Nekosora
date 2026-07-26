@@ -128,4 +128,24 @@ describe("POST /v1/audio/transcriptions", () => {
       },
     );
   });
+
+  it("异常兜底不会把凭据写入 HTTP、console 或错误日志", async () => {
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mocks.transcribeViaRoute.mockRejectedValue(
+      new Error("upstream failed Authorization: Bearer ROUTE_SECRET"),
+    );
+
+    const response = await POST(request());
+    const body = await response.json();
+
+    expect(JSON.stringify(body)).not.toContain("ROUTE_SECRET");
+    expect(JSON.stringify(body)).toContain("[REDACTED]");
+    expect(mocks.logUsage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        errorMessage: "upstream failed Authorization: Bearer [REDACTED]",
+      }),
+    );
+    expect(JSON.stringify(consoleSpy.mock.calls)).not.toContain("ROUTE_SECRET");
+    consoleSpy.mockRestore();
+  });
 });

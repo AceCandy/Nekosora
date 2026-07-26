@@ -34,6 +34,7 @@ import {
   resolveRunTerminalStatus,
   startRun,
 } from "@/lib/chat/run-lifecycle";
+import { redactErrorMessage } from "@/lib/redaction";
 import type { IRRequest, IRUsage } from "@/lib/providers/types";
 import type { ReasoningLevel } from "@/db/types";
 
@@ -222,7 +223,12 @@ export async function POST(req: NextRequest) {
         };
         void getQueue()
           .then((q) => q.send("conversation-title", titleJob))
-          .catch((error) => console.error("[chat] conversation-title enqueue failed:", error));
+          .catch((error) =>
+            console.error(
+              "[chat] conversation-title enqueue failed:",
+              redactErrorMessage(error),
+            ),
+          );
       }
     } catch {
       /* fallback 写入失败不阻断主回答 */
@@ -399,7 +405,7 @@ export async function POST(req: NextRequest) {
         if (!abortCtl.signal.aborted) {
           sawStreamError = true;
           safeEnqueue(
-            encoder.encode(`data: ${JSON.stringify({ type: "error", error: err instanceof Error ? err.message : "内部错误" })}\n\n`),
+            encoder.encode(`data: ${JSON.stringify({ type: "error", error: redactErrorMessage(err, [], "内部错误") })}\n\n`),
           );
         }
       } finally {
@@ -498,7 +504,7 @@ export async function POST(req: NextRequest) {
           if (!abortCtl.signal.aborted) {
             safeEnqueue(
               encoder.encode(
-                `data: ${JSON.stringify({ type: "error", error: err instanceof Error ? err.message : "收尾持久化失败" })}\n\n`,
+                `data: ${JSON.stringify({ type: "error", error: redactErrorMessage(err, [], "收尾持久化失败") })}\n\n`,
               ),
             );
           }

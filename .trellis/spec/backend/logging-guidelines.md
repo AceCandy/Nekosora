@@ -34,6 +34,7 @@ failed/interrupted → insert ops_error_logs
 - 写入**永不阻断主流程**：整段 `try/catch`，失败只 `console.error`。
 - `errorCode` 列 NOT NULL，写入时 `?? "unknown"` 兜底；`userId` 空串收敛 `null`（FK 安全）。
 - Prometheus `observeRequest` 埋点不变（source/model/status/latency/tokens）。
+- `ops_error_logs.errorMessage` 写入前必须经过共享 `redactSensitiveText()` 通用兜底；其他错误分类、status 和 category 字段不受影响。
 
 ---
 
@@ -117,6 +118,8 @@ stream 层 failed 行 `httpStatus` 由 `SHORT_HTTP_STATUS`（stream 内部短码
 - ❌ 完整 request body / response body（错误表只存脱敏摘要 / requestPath）。
 - ❌ 凭证、Authorization header、api key 明文（上游 key 只存脱敏快照 `upstreamKeyMasked`）。
 
+`logUsage()` 的模式清洗只是 defense in depth。持有实际 provider key 或自定义 header 的 probe、stream 和 multimodal adapter 必须先按精确值脱敏，再把 safe message 交给 console、响应与 `logUsage()`；否则任意 opaque secret 无法由最终 sink 推断。完整边界和测试矩阵见 [Error Handling](./error-handling.md#scenario-provider-error-credential-redaction)。
+
 ## Scenario: MCP Agent 聚合用量
 
 ### 1. Scope / Trigger
@@ -196,6 +199,7 @@ panel **不做字段级脱敏**——错误日志均为用户自己调用产生�
 - **panel 防越权靠字段置空** → 靠查询层 `userId` 强制 where（`listErrorLogs` / `getErrorLog`）；字段级脱敏会让用户无法定位自己的错误。
 - **`logUsage` 抛错阻断主流程** → 永不抛错，失败只 `console.error`。
 - **副任务调 streamChat/generateChat 不传 `taskKind`** → 与主回复混在 source=chat，用量明细出现「一请求多日志」；标题/记忆/压缩必须透传。
+- **认为 `logUsage` 兜底足以清理任意 key** → 它只识别凭据形态；provider 边界必须传入当前 key/header 做精确替换。
 
 ## Scenario: WebChat Run 审计生命周期
 

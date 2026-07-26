@@ -150,6 +150,67 @@ for await (const event of streamChat({ ctx, request, abortSignal })) consume(eve
 if (!abortSignal.aborted) controller.enqueue(doneFrame);
 ```
 
+## Scenario: Provider Error Credential Redaction
+
+### 1. Scope / Trigger
+
+Apply this contract whenever an upstream provider error can cross into an API/SSE response, `console`, probe result, database error field, or structured run/tool audit.
+
+### 2. Signatures
+
+- `isSensitiveFieldName(name: string): boolean`
+- `redactSensitiveText(text: string, secrets?: readonly (string | null | undefined)[]): string`
+- `redactErrorMessage(error: unknown, secrets?, fallback?): string`
+
+The shared implementation lives in `src/lib/redaction.ts`; provider-specific callers must not maintain local credential regexes.
+
+### 3. Contracts
+
+- A boundary that holds an actual API key or custom provider headers passes the key and every header value as exact secrets before the error leaves that boundary.
+- Exact secrets are replaced literally, longest first; empty secrets are ignored. Query credentials, Authorization/Bearer, `x-api-key`, JSON fields, and key/value diagnostics also receive pattern-based redaction.
+- Retry, HTTP status extraction, auth classification, failover, and circuit-breaker decisions may inspect the raw error in-process. Only the derived safe message may enter downstream sinks.
+- Image, TTS, and STT adapters throw a new `Error(safeMessage)` without retaining the raw `cause` or stack. Their routes may only log, persist, or return that safe message.
+- `logUsage()` and structured run/tool normalization apply generic redaction as defense in depth. They cannot discover an arbitrary opaque secret that the owning caller failed to provide.
+- The replacement marker is `[REDACTED]`; non-sensitive diagnostic text and existing API error codes/statuses remain unchanged.
+
+### 4. Validation & Error Matrix
+
+| Input / condition | Required result |
+| --- | --- |
+| Error contains the current API key or custom header value | Replace every exact occurrence with `[REDACTED]` |
+| Error contains `?key=`, Authorization/Bearer, `x-api-key`, or a sensitive JSON/key-value field | Replace only the credential value |
+| Error contains no credential | Preserve the diagnostic message |
+| Raw error contains `statusCode` or retry metadata | Classify and route using the raw error, then publish only the safe message |
+| Unknown opaque secret was not supplied by the owning caller | Pattern backstops are insufficient; fix the owning boundary to pass the secret |
+
+### 5. Good / Base / Bad Cases
+
+- Good: each key attempt builds `secrets = [tryKey, ...Object.values(route.provider.headers ?? {})]`, classifies the raw error, then reuses one safe message for events, console, and logs.
+- Base: `upstream timeout after 30s` remains readable and otherwise unchanged.
+- Bad: passing the raw `Error` to `console.error`, an API details object, or `ops_error_logs` can expose a URL query, header, `cause`, or stack containing credentials.
+
+### 6. Tests Required
+
+- Unit-test literal secrets with regex metacharacters, overlapping values, and empty entries.
+- Cover URL query, Authorization/Bearer, `x-api-key`, quoted JSON/key-value forms, idempotence, and ordinary-message preservation.
+- Probe tests must cover fetch errors, model-construction errors, non-stream/stream errors, and custom header values.
+- Stream tests must prove raw status/retry behavior is retained while events, return values, console, and log parameters exclude the attempted key.
+- Media adapter and route tests must prove HTTP, console, `ops_error_logs`, and job error fields receive only safe messages.
+- Structured audit tests must retain depth, circular-reference, and truncation behavior while redacting sensitive fields and embedded credential text.
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong: the raw provider error crosses a sink boundary.
+console.error("provider failed", error);
+await logUsage({ ...params, errorMessage: error.message });
+
+// Correct: classify with the raw error, then reuse only the safe message.
+const classification = classifyStreamError(error, secrets);
+console.error("provider failed", classification.message);
+await logUsage({ ...params, errorMessage: classification.message });
+```
+
 ---
 
 ## Common Mistakes
@@ -159,3 +220,5 @@ if (!abortSignal.aborted) controller.enqueue(doneFrame);
 - **新增错误码只改了 `ErrorCode` 没补 `ERROR_META`** → 编译/运行会缺映射。
 - **新增错误码没补 i18n 文案** → message 退回错误码字符串。
 - **在网关直接用 `RoutingError.code` 短码返回** → 必须经 `routingCodeToErrorCode` 映射成点分码。
+- **只在最终日志 sink 做脱敏** → sink 不知道任意 opaque key；持有实际 key/header 的 provider 边界必须先做精确替换。
+- **把原始 provider `Error` 交给 console 或 route** → `cause`/stack 可能保留凭据；跨边界只传 safe message 或新建的 safe `Error`。

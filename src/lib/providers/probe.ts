@@ -22,6 +22,7 @@
 import { generateText, streamText } from "ai";
 import { buildLanguageModelWithKey } from "@/lib/providers/registry";
 import { isKeyAuthError } from "@/lib/stream";
+import { redactErrorMessage } from "@/lib/redaction";
 import type { ResolvedRoute } from "@/lib/providers/types";
 import type { ProviderProtocol } from "@/db/types";
 
@@ -215,7 +216,29 @@ async function probeModelAvailability(opts: {
     routeId: "__probe__",
   };
   const startedAt = Date.now();
-  const model = buildLanguageModelWithKey(route, apiKey, undefined, undefined, headers?.["user-agent"]);
+  const secrets = [apiKey, ...Object.values(headers ?? {})];
+  let model: ReturnType<typeof buildLanguageModelWithKey>;
+  try {
+    model = buildLanguageModelWithKey(
+      route,
+      apiKey,
+      undefined,
+      undefined,
+      headers?.["user-agent"],
+    );
+  } catch (err) {
+    const errorKind: ProbeResult["errorKind"] = isKeyAuthError(err)
+      ? "auth"
+      : isNetworkError(err)
+        ? "network"
+        : "unknown";
+    return {
+      ok: false,
+      latencyMs: Date.now() - startedAt,
+      error: redactErrorMessage(err, secrets),
+      errorKind,
+    };
+  }
   try {
     await generateText({
       model,
@@ -224,7 +247,7 @@ async function probeModelAvailability(opts: {
     });
     return { ok: true, latencyMs: Date.now() - startedAt, mode: "non-stream" };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = redactErrorMessage(err, secrets);
     const errorKind: ProbeResult["errorKind"] = isKeyAuthError(err)
       ? "auth"
       : isNetworkError(err)
@@ -245,7 +268,7 @@ async function probeModelAvailability(opts: {
         nonStreamError: msg,
       };
     } catch (streamErr) {
-      const streamMsg = streamErr instanceof Error ? streamErr.message : String(streamErr);
+      const streamMsg = redactErrorMessage(streamErr, secrets);
       return {
         ok: false,
         latencyMs: Date.now() - startedAt,
@@ -331,10 +354,10 @@ async function probeKeyAuth(opts: {
     return { ok: true, latencyMs };
   } catch (err) {
     const latencyMs = Date.now() - startedAt;
-    const msg = err instanceof Error ? err.message : String(err);
     const errorKind: ProbeResult["errorKind"] = isNetworkError(err)
       ? "network"
       : "unknown";
+    const msg = redactErrorMessage(err, [apiKey, ...Object.values(headers ?? {})]);
     return { ok: false, latencyMs, error: msg, errorKind };
   }
 }
@@ -362,17 +385,23 @@ export async function fetchUpstreamModels(opts: {
 
   const base = baseUrl.replace(/\/+$/, "");
   const { url, init } = buildModelsRequest(protocol, base, apiKey, headers);
-  const res = await fetch(url, init);
-  if (!res.ok) {
-    throw new Error(`上游返回 ${res.status} ${res.statusText}`);
+  try {
+    const res = await fetch(url, init);
+    if (!res.ok) {
+      throw new Error(`上游返回 ${res.status} ${res.statusText}`);
+    }
+    const json = await res.json();
+    // gemini 的列表结构与其他协议不同,单独解析;openai/openai-compatible/anthropic
+    // 都是 {data:[{id}]} 结构,共用 parseDataModels。
+    if (protocol === "gemini") {
+      return parseGeminiModels(json);
+    }
+    return parseDataModels(json);
+  } catch (error) {
+    throw new Error(
+      redactErrorMessage(error, [apiKey, ...Object.values(headers ?? {})], "拉取上游模型失败"),
+    );
   }
-  const json = await res.json();
-  // gemini 的列表结构与其他协议不同,单独解析;openai/openai-compatible/anthropic
-  // 都是 {data:[{id}]} 结构,共用 parseDataModels。
-  if (protocol === "gemini") {
-    return parseGeminiModels(json);
-  }
-  return parseDataModels(json);
 }
 
 /** OpenAI 兼容/Anthropic:响应 {data:[{id}]}。data 缺失时返回空列表(不抛错)。 */
