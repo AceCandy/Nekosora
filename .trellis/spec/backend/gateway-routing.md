@@ -146,6 +146,71 @@ WebChat 发消息、图像工作室生成(session 鉴权)。前端传 `modelId` 
 - 核心算法 `orderRoutes`/`weightedShuffle`/`filterByCircuitBreaker`/`pickWeightedKey`/`parseKeyBundle` 原样保留,对 route 来源透明。
 - 下游 `streamChat` 拿到 `routes[]` 后逐路由故障转移 × 路由内逐 key 重试,对 `source` 透明。
 
+## Scenario: 流式响应提交后的故障转移边界
+
+### 1. Scope / Trigger
+
+修改 `streamChat` 的 key 重试、路由故障转移或 `StreamEvent` 产出时，必须保持本节契约。目标是只在客户端尚未收到不可撤回事件时执行完整请求重试，防止同一条流拼接多个上游的内容。
+
+### 2. Signatures
+
+- `streamChat(opts: StreamChatOptions): AsyncGenerator<StreamEvent, void, unknown>`
+- 不可撤回事件：`text-delta`、`reasoning-delta`、`tool-call`
+- `isRetryableForKey(err: unknown): boolean`
+- `isFailoverableError(err: unknown): boolean`
+
+### 3. Contracts
+
+- `streamChat` 为每次请求维护单向的响应提交状态；不可撤回事件必须在向调用方 `yield` 前置为已提交。
+- 响应未提交时，继续按既有规则尝试同 Provider 的后续 key 和下一条 route。
+- 响应已提交后，当前尝试发生任何非 Abort 错误都不得再调用其他 key 或 route；向调用方保留已输出事件并追加现有脱敏 `generation_failed` error 事件。
+- 已提交失败仍调用 `logAttemptFailure`。错误可转移时仍先 `recordFailure(providerId)`，再停止路由循环；禁止故障转移不能跳过失败审计或 breaker 更新。
+- Abort 继续直接收敛为 interrupted，不写普通失败事件、不重试、不转移。
+- `finish` 是成功终态；`tool-result` 由 Agent loop 在已完成的 `streamChat` 步骤之外产生，不参与单次上游尝试的提交判定。
+- 不使用 TTFT 的 `firstTokenAt` 代替提交状态，因为 tool-call 也不可撤回但不是文本 token。
+
+### 4. Validation & Error Matrix
+
+| 条件 | key / route 行为 | 终态与审计 |
+|---|---|---|
+| 未输出不可撤回事件，key 可重试且仍有 key | 尝试下一 key | 当前 attempt 记 failed |
+| 未输出不可撤回事件，错误可转移且仍有 route | 记录 provider 失败后转移 | 当前 attempt 记 failed |
+| 已输出 text/reasoning/tool-call 后发生非 Abort 错误 | 不再调用其他 key 或 route | 当前 attempt 记 failed；可转移错误更新 breaker；流以 error 结束 |
+| 已输出后发生确定性请求错误 | 不再调用其他 key 或 route | 当前 attempt 记 failed；不更新 breaker；流以 error 结束 |
+| 任意阶段 Abort | 不重试、不转移 | interrupted；不发普通 error |
+| 上游正常 finish | 不重试、不转移 | success，记录终态 usage |
+
+### 5. Good / Base / Bad Cases
+
+- Good：首路由先输出 `foo` 后超时，客户端收到 `foo` 和 error；备用路由未调用，provider 失败仍进入 breaker。
+- Base：首路由在任何 delta 前连接失败，系统继续切到备用路由并正常完成。
+- Bad：首 key 输出 `foo` 后失败，第二 key 重新执行完整 messages 并输出 `bar`，客户端最终得到来源混杂的 `foobar`。
+
+### 6. Tests Required
+
+- `stream-circuit-breaker.test.ts`：分别用 text-delta、reasoning-delta、tool-call 触发响应提交，随后抛可转移错误；断言第二路由未调用、事件以脱敏 error 结束、attempt 日志与 breaker 仍更新且无 success 日志。
+- 同文件配置一个 Provider 的两把 key，断言首 key 已输出后 `streamText` 只调用一次。
+- 保留反向用例：首 key / route 在不可撤回事件前失败时，后续 key / route 仍调用并可成功 finish。
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong:只看错误类型和候选数量,已输出内容后仍会拼接另一上游。
+if (hasMoreAttempts && isRetryableForKey(err)) continue;
+if (i < routes.length - 1 && isFailoverableError(err)) continue;
+
+// Correct:输出前提交响应;失败审计和 breaker 更新照常执行,仅禁止后续上游。
+if (ev.type === "text-delta" || ev.type === "reasoning-delta" || ev.type === "tool-call") {
+  responseCommitted = true;
+}
+yield ev;
+
+if (!responseCommitted && hasMoreAttempts && isRetryableForKey(err)) continue;
+const failoverable = isFailoverableError(err);
+if (failoverable) recordFailure(route.provider.id);
+if (responseCommitted || !failoverable || i === routes.length - 1) break;
+```
+
 ## Scenario: 熔断状态机与失败上报
 
 ### 1. Scope / Trigger

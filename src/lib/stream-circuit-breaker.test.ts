@@ -73,6 +73,52 @@ function makeSingleRouteRepository(): RouteRepository {
   };
 }
 
+function makeTwoRouteRepository(): RouteRepository {
+  const repository = makeSingleRouteRepository();
+  return {
+    ...repository,
+    findEnabledRoutes: async (modelId) => [
+      ...await repository.findEnabledRoutes(modelId),
+      {
+        route: {
+          id: "route-b",
+          modelId: "model-a",
+          providerId: "provider-b",
+          upstreamModelName: "fallback-model",
+          priority: 1,
+          weight: 1,
+          enabled: true,
+        },
+        provider: {
+          id: "provider-b",
+          name: "Provider B",
+          protocol: "openai",
+          baseUrl: "https://fallback.example.com/v1",
+          apiKeysEnc: encryptedKeys,
+          headersJson: {},
+          enabled: true,
+        },
+      },
+    ],
+  };
+}
+
+async function collectStream(abortSignal?: AbortSignal) {
+  const events = [];
+  for await (const event of streamChat({
+    ctx: { userId: "user-a", keyKind: null, source: "chat" },
+    request: {
+      model: "test-model",
+      messages: [{ role: "user", content: "hello" }],
+    },
+    abortSignal,
+    userAgent: "Nekusora-Test",
+  })) {
+    events.push(event);
+  }
+  return events;
+}
+
 describe("chat generation circuit breaker reporting", () => {
   beforeAll(() => {
     process.env.DATA_ENCRYPTION_KEY =
@@ -194,6 +240,7 @@ describe("chat generation circuit breaker reporting", () => {
       }
 
       const output = JSON.stringify(vi.mocked(console.warn).mock.calls);
+      expect(streamText).toHaveBeenCalledTimes(2);
       expect(output).toContain("[REDACTED]");
       expect(output).not.toContain("sk-first-fake");
       expect(output).not.toContain("HEADER_SECRET");
@@ -223,6 +270,163 @@ describe("chat generation circuit breaker reporting", () => {
     expect(generateText).toHaveBeenCalledWith(expect.objectContaining({
       output: { kind: "json-output" },
     }));
+  });
+
+  it.each([
+    [
+      "正文",
+      { type: "text-delta", text: "primary" },
+      { type: "text-delta", text: "primary" },
+    ],
+    [
+      "推理",
+      { type: "reasoning-delta", text: "thinking" },
+      { type: "reasoning-delta", text: "thinking" },
+    ],
+    [
+      "工具调用",
+      { type: "tool-call", toolCallId: "call-1", toolName: "search", input: { q: "hello" } },
+      { type: "tool-call", toolCallId: "call-1", toolName: "search", args: { q: "hello" } },
+    ],
+  ])("首路由已输出%s后失败时不再转移到下一路由", async (_label, upstreamEvent, expectedEvent) => {
+    setRouteRepository(makeTwoRouteRepository());
+    vi.mocked(streamText)
+      .mockReturnValueOnce({
+        stream: (async function* () {
+          yield upstreamEvent;
+          yield { type: "error", error: new Error("connect ETIMEDOUT") };
+        })(),
+      } as never)
+      .mockReturnValueOnce({
+        stream: (async function* () {
+          yield { type: "text-delta", text: "fallback" };
+        })(),
+        usage: Promise.resolve({ inputTokens: 1, outputTokens: 1, totalTokens: 2 }),
+        finishReason: Promise.resolve("stop"),
+      } as never);
+
+    const events = await collectStream();
+
+    expect(streamText).toHaveBeenCalledTimes(1);
+    expect(events).toEqual([
+      expectedEvent,
+      { type: "error", error: "connect ETIMEDOUT", code: "generation_failed" },
+    ]);
+    expect(mocks.logUsage).toHaveBeenCalledTimes(1);
+    expect(mocks.logUsage).toHaveBeenCalledWith(expect.objectContaining({
+      status: "failed",
+      providerRef: "byo:provider-a",
+    }));
+    expect(mocks.logUsage).not.toHaveBeenCalledWith(expect.objectContaining({
+      status: "success",
+    }));
+    expect(snapshotBreakers()["provider-a"]).toMatchObject({
+      status: "closed",
+      failures: 1,
+    });
+  });
+
+  it("首路由未输出即失败时仍转移到下一路由", async () => {
+    setRouteRepository(makeTwoRouteRepository());
+    vi.mocked(streamText)
+      .mockReturnValueOnce({
+        stream: (async function* () {
+          yield { type: "error", error: new Error("connect ETIMEDOUT") };
+        })(),
+      } as never)
+      .mockReturnValueOnce({
+        stream: (async function* () {
+          yield { type: "text-delta", text: "fallback" };
+        })(),
+        usage: Promise.resolve({ inputTokens: 1, outputTokens: 1, totalTokens: 2 }),
+        finishReason: Promise.resolve("stop"),
+      } as never);
+
+    const events = await collectStream();
+
+    expect(streamText).toHaveBeenCalledTimes(2);
+    expect(events).toEqual([
+      { type: "text-delta", text: "fallback" },
+      {
+        type: "finish",
+        finishReason: "stop",
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+      },
+    ]);
+    expect(mocks.logUsage).toHaveBeenCalledTimes(2);
+    expect(mocks.logUsage).toHaveBeenCalledWith(expect.objectContaining({
+      status: "success",
+      providerRef: "byo:provider-b",
+    }));
+    expect(snapshotBreakers()["provider-a"]).toMatchObject({
+      status: "closed",
+      failures: 1,
+    });
+  });
+
+  it("同一 Provider 已输出正文后失败时不再尝试其他 key", async () => {
+    const originalEncryptedKeys = encryptedKeys;
+    encryptedKeys = encrypt(JSON.stringify({
+      keys: [
+        { key: "sk-first-fake", weight: 1 },
+        { key: "sk-second-fake", weight: 1 },
+      ],
+    }));
+    setRouteRepository(makeSingleRouteRepository());
+    vi.mocked(streamText).mockReturnValue({
+      stream: (async function* () {
+        yield { type: "text-delta", text: "primary" };
+        yield { type: "error", error: new Error("connect ETIMEDOUT") };
+      })(),
+    } as never);
+
+    try {
+      const events = await collectStream();
+
+      expect(streamText).toHaveBeenCalledTimes(1);
+      expect(events).toEqual([
+        { type: "text-delta", text: "primary" },
+        { type: "error", error: "connect ETIMEDOUT", code: "generation_failed" },
+      ]);
+      expect(mocks.logUsage).toHaveBeenCalledTimes(1);
+      expect(mocks.logUsage).not.toHaveBeenCalledWith(expect.objectContaining({
+        status: "success",
+      }));
+      expect(snapshotBreakers()["provider-a"]).toMatchObject({
+        status: "closed",
+        failures: 1,
+      });
+    } finally {
+      encryptedKeys = originalEncryptedKeys;
+    }
+  });
+
+  it("已输出正文后中止时不重试且只记录 interrupted", async () => {
+    const abortController = new AbortController();
+    const abortError = new Error("This operation was aborted");
+    abortError.name = "AbortError";
+    setRouteRepository(makeTwoRouteRepository());
+    vi.mocked(streamText).mockReturnValue({
+      stream: (async function* () {
+        yield { type: "text-delta", text: "primary" };
+        abortController.abort();
+        yield { type: "error", error: abortError };
+      })(),
+    } as never);
+
+    const events = await collectStream(abortController.signal);
+
+    expect(streamText).toHaveBeenCalledTimes(1);
+    expect(events).toEqual([{ type: "text-delta", text: "primary" }]);
+    expect(mocks.logUsage).toHaveBeenCalledTimes(1);
+    expect(mocks.logUsage).toHaveBeenCalledWith(expect.objectContaining({
+      status: "interrupted",
+      providerRef: "byo:provider-a",
+    }));
+    expect(snapshotBreakers()["provider-a"]).toMatchObject({
+      status: "closed",
+      failures: 0,
+    });
   });
 
   it("流式唯一路由发生可转移错误时仍记录 provider 失败", async () => {

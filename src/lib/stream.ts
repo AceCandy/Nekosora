@@ -246,6 +246,8 @@ export async function* streamChat(
   const timing: { firstTokenAt?: number } = {};
   // 客户端中止标记:命中则跳过故障转移、不发 error 帧,finally 记 interrupted。
   let aborted = false;
+  // 正文、推理或工具调用一旦发给客户端就无法撤回,后续失败不得再拼接其他 key/路由的输出。
+  let responseCommitted = false;
 
   // 活跃流式连接计数(metrics)。惰性加载,metrics 不可用时降级为 no-op。
   let releaseStream: () => void = () => {};
@@ -304,6 +306,9 @@ export async function* streamChat(
         const tryKey = keySeq[k].key;
         try {
           for await (const ev of streamWithRoute(route, request, tryKey, timing, opts.cacheKey, opts.abortSignal, opts.userAgent)) {
+            if (ev.type === "text-delta" || ev.type === "reasoning-delta" || ev.type === "tool-call") {
+              responseCommitted = true;
+            }
             yield ev;
             if (ev.type === "finish") finalUsage = ev.usage;
           }
@@ -334,7 +339,7 @@ export async function* streamChat(
           // 可换 key 重试的错误(认证/限流/连接/5xx)+ 还有尝试额度 -> 换 key 重试(不跨路由)。
           // 请求本身的确定性错误(model_not_found/invalid_request/context_length)不换 key。
           const hasMoreAttempts = k < maxAttempts - 1;
-          if (hasMoreAttempts && isRetryableForKey(err)) {
+          if (!responseCommitted && hasMoreAttempts && isRetryableForKey(err)) {
             console.warn(
               `[streamChat] key 重试 ${k + 2}/${maxAttempts} (model=${route.upstreamModelName}):`,
               lastSafeError,
@@ -350,7 +355,7 @@ export async function* streamChat(
       // 路由级故障转移。可转移错误(连接/5xx/限流)→ 上报熔断器,尝试下一条。
       const failoverable = isFailoverableError(lastError);
       if (failoverable && route.provider.id) recordFailure(route.provider.id);
-      if (i === routes.length - 1 || !failoverable) break;
+      if (responseCommitted || i === routes.length - 1 || !failoverable) break;
       console.warn(
         `[streamChat] 路由转移 ${i + 1}/${routes.length} (model=${route.upstreamModelName}):`,
         lastSafeError,

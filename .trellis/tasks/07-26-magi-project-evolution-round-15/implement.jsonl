@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/index.md","reason":"服务端流式核心改动的规范入口。"}
+{"file":".trellis/spec/backend/gateway-routing.md","reason":"多 key、多路由、熔断与失败上报的既有路由契约。"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"生成错误分类、Abort、SSE 与凭据脱敏边界。"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"尝试失败日志、最终指标、TTFT 与 Agent 聚合日志约定。"}
+{"file":".trellis/tasks/07-26-magi-project-evolution-round-15/research/stream-failover-after-output.md","reason":"问题调用链、不可撤回事件集合、复现、最小修复和延后项。"}

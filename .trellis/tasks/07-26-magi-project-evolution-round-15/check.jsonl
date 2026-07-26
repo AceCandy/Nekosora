@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/index.md","reason":"按后端规范入口执行最终质量复核。"}
+{"file":".trellis/spec/backend/gateway-routing.md","reason":"核对未输出容灾、已输出停止、熔断上报和路由行为。"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"核对错误事件、Abort 与凭据脱敏没有回归。"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"核对 attempt 日志、终态指标、TTFT 与 Agent 聚合边界。"}
+{"file":".trellis/tasks/07-26-magi-project-evolution-round-15/research/stream-failover-after-output.md","reason":"逐项复核根因、事件提交边界、测试防回归能力和范围控制。"}
