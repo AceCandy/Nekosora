@@ -19,6 +19,70 @@
 - 模式:函数内 `const { drizzle } = await import("drizzle-orm/node-postgres"); const { default: pg } = await import("pg");`。queue 用变量路径 `const m = "pg-boss"; await import(m)` 进一步阻断静态分析。
 - `pnpm build` 的 Edge instrumentation 编译是这条约束的验证 gate。
 
+## Scenario: pg-boss Producer Lifecycle And Readiness
+
+### 1. Scope / Trigger
+
+Apply this contract when changing `src/lib/infra/queue.ts`, Web/worker queue producers, queue workers, or `/healthz/ready`. Web and worker processes have separate in-memory adapters, so no producer may rely on another process having started pg-boss or created a named queue.
+
+### 2. Signatures
+
+- `getQueue(): Promise<QueueAdapter>`
+- `QueueAdapter.start(): Promise<void>` / `stop(): Promise<void>`
+- `QueueAdapter.send<T>(name, data, opts?): Promise<string>`
+- `QueueAdapter.work<T>(name, handler): Promise<void>`
+- `queueAvailable(): Promise<boolean>`
+- `GET /healthz/ready -> { status, checks, ts }`
+
+### 3. Contracts
+
+- Keep the variable-path `import("pg-boss")`; a top-level/static import breaks the Edge instrumentation build.
+- Adapter construction, start, stop, and same-name queue creation use in-flight promises. Concurrent callers await the same operation; a rejected operation removes only its own promise so a later call can retry.
+- A start/send/work arriving during stop waits for stop to finish, performs a fresh start, and only then continues.
+- Send/work operations remain concurrent, but stop waits for operations that already entered start/create/send/work before closing pg-boss.
+- `send()` and `work()` always await pg-boss start and idempotent `createQueue(name)`. Queue creation is lazy per name; do not maintain a second queue-name registry.
+- `send()` succeeds only with a non-empty job id. A `null`/empty id rejects so producer fallback or logging runs.
+- `queueAvailable()` awaits real pg-boss startup. Readiness requires both DB and queue checks; storage and Redis remain informational/degradable.
+- Queue readiness means that this process can initialize the queue backend. It does not prove that the independent worker is alive or consuming jobs.
+
+### 4. Validation & Error Matrix
+
+| Condition | Adapter result | Readiness / producer result |
+| --- | --- | --- |
+| Concurrent cold calls | One adapter/start/create per name | All callers await the same result |
+| Build/start/create rejects | Failed promise is cleared | Later call can retry |
+| `send()` returns a non-empty id | Resolve id | Producer treats dispatch as successful |
+| `send()` returns `null` or empty string | Reject | Upload fallback or chat async error path |
+| DB and queue startup succeed | Queue `{ available: true }` | HTTP 200 `ready` |
+| Queue false/error/timeout | Preserve queue diagnostic | HTTP 503 `unready` |
+| Worker is offline but queue backend is writable | Jobs remain durable in pg-boss | Readiness does not infer worker liveness |
+
+### 5. Good / Base / Bad Cases
+
+- Good: a Web producer can cold-start pg-boss, create `memory-extract`, and send before any worker process has registered `work()`.
+- Base: a started worker calls `work()` for each handler and reuses the same adapter/start promises.
+- Bad: `getQueue()` returns `available: true` without starting, then `send()` assumes the worker already created the queue.
+- Bad: readiness returns 200 based only on DB while queue startup errored or timed out.
+
+### 6. Tests Required
+
+- Queue unit tests: concurrent construction/start/create, operation ordering, build/start/create retry, null/empty job id, work registration, overlapping stop/start, and stop during an active create/send.
+- Readiness route tests: healthy DB+queue, queue false, reject, timeout, and DB failure; assert HTTP status and `checks.queue` shape.
+- Upload regression: acquisition/send failures still call `processFile` fallback exactly once and return the existing success response.
+- Run `pnpm build` to protect the variable dynamic-import boundary.
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong: a process-local flag says nothing about pg-boss startup or queue existence.
+const queue = await getQueue();
+if (queue.available) await queue.send(name, payload);
+
+// Correct: the adapter owns start + createQueue before resolving send.
+const queue = await getQueue();
+const jobId = await queue.send(name, payload);
+```
+
 ## Query Patterns
 
 - `getDb()` 返回 `any`(drizzle 跨表联合时 query builder 类型不互通,弱化类型换取可调用性)。业务通过 schema 表引用驱动查询。

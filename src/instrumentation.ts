@@ -17,7 +17,7 @@
  * 让 DB 状态异常在启动阶段尽早暴露,避免"启动了但运行时才报错"。
  * 仅 pgvector 扩展创建保留 warn(部分托管 PG 禁建扩展,不影响核心)。
  *
- * pg-boss 队列初始化仍由独立 worker 进程(src/worker.ts)负责,不在本文件做。
+ * pg-boss 由 QueueAdapter 在 producer/worker/readiness 首次使用时惰性初始化,不在本文件做。
  */
 export async function register(): Promise<void> {
   // 防线 1:Edge 版本 instrumentation 直接 return,不跑任何 DB 逻辑。

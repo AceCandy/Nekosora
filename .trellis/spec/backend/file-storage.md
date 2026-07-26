@@ -278,12 +278,12 @@ Apply this contract when changing `/api/upload` dispatch to the `file-process` q
 ### 2. Signatures
 
 - `getQueue(): Promise<QueueAdapter>` may reject while initializing pg-boss.
-- `queue.send("file-process", { fileId, storagePath, mime })` may reject while dispatching.
+- `queue.send("file-process", { fileId, storagePath, mime })` starts pg-boss, ensures the named queue, and may reject during initialization/creation/dispatch or when pg-boss returns no job id.
 - `processFile(fileId, storagePath, mime): Promise<void>` is the existing no-queue fallback.
 
 ### 3. Contracts
 
-- A successful queue send is the only path that skips synchronous fallback.
+- A successful queue send with a non-empty job id is the only path that skips synchronous fallback.
 - `available: false`, queue acquisition failure, and send failure each start exactly one fire-and-forget `processFile` call.
 - Log acquisition/send errors before fallback. Explicit `available: false` is not an error and must not emit a queue-failure log.
 - Attach a rejection handler to fallback processing; a fallback failure is logged but does not turn the already-persisted upload response into an error.

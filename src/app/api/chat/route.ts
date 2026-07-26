@@ -485,7 +485,12 @@ export async function POST(req: NextRequest) {
                   recentMessages,
                 }),
               )
-              .catch(() => {});
+              .catch((error) =>
+                console.error(
+                  "[chat] memory-extract enqueue failed:",
+                  redactErrorMessage(error),
+                ),
+              );
           }
 
           // DONE 是可靠完成信号：assistant/Artifact/generating 均已持久化。

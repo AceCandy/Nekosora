@@ -23,7 +23,7 @@ interface QueueAdapter {
   stop(): Promise<void>;
 }
 
-let _adapter: QueueAdapter | null = null;
+let _adapterPromise: Promise<QueueAdapter> | null = null;
 
 async function buildAdapter(): Promise<QueueAdapter> {
   // 用变量路径动态 import 阻断 Turbopack 静态分析 —— 否则 Edge instrumentation
@@ -52,39 +52,106 @@ async function buildAdapter(): Promise<QueueAdapter> {
     console.error("[queue] pg-boss error:", err);
   });
 
+  let startPromise: Promise<void> | null = null;
+  let stopPromise: Promise<void> | null = null;
+  const queuePromises = new Map<string, Promise<void>>();
+  const activeOperations = new Set<Promise<unknown>>();
+
+  function start(): Promise<void> {
+    if (startPromise) return startPromise;
+    const promise = (stopPromise ?? Promise.resolve())
+      .then(() => boss.start())
+      .then(() => undefined);
+    startPromise = promise;
+    void promise.catch(() => {
+      if (startPromise === promise) startPromise = null;
+    });
+    return promise;
+  }
+
+  function stop(): Promise<void> {
+    if (stopPromise) return stopPromise;
+    const starting = startPromise;
+    startPromise = null;
+    const promise = (starting ?? Promise.resolve())
+      .catch(() => undefined)
+      .then(() => Promise.allSettled([...activeOperations]))
+      .then(() => boss.stop())
+      .then(() => undefined);
+    stopPromise = promise;
+    const clear = () => {
+      if (stopPromise === promise) stopPromise = null;
+    };
+    void promise.then(clear, clear);
+    return promise;
+  }
+
+  async function runOperation<T>(operation: () => Promise<T>): Promise<T> {
+    while (true) {
+      await start();
+      if (stopPromise) {
+        await stopPromise;
+        continue;
+      }
+
+      const promise = Promise.resolve().then(operation);
+      activeOperations.add(promise);
+      const clear = () => activeOperations.delete(promise);
+      void promise.then(clear, clear);
+      return promise;
+    }
+  }
+
+  async function ensureQueue(name: string): Promise<void> {
+    const existing = queuePromises.get(name);
+    if (existing) return existing;
+
+    const promise = boss.createQueue(name);
+    queuePromises.set(name, promise);
+    void promise.catch(() => {
+      if (queuePromises.get(name) === promise) queuePromises.delete(name);
+    });
+    return promise;
+  }
+
   return {
     available: true,
-    async send(name, data, opts) {
-      // pg-boss 要求 data 为 object;非 object 包装一层。
-      const payload = (typeof data === "object" && data !== null ? data : { value: data }) as object;
-      const sendOpts = opts ? { startAfter: opts.startAfter } : undefined;
-      const id = await boss.send(name, payload, sendOpts as never);
-      return id ?? "";
-    },
-    async work(name, handler) {
-      // pg-boss 11:work 前队列必须已存在,否则 fetch 报 "Queue X does not exist"。
-      // 记忆提取等「注册早于首次 send」的队列会因此崩进程,先 ensure 建队列(已存在则幂等)。
-      await boss.createQueue(name);
-      // pg-boss 的 handler 接收 job 数组(批量模式);逐个派发。
-      await boss.work(name, async (jobs) => {
-        for (const job of jobs) {
-          await handler(job.data as never);
-        }
+    send(name, data, opts) {
+      return runOperation(async () => {
+        await ensureQueue(name);
+        // pg-boss 要求 data 为 object;非 object 包装一层。
+        const payload = (typeof data === "object" && data !== null ? data : { value: data }) as object;
+        const sendOpts = opts ? { startAfter: opts.startAfter } : undefined;
+        const id = await boss.send(name, payload, sendOpts as never);
+        if (!id) throw new Error(`pg-boss 未返回 job id: ${name}`);
+        return id;
       });
     },
-    async start() {
-      await boss.start();
+    work(name, handler) {
+      return runOperation(async () => {
+        await ensureQueue(name);
+        // pg-boss 的 handler 接收 job 数组(批量模式);逐个派发。
+        await boss.work(name, async (jobs) => {
+          for (const job of jobs) {
+            await handler(job.data as never);
+          }
+        });
+      });
     },
-    async stop() {
-      await boss.stop();
-    },
+    start,
+    stop,
   };
 }
 
 /** 获取队列适配器单例(惰性)。 */
-export async function getQueue(): Promise<QueueAdapter> {
-  if (!_adapter) _adapter = await buildAdapter();
-  return _adapter;
+export function getQueue(): Promise<QueueAdapter> {
+  if (_adapterPromise) return _adapterPromise;
+  const promise = buildAdapter();
+  _adapterPromise = promise;
+  void promise.catch(() => {
+    if (_adapterPromise === promise) _adapterPromise = null;
+  });
+  return promise;
 }
 
 /** 启动时初始化连接(instrumentation / worker 调用)。 */
@@ -96,5 +163,6 @@ export async function initQueue(): Promise<void> {
 /** 是否有可用队列(运行时探测 pg-boss 连接)。 */
 export async function queueAvailable(): Promise<boolean> {
   const q = await getQueue();
+  await q.start();
   return q.available;
 }

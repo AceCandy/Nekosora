@@ -71,8 +71,11 @@ export async function GET() {
     redis: env.hasRedis,
   };
 
-  // DB 是关键:DB 不通 = 未就绪。其他组件降级不影响就绪判定。
-  const ready = dbCheck === "ok";
+  // DB 与队列是请求和异步任务的关键依赖;Storage/Redis 仍允许降级。
+  const ready =
+    dbCheck === "ok" &&
+    typeof queueCheck === "object" &&
+    queueCheck.available;
 
   return NextResponse.json(
     {
