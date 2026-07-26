@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 46
+- **Total Sessions**: 47
 - **Last Active**: 2026-07-26
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1531 | Active |
+| `journal-1.md` | ~1564 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 47 | 2026-07-26 | Magi 项目演进第 12 轮：修复消息引用并发写入竞态 | `ed00d39` | `opt0725` |
 | 46 | 2026-07-26 | MAGI 项目进化第 11 轮 | `ba706b3` | `opt0725` |
 | 45 | 2026-07-26 | MAGI 项目进化第 10 轮 | `c37af6a` | `opt0725` |
 | 44 | 2026-07-26 | MAGI 项目进化第 9 轮 | `56d0d37` | `opt0725` |

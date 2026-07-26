@@ -1529,3 +1529,36 @@ setKeyEnabled 接收 userId 并在更新 SQL 中同时限制 key ID 与属主，
 ### Next Steps
 
 - None - task complete
+
+
+## Session 47: Magi 项目演进第 12 轮：修复消息引用并发写入竞态
+
+**Date**: 2026-07-26
+**Task**: Magi 项目演进第 12 轮：修复消息引用并发写入竞态
+**Branch**: `opt0725`
+
+### Summary
+
+为聊天消息写入引入会话级 PostgreSQL 行锁和条件更新，覆盖发送、续写、编辑与删除的并发竞争；补充竞态测试与消息引用规范，并完成全量质量验证。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ed00d39` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
