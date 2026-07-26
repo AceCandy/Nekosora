@@ -175,6 +175,74 @@ Correct:
 {"idx": 10, "when": 1785003843594, "tag": "new_follow_up_migration"}
 ```
 
+### Scenario: WebChat 活动 Run 租约投影
+
+#### 1. Scope / Trigger
+
+- 修改 `runs` 生命周期、会话 `generating` 查询、Chat 心跳或相关 PostgreSQL 迁移时适用。
+- 该状态跨越请求进程、数据库、Server Action 和 Sidebar；必须覆盖并发 run、进程崩溃、多实例启动与滚动升级。
+
+#### 2. Signatures
+
+- `runs.lease_expires_at`: nullable `timestamptz`，数据库默认值 `now() + interval '2 minutes'`。
+- `runs_active_conversation_idx`: `(conversation_id, lease_expires_at) WHERE status = 'running'`。
+- 活动谓词：`EXISTS (... status = 'running' AND lease_expires_at > now())`。
+- `startRun(...) -> Promise<boolean>`；`heartbeatRun(runId) -> Promise<void>`；`finalizeRun(...) -> Promise<void>`。
+
+#### 3. Contracts
+
+- `runs` 是生成活动状态唯一事实源；`conversations.generating` 保留供旧版本回滚，但新 runtime 不得读写。
+- 租约创建、续租和活动查询统一使用 PostgreSQL `now()`，不得混用应用服务器时间。
+- 新 runtime 显式写入两分钟租约；数据库列默认值同时覆盖滚动升级期间仍由旧 runtime 插入、未携带该列的新 running row。
+- 迁移只回填 `status='running' AND lease_expires_at IS NULL` 的行，不全表更新 legacy `conversations.generating`。
+- 心跳仅按 `runId + status='running'` 更新当前 run；finalize 也只更新当前 running run。任何请求都不得清理同会话其他 run。
+- 会话列表与轻量轮询必须复用同一个相关 `EXISTS` 表达式，避免活动定义漂移。
+- 普通 `CREATE INDEX` 可能等待大表锁；执行真实生产迁移前必须评估锁窗口。若改用 `CONCURRENTLY`，须独立设计 Drizzle 事务外迁移流程，不得直接塞入现有事务型 migrator。
+
+#### 4. Validation & Error Matrix
+
+| 条件 | 数据库状态 | 活动投影 |
+|---|---|---|
+| 新 runtime 插入 running run | 显式 fresh lease | true |
+| 滚动升级中的旧 runtime 省略 lease | 数据库默认 fresh lease | true，默认窗口内兼容 |
+| 迁移前遗留 running + NULL | 迁移回填 fresh lease | true，窗口到期后 false |
+| terminal run，即使 lease 尚未过期 | status 非 running | false |
+| running + NULL 或过期 lease | 不满足完整谓词 | false |
+| 同会话多个 run，仅一条终结 | 仍有另一条 fresh running row | true |
+| 旧 runtime 改写 legacy boolean | `runs` 不变 | 新 runtime 查询结果不受影响 |
+
+#### 5. Good / Base / Bad Cases
+
+- Good：两个实例各自维护不同 run 的租约，任一实例完成只终结自己的行。
+- Good：新版本部署时，旧实例省略 lease 的 insert 仍获得数据库默认租约。
+- Base：历史终态行允许 `lease_expires_at IS NULL`，无需无意义回填。
+- Bad：只检查 `status='running'`，会让崩溃遗留行永久显示活动。
+- Bad：启动时全量清零会话布尔值，或在单 run finalize 时覆盖会话布尔值。
+- Bad：仅由新应用代码设置 lease 而没有数据库默认值，混合版本期间旧实例会持续插入 NULL。
+
+#### 6. Tests Required
+
+- schema 测试断言 nullable `timestamptz`、数据库默认表达式与部分索引谓词。
+- 迁移测试断言 add column、set default、仅回填 running NULL、创建部分索引，且不更新 `conversations.generating`。
+- 查询测试断言 conversation 关联、running、`lease_expires_at > now()` 三个条件，并覆盖并发/fresh/expired/null/terminal 真值表。
+- lifecycle 测试断言 start/heartbeat 使用数据库时间，heartbeat/finalize 只匹配 running row，所有 DB 失败仍遵循 best-effort。
+- 迁移元数据测试断言 SQL、journal 与 snapshot 链同步；发布前另行记录是否在真实 PostgreSQL 验证以及索引锁风险。
+
+#### 7. Wrong vs Correct
+
+```sql
+-- Wrong:状态无过期边界，且单值无法表达并发 run。
+UPDATE conversations SET generating = false WHERE id = $1;
+
+-- Correct:从所有仍有效的 run 动态派生。
+SELECT EXISTS (
+  SELECT 1 FROM runs
+  WHERE runs.conversation_id = conversations.id
+    AND runs.status = 'running'
+    AND runs.lease_expires_at > now()
+);
+```
+
 ## Timestamps(时区)
 
 - **PG 时间戳必须用 `timestamp({ withTimezone: true })`**(timestamptz)。`timestamp`(without tz)+ 非 UTC 服务器 → epoch 偏移,破坏时间筛选。

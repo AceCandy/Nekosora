@@ -11,7 +11,7 @@
  *   - 经 getDb/getSchema 访问,禁止静态引入 pg 驱动
  *   - 不写完整模型请求/回复;工具入参/出参经 toSafeJsonb 规范化
  */
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
 import {
   isSensitiveFieldName,
@@ -23,6 +23,8 @@ import type { IRUsage } from "@/lib/providers/types";
 
 export type RunTerminalStatus = "success" | "failed" | "interrupted";
 export type ToolCallWriteStatus = "pending" | "running" | "success" | "failed";
+
+const RUN_LEASE_EXPIRES_AT = sql`now() + interval '2 minutes'`;
 
 /** 生成与 streamChat / usage 日志一致的 runId。 */
 export function createRunId(): string {
@@ -156,8 +158,8 @@ export interface StartRunParams {
   upstreamId?: string | null;
 }
 
-/** 流开始前插入 runs(status=running)。失败不抛。 */
-export async function startRun(params: StartRunParams): Promise<void> {
+/** 流开始前插入带租约的 runs(status=running)。失败返回 false,不抛。 */
+export async function startRun(params: StartRunParams): Promise<boolean> {
   try {
     const db = await getDb();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -170,9 +172,27 @@ export async function startRun(params: StartRunParams): Promise<void> {
       routedBindingCode: params.routedBindingCode ?? null,
       upstreamId: params.upstreamId ?? null,
       status: "running",
+      leaseExpiresAt: RUN_LEASE_EXPIRES_AT,
     });
+    return true;
   } catch (err) {
     logRunDbFailure("startRun", err);
+    return false;
+  }
+}
+
+/** 延长当前 running run 的租约。失败不抛。 */
+export async function heartbeatRun(runId: string): Promise<void> {
+  try {
+    const db = await getDb();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const s = getSchema() as any;
+    await db
+      .update(s.runs)
+      .set({ leaseExpiresAt: RUN_LEASE_EXPIRES_AT })
+      .where(and(eq(s.runs.runId, runId), eq(s.runs.status, "running")));
+  } catch (err) {
+    logRunDbFailure("heartbeatRun", err);
   }
 }
 

@@ -40,8 +40,6 @@ export async function bootstrapDatabase(): Promise<void> {
   // 内置输出模式预设(幂等,失败不阻断) —— 「结构化输出」引导 AI 用 chart/metric/table 代码块
   await ensureBuiltinOutputModes(db, await getSchema());
 
-  // --- 步骤 6:清理上次崩溃残留的「生成中」标记 ---
-  await clearStaleGenerating(db, await getSchema());
 }
 
 /**
@@ -673,32 +671,6 @@ async function ensureBuiltinOutputModes(
     console.log("[bootstrap] ✅ 内置输出模式预设就绪(结构化输出)");
   } catch (e) {
     console.warn("[bootstrap] 内置输出模式预设写入失败(忽略):", e instanceof Error ? e.message : e);
-  }
-}
-
-/**
- * 清理「生成中」僵尸标记。
- *
- * generating 标记由 /api/chat 在流式开始时置 true、结束时置 false。
- * 若进程在流式中途崩溃,该标记会残留,导致侧栏永久转圈。
- * 启动时把所有 generating=true 的会话重置为 false(尽力而为,失败不阻断启动)。
- */
-async function clearStaleGenerating(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  db: any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  schema: any,
-): Promise<void> {
-  try {
-    const { eq } = await import("drizzle-orm");
-    const conversations = schema.conversations;
-    await db.update(conversations).set({ generating: false }).where(eq(conversations.generating, true));
-    console.log("[bootstrap] ✅ 已重置残留的 generating 标记");
-  } catch (e) {
-    console.warn(
-      "[bootstrap] 清理 generating 标记失败(忽略):",
-      e instanceof Error ? e.message : e,
-    );
   }
 }
 

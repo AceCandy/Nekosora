@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   prepareChatContext: vi.fn(),
   createRunId: vi.fn(),
   finalizeRun: vi.fn(),
+  heartbeatRun: vi.fn(),
   irUsageToTokenUsage: vi.fn(),
   recordToolCallResult: vi.fn(),
   recordToolCallStart: vi.fn(),
@@ -47,6 +48,7 @@ vi.mock("@/lib/chat/orchestrator", () => ({ prepareChatContext: mocks.prepareCha
 vi.mock("@/lib/chat/run-lifecycle", () => ({
   createRunId: mocks.createRunId,
   finalizeRun: mocks.finalizeRun,
+  heartbeatRun: mocks.heartbeatRun,
   irUsageToTokenUsage: mocks.irUsageToTokenUsage,
   recordToolCallResult: mocks.recordToolCallResult,
   recordToolCallStart: mocks.recordToolCallStart,
@@ -126,8 +128,9 @@ describe("POST /api/chat 消息引用并发收敛", () => {
       ragStatus: null,
       compaction: null,
     });
-    mocks.startRun.mockResolvedValue(undefined);
+    mocks.startRun.mockResolvedValue(true);
     mocks.finalizeRun.mockResolvedValue(undefined);
+    mocks.heartbeatRun.mockResolvedValue(undefined);
     mocks.writeFallbackTitle.mockResolvedValue(null);
     mocks.extractArtifacts.mockReturnValue({ artifacts: [] });
     mocks.getQueue.mockResolvedValue({ send: vi.fn().mockResolvedValue("job-1") });
@@ -304,6 +307,19 @@ describe("POST /api/chat 消息引用并发收敛", () => {
   });
 
   it("引用有效时在两个短事务后完成正常发送", async () => {
+    let markFinalizeStarted: () => void = () => {};
+    const finalizeStarted = new Promise<void>((resolve) => {
+      markFinalizeStarted = resolve;
+    });
+    let releaseFinalize: () => void = () => {};
+    const finalizePending = new Promise<void>((resolve) => {
+      releaseFinalize = resolve;
+    });
+    mocks.finalizeRun.mockImplementation(() => {
+      markFinalizeStarted();
+      return finalizePending;
+    });
+
     const outerSelect = selectQueue([
       [{ id: "conversation-1", userId: "user-1", outputModeId: null }],
       [{
@@ -366,9 +382,31 @@ describe("POST /api/chat 消息引用并发收敛", () => {
       messages: [{ role: "user", content: "next question" }],
       parentPublicId: "assistant-public-1",
     }) as never);
-    const payload = await response.text();
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let payload = "";
+    for (let index = 0; index < 5; index += 1) {
+      const chunk = await reader.read();
+      expect(chunk.done).toBe(false);
+      payload += decoder.decode(chunk.value, { stream: true });
+    }
+    expect(payload).not.toContain("[DONE]");
+
+    let terminalReadSettled = false;
+    const terminalRead = reader.read().then((chunk) => {
+      terminalReadSettled = true;
+      return chunk;
+    });
+    await finalizeStarted;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const doneArrivedBeforeFinalize = terminalReadSettled;
+    releaseFinalize();
+    const terminalChunk = await terminalRead;
+    payload += decoder.decode(terminalChunk.value, { stream: true });
+    payload += decoder.decode();
 
     expect(response.status).toBe(200);
+    expect(doneArrivedBeforeFinalize).toBe(false);
     expect(payload).toContain("[DONE]");
     expect(payload).not.toContain('"type":"error"');
     expect(transaction).toHaveBeenCalledTimes(2);
@@ -378,8 +416,100 @@ describe("POST /api/chat 消息引用并发收敛", () => {
     expect(assistantValues).toHaveBeenCalledWith(
       expect.objectContaining({ parentId: "user-message-2", role: "assistant" }),
     );
+    for (const [conversationPatch] of updateSet.mock.calls) {
+      expect(conversationPatch).not.toHaveProperty("generating");
+    }
     expect(mocks.finalizeRun).toHaveBeenCalledWith(
       expect.objectContaining({ runId: "run-1", status: "success" }),
     );
+  });
+
+  it("生成期间每 30 秒续租且完成后停止心跳", async () => {
+    vi.useFakeTimers();
+    let markGenerationStarted: () => void = () => {};
+    const generationStarted = new Promise<void>((resolve) => {
+      markGenerationStarted = resolve;
+    });
+    let releaseGeneration: () => void = () => {};
+    const generationPending = new Promise<void>((resolve) => {
+      releaseGeneration = resolve;
+    });
+    mocks.streamChat.mockImplementation(async function* () {
+      markGenerationStarted();
+      await generationPending;
+      yield { type: "text-delta", text: " continuation" };
+      yield { type: "finish", usage: {} };
+    });
+
+    const outerSelect = selectQueue([
+      [{ id: "conversation-1", userId: "user-1", outputModeId: null }],
+      [{
+        id: "assistant-1",
+        publicId: "assistant-public-1",
+        conversationId: "conversation-1",
+        parentId: "user-message-1",
+        role: "assistant",
+        content: "prefix",
+        deletedAt: null,
+      }],
+      [{
+        id: "user-message-1",
+        publicId: "user-public-1",
+        conversationId: "conversation-1",
+        role: "user",
+        content: "question",
+        deletedAt: null,
+      }],
+    ]);
+    const transactionSelect = selectQueue([
+      [{ id: "conversation-1" }],
+      [{
+        id: "user-message-1",
+        publicId: "user-public-1",
+        conversationId: "conversation-1",
+        role: "user",
+        content: "question",
+        deletedAt: null,
+      }],
+    ]);
+    const returning = vi.fn().mockResolvedValue([{ id: "assistant-1" }]);
+    const transactionWhere = vi.fn(() => ({ returning }));
+    const transactionSet = vi.fn(() => ({ where: transactionWhere }));
+    const transactionUpdate = vi.fn(() => ({ set: transactionSet }));
+    const updateWhere = vi.fn().mockResolvedValue(undefined);
+    const updateSet = vi.fn(() => ({ where: updateWhere }));
+    mocks.getDb.mockResolvedValue({
+      select: outerSelect,
+      update: vi.fn(() => ({ set: updateSet })),
+      transaction: vi.fn(
+        async (operation: (tx: {
+          select: typeof transactionSelect;
+          update: typeof transactionUpdate;
+        }) => Promise<unknown>) => operation({
+          select: transactionSelect,
+          update: transactionUpdate,
+        }),
+      ),
+    });
+
+    const response = await POST(request() as never);
+    const payloadPromise = response.text();
+    await generationStarted;
+    await vi.advanceTimersByTimeAsync(29_999);
+    const callsBeforeInterval = mocks.heartbeatRun.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(1);
+    const callsDuringGeneration = mocks.heartbeatRun.mock.calls.length;
+
+    releaseGeneration();
+    const payload = await payloadPromise;
+    await vi.advanceTimersByTimeAsync(60_000);
+    const callsAfterCompletion = mocks.heartbeatRun.mock.calls.length;
+    vi.useRealTimers();
+
+    expect(callsBeforeInterval).toBe(0);
+    expect(callsDuringGeneration).toBe(1);
+    expect(mocks.heartbeatRun).toHaveBeenCalledWith("run-1");
+    expect(callsAfterCompletion).toBe(callsDuringGeneration);
+    expect(payload).toContain("[DONE]");
   });
 });

@@ -8,6 +8,17 @@ import type { ReasoningLevel } from "@/db/types";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const S = () => getSchema() as any;
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function activeRunExists(s: any) {
+  return sql<boolean>`exists (
+    select 1
+    from ${s.runs}
+    where ${s.runs.conversationId} = ${s.conversations.id}
+      and ${s.runs.status} = 'running'
+      and ${s.runs.leaseExpiresAt} > now()
+  )`;
+}
+
 /**
  * 有启用路由的 modelId 集合(CTE)。
  * innerJoin 它既保证模型至少有一条可用路由,又使每模型只匹配一行(无需再去重)。
@@ -94,28 +105,30 @@ export async function getImageModels() {
 export async function listConversations() {
   const user = await requireSession();
   const db = await getDb();
+  const s = S();
   return db
     .select({
-      id: S().conversations.id,
-      title: S().conversations.title,
-      pinned: S().conversations.pinned,
-      archived: S().conversations.archived,
-      generating: S().conversations.generating,
-      updatedAt: S().conversations.updatedAt,
+      id: s.conversations.id,
+      title: s.conversations.title,
+      pinned: s.conversations.pinned,
+      archived: s.conversations.archived,
+      generating: activeRunExists(s),
+      updatedAt: s.conversations.updatedAt,
     })
-    .from(S().conversations)
-    .where(eq(S().conversations.userId, user.id))
-    .orderBy(desc(S().conversations.updatedAt));
+    .from(s.conversations)
+    .where(eq(s.conversations.userId, user.id))
+    .orderBy(desc(s.conversations.updatedAt));
 }
 
 /** 轻量轮询接口:只返回当前用户各会话的 id + generating,供侧栏检测后台会话完成。 */
 export async function getGeneratingStatuses() {
   const user = await requireSession();
   const db = await getDb();
+  const s = S();
   const rows = await db
-    .select({ id: S().conversations.id, generating: S().conversations.generating })
-    .from(S().conversations)
-    .where(eq(S().conversations.userId, user.id));
+    .select({ id: s.conversations.id, generating: activeRunExists(s) })
+    .from(s.conversations)
+    .where(eq(s.conversations.userId, user.id));
   return rows as { id: string; generating: boolean }[];
 }
 

@@ -5,9 +5,14 @@ const mocks = vi.hoisted(() => ({
   getSchema: vi.fn(),
   eq: vi.fn((left: unknown, right: unknown) => ({ op: "eq", left, right })),
   and: vi.fn((...conditions: unknown[]) => ({ op: "and", conditions })),
+  sql: vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => ({
+    op: "sql",
+    text: strings.join("?"),
+    values,
+  })),
 }));
 
-vi.mock("drizzle-orm", () => ({ eq: mocks.eq, and: mocks.and }));
+vi.mock("drizzle-orm", () => ({ eq: mocks.eq, and: mocks.and, sql: mocks.sql }));
 vi.mock("@/lib/infra/db", () => ({
   getDb: mocks.getDb,
   getSchema: mocks.getSchema,
@@ -16,6 +21,7 @@ vi.mock("@/lib/infra/db", () => ({
 import {
   createRunId,
   finalizeRun,
+  heartbeatRun,
   irUsageToTokenUsage,
   recordToolCallResult,
   recordToolCallStart,
@@ -28,6 +34,7 @@ const schema = {
   runs: {
     runId: "runs.runId",
     status: "runs.status",
+    leaseExpiresAt: "runs.leaseExpiresAt",
   },
   toolCalls: {
     runId: "toolCalls.runId",
@@ -139,16 +146,18 @@ describe("run lifecycle DB writes", () => {
     mocks.getSchema.mockReturnValue(schema);
   });
 
-  it("startRun 插入 status=running", async () => {
+  it("startRun 用数据库时间创建租约并返回成功", async () => {
     const { db, insertValues } = createDb();
     mocks.getDb.mockResolvedValue(db);
 
-    await startRun({
-      runId: "run_1",
-      conversationId: "c1",
-      userId: "u1",
-      platformModelName: "gpt-test",
-    });
+    await expect(
+      startRun({
+        runId: "run_1",
+        conversationId: "c1",
+        userId: "u1",
+        platformModelName: "gpt-test",
+      }),
+    ).resolves.toBe(true);
 
     expect(db.insert).toHaveBeenCalledWith(schema.runs);
     expect(insertValues).toHaveBeenCalledWith(
@@ -158,6 +167,10 @@ describe("run lifecycle DB writes", () => {
         userId: "u1",
         platformModelName: "gpt-test",
         status: "running",
+        leaseExpiresAt: expect.objectContaining({
+          op: "sql",
+          text: expect.stringContaining("now()"),
+        }),
       }),
     );
   });
@@ -177,6 +190,28 @@ describe("run lifecycle DB writes", () => {
       status: "success",
       tokenUsage: { promptTokens: 1, completionTokens: 2 },
       firstTokenLatencyMs: null,
+    });
+    expect(updateWhere).toHaveBeenCalledWith({
+      op: "and",
+      conditions: [
+        { op: "eq", left: schema.runs.runId, right: "run_1" },
+        { op: "eq", left: schema.runs.status, right: "running" },
+      ],
+    });
+  });
+
+  it("heartbeatRun 只为当前 running run 续租", async () => {
+    const { db, updateSet, updateWhere } = createDb();
+    mocks.getDb.mockResolvedValue(db);
+
+    await heartbeatRun("run_1");
+
+    expect(db.update).toHaveBeenCalledWith(schema.runs);
+    expect(updateSet).toHaveBeenCalledWith({
+      leaseExpiresAt: expect.objectContaining({
+        op: "sql",
+        text: expect.stringContaining("now()"),
+      }),
     });
     expect(updateWhere).toHaveBeenCalledWith({
       op: "and",
@@ -242,10 +277,11 @@ describe("run lifecycle DB writes", () => {
 
     await expect(
       startRun({ runId: "run_x", conversationId: "c", userId: "u" }),
-    ).resolves.toBeUndefined();
+    ).resolves.toBe(false);
     await expect(
       finalizeRun({ runId: "run_x", status: "failed" }),
     ).resolves.toBeUndefined();
+    await expect(heartbeatRun("run_x")).resolves.toBeUndefined();
     await expect(
       recordToolCallStart({
         runId: "run_x",

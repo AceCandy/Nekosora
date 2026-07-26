@@ -31,6 +31,7 @@ import {
 import {
   createRunId,
   finalizeRun,
+  heartbeatRun,
   irUsageToTokenUsage,
   recordToolCallResult,
   recordToolCallStart,
@@ -43,6 +44,8 @@ import type { ReasoningLevel } from "@/db/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const RUN_HEARTBEAT_INTERVAL_MS = 30_000;
 
 export async function POST(req: NextRequest) {
   const user = await getSession();
@@ -311,10 +314,8 @@ export async function POST(req: NextRequest) {
 
   // 流式返回:text/event-stream,每条 text-delta 作为一行
   const encoder = new TextEncoder();
-  // 标记会话为「生成中」(供侧栏转圈标识;在 finally 中清除)
-  await db.update(s.conversations).set({ generating: true }).where(eq(s.conversations.id, body.conversationId));
   // 流开始前落 runs(running);DB 失败不阻断后续流式生成。
-  await startRun({
+  const runStarted = await startRun({
     runId,
     conversationId: body.conversationId,
     userId: user.id,
@@ -327,6 +328,7 @@ export async function POST(req: NextRequest) {
   // 触发 Socket closed unexpectedly → uncaughtException 反复冲击 dev server。req.signal 在部分场景
   // 不可靠,由 ReadableStream.cancel() 兜底,二者都触发同一个 AbortController。
   const abortCtl = new AbortController();
+  let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   const onRequestAbort = () => abortCtl.abort();
   if (req.signal.aborted) {
     abortCtl.abort();
@@ -335,6 +337,12 @@ export async function POST(req: NextRequest) {
   }
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
+      if (runStarted) {
+        heartbeatTimer = setInterval(() => {
+          void heartbeatRun(runId);
+        }, RUN_HEARTBEAT_INTERVAL_MS);
+        heartbeatTimer.unref();
+      }
       // 客户端断开后 controller 处于已关闭态:统一经 safeEnqueue 写入,避免向已关闭流 enqueue 抛错。
       const safeEnqueue = (chunk: Uint8Array) => {
         if (abortCtl.signal.aborted) return;
@@ -349,6 +357,7 @@ export async function POST(req: NextRequest) {
       let finished = false; // 正常收到 finish 事件才判 success,否则 interrupted/failed
       let sawStreamError = false;
       let persistenceFailed = false;
+      let completionPersisted = false;
       let finalUsage: IRUsage | undefined;
       // 回传本轮 user 消息的 publicId,供前端回填后支持编辑重发。
       // 续写模式下 user 沿用原消息,前端无需回填,跳过该帧。
@@ -556,10 +565,10 @@ export async function POST(req: NextRequest) {
             }
           }
 
-          // 更新会话时间 + 清除「生成中」标记
+          // 更新会话时间；生成活动状态由 fresh running runs 动态派生。
           await db
             .update(s.conversations)
-            .set({ updatedAt: new Date(), generating: false })
+            .set({ updatedAt: new Date() })
             .where(eq(s.conversations.id, body.conversationId));
 
           // 异步提取记忆(入队 pg-boss,由 worker 消费,抗重启)。
@@ -582,15 +591,14 @@ export async function POST(req: NextRequest) {
               );
           }
 
-          // DONE 是可靠完成信号：assistant/Artifact/generating 均已持久化。
-          safeEnqueue(encoder.encode("data: [DONE]\n\n"));
+          completionPersisted = true;
         } catch (err) {
           persistenceFailed = true;
-          // 收尾失败也必须尽力清除生成标记，避免侧栏永久转圈；失败仍不发送 DONE。
+          // 收尾失败仍尽力更新时间；活动 run 会由终态或租约过期收敛。
           try {
             await db
               .update(s.conversations)
-              .set({ updatedAt: new Date(), generating: false })
+              .set({ updatedAt: new Date() })
               .where(eq(s.conversations.id, body.conversationId));
           } catch {
             /* DB 不可用时无法继续收敛 */
@@ -604,6 +612,10 @@ export async function POST(req: NextRequest) {
           }
         } finally {
           // 无论消息落库是否成功,都必须把 runs 从 running 收敛到终态。
+          if (heartbeatTimer) {
+            clearInterval(heartbeatTimer);
+            heartbeatTimer = null;
+          }
           await finalizeRun({
             runId,
             status: resolveRunTerminalStatus({
@@ -614,6 +626,10 @@ export async function POST(req: NextRequest) {
             }),
             tokenUsage: irUsageToTokenUsage(finalUsage),
           });
+          // DONE 是可靠完成信号：必要消息持久化与 run 终结处理均已完成。
+          if (completionPersisted) {
+            safeEnqueue(encoder.encode("data: [DONE]\n\n"));
+          }
           req.signal.removeEventListener("abort", onRequestAbort);
           try {
             controller.close();

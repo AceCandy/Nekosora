@@ -85,6 +85,13 @@
       "when": 1785045795808,
       "tag": "0011_fix_kimi_fixed_reasoning",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1785049823965,
+      "tag": "0012_add_run_lease",
+      "breakpoints": true
     }
   ]
 }

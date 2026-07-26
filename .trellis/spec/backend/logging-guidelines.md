@@ -206,52 +206,66 @@ panel **不做字段级脱敏**——错误日志均为用户自己调用产生�
 ### 1. Scope / Trigger
 
 - `/api/chat` 创建一次用户可见生成时，将现有 `runs`、`tool_calls` 与 `messages.runId` 接入审计链路。
-- 不在该场景新增 schema；请求幂等与事件重放另行设计。
+- `runs` 同时承担跨实例活动状态事实源时，必须维护数据库时间租约；请求幂等、事件重放与过期 run 终态物化另行设计。
 
 ### 2. Signatures
 
-- `startRun({ runId, conversationId, userId, platformModelName })`
+- `startRun({ runId, conversationId, userId, platformModelName }): Promise<boolean>`
+- `heartbeatRun(runId): Promise<void>`
 - `recordToolCallStart({ runId, toolCallId, toolName, args })`
 - `recordToolCallResult({ runId, toolCallId, result, isError })`
-- `finalizeRun({ runId, status, tokenUsage })`
+- `finalizeRun({ runId, status, tokenUsage }): Promise<void>`
 - `resolveRunTerminalStatus({ finished, aborted, sawError, persistenceFailed })`
+- 活动谓词：`runs.status = 'running' AND runs.lease_expires_at > now()`。
 
 ### 3. Contracts
 
 - 普通发送、重试、编辑重发与续写每轮生成唯一 `runId`；同一 Agent 多轮必须共享该值。
 - 新建 user 与本轮新建/续写 assistant 写入 `runId`；复用历史 user 时不得改写其归属。
-- run/tool DB 写入均为 best-effort，失败只记录短错误，不阻断模型流或记录工具敏感参数。
-- 所有 SSE 帧必须经取消安全的 `safeEnqueue` 写入；run 必须在最内层 `finally` 从 `running` 收敛。
+- `runs` 是活动状态唯一事实源；会话列表与轮询共用有效租约谓词动态派生 `generating`。`conversations.generating` 仅供旧版本回滚，新 runtime 不读写。
+- `startRun` 使用 PostgreSQL `now() + interval '2 minutes'` 创建租约。仅 start 成功时每 30 秒调用 `heartbeatRun`，timer 必须 `unref()` 并在所有完成、失败和取消路径清除。
+- start/heartbeat/finalize 与 tool DB 写入均为 best-effort，失败只记录脱敏短错误，不阻断模型流或记录工具敏感参数。start 失败不启动心跳；finalize 失败时活动投影最多保留到租约过期。
+- 所有 SSE 帧必须经取消安全的 `safeEnqueue` 写入；run 必须在最内层 `finally` 从 `running` 收敛，并在成功路径发送 `[DONE]` 前 `await finalizeRun(...)`。
 - `finish` 是权威完成信号；完成后的客户端 abort 不得把成功 run 降级，收尾持久化失败除外。
 
 ### 4. Validation & Error Matrix
 
-| 条件 | `runs.status` | assistant 状态 |
+| 条件 | `runs.status` / 租约 | 对外行为 |
 |---|---|---|
-| 收到 `finish` 且收尾持久化成功 | `success` | `success` |
-| 未收到 `finish` 的显式流错误 / 抛出异常 | `failed` | `interrupted` |
-| abort 或 maxSteps 未收到 finish | `interrupted` | `interrupted` |
-| assistant / 会话收尾持久化失败 | `failed` | 未可靠持久化 |
+| fresh running run | `running` 且租约未过期 | `generating=true` |
+| 同会话一条 run 终结，另一条仍 fresh | 当前 run 终态，另一条 `running` | `generating=true` |
+| 最后一条 fresh run 终结 | `success` / `failed` / `interrupted` | `generating=false`；成功时 finalize 后发 `[DONE]` |
+| 进程崩溃或心跳停止 | 行可保持 `running`，租约最终过期 | 过期后 `generating=false` |
+| start 写入失败 | 无可用活动 run | 模型流继续；不启动心跳 |
+| finalize 写入失败 | 行暂时 `running` | 模型流按 best-effort 契约结束；租约过期后转为 inactive |
+| assistant / 会话收尾持久化失败 | 当前 run 最终标记 `failed` | error SSE；无 `[DONE]` |
 
 ### 5. Good / Base / Bad Cases
 
+- Good：同一会话 R1、R2 并发时，R1 终结只更新自身；R2 的有效租约继续让侧栏显示活动。
 - Good：Agent 两轮的 tool-call/tool-result 与最终 assistant 都关联同一 run。
-- Base：无工具的普通生成仍创建并收敛一条 run，SSE 载荷不变。
-- Bad：直接 `controller.enqueue` 在客户端取消后抛错，使收尾 `finally` 未执行并留下 `running` run。
+- Base：无工具的普通生成仍创建、续租并收敛一条 run，SSE 载荷不变。
+- Bad：任一请求结束时直接把会话级布尔值写成 false，会提前清除其他并发 run 的活动状态。
+- Bad：启动时全量清理活动布尔值，会误伤其他实例仍在执行的请求。
 
 ### 6. Tests Required
 
-- `run-lifecycle.test.ts` 覆盖终态优先级、usage 映射、敏感 JSONB 规范化与 DB 失败隔离。
+- `run-lifecycle.test.ts` 覆盖数据库时间租约、只续租 running run、终态优先级、usage 映射、敏感 JSONB 规范化与 DB 失败隔离。
 - Agent loop 测试断言每轮 `streamChat` 接收同一 `runId`。
-- route 接线复核须覆盖 send/retry/edit/continue 的消息 `runId` 规则与 abort/error/finalize 边界。
+- 会话 action 测试覆盖 fresh/expired/null/terminal 真值表，并断言列表与轮询共用同一活动谓词。
+- route 接线复核须覆盖 send/retry/edit/continue 的消息 `runId` 规则、heartbeat 清理以及 `[DONE]` 晚于 finalize 的时序。
+- bootstrap 回归须断言启动流程不再全量更新 `conversations.generating`。
 
 ### 7. Wrong vs Correct
 
 ```typescript
-// Wrong:取消竞态可抛出并跳过 run 收尾。
-controller.enqueue(frame);
-
-// Correct:丢弃已关闭流的帧,终态仍由 finally 收敛。
-safeEnqueue(frame);
+// Wrong:一个 run 结束便覆盖整个会话,并在终态持久化前宣告完成。
+await db.update(conversations).set({ generating: false });
+safeEnqueue(doneFrame);
 await finalizeRun({ runId, status, tokenUsage });
+
+// Correct:只终结当前 run；查询从剩余有效租约派生活动状态。
+clearHeartbeat();
+await finalizeRun({ runId, status, tokenUsage });
+safeEnqueue(doneFrame);
 ```

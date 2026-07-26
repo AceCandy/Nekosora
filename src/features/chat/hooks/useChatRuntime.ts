@@ -58,9 +58,8 @@ export function useChatRuntime({
   const messages = storeMessages ?? initialMessages;
   const streaming = useChatStreamStore((s) => s.runtimes[key]?.streaming ?? false);
 
-  // 前台会话的生成状态变化时刷新侧栏。开始时 refresh(此时 DB generating 已被
-  // /api/chat 置 true),结束时也 refresh(清掉转圈)。仅当前路由对应的会话触发即可:
-  // refresh 会重跑共享 layout 的 listConversations,所有会话的 generating 同步更新。
+  // 前台会话的本地流状态变化时刷新侧栏。开始和结束均 refresh；共享 layout 会重跑
+  // listConversations,由 fresh running run 的租约动态派生所有会话的 generating。
   // 挂载时判定是否新会话页(initialConvId 为空)。replaceState 后 router.refresh 会跨 segment 重挂,
   // 故新会话场景跳过 refresh;侧栏高亮/新会话项/generating 改由 chatStreamStore 乐观驱动。
   const wasNewConversation = useRef(conversationId === null);

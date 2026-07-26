@@ -301,8 +301,12 @@ describe("Kimi fixed reasoning repair migration", () => {
   });
 
   it("appends migration metadata without changing the schema snapshot", () => {
-    const previousEntry = journal.entries.at(-2);
-    const currentEntry = journal.entries.at(-1);
+    const currentEntryIndex = journal.entries.findIndex(
+      (entry) => entry.tag === "0011_fix_kimi_fixed_reasoning",
+    );
+    expect(currentEntryIndex).toBeGreaterThan(0);
+    const previousEntry = journal.entries[currentEntryIndex - 1];
+    const currentEntry = journal.entries[currentEntryIndex];
     expect(previousEntry).toBeDefined();
     expect(currentEntry).toMatchObject({
       idx: 11,

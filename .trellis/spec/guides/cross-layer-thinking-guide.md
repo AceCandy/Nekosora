@@ -340,3 +340,22 @@ state correctly, but several commands still re-parsed event payload fields with
 local casts. The fix was to make the core event layer own `ThreadChannelEvent`
 and `isThreadEvent`, make `reduceChannelMetadata` the only channel metadata
 projection, and make `reduceThreads` the only thread replay reducer.
+
+---
+
+## Durable Activity Projection Boundary
+
+Long-running activity crosses request runtimes, database rows, server queries,
+and UI indicators. A cached parent-level boolean is not a valid projection when
+multiple child operations can overlap or a process can disappear.
+
+### Checklist: Before Changing Long-Running Activity State
+
+- [ ] Define one durable source of truth and one reusable active predicate
+- [ ] Model overlapping operations independently; completion may only mutate the current operation
+- [ ] Give abandoned activity an expiry or reconciliation path using one authoritative clock
+- [ ] Trace start, heartbeat, finalize, crash, temporary database failure, and rolling upgrade
+- [ ] Keep startup from globally clearing activity owned by other instances
+- [ ] Treat compatibility cache columns as rollback-only; runtime readers and writers must not split across both models
+- [ ] Test fresh, expired, null, terminal, concurrent, and last-operation-completes cases at every projection consumer
+- [ ] Record the concrete database and runtime contract in the owning backend specs

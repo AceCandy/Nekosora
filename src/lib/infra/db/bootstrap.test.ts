@@ -133,6 +133,69 @@ function migrationLedgerDb(
   }, options);
 }
 
+describe("bootstrapDatabase", () => {
+  it("启动时不全量更新 conversations 生成状态", async () => {
+    process.env.BOOTSTRAP_SKIP_MIGRATE = "1";
+    const schema = {
+      user: { id: "user.id", email: "user.email" },
+      renderStyles: {
+        id: "renderStyles.id",
+        cssClass: "renderStyles.cssClass",
+        builtin: "renderStyles.builtin",
+      },
+      outputModes: { id: "outputModes.id" },
+      conversations: { generating: "conversations.generating" },
+    };
+    const resultSets = [
+      [{ id: "user-1" }],
+      [{ id: "paper" }],
+      [{ id: "paper", cssClass: "paper" }],
+      [{ id: "builtin-structured-output" }],
+    ];
+    const select = vi.fn(() => {
+      const rows = resultSets.shift() ?? [];
+      const query = {
+        from: vi.fn(() => query),
+        where: vi.fn(() => query),
+        limit: vi.fn(() => Promise.resolve(rows.slice(0, 1))),
+        then: (
+          resolve: (value: Record<string, unknown>[]) => unknown,
+          reject: (reason: unknown) => unknown,
+        ) => Promise.resolve(rows).then(resolve, reject),
+      };
+      return query;
+    });
+    const updatedTables: unknown[] = [];
+    const update = vi.fn((table: unknown) => {
+      updatedTables.push(table);
+      return {
+        set: vi.fn(() => ({ where: vi.fn().mockResolvedValue(undefined) })),
+      };
+    });
+    const db = {
+      execute: vi.fn().mockResolvedValue({ rows: [] }),
+      select,
+      update,
+      insert: vi.fn(),
+      delete: vi.fn(),
+    };
+    vi.doMock("@/lib/infra/db", () => ({
+      getDb: vi.fn().mockResolvedValue(db),
+      getSchema: vi.fn(() => schema),
+    }));
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      const { bootstrapDatabase } = await import("@/lib/infra/db/bootstrap");
+      await bootstrapDatabase();
+    } finally {
+      logSpy.mockRestore();
+    }
+
+    expect(updatedTables).not.toContain(schema.conversations);
+  });
+});
+
 describe("runMigrations", () => {
   it("相同迁移 hash 已按旧时间登记时协调到当前 journal 时间", async () => {
     mockTestMigrationFiles();

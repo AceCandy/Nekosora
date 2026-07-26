@@ -316,7 +316,7 @@ export const conversations = pgTable(
     composerState: jsonb("composer_state").$type<import("@/db/types").ComposerState>(), // 指令卡 / 知识库等数组型会话状态
     pinned: boolean("pinned").notNull().default(false), // 是否置顶
     archived: boolean("archived").notNull().default(false), // 是否归档
-    generating: boolean("generating").notNull().default(false), // 是否正在生成(供侧栏转圈标识;服务端写入)
+    generating: boolean("generating").notNull().default(false), // 遗留回滚兼容列;新 runtime 从有效 run 租约派生,不读写
     contextPolicy: jsonb("context_policy").$type<ContextPolicy>(), // per-conversation 快照
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -388,21 +388,31 @@ export const messageFeedback = pgTable(
   ],
 );
 
-export const runs = pgTable("runs", {
-  id: text("id").primaryKey().default(sql`gen_random_uuid()`),
-  runId: text("run_id").notNull().unique(),
-  conversationId: text("conversation_id").references(() => conversations.id, {
-    onDelete: "cascade",
-  }),
-  userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
-  upstreamId: text("upstream_id"),
-  platformModelName: text("platform_model_name"),
-  routedBindingCode: text("routed_binding_code"),
-  firstTokenLatencyMs: integer("first_token_latency_ms"),
-  tokenUsage: jsonb("token_usage").$type<TokenUsage>(),
-  status: text("status").notNull().default("running"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+export const runs = pgTable(
+  "runs",
+  {
+    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
+    runId: text("run_id").notNull().unique(),
+    conversationId: text("conversation_id").references(() => conversations.id, {
+      onDelete: "cascade",
+    }),
+    userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
+    upstreamId: text("upstream_id"),
+    platformModelName: text("platform_model_name"),
+    routedBindingCode: text("routed_binding_code"),
+    firstTokenLatencyMs: integer("first_token_latency_ms"),
+    tokenUsage: jsonb("token_usage").$type<TokenUsage>(),
+    status: text("status").notNull().default("running"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true })
+      .default(sql`now() + interval '2 minutes'`),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("runs_active_conversation_idx")
+      .on(t.conversationId, t.leaseExpiresAt)
+      .where(sql`${t.status} = 'running'`),
+  ],
+);
 
 export const toolCalls = pgTable("tool_calls", {
   id: text("id").primaryKey().default(sql`gen_random_uuid()`),

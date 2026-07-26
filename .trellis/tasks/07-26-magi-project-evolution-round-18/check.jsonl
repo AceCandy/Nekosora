@@ -1,0 +1,7 @@
+{"file":".trellis/spec/backend/index.md","reason":"按后端规范入口执行最终复核。"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"核对 run lease、终态、best-effort 和 finally 时序。"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"核对 0012、部分索引、journal/snapshot 与滚动升级兼容。"}
+{"file":".trellis/spec/backend/chat-message-references.md","reason":"核对消息收尾、并发 run 与 DONE 可靠完成信号。"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"核对实现范围、重复 SQL 条件、timer 清理和测试覆盖。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"核对 run 写入、活动查询与 Sidebar 状态的完整数据流。"}
+{"file":".trellis/tasks/07-26-magi-project-evolution-round-18/research/generating-run-race.md","reason":"逐项复核根因、并发真值表、多实例风险和延期范围。"}
