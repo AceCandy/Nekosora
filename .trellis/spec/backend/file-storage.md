@@ -431,63 +431,89 @@ if (useSyncFallback) {
 }
 ```
 
-## Scenario: Atomic File Processing Claim
+## Scenario: Recoverable Fenced File Processing
 
 ### 1. Scope / Trigger
 
-Apply this contract when changing `processFile`, the `file-process` worker, or upload fallback processing. Queue and fallback can deliver the same file concurrently.
+Apply this contract when changing `processFile`, file chunks, the `file-process` worker, upload fallback processing, or stale-file recovery. Queue delivery, Web fallback, multiple workers, and crashed processes can all overlap.
 
 ### 2. Signatures
 
-- `processFile(fileId: string, storagePath: string, mime: string): Promise<void>` claims a file before extraction.
-- The claim updates `file_objects.processing_status` and `extract_status` and returns the claimed row id.
+- `file_objects.processing_lease_id`: nullable text fencing token, replaced on every claim.
+- `file_objects.processing_lease_expires_at`: nullable `timestamptz`, compared with PostgreSQL time.
+- `processFile(fileId: string, storagePath: string, mime: string): Promise<void>` atomically claims and processes one file.
+- `recoverStaleFileProcessing(): Promise<void>` scans and sequentially processes at most 25 stale active rows.
+- `startFileProcessingRecovery(recover?): () => Promise<void>` starts immediate and 60-second single-flight scans and returns an asynchronous stop function.
+- `startWorker(runtime?): Promise<void>` registers queue handlers, starts recovery, and owns startup/shutdown cleanup.
 
 ### 3. Contracts
 
-- Claim with one atomic update constrained by `id = fileId` and `processing_status IN ('pending', 'error')`, setting `processing_status='extracting'` and `extract_status='running'`.
-- If `returning()` yields no row, return before extract, chunk, embedding, or chunk persistence; do not overwrite another worker's status.
-- A successful claim preserves existing unsupported, empty-text, embedding, done, and error transitions.
-- This is a database-level claim, not an in-process mutex, so separate worker and web processes share the guard.
-- It does not recover stale `extracting/embedding` rows or deduplicate historical chunks.
+- Claim with one conditional UPDATE for `pending/error`, or `extracting/embedding` whose lease is NULL or expired. Set a random token and `now() + interval '2 minutes'`; an empty `RETURNING` is an immediate no-op.
+- Every post-claim status write matches file id, token, active status, and `processing_lease_expires_at > now()`. A zero-row write means ownership is lost and no later database write may be attempted.
+- Heartbeat renews every 30 seconds, is single-flight, uses an unreferenced timer, and treats zero rows or a database error as lease loss. Stop the timer and await an in-flight renewal on every exit path.
+- Extraction and embedding APIs currently have no cancellation signal. Lease loss fences their late results; it does not claim to cancel external computation.
+- Unsupported, empty-text, and ordinary error terminal writes clear both lease fields only while still owned. Embedding API failure keeps text chunks but sets `rag_ready=false` and `rag_reason='embedding_failed'`.
+- Chunk replacement runs in one transaction: renew and lock the parent row, delete old chunks, insert batches of 50, then mark `done` and clear the lease. The final predicate uses `statement_timestamp()` so an overlong transaction rolls back delete, inserts, and terminal state together.
+- Stale scanning selects active rows with NULL/expired leases, orders NULL first then by lease and creation time, limits to 25, and processes sequentially. One candidate failure is redacted and does not stop later candidates; a SELECT failure rejects the round.
+- Recovery scheduling runs immediately and every 60 seconds without overlap. Its stop function clears the timer and waits for the active scan. The worker stops recovery before the queue; repeated signals reuse one shutdown promise.
+- Worker startup failure stops any started recovery and queue while preserving the original error. Shutdown continues remaining cleanup after a failure and exits non-zero when cleanup was incomplete.
+- Deploy the migration before the new runtime, drain old workers/Web fallback executors, then start the scanner. A token-aware scanner must not run beside an old runtime that can still write chunks by file id alone.
 
 ### 4. Validation & Error Matrix
 
-| Claim result | Processing behavior |
+| Condition | Required behavior |
 | --- | --- |
-| One `pending/error` row returned | Run the existing pipeline |
-| Empty returning set | Immediate no-op |
-| Row in another status / missing row | Immediate no-op |
-| Claim query fails | Propagate to queue/fallback caller for retry handling |
+| Pending/error or stale active claim wins | New token and fresh database-time lease; pipeline runs |
+| Fresh active row, terminal row, missing row, or concurrent loser | Immediate no-op before extraction |
+| Heartbeat/update returns zero rows or heartbeat rejects | Mark local ownership lost; discard late results and stop later writes |
+| Embedding call fails while ownership remains | Persist text chunks, `embed_status=error`, `rag_ready=false` |
+| Chunk insert fails | Roll back replacement, keep old chunks, then write owned `error` terminal state |
+| Final statement-time freshness check fails | Roll back replacement and leave the row for later stale recovery |
+| Stale SELECT fails | Log a redacted scheduler error; retry on the next tick |
+| One stale candidate throws | Log file id plus redacted error; continue the same batch |
+| Worker startup or shutdown cleanup fails | Continue available cleanup; preserve startup error or exit non-zero |
 
 ### 5. Good / Base / Bad Cases
 
-- Good: worker and fallback race; one atomically claims, the other exits before deleting or inserting chunks.
-- Base: a pending upload claims once and reaches the existing status transitions.
-- Bad: unconditional `extracting` update lets every concurrent caller delete and reinsert the same file's chunks.
+- Good: an old executor resumes after another worker took over; its token cannot update status or enter the chunk transaction.
+- Good: a process dies during embedding; after expiry the scanner claims it and atomically replaces the previous chunks.
+- Base: a pending upload claims once, heartbeats during long external work, and clears its lease at a terminal state.
+- Bad: reset stale rows to pending and enqueue separately; queue dispatch is not atomic with the database reset.
+- Bad: delete chunks outside the fenced transaction, or use transaction-start `now()` as the final freshness check.
 
 ### 6. Tests Required
 
-- Assert the claim where clause combines file id equality with `pending/error` status membership.
-- Assert an empty `returning()` result skips extract, chunk, embedding, delete, and insert calls.
-- Assert a successful claim still handles unsupported files as `done/skipped`.
-- Keep lint, typecheck, full tests, production build, and diff checks green.
+- Unit tests must cover pending/error/stale claim, fresh rejection, heartbeat single-flight and failure, all owned status stages, unsupported/empty/error paths, embedding failure, transaction entry fencing, scheduler retry/single-flight/limit, and worker startup/shutdown failure cleanup.
+- Migration tests must assert nullable text/timestamptz columns, active-row NULL backfill with `now()`, partial-index predicate, journal order, and snapshot `prevId` continuity.
+- A harness-created, fixed-prefix random PostgreSQL database must run full migrations and prove concurrent single-winner claim, parent-row lock waiting plus predicate re-evaluation, old-token rejection, explicit chunk-insert rollback, final `statement_timestamp()` rollback, stale scanning, candidate isolation, and the 25-row limit.
+- The harness must construct `TEST_DATABASE_URL` internally, close pools/processes, terminate only sessions for the generated database, and force-drop it in `finally` without printing connection strings.
+- Keep upload fallback, queue lifecycle, lint, typecheck, full tests, production build, Trellis validation, and diff checks green.
 
 ### 7. Wrong vs Correct
 
 ```typescript
-// Wrong: every caller enters the pipeline.
-await update({ processingStatus: "extracting", extractStatus: "running" });
-await extractText(storagePath, mime);
+// Wrong: file id alone lets an expired executor overwrite the new owner.
+await db.update(s.fileObjects)
+  .set({ processingStatus: "done" })
+  .where(eq(s.fileObjects.id, fileId));
+await db.delete(s.fileChunks).where(eq(s.fileChunks.fileId, fileId));
 
-// Correct: only the caller that changed pending/error owns the pipeline.
-const [claimed] = await db.update(s.fileObjects)
-  .set({ processingStatus: "extracting", extractStatus: "running" })
-  .where(and(
-    eq(s.fileObjects.id, fileId),
-    inArray(s.fileObjects.processingStatus, ["pending", "error"]),
-  ))
-  .returning({ id: s.fileObjects.id });
-if (!claimed) return;
+// Correct: fence every write, and replace chunks with the terminal state atomically.
+await db.transaction(async (tx) => {
+  const [locked] = await tx.update(s.fileObjects)
+    .set({ processingLeaseExpiresAt: sql`now() + interval '2 minutes'` })
+    .where(ownedWhere(sql`now()`))
+    .returning({ id: s.fileObjects.id });
+  if (!locked) throw new FileProcessingLeaseLostError();
+
+  await tx.delete(s.fileChunks).where(eq(s.fileChunks.fileId, fileId));
+  await tx.insert(s.fileChunks).values(rows);
+  const [done] = await tx.update(s.fileObjects)
+    .set({ processingStatus: "done", processingLeaseId: null, processingLeaseExpiresAt: null })
+    .where(ownedWhere(sql`statement_timestamp()`))
+    .returning({ id: s.fileObjects.id });
+  if (!done) throw new FileProcessingLeaseLostError();
+});
 ```
 
 ## Scenario: User-Owned RAG And Vision Files

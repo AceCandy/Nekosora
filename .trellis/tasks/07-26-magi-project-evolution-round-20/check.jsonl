@@ -1,0 +1,6 @@
+{"file":".trellis/spec/backend/index.md","reason":"后端完整质量检查入口"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"复核迁移链、数据库时间、事务与索引一致性"}
+{"file":".trellis/spec/backend/file-storage.md","reason":"复核文件处理状态、fallback 与并发 claim 回归"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"复核 schema、运行时、worker 生命周期的端到端数据流"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"复核租约常量与调度模式是否无不必要重复"}
+{"file":".trellis/tasks/07-26-magi-project-evolution-round-20/research/stale-file-processing.md","reason":"按已确认失败链和竞态检查实现完整性"}

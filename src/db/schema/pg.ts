@@ -578,6 +578,8 @@ export const fileObjects = pgTable(
     storagePath: text("storage_path").notNull(),
     size: integer("size").notNull(),
     processingStatus: text("processing_status").notNull().default("pending"),
+    processingLeaseId: text("processing_lease_id"),
+    processingLeaseExpiresAt: timestamp("processing_lease_expires_at", { withTimezone: true }),
     extractStatus: text("extract_status"),
     extractEngine: text("extract_engine"),
     extractChars: integer("extract_chars"),
@@ -591,7 +593,12 @@ export const fileObjects = pgTable(
     chunkCount: integer("chunk_count"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("file_objects_user_idx").on(t.userId)],
+  (t) => [
+    index("file_objects_user_idx").on(t.userId),
+    index("file_objects_stale_processing_idx")
+      .on(t.processingLeaseExpiresAt, t.createdAt)
+      .where(sql`${t.processingStatus} IN ('extracting', 'embedding')`),
+  ],
 );
 
 export const fileChunks = pgTable(

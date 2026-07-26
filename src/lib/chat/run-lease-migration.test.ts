@@ -34,8 +34,10 @@ describe("0012 run lease migration", () => {
         breakpoints: boolean;
       }>;
     };
-    const previousEntry = journal.entries.at(-2)!;
-    const currentEntry = journal.entries.at(-1)!;
+    const currentIndex = journal.entries.findIndex((entry) => entry.tag === "0012_add_run_lease");
+    expect(currentIndex).toBeGreaterThan(0);
+    const previousEntry = journal.entries[currentIndex - 1]!;
+    const currentEntry = journal.entries[currentIndex]!;
     expect(currentEntry).toEqual(expect.objectContaining({
       idx: 12,
       tag: "0012_add_run_lease",
