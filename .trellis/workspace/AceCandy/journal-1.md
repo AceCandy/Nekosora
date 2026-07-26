@@ -1727,3 +1727,36 @@ setKeyEnabled 接收 userId 并在更新 SQL 中同时限制 key ID 与属主，
 ### Next Steps
 
 - None - task complete
+
+
+## Session 53: MAGI 项目进化第 18 轮
+
+**Date**: 2026-07-26
+**Task**: MAGI 项目进化第 18 轮
+**Branch**: `opt0725`
+
+### Summary
+
+修复同一会话并发 Chat run 提前清除 generating 的竞态：以带数据库租约的 runs 作为唯一活动事实源，接入心跳与 finalize-before-DONE 时序，移除启动全量清理，补齐 PostgreSQL 0012 迁移、回归测试和跨层规范。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `44ae9ea` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
