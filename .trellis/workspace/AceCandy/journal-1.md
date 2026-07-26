@@ -1694,3 +1694,36 @@ setKeyEnabled 接收 userId 并在更新 SQL 中同时限制 key ID 与属主，
 ### Next Steps
 
 - None - task complete
+
+
+## Session 52: MAGI 项目进化第 17 轮
+
+**Date**: 2026-07-26
+**Task**: MAGI 项目进化第 17 轮
+**Branch**: `opt0725`
+
+### Summary
+
+修复 Kimi K2.7 fixed 推理档位漂移：运行时只认显式非空单档，同步保留 curated map，新增 0011 数据迁移及完整回归与契约。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `cd18473` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
