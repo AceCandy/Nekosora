@@ -22,6 +22,7 @@ Managed by Trellis. Edits outside this block are preserved; edits inside may be 
 
 ## 补充逻辑
 - 工作过程中定期查看我的实时反馈
+- codex在等待原生子代理只调用 agents.wait_agent，不得使用 functions.wait 或构造 cell_id
 - 日常不需要扫描docs/cankao这个目录下的代码,这里面是参考的开源项目
 - 如果涉及到用户要求参考对应项目的逻辑的时候,优先看这个文件下的项目代码
 - 扫描代码的codeGraph使用参考 @CODEGRAPH.md
