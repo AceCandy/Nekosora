@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"Drizzle PostgreSQL transaction and query conventions"}
+{"file":".trellis/spec/backend/chat-message-references.md","reason":"existing message reference isolation and branch mutation contract"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"preserve API and SSE error behavior"}
+{"file":".trellis/tasks/07-26-magi-project-evolution-round-12/research/message-reference-races.md","reason":"verified TOCTOU paths and event sequences"}
+{"file":".trellis/tasks/07-26-magi-project-evolution-round-12/research/concurrency-strategy.md","reason":"selected short transaction lock and conditional write design"}

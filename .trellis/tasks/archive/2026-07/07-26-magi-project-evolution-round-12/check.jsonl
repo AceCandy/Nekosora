@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"verify transaction scope and PostgreSQL-only compatibility"}
+{"file":".trellis/spec/backend/chat-message-references.md","reason":"verify all reference and branch mutation invariants"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"verify error framing and completion semantics"}
+{"file":".trellis/tasks/07-26-magi-project-evolution-round-12/research/message-reference-races.md","reason":"verify each researched race is closed"}
+{"file":".trellis/tasks/07-26-magi-project-evolution-round-12/research/concurrency-strategy.md","reason":"verify every message write uses the selected concurrency protocol"}
