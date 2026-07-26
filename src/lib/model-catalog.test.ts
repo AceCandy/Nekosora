@@ -252,3 +252,70 @@ describe("current mainstream catalog seed", () => {
     }
   });
 });
+
+describe("Kimi fixed reasoning repair migration", () => {
+  const migration = readFileSync("drizzle/pg/0011_fix_kimi_fixed_reasoning.sql", "utf8");
+  const journal = JSON.parse(readFileSync("drizzle/pg/meta/_journal.json", "utf8")) as {
+    entries: Array<{ idx: number; tag: string; when: number; breakpoints: boolean }>;
+  };
+  const previousSnapshot = JSON.parse(readFileSync("drizzle/pg/meta/0010_snapshot.json", "utf8")) as {
+    id: string;
+    prevId: string;
+    [key: string]: unknown;
+  };
+  const currentSnapshot = JSON.parse(readFileSync("drizzle/pg/meta/0011_snapshot.json", "utf8")) as {
+    id: string;
+    prevId: string;
+    [key: string]: unknown;
+  };
+
+  it("repairs both Kimi K2.7 rows while preserving unrelated capabilities", () => {
+    expect(migration).toContain('UPDATE "model_catalog"');
+    expect(migration).toContain('"capabilities" = "capabilities" ||');
+    expect(migration).toContain('"updated_at" = now()');
+
+    const patchMatch = migration.match(/\|\|\s*'(\{[^\n]+\})'::jsonb/);
+    expect(patchMatch).not.toBeNull();
+    const capabilityPatch = JSON.parse(patchMatch?.[1] ?? "{}") as Record<string, unknown>;
+    const expectedPatch = {
+      thinkingFormat: "fixed",
+      thinkingLevelMap: {
+        off: null,
+        minimal: null,
+        low: null,
+        medium: null,
+        high: "default",
+        xhigh: null,
+        max: null,
+      },
+    };
+    expect(capabilityPatch).toEqual(expectedPatch);
+    expect({ tools: true, vision: true, ...capabilityPatch })
+      .toEqual({ tools: true, vision: true, ...expectedPatch });
+
+    const targetMatch = migration.match(/WHERE\s+"canonical_model_id"\s+IN\s*\(([\s\S]*?)\);/);
+    expect(targetMatch).not.toBeNull();
+    const targetIds = [...(targetMatch?.[1] ?? "").matchAll(/'([^']+)'/g)]
+      .map((match) => match[1]);
+    expect(targetIds).toEqual(["kimi-k2.7-code", "kimi-k2.7-code-highspeed"]);
+  });
+
+  it("appends migration metadata without changing the schema snapshot", () => {
+    const previousEntry = journal.entries.at(-2);
+    const currentEntry = journal.entries.at(-1);
+    expect(previousEntry).toBeDefined();
+    expect(currentEntry).toMatchObject({
+      idx: 11,
+      tag: "0011_fix_kimi_fixed_reasoning",
+      breakpoints: true,
+    });
+    expect(currentEntry?.when).toBeGreaterThan(previousEntry?.when ?? Number.POSITIVE_INFINITY);
+
+    const { id: previousId, prevId: previousPrevId, ...previousSchema } = previousSnapshot;
+    const { id: currentId, prevId: currentPrevId, ...currentSchema } = currentSnapshot;
+    expect(currentPrevId).toBe(previousId);
+    expect(currentId).not.toBe(previousId);
+    expect(previousPrevId).toBeTypeOf("string");
+    expect(currentSchema).toEqual(previousSchema);
+  });
+});

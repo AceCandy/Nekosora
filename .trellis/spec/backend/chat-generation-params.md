@@ -55,6 +55,62 @@
 
 ---
 
+## Scenario: fixed 推理目录与 pi 同步
+
+### 1. Scope / Trigger
+- Scope: `model_catalog.capabilities`、`src/lib/reasoning.ts`、`src/lib/sync-pi-models.ts` 与目录数据迁移。
+- Trigger: 新增或调整 `thinkingFormat: "fixed"` 模型、同步 pi 模型元数据，或修复 fixed 存量目录时，必须遵守本契约。
+- Boundary: `fixed` 只描述模型官方请求语义；不得据 Provider URL 改写，也不得在 Chat 或路由层另写能力判断。
+
+### 2. Signatures
+- 目录形状:`ModelCapabilities { reasoning: true, thinkingFormat: "fixed", thinkingLevelMap }`。
+- 运行时:`getSupportedReasoningLevels(capabilities): ReasoningLevel[]`。
+- 同步:`resolveThinkingLevelMap(current, pi): ThinkingLevelMap | undefined` 与 `passesInvariants(capabilities): boolean`。
+- 数据修复:追加 PostgreSQL 迁移，以 `capabilities || patch::jsonb` 按 `canonical_model_id` 定向更新。
+
+### 3. Contracts
+- fixed map 必须恰好有一个显式非空字符串值的非 `off` 档位；`off` 必须为 `null`，表示不可关闭。
+- fixed 的缺省键不继承普通格式的 `off/minimal/low/medium/high` 默认支持语义。运行时只返回 map 中显式非空字符串值的非 `off` 档位，不自动猜测 `high`。
+- 合法 fixed 的默认值和失效会话值均夹到唯一档位；`buildReasoningProviderOptions` 返回 `undefined`，compatible 请求体保持原样，不伪造启停或强度参数。
+- 当前目录已经声明 fixed 时，pi 同步必须同时保留 curated `thinkingFormat` 与 `thinkingLevelMap`；不得采用 pi 的 toggle map。保留现有空字符串规范化规则。
+- `passesInvariants` 对 fixed 要求支持档位数量严格等于 1；其他 reasoning 模型仍要求至少一个可用档位。
+- 已发布目录迁移不得改写。存量修复必须追加迁移并同步 journal/snapshot，JSONB 顶层合并只能替换推理键，保留其他 capabilities。
+
+### 4. Validation & Error Matrix
+| Condition | Runtime | Sync / Migration |
+| --- | --- | --- |
+| 合法 fixed，唯一开启档 | 返回唯一档，默认与失效值夹到该档 | 不变量通过 |
+| fixed 只有 `{off:null}` | 返回空数组，不显示假档位 | 不变量失败，禁止作为合法同步结果 |
+| fixed 有多个开启档 | 返回显式档位，不猜测所有权 | 不变量失败，禁止落盘 |
+| current fixed + pi `deepseek` toggle map | 继续使用 current curated map | 不产生 capabilities 覆盖差异 |
+| 存量 fixed 数据损坏 | 防御性隐藏无效控件 | 追加定向迁移修复，不覆盖其他 capability |
+
+### 5. Good / Base / Bad Cases
+- Good:Kimi K2.7 使用 `off:null + high:"default"`，Chat 显示固定开启，请求体不增加控制字段。
+- Base:非 fixed 模型继续按目录 map 与格式默认值生成可用档位，既有翻译行为不变。
+- Bad:保留 current `fixed` 格式，却用 pi 的 `{off:null}` 覆盖 map，形成格式与档位所有权不一致的混合配置。
+- Bad:在运行时为 malformed fixed 自动补 `high`；这会掩盖目录损坏并绕过同步闸门。
+
+### 6. Tests Required
+- `reasoning.test.ts`:覆盖 `{off:null}` 与空字符串返回空数组、合法 fixed 唯一档、默认/夹取与请求体原样。
+- `sync-pi-models.test.ts`:覆盖 current fixed 遇 pi toggle map 时保留、fixed 零/一/多档不变量。
+- `model-catalog.test.ts`:读取追加迁移，断言目标 canonical ID、完整 fixed map、JSONB 合并与 `updated_at`。
+- 迁移元数据:断言新 snapshot 的 `prevId` 指向上一 snapshot，且 custom 数据迁移不引入 schema 差异。
+
+### 7. Wrong vs Correct
+#### Wrong
+```typescript
+if (pi.thinkingLevelMap) return pi.thinkingLevelMap;
+```
+
+#### Correct
+```typescript
+if (current.thinkingFormat === "fixed") return normalize(current.thinkingLevelMap);
+if (pi.thinkingLevelMap) return pi.thinkingLevelMap;
+```
+
+---
+
 ## Convention: per-model 能力映射(thinkingLevelMap)
 
 推理档位使用完整集合 `off/minimal/low/medium/high/xhigh/max`。Chat 从模型目录动态读取可用档位；`null` 明确禁用档位，`xhigh/max` 必须显式映射才可用。会话通过 `composerState.reasoningByModelId` 按具体模型保存选择，默认优先 `off`，不能关闭时使用最低可用档。

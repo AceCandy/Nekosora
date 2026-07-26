@@ -167,6 +167,22 @@ describe("resolveThinkingFormat", () => {
 });
 
 describe("resolveThinkingLevelMap", () => {
+  it("fixed 目录保留 curated map,不采用 pi 的开关 map", () => {
+    const currentMap = {
+      off: null,
+      minimal: null,
+      low: null,
+      medium: null,
+      high: "default",
+      xhigh: null,
+      max: null,
+    };
+    expect(resolveThinkingLevelMap(
+      cap({ thinkingFormat: "fixed", thinkingLevelMap: currentMap }),
+      pi({ compat: { thinkingFormat: "deepseek" }, thinkingLevelMap: { off: null } }),
+    )).toEqual(currentMap);
+  });
+
   it("openai-completions 系(pi 有 thinkingFormat)→ 用 pi map", () => {
     const piMap = { minimal: null, low: "high", medium: "high", high: "high", max: "max" };
     expect(resolveThinkingLevelMap(cap({ thinkingLevelMap: { high: null } }),
@@ -212,6 +228,27 @@ describe("passesInvariants", () => {
   });
   it("reasoning=true 有档 → 通过(不变量1/2)", () => {
     expect(passesInvariants(cap({ reasoning: true, thinkingLevelMap: { off: null, high: "high" } }))).toBe(true);
+  });
+  it("fixed 有多个开启档 → 拦截", () => {
+    expect(passesInvariants(cap({
+      reasoning: true,
+      thinkingFormat: "fixed",
+      thinkingLevelMap: { off: null, low: "low", high: "high" },
+    }))).toBe(false);
+  });
+  it("fixed 没有开启档 → 拦截", () => {
+    expect(passesInvariants(cap({
+      reasoning: true,
+      thinkingFormat: "fixed",
+      thinkingLevelMap: { off: null },
+    }))).toBe(false);
+  });
+  it("fixed 恰好一个开启档 → 通过", () => {
+    expect(passesInvariants(cap({
+      reasoning: true,
+      thinkingFormat: "fixed",
+      thinkingLevelMap: { off: null, high: "default" },
+    }))).toBe(true);
   });
   it("reasoning=true 但全档被 null → 拦截", () => {
     expect(passesInvariants(cap({

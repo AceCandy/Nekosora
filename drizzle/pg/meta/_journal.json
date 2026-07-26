@@ -78,6 +78,13 @@
       "when": 1785003843594,
       "tag": "0010_lazy_gorgon",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1785045795808,
+      "tag": "0011_fix_kimi_fixed_reasoning",
+      "breakpoints": true
     }
   ]
 }

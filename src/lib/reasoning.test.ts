@@ -38,6 +38,24 @@ describe("model-driven reasoning levels", () => {
     expect(applyReasoningToCompatibleBody({ model: "composer-2.5" }, caps, "high")).toEqual({ model: "composer-2.5" });
   });
 
+  it("does not infer levels for malformed fixed reasoning", () => {
+    const caps: ModelCapabilities = {
+      reasoning: true,
+      thinkingFormat: "fixed",
+      thinkingLevelMap: { off: null },
+    };
+    expect(getSupportedReasoningLevels(caps)).toEqual([]);
+  });
+
+  it("does not treat an empty fixed mapping as an enabled level", () => {
+    const caps: ModelCapabilities = {
+      reasoning: true,
+      thinkingFormat: "fixed",
+      thinkingLevelMap: { off: null, high: "" },
+    };
+    expect(getSupportedReasoningLevels(caps)).toEqual([]);
+  });
+
   it("exposes Agnes thinking as an off/high toggle", () => {
     const caps: ModelCapabilities = {
       reasoning: true,

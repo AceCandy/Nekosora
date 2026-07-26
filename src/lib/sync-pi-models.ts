@@ -304,12 +304,12 @@ export function resolveThinkingFormat(cur: ModelCapabilities, pi: PiModel): Thin
   return cur.thinkingFormat;
 }
 
-/** thinkingLevelMap:仅 openai-completions 系(pi 给了非网关 thinkingFormat)才采用 pi 的 map;
+/** thinkingLevelMap:仅非 fixed 的 openai-completions 系(pi 给了非网关 thinkingFormat)才采用 pi 的 map;
  *  原生 API(claude/gemini/openai-responses)档位映射走 DEFAULT_MAP + providerOptions,
  *  刷 pi 的 map 会改请求行为,故保现状,仅规范化空串。 */
 export function resolveThinkingLevelMap(cur: ModelCapabilities, pi: PiModel): ThinkingLevelMap | undefined {
   const pf = pi.compat?.thinkingFormat;
-  if (pf && !AGGREGATOR_FORMATS.has(pf) && pi.thinkingLevelMap) {
+  if (cur.thinkingFormat !== "fixed" && pf && !AGGREGATOR_FORMATS.has(pf) && pi.thinkingLevelMap) {
     return pi.thinkingLevelMap as ThinkingLevelMap;
   }
   const cur2 = cur.thinkingLevelMap;
@@ -333,10 +333,11 @@ export function translate(cur: ModelCapabilities, pi: PiModel): ModelCapabilitie
   return cap;
 }
 
-/** 闸门:reasoning=true 时刷后必须有可显档(否则配置错误)。 */
+/** 闸门:reasoning=true 时刷后必须有可显档;fixed 必须恰好一个。 */
 export function passesInvariants(cap: ModelCapabilities): boolean {
   if (!cap.reasoning) return true;
-  return getSupportedReasoningLevels(cap).length > 0;
+  const levels = getSupportedReasoningLevels(cap);
+  return cap.thinkingFormat === "fixed" ? levels.length === 1 : levels.length > 0;
 }
 
 /** 规范化 JSON(对象按 key 排序),消除同值不同序的误报。 */

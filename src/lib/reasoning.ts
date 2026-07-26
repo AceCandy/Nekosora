@@ -17,6 +17,12 @@ const LEVELS: ReasoningLevel[] = ["off", "minimal", "low", "medium", "high", "xh
 
 export function getSupportedReasoningLevels(capabilities?: ModelCapabilities): ReasoningLevel[] {
   if (!capabilities?.reasoning) return [];
+  if (capabilities.thinkingFormat === "fixed") {
+    return LEVELS.filter((level) => {
+      const mapped = capabilities.thinkingLevelMap?.[level];
+      return level !== "off" && typeof mapped === "string" && mapped.length > 0;
+    });
+  }
   return LEVELS.filter((level) => {
     const mapped = capabilities.thinkingLevelMap?.[level];
     if (mapped === null) return false;
