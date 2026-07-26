@@ -12,6 +12,7 @@
  */
 import { and, eq, isNull } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
+import { withBestEffortTimeout } from "@/lib/best-effort";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { getSession } from "@/lib/session";
 import { streamChat, streamChatWithTools } from "@/lib/stream";
@@ -329,17 +330,37 @@ export async function POST(req: NextRequest) {
   // 不可靠,由 ReadableStream.cancel() 兜底,二者都触发同一个 AbortController。
   const abortCtl = new AbortController();
   let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
-  const onRequestAbort = () => abortCtl.abort();
-  if (req.signal.aborted) {
+  let heartbeatInFlight: Promise<void> | null = null;
+  let heartbeatStopped = false;
+  const stopHeartbeat = () => {
+    heartbeatStopped = true;
+    if (heartbeatTimer) {
+      clearInterval(heartbeatTimer);
+      heartbeatTimer = null;
+    }
+  };
+  const onRequestAbort = () => {
+    stopHeartbeat();
     abortCtl.abort();
+  };
+  if (req.signal.aborted) {
+    onRequestAbort();
   } else {
     req.signal.addEventListener("abort", onRequestAbort, { once: true });
   }
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      if (runStarted) {
+      if (runStarted && !heartbeatStopped && !abortCtl.signal.aborted) {
         heartbeatTimer = setInterval(() => {
-          void heartbeatRun(runId);
+          if (heartbeatStopped || abortCtl.signal.aborted || heartbeatInFlight) {
+            return;
+          }
+          const pending = heartbeatRun(runId);
+          heartbeatInFlight = pending;
+          const clearInFlight = () => {
+            if (heartbeatInFlight === pending) heartbeatInFlight = null;
+          };
+          void pending.then(clearInFlight, clearInFlight);
         }, RUN_HEARTBEAT_INTERVAL_MS);
         heartbeatTimer.unref();
       }
@@ -462,6 +483,7 @@ export async function POST(req: NextRequest) {
           );
         }
       } finally {
+        stopHeartbeat();
         try {
           const persisted = await withConversationMessageWrite(
             db,
@@ -596,10 +618,12 @@ export async function POST(req: NextRequest) {
           persistenceFailed = true;
           // 收尾失败仍尽力更新时间；活动 run 会由终态或租约过期收敛。
           try {
-            await db
-              .update(s.conversations)
-              .set({ updatedAt: new Date() })
-              .where(eq(s.conversations.id, body.conversationId));
+            await withBestEffortTimeout(() =>
+              db
+                .update(s.conversations)
+                .set({ updatedAt: new Date() })
+                .where(eq(s.conversations.id, body.conversationId)),
+            );
           } catch {
             /* DB 不可用时无法继续收敛 */
           }
@@ -612,10 +636,7 @@ export async function POST(req: NextRequest) {
           }
         } finally {
           // 无论消息落库是否成功,都必须把 runs 从 running 收敛到终态。
-          if (heartbeatTimer) {
-            clearInterval(heartbeatTimer);
-            heartbeatTimer = null;
-          }
+          stopHeartbeat();
           await finalizeRun({
             runId,
             status: resolveRunTerminalStatus({
@@ -641,6 +662,7 @@ export async function POST(req: NextRequest) {
     },
     // 客户端断开时触发:中止上游生成(req.signal 在部分场景不可靠,cancel 兜底)。
     cancel() {
+      stopHeartbeat();
       abortCtl.abort();
     },
   });

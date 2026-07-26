@@ -31,7 +31,8 @@ failed/interrupted → insert ops_error_logs
 
 **硬规则**：
 
-- 写入**永不阻断主流程**：整段 `try/catch`，失败只 `console.error`。
+- 写入**永不阻断主流程**：导出入口通过 `withBestEffortTimeout` 限制为固定 5 秒等待，失败或超时只记录脱敏 `console.error`并 resolve `void`。
+- 应用层超时只停止调用方等待，不伪装成已取消 Drizzle/pg 查询；底层 Promise 允许晚完成且晚 reject 不得形成 unhandled rejection。
 - `errorCode` 列 NOT NULL，写入时 `?? "unknown"` 兜底；`userId` 空串收敛 `null`（FK 安全）。
 - Prometheus `observeRequest` 埋点不变（source/model/status/latency/tokens）。
 - `ops_error_logs.errorMessage` 写入前必须经过共享 `redactSensitiveText()` 通用兜底；其他错误分类、status 和 category 字段不受影响。
@@ -211,6 +212,7 @@ panel **不做字段级脱敏**——错误日志均为用户自己调用产生�
 ### 2. Signatures
 
 - `startRun({ runId, conversationId, userId, platformModelName }): Promise<boolean>`
+- `withBestEffortTimeout<T>(operation: () => Promise<T>): Promise<T>`，固定等待预算 5 秒
 - `heartbeatRun(runId): Promise<void>`
 - `recordToolCallStart({ runId, toolCallId, toolName, args })`
 - `recordToolCallResult({ runId, toolCallId, result, isError })`
@@ -224,7 +226,8 @@ panel **不做字段级脱敏**——错误日志均为用户自己调用产生�
 - 新建 user 与本轮新建/续写 assistant 写入 `runId`；复用历史 user 时不得改写其归属。
 - `runs` 是活动状态唯一事实源；会话列表与轮询共用有效租约谓词动态派生 `generating`。`conversations.generating` 仅供旧版本回滚，新 runtime 不读写。
 - `startRun` 使用 PostgreSQL `now() + interval '2 minutes'` 创建租约。仅 start 成功时每 30 秒调用 `heartbeatRun`，timer 必须 `unref()` 并在所有完成、失败和取消路径清除。
-- start/heartbeat/finalize 与 tool DB 写入均为 best-effort，失败只记录脱敏短错误，不阻断模型流或记录工具敏感参数。start 失败不启动心跳；finalize 失败时活动投影最多保留到租约过期。
+- start/finalize 与 tool DB 写入均为有界 best-effort，包含 `getDb()` 在内最多等待 5 秒；失败或超时只记录脱敏短错误，不阻断模型流或记录工具敏感参数。start 失败/超时不启动心跳；finalize 失败/超时时活动投影最多保留到租约过期。
+- `heartbeatRun` 保留原始 DB Promise 作为单飞信号，不套 5 秒 wrapper；前一次未完成时后续 tick 必须跳过。request abort、stream cancel 与 finally 共用幂等停止函数，立即停止后续调度，但不伪装取消已进入 pg 的单次心跳。
 - 所有 SSE 帧必须经取消安全的 `safeEnqueue` 写入；run 必须在最内层 `finally` 从 `running` 收敛，并在成功路径发送 `[DONE]` 前 `await finalizeRun(...)`。
 - `finish` 是权威完成信号；完成后的客户端 abort 不得把成功 run 降级，收尾持久化失败除外。
 
@@ -250,10 +253,10 @@ panel **不做字段级脱敏**——错误日志均为用户自己调用产生�
 
 ### 6. Tests Required
 
-- `run-lifecycle.test.ts` 覆盖数据库时间租约、只续租 running run、终态优先级、usage 映射、敏感 JSONB 规范化与 DB 失败隔离。
+- `best-effort.test.ts` 覆盖快速 resolve/reject、5 秒 timeout、timer cleanup/`unref()` 和底层 late reject；`run-lifecycle.test.ts` 额外覆盖 pending `getDb()` 时 start/finalize/tool 写入的有界收敛与脱敏日志。
 - Agent loop 测试断言每轮 `streamChat` 接收同一 `runId`。
 - 会话 action 测试覆盖 fresh/expired/null/terminal 真值表，并断言列表与轮询共用同一活动谓词。
-- route 接线复核须覆盖 send/retry/edit/continue 的消息 `runId` 规则、heartbeat 清理以及 `[DONE]` 晚于 finalize 的时序。
+- route 接线复核须覆盖 send/retry/edit/continue 的消息 `runId` 规则、heartbeat pending 时单飞、abort/cancel 后不再调度，以及 `[DONE]` 晚于有界 finalize 尝试的时序。
 - bootstrap 回归须断言启动流程不再全量更新 `conversations.generating`。
 
 ### 7. Wrong vs Correct

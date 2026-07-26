@@ -1,0 +1,6 @@
+{"file":".trellis/tasks/07-26-magi-project-evolution-round-19/prd.md","reason":"逐项核对可观察验收条件与不扩大范围。"}
+{"file":".trellis/tasks/07-26-magi-project-evolution-round-19/design.md","reason":"核对 bounded wait、heartbeat 单飞与取消限制。"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"核对 best-effort、用量分流、脱敏和 DONE 时序。"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"核对 timeout 不等于 query cancellation 及全局 DB 边界。"}
+{"file":".trellis/spec/backend/chat-message-references.md","reason":"核对必要消息持久化仍为完成前置条件。"}
+{"file":".trellis/tasks/07-26-magi-project-evolution-round-19/research/best-effort-db-stall.md","reason":"复核证据、依赖版本与延期风险。"}

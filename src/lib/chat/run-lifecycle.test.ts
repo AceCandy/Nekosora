@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { BEST_EFFORT_TIMEOUT_MS } from "@/lib/best-effort";
 
 const mocks = vi.hoisted(() => ({
   getDb: vi.fn(),
@@ -52,6 +53,10 @@ function createDb() {
   };
   return { db, insertValues, updateSet, updateWhere };
 }
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe("toSafeJsonb / irUsageToTokenUsage", () => {
   it("脱敏敏感键并截断过长字符串", () => {
@@ -298,6 +303,53 @@ describe("run lifecycle DB writes", () => {
     for (const call of errSpy.mock.calls) {
       const text = call.map(String).join(" ");
       expect(text).not.toMatch(/sk-|Bearer /i);
+    }
+    errSpy.mockRestore();
+  });
+
+  it("挂起的 start/finalize/tool 写入在等待预算后释放调用方", async () => {
+    vi.useFakeTimers();
+    mocks.getDb.mockReturnValue(new Promise(() => {}));
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    let startResult: boolean | undefined;
+    let completedVoidWrites = 0;
+
+    void startRun({
+      runId: "run_timeout",
+      conversationId: "conversation_timeout",
+      userId: "sk-sensitive-user",
+    }).then((result) => {
+      startResult = result;
+    });
+    void finalizeRun({ runId: "run_timeout", status: "failed" }).then(() => {
+      completedVoidWrites += 1;
+    });
+    void recordToolCallStart({
+      runId: "run_timeout",
+      toolCallId: "tool_timeout",
+      toolName: "secret-tool",
+      args: { apiKey: "sk-sensitive-argument" },
+    }).then(() => {
+      completedVoidWrites += 1;
+    });
+    void recordToolCallResult({
+      runId: "run_timeout",
+      toolCallId: "tool_timeout",
+      result: { authorization: "Bearer sensitive-result" },
+      isError: true,
+    }).then(() => {
+      completedVoidWrites += 1;
+    });
+
+    await vi.advanceTimersByTimeAsync(BEST_EFFORT_TIMEOUT_MS);
+
+    expect(startResult).toBe(false);
+    expect(completedVoidWrites).toBe(3);
+    expect(errSpy).toHaveBeenCalledTimes(4);
+    for (const call of errSpy.mock.calls) {
+      expect(call.map(String).join(" ")).not.toMatch(
+        /sk-sensitive|Bearer sensitive|secret-tool/i,
+      );
     }
     errSpy.mockRestore();
   });

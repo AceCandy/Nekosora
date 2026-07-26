@@ -12,6 +12,7 @@
  *   - 不写完整模型请求/回复;工具入参/出参经 toSafeJsonb 规范化
  */
 import { and, eq, sql } from "drizzle-orm";
+import { withBestEffortTimeout } from "@/lib/best-effort";
 import { getDb, getSchema } from "@/lib/infra/db";
 import {
   isSensitiveFieldName,
@@ -149,6 +150,19 @@ function logRunDbFailure(op: string, err: unknown): void {
   console.error(`[run-lifecycle] ${op} failed:`, msg.slice(0, 200));
 }
 
+async function executeBestEffort<T>(
+  operationName: string,
+  operation: () => Promise<T>,
+  fallback: T,
+): Promise<T> {
+  try {
+    return await withBestEffortTimeout(operation);
+  } catch (err) {
+    logRunDbFailure(operationName, err);
+    return fallback;
+  }
+}
+
 export interface StartRunParams {
   runId: string;
   conversationId: string;
@@ -160,25 +174,26 @@ export interface StartRunParams {
 
 /** 流开始前插入带租约的 runs(status=running)。失败返回 false,不抛。 */
 export async function startRun(params: StartRunParams): Promise<boolean> {
-  try {
-    const db = await getDb();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const s = getSchema() as any;
-    await db.insert(s.runs).values({
-      runId: params.runId,
-      conversationId: params.conversationId,
-      userId: params.userId,
-      platformModelName: params.platformModelName ?? null,
-      routedBindingCode: params.routedBindingCode ?? null,
-      upstreamId: params.upstreamId ?? null,
-      status: "running",
-      leaseExpiresAt: RUN_LEASE_EXPIRES_AT,
-    });
-    return true;
-  } catch (err) {
-    logRunDbFailure("startRun", err);
-    return false;
-  }
+  return executeBestEffort(
+    "startRun",
+    async () => {
+      const db = await getDb();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const s = getSchema() as any;
+      await db.insert(s.runs).values({
+        runId: params.runId,
+        conversationId: params.conversationId,
+        userId: params.userId,
+        platformModelName: params.platformModelName ?? null,
+        routedBindingCode: params.routedBindingCode ?? null,
+        upstreamId: params.upstreamId ?? null,
+        status: "running",
+        leaseExpiresAt: RUN_LEASE_EXPIRES_AT,
+      });
+      return true;
+    },
+    false,
+  );
 }
 
 /** 延长当前 running run 的租约。失败不抛。 */
@@ -208,21 +223,23 @@ export interface FinalizeRunParams {
  * 仅更新仍为 running 的行,避免重复 finalize 覆盖。
  */
 export async function finalizeRun(params: FinalizeRunParams): Promise<void> {
-  try {
-    const db = await getDb();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const s = getSchema() as any;
-    await db
-      .update(s.runs)
-      .set({
-        status: params.status,
-        tokenUsage: params.tokenUsage ?? null,
-        firstTokenLatencyMs: params.firstTokenLatencyMs ?? null,
-      })
-      .where(and(eq(s.runs.runId, params.runId), eq(s.runs.status, "running")));
-  } catch (err) {
-    logRunDbFailure("finalizeRun", err);
-  }
+  return executeBestEffort(
+    "finalizeRun",
+    async () => {
+      const db = await getDb();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const s = getSchema() as any;
+      await db
+        .update(s.runs)
+        .set({
+          status: params.status,
+          tokenUsage: params.tokenUsage ?? null,
+          firstTokenLatencyMs: params.firstTokenLatencyMs ?? null,
+        })
+        .where(and(eq(s.runs.runId, params.runId), eq(s.runs.status, "running")));
+    },
+    undefined,
+  );
 }
 
 export interface RecordToolCallStartParams {
@@ -239,21 +256,23 @@ export interface RecordToolCallStartParams {
 export async function recordToolCallStart(
   params: RecordToolCallStartParams,
 ): Promise<void> {
-  try {
-    const db = await getDb();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const s = getSchema() as any;
-    await db.insert(s.toolCalls).values({
-      runId: params.runId,
-      toolCallId: params.toolCallId,
-      toolType: params.toolType ?? "server",
-      toolName: params.toolName,
-      status: params.status ?? "running",
-      inputJson: toSafeJsonb(params.args ?? null),
-    });
-  } catch (err) {
-    logRunDbFailure("recordToolCallStart", err);
-  }
+  return executeBestEffort(
+    "recordToolCallStart",
+    async () => {
+      const db = await getDb();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const s = getSchema() as any;
+      await db.insert(s.toolCalls).values({
+        runId: params.runId,
+        toolCallId: params.toolCallId,
+        toolType: params.toolType ?? "server",
+        toolName: params.toolName,
+        status: params.status ?? "running",
+        inputJson: toSafeJsonb(params.args ?? null),
+      });
+    },
+    undefined,
+  );
 }
 
 export interface RecordToolCallResultParams {
@@ -267,34 +286,36 @@ export interface RecordToolCallResultParams {
 export async function recordToolCallResult(
   params: RecordToolCallResultParams,
 ): Promise<void> {
-  try {
-    const db = await getDb();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const s = getSchema() as any;
-    const isError = Boolean(params.isError);
-    const patch = isError
-      ? {
-          status: "failed" as const,
-          errorJson: toSafeJsonb(params.result ?? { error: true }),
-          outputJson: null,
-        }
-      : {
-          status: "success" as const,
-          outputJson: toSafeJsonb(params.result ?? null),
-          errorJson: null,
-        };
-    await db
-      .update(s.toolCalls)
-      .set(patch)
-      .where(
-        and(
-          eq(s.toolCalls.runId, params.runId),
-          eq(s.toolCalls.toolCallId, params.toolCallId),
-        ),
-      );
-  } catch (err) {
-    logRunDbFailure("recordToolCallResult", err);
-  }
+  return executeBestEffort(
+    "recordToolCallResult",
+    async () => {
+      const db = await getDb();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const s = getSchema() as any;
+      const isError = Boolean(params.isError);
+      const patch = isError
+        ? {
+            status: "failed" as const,
+            errorJson: toSafeJsonb(params.result ?? { error: true }),
+            outputJson: null,
+          }
+        : {
+            status: "success" as const,
+            outputJson: toSafeJsonb(params.result ?? null),
+            errorJson: null,
+          };
+      await db
+        .update(s.toolCalls)
+        .set(patch)
+        .where(
+          and(
+            eq(s.toolCalls.runId, params.runId),
+            eq(s.toolCalls.toolCallId, params.toolCallId),
+          ),
+        );
+    },
+    undefined,
+  );
 }
 
 /**

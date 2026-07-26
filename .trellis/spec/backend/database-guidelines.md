@@ -196,6 +196,8 @@ Correct:
 - 新 runtime 显式写入两分钟租约；数据库列默认值同时覆盖滚动升级期间仍由旧 runtime 插入、未携带该列的新 running row。
 - 迁移只回填 `status='running' AND lease_expires_at IS NULL` 的行，不全表更新 legacy `conversations.generating`。
 - 心跳仅按 `runId + status='running'` 更新当前 run；finalize 也只更新当前 running run。任何请求都不得清理同会话其他 run。
+- start/finalize/tool/用量等阻塞主流程的 best-effort 写入使用固定 5 秒应用层等待预算，且必须包住 `getDb()` 本身。该超时不是 PostgreSQL `statement_timeout/query_timeout`，不取消已提交的查询，晚写入允许完成。
+- heartbeat 不使用应用层超时伪装底层完成；route 以原始 Promise 单飞调度，并在 abort/cancel/finally 停止后续 tick。在 Drizzle node-postgres 未提供 AbortSignal 通道时，不得声称已取消进行中的 update。
 - 会话列表与轻量轮询必须复用同一个相关 `EXISTS` 表达式，避免活动定义漂移。
 - 普通 `CREATE INDEX` 可能等待大表锁；执行真实生产迁移前必须评估锁窗口。若改用 `CONCURRENTLY`，须独立设计 Drizzle 事务外迁移流程，不得直接塞入现有事务型 migrator。
 
@@ -225,7 +227,8 @@ Correct:
 - schema 测试断言 nullable `timestamptz`、数据库默认表达式与部分索引谓词。
 - 迁移测试断言 add column、set default、仅回填 running NULL、创建部分索引，且不更新 `conversations.generating`。
 - 查询测试断言 conversation 关联、running、`lease_expires_at > now()` 三个条件，并覆盖并发/fresh/expired/null/terminal 真值表。
-- lifecycle 测试断言 start/heartbeat 使用数据库时间，heartbeat/finalize 只匹配 running row，所有 DB 失败仍遵循 best-effort。
+- lifecycle 测试断言 start/heartbeat 使用数据库时间，heartbeat/finalize 只匹配 running row，所有 DB 失败仍遵循 best-effort，且 pending `getDb()` 在 5 秒后释放 start/finalize/tool 调用方。
+- route 测试使用未完成 heartbeat Promise 验证多个 tick 仍只有一次 update，完成后才恢复；abort/cancel 后推进时钟不得产生新 update。
 - 迁移元数据测试断言 SQL、journal 与 snapshot 链同步；发布前另行记录是否在真实 PostgreSQL 验证以及索引锁风险。
 
 #### 7. Wrong vs Correct

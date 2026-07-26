@@ -1,0 +1,6 @@
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"用量日志和 run/tool best-effort 写入、脱敏错误与完成时序契约。"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"PostgreSQL Pool、Drizzle 查询取消限制与 timeout 边界。"}
+{"file":".trellis/spec/backend/chat-message-references.md","reason":"Chat 必要持久化、finalize 与 DONE 顺序契约。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"长任务跨 DB/runtime/UI 的生命周期与失败矩阵。"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"共享 timeout helper 与单一等待常量的复用边界。"}
+{"file":".trellis/tasks/07-26-magi-project-evolution-round-19/research/best-effort-db-stall.md","reason":"已确认卡死时序、依赖限制、范围决策与残余风险。"}

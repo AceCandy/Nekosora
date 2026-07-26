@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { BEST_EFFORT_TIMEOUT_MS } from "@/lib/best-effort";
 
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
@@ -91,7 +92,7 @@ function selectQueue(responses: Record<string, unknown>[][]) {
   }));
 }
 
-function request(body?: Record<string, unknown>) {
+function request(body?: Record<string, unknown>, signal?: AbortSignal) {
   return new Request("http://localhost/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -106,8 +107,102 @@ function request(body?: Record<string, unknown>) {
         continueFromPublicId: "assistant-public-1",
       },
     ),
+    signal,
   });
 }
+
+function deferred<T = void>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
+function mockContinuationDb(options?: {
+  activeUser?: Record<string, unknown> | null;
+  conversationUpdate?: Promise<unknown>;
+  finalWriteStarted?: () => void;
+  finalWriteGate?: Promise<void>;
+}) {
+  const activeUser =
+    options?.activeUser === undefined
+      ? {
+          id: "user-message-1",
+          publicId: "user-public-1",
+          conversationId: "conversation-1",
+          role: "user",
+          content: "question",
+          deletedAt: null,
+        }
+      : options.activeUser;
+  const outerSelect = selectQueue([
+    [{ id: "conversation-1", userId: "user-1", outputModeId: null }],
+    [{
+      id: "assistant-1",
+      publicId: "assistant-public-1",
+      conversationId: "conversation-1",
+      parentId: "user-message-1",
+      role: "assistant",
+      content: "prefix",
+      deletedAt: null,
+    }],
+    [{
+      id: "user-message-1",
+      publicId: "user-public-1",
+      conversationId: "conversation-1",
+      role: "user",
+      content: "question",
+      deletedAt: null,
+    }],
+  ]);
+  const transactionSelect = selectQueue([
+    [{ id: "conversation-1" }],
+    activeUser ? [activeUser] : [],
+  ]);
+  const returning = vi.fn().mockResolvedValue([{ id: "assistant-1" }]);
+  const transactionWhere = vi.fn(() => ({ returning }));
+  const transactionSet = vi.fn(() => ({ where: transactionWhere }));
+  const transactionUpdate = vi.fn(() => ({ set: transactionSet }));
+  const updateWhere = vi
+    .fn()
+    .mockReturnValue(options?.conversationUpdate ?? Promise.resolve(undefined));
+  const updateSet = vi.fn(() => ({ where: updateWhere }));
+  mocks.getDb.mockResolvedValue({
+    select: outerSelect,
+    update: vi.fn(() => ({ set: updateSet })),
+    transaction: vi.fn(
+      async (operation: (tx: {
+        select: typeof transactionSelect;
+        update: typeof transactionUpdate;
+      }) => Promise<unknown>) => {
+        options?.finalWriteStarted?.();
+        if (options?.finalWriteGate) await options.finalWriteGate;
+        return operation({
+          select: transactionSelect,
+          update: transactionUpdate,
+        });
+      },
+    ),
+  });
+  return { updateWhere };
+}
+
+function mockPendingGeneration() {
+  const started = deferred();
+  const release = deferred();
+  mocks.streamChat.mockImplementation(async function* () {
+    started.resolve();
+    await release.promise;
+    yield { type: "text-delta", text: " continuation" };
+    yield { type: "finish", usage: {} };
+  });
+  return { started: started.promise, release: release.resolve };
+}
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe("POST /api/chat 消息引用并发收敛", () => {
   beforeEach(() => {
@@ -440,6 +535,8 @@ describe("POST /api/chat 消息引用并发收敛", () => {
       yield { type: "text-delta", text: " continuation" };
       yield { type: "finish", usage: {} };
     });
+    const heartbeatPending = deferred();
+    mocks.heartbeatRun.mockReturnValue(heartbeatPending.promise);
 
     const outerSelect = selectQueue([
       [{ id: "conversation-1", userId: "user-1", outputModeId: null }],
@@ -499,6 +596,12 @@ describe("POST /api/chat 消息引用并发收敛", () => {
     const callsBeforeInterval = mocks.heartbeatRun.mock.calls.length;
     await vi.advanceTimersByTimeAsync(1);
     const callsDuringGeneration = mocks.heartbeatRun.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(60_000);
+    const callsWhileHeartbeatPending = mocks.heartbeatRun.mock.calls.length;
+    heartbeatPending.resolve();
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(30_000);
+    const callsAfterHeartbeatSettled = mocks.heartbeatRun.mock.calls.length;
 
     releaseGeneration();
     const payload = await payloadPromise;
@@ -508,8 +611,152 @@ describe("POST /api/chat 消息引用并发收敛", () => {
 
     expect(callsBeforeInterval).toBe(0);
     expect(callsDuringGeneration).toBe(1);
+    expect(callsWhileHeartbeatPending).toBe(1);
+    expect(callsAfterHeartbeatSettled).toBe(2);
     expect(mocks.heartbeatRun).toHaveBeenCalledWith("run-1");
-    expect(callsAfterCompletion).toBe(callsDuringGeneration);
+    expect(callsAfterCompletion).toBe(callsAfterHeartbeatSettled);
     expect(payload).toContain("[DONE]");
+  });
+
+  it("生成结束进入必要持久化时立即停止 heartbeat", async () => {
+    vi.useFakeTimers();
+    const finalWriteStarted = deferred();
+    const finalWriteGate = deferred();
+    mockContinuationDb({
+      finalWriteStarted: finalWriteStarted.resolve,
+      finalWriteGate: finalWriteGate.promise,
+    });
+
+    const response = await POST(request() as never);
+    const payloadPromise = response.text();
+    await finalWriteStarted.promise;
+    await vi.advanceTimersByTimeAsync(60_000);
+    const heartbeatCallsDuringPersistence = mocks.heartbeatRun.mock.calls.length;
+
+    finalWriteGate.resolve();
+    const payload = await payloadPromise;
+
+    expect(heartbeatCallsDuringPersistence).toBe(0);
+    expect(payload).toContain("[DONE]");
+  });
+
+  it("run 启动失败时不创建 heartbeat", async () => {
+    vi.useFakeTimers();
+    mocks.startRun.mockResolvedValue(false);
+    mockContinuationDb();
+    const generation = mockPendingGeneration();
+
+    const response = await POST(request() as never);
+    const payloadPromise = response.text();
+    await generation.started;
+    await vi.advanceTimersByTimeAsync(90_000);
+    const heartbeatCalls = mocks.heartbeatRun.mock.calls.length;
+
+    generation.release();
+    const payload = await payloadPromise;
+
+    expect(heartbeatCalls).toBe(0);
+    expect(payload).toContain("[DONE]");
+  });
+
+  it("request abort 后立即停止后续 heartbeat 调度", async () => {
+    vi.useFakeTimers();
+    mockContinuationDb();
+    const generation = mockPendingGeneration();
+    const requestAbort = new AbortController();
+
+    const response = await POST(request(undefined, requestAbort.signal) as never);
+    const payloadPromise = response.text();
+    await generation.started;
+    await vi.advanceTimersByTimeAsync(30_000);
+    const callsBeforeAbort = mocks.heartbeatRun.mock.calls.length;
+
+    requestAbort.abort();
+    await vi.advanceTimersByTimeAsync(60_000);
+    const callsAfterAbort = mocks.heartbeatRun.mock.calls.length;
+
+    generation.release();
+    await payloadPromise;
+
+    expect(callsBeforeAbort).toBe(1);
+    expect(callsAfterAbort).toBe(callsBeforeAbort);
+  });
+
+  it("stream start 前 request 已 abort 时不创建 heartbeat", async () => {
+    vi.useFakeTimers();
+    mockContinuationDb();
+    const generation = mockPendingGeneration();
+    const requestAbort = new AbortController();
+    requestAbort.abort();
+
+    const response = await POST(request(undefined, requestAbort.signal) as never);
+    const payloadPromise = response.text();
+    await generation.started;
+    await vi.advanceTimersByTimeAsync(60_000);
+    const heartbeatCalls = mocks.heartbeatRun.mock.calls.length;
+
+    generation.release();
+    await payloadPromise;
+
+    expect(heartbeatCalls).toBe(0);
+  });
+
+  it("stream cancel 后立即停止后续 heartbeat 调度", async () => {
+    vi.useFakeTimers();
+    mockContinuationDb();
+    const generation = mockPendingGeneration();
+    const finalized = deferred();
+    mocks.finalizeRun.mockImplementation(async () => {
+      finalized.resolve();
+    });
+
+    const response = await POST(request() as never);
+    const reader = response.body!.getReader();
+    await generation.started;
+    await vi.advanceTimersByTimeAsync(30_000);
+    const callsBeforeCancel = mocks.heartbeatRun.mock.calls.length;
+
+    await reader.cancel();
+    await vi.advanceTimersByTimeAsync(60_000);
+    const callsAfterCancel = mocks.heartbeatRun.mock.calls.length;
+
+    generation.release();
+    await finalized.promise;
+
+    expect(callsBeforeCancel).toBe(1);
+    expect(callsAfterCancel).toBe(callsBeforeCancel);
+  });
+
+  it("失败 fallback 更新时间挂起时在等待预算后 finalize 并关闭流", async () => {
+    vi.useFakeTimers();
+    const fallbackUpdate = deferred();
+    const fallbackStarted = deferred();
+    const { updateWhere } = mockContinuationDb({
+      activeUser: null,
+      conversationUpdate: fallbackUpdate.promise,
+    });
+    updateWhere.mockImplementation(() => {
+      fallbackStarted.resolve();
+      return fallbackUpdate.promise;
+    });
+
+    const response = await POST(request() as never);
+    let streamSettled = false;
+    const payloadPromise = response.text().then((payload) => {
+      streamSettled = true;
+      return payload;
+    });
+    await fallbackStarted.promise;
+    await vi.advanceTimersByTimeAsync(BEST_EFFORT_TIMEOUT_MS);
+    const settledAfterBudget = streamSettled;
+    const finalizeCallsAfterBudget = mocks.finalizeRun.mock.calls.length;
+
+    fallbackUpdate.resolve();
+    const payload = await payloadPromise;
+
+    expect(settledAfterBudget).toBe(true);
+    expect(finalizeCallsAfterBudget).toBe(1);
+    expect(payload).toContain('"type":"error"');
+    expect(payload).not.toContain("[DONE]");
   });
 });

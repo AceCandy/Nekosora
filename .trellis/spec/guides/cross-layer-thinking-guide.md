@@ -355,6 +355,8 @@ multiple child operations can overlap or a process can disappear.
 - [ ] Model overlapping operations independently; completion may only mutate the current operation
 - [ ] Give abandoned activity an expiry or reconciliation path using one authoritative clock
 - [ ] Trace start, heartbeat, finalize, crash, temporary database failure, and rolling upgrade
+- [ ] Distinguish caller wait timeout from real cancellation; if the database API has no cancellation channel, document late completion and bound concurrent in-flight work instead of claiming the query stopped
+- [ ] Make periodic heartbeats single-flight and stop future scheduling immediately on request abort, stream cancel, and every finalization path
 - [ ] Keep startup from globally clearing activity owned by other instances
 - [ ] Treat compatibility cache columns as rollback-only; runtime readers and writers must not split across both models
 - [ ] Test fresh, expired, null, terminal, concurrent, and last-operation-completes cases at every projection consumer

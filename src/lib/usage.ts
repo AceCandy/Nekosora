@@ -8,6 +8,7 @@
  * 供 WebChat 和网关统一调用,带来源、身份、token 拆分归属。
  * 失败不抛错(日志记录不应阻断主流程)。
  */
+import { withBestEffortTimeout } from "@/lib/best-effort";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { redactErrorMessage, redactSensitiveText } from "@/lib/redaction";
 import type { CallContext, IRUsage } from "@/lib/providers/types";
@@ -76,8 +77,7 @@ export function maskKey(k?: string | null): string | null {
   return k.length <= 6 ? `${k.slice(0, 2)}***` : `${k.slice(0, 3)}***${k.slice(-3)}`;
 }
 
-/** 记录一条用量/错误日志。失败不抛错(日志记录不应阻断主流程)。 */
-export async function logUsage(params: LogUsageParams): Promise<void> {
+async function logUsageInternal(params: LogUsageParams): Promise<void> {
   try {
     const db = await getDb();
     const schema = getSchema();
@@ -160,6 +160,15 @@ export async function logUsage(params: LogUsageParams): Promise<void> {
     }
   } catch (err) {
     // 日志记录失败不应影响主流程。
+    console.error("[logUsage] 记录失败:", redactErrorMessage(err));
+  }
+}
+
+/** 记录一条用量/错误日志。失败或超时不阻断主流程。 */
+export async function logUsage(params: LogUsageParams): Promise<void> {
+  try {
+    await withBestEffortTimeout(() => logUsageInternal(params));
+  } catch (err) {
     console.error("[logUsage] 记录失败:", redactErrorMessage(err));
   }
 }
