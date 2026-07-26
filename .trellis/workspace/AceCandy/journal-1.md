@@ -1595,3 +1595,36 @@ setKeyEnabled 接收 userId 并在更新 SQL 中同时限制 key ID 与属主，
 ### Next Steps
 
 - None - task complete
+
+
+## Session 49: MAGI 项目进化第 14 轮
+
+**Date**: 2026-07-26
+**Task**: MAGI 项目进化第 14 轮
+**Branch**: `opt0725`
+
+### Summary
+
+修复 Embedding 设置的跨管理员 Provider 属主授权缺口，提取共享授权 helper，补回归测试并同步规范；lint、typecheck、646 项测试和生产构建通过。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7f23317` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
