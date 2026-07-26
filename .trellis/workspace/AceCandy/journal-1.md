@@ -1661,3 +1661,36 @@ setKeyEnabled 接收 userId 并在更新 SQL 中同时限制 key ID 与属主，
 ### Next Steps
 
 - None - task complete
+
+
+## Session 51: MAGI 项目进化第 16 轮
+
+**Date**: 2026-07-26
+**Task**: MAGI 项目进化第 16 轮
+**Branch**: `opt0725`
+
+### Summary
+
+修复上传接口未校验客户端 conversationId 属主的问题：以会话 ID 和当前用户组合查询，在存储、文件插入和处理调度前统一拒绝 foreign/missing 关联；保留空关联与存储补偿行为，补齐 22 项聚焦测试、文件存储规范和根因分析。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `06d3733` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
