@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/index.md","reason":"按后端质量门槛复核服务端授权改动。"}
+{"file":".trellis/spec/backend/gateway-routing.md","reason":"核对 Provider owner-only 与公共模型协作语义均未回归。"}
+{"file":".trellis/spec/backend/key-binding-authorization.md","reason":"核对所有客户端资源 ID 在副作用前完成 owner-scoped 授权。"}
+{"file":".trellis/tasks/07-26-magi-project-evolution-round-13/research/round-selection.md","reason":"逐项复核已确认漏洞入口、利用链和遗漏风险。"}

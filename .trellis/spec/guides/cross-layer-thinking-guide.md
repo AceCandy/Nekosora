@@ -100,6 +100,19 @@ create one owner for:
 
 Rendering code may format fields, but it must not redefine the payload contract.
 
+### Mistake 5: UI Filtering Is Treated As Resource Authorization
+
+**Bad**: An owner-filtered dropdown submits a resource ID, then the Server Action
+queries that ID globally because the caller already has a valid session.
+
+**Good**: Treat every client-supplied resource ID as untrusted. Resolve it with
+the caller's owner/visibility predicate at the server boundary, and return the
+same error for missing and unauthorized resources.
+
+**Rule**: Authentication proves who the caller is; it does not authorize the
+resource ID. Complete authorization before database writes, secret decryption,
+network requests, cache invalidation, or health/circuit-breaker side effects.
+
 ---
 
 ## Checklist for Cross-Layer Features
@@ -110,11 +123,13 @@ Before implementation:
 - [ ] Identified all layer boundaries
 - [ ] Defined format at each boundary
 - [ ] Decided where validation happens
+- [ ] Mapped every client-supplied resource ID to its owner/visibility predicate
 
 After implementation:
 
 - [ ] Tested with edge cases (null, empty, invalid)
 - [ ] Verified error handling at each boundary
+- [ ] Verified resource authorization occurs before every external or persistent side effect
 - [ ] Checked data survives round-trip
 - [ ] Checked that consumers import shared decoders / projections instead of
       casting payload fields locally

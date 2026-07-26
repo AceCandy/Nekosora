@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/index.md","reason":"服务端改动入口与项目级后端规范索引。"}
+{"file":".trellis/spec/backend/gateway-routing.md","reason":"Provider 私有属主、公共模型/路由管理权和运行时关联的事实契约。"}
+{"file":".trellis/spec/backend/key-binding-authorization.md","reason":"客户端提交资源 ID 必须执行 owner-scoped 授权与非枚举拒绝的同类安全模式。"}
+{"file":".trellis/tasks/07-26-magi-project-evolution-round-13/research/round-selection.md","reason":"缺陷调用链、候选排序、选题证据和明确修复边界。"}

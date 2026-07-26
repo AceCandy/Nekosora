@@ -14,6 +14,73 @@
 
 ---
 
+## Scenario: Admin Provider Association Authorization
+
+### 1. Scope / Trigger
+
+Apply this contract to admin model/route actions that accept a client-supplied `providerId`, and to route probes that resolve a Provider key from a client-supplied `routeId`.
+
+### 2. Signatures
+
+- `requireOwnedProvider(db, providerId, adminId)`
+- `createModel(formData)`
+- `createRoute(modelIdOrFormData, formData?)`
+- `attachProviderModelRoute(modelId, providerId, upstreamModelName)`
+- `updateRoute(routeId, formData)`
+- `testRoute(routeId)`
+
+### 3. Contracts
+
+- Providers are always private. A model or route being public does not authorize an admin to submit another owner's Provider ID.
+- Every model/route write combines `providers.id = providerId` with `providers.owner_user_id = admin.id` before inserting or updating a route.
+- A missing and a foreign Provider both fail with `服务商不存在`; the action must not reveal which condition occurred.
+- `createModel` performs the Provider authorization inside its existing transaction and before the first model/route write.
+- `testRoute` authorizes the route through the existing public/private manageability rule before reading `apiKeysEnc`, probing upstream, or changing circuit-breaker state.
+- Runtime route resolution intentionally follows an already-authorized route without requiring model and Provider owners to match. Public models can legitimately use a Provider voluntarily attached by a different admin, so authorization belongs at association time.
+
+### 4. Validation & Error Matrix
+
+| Operation | Resource | Result |
+|---|---|---|
+| Create/update route | Caller-owned Provider | Continue with existing model/route permission checks |
+| Create/update route | Missing or foreign Provider | Throw `服务商不存在` before write |
+| Create model with initial route | Missing or foreign Provider | Reject transaction with no model or route |
+| Probe own private route | Referenced Provider | Probe and report breaker result |
+| Probe public route manageable by admin | Referenced Provider | Probe and report breaker result |
+| Probe another owner's private route | Any Provider | Throw before key parsing, probe, or breaker update |
+
+### 5. Good / Base / Bad Cases
+
+- Good: an admin attaches their own Provider to a public model owned by another admin; the route owner still follows the model owner.
+- Base: an admin creates or updates a private route using their own Provider.
+- Bad: UI filtering shows only owned Providers, but the Server Action trusts a forged foreign `providerId`.
+- Bad: `testRoute` loads and decrypts the Provider before checking whether the caller may manage the route.
+
+### 6. Tests Required
+
+- Reject foreign Provider IDs in `createModel`, `createRoute`, `updateRoute`, and `attachProviderModelRoute`; assert no model/route mutation.
+- Accept an owned Provider for private and manageable public models/routes.
+- Reject probing another owner's private route before key parsing, upstream probe, `recordSuccess`, or `recordFailure`.
+- Keep positive probe coverage for own private and manageable public routes.
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong: a valid admin session does not authorize a client-supplied Provider ID.
+const [provider] = await db.select().from(s.providers)
+  .where(eq(s.providers.id, providerId));
+
+// Correct: resolve owned Provider and hide foreign-resource existence.
+const [provider] = await db.select().from(s.providers)
+  .where(and(
+    eq(s.providers.id, providerId),
+    eq(s.providers.ownerUserId, admin.id),
+  ));
+if (!provider) throw new Error("服务商不存在");
+```
+
+---
+
 ## Scenario: resolveRoutes 决策树(网关路径 · by name + owner-only)
 
 ### 1. Trigger

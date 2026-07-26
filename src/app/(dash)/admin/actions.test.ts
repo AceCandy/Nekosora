@@ -3,8 +3,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mockData = vi.hoisted(() => ({
   admin: { id: "admin-a", role: "admin" },
   models: [] as Record<string, unknown>[],
+  catalogs: [] as Record<string, unknown>[],
   providers: [] as Record<string, unknown>[],
   routes: [] as Record<string, unknown>[],
+}));
+
+const mockFunctions = vi.hoisted(() => ({
+  parseKeyBundle: vi.fn(() => [{ key: "secret", weight: 1 }]),
+  pickWeightedKey: vi.fn(() => "secret"),
+  probeProviderKey: vi.fn(async () => ({ ok: true, latencyMs: 1 })),
+  recordSuccess: vi.fn(),
+  recordFailure: vi.fn(),
 }));
 
 vi.mock("drizzle-orm", () => ({
@@ -20,11 +29,18 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/session", () => ({ requireAdmin: vi.fn(async () => mockData.admin) }));
 vi.mock("@/lib/providers/keys", () => ({
   encryptKeyBundle: vi.fn(),
-  parseKeyBundle: vi.fn(),
-  pickWeightedKey: vi.fn(),
+  parseKeyBundle: mockFunctions.parseKeyBundle,
+  pickWeightedKey: mockFunctions.pickWeightedKey,
 }));
-vi.mock("@/lib/providers/probe", () => ({ probeProviderKey: vi.fn(), fetchUpstreamModels: vi.fn() }));
-vi.mock("@/lib/circuit-breaker", () => ({ recordSuccess: vi.fn(), recordFailure: vi.fn() }));
+vi.mock("@/lib/providers/probe", () => ({
+  probeProviderKey: mockFunctions.probeProviderKey,
+  fetchUpstreamModels: vi.fn(),
+}));
+vi.mock("@/lib/circuit-breaker", () => ({
+  recordSuccess: mockFunctions.recordSuccess,
+  recordFailure: mockFunctions.recordFailure,
+}));
+vi.mock("@/lib/system-settings/ua", () => ({ getProbeHeaders: vi.fn(async () => ({})) }));
 
 vi.mock("@/lib/infra/db", () => {
   type Condition =
@@ -65,6 +81,14 @@ vi.mock("@/lib/infra/db", () => {
       id: "id",
       ownerUserId: "ownerUserId",
       visibility: "visibility",
+      name: "name",
+      sortOrder: "sortOrder",
+    },
+    modelCatalog: {
+      __table: "modelCatalog",
+      id: "id",
+      name: "name",
+      canonicalModelId: "canonicalModelId",
     },
     providers: {
       __table: "providers",
@@ -81,39 +105,246 @@ vi.mock("@/lib/infra/db", () => {
     },
   };
 
+  function rowsForTable(table: { __table?: string }) {
+    if (table.__table === "modelCatalog") return mockData.catalogs;
+    if (table.__table === "providers") return mockData.providers;
+    if (table.__table === "routes") return mockData.routes;
+    return mockData.models;
+  }
+
   const db = {
     select: (fields?: Record<string, unknown>) => ({
-      from: (table: { __table?: string }) => {
-        const rows = table.__table === "providers"
-          ? mockData.providers
-          : table.__table === "routes"
-            ? mockData.routes
-            : mockData.models;
-        return makeQuery(rows, fields);
-      },
+      from: (table: { __table?: string }) => makeQuery(rowsForTable(table), fields),
     }),
     insert: (table: { __table?: string }) => ({
       values: async (row: Record<string, unknown>) => {
-        if (table.__table === "routes") {
+        if (table.__table === "models") {
+          mockData.models.push({ id: `model-${mockData.models.length + 1}`, ...row });
+        } else if (table.__table === "routes") {
           mockData.routes.push({ id: `route-${mockData.routes.length + 1}`, ...row });
         }
       },
     }),
+    update: (table: { __table?: string }) => ({
+      set: (patch: Record<string, unknown>) => ({
+        where: async (condition: Condition) => {
+          for (const row of rowsForTable(table)) {
+            if (matches(row, condition)) Object.assign(row, patch);
+          }
+        },
+      }),
+    }),
+    transaction: async (callback: (tx: unknown) => Promise<unknown>) => {
+      const models = mockData.models.map((row) => ({ ...row }));
+      const routes = mockData.routes.map((row) => ({ ...row }));
+      try {
+        return await callback(db);
+      } catch (error) {
+        mockData.models = models;
+        mockData.routes = routes;
+        throw error;
+      }
+    },
   };
 
   return { getDb: async () => db, getSchema: () => schema };
 });
 
-import { attachProviderModelRoute } from "./actions";
+import {
+  attachProviderModelRoute,
+  createModel,
+  createRoute,
+  testRoute,
+  updateRoute,
+} from "./actions";
 
 beforeEach(() => {
+  vi.clearAllMocks();
   mockData.models = [
-    { id: "private-a", ownerUserId: "admin-a", visibility: "private" },
-    { id: "private-b", ownerUserId: "user-b", visibility: "private" },
-    { id: "public-b", ownerUserId: "user-b", visibility: "public" },
+    { id: "private-a", ownerUserId: "admin-a", visibility: "private", name: "private-a" },
+    { id: "private-b", ownerUserId: "user-b", visibility: "private", name: "private-b" },
+    { id: "public-b", ownerUserId: "user-b", visibility: "public", name: "public-b" },
   ];
+  mockData.catalogs = [];
   mockData.providers = [{ id: "provider-a", ownerUserId: "admin-a" }];
   mockData.routes = [];
+});
+
+describe("createModel", () => {
+  it("允许使用自己的服务商创建模型和初始路由", async () => {
+    const formData = new FormData();
+    formData.set("name", "model-new");
+    formData.set("providerId", "provider-a");
+    formData.set("upstreamModelName", "upstream-a");
+
+    await expect(createModel(formData)).resolves.toBeUndefined();
+    const model = mockData.models.find((row) => row.name === "model-new");
+    expect(model).toEqual(expect.objectContaining({ ownerUserId: "admin-a" }));
+    expect(mockData.routes).toContainEqual(expect.objectContaining({
+      ownerUserId: "admin-a",
+      modelId: model?.id,
+      providerId: "provider-a",
+      upstreamModelName: "upstream-a",
+    }));
+  });
+
+  it("拒绝使用其他管理员的服务商并回滚模型创建", async () => {
+    mockData.providers = [{ id: "provider-b", ownerUserId: "admin-b" }];
+    const formData = new FormData();
+    formData.set("name", "model-new");
+    formData.set("providerId", "provider-b");
+    formData.set("upstreamModelName", "upstream-b");
+
+    await expect(createModel(formData)).rejects.toThrow("服务商不存在");
+    expect(mockData.models).not.toContainEqual(expect.objectContaining({ name: "model-new" }));
+    expect(mockData.routes).toHaveLength(0);
+  });
+
+  it("提交服务商但未填写上游模型时仍校验服务商归属", async () => {
+    mockData.providers = [{ id: "provider-b", ownerUserId: "admin-b" }];
+    const formData = new FormData();
+    formData.set("name", "model-new");
+    formData.set("providerId", "provider-b");
+
+    await expect(createModel(formData)).rejects.toThrow("服务商不存在");
+    expect(mockData.models).not.toContainEqual(expect.objectContaining({ name: "model-new" }));
+    expect(mockData.routes).toHaveLength(0);
+  });
+});
+
+describe("createRoute", () => {
+  it.each([
+    ["自己的私有模型", "private-a", "admin-a"],
+    ["可管理的公共模型", "public-b", "user-b"],
+  ])("允许给%s绑定自己的服务商", async (_label, modelId, routeOwnerId) => {
+    const formData = new FormData();
+    formData.set("providerId", "provider-a");
+    formData.set("upstreamModelName", "upstream-a");
+
+    await expect(createRoute(modelId, formData)).resolves.toBeUndefined();
+    expect(mockData.routes).toContainEqual(expect.objectContaining({
+      ownerUserId: routeOwnerId,
+      modelId,
+      providerId: "provider-a",
+      upstreamModelName: "upstream-a",
+    }));
+  });
+
+  it("拒绝使用其他管理员的服务商", async () => {
+    mockData.providers = [{ id: "provider-b", ownerUserId: "admin-b" }];
+    const formData = new FormData();
+    formData.set("providerId", "provider-b");
+    formData.set("upstreamModelName", "upstream-b");
+
+    await expect(createRoute("private-a", formData)).rejects.toThrow("服务商不存在");
+    expect(mockData.routes).toHaveLength(0);
+  });
+});
+
+describe("updateRoute", () => {
+  it.each([
+    ["自己的私有路由", "private-a", "admin-a"],
+    ["可管理的公共路由", "public-b", "user-b"],
+  ])("允许更新%s并改用自己的服务商", async (_label, modelId, ownerUserId) => {
+    mockData.routes = [{
+      id: "route-a",
+      ownerUserId,
+      modelId,
+      providerId: "provider-old",
+      upstreamModelName: "upstream-old",
+      priority: 0,
+      weight: 1,
+    }];
+    const formData = new FormData();
+    formData.set("providerId", "provider-a");
+    formData.set("upstreamModelName", "upstream-a");
+    formData.set("priority", "2");
+    formData.set("weight", "3");
+
+    await expect(updateRoute("route-a", formData)).resolves.toBeUndefined();
+    expect(mockData.routes[0]).toEqual(expect.objectContaining({
+      providerId: "provider-a",
+      upstreamModelName: "upstream-a",
+      priority: 2,
+      weight: 3,
+    }));
+  });
+
+  it("拒绝改用其他管理员的服务商", async () => {
+    mockData.providers = [{ id: "provider-b", ownerUserId: "admin-b" }];
+    mockData.routes = [{
+      id: "route-a",
+      ownerUserId: "admin-a",
+      modelId: "private-a",
+      providerId: "provider-a",
+      upstreamModelName: "upstream-a",
+      priority: 0,
+      weight: 1,
+    }];
+    const formData = new FormData();
+    formData.set("providerId", "provider-b");
+    formData.set("upstreamModelName", "upstream-b");
+
+    await expect(updateRoute("route-a", formData)).rejects.toThrow("服务商不存在");
+    expect(mockData.routes[0]).toEqual(expect.objectContaining({
+      providerId: "provider-a",
+      upstreamModelName: "upstream-a",
+    }));
+  });
+});
+
+describe("testRoute", () => {
+  it.each([
+    ["自己的私有路由", "private-a", "admin-a"],
+    ["可管理的公共路由", "public-b", "user-b"],
+  ])("允许探测%s", async (_label, modelId, ownerUserId) => {
+    const providerId = `provider-${modelId}`;
+    mockData.providers = [{
+      id: providerId,
+      ownerUserId,
+      apiKeysEnc: `encrypted-${modelId}`,
+      protocol: "openai",
+      baseUrl: `https://${providerId}.example`,
+    }];
+    mockData.routes = [{
+      id: `route-${modelId}`,
+      ownerUserId,
+      modelId,
+      providerId,
+      upstreamModelName: `upstream-${modelId}`,
+    }];
+
+    await expect(testRoute(`route-${modelId}`)).resolves.toEqual({ ok: true, latencyMs: 1 });
+    expect(mockFunctions.probeProviderKey).toHaveBeenCalledWith(expect.objectContaining({
+      apiKey: "secret",
+      upstreamModelName: `upstream-${modelId}`,
+    }));
+    expect(mockFunctions.recordSuccess).toHaveBeenCalledWith(providerId);
+    expect(mockFunctions.recordFailure).not.toHaveBeenCalled();
+  });
+
+  it("拒绝探测其他用户的私有路由且不产生副作用", async () => {
+    mockData.providers = [{
+      id: "provider-b",
+      ownerUserId: "user-b",
+      apiKeysEnc: "encrypted-b",
+      protocol: "openai",
+      baseUrl: "https://provider-b.example",
+    }];
+    mockData.routes = [{
+      id: "route-b",
+      ownerUserId: "user-b",
+      modelId: "private-b",
+      providerId: "provider-b",
+      upstreamModelName: "upstream-b",
+    }];
+
+    await expect(testRoute("route-b")).rejects.toThrow("无权操作");
+    expect(mockFunctions.parseKeyBundle).not.toHaveBeenCalled();
+    expect(mockFunctions.probeProviderKey).not.toHaveBeenCalled();
+    expect(mockFunctions.recordSuccess).not.toHaveBeenCalled();
+    expect(mockFunctions.recordFailure).not.toHaveBeenCalled();
+  });
 });
 
 describe("attachProviderModelRoute", () => {

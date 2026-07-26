@@ -66,14 +66,38 @@ async function assertModelManageable(db: unknown, id: string, adminId: string) {
 async function assertRouteManageable(db: unknown, routeId: string, adminId: string) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [route] = await (db as any)
-    .select({ ownerUserId: S().routes.ownerUserId, modelId: S().routes.modelId })
+    .select({
+      ownerUserId: S().routes.ownerUserId,
+      modelId: S().routes.modelId,
+      providerId: S().routes.providerId,
+      upstreamModelName: S().routes.upstreamModelName,
+    })
     .from(S().routes)
     .where(eq(S().routes.id, routeId))
     .limit(1);
   if (!route) throw new Error("路由不存在");
-  if (route.ownerUserId === adminId) return;
-  // 非 owner → 仅当模型为 public 时允许
-  await assertModelManageable(db, route.modelId, adminId);
+  if (route.ownerUserId !== adminId) {
+    // 非 owner → 仅当模型为 public 时允许
+    await assertModelManageable(db, route.modelId, adminId);
+  }
+  return route as {
+    ownerUserId: string;
+    modelId: string;
+    providerId: string;
+    upstreamModelName: string;
+  };
+}
+
+/** 获取当前 admin 拥有的服务商，不向调用方泄露其他服务商是否存在。 */
+async function requireOwnedProvider(db: unknown, providerId: string, adminId: string) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [provider] = await (db as any)
+    .select({ id: S().providers.id })
+    .from(S().providers)
+    .where(and(eq(S().providers.id, providerId), eq(S().providers.ownerUserId, adminId)))
+    .limit(1);
+  if (!provider) throw new Error("服务商不存在");
+  return provider;
 }
 
 // ===================== Providers =====================
@@ -436,13 +460,9 @@ export async function refreshUpstreamModels(
  * 结果同步喂养熔断器,让主动测试与被动健康联动。
  */
 export async function testRoute(routeId: string): Promise<ProbeResult> {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const db = await getDb();
-  const [route] = await db
-    .select()
-    .from(S().routes)
-    .where(eq(S().routes.id, routeId));
-  if (!route) throw new Error("路由不存在");
+  const route = await assertRouteManageable(db, routeId, admin.id);
   const [provider] = await db
     .select()
     .from(S().providers)
@@ -548,11 +568,12 @@ export async function createModel(formData: FormData) {
   const nextSort = (maxRow?.maxSort ?? -1) + 1;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await db.transaction(async (tx: any) => {
+    if (providerId) {
+      await requireOwnedProvider(tx, providerId, admin.id);
+    }
     await tx.insert(S().models).values({ ownerUserId: admin.id, visibility, name, displayName, catalogId, enabled: true, systemPrompt: String(formData.get("systemPrompt") ?? "") || null, description: String(formData.get("description") ?? "") || null, sortOrder: nextSort });
     const [created] = await tx.select({ id: S().models.id }).from(S().models).where(and(eq(S().models.ownerUserId, admin.id), eq(S().models.name, name))).limit(1);
     if (providerId && upstreamModelName) {
-      const [provider] = await tx.select({ id: S().providers.id }).from(S().providers).where(eq(S().providers.id, providerId)).limit(1);
-      if (!provider) throw new Error("服务商不存在");
       await tx.insert(S().routes).values({ ownerUserId: admin.id, modelId: created.id, providerId, upstreamModelName, enabled: true });
     }
   });
@@ -569,12 +590,14 @@ export async function createRoute(modelIdOrFormData: string | FormData, formData
   const fd = typeof modelIdOrFormData === "string" ? formData! : modelIdOrFormData;
   const modelId =
     typeof modelIdOrFormData === "string" ? modelIdOrFormData : String(fd.get("modelId") ?? "");
+  const providerId = String(fd.get("providerId") ?? "");
   // 路由归属模型:校验模型存在且 admin 有管理权(public 或自己的)。
   const model = await assertModelManageable(db, modelId, admin.id);
+  await requireOwnedProvider(db, providerId, admin.id);
   await db.insert(S().routes).values({
     ownerUserId: model.ownerUserId, // 跟随所属 model owner
     modelId,
-    providerId: String(fd.get("providerId") ?? ""),
+    providerId,
     upstreamModelName: String(fd.get("upstreamModelName") ?? ""),
     priority: Number(fd.get("priority") ?? 0),
     weight: Number(fd.get("weight") ?? 1),
@@ -592,12 +615,7 @@ export async function attachProviderModelRoute(
   const admin = await requireAdmin();
   const db = await getDb();
   const model = await assertModelManageable(db, modelId, admin.id);
-  const [provider] = await db
-    .select({ id: S().providers.id })
-    .from(S().providers)
-    .where(and(eq(S().providers.id, providerId), eq(S().providers.ownerUserId, admin.id)))
-    .limit(1);
-  if (!provider) throw new Error("服务商不存在");
+  await requireOwnedProvider(db, providerId, admin.id);
   const [existing] = await db
     .select({ id: S().routes.id })
     .from(S().routes)
@@ -697,11 +715,13 @@ export async function reorderModels(orderedIds: string[]) {
 export async function updateRoute(id: string, formData: FormData) {
   const admin = await requireAdmin();
   const db = await getDb();
+  const providerId = String(formData.get("providerId") ?? "");
   await assertRouteManageable(db, id, admin.id);
+  await requireOwnedProvider(db, providerId, admin.id);
   await db
     .update(S().routes)
     .set({
-      providerId: String(formData.get("providerId") ?? ""),
+      providerId,
       upstreamModelName: String(formData.get("upstreamModelName") ?? ""),
       priority: Number(formData.get("priority") ?? 0),
       weight: Number(formData.get("weight") ?? 1),
