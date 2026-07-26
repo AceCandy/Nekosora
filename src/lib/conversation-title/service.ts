@@ -15,6 +15,14 @@ const TITLE_MODEL_FALLBACK = "gpt-4o-mini";
 const MAX_TITLE_LEN = 30;
 const FALLBACK_MAX_LEN = 16;
 
+/** 标记应由后台队列重试的标题生成失败，并避免携带上游错误详情。 */
+class ConversationTitleGenerationError extends Error {
+  constructor() {
+    super("会话标题生成失败");
+    this.name = "ConversationTitleGenerationError";
+  }
+}
+
 export interface ConversationTitleJob {
   userId: string;
   conversationId: string;
@@ -99,12 +107,12 @@ export async function generateConversationTitle(job: ConversationTitleJob): Prom
       taskKind: "title",
     });
   } catch {
-    return null;
+    throw new ConversationTitleGenerationError();
   }
-  if (result.error || !result.text) return null;
+  if (result.error || !result.text) throw new ConversationTitleGenerationError();
 
   const title = sanitizeTitle(result.text);
-  if (!title) return null;
+  if (!title) throw new ConversationTitleGenerationError();
 
   const updated = await db
     .update(s.conversations)
@@ -133,13 +141,19 @@ export async function maybeGenerateTitle(
   const fallbackTitle = await writeFallbackTitle(userId, conversationId, firstUserMessage);
   if (!fallbackTitle) return;
   onTitle?.(fallbackTitle);
-  const title = await generateConversationTitle({
-    userId,
-    conversationId,
-    firstUserMessage,
-    fallbackTitle,
-    chatModel,
-  });
+  let title: string | null;
+  try {
+    title = await generateConversationTitle({
+      userId,
+      conversationId,
+      firstUserMessage,
+      fallbackTitle,
+      chatModel,
+    });
+  } catch (error) {
+    if (error instanceof ConversationTitleGenerationError) return;
+    throw error;
+  }
   if (title) onTitle?.(title);
 }
 

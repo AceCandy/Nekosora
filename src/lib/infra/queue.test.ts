@@ -201,6 +201,27 @@ describe("pg-boss queue adapter", () => {
     );
   });
 
+  it("work 将 handler 拒绝原样交给 pg-boss 并停止当前批次", async () => {
+    let pgBossHandler!: (jobs: { data: unknown }[]) => Promise<void>;
+    mocks.work.mockImplementation(async (_name, handler) => {
+      pgBossHandler = handler as typeof pgBossHandler;
+      return "worker-1";
+    });
+    const taskError = new Error("task failed");
+    const handler = vi.fn().mockRejectedValueOnce(taskError);
+    const { getQueue } = await loadQueue();
+    const queue = await getQueue();
+    await queue.work("conversation-title", handler);
+
+    await expect(pgBossHandler([
+      { data: { id: 1 } },
+      { data: { id: 2 } },
+    ])).rejects.toBe(taskError);
+
+    expect(handler).toHaveBeenCalledOnce();
+    expect(handler).toHaveBeenCalledWith({ id: 1 });
+  });
+
   it("queueAvailable 等待真实 start", async () => {
     const start = deferred<void>();
     mocks.start.mockReturnValue(start.promise);

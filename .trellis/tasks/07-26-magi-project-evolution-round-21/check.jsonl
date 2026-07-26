@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/index.md","reason":"后端完整质量检查入口"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"复核 worker rejection、queue retry 与动态 import 回归"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"复核 taskKind、重复日志和敏感错误文本边界"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"复核失败类型和测试辅助是否保持最小复用"}
+{"file":".trellis/tasks/07-26-magi-project-evolution-round-21/research/conversation-title-retry.md","reason":"按已确认因果链检查实现与验收完整性"}

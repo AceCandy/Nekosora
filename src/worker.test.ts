@@ -77,6 +77,34 @@ describe("worker lifecycle", () => {
     expect(runtime.exit).toHaveBeenCalledOnce();
   });
 
+  it("会话标题 handler 传播生成失败供队列重试", async () => {
+    const taskHandlers = new Map<string, (data: unknown) => Promise<void>>();
+    const queue = {
+      start: vi.fn().mockResolvedValue(undefined),
+      work: vi.fn(async (name: string, handler: (data: unknown) => Promise<void>) => {
+        taskHandlers.set(name, handler);
+      }),
+      stop: vi.fn().mockResolvedValue(undefined),
+    };
+    mocks.getQueue.mockResolvedValue(queue);
+    mocks.startFileProcessingRecovery.mockReturnValue(vi.fn());
+    const runtime = {
+      on: vi.fn(),
+      exit: vi.fn(),
+    };
+    const generationError = new Error("title generation failed");
+    mocks.generateConversationTitle.mockRejectedValueOnce(generationError);
+    const { startWorker } = await import("@/worker");
+    await startWorker(runtime);
+
+    await expect(taskHandlers.get("conversation-title")!({
+      userId: "u1",
+      conversationId: "c1",
+      firstUserMessage: "问题",
+      fallbackTitle: "问题",
+    })).rejects.toBe(generationError);
+  });
+
   it("恢复调度启动失败时停止已启动的队列并保留原错误", async () => {
     const startupError = new Error("recovery startup failed");
     const queue = {

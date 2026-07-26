@@ -31,6 +31,7 @@ Apply this contract when changing `src/lib/infra/queue.ts`, Web/worker queue pro
 - `QueueAdapter.start(): Promise<void>` / `stop(): Promise<void>`
 - `QueueAdapter.send<T>(name, data, opts?): Promise<string>`
 - `QueueAdapter.work<T>(name, handler): Promise<void>`
+- `JobHandler<T> = (data: T) => Promise<void>`
 - `queueAvailable(): Promise<boolean>`
 - `GET /healthz/ready -> { status, checks, ts }`
 
@@ -42,6 +43,9 @@ Apply this contract when changing `src/lib/infra/queue.ts`, Web/worker queue pro
 - Send/work operations remain concurrent, but stop waits for operations that already entered start/create/send/work before closing pg-boss.
 - `send()` and `work()` always await pg-boss start and idempotent `createQueue(name)`. Queue creation is lazy per name; do not maintain a second queue-name registry.
 - `send()` succeeds only with a non-empty job id. A `null`/empty id rejects so producer fallback or logging runs.
+- A worker handler resolves only after the job succeeded or reached an explicit business no-op. Recoverable service, provider, or persistence failure must reject so pg-boss can apply its finite retry policy; catching and returning silently acknowledges the job as completed.
+- Retried handlers must be idempotent or use conditional writes. `conversation-title` re-reads the current title and only updates `新会话` or the job's fallback, so a retry cannot overwrite a manual title.
+- Queue-facing errors must not include raw provider, connection, header, or credential details. Use a stable generic error for retry signaling and leave detailed failure recording to the owning, redaction-aware service boundary.
 - `queueAvailable()` awaits real pg-boss startup. Readiness requires both DB and queue checks; storage and Redis remain informational/degradable.
 - Queue readiness means that this process can initialize the queue backend. It does not prove that the independent worker is alive or consuming jobs.
 
@@ -53,6 +57,9 @@ Apply this contract when changing `src/lib/infra/queue.ts`, Web/worker queue pro
 | Build/start/create rejects | Failed promise is cleared | Later call can retry |
 | `send()` returns a non-empty id | Resolve id | Producer treats dispatch as successful |
 | `send()` returns `null` or empty string | Reject | Upload fallback or chat async error path |
+| Worker handler succeeds or confirms an idempotent no-op | Resolve callback | pg-boss completes the job |
+| Worker handler rejects | Reject callback with the same error | pg-boss retries or fails the job according to its finite policy |
+| Worker service catches a recoverable failure and returns | False success | Job is permanently acknowledged; forbidden |
 | DB and queue startup succeed | Queue `{ available: true }` | HTTP 200 `ready` |
 | Queue false/error/timeout | Preserve queue diagnostic | HTTP 503 `unready` |
 | Worker is offline but queue backend is writable | Jobs remain durable in pg-boss | Readiness does not infer worker liveness |
@@ -60,13 +67,18 @@ Apply this contract when changing `src/lib/infra/queue.ts`, Web/worker queue pro
 ### 5. Good / Base / Bad Cases
 
 - Good: a Web producer can cold-start pg-boss, create `memory-extract`, and send before any worker process has registered `work()`.
+- Good: title generation returns a generic rejection on model failure; pg-boss retries, while a missing conversation or manual rename resolves as an idempotent no-op.
 - Base: a started worker calls `work()` for each handler and reuses the same adapter/start promises.
+- Base: a batch callback awaits jobs in order; the first rejection aborts that callback instead of continuing and acknowledging later work.
 - Bad: `getQueue()` returns `available: true` without starting, then `send()` assumes the worker already created the queue.
+- Bad: a service catches a model or database failure and returns `null` when `null` also means a valid no-op; the worker cannot distinguish failure and pg-boss records success.
 - Bad: readiness returns 200 based only on DB while queue startup errored or timed out.
 
 ### 6. Tests Required
 
 - Queue unit tests: concurrent construction/start/create, operation ordering, build/start/create retry, null/empty job id, work registration, overlapping stop/start, and stop during an active create/send.
+- Execute the callback passed to pg-boss in a unit test. A rejecting business handler must reject that callback with the same error and stop the remaining jobs in the batch.
+- Worker service tests must separate explicit no-op from retryable failure. For `conversation-title`, cover missing/renamed conversations, thrown generation, error/empty responses, sanitized-empty output, compatibility best-effort behavior, and the worker handler rejection path.
 - Readiness route tests: healthy DB+queue, queue false, reject, timeout, and DB failure; assert HTTP status and `checks.queue` shape.
 - Upload regression: acquisition/send failures still call `processFile` fallback exactly once and return the existing success response.
 - Run `pnpm build` to protect the variable dynamic-import boundary.
@@ -81,6 +93,16 @@ if (queue.available) await queue.send(name, payload);
 // Correct: the adapter owns start + createQueue before resolving send.
 const queue = await getQueue();
 const jobId = await queue.send(name, payload);
+
+// Wrong: retryable failure is converted into a successful callback.
+try {
+  await generateConversationTitle(data);
+} catch {
+  return;
+}
+
+// Correct: only explicit no-op resolves; generation failure rejects generically.
+await generateConversationTitle(data);
 ```
 
 ## Query Patterns

@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/index.md","reason":"后端入口与预开发检查清单"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"pg-boss producer、worker handler 与动态 import 现有契约"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"标题副任务 taskKind、失败日志归属与敏感信息边界"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"标题服务、worker 与队列的跨层失败传播"}
+{"file":".trellis/tasks/07-26-magi-project-evolution-round-21/research/conversation-title-retry.md","reason":"已确认失败链、运行时事实与方案取舍"}
