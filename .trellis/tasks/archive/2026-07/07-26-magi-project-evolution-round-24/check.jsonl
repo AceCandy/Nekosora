@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/auth-guidelines.md","reason":"核验 status、权威 session、API key owner 与 seed 契约"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"核验 Node/Edge 启动边界和查询模式"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"核验授权状态在各入口一致传播"}
+{"file":".trellis/tasks/07-26-magi-project-evolution-round-24/research/security-boundaries.md","reason":"核验实现是否关闭已确认因果链"}
