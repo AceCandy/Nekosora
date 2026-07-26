@@ -1859,3 +1859,36 @@ setKeyEnabled 接收 userId 并在更新 SQL 中同时限制 key ID 与属主，
 ### Next Steps
 
 - None - task complete
+
+
+## Session 57: MAGI 项目进化第 22 轮：会话标题持久投递
+
+**Date**: 2026-07-26
+**Task**: MAGI 项目进化第 22 轮：会话标题持久投递
+**Branch**: `opt0725`
+
+### Summary
+
+新增 conversation_title_jobs outbox，将 fallback 与任务原子提交；实现数据库时间 claim、周期恢复、job id 双重 fencing 和 worker 双恢复生命周期，并补迁移、服务、dispatcher、route、worker 回归及数据库规范。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4bbf4ee` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
