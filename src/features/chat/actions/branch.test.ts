@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   getDb: vi.fn(),
   getSchema: vi.fn(),
   findConversationMessage: vi.fn(),
+  withConversationMessageWrite: vi.fn(),
   eq: vi.fn((left: unknown, right: unknown) => ({ op: "eq", left, right })),
   and: vi.fn((...conditions: unknown[]) => ({ op: "and", conditions })),
   isNull: vi.fn((field: unknown) => ({ op: "isNull", field })),
@@ -21,6 +22,7 @@ vi.mock("@/lib/session", () => ({ requireSession: mocks.requireSession }));
 vi.mock("@/lib/infra/db", () => ({ getDb: mocks.getDb, getSchema: mocks.getSchema }));
 vi.mock("@/lib/chat/message-reference", () => ({
   findConversationMessage: mocks.findConversationMessage,
+  withConversationMessageWrite: mocks.withConversationMessageWrite,
 }));
 
 import {
@@ -93,6 +95,15 @@ describe("聊天分支消息属主隔离", () => {
     vi.clearAllMocks();
     mocks.requireSession.mockResolvedValue({ id: "user-1" });
     mocks.getSchema.mockReturnValue(schema);
+    mocks.withConversationMessageWrite.mockImplementation(
+      async (
+        db: unknown,
+        _schema: unknown,
+        _conversationId: string,
+        _userId: string,
+        operation: (transactionDb: unknown) => Promise<unknown>,
+      ) => operation(db),
+    );
   });
 
   it("编辑时拒绝当前会话之外的消息且不执行写操作", async () => {
@@ -118,6 +129,79 @@ describe("聊天分支消息属主隔离", () => {
       { publicId: "foreign-message" },
     );
     expect(update).not.toHaveBeenCalled();
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it("编辑等待写锁后会话失效时不执行消息写入", async () => {
+    const where = vi.fn().mockResolvedValue(undefined);
+    const set = vi.fn(() => ({ where }));
+    const update = vi.fn(() => ({ set }));
+    const remove = vi.fn();
+    const db = {
+      select: selectQueue([
+        [{ id: "conversation-1", userId: "user-1" }],
+        [{ id: "user-message-1", parentId: null }],
+      ]),
+      update,
+      delete: remove,
+    };
+    mocks.getDb.mockResolvedValue(db);
+    mocks.findConversationMessage.mockResolvedValue({
+      id: "user-message-1",
+      publicId: "user-public-1",
+      parentId: null,
+      role: "user",
+      content: "old content",
+    });
+    mocks.withConversationMessageWrite.mockResolvedValueOnce(null);
+
+    await expect(
+      editMessage("conversation-1", "user-public-1", "new content"),
+    ).rejects.toThrow("无权操作");
+
+    expect(update).not.toHaveBeenCalled();
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it("编辑目标有效时在写锁内条件更新并返回新消息", async () => {
+    const returning = vi.fn().mockResolvedValue([{ id: "user-message-1" }]);
+    const where = vi.fn(() => ({ returning }));
+    const set = vi.fn(() => ({ where }));
+    const update = vi.fn(() => ({ set }));
+    const remove = vi.fn();
+    const db = {
+      select: selectQueue([
+        [{ id: "user-message-1", parentId: null }],
+      ]),
+      update,
+      delete: remove,
+    };
+    mocks.getDb.mockResolvedValue(db);
+    mocks.findConversationMessage.mockResolvedValueOnce({
+      id: "user-message-1",
+      publicId: "user-public-1",
+      parentId: null,
+      role: "user",
+      content: "old content",
+    });
+
+    await expect(
+      editMessage("conversation-1", "user-public-1", "new content"),
+    ).resolves.toEqual({
+      messages: [{ role: "user", content: "new content" }],
+    });
+
+    expect(mocks.withConversationMessageWrite).toHaveBeenCalledWith(
+      db,
+      schema,
+      "conversation-1",
+      "user-1",
+      expect.any(Function),
+    );
+    expect(mocks.eq).toHaveBeenCalledWith(schema.messages.conversationId, "conversation-1");
+    expect(mocks.eq).toHaveBeenCalledWith(schema.messages.role, "user");
+    expect(mocks.isNull).toHaveBeenCalledWith(schema.messages.deletedAt);
+    expect(returning).toHaveBeenCalledWith({ id: schema.messages.id });
     expect(remove).not.toHaveBeenCalled();
   });
 
@@ -199,7 +283,13 @@ describe("聊天分支消息属主隔离", () => {
       { id: "user-2", publicId: "user-public-2", parentId: "assistant-1" },
       { id: "other-root", publicId: "other-public", parentId: null },
     ];
-    const where = vi.fn().mockResolvedValue(undefined);
+    const returning = vi.fn().mockResolvedValue(
+      allMessages.slice(0, 3).map((message) => ({
+        id: message.id,
+        publicId: message.publicId,
+      })),
+    );
+    const where = vi.fn(() => ({ returning }));
     const set = vi.fn(() => ({ where }));
     const update = vi.fn(() => ({ set }));
     mocks.getDb.mockResolvedValue({
@@ -208,6 +298,12 @@ describe("聊天分支消息属主隔离", () => {
         allMessages,
       ]),
       update,
+    });
+    mocks.findConversationMessage.mockResolvedValueOnce({
+      id: "user-1",
+      publicId: "user-public-1",
+      conversationId: "conversation-1",
+      role: "user",
     });
 
     await expect(softDeleteMessage("user-public-1")).resolves.toEqual([
@@ -223,6 +319,53 @@ describe("聊天分支消息属主隔离", () => {
       expect.arrayContaining(["user-1", "assistant-1", "user-2"]),
     );
     expect(where).toHaveBeenCalledTimes(1);
+  });
+
+  it("软删除只更新部分子树时拒绝返回成功", async () => {
+    const allMessages = [
+      { id: "user-1", publicId: "user-public-1", parentId: null },
+      { id: "assistant-1", publicId: "assistant-public-1", parentId: "user-1" },
+    ];
+    const returning = vi.fn().mockResolvedValue([
+      { id: "user-1", publicId: "user-public-1" },
+    ]);
+    const where = vi.fn(() => ({ returning }));
+    const set = vi.fn(() => ({ where }));
+    const update = vi.fn(() => ({ set }));
+    mocks.getDb.mockResolvedValue({
+      select: selectQueue([
+        [{ id: "user-1", conversationId: "conversation-1", role: "user" }],
+        allMessages,
+      ]),
+      update,
+    });
+    mocks.findConversationMessage.mockResolvedValueOnce({
+      id: "user-1",
+      publicId: "user-public-1",
+      conversationId: "conversation-1",
+      role: "user",
+    });
+
+    await expect(softDeleteMessage("user-public-1"))
+      .rejects.toThrow("消息树已发生变化");
+  });
+
+  it("软删除等待写锁后目标失效时不更新消息", async () => {
+    const where = vi.fn().mockResolvedValue(undefined);
+    const set = vi.fn(() => ({ where }));
+    const update = vi.fn(() => ({ set }));
+    mocks.getDb.mockResolvedValue({
+      select: selectQueue([
+        [{ id: "user-1", conversationId: "conversation-1", role: "user" }],
+        [{ id: "user-1", publicId: "user-public-1", parentId: null }],
+      ]),
+      update,
+    });
+    mocks.withConversationMessageWrite.mockResolvedValueOnce(null);
+
+    await expect(softDeleteMessage("user-public-1")).rejects.toThrow("消息不存在");
+
+    expect(update).not.toHaveBeenCalled();
   });
 
   it("查询同父兄弟时排除软删除目标并限制消息所属会话", async () => {

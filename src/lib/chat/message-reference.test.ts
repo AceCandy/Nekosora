@@ -8,9 +8,16 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("drizzle-orm", () => ({ eq: mocks.eq, and: mocks.and, isNull: mocks.isNull }));
 
-import { findConversationMessage } from "@/lib/chat/message-reference";
+import {
+  findConversationMessage,
+  withConversationMessageWrite,
+} from "@/lib/chat/message-reference";
 
 const schema = {
+  conversations: {
+    id: "conversations.id",
+    userId: "conversations.userId",
+  },
   messages: {
     id: "messages.id",
     publicId: "messages.publicId",
@@ -52,5 +59,66 @@ describe("findConversationMessage", () => {
         { op: "isNull", field: schema.messages.deletedAt },
       ],
     });
+  });
+
+  it("在属主会话行锁事务内执行消息写回调", async () => {
+    const lock = vi.fn().mockResolvedValue([{ id: "conversation-1" }]);
+    const where = vi.fn(() => ({ for: lock }));
+    const tx = {
+      select: vi.fn(() => ({ from: vi.fn(() => ({ where })) })),
+    };
+    const transaction = vi.fn(
+      async (operation: (transactionDb: typeof tx) => Promise<unknown>) => operation(tx),
+    );
+    const operation = vi.fn(async (transactionDb: typeof tx) => {
+      expect(transactionDb).toBe(tx);
+      return "written";
+    });
+
+    await expect(
+      withConversationMessageWrite(
+        { transaction },
+        schema,
+        "conversation-1",
+        "user-1",
+        operation,
+      ),
+    ).resolves.toBe("written");
+
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(lock).toHaveBeenCalledWith("update");
+    expect(where).toHaveBeenCalledWith({
+      op: "and",
+      conditions: [
+        { op: "eq", left: schema.conversations.id, right: "conversation-1" },
+        { op: "eq", left: schema.conversations.userId, right: "user-1" },
+      ],
+    });
+    expect(operation).toHaveBeenCalledTimes(1);
+  });
+
+  it("属主会话未命中时不执行消息写回调", async () => {
+    const lock = vi.fn().mockResolvedValue([]);
+    const where = vi.fn(() => ({ for: lock }));
+    const tx = {
+      select: vi.fn(() => ({ from: vi.fn(() => ({ where })) })),
+    };
+    const transaction = vi.fn(
+      async (operation: (transactionDb: typeof tx) => Promise<unknown>) => operation(tx),
+    );
+    const operation = vi.fn();
+
+    await expect(
+      withConversationMessageWrite(
+        { transaction },
+        schema,
+        "conversation-1",
+        "other-user",
+        operation,
+      ),
+    ).resolves.toBeNull();
+
+    expect(lock).toHaveBeenCalledWith("update");
+    expect(operation).not.toHaveBeenCalled();
   });
 });

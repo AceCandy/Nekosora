@@ -10,7 +10,7 @@
  * 段 A(上下文准备)已抽到 @/lib/chat/orchestrator;段 B/C(流式 + 收尾)留在本文件,
  * 因它们共享 ReadableStream 的 controller / 累积文本等闭包变量,强拆会扯断耦合。
  */
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { getSession } from "@/lib/session";
@@ -24,7 +24,10 @@ import {
   type ConversationTitleJob,
 } from "@/lib/conversation-title/service";
 import { prepareChatContext } from "@/lib/chat/orchestrator";
-import { findConversationMessage } from "@/lib/chat/message-reference";
+import {
+  findConversationMessage,
+  withConversationMessageWrite,
+} from "@/lib/chat/message-reference";
 import {
   createRunId,
   finalizeRun,
@@ -139,6 +142,7 @@ export async function POST(req: NextRequest) {
   let isContinue = false;
   let continuePrefixText = "";
   let continueAssistantInternalId: string | null = null;
+  let continueParentUserInternalId: string | null = null;
   let continueParentUserPublicId: string | null = null;
   if (body.continueFromPublicId) {
     const contMsg = await findConversationMessage(db, s, body.conversationId, {
@@ -159,6 +163,7 @@ export async function POST(req: NextRequest) {
         id: contMsg.parentId as string,
       });
       if (parentUser?.role === "user") {
+        continueParentUserInternalId = parentUser.id as string;
         continueParentUserPublicId = parentUser.publicId as string;
       }
     }
@@ -182,6 +187,7 @@ export async function POST(req: NextRequest) {
     }
     // 续写沿用原 user 父消息,不插入新 user
     userPublicId = continueParentUserPublicId;
+    userMessageInternalId = continueParentUserInternalId;
   } else if (body.userPublicId) {
     const userMessage = await findConversationMessage(db, s, body.conversationId, {
       publicId: body.userPublicId,
@@ -193,21 +199,59 @@ export async function POST(req: NextRequest) {
     userMessageInternalId = userMessage.id as string;
   } else {
     userPublicId = crypto.randomUUID();
-    const [insertedUser] = await db
-      .insert(s.messages)
-      .values({
-        conversationId: body.conversationId,
-        publicId: userPublicId,
-        parentId: parentIdInternal,
-        sourceId: sourceIdInternal,
-        branchReason: body.branchReason ?? null,
-        runId,
-        role: "user",
-        content: userContent,
-        status: "success",
-      })
-      .returning({ id: s.messages.id });
-    userMessageInternalId = insertedUser.id as string;
+    const insertedUser = await withConversationMessageWrite(
+      db,
+      s,
+      body.conversationId,
+      user.id,
+      async (tx) => {
+        if (parentIdInternal) {
+          const activeParent = await findConversationMessage(
+            tx,
+            s,
+            body.conversationId,
+            { id: parentIdInternal },
+          );
+          if (!activeParent) return { error: "parent" as const };
+        }
+        if (sourceIdInternal) {
+          const activeSource = await findConversationMessage(
+            tx,
+            s,
+            body.conversationId,
+            { id: sourceIdInternal },
+          );
+          if (!activeSource) return { error: "source" as const };
+        }
+
+        const [inserted] = await tx
+          .insert(s.messages)
+          .values({
+            conversationId: body.conversationId,
+            publicId: userPublicId,
+            parentId: parentIdInternal,
+            sourceId: sourceIdInternal,
+            branchReason: body.branchReason ?? null,
+            runId,
+            role: "user",
+            content: userContent,
+            status: "success",
+          })
+          .returning({ id: s.messages.id });
+        return { id: inserted.id as string };
+      },
+    );
+    if (insertedUser === null) {
+      return NextResponse.json({ error: "会话不存在或无权访问" }, { status: 403 });
+    }
+    if ("error" in insertedUser) {
+      const error =
+        insertedUser.error === "parent"
+          ? "父消息不存在或不属于当前会话"
+          : "源消息不存在或不属于当前会话";
+      return NextResponse.json({ error }, { status: 400 });
+    }
+    userMessageInternalId = insertedUser.id;
 
     // 首条消息只同步写可读 fallback；标题任务立即并行入队，不阻塞 Chat。
     try {
@@ -410,32 +454,77 @@ export async function POST(req: NextRequest) {
         }
       } finally {
         try {
-          if (isContinue && continueAssistantInternalId) {
-            // 续写:update 既有 assistant 行,prefix + 新增内容;关联本轮 runId。
-            await db
-              .update(s.messages)
-              .set({
-                content: continuePrefixText + assistantText,
+          const persisted = await withConversationMessageWrite(
+            db,
+            s,
+            body.conversationId,
+            user.id,
+            async (tx) => {
+              if (!userMessageInternalId) throw new Error("用户父消息已失效");
+              const activeUserMessage = await findConversationMessage(
+                tx,
+                s,
+                body.conversationId,
+                { id: userMessageInternalId },
+              );
+              const activeUserContent =
+                typeof activeUserMessage?.content === "string"
+                  ? activeUserMessage.content
+                  : String(activeUserMessage?.content ?? "");
+              if (activeUserMessage?.role !== "user" || activeUserContent !== userContent) {
+                throw new Error("用户父消息已失效或内容已变更");
+              }
+
+              if (sourceIdInternal) {
+                const activeSource = await findConversationMessage(
+                  tx,
+                  s,
+                  body.conversationId,
+                  { id: sourceIdInternal },
+                );
+                if (!activeSource) throw new Error("源消息已失效");
+              }
+
+              if (isContinue && continueAssistantInternalId) {
+                // 原内容参与条件写，避免两个并发续写互相覆盖。
+                const [updated] = await tx
+                  .update(s.messages)
+                  .set({
+                    content: continuePrefixText + assistantText,
+                    reasoning: assistantReasoning || null,
+                    status: finished ? "success" : "interrupted",
+                    processTrace: trace,
+                    runId,
+                  })
+                  .where(
+                    and(
+                      eq(s.messages.id, continueAssistantInternalId),
+                      eq(s.messages.conversationId, body.conversationId),
+                      eq(s.messages.role, "assistant"),
+                      isNull(s.messages.deletedAt),
+                      eq(s.messages.content, continuePrefixText),
+                    ),
+                  )
+                  .returning({ id: s.messages.id });
+                if (!updated) throw new Error("续写消息已失效或内容已变更");
+                return;
+              }
+
+              // 持久化 assistant 消息;parentId 指向本轮 user 消息;附 process_trace + runId
+              await tx.insert(s.messages).values({
+                conversationId: body.conversationId,
+                publicId: assistantPublicId,
+                parentId: userMessageInternalId,
+                runId,
+                role: "assistant",
+                content: assistantText,
                 reasoning: assistantReasoning || null,
                 status: finished ? "success" : "interrupted",
                 processTrace: trace,
-                runId,
-              })
-              .where(eq(s.messages.id, continueAssistantInternalId));
-          } else {
-            // 持久化 assistant 消息;parentId 指向本轮 user 消息;附 process_trace + runId
-            await db.insert(s.messages).values({
-              conversationId: body.conversationId,
-              publicId: assistantPublicId,
-              parentId: userMessageInternalId,
-              runId,
-              role: "assistant",
-              content: assistantText,
-              reasoning: assistantReasoning || null,
-              status: finished ? "success" : "interrupted",
-              processTrace: trace,
-            });
-          }
+              });
+            },
+          );
+          if (persisted === null) throw new Error("会话已失效或无权访问");
 
           // P1-B:抽取 artifact(代码块/Mermaid/SVG 等)并持久化。
           if (assistantText && !isContinue) {

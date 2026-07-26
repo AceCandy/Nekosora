@@ -2,7 +2,10 @@
 import { eq, inArray, and, isNull } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { requireSession } from "@/lib/session";
-import { findConversationMessage } from "@/lib/chat/message-reference";
+import {
+  findConversationMessage,
+  withConversationMessageWrite,
+} from "@/lib/chat/message-reference";
 import {
   normalizeMessageFeedback,
   type MessageFeedback,
@@ -298,67 +301,100 @@ export async function editMessage(
   const db = await getDb();
   const s = S();
 
-  const [conv] = await db.select().from(s.conversations).where(eq(s.conversations.id, conversationId)).limit(1);
-  if (!conv || conv.userId !== user.id) throw new Error("无权操作");
+  const result = await withConversationMessageWrite(
+    db,
+    s,
+    conversationId,
+    user.id,
+    async (tx) => {
+      const oldMsg = await findConversationMessage(tx, s, conversationId, {
+        publicId: messagePublicId,
+      });
+      if (!oldMsg) throw new Error("消息不存在");
+      if (oldMsg.role !== "user") throw new Error("仅支持编辑用户消息");
+      const oldMessageId = oldMsg.id as string;
 
-  const oldMsg = await findConversationMessage(db, s, conversationId, { publicId: messagePublicId });
-  if (!oldMsg) throw new Error("消息不存在");
-  if (oldMsg.role !== "user") throw new Error("仅支持编辑用户消息");
+      // 获锁后读取最新消息树，等待锁期间提交的新后代也会进入删除集合。
+      const allMsgs = (await tx
+        .select()
+        .from(s.messages)
+        .where(and(eq(s.messages.conversationId, conversationId), isNull(s.messages.deletedAt)))
+        .orderBy(s.messages.createdAt)) as {
+        id: string;
+        parentId: string | null;
+      }[];
 
-  // 递归收集 oldMsg 的全部后代(原 AI 回答及其后续整段子树)。
-  const allMsgs = (await db
-    .select()
-    .from(s.messages)
-    .where(and(eq(s.messages.conversationId, conversationId), isNull(s.messages.deletedAt)))
-    .orderBy(s.messages.createdAt)) as {
-    id: string;
-    parentId: string | null;
-  }[];
+      const descendants: string[] = [];
+      const queue = allMsgs.filter((m) => m.parentId === oldMessageId).map((m) => m.id);
+      while (queue.length > 0) {
+        const cur = queue.shift()!;
+        descendants.push(cur);
+        for (const m of allMsgs) {
+          if (m.parentId === cur) queue.push(m.id);
+        }
+      }
+      // 物理删除后代子树(artifacts 等依赖 messages 的表已配级联或按 messageId 关联,见 schema)
+      if (descendants.length > 0) {
+        await tx
+          .delete(s.messages)
+          .where(
+            and(
+              inArray(s.messages.id, descendants),
+              eq(s.messages.conversationId, conversationId),
+              isNull(s.messages.deletedAt),
+            ),
+          );
+      }
 
-  const descendants: string[] = [];
-  const queue = allMsgs.filter((m) => m.parentId === oldMsg.id).map((m) => m.id);
-  while (queue.length > 0) {
-    const cur = queue.shift()!;
-    descendants.push(cur);
-    for (const m of allMsgs) {
-      if (m.parentId === cur) queue.push(m.id);
-    }
-  }
-  // 物理删除后代子树(artifacts 等依赖 messages 的表已配级联或按 messageId 关联,见 schema)
-  if (descendants.length > 0) {
-    await db.delete(s.messages).where(inArray(s.messages.id, descendants));
-  }
+      // 原地改写 user 消息内容,并清空其 fork 记录(改写主线后不再是任何分支的源)
+      const [updated] = await tx
+        .update(s.messages)
+        .set({ content: newContent, sourceId: null, branchReason: null })
+        .where(
+          and(
+            eq(s.messages.id, oldMessageId),
+            eq(s.messages.conversationId, conversationId),
+            eq(s.messages.role, "user"),
+            isNull(s.messages.deletedAt),
+          ),
+        )
+        .returning({ id: s.messages.id });
+      if (!updated) throw new Error("消息已失效");
 
-  // 原地改写 user 消息内容,并清空其 fork 记录(改写主线后不再是任何分支的源)
-  await db
-    .update(s.messages)
-    .set({ content: newContent, sourceId: null, branchReason: null })
-    .where(eq(s.messages.id, oldMsg.id));
+      // 构造重生成所需历史:沿 parentId 向上回溯到根,再追加改写后的新内容
+      const pathMsgs: { role: string; content: string }[] = [];
+      const pathIds: string[] = [];
+      let cur: string | null = typeof oldMsg.parentId === "string" ? oldMsg.parentId : null;
+      while (cur) {
+        pathIds.unshift(cur);
+        const node = allMsgs.find((m) => m.id === cur);
+        cur = node?.parentId ?? null;
+      }
+      if (pathIds.length > 0) {
+        const pathRows = (await tx
+          .select()
+          .from(s.messages)
+          .where(
+            and(
+              inArray(s.messages.id, pathIds),
+              eq(s.messages.conversationId, conversationId),
+              isNull(s.messages.deletedAt),
+            ),
+          )) as { id: string; role: string; content: string }[];
+        // 按 pathIds 顺序排列
+        const byId = new Map(pathRows.map((r) => [r.id, r]));
+        for (const id of pathIds) {
+          const r = byId.get(id);
+          if (r) pathMsgs.push({ role: r.role, content: r.content });
+        }
+      }
+      pathMsgs.push({ role: "user", content: newContent });
 
-  // 构造重生成所需历史:沿 parentId 向上回溯到根,再追加改写后的新内容
-  const pathMsgs: { role: string; content: string }[] = [];
-  const pathIds: string[] = [];
-  let cur: string | null = typeof oldMsg.parentId === "string" ? oldMsg.parentId : null;
-  while (cur) {
-    pathIds.unshift(cur);
-    const node = allMsgs.find((m) => m.id === cur);
-    cur = node?.parentId ?? null;
-  }
-  if (pathIds.length > 0) {
-    const pathRows = (await db
-      .select()
-      .from(s.messages)
-      .where(inArray(s.messages.id, pathIds))) as { id: string; role: string; content: string }[];
-    // 按 pathIds 顺序排列
-    const byId = new Map(pathRows.map((r) => [r.id, r]));
-    for (const id of pathIds) {
-      const r = byId.get(id);
-      if (r) pathMsgs.push({ role: r.role, content: r.content });
-    }
-  }
-  pathMsgs.push({ role: "user", content: newContent });
-
-  return { messages: pathMsgs };
+      return { messages: pathMsgs };
+    },
+  );
+  if (result === null) throw new Error("无权操作");
+  return result;
 }
 
 /**
@@ -493,31 +529,73 @@ export async function softDeleteMessage(messagePublicId: string): Promise<string
         eq(s.conversations.userId, user.id),
       ),
     )
-    .where(eq(s.messages.publicId, messagePublicId))
+    .where(
+      and(
+        eq(s.messages.publicId, messagePublicId),
+        isNull(s.messages.deletedAt),
+      ),
+    )
     .limit(1);
   if (!msg) throw new Error("消息不存在");
   if (msg.role !== "user") throw new Error("仅支持删除用户消息");
 
-  // 收集该 user 消息及其全部后代(对应 AI 回复 + 之后所有消息)
-  const allMsgs = (await db
-    .select()
-    .from(s.messages)
-    .where(and(eq(s.messages.conversationId, msg.conversationId), isNull(s.messages.deletedAt)))
-    .orderBy(s.messages.createdAt)) as { id: string; publicId: string; parentId: string | null }[];
+  const deletedPublicIds = await withConversationMessageWrite(
+    db,
+    s,
+    msg.conversationId,
+    user.id,
+    async (tx) => {
+      const current = await findConversationMessage(tx, s, msg.conversationId, {
+        publicId: messagePublicId,
+      });
+      if (!current) throw new Error("消息不存在");
+      if (current.role !== "user") throw new Error("仅支持删除用户消息");
+      const currentId = current.id as string;
 
-  const targetIds = new Set<string>([msg.id]);
-  const queue = allMsgs.filter((m) => m.parentId === msg.id).map((m) => m.id);
-  while (queue.length > 0) {
-    const cur = queue.shift()!;
-    targetIds.add(cur);
-    for (const m of allMsgs) {
-      if (m.parentId === cur) queue.push(m.id);
-    }
-  }
+      // 获锁后读取最新树，确保等待期间提交的新子节点也被纳入。
+      const allMsgs = (await tx
+        .select()
+        .from(s.messages)
+        .where(and(eq(s.messages.conversationId, msg.conversationId), isNull(s.messages.deletedAt)))
+        .orderBy(s.messages.createdAt)) as {
+        id: string;
+        publicId: string;
+        parentId: string | null;
+      }[];
 
-  await db.update(s.messages).set({ deletedAt: new Date() }).where(inArray(s.messages.id, [...targetIds]));
+      const targetIds = new Set<string>([currentId]);
+      const queue = allMsgs.filter((m) => m.parentId === currentId).map((m) => m.id);
+      while (queue.length > 0) {
+        const cur = queue.shift()!;
+        targetIds.add(cur);
+        for (const m of allMsgs) {
+          if (m.parentId === cur) queue.push(m.id);
+        }
+      }
 
-  return allMsgs.filter((m) => targetIds.has(m.id)).map((m) => m.publicId);
+      const updated = (await tx
+        .update(s.messages)
+        .set({ deletedAt: new Date() })
+        .where(
+          and(
+            inArray(s.messages.id, [...targetIds]),
+            eq(s.messages.conversationId, msg.conversationId),
+            isNull(s.messages.deletedAt),
+          ),
+        )
+        .returning({ id: s.messages.id, publicId: s.messages.publicId })) as {
+        id: string;
+        publicId: string;
+      }[];
+      if (updated.length !== targetIds.size) throw new Error("消息树已发生变化");
+      const updatedById = new Map(updated.map((row) => [row.id, row.publicId]));
+      return allMsgs
+        .filter((message) => targetIds.has(message.id))
+        .map((message) => updatedById.get(message.id) ?? message.publicId);
+    },
+  );
+  if (deletedPublicIds === null) throw new Error("消息不存在");
+  return deletedPublicIds;
 }
 
 /**
