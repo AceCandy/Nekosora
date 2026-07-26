@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/provider-probe.md","reason":"Verify probe behavior and diagnostics remain compatible."}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"Verify no credential reaches persistent or runtime logs."}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Verify external error structures and status codes remain unchanged."}
+{"file":".trellis/tasks/07-26-magi-project-evolution-round-10/research/provider-error-sinks.md","reason":"Review every proven provider-error sink."}

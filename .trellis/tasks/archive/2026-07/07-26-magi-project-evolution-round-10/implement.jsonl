@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/provider-probe.md","reason":"Probe request and error-result contract."}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"Credential and persistent error logging boundary."}
+{"file":".trellis/spec/backend/error-handling.md","reason":"External API and SSE error response contract."}
+{"file":".trellis/tasks/07-26-magi-project-evolution-round-10/research/provider-error-sinks.md","reason":"Verified source-to-sink inventory for provider errors."}
