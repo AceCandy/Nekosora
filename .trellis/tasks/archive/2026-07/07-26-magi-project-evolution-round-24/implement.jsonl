@@ -1,4 +1,4 @@
 {"file":".trellis/spec/backend/auth-guidelines.md","reason":"Better Auth 配置、session 与生产 Origin 安全约定"}
 {"file":".trellis/spec/backend/database-guidelines.md","reason":"启动 bootstrap、动态 import 与数据库查询约束"}
 {"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"共享授权边界与数据库状态跨层一致性"}
-{"file":".trellis/tasks/07-26-magi-project-evolution-round-24/research/security-boundaries.md","reason":"当前授权、启动、seed 因果链和测试现状"}
+{"file":".trellis/tasks/archive/2026-07/07-26-magi-project-evolution-round-24/research/security-boundaries.md","reason":"当前授权、启动、seed 因果链和测试现状"}
