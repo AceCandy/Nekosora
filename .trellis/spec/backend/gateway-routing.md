@@ -14,11 +14,11 @@
 
 ---
 
-## Scenario: Admin Provider Association Authorization
+## Scenario: Admin Provider Reference Authorization
 
 ### 1. Scope / Trigger
 
-Apply this contract to admin model/route actions that accept a client-supplied `providerId`, and to route probes that resolve a Provider key from a client-supplied `routeId`.
+Apply this contract to admin model/route and system-setting actions that accept a client-supplied Provider ID, and to route probes that resolve a Provider key from a client-supplied `routeId`.
 
 ### 2. Signatures
 
@@ -28,15 +28,19 @@ Apply this contract to admin model/route actions that accept a client-supplied `
 - `attachProviderModelRoute(modelId, providerId, upstreamModelName)`
 - `updateRoute(routeId, formData)`
 - `testRoute(routeId)`
+- `saveEmbedding(formData)` with `provider_id` / `model`
 
 ### 3. Contracts
 
 - Providers are always private. A model or route being public does not authorize an admin to submit another owner's Provider ID.
+- Every non-empty client-supplied Provider reference is resolved with `providers.id = providerId` and `providers.owner_user_id = admin.id` before the first database, secret, network, cache, or revalidation side effect owned by that action.
 - Every model/route write combines `providers.id = providerId` with `providers.owner_user_id = admin.id` before inserting or updating a route.
 - A missing and a foreign Provider both fail with `服务商不存在`; the action must not reveal which condition occurred.
 - `createModel` performs the Provider authorization inside its existing transaction and before the first model/route write.
+- `saveEmbedding` authorizes a non-empty `provider_id` before updating `system_settings`, resetting the Embedding cache, or revalidating the settings page. An exact empty string keeps the existing clear-config behavior and skips the Provider lookup.
 - `testRoute` authorizes the route through the existing public/private manageability rule before reading `apiKeysEnc`, probing upstream, or changing circuit-breaker state.
 - Runtime route resolution intentionally follows an already-authorized route without requiring model and Provider owners to match. Public models can legitimately use a Provider voluntarily attached by a different admin, so authorization belongs at association time.
+- Runtime Embedding resolution intentionally consumes the system setting without an admin identity. Authorization therefore belongs at the settings write boundary; changing this requires an owner-aware settings schema and is a separate contract.
 
 ### 4. Validation & Error Matrix
 
@@ -45,6 +49,9 @@ Apply this contract to admin model/route actions that accept a client-supplied `
 | Create/update route | Caller-owned Provider | Continue with existing model/route permission checks |
 | Create/update route | Missing or foreign Provider | Throw `服务商不存在` before write |
 | Create model with initial route | Missing or foreign Provider | Reject transaction with no model or route |
+| Save Embedding settings | Caller-owned Provider | Update settings, then reset cache and revalidate page |
+| Save Embedding settings | Missing or foreign Provider | Throw `服务商不存在`; preserve settings and skip cache/revalidation side effects |
+| Clear Embedding settings | Exact empty Provider ID | Skip Provider lookup and preserve existing clear behavior |
 | Probe own private route | Referenced Provider | Probe and report breaker result |
 | Probe public route manageable by admin | Referenced Provider | Probe and report breaker result |
 | Probe another owner's private route | Any Provider | Throw before key parsing, probe, or breaker update |
@@ -52,21 +59,26 @@ Apply this contract to admin model/route actions that accept a client-supplied `
 ### 5. Good / Base / Bad Cases
 
 - Good: an admin attaches their own Provider to a public model owned by another admin; the route owner still follows the model owner.
+- Good: an admin selects their own Provider for system-level Embedding; the saved global setting may then be consumed by background tasks.
 - Base: an admin creates or updates a private route using their own Provider.
+- Base: an exact empty `provider_id` clears the Embedding configuration without a Provider lookup.
 - Bad: UI filtering shows only owned Providers, but the Server Action trusts a forged foreign `providerId`.
+- Bad: an owner-filtered Embedding dropdown is treated as authorization and a forged `provider_id` is written to `system_settings` before cache invalidation.
 - Bad: `testRoute` loads and decrypts the Provider before checking whether the caller may manage the route.
 
 ### 6. Tests Required
 
 - Reject foreign Provider IDs in `createModel`, `createRoute`, `updateRoute`, and `attachProviderModelRoute`; assert no model/route mutation.
 - Accept an owned Provider for private and manageable public models/routes.
+- Exercise `saveEmbedding` through the real owner resolver and settings service: accept owned, reject foreign and missing with the same error while preserving prior settings, and keep exact-empty clear behavior.
+- On rejected Embedding saves, assert no cache reset or page revalidation occurs; the test must fail if either the Server Action check or the shared `id + ownerUserId` query predicate is removed.
 - Reject probing another owner's private route before key parsing, upstream probe, `recordSuccess`, or `recordFailure`.
 - Keep positive probe coverage for own private and manageable public routes.
 
 ### 7. Wrong vs Correct
 
 ```typescript
-// Wrong: a valid admin session does not authorize a client-supplied Provider ID.
+// Wrong: a valid admin session or owner-filtered dropdown does not authorize a submitted Provider ID.
 const [provider] = await db.select().from(s.providers)
   .where(eq(s.providers.id, providerId));
 

@@ -1,0 +1,8 @@
+{"file":".trellis/spec/backend/index.md","reason":"服务端改动入口与项目后端规范索引。"}
+{"file":".trellis/spec/backend/directory-structure.md","reason":"Server Action 与 Provider 领域共享模块的目录和依赖方向约定。"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"getDb/getSchema 与 Drizzle owner-scoped 查询的项目约定。"}
+{"file":".trellis/spec/backend/gateway-routing.md","reason":"Provider owner-only、非枚举错误和关联时授权的既有事实契约。"}
+{"file":".trellis/spec/backend/key-binding-authorization.md","reason":"客户端资源 ID 必须在副作用前完成 owner-scoped 授权的同类安全模式。"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"第二个生产消费者出现后提取共享授权 helper 的复用判断。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"UI 过滤不能替代 Server Action 资源授权的跨层检查清单。"}
+{"file":".trellis/tasks/07-26-magi-project-evolution-round-14/research/embedding-provider-authorization.md","reason":"漏洞数据流、入口审计、测试边界、方案取舍和延后风险。"}

@@ -1,0 +1,7 @@
+{"file":".trellis/spec/backend/index.md","reason":"按后端规范入口执行最终质量复核。"}
+{"file":".trellis/spec/backend/directory-structure.md","reason":"核对 app 到 lib 的依赖方向和 Server Action 文件组织。"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"核对共享 helper 的 Drizzle 查询与数据库访问方式。"}
+{"file":".trellis/spec/backend/gateway-routing.md","reason":"核对 Provider owner-only、非枚举拒绝和公共模型协作语义未回归。"}
+{"file":".trellis/spec/backend/key-binding-authorization.md","reason":"核对客户端资源 ID 在所有持久化、密钥和缓存副作用前完成授权。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"复核完整数据流与所有客户端 Provider ID 入口。"}
+{"file":".trellis/tasks/07-26-magi-project-evolution-round-14/research/embedding-provider-authorization.md","reason":"逐项复核确认漏洞、测试防回归能力、范围边界和剩余风险。"}

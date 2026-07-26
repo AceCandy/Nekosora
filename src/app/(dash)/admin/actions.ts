@@ -7,6 +7,7 @@ import type { WeightedKey } from "@/lib/providers/keys";
 import { probeProviderKey, fetchUpstreamModels, type ProbeResult, type UpstreamModel } from "@/lib/providers/probe";
 import { getProbeHeaders } from "@/lib/system-settings/ua";
 import { normalizeBaseUrl } from "@/lib/providers/defaults";
+import { requireOwnedProvider } from "@/lib/providers/ownership";
 import { recordSuccess, recordFailure } from "@/lib/circuit-breaker";
 import { pickWeightedKey } from "@/lib/providers/keys";
 import type { ProviderProtocol } from "@/db/types";
@@ -86,18 +87,6 @@ async function assertRouteManageable(db: unknown, routeId: string, adminId: stri
     providerId: string;
     upstreamModelName: string;
   };
-}
-
-/** 获取当前 admin 拥有的服务商，不向调用方泄露其他服务商是否存在。 */
-async function requireOwnedProvider(db: unknown, providerId: string, adminId: string) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [provider] = await (db as any)
-    .select({ id: S().providers.id })
-    .from(S().providers)
-    .where(and(eq(S().providers.id, providerId), eq(S().providers.ownerUserId, adminId)))
-    .limit(1);
-  if (!provider) throw new Error("服务商不存在");
-  return provider;
 }
 
 // ===================== Providers =====================

@@ -2,13 +2,13 @@ import { revalidatePath } from "next/cache";
 import { eq, and } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { getSettings, upsertSettings } from "@/lib/system-settings/service";
-import { resetEmbeddingConfig } from "@/lib/rag/embedding";
 import { resetTitleModelConfig } from "@/lib/conversation-title/service";
 import { resetCompactModelConfig } from "@/lib/compact/service";
 import { resetMemoryClient } from "@/lib/memory/mem0";
 import { requireAdmin } from "@/lib/session";
 import EmbeddingConfigForm from "./EmbeddingConfigForm";
 import BackgroundModelConfigForm from "./BackgroundModelConfigForm";
+import { saveEmbedding } from "./actions";
 import { listUpstreamModelsCached } from "../actions";
 
 /** Server Action 边界校验：后台任务只允许选择可路由的公共模型。 */
@@ -103,19 +103,6 @@ export default async function ModelConfigSection({
     task.compact_model_id ?? backgroundModels.find((model) => model.name === task.compact_model)?.id ?? "";
   const mem0ModelId =
     rag.mem0_llm_model_id ?? backgroundModels.find((model) => model.name === rag.mem0_llm_model)?.id ?? "";
-
-  async function saveEmbedding(formData: FormData) {
-    "use server";
-    await requireAdmin();
-    const providerId = String(formData.get("provider_id") ?? "");
-    const model = String(formData.get("model") ?? "").trim();
-    await upsertSettings("rag", {
-      embedding_provider_id: providerId,
-      embedding_model: model,
-    });
-    resetEmbeddingConfig();
-    revalidatePath("/admin/settings");
-  }
 
   async function saveTitleModel(formData: FormData) {
     "use server";
