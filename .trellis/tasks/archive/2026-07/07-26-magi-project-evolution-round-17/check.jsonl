@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/index.md","reason":"按后端规范入口执行最终复核。"}
+{"file":".trellis/spec/backend/chat-generation-params.md","reason":"核对 fixed 单档、同步保护和请求体无伪造参数。"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"核对 0011、journal/snapshot 与旧迁移完整性。"}
+{"file":".trellis/spec/frontend/index.md","reason":"核对动态档位消费与 Chat fixed 展示契约。"}
+{"file":".trellis/tasks/07-26-magi-project-evolution-round-17/research/kimi-fixed-reasoning-drift.md","reason":"逐项复核证据、根因、迁移范围和测试防回归能力。"}

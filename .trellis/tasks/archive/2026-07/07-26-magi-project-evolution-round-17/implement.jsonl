@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/index.md","reason":"模型目录、推理翻译与 PostgreSQL 迁移属于后端核心。"}
+{"file":".trellis/spec/backend/chat-generation-params.md","reason":"模型驱动推理档位、thinkingFormat 与请求翻译契约。"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"追加迁移、journal/snapshot 与已发布迁移不可改写约束。"}
+{"file":".trellis/spec/frontend/index.md","reason":"确认 Chat 只消费动态档位列表，不另写 fixed 能力判断。"}
+{"file":".trellis/tasks/07-26-magi-project-evolution-round-17/research/kimi-fixed-reasoning-drift.md","reason":"pi 证据、迁移覆盖链、运行时假档位与同步根因。"}
