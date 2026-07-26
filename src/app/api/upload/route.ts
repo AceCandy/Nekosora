@@ -3,9 +3,10 @@
  *
  * 流程:
  *   1. session 鉴权
- *   2. 经 StorageDriver 存储文件(key = {userId}/{fileId}-{filename})
- *   3. 写 file_objects(processing_status=pending,storage_path 存 key)
- *   4. 入队 file-process(队列可用时)/ 同步处理(队列不可用时 fallback)
+ *   2. 校验可选 conversationId 属于当前用户
+ *   3. 经 StorageDriver 存储文件(key = {userId}/{fileId}-{filename})
+ *   4. 写 file_objects(processing_status=pending,storage_path 存 key)
+ *   5. 入队 file-process(队列可用时)/ 同步处理(队列不可用时 fallback)
  *
  * 返回 fileId,前端把它与消息关联。
  *
@@ -13,6 +14,7 @@
  * 见 src/lib/infra/storage。storage_path 列存 driver 无关的 key。
  */
 import { type NextRequest, NextResponse } from "next/server";
+import { and, eq } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { getSession } from "@/lib/session";
 import { getQueue } from "@/lib/infra/queue";
@@ -62,6 +64,28 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  const db = await getDb();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const s = getSchema() as any;
+  if (conversationId) {
+    const [conversation] = await db
+      .select({ id: s.conversations.id })
+      .from(s.conversations)
+      .where(
+        and(
+          eq(s.conversations.id, conversationId),
+          eq(s.conversations.userId, user.id),
+        ),
+      )
+      .limit(1);
+    if (!conversation) {
+      return NextResponse.json(
+        { error: "会话不存在或无权访问" },
+        { status: 403 },
+      );
+    }
+  }
+
   const fileId = crypto.randomUUID();
   const safeFilename = sanitizeUploadFilename(file.name);
   const mime = file.type || "application/octet-stream";
@@ -73,9 +97,6 @@ export async function POST(req: NextRequest) {
   await storage.put(storagePath, buf, mime);
 
   try {
-    const db = await getDb();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const s = getSchema() as any;
     await db.insert(s.fileObjects).values({
       id: fileId,
       userId: user.id,

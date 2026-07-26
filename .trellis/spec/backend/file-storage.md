@@ -212,38 +212,43 @@ Apply this contract when `/api/upload` changes the sequence between `StorageDriv
 
 ### 2. Signatures
 
+- `getDb()` / `getSchema()` and the optional conversation ownership query run before storage access.
 - `StorageDriver.put(storagePath, data, mime)` persists the object first.
 - `db.insert(fileObjects).values(...)` establishes the application-owned reference.
 - `StorageDriver.delete(storagePath)` is the idempotent compensation action.
 
 ### 3. Contracts
 
-- After put succeeds, wrap DB acquisition, schema access, and row insertion in one compensation boundary.
-- If that boundary throws, attempt exactly one delete for the same generated storage key, then rethrow the original DB error.
+- Complete DB acquisition, schema access, and any client-supplied relationship authorization before `getStorage()` or `put()`.
+- After put succeeds, wrap the `file_objects` row insertion in the compensation boundary.
+- If row insertion throws, attempt exactly one delete for the same generated storage key, then rethrow the original DB error.
 - If delete also throws, log the cleanup error without replacing the original DB error.
-- A failed put must not reach DB, delete, or queue code. A successful DB insert must not trigger delete.
+- A failed DB preflight must not reach storage. A failed put may follow a successful read-only DB preflight, but must not reach file insertion, delete, or queue code. A successful DB insert must not trigger delete.
 - Compensation is best effort, not a distributed transaction. A connection failure after an upstream DB commit can make commit status ambiguous and remains an operational residual risk.
 
 ### 4. Validation & Error Matrix
 
 | Condition | Storage compensation | Result |
 | --- | --- | --- |
-| Put fails | None | Original storage error |
-| DB acquisition/schema/insert fails after put | Delete once | Original DB error |
-| DB failure and delete failure | Delete attempted once; log cleanup error | Original DB error |
+| DB acquisition/schema/ownership query fails before put | None; storage is untouched | Original DB error |
+| Put fails after a successful DB preflight | None | Original storage error |
+| File row insertion fails after put | Delete once | Original DB error |
+| File row insertion and delete both fail | Delete attempted once; log cleanup error | Original DB error |
 | DB insert succeeds | None | Existing queue/synchronous processing flow |
 
 ### 5. Good / Base / Bad Cases
 
 - Good: a definite insert rejection deletes the just-written object and preserves the DB error for diagnosis.
+- Good: a DB preflight failure returns before storage and needs no compensation.
 - Base: a normal upload stores one object, inserts one row, and sends one processing job without deletion.
 - Bad: letting an insert error escape immediately leaves an object with no `file_objects` owner or normal cleanup path.
 
 ### 6. Tests Required
 
-- Assert DB acquisition and insertion failures delete the exact key once and preserve Error object identity.
+- Assert DB acquisition and ownership-query failures do not acquire or write storage.
+- Assert file row insertion failures delete the exact key once and preserve Error object identity.
 - Assert cleanup failure is logged while the original DB Error still wins.
-- Assert put failure does not call DB, delete, or queue.
+- Assert put failure may follow the authorization query but does not call file insertion, delete, or queue.
 - Keep the success-path assertion that delete is never called.
 
 ### 7. Wrong vs Correct
@@ -253,11 +258,27 @@ Apply this contract when `/api/upload` changes the sequence between `StorageDriv
 await storage.put(storagePath, data, mime);
 await db.insert(fileObjects).values(row);
 
-// Correct: compensate only the pre-persistence failure window.
+// Correct: preflight before storage, then compensate only row insertion.
+const db = await getDb();
+const schema = getSchema();
+if (conversationId) {
+  const [conversation] = await db
+    .select({ id: schema.conversations.id })
+    .from(schema.conversations)
+    .where(and(
+      eq(schema.conversations.id, conversationId),
+      eq(schema.conversations.userId, userId),
+    ))
+    .limit(1);
+  if (!conversation) {
+    return NextResponse.json(
+      { error: "会话不存在或无权访问" },
+      { status: 403 },
+    );
+  }
+}
 await storage.put(storagePath, data, mime);
 try {
-  const db = await getDb();
-  const schema = getSchema();
   await db.insert(schema.fileObjects).values(row);
 } catch (error) {
   try {
@@ -266,6 +287,81 @@ try {
     console.error("[upload] failed to clean up stored file:", cleanupError);
   }
   throw error;
+}
+```
+
+## Scenario: Client-Supplied Upload Conversation Ownership
+
+### 1. Scope / Trigger
+
+Apply this contract whenever `/api/upload` accepts an optional client-supplied `conversationId`. Authentication identifies the uploader but does not authorize a relationship to an arbitrary conversation.
+
+### 2. Signatures
+
+- Request field: multipart `conversationId`, where `""` means no conversation relationship.
+- Ownership predicate: `and(eq(conversations.id, conversationId), eq(conversations.userId, session.user.id))`.
+- Unauthorized response: HTTP 403 with `{ error: "会话不存在或无权访问" }`.
+- Persisted field: an owned non-empty ID is stored as-is; an empty ID is stored as `null`.
+
+### 3. Contracts
+
+- Treat every non-empty `conversationId` as untrusted even after session authentication.
+- Resolve the relationship with one query that combines conversation ID and authenticated user ID; a foreign row must not be loaded and compared after an ID-only query.
+- Collapse missing and foreign conversations to the same 403 status and message so the endpoint does not reveal existence.
+- Reject before `getStorage`, `storage.put`, `file_objects` insertion, queue acquisition/send, or synchronous processing fallback.
+- Skip the conversation query for an empty ID and preserve the unassociated upload behavior.
+- Reuse the DB/schema obtained for authorization when inserting the file row; do not add a transaction or conversation row lock because upload does not write conversation state.
+
+### 4. Validation & Error Matrix
+
+| Input / condition | HTTP / result | Persisted `conversation_id` | Downstream side effects |
+| --- | --- | --- | --- |
+| Owned non-empty conversation | 200 processing | Submitted ID | Normal storage, insert, processing dispatch |
+| Foreign conversation | 403 unified error | None | None |
+| Missing conversation | 403 unified error | None | None |
+| Empty conversation ID | 200 processing | `null` | Normal upload; no conversation query |
+| DB acquisition or ownership query fails | Propagate original error | None | Storage and processing untouched |
+| Conversation is deleted after authorization | FK rejects file insert | None | Stored object is compensation-deleted |
+
+### 5. Good / Base / Bad Cases
+
+- Good: an attacker submits another user's conversation ID; the owner-constrained query returns no row and the route returns 403 before storage acquisition.
+- Base: the uploader's own conversation ID is preserved, while an empty ID still creates an unassociated file.
+- Bad: relying on the `conversation_id` foreign key only proves that the conversation exists; it permits `file.user_id` and `conversation.user_id` to disagree.
+
+### 6. Tests Required
+
+- Exercise the exported `POST` handler with owned, foreign, missing, and empty conversation IDs.
+- Assert the query combines `conversations.id` and `conversations.userId`, selects at most one row, and returns identical foreign/missing responses.
+- On 403 or ownership-query failure, assert no storage acquisition/write, file insertion, queue access, or synchronous processing.
+- For an empty ID, assert no conversation select occurs and the inserted row contains `conversationId: null`.
+- Keep DB insertion compensation, put failure, queue fallback, size limits, MIME normalization, and filename sanitization regressions green.
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong: the foreign key checks existence, not ownership.
+await db.insert(s.fileObjects).values({
+  userId: user.id,
+  conversationId,
+});
+
+// Correct: authorize the relationship before every upload side effect.
+if (conversationId) {
+  const [conversation] = await db
+    .select({ id: s.conversations.id })
+    .from(s.conversations)
+    .where(and(
+      eq(s.conversations.id, conversationId),
+      eq(s.conversations.userId, user.id),
+    ))
+    .limit(1);
+  if (!conversation) {
+    return NextResponse.json(
+      { error: "会话不存在或无权访问" },
+      { status: 403 },
+    );
+  }
 }
 ```
 

@@ -9,12 +9,20 @@ const mocks = vi.hoisted(() => ({
   storageDelete: vi.fn(),
   getDb: vi.fn(),
   getSchema: vi.fn(),
+  dbSelect: vi.fn(),
+  dbFrom: vi.fn(),
+  dbWhere: vi.fn(),
+  dbLimit: vi.fn(),
+  dbInsert: vi.fn(),
   dbValues: vi.fn(),
   getQueue: vi.fn(),
   queueSend: vi.fn(),
   processFile: vi.fn(),
+  eq: vi.fn((left: unknown, right: unknown) => ({ op: "eq", left, right })),
+  and: vi.fn((...conditions: unknown[]) => ({ op: "and", conditions })),
 }));
 
+vi.mock("drizzle-orm", () => ({ eq: mocks.eq, and: mocks.and }));
 vi.mock("@/lib/session", () => ({ getSession: mocks.getSession }));
 vi.mock("@/lib/multipart", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/multipart")>();
@@ -35,6 +43,14 @@ import {
   POST,
 } from "@/app/api/upload/route";
 
+const schema = {
+  conversations: {
+    id: "conversations.id",
+    userId: "conversations.userId",
+  },
+  fileObjects: {},
+};
+
 function request() {
   return new NextRequest("http://localhost/api/upload", { method: "POST" });
 }
@@ -50,6 +66,8 @@ function uploadForm(size = 5, filename = "hello.txt", mime = "text/plain"): Form
 
 describe("POST /api/upload", () => {
   beforeEach(() => {
+    mocks.eq.mockClear();
+    mocks.and.mockClear();
     mocks.getSession.mockReset().mockResolvedValue({ id: "user-1" });
     mocks.parseFormData.mockReset().mockResolvedValue(uploadForm());
     mocks.storagePut.mockReset().mockResolvedValue(undefined);
@@ -58,11 +76,17 @@ describe("POST /api/upload", () => {
       put: mocks.storagePut,
       delete: mocks.storageDelete,
     });
+    mocks.dbLimit.mockReset().mockResolvedValue([{ id: "conversation-1" }]);
+    mocks.dbWhere.mockReset().mockReturnValue({ limit: mocks.dbLimit });
+    mocks.dbFrom.mockReset().mockReturnValue({ where: mocks.dbWhere });
+    mocks.dbSelect.mockReset().mockReturnValue({ from: mocks.dbFrom });
+    mocks.dbInsert.mockReset().mockReturnValue({ values: mocks.dbValues });
     mocks.dbValues.mockReset().mockResolvedValue(undefined);
     mocks.getDb.mockReset().mockResolvedValue({
-      insert: () => ({ values: mocks.dbValues }),
+      select: mocks.dbSelect,
+      insert: mocks.dbInsert,
     });
-    mocks.getSchema.mockReset().mockReturnValue({ fileObjects: {} });
+    mocks.getSchema.mockReset().mockReturnValue(schema);
     mocks.queueSend.mockReset().mockResolvedValue(undefined);
     mocks.getQueue.mockReset().mockResolvedValue({
       available: true,
@@ -113,6 +137,16 @@ describe("POST /api/upload", () => {
 
     expect(response.status).toBe(200);
     expect(body).toMatchObject({ filename: "hello.txt", status: "processing" });
+    expect(mocks.dbSelect).toHaveBeenCalledWith({ id: schema.conversations.id });
+    expect(mocks.dbFrom).toHaveBeenCalledWith(schema.conversations);
+    expect(mocks.dbWhere).toHaveBeenCalledWith({
+      op: "and",
+      conditions: [
+        { op: "eq", left: schema.conversations.id, right: "conversation-1" },
+        { op: "eq", left: schema.conversations.userId, right: "user-1" },
+      ],
+    });
+    expect(mocks.dbLimit).toHaveBeenCalledWith(1);
     expect(mocks.storagePut).toHaveBeenCalledWith(
       expect.stringMatching(/^user-1\/.+-hello\.txt$/),
       Buffer.from("hello"),
@@ -134,6 +168,57 @@ describe("POST /api/upload", () => {
     expect(mocks.processFile).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["其他用户", "conversation-foreign"],
+    ["不存在", "conversation-missing"],
+  ])("%s会话返回统一 403 且不产生上传副作用", async (_kind, conversationId) => {
+    const formData = uploadForm();
+    formData.set("conversationId", conversationId);
+    mocks.parseFormData.mockResolvedValue(formData);
+    mocks.dbLimit.mockResolvedValue([]);
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: "会话不存在或无权访问" });
+    expect(mocks.eq).toHaveBeenCalledWith(schema.conversations.id, conversationId);
+    expect(mocks.eq).toHaveBeenCalledWith(schema.conversations.userId, "user-1");
+    expect(mocks.and).toHaveBeenCalledWith(
+      { op: "eq", left: schema.conversations.id, right: conversationId },
+      { op: "eq", left: schema.conversations.userId, right: "user-1" },
+    );
+    expect(mocks.getStorage).not.toHaveBeenCalled();
+    expect(mocks.dbInsert).not.toHaveBeenCalled();
+    expect(mocks.getQueue).not.toHaveBeenCalled();
+    expect(mocks.processFile).not.toHaveBeenCalled();
+  });
+
+  it("空会话 ID 跳过属主查询并写入 null", async () => {
+    const formData = uploadForm();
+    formData.set("conversationId", "");
+    mocks.parseFormData.mockResolvedValue(formData);
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(200);
+    expect(mocks.dbSelect).not.toHaveBeenCalled();
+    expect(mocks.dbValues).toHaveBeenCalledWith(
+      expect.objectContaining({ conversationId: null }),
+    );
+  });
+
+  it("会话属主查询失败时不产生上传副作用", async () => {
+    const dbError = new Error("db unavailable");
+    mocks.dbLimit.mockRejectedValue(dbError);
+
+    await expect(POST(request())).rejects.toBe(dbError);
+
+    expect(mocks.getStorage).not.toHaveBeenCalled();
+    expect(mocks.dbInsert).not.toHaveBeenCalled();
+    expect(mocks.getQueue).not.toHaveBeenCalled();
+    expect(mocks.processFile).not.toHaveBeenCalled();
+  });
+
   it("DB 插入失败时删除已写入对象并保留原始异常", async () => {
     const dbError = new Error("db unavailable");
     mocks.dbValues.mockRejectedValue(dbError);
@@ -146,15 +231,30 @@ describe("POST /api/upload", () => {
     expect(mocks.getQueue).not.toHaveBeenCalled();
   });
 
-  it("DB 获取失败时也删除已写入对象", async () => {
+  it("DB 获取失败时不写入存储对象", async () => {
     const dbError = new Error("db unavailable");
     mocks.getDb.mockRejectedValue(dbError);
 
     await expect(POST(request())).rejects.toBe(dbError);
 
-    const storagePath = mocks.storagePut.mock.calls[0][0] as string;
-    expect(mocks.storageDelete).toHaveBeenCalledOnce();
-    expect(mocks.storageDelete).toHaveBeenCalledWith(storagePath);
+    expect(mocks.getStorage).not.toHaveBeenCalled();
+    expect(mocks.storagePut).not.toHaveBeenCalled();
+    expect(mocks.storageDelete).not.toHaveBeenCalled();
+    expect(mocks.getQueue).not.toHaveBeenCalled();
+  });
+
+  it("Schema 获取失败时不写入存储对象", async () => {
+    const dbError = new Error("schema unavailable");
+    mocks.getSchema.mockImplementation(() => {
+      throw dbError;
+    });
+
+    await expect(POST(request())).rejects.toBe(dbError);
+
+    expect(mocks.dbSelect).not.toHaveBeenCalled();
+    expect(mocks.getStorage).not.toHaveBeenCalled();
+    expect(mocks.storagePut).not.toHaveBeenCalled();
+    expect(mocks.storageDelete).not.toHaveBeenCalled();
     expect(mocks.getQueue).not.toHaveBeenCalled();
   });
 
@@ -175,13 +275,15 @@ describe("POST /api/upload", () => {
     expect(mocks.getQueue).not.toHaveBeenCalled();
   });
 
-  it("存储写入失败时不触达 DB、补偿删除或队列", async () => {
+  it("存储写入失败时不触达文件插入、补偿删除或队列", async () => {
     const storageError = new Error("storage unavailable");
     mocks.storagePut.mockRejectedValue(storageError);
 
     await expect(POST(request())).rejects.toBe(storageError);
 
-    expect(mocks.getDb).not.toHaveBeenCalled();
+    expect(mocks.getDb).toHaveBeenCalledOnce();
+    expect(mocks.dbSelect).toHaveBeenCalledOnce();
+    expect(mocks.dbInsert).not.toHaveBeenCalled();
     expect(mocks.storageDelete).not.toHaveBeenCalled();
     expect(mocks.getQueue).not.toHaveBeenCalled();
   });

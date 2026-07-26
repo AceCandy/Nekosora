@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/index.md","reason":"按后端规范入口执行最终质量复核。"}
+{"file":".trellis/spec/backend/file-storage.md","reason":"核对上传授权顺序、存储补偿和文件关联行为。"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"核对组合属主查询、Drizzle 用法和数据库失败路径。"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"核对 403 一致性、错误泄露和拒绝路径副作用。"}
+{"file":".trellis/tasks/07-26-magi-project-evolution-round-16/research/upload-conversation-ownership.md","reason":"逐项复核根因、范围、授权条件和测试防回归能力。"}
