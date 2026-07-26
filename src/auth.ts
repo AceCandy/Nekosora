@@ -62,6 +62,16 @@ async function buildAuth(): Promise<AuthInstance> {
       minPasswordLength: 8,
       maxPasswordLength: 128,
     },
+    user: {
+      additionalFields: {
+        status: {
+          type: "string",
+          required: true,
+          defaultValue: "active",
+          input: false,
+        },
+      },
+    },
     session: {
       expiresIn: 60 * 60 * 24 * 7, // 7 天(秒)
       updateAge: 60 * 60 * 24, // 每天刷新一次过期

@@ -79,3 +79,93 @@ function pickDevTrustedOrigin(request?: Request): string[] {
 - **用通配符 pattern 放宽 origin** —— DNS 绕过风险,改用精确 host 正则。
 - **生产部署忘了设正确的 `BETTER_AUTH_URL`** —— 生产不走 dev 放宽逻辑,必须配置正式域名。
 - **改完 auth/next 配置不重启 dev** —— 配置不热更新,改完务必重启。
+
+## Scenario: User Availability And Secure Bootstrap
+
+### 1. Scope / Trigger
+
+- 修改 Better Auth 用户字段、共享 session 边界、API key 鉴权、首管理员 seed 或 Node/worker 启动入口时适用。
+- 目标是让 `user.status = 'active'` 成为 Web session 与 API key 的共同授权谓词,并让生产空库只能用显式强凭据创建首管理员。
+
+### 2. Signatures
+
+- `getSession(): Promise<SessionUser | null>`
+- `verifyKey(rawKey: string): Promise<{ ctx: CallContext; record: ApiKeyRecord } | null>`
+- `resolveSeedAdminCredentials(env: NodeJS.ProcessEnv): { email: string; password: string; name: string }`
+- `validateEnv(): EnvInfo`
+- Better Auth `user.additionalFields.status`: `{ type: "string", required: true, defaultValue: "active", input: false }`
+
+### 3. Contracts
+
+- `status` 是服务端只读字段;客户端注册或资料输入不得写入。共享 `getSession` 必须传 `query.disableCookieCache=true`,且只接受严格等于 `active` 的权威 DB 结果。缺失、未知、disabled 或读取异常都返回 `null`。
+- `verifyKey` 每次只做一次候选读取:按 prefix 查询 enabled key,inner join owner,并约束 `user.status='active'`;命中后才做常量时间 hash 比较。`lastUsedAt` 的 PostgreSQL `UPDATE ... FROM user` 再次约束 key enabled 与 owner active,避免状态在候选读取后变化时写入禁用 key。
+- seed 凭据只在确认数据库无用户后解析。生产环境的 `SEED_ADMIN_PASSWORD` 缺失、trim 后为空或等于公开默认值时必须在创建账号前抛错;非生产保留开发默认值。已有用户不受 seed 密码配置影响。
+- Next instrumentation 必须先对 Edge runtime return;Node 路径安装 process guard 后动态 import `env.ts` 并校验,再动态 import DB bootstrap。worker 必须在 queue/RAG 等模块加载及 `getQueue()` 前校验。
+- instrumentation 的 Node-only 模块继续使用变量路径动态 import;生产构建是 Edge 依赖边界门禁。
+
+### 4. Validation & Error Matrix
+
+| Condition | Result |
+| --- | --- |
+| Session user status is `active` | Return mapped `SessionUser` |
+| Session status is missing, unknown, or `disabled` | Return `null` |
+| Authoritative session read throws | Return `null` |
+| API key disabled or owner non-active | No candidate, no `lastUsedAt` write, return `null` |
+| Active owner and matching enabled key | Return gateway context; best-effort conditional `lastUsedAt` update |
+| Production empty DB with missing/blank/public-default seed password | Throw before auth signup |
+| Existing user in production | Skip seed parsing and account creation |
+| Edge instrumentation | Return before all Node-only imports |
+| Node/worker environment validation fails | Reject before DB/queue business initialization |
+
+### 5. Good / Base / Bad Cases
+
+- Good:管理员禁用用户后,后续 session 权威读取与 API key owner join 都立即拒绝;不需要在各业务路由重复判断。
+- Good:已有用户的生产部署即使没有 `SEED_ADMIN_PASSWORD` 仍能启动,因为不会创建首管理员。
+- Base:active 用户保持原有 Web/API key 行为;开发空库仍可使用兼容默认 seed 凭据。
+- Bad:从 cookie cache 直接授权,或把缺失 `status` 默认成 active。
+- Bad:只检查 `api_keys.enabled`,不检查 key owner 状态。
+- Bad:在空库判断前解析生产 seed 密码,或在 Edge instrumentation 静态导入 DB/env 初始化链。
+
+### 6. Tests Required
+
+- Auth 配置测试断言 `status` 的 type/required/defaultValue/input 字段。
+- Session 单测覆盖 active、disabled、missing、unknown、读取异常,并断言 `disableCookieCache: true`。
+- API key 单测覆盖 active owner 成功、disabled owner 拒绝、拒绝路径零更新,以及条件 `UPDATE ... FROM user` 的 enabled/active 谓词。
+- Seed 单测覆盖生产 missing/blank/public-default 拒绝、生产强密码和开发默认;bootstrap 回归断言生产已有用户不要求 seed 密码。
+- Instrumentation 测试覆盖 Edge no-op、Node guard -> env -> bootstrap 顺序、校验失败阻断;worker 测试覆盖 env -> getQueue 顺序与失败时零资源副作用。
+- 必须运行 `pnpm check`、`pnpm test` 与 `pnpm build`;build 用于保护 Edge 动态 import 边界。
+
+### 7. Wrong vs Correct
+
+Wrong:
+
+```ts
+const session = await auth.api.getSession({ headers });
+const status = session.user.status ?? "active";
+```
+
+Correct:
+
+```ts
+const session = await auth.api.getSession({
+  headers,
+  query: { disableCookieCache: true },
+});
+if (session?.user.status !== "active") return null;
+```
+
+Wrong:
+
+```ts
+const keys = await db.select().from(apiKeys).where(eq(apiKeys.keyPrefix, prefix));
+```
+
+Correct:
+
+```ts
+const keys = await db
+  .select({ key: apiKeys })
+  .from(apiKeys)
+  .innerJoin(user, eq(apiKeys.userId, user.id))
+  .where(and(eq(apiKeys.enabled, true), eq(user.status, "active")));
+```

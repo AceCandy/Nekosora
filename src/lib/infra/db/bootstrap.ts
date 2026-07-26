@@ -492,9 +492,9 @@ async function ensureFirstAdmin(
     return;
   }
 
-  const email = process.env.SEED_ADMIN_EMAIL ?? "admin@nekusora.local";
-  const password = process.env.SEED_ADMIN_PASSWORD ?? "change-me-on-first-login";
-  const name = process.env.SEED_ADMIN_NAME ?? "Administrator";
+  const seedAdminPath = "@/lib/infra/seed-admin";
+  const { resolveSeedAdminCredentials } = await import(seedAdminPath);
+  const { email, password, name } = resolveSeedAdminCredentials(process.env);
 
   console.log(`[bootstrap] 无用户,创建首个管理员 ${email} ...`);
   const { getAuth } = await import("@/auth");

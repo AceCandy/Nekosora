@@ -31,6 +31,10 @@ export async function register(): Promise<void> {
   const { installGlobalErrorGuards } = await import(guardPath);
   installGlobalErrorGuards();
 
+  const envPath = "@/lib/infra/env";
+  const { validateEnv } = await import(envPath);
+  validateEnv();
+
   const hasRedis = !!process.env.REDIS_URL;
   console.log(
     `[instrumentation] Nekusora 启动 | DB=pg | Redis=${hasRedis ? "on" : "off(memory)"} | ` +

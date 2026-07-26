@@ -99,8 +99,9 @@ pnpm dev                      # 启动 http://localhost:3000
 > 首次启动会**自动**创建首个管理员账号(读 `.env.local` 的 `SEED_ADMIN_*`)。
 > PG 模式下连建表也会自动跑(`drizzle migrate`),无需手动 migrate。
 > `pnpm seed` 仅用于手动重置管理员。
+> 生产环境的空库必须显式设置唯一强 `SEED_ADMIN_PASSWORD`;缺失、空白或公开默认值会阻断创建。
 
-首次登录:用 `.env.local` 里 `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` 登录 `/login`。
+首次登录:用 `.env.local` 里配置的 `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` 登录 `/login`。
 
 ### 配置上游 Provider
 
@@ -155,6 +156,7 @@ pnpm worker                    # 另开终端:文件处理队列(pg-boss)
 | `DATA_ENCRYPTION_KEY` | AES-256-GCM 主密钥(64 位 hex) | 必填 |
 | `BETTER_AUTH_SECRET` | 认证密钥 | 必填 |
 | `BETTER_AUTH_URL` | 应用对外根 URL | `http://localhost:3000` |
+| `SEED_ADMIN_PASSWORD` | 空库创建首管理员的密码;生产必须显式设置 | 开发兼容默认值 |
 | `SK_PREFIX` | 签发 API key 前缀 | `sk-` |
 | `STORAGE_DRIVER` | `local` / `s3` / `r2` / `minio` | `local` |
 | `METRICS_ENABLED` | `/metrics` 端点开关 | `true` |
@@ -178,6 +180,7 @@ docker run -p 3000:3000 \
   -e DATABASE_URL=postgresql://user:pass@db:5432/nekusora \
   -e DATA_ENCRYPTION_KEY=$(openssl rand -hex 32) \
   -e BETTER_AUTH_SECRET=$(openssl rand -hex 32) \
+  -e SEED_ADMIN_PASSWORD="$SEED_ADMIN_PASSWORD" \
   nekusora
 ```
 

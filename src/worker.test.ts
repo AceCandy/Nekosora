@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  validateEnv: vi.fn(),
   getQueue: vi.fn(),
   processFile: vi.fn(),
   extractMemories: vi.fn(),
@@ -9,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   startConversationTitleRecovery: vi.fn(),
 }));
 
+vi.mock("@/lib/infra/env", () => ({ validateEnv: mocks.validateEnv }));
 vi.mock("@/lib/infra/queue", () => ({ getQueue: mocks.getQueue }));
 vi.mock("@/lib/rag/process", () => ({ processFile: mocks.processFile }));
 vi.mock("@/lib/memory/extract", () => ({ extractMemories: mocks.extractMemories }));
@@ -25,6 +27,7 @@ vi.mock("@/lib/conversation-title/dispatch", () => ({
 describe("worker lifecycle", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.validateEnv.mockReset();
   });
 
   it("注册任务后启动恢复，并单飞执行有序关闭", async () => {
@@ -46,7 +49,13 @@ describe("worker lifecycle", () => {
     const stopTitleRecovery = vi.fn(async () => {
       calls.push("title-recovery.stop");
     });
-    mocks.getQueue.mockResolvedValue(queue);
+    mocks.validateEnv.mockImplementation(() => {
+      calls.push("env.validate");
+    });
+    mocks.getQueue.mockImplementation(async () => {
+      calls.push("queue.get");
+      return queue;
+    });
     mocks.startFileProcessingRecovery.mockImplementation(() => {
       calls.push("file-recovery.start");
       return stopFileRecovery;
@@ -69,6 +78,8 @@ describe("worker lifecycle", () => {
     await startWorker(runtime);
 
     expect(calls).toEqual([
+      "env.validate",
+      "queue.get",
       "queue.start",
       "queue.work:file-process",
       "queue.work:memory-extract",
@@ -119,6 +130,26 @@ describe("worker lifecycle", () => {
       firstUserMessage: "问题",
       fallbackTitle: "问题",
     })).rejects.toBe(generationError);
+  });
+
+  it("环境校验失败时不获取队列或注册运行时副作用", async () => {
+    const validationError = new Error("invalid environment");
+    mocks.validateEnv.mockImplementation(() => {
+      throw validationError;
+    });
+    const runtime = {
+      on: vi.fn(),
+      exit: vi.fn(),
+    };
+    const { startWorker } = await import("@/worker");
+
+    await expect(startWorker(runtime)).rejects.toBe(validationError);
+
+    expect(mocks.getQueue).not.toHaveBeenCalled();
+    expect(mocks.startFileProcessingRecovery).not.toHaveBeenCalled();
+    expect(mocks.startConversationTitleRecovery).not.toHaveBeenCalled();
+    expect(runtime.on).not.toHaveBeenCalled();
+    expect(runtime.exit).not.toHaveBeenCalled();
   });
 
   it("恢复调度启动失败时停止已启动的队列并保留原错误", async () => {

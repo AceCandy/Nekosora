@@ -12,16 +12,10 @@
 import { eq } from "drizzle-orm";
 import { getDb, getSchema, closeDb } from "@/lib/infra/db";
 import { getAuth } from "@/auth";
+import { resolveSeedAdminCredentials } from "@/lib/infra/seed-admin";
 
 async function main() {
-  const email = process.env.SEED_ADMIN_EMAIL ?? "admin@nekusora.local";
-  const password = process.env.SEED_ADMIN_PASSWORD ?? "change-me-on-first-login";
-  const name = process.env.SEED_ADMIN_NAME ?? "Administrator";
-
   const db = await getDb();
-  const auth = await getAuth();
-  if (!auth) throw new Error("auth 初始化失败");
-
   const schema = getSchema();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const userTable = (schema as any).user;
@@ -29,9 +23,12 @@ async function main() {
   const existing = await db.select().from(userTable).limit(1);
   if (existing.length > 0) {
     console.log(`[seed] 数据库已有用户(${existing.length} 个),跳过管理员创建。`);
-    console.log(`[seed] 如需置管理员:UPDATE "user" SET role='admin' WHERE email='${email}'`);
     return;
   }
+
+  const { email, password, name } = resolveSeedAdminCredentials(process.env);
+  const auth = await getAuth();
+  if (!auth) throw new Error("auth 初始化失败");
 
   console.log(`[seed] 创建管理员 ${email} ...`);
   await auth.api.signUpEmail({ body: { email, password, name } });

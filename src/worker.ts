@@ -14,6 +14,10 @@ interface WorkerRuntime {
 }
 
 export async function startWorker(runtime: WorkerRuntime = process): Promise<void> {
+  const envPath = "@/lib/infra/env";
+  const { validateEnv } = await import(envPath);
+  validateEnv();
+
   const { getQueue } = await import("@/lib/infra/queue");
   const { processFile } = await import("@/lib/rag/process");
   const { startFileProcessingRecovery } = await import("@/lib/rag/recovery");

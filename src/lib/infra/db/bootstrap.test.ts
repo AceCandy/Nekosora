@@ -134,8 +134,10 @@ function migrationLedgerDb(
 }
 
 describe("bootstrapDatabase", () => {
-  it("启动时不全量更新 conversations 生成状态", async () => {
+  it("生产环境已有用户时跳过 seed 凭据要求且不全量更新生成状态", async () => {
     process.env.BOOTSTRAP_SKIP_MIGRATE = "1";
+    process.env.NODE_ENV = "production";
+    delete process.env.SEED_ADMIN_PASSWORD;
     const schema = {
       user: { id: "user.id", email: "user.email" },
       renderStyles: {

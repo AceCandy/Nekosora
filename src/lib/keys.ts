@@ -120,7 +120,7 @@ export async function setKeyEnabled(userId: string, keyId: string, enabled: bool
 /**
  * 校验原始 key 字符串,返回调用上下文。失败返回 null。
  *
- * 策略:sha256(raw) → 遍历该 hash 匹配的行 → 常量时间比对 → 校验 enabled → 更新 lastUsedAt。
+ * 策略:sha256(raw) → 查询 active 用户的 enabled key 候选 → 常量时间比对 → 更新 lastUsedAt。
  * 用 prefix 先缩小候选集(prefix 索引)。
  */
 export async function verifyKey(rawKey: string): Promise<{
@@ -135,21 +135,35 @@ export async function verifyKey(rawKey: string): Promise<{
   const keyHash = hashSecret(rawKey);
   const prefix = makePrefix(rawKey);
 
-  // 按 prefix 缩小候选范围。
+  // 按 prefix 缩小候选范围,并在同一次读取中约束 key 与所属用户均可用。
   const candidates = await db
-    .select()
+    .select({ key: s.apiKeys })
     .from(s.apiKeys)
-    .where(eq(s.apiKeys.keyPrefix, prefix));
+    .innerJoin(s.user, eq(s.apiKeys.userId, s.user.id))
+    .where(
+      and(
+        eq(s.apiKeys.keyPrefix, prefix),
+        eq(s.apiKeys.enabled, true),
+        eq(s.user.status, "active"),
+      ),
+    );
 
-  for (const row of candidates as ApiKeyRecord[]) {
+  for (const { key: row } of candidates as { key: ApiKeyRecord }[]) {
     if (safeEqual(row.keyHash, keyHash)) {
-      if (!row.enabled) return null;
       // 更新最后使用时间(失败不阻断)。
       try {
         await db
           .update(s.apiKeys)
           .set({ lastUsedAt: new Date() })
-          .where(eq(s.apiKeys.id, row.id));
+          .from(s.user)
+          .where(
+            and(
+              eq(s.apiKeys.id, row.id),
+              eq(s.apiKeys.enabled, true),
+              eq(s.apiKeys.userId, s.user.id),
+              eq(s.user.status, "active"),
+            ),
+          );
       } catch {
         /* ignore */
       }

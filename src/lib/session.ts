@@ -15,15 +15,19 @@ export interface SessionUser {
 export async function getSession(): Promise<SessionUser | null> {
   try {
     const auth = await getAuth();
-    const session = await auth.api.getSession({ headers: await headers() });
+    const session = await auth.api.getSession({
+      headers: await headers(),
+      query: { disableCookieCache: true },
+    });
     if (!session?.user) return null;
     const u = session.user as Record<string, unknown>;
+    if (u.status !== "active") return null;
     return {
       id: u.id as string,
       email: u.email as string,
       name: u.name as string,
       role: (u.role as string) ?? "user",
-      status: (u.status as string) ?? "active",
+      status: u.status,
     };
   } catch {
     return null;
