@@ -1826,3 +1826,36 @@ setKeyEnabled 接收 userId 并在更新 SQL 中同时限制 key ID 与属主，
 ### Next Steps
 
 - None - task complete
+
+
+## Session 56: MAGI 项目进化第 21 轮
+
+**Date**: 2026-07-26
+**Task**: MAGI 项目进化第 21 轮
+**Branch**: `opt0725`
+
+### Summary
+
+修复会话标题后台任务吞掉生成失败的问题，恢复 pg-boss 有限重试，并补充跨层回归测试与队列契约。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `14e76d8` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
