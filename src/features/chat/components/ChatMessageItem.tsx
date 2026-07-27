@@ -312,22 +312,24 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
   const canShowMenu = canEdit || canDelete;
 
   return (
-    <div id={domId} className={clsx("flex gap-4 animate-in fade-in duration-200 scroll-mt-4", role === "user" ? "justify-end" : "justify-start")}>
+    <div id={domId} className={clsx("relative flex animate-in fade-in duration-200 scroll-mt-4", role === "user" ? "justify-end" : "justify-start")}>
       {role === "assistant" && (
-        <button
-          type="button"
-          onClick={() => {
-            if (!domId) return;
-            document.getElementById(domId)?.scrollIntoView({ behavior: "smooth", block: "start" });
-          }}
-          className="sticky top-4 w-7 h-7 rounded-full border border-sora-blue/10 bg-sora-blue/[0.04] hover:bg-sora-blue/[0.08] hidden sm:flex items-center justify-center shrink-0 self-start mt-0.5 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
-          title={t("scrollToReplyTop")}
-          aria-label={t("scrollToReplyTop")}
-        >
-          <Sparkles className="w-3.5 h-3.5 text-sora-blue" aria-hidden="true" />
-        </button>
+        <div className="absolute inset-y-0 -left-11 hidden w-7 @min-[54rem]:block">
+          <button
+            type="button"
+            onClick={() => {
+              if (!domId) return;
+              document.getElementById(domId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
+            className="sticky top-4 mt-0.5 flex h-7 w-7 items-center justify-center rounded-full border border-sora-blue/10 bg-sora-blue/[0.04] cursor-pointer transition-colors hover:bg-sora-blue/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
+            title={t("scrollToReplyTop")}
+            aria-label={t("scrollToReplyTop")}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-sora-blue" aria-hidden="true" />
+          </button>
+        </div>
       )}
-      <div className={clsx("space-y-2", role === "user" ? "flex flex-col items-end w-full max-w-[82%]" : "flex-1 min-w-0")}>
+      <div className={clsx("space-y-2", role === "user" ? "flex flex-col items-end w-full max-w-[70%]" : "flex-1 min-w-0")}>
         {role === "user" ? (
           /* 用户消息: 可编辑文本气泡 */
           (editing ? (<div className="w-full space-y-1.5">

@@ -285,7 +285,7 @@ export function ChatMessageList({
         <MessageScroller.Viewport
           ref={viewportRef}
           onScroll={handleViewportScroll}
-          className="scrollbar-hidden h-full overflow-y-auto px-6 pt-8 [overflow-anchor:none] md:pt-12"
+          className="scrollbar-hidden @container h-full overflow-y-auto px-6 pt-8 [overflow-anchor:none] md:pt-12"
           style={{ paddingBottom: bottomInset ?? 8 }}
           preserveScrollOnPrepend
         >
