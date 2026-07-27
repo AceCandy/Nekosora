@@ -17,12 +17,12 @@ interface PreviewMediaProps {
 export default function PreviewMedia({ url, mime, filename }: PreviewMediaProps) {
   if (mime.startsWith("image/")) {
     return (
-      <div className="flex items-center justify-center p-4 bg-neutral-50 dark:bg-neutral-950/50">
+      <div className="flex items-center justify-center">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={url}
           alt={filename}
-          className="max-w-full max-h-[70vh] object-contain rounded"
+          className="block max-h-[calc(100dvh-7rem)] max-w-[calc(100vw-2rem)] object-contain"
         />
       </div>
     );

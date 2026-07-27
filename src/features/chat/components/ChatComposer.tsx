@@ -392,8 +392,6 @@ export default function ChatComposer({
                 {t("welcomeTitle")}
               </h1>
             )}
-            <ChatToolbar {...toolbarProps} />
-
             <ChatInputBox
               value={input}
               onChange={setInput}
@@ -404,6 +402,7 @@ export default function ChatComposer({
               onDropFiles={handleUpload}
               cards={cards}
               onCardToggle={handleCardToggle}
+              topContent={<ChatToolbar {...toolbarProps} />}
               leadingControl={<ComposerPlusMenu {...toolbarProps} />}
               trailingControl={<ModelControlMenu {...toolbarProps} />}
             />

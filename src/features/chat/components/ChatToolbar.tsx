@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Loader2, Sparkles, Globe, Library, Wand2, Palette, X, Paperclip, Brain, ChevronDown, Plus, Search, Check } from "lucide-react";
+import { Sparkles, Globe, Library, Wand2, Palette, X, File as FileIcon, Brain, ChevronDown, Plus, Search, Check } from "lucide-react";
 import { clsx } from "clsx";
 import { OptionPicker, type OptionItem } from "@/shared/ui/OptionPicker";
 import { Popover } from "@/shared/ui/Popover";
@@ -36,7 +36,7 @@ export interface ChatToolbarProps {
   onModelPickerToggle: () => void;
   onModelPickerClose: () => void;
 
-  // 已上传附件(仅展示 chip)
+  // 已上传附件
   attached: UploadFileItem[];
   onRemoveAttachment: (id: string) => void;
   onPreviewFile: (file: PreviewableFile) => void;
@@ -95,7 +95,7 @@ export function ChatToolbar(props: ChatToolbarProps) {
   if (selectedCardIds.length === 0 && selectedKbIds.length === 0 && attached.length === 0) return null;
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5 px-2">
+    <div className="flex flex-wrap items-center gap-1.5 px-2 pt-2">
       {selectedCardIds.map((id) => {
         const card = cards.find((c) => c.id === id);
         if (!card) return null;
@@ -132,56 +132,70 @@ export function ChatToolbar(props: ChatToolbarProps) {
         );
       })}
 
-      {/* 附件 chip */}
+      {/* 附件信息卡 */}
       {attached.map((a) => {
-        const isPreviewable = a.status === "uploaded" && a.fileId;
+        const isPreviewable = a.status === "uploaded" && Boolean(a.fileId);
+        const statusLabel = a.status === "pending"
+          ? t("attachPending")
+          : a.status === "uploading"
+            ? t("attachUploading")
+            : a.status === "error"
+              ? t("attachError")
+              : null;
+        const metadata = [
+          attachmentKind(a),
+          formatFileSize(a.file?.size),
+          statusLabel,
+        ].filter(Boolean).join(" · ");
         return (
-          <span
+          <div
             key={a.id}
             className={clsx(
-              "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-ui-caption font-medium transition-colors",
-              a.status === "uploaded" && "bg-sora-blue/[0.04] border-sora-blue/20 text-sora-blue",
-              a.status === "uploading" && "bg-neutral-100 dark:bg-neutral-900 border-morning-mist dark:border-deep-space text-neutral-500",
-              a.status === "pending" && "bg-neku-amber/[0.04] border-neku-amber/20 text-neku-amber",
-              a.status === "error" && "bg-red-500/[0.04] border-red-500/20 text-red-500",
+              "relative flex h-16 w-60 max-w-full min-w-0 items-center rounded-lg p-2 pr-12 transition-colors",
+              a.status === "uploaded" && "bg-neutral-100 dark:bg-white/[0.06]",
+              a.status === "uploading" && "bg-neutral-100 dark:bg-white/[0.06]",
+              a.status === "pending" && "bg-neku-amber/[0.06]",
+              a.status === "error" && "bg-red-500/[0.06]",
             )}
           >
             <button
               type="button"
               disabled={!isPreviewable}
-              onClick={() => isPreviewable && onPreviewFile({ fileId: a.fileId!, filename: a.filename, mime: guessMime(a.filename) })}
-              className="inline-flex items-center gap-1.5 disabled:cursor-default enabled:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue rounded"
+              onClick={() => isPreviewable && onPreviewFile({ fileId: a.fileId!, filename: a.filename, mime: a.file?.type || guessMime(a.filename) })}
+              className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md text-left disabled:cursor-default enabled:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
               title={isPreviewable ? t("attachPreview") : undefined}
             >
-              {a.status === "uploading" ? (
-                <Loader2 className="w-3.5 h-3.5 text-neutral-400 animate-spin" aria-hidden="true" />
-              ) : a.isImage && a.previewUrl ? (
+              {a.isImage && a.previewUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={a.previewUrl} alt={a.filename} className="w-4 h-4 rounded-sm object-cover shrink-0" />
+                <img src={a.previewUrl} alt="" className="h-11 w-11 shrink-0 rounded-md object-cover" />
               ) : (
-                <Paperclip className={clsx(
-                  "w-3 h-3",
-                  a.status === "uploaded" && "text-sora-blue",
-                  a.status === "pending" && "text-neku-amber",
-                  a.status === "error" && "text-red-500",
-                )} aria-hidden="true" />
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-white text-neutral-500 dark:bg-space-ink dark:text-neutral-400">
+                  <FileIcon className="h-5 w-5" aria-hidden="true" />
+                </span>
               )}
-              <span className="max-w-[120px] truncate" title={a.filename}>
-                {a.filename}
-                {a.status === "pending" && ` ${t("attachPending")}`}
-                {a.status === "uploading" && ` ${t("attachUploading")}`}
-                {a.status === "error" && ` ${t("attachError")}`}
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-ui-body font-medium text-space-ink dark:text-nebula-silver" title={a.filename}>
+                  {a.filename}
+                </span>
+                <span className={clsx(
+                  "block truncate text-ui-caption font-normal text-neutral-600 dark:text-neutral-400",
+                  a.status === "pending" && "text-neku-amber dark:text-neku-amber",
+                  a.status === "error" && "text-red-500 dark:text-red-400",
+                )}>
+                  {metadata}
+                </span>
               </span>
             </button>
             <button
+              type="button"
               onClick={() => onRemoveAttachment(a.id)}
-              className="hover:opacity-75 font-semibold p-1.5 -m-1 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-850 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sora-blue cursor-pointer"
+              className="touch-target absolute right-1.5 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-black/[0.05] hover:text-neutral-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:hover:bg-white/[0.08] dark:hover:text-neutral-200"
               title={t("attachRemove")}
               aria-label="移除附件"
             >
-              <X className="w-3.5 h-3.5 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300" aria-hidden="true" />
+              <X className="h-4 w-4" aria-hidden="true" />
             </button>
-          </span>
+          </div>
         );
       })}
     </div>
@@ -477,4 +491,25 @@ function guessMime(filename: string): string {
     csv: "text/csv",
   };
   return map[ext] ?? "application/octet-stream";
+}
+
+function attachmentKind(item: UploadFileItem): string {
+  const filenameParts = item.filename.split(".");
+  const extension = filenameParts.length > 1 ? filenameParts.pop() : undefined;
+  const mimeSubtype = item.file?.type.split("/").pop();
+  return (extension || mimeSubtype || "FILE").toUpperCase();
+}
+
+function formatFileSize(bytes?: number): string | null {
+  if (bytes === undefined) return null;
+  if (bytes < 1024) return `${bytes} B`;
+
+  const units = ["KB", "MB", "GB"];
+  let value = bytes / 1024;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  return `${value.toFixed(1)} ${units[unitIndex]}`;
 }

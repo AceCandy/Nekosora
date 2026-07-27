@@ -15,6 +15,8 @@ interface ModalProps {
    * 标题(显示在 header)。传空字符串可隐藏 header 文字,但仍保留关闭按钮区。
    */
   title?: string;
+  /** 无可见标题时为 dialog 提供可访问名称。 */
+  ariaLabel?: string;
   /**
    * 内容。
    */
@@ -48,6 +50,7 @@ export default function Modal({
   open,
   onClose,
   title,
+  ariaLabel,
   children,
   dialogClassName,
   bodyClassName,
@@ -71,8 +74,12 @@ export default function Modal({
   return (
     <dialog
       ref={ref}
+      aria-label={ariaLabel}
       onClose={onClose}
-      onCancel={onClose}
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
       onClick={(e) => {
         // 点击 backdrop:原生 dialog 元素本身就是 backdrop 区域,event.target === dialog。
         if (e.target === ref.current) onClose();
