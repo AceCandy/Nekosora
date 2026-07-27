@@ -1,7 +1,7 @@
 import { getTranslations } from "next-intl/server";
 import { getVisibleModels, getArtifactsByConversation, getConversationComposerState } from "@/features/chat/actions/conversations";
 import { getVisibleBranch } from "@/features/chat/actions/branch";
-import { createShare } from "@/features/chat/actions/share";
+import { createShare, listConversationShares, revokeShare, type CreateShareInput } from "@/features/chat/actions/share";
 import { listMyCards } from "@/features/panel/cards/actions";
 import { listKnowledgeBases } from "@/lib/knowledge-base/service";
 import { listEnabledOutputModes } from "@/lib/output-modes/service";
@@ -86,9 +86,17 @@ export default async function ChatConversationPage({
   }));
 
   // Server action wrapper for sharing
-  async function handleCreateShare(convId: string, messagePublicIds: string[]) {
+  async function handleCreateShare(input: CreateShareInput) {
     "use server";
-    return createShare(convId, messagePublicIds);
+    return createShare(input);
+  }
+  async function handleListShares(convId: string) {
+    "use server";
+    return listConversationShares(convId);
+  }
+  async function handleRevokeShare(shareId: string) {
+    "use server";
+    return revokeShare(shareId);
   }
 
   // 历史会话列表已上移至 chat/layout 的单栏侧栏,此处只渲染会话头部与聊天区。
@@ -111,6 +119,8 @@ export default async function ChatConversationPage({
           initialReasoningByModelId={composerState.reasoningByModelId}
           conversationId={id}
           createShareAction={handleCreateShare}
+          listSharesAction={handleListShares}
+          revokeShareAction={handleRevokeShare}
           initialMessages={initialMessages}
         />
       </div>

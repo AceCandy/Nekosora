@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"复核迁移不可改写、索引/FK、journal/snapshot 与数据库测试"}
+{"file":".trellis/spec/backend/auth-guidelines.md","reason":"复核分享授权、Cookie、撤销/到期权威检查和敏感信息边界"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"复核 lint/typecheck/test、交互回归和前端质量门槛"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"复核消息外观复用、可访问性、响应式和组件职责"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"复核数据库到公开页面的完整数据流与兼容路径"}

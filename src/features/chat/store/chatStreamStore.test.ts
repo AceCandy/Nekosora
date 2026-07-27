@@ -4,7 +4,9 @@ const mocks = vi.hoisted(() => ({
   consumeChatSSE: vi.fn(),
   handleStreamError: vi.fn(),
   createConversation: vi.fn(),
+  retryFromMessage: vi.fn(),
   getMessageSiblings: vi.fn(),
+  selectMessageVersion: vi.fn(),
 }));
 
 vi.mock("@/features/chat/model/sse", () => ({
@@ -15,9 +17,10 @@ vi.mock("@/features/chat/actions/conversations", () => ({
   createConversation: mocks.createConversation,
 }));
 vi.mock("@/features/chat/actions/branch", () => ({
-  retryFromMessage: vi.fn(),
+  retryFromMessage: mocks.retryFromMessage,
   editMessage: vi.fn(),
   getMessageSiblings: mocks.getMessageSiblings,
+  selectMessageVersion: mocks.selectMessageVersion,
   softDeleteMessage: vi.fn(),
   continueMessage: vi.fn(),
 }));
@@ -125,6 +128,7 @@ describe("chatStreamStore switchVersion toolCalls", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.selectMessageVersion.mockResolvedValue(undefined);
     seedAssistant();
   });
 
@@ -258,6 +262,21 @@ describe("chatStreamStore switchVersion toolCalls", () => {
     expect(msg.feedback).toBeUndefined();
   });
 
+  it("版本选择持久化失败时不切换本地消息", async () => {
+    mocks.getMessageSiblings.mockResolvedValue({
+      current: { publicId: "pub-v1", parentId: "user-1" },
+      siblings: [
+        { publicId: "pub-v1", content: "version 1", reasoning: null, branchReason: null },
+        { publicId: "pub-v2", content: "version 2", reasoning: null, branchReason: "retry" },
+      ],
+    });
+    mocks.selectMessageVersion.mockRejectedValue(new Error("write failed"));
+
+    await useChatStreamStore.getState().switchVersion(key, "pub-v1", "next");
+
+    expect(useChatStreamStore.getState().runtimes[key].messages[0].publicId).toBe("pub-v1");
+  });
+
   it("setMessageFeedbackLocal 只更新目标消息", () => {
     seedAssistant({ feedback: { rating: "up" } });
     useChatStreamStore.setState((s) => ({
@@ -280,5 +299,71 @@ describe("chatStreamStore switchVersion toolCalls", () => {
     const msgs = useChatStreamStore.getState().runtimes[key].messages;
     expect(msgs[0].feedback).toEqual({ rating: "down", reason: "unsafe" });
     expect(msgs[1].feedback).toEqual({ rating: "down" });
+  });
+});
+
+describe("chatStreamStore regenerate version selection", () => {
+  const key = "conversation-regenerate";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useChatStreamStore.setState({
+      runtimes: {
+        [key]: {
+          messages: [{ role: "assistant", publicId: "assistant-old", content: "Old answer" }],
+          streaming: false,
+          abortController: null,
+        },
+      },
+      activeConversationId: key,
+      optimisticConversation: null,
+    });
+    mocks.retryFromMessage.mockResolvedValue({
+      newAssistantPublicId: "assistant-placeholder",
+      parentPublicId: "user-1",
+      messages: [{ role: "user", content: "Question" }],
+    });
+    mocks.selectMessageVersion.mockResolvedValue(undefined);
+    mocks.handleStreamError.mockReturnValue({ content: "[错误] request failed" });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("data: done\n\n")));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("流成功结束后持久化后端返回的真实版本 ID", async () => {
+    mocks.consumeChatSSE.mockImplementationOnce(async (
+      _body: ReadableStream<Uint8Array>,
+      handlers: { onAssistantMessage?: (publicId: string) => void },
+    ) => {
+      handlers.onAssistantMessage?.("assistant-real");
+    });
+
+    await useChatStreamStore.getState().regenerate(key, "assistant-old", "model-a", "model-id-a");
+
+    expect(mocks.selectMessageVersion).toHaveBeenCalledWith("assistant-real");
+    expect(useChatStreamStore.getState().runtimes[key].messages[0].publicId).toBe("assistant-real");
+  });
+
+  it("版本选择持久化失败不把已完成生成标记为失败", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mocks.consumeChatSSE.mockImplementationOnce(async (
+      _body: ReadableStream<Uint8Array>,
+      handlers: { onAssistantMessage?: (publicId: string) => void },
+    ) => {
+      handlers.onAssistantMessage?.("assistant-real");
+    });
+    mocks.selectMessageVersion.mockRejectedValue(new Error("write failed"));
+
+    await useChatStreamStore.getState().regenerate(key, "assistant-old", "model-a", "model-id-a");
+
+    expect(mocks.handleStreamError).not.toHaveBeenCalled();
+    expect(useChatStreamStore.getState().runtimes[key].messages[0]).toMatchObject({
+      publicId: "assistant-real",
+      content: "",
+    });
+    expect(consoleError).toHaveBeenCalledWith("persist regenerated version failed:", expect.any(Error));
+    consoleError.mockRestore();
   });
 });

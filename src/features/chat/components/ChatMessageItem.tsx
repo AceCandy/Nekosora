@@ -13,6 +13,7 @@ import { FEEDBACK_REASONS, type FeedbackReason } from "@/features/chat/model/fee
 import { setMessageFeedback } from "@/features/chat/actions/feedback";
 
 import { copyToClipboard } from "@/shared/lib/clipboard";
+import { ASSISTANT_MESSAGE_CLASS, USER_MESSAGE_BUBBLE_CLASS } from "@/features/chat/components/messagePresentation";
 import { useClickOutside } from "@/shared/lib/useClickOutside";
 
 /** 用户消息超过此行数才折叠(长消息默认收起,避免撑高会话)。 */
@@ -392,7 +393,8 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
                 setUserMsgExpanded((v) => !v);
               }}
               className={clsx(
-                "relative rounded-2xl bg-neutral-900 text-white px-4 py-2.5 dark:bg-white dark:text-black shadow-none border border-transparent text-ui-reading leading-7 whitespace-pre-wrap [overflow-wrap:anywhere] overflow-hidden transition-[max-height] duration-300 ease-out",
+                USER_MESSAGE_BUBBLE_CLASS,
+                "transition-[max-height] duration-300 ease-out",
                 userMsgCanCollapse && "cursor-pointer",
               )}
               style={
@@ -452,7 +454,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
         ) : (
           /* Assistant 消息: 流式 markdown 渲染 */
           (<div className={clsx(
-            "text-neutral-800 dark:text-neutral-200 text-ui-reading leading-7",
+            ASSISTANT_MESSAGE_CLASS,
             renderStyleClass && `rs-${renderStyleClass}`,
           )}>
             {hasReasoning && (

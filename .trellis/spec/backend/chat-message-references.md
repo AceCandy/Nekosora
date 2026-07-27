@@ -9,10 +9,7 @@ Apply this contract when `/api/chat`, branch actions, or message-tree traversal 
 - `findConversationMessage(db, schema, conversationId, { publicId })`
 - `findConversationMessage(db, schema, conversationId, { id })`
 - `withConversationMessageWrite(db, schema, conversationId, userId, operation): Promise<T | null>`
-- `createShare(conversationId, messagePublicIds): Promise<string>`
-- `getShare(shareId): Promise<{ title; model; messages } | null>`
 - `revokeShare(shareId): Promise<void>`
-- `conversation_shares.message_snapshots_json`: nullable JSONB array of `{ publicId, role, content }`
 - `softDeleteMessage(messagePublicId): Promise<string[]>`
 - Exactly one identifier is supplied; the result is a message row or `null`.
 
@@ -35,12 +32,7 @@ Apply this contract when `/api/chat`, branch actions, or message-tree traversal 
 - A final chat persistence conflict sets `persistenceFailed`, emits an error frame, suppresses `[DONE]`, clears the run heartbeat, and finalizes the run as failed. Sidebar `generating` is derived from any remaining fresh running lease rather than cleared by this request.
 - Required assistant/message persistence remains an unbounded correctness gate: `[DONE]` is emitted only after that persistence succeeds and the bounded run-finalize attempt returns. The fallback conversation `updatedAt` write after a persistence failure is best-effort and must release the caller after the shared 5-second budget; timeout still suppresses `[DONE]` and proceeds to failed-run finalization.
 - `softDeleteMessage` resolves the target with one query that joins `messages.conversation_id = conversations.id` and filters `conversations.user_id = session.user.id`; missing and foreign targets therefore use the same query path and throw `消息不存在` before role validation.
-- Share creation receives the ordered public IDs currently visible in the client runtime; streaming, empty, or partially persisted views remain disabled and must not create partial snapshots.
-- The server authorizes the complete submitted set with `conversationId + deletedAt IS NULL + publicId IN (...)`. Empty, duplicate, missing, deleted, cross-conversation, or cross-user IDs throw `分享消息无效` before insert.
-- Database result order is validation-only. Both snapshot ID arrays preserve the client-visible order so a switched assistant version replaces, rather than accompanies, its hidden sibling.
-- New shares persist ordered message bodies from the validated database rows in `message_snapshots_json`; later user edits and assistant continuations must not change the shared body.
-- `message_snapshots_json IS NULL` identifies historical shares and keeps their existing dynamic body lookup. Do not backfill current message bodies as if they were creation-time snapshots.
-- Public share reads query the stored public IDs inside the share conversation without discarding `deletedAt`. For new body snapshots, an existing row with non-null `deletedAt` hides the snapshot, while a physically missing row remains frozen because branch editing deletes descendants. Historical null snapshots still require an existing row with null `deletedAt`.
+- Conversation sharing, persisted version selection, snapshot/live/legacy behavior, and anonymous access controls are governed by [Conversation Sharing](./conversation-sharing.md). Share creation derives the visible branch on the server; it does not trust client-submitted message IDs or bodies.
 - Share revocation resolves the share, loads its associated conversation, and verifies `conversation.userId === session.user.id` before updating the share row.
 
 ## 4. Validation & Error Matrix
@@ -61,8 +53,6 @@ Apply this contract when `/api/chat`, branch actions, or message-tree traversal 
 | branch retry / edit / continue target | Authorized current conversation | Throw `消息不存在` before mutation |
 | soft-delete target | `publicId` + conversation owned by session user, then `role='user'` | Missing/foreign: `消息不存在`; owned non-user: `仅支持删除用户消息`; no update |
 | sibling `parentId` query | Original message conversation | Return only same-conversation siblings |
-| share message snapshot | Owned conversation + non-empty unique visible IDs, all matching `conversationId + deletedAt IS NULL` | Throw `分享消息无效`; no insert |
-| public share message read | Share conversation + stored public IDs; distinguish existing active, existing soft-deleted, and physically missing rows | New snapshot: hide only explicit soft-delete tombstones; historical null snapshot: return only existing active rows |
 | share revocation | Share conversation owned by session user | Throw `无权操作` before update |
 
 ## 5. Good / Base / Bad Cases
@@ -73,11 +63,6 @@ Apply this contract when `/api/chat`, branch actions, or message-tree traversal 
 - Good: two continuations generated from the same assistant prefix yield at most one persisted update; the losing response ends with an error and no `[DONE]`.
 - Good: an authenticated user cannot revoke a share belonging to another user's conversation.
 - Good: deleting a foreign message ID and deleting a missing ID execute the same owner-scoped lookup and return the same error.
-- Good: creating a share publishes only the ordered message versions visible when the user clicks Share; hidden regenerated siblings stay private.
-- Good: editing or continuing a message after creating a new share does not rewrite that share's body.
-- Good: editing a shared user message may physically delete its assistant descendants, but the new share keeps those frozen descendant bodies.
-- Base: a historical share with `message_snapshots_json IS NULL` remains readable through its stored message IDs and current bodies.
-- Good: deleting a message after share creation removes it from the existing public link.
 - Base: normal send, retry, edit, continue, sibling lookup, and owner share revocation preserve existing behavior.
 - Bad: querying by globally unique public ID alone allows cross-conversation edges that branch traversal can later follow.
 - Bad: re-querying immediately before a write without a shared lock or atomic condition leaves another TOCTOU window between that query and the write.
@@ -85,11 +70,6 @@ Apply this contract when `/api/chat`, branch actions, or message-tree traversal 
 - Bad: checking only the assistant id on continuation permits soft-deleted rows to be rewritten and concurrent continuations to overwrite each other.
 - Bad: treating `requireSession()` alone as authorization allows any authenticated user to mutate another user's share by `shareId`.
 - Bad: loading a message globally and checking its conversation in a second query still leaks existence through query count/timing, even if both paths use the same error text.
-- Bad: selecting every message by `conversationId` publishes regenerated siblings hidden from the current UI.
-- Bad: accepting the subset returned by an owner-scoped query creates a partial or cross-conversation snapshot; the validated set must exactly match the submitted set.
-- Bad: filtering only at share creation leaves later soft-deleted content readable through existing links.
-- Bad: querying only `deletedAt IS NULL` makes explicit soft deletes and branch-edit hard deletes both look absent, so frozen descendant bodies disappear.
-- Bad: backfilling historical shares with current bodies falsely labels upgrade-time content as a creation-time snapshot.
 
 ## 6. Tests Required
 
@@ -98,12 +78,7 @@ Apply this contract when `/api/chat`, branch actions, or message-tree traversal 
 - Soft-delete tests assert the target query joins conversations with the current `userId`, missing/foreign user/foreign non-user IDs all throw `消息不存在` without update, and owner role/subtree behavior remains unchanged.
 - Sibling tests assert the parent query includes the original message's `conversationId`.
 - Sibling tests assert the initial target lookup excludes `deletedAt` tombstones and stops before conversation, tool-call, or feedback queries when absent.
-- Share creation tests assert the message query combines `conversationId`, `isNull(deletedAt)`, and `inArray(publicId, submittedIds)`; database result order may differ, but both stored ID lists retain submitted order.
-- Share creation tests reject empty, duplicate, partial/foreign, and foreign-owner inputs before insert. Store tests prove version switching replaces the runtime `publicId` consumed by the share caller.
-- Public share read tests assert the state query combines the share conversation ID with `inArray(publicId, storedIds)` and explicitly selects `deletedAt`.
-- Public share read tests use different snapshot and live bodies for both user and assistant messages, assert the snapshot bodies win for new shares, and assert soft-deleted snapshot entries remain hidden.
-- Public share read tests omit a snapshotted assistant row to model branch-edit hard deletion and assert its frozen body remains in order.
-- Compatibility tests set `message_snapshots_json` to null and assert historical shares return only existing, non-deleted live bodies in stored ID order.
+- Sharing tests follow [Conversation Sharing](./conversation-sharing.md); this document only retains the owner-isolation requirement for share mutation.
 - Share action tests cover both foreign-owner rejection without update and successful owner revocation.
 - Search `/api/chat` for direct message public-ID lookups; none may remain outside the helper.
 - Typecheck must preserve explicit row-field narrowing from `Record<string, unknown>`.
@@ -176,49 +151,6 @@ const [conversation] = await db.select().from(s.conversations)
 if (!conversation || conversation.userId !== user.id) {
   throw new Error("无权操作");
 }
-```
-
-```typescript
-// Wrong:server-side conversation scans publish hidden regenerated siblings.
-const messageIds = (await db.select({ publicId: s.messages.publicId })
-  .from(s.messages)
-  .where(eq(s.messages.conversationId, conversationId)))
-  .map((message) => message.publicId);
-
-// Correct:the client supplies visible order; the server validates the complete set.
-const visibleMessages = await db.select({ publicId: s.messages.publicId })
-  .from(s.messages)
-  .where(and(
-    eq(s.messages.conversationId, conversationId),
-    isNull(s.messages.deletedAt),
-    inArray(s.messages.publicId, messagePublicIds),
-  ));
-if (visibleMessages.length !== messagePublicIds.length) {
-  throw new Error("分享消息无效");
-}
-const messageIds = messagePublicIds;
-```
-
-```typescript
-// Wrong:new shares keep following edits because only message IDs are stored.
-await db.insert(s.conversationShares).values({ messageIdsJson: messageIds });
-
-// Correct:freeze validated rows in client-visible order; reads still filter by live undeleted IDs.
-const snapshotsById = new Map(visibleMessages.map((message) => [message.publicId, message]));
-const messageSnapshotsJson = messageIds.map((id) => snapshotsById.get(id));
-await db.insert(s.conversationShares).values({ messageIdsJson: messageIds, messageSnapshotsJson });
-```
-
-```typescript
-// Wrong:both soft-deleted and physically missing rows disappear from this result.
-const current = await db.select().from(s.messages)
-  .where(and(eq(s.messages.conversationId, conversationId), isNull(s.messages.deletedAt)));
-
-// Correct:retain deletion state; only an explicit tombstone retracts a new frozen snapshot.
-const current = await db.select({ publicId: s.messages.publicId, deletedAt: s.messages.deletedAt })
-  .from(s.messages)
-  .where(and(eq(s.messages.conversationId, conversationId), inArray(s.messages.publicId, messageIds)));
-const visibleSnapshots = snapshots.filter((snapshot) => !byPublicId.get(snapshot.publicId)?.deletedAt);
 ```
 
 ```typescript

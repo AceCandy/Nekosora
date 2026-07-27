@@ -16,6 +16,7 @@ import { useChatStreamStore } from "@/features/chat/store/chatStreamStore";
 import { setConversationOutputMode, setConversationRenderStyle, setConversationModel, setConversationWebSearch, setConversationComposerState, setConversationModelReasoning } from "@/features/chat/actions/conversations";
 import type { ChatMessage, ModelOption, CardOption, KnowledgeBaseOption, OutputModeOption, RenderStyleOption } from "@/features/chat/model/types";
 import type { ReasoningLevel } from "@/db/types";
+import type { ConversationShareListItem, CreateShareInput } from "@/features/chat/actions/share";
 import { resolveReasoningForModel } from "@/lib/reasoning";
 
 export type { ChatMessage, ModelOption, CardOption, KnowledgeBaseOption, OutputModeOption, RenderStyleOption } from "@/features/chat/model/types";
@@ -49,7 +50,9 @@ interface ChatComposerProps {
   /** 当前会话标题;新会话未传时使用既有翻译。 */
   initialTitle?: string;
   /** 分享当前会话的 server action(由 page 提供,ChatHeader 用)。 */
-  createShareAction: (id: string, messagePublicIds: string[]) => Promise<string>;
+  createShareAction: (input: CreateShareInput) => Promise<ConversationShareListItem>;
+  listSharesAction: (conversationId: string) => Promise<ConversationShareListItem[]>;
+  revokeShareAction: (shareId: string) => Promise<void>;
   initialMessages?: ChatMessage[];
 }
 
@@ -77,6 +80,8 @@ export default function ChatComposer({
   conversationId: initialConvId,
   initialTitle,
   createShareAction,
+  listSharesAction,
+  revokeShareAction,
   initialMessages = [],
 }: ChatComposerProps) {
   const t = useTranslations("chat");
@@ -323,9 +328,7 @@ export default function ChatComposer({
     onReasoningChange: handleReasoningChange,
   };
   const isEmptyConversation = runtime.messages.length === 0;
-  const shareMessagePublicIds = runtime.streaming || runtime.messages.some((message) => !message.publicId)
-    ? []
-    : runtime.messages.map((message) => message.publicId!);
+  const canShare = !runtime.streaming && runtime.messages.length > 0 && runtime.messages.every((message) => message.publicId);
 
   return (
     <div className="flex-1 flex h-full bg-nebula-white dark:bg-twilight-obsidian transition-colors duration-250">
@@ -335,8 +338,12 @@ export default function ChatComposer({
           <ChatHeader
             title={conversationTitle}
             conversationId={activeConvId}
-            messagePublicIds={shareMessagePublicIds}
+            canShare={canShare}
+            renderStyles={renderStyles}
+            currentRenderStyleId={renderStyleId}
             createShareAction={createShareAction}
+            listSharesAction={listSharesAction}
+            revokeShareAction={revokeShareAction}
           />
         )}
         <ChatMessageList

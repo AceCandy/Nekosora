@@ -13,17 +13,24 @@ export async function copyToClipboard(text: string): Promise<boolean> {
       // 权限被拒等场景,继续走 execCommand 兜底
     }
   }
+  let textarea: HTMLTextAreaElement | null = null;
+  let appended = false;
   try {
-    const textarea = document.createElement("textarea");
+    textarea = document.createElement("textarea");
     textarea.value = text;
     textarea.style.position = "fixed";
     textarea.style.opacity = "0";
     document.body.appendChild(textarea);
+    appended = true;
     textarea.select();
-    const ok = document.execCommand("copy");
-    document.body.removeChild(textarea);
-    return ok;
+    return document.execCommand("copy");
   } catch {
     return false;
+  } finally {
+    if (appended && textarea) {
+      try {
+        document.body.removeChild(textarea);
+      } catch { /* cleanup best effort */ }
+    }
   }
 }

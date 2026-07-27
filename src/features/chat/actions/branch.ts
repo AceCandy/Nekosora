@@ -10,6 +10,8 @@ import {
   normalizeMessageFeedback,
   type MessageFeedback,
 } from "@/features/chat/model/feedback";
+import type { MessageVersionSelections } from "@/db/types";
+import { resolveVisibleBranch } from "@/features/chat/lib/visible-branch";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const S = () => getSchema() as any;
@@ -214,6 +216,37 @@ export async function getMessageSiblings(messagePublicId: string): Promise<{
     current: { publicId: msg.publicId, parentId: msg.parentId },
     siblings,
   };
+}
+
+/** 持久化当前会话选中的 assistant 消息版本。 */
+export async function selectMessageVersion(messagePublicId: string): Promise<void> {
+  const user = await requireSession();
+  const db = await getDb();
+  const s = S();
+
+  await db.transaction(async (tx: typeof db) => {
+    const [message] = await tx
+      .select()
+      .from(s.messages)
+      .where(and(eq(s.messages.publicId, messagePublicId), isNull(s.messages.deletedAt)))
+      .limit(1);
+    if (!message || message.role !== "assistant") throw new Error("消息不存在");
+
+    const [conversation] = await tx
+      .select()
+      .from(s.conversations)
+      .where(eq(s.conversations.id, message.conversationId))
+      .limit(1)
+      .for("update");
+    if (!conversation || conversation.userId !== user.id) throw new Error("无权操作");
+
+    const key = message.parentId ?? "__root__";
+    const selections = (conversation.messageVersionSelections ?? {}) as MessageVersionSelections;
+    await tx
+      .update(s.conversations)
+      .set({ messageVersionSelections: { ...selections, [key]: message.publicId } })
+      .where(eq(s.conversations.id, message.conversationId));
+  });
 }
 
 /**
@@ -422,46 +455,10 @@ export async function getVisibleBranch(conversationId: string): Promise<{
     .where(and(eq(s.messages.conversationId, conversationId), isNull(s.messages.deletedAt)))
     .orderBy(s.messages.createdAt)) as Record<string, unknown>[];
 
-  if (allMsgs.length === 0) return { messages: [], versionMap: {} };
-
-  // 找最新叶子:没有其他消息以它为 parent 的节点中,createdAt 最大者。
-  const parentIds = new Set(
-    allMsgs.map((m) => m.parentId as string | null).filter((x): x is string => Boolean(x)),
+  const { messages: mainMessages, versionMap } = resolveVisibleBranch(
+    allMsgs,
+    conv.messageVersionSelections as MessageVersionSelections | null,
   );
-  const leaves = allMsgs.filter((m) => !parentIds.has(m.id as string));
-  // 叶子中取 createdAt 最大;无叶子(理论上仅成环)退化为全量最后一条
-  const latest = (leaves.length > 0 ? leaves : allMsgs).reduce((a, b) =>
-    new Date(b.createdAt as string) > new Date(a.createdAt as string) ? b : a,
-  );
-
-  // 从 latest 沿 parentId 回溯到根,收集主线 id 集合
-  const mainLineIds = new Set<string>();
-  let cursor: string | null = latest.id as string;
-  while (cursor) {
-    if (mainLineIds.has(cursor)) break; // 防环
-    mainLineIds.add(cursor);
-    const node = allMsgs.find((m) => m.id === cursor);
-    cursor = (node?.parentId as string | null) ?? null;
-  }
-
-  const mainMessages = allMsgs.filter((m) => mainLineIds.has(m.id as string));
-
-  // 为每个主线上 assistant 的 parent 计算兄弟版本:统计同 parentId 的 assistant 数。
-  // 主线上某 assistant 的可见版本 = 该 parentId 下 createdAt 最大的 assistant。
-  const versionMap: Record<string, { current: number; total: number }> = {};
-  // 按 parent 分组 assistant(全量,不限主线)
-  const siblingsByParent = new Map<string, Record<string, unknown>[]>();
-  for (const m of allMsgs) {
-    if (m.role !== "assistant") continue;
-    const pid = (m.parentId as string | null) ?? "__root__";
-    (siblingsByParent.get(pid) ?? siblingsByParent.set(pid, []).get(pid)!).push(m);
-  }
-  // allMsgs 已按 createdAt 升序;每组里最后一条即最新版本
-  for (const [, siblings] of siblingsByParent) {
-    if (siblings.length <= 1) continue;
-    const latestSibling = siblings[siblings.length - 1];
-    versionMap[latestSibling.id as string] = { current: siblings.length, total: siblings.length };
-  }
 
   // P1-B: 主线 assistant 的 MCP 工具调用按 runId 批量回填,刷新后恢复 toolCalls。
   // 必须 join runs 并用 conversationId 限定本会话,不能只按客户端/消息上的 runId 列表过滤。

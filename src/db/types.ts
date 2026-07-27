@@ -103,6 +103,21 @@ export interface ConversationShareMessageSnapshot {
   content: unknown;
 }
 
+/** 新版对话分享模式；null 仅用于识别历史分享。 */
+export type ConversationShareMode = "snapshot" | "live";
+
+/** 快照分享冻结的完整输出样式语义。 */
+export interface ConversationShareRenderStyleSnapshot {
+  sourceId: string | null;
+  name: string;
+  cssClass: string;
+  css: string;
+  renderer: "streamdown" | "custom";
+}
+
+/** 会话中每个 assistant 兄弟组当前选中的消息版本。key 为 parent message id。 */
+export type MessageVersionSelections = Record<string, string>;
+
 // 枚举字面量类型(pg 用 pgEnum 存储)。
 export type ApiKeyKind = "master" | "sub";
 export type ProviderProtocol =

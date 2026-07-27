@@ -5,7 +5,7 @@ import { listKnowledgeBases } from "@/lib/knowledge-base/service";
 import { listEnabledOutputModes } from "@/lib/output-modes/service";
 import { listEnabledRenderStyles } from "@/lib/render-styles/service";
 import ChatComposer, { type ModelOption } from "@/features/chat/components/ChatComposer";
-import { createShare } from "@/features/chat/actions/share";
+import { createShare, listConversationShares, revokeShare, type CreateShareInput } from "@/features/chat/actions/share";
 import type { ModelCapabilities } from "@/db/types";
 
 export default async function ChatPage() {
@@ -45,14 +45,22 @@ export default async function ChatPage() {
     icon: s.icon,
   }));
 
-  async function handleCreateShare(convId: string, messagePublicIds: string[]) {
+  async function handleCreateShare(input: CreateShareInput) {
     "use server";
-    return createShare(convId, messagePublicIds);
+    return createShare(input);
+  }
+  async function handleListShares(convId: string) {
+    "use server";
+    return listConversationShares(convId);
+  }
+  async function handleRevokeShare(shareId: string) {
+    "use server";
+    return revokeShare(shareId);
   }
 
   return (
     <div className="flex-1 flex flex-col min-w-0 h-full">
-      <ChatComposer models={models} cards={cards} knowledgeBases={knowledgeBases} outputModes={modes} renderStyles={styles} createShareAction={handleCreateShare} />
+      <ChatComposer models={models} cards={cards} knowledgeBases={knowledgeBases} outputModes={modes} renderStyles={styles} createShareAction={handleCreateShare} listSharesAction={handleListShares} revokeShareAction={handleRevokeShare} />
     </div>
   );
 }

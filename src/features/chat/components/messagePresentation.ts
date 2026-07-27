@@ -1,0 +1,5 @@
+export const USER_MESSAGE_BUBBLE_CLASS =
+  "relative rounded-2xl bg-neutral-900 text-white px-4 py-2.5 dark:bg-white dark:text-black shadow-none border border-transparent text-ui-reading leading-7 whitespace-pre-wrap [overflow-wrap:anywhere] overflow-hidden";
+
+export const ASSISTANT_MESSAGE_CLASS =
+  "text-neutral-800 dark:text-neutral-200 text-ui-reading leading-7";

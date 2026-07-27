@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import { createConversation, type CreateConversationOptions } from "@/features/chat/actions/conversations";
-import { retryFromMessage, editMessage, getMessageSiblings, softDeleteMessage, continueMessage } from "@/features/chat/actions/branch";
+import { retryFromMessage, editMessage, getMessageSiblings, selectMessageVersion, softDeleteMessage, continueMessage } from "@/features/chat/actions/branch";
 import { consumeChatSSE, handleStreamError } from "@/features/chat/model/sse";
 import type { ChatMessage, MessageFeedback, ToolCallRecord } from "@/features/chat/model/types";
 import type { ReasoningLevel } from "@/db/types";
@@ -443,6 +443,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
     set((s) => patchRuntime(s, key, (r) => ({ ...r, abortController: controller })));
 
     try {
+      let generatedAssistantPublicId: string | null = null;
       const result = await retryFromMessage(key, assistantPublicId);
       const assistantIdx = (() => {
         let idx = -1;
@@ -476,13 +477,23 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
         onReasoning: (t) => enqueueDelta(key, assistantIdx, "reasoning", t),
         // 回填后端真实 publicId,覆盖 retryFromMessage 生成的占位 UUID;
         // 否则生成结束后 refreshVersionInfo 拿占位 id 查不到兄弟,版本切换器无法显示。
-        onAssistantMessage: (publicId) => set((s) => patchRuntime(s, key, (r) => {
-          if (assistantIdx < 0 || assistantIdx >= r.messages.length) return r;
-          const copy = [...r.messages];
-          copy[assistantIdx] = { ...copy[assistantIdx], publicId };
-          return { ...r, messages: copy };
-        })),
+        onAssistantMessage: (publicId) => {
+          generatedAssistantPublicId = publicId;
+          set((s) => patchRuntime(s, key, (r) => {
+            if (assistantIdx < 0 || assistantIdx >= r.messages.length) return r;
+            const copy = [...r.messages];
+            copy[assistantIdx] = { ...copy[assistantIdx], publicId };
+            return { ...r, messages: copy };
+          }));
+        },
       });
+      if (generatedAssistantPublicId) {
+        try {
+          await selectMessageVersion(generatedAssistantPublicId);
+        } catch (err) {
+          console.error("persist regenerated version failed:", err);
+        }
+      }
     } catch (err) {
       flushDeltasNow();
       const { content } = handleStreamError(err, "网络错误");
@@ -622,6 +633,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
       if (curIdx < 0) return;
       const nextIdx = direction === "prev" ? (curIdx - 1 + siblings.length) % siblings.length : (curIdx + 1) % siblings.length;
       const target = siblings[nextIdx];
+      await selectMessageVersion(target.publicId);
       set((s) => patchRuntime(s, key, (r) => {
         const idx = r.messages.findIndex((x) => x.publicId === publicId);
         if (idx < 0) return r;

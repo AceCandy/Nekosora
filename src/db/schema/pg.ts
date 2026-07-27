@@ -24,6 +24,9 @@ import type {
   TokenUsage,
   ProcessTrace,
   ConversationShareMessageSnapshot,
+  ConversationShareMode,
+  ConversationShareRenderStyleSnapshot,
+  MessageVersionSelections,
 } from "@/db/types";
 
 // ===========================================================================
@@ -312,6 +315,7 @@ export const conversations = pgTable(
     modelName: text("model_name"), // 记录使用的对外模型名
     outputModeId: text("output_mode_id"), // 当前会话的输出模式(管理员预设的 prompt 模板)
     renderStyleId: text("render_style_id"), // 当前会话的输出样式(管理员预设的渲染 CSS)
+    messageVersionSelections: jsonb("message_version_selections").$type<MessageVersionSelections>(),
     webSearch: boolean("web_search").notNull().default(false), // 当前会话是否启用联网搜索
     composerState: jsonb("composer_state").$type<import("@/db/types").ComposerState>(), // 指令卡 / 知识库等数组型会话状态
     pinned: boolean("pinned").notNull().default(false), // 是否置顶
@@ -520,23 +524,53 @@ export const artifacts = pgTable(
   (t) => [index("artifacts_msg_idx").on(t.messageId), index("artifacts_conv_idx").on(t.conversationId)],
 );
 
-export const conversationShares = pgTable("conversation_shares", {
-  id: text("id").primaryKey().default(sql`gen_random_uuid()`),
-  shareId: text("share_id").notNull().unique(),
-  conversationId: text("conversation_id")
-    .notNull()
-    .references(() => conversations.id, { onDelete: "cascade" }),
-  status: text("status").notNull().default("active"),
-  titleSnapshot: text("title_snapshot"),
-  modelSnapshot: text("model_snapshot"),
-  messageIdsJson: jsonb("message_ids_json").$type<string[]>(),
-  defaultMessageIdsJson: jsonb("default_message_ids_json").$type<string[]>(),
-  messageSnapshotsJson: jsonb("message_snapshots_json").$type<ConversationShareMessageSnapshot[]>(),
-  revokedAt: timestamp("revoked_at", { withTimezone: true }),
-  regeneratedAt: timestamp("regenerated_at", { withTimezone: true }),
-  lastAccessedAt: timestamp("last_accessed_at", { withTimezone: true }),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+export const conversationShares = pgTable(
+  "conversation_shares",
+  {
+    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
+    shareId: text("share_id").notNull().unique(),
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    status: text("status").notNull().default("active"),
+    mode: text("mode").$type<ConversationShareMode>(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    passwordVerifier: text("password_verifier"),
+    renderStyleSnapshot: jsonb("render_style_snapshot").$type<ConversationShareRenderStyleSnapshot>(),
+    titleSnapshot: text("title_snapshot"),
+    modelSnapshot: text("model_snapshot"),
+    messageIdsJson: jsonb("message_ids_json").$type<string[]>(),
+    defaultMessageIdsJson: jsonb("default_message_ids_json").$type<string[]>(),
+    messageSnapshotsJson: jsonb("message_snapshots_json").$type<ConversationShareMessageSnapshot[]>(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    regeneratedAt: timestamp("regenerated_at", { withTimezone: true }),
+    lastAccessedAt: timestamp("last_accessed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("conversation_shares_conversation_created_idx").on(t.conversationId, t.createdAt)],
+);
+
+/** 受密码保护分享的失败解锁窗口；来源仅保存域分离 HMAC 指纹。 */
+export const conversationShareUnlockAttempts = pgTable(
+  "conversation_share_unlock_attempts",
+  {
+    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
+    shareId: text("share_id")
+      .notNull()
+      .references(() => conversationShares.shareId, { onDelete: "cascade" }),
+    scope: text("scope").notNull(),
+    clientFingerprint: text("client_fingerprint").notNull(),
+    windowStartedAt: timestamp("window_started_at", { withTimezone: true }).notNull().defaultNow(),
+    failureCount: integer("failure_count").notNull().default(0),
+    blockedUntil: timestamp("blocked_until", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("conversation_share_unlock_attempts_bucket_idx")
+      .on(t.shareId, t.scope, t.clientFingerprint),
+    index("conversation_share_unlock_attempts_updated_idx").on(t.updatedAt),
+  ],
+);
 
 // ===========================================================================
 // 图像生成任务

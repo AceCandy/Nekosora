@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"遵守 PostgreSQL-only 查询、追加迁移、journal/snapshot 连续性与迁移测试契约"}
+{"file":".trellis/spec/backend/auth-guidelines.md","reason":"遵守服务端权威鉴权与 Cookie 不可替代授权检查的安全边界"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"复用 Server/Client 组件边界、UI 原语、语义 token 与可访问性约定"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"为 Server Action、公开读取和 JSONB 数据建立 zod 与判别联合边界"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"核对 schema、action、UI、i18n、迁移与测试的跨层数据流"}
