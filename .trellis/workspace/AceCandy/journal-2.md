@@ -77,3 +77,24 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 64: 聊天回复运行元数据
+
+**Date**: 2026-07-28
+**Task**: 聊天回复运行元数据
+**Branch**: `main`
+
+### Summary
+
+新增 assistant 回复的模型、Token、耗时与完成时间投影，打通实时及历史链路，移除普通聊天上下文追踪，并完成响应式底部交互。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9590436` | (see git log) |
+
+### Status
+
+[OK] **Completed**
