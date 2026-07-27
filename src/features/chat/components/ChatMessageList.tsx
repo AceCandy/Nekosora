@@ -1,6 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import { useTranslations } from "next-intl";
 import { MessageScroller, useMessageScroller } from "@shadcn/react/message-scroller";
 import { ChevronDown, Copy, Reply, MessagesSquare, Volume2, Square } from "lucide-react";
@@ -13,6 +23,12 @@ import type { ChatMessage, MessageFeedback, ModelOption } from "@/features/chat/
 import type { Artifact } from "@/features/artifacts/ArtifactPanel";
 import { copyToClipboard } from "@/shared/lib/clipboard";
 import { useMessageSpeech } from "@/features/chat/hooks/useMessageSpeech";
+import {
+  CHAT_SCROLL_EDGE_THRESHOLD,
+  captureChatScrollMemory,
+  resolveChatScrollEntry,
+  type ChatScrollMemoryEntry,
+} from "@/features/chat/model/chatScrollMemory";
 
 interface ChatMessageListProps {
   messages: ChatMessage[];
@@ -51,10 +67,39 @@ const SELECTION_SPEECH_ID = "selection";
 const ANCHOR_SCROLL_MARGIN = 64;
 
 /**
- * 跨会话滚动位置记忆:按 conversationId 缓存 scrollTop。模块级(非 ref)以在
- * ChatMessageList 因会话切换重挂载时仍保持记忆。
+ * 跨会话滚动位置记忆:按 conversationId 缓存 scrollTop 与是否在底部。模块级(非 ref)
+ * 以在 ChatMessageList 因会话切换重挂载时仍保持记忆。
  */
-const scrollMemory = new Map<string, number>();
+const scrollMemory = new Map<string, ChatScrollMemoryEntry>();
+
+interface ScrollPositionRestorerHandle {
+  followEnd: () => void;
+  restore: (scrollTop: number) => void;
+}
+
+interface ScrollPositionRestorerProps {
+  viewportRef: RefObject<HTMLDivElement | null>;
+}
+
+/** 将 message-scroller 切到自由滚动后,恢复保存的像素位置。 */
+const ScrollPositionRestorer = forwardRef<ScrollPositionRestorerHandle, ScrollPositionRestorerProps>(
+  function ScrollPositionRestorer({ viewportRef }, ref) {
+    const { scrollToEnd, scrollToStart } = useMessageScroller();
+
+    useImperativeHandle(ref, () => ({
+      followEnd: () => {
+        scrollToEnd({ behavior: "auto" });
+      },
+      restore: (scrollTop) => {
+        if (!scrollToStart({ behavior: "auto" })) return;
+        const viewport = viewportRef.current;
+        if (viewport) viewport.scrollTop = scrollTop;
+      },
+    }), [scrollToEnd, scrollToStart, viewportRef]);
+
+    return null;
+  },
+);
 
 /**
  * 锚定信号消费者:须渲染在 MessageScroller.Provider 内。target 形如 `msg-{i}#{nonce}`。
@@ -184,34 +229,35 @@ export function ChatMessageList({
   };
   // 视口 ref:供选区检测判断选区是否落在消息区内
   const viewportRef = useRef<HTMLDivElement>(null);
+  const scrollPositionRestorerRef = useRef<ScrollPositionRestorerHandle>(null);
 
   // ===== 会话滚动位置记忆 =====
-  // 关闭 message-scroller 的 autoScroll(其 following-bottom 模式会在 messages 变化时持续
-  // scrollToEnd,覆盖恢复的位置),改为手动控制:切会话时 useLayoutEffect 在 fe 首次滚底后
-  // 同步覆盖回记忆位置(无闪烁);流式时仅在用户已贴底时手动跟随(参考 GPT/Claude:用户在
-  // 非底部看历史时不强制跟随)。restoredForConvRef 防止流式结束后重复恢复。
-  const restoredForConvRef = useRef<string | null>(null);
+  // 进入会话时固定读取一次记忆,避免本会话后续 scroll 事件改变恢复动作。
+  const savedScroll = useMemo(
+    () => conversationId ? scrollMemory.get(conversationId) : undefined,
+    [conversationId],
+  );
+  const previousConversationIdRef = useRef(conversationId);
   useLayoutEffect(() => {
-    if (!conversationId || streaming) return;
-    if (restoredForConvRef.current === conversationId) return;
-    restoredForConvRef.current = conversationId;
-    const saved = scrollMemory.get(conversationId);
-    if (saved === undefined) return;
-    const vp = viewportRef.current;
-    if (vp) vp.scrollTop = saved;
-  }, [conversationId, streaming]);
-  // 流式时手动跟随底部(仅当用户已贴底);替代 autoScroll 的自动 scrollToEnd
-  useEffect(() => {
-    if (!streaming) return;
-    const vp = viewportRef.current;
-    if (!vp) return;
-    const atBottom = vp.scrollTop + vp.clientHeight >= vp.scrollHeight - 24;
-    if (atBottom) vp.scrollTop = vp.scrollHeight;
-  }, [messages, streaming]);
+    const previousConversationId = previousConversationIdRef.current;
+    previousConversationIdRef.current = conversationId;
+    if (!conversationId) return;
+
+    const action = resolveChatScrollEntry(savedScroll);
+    if (action.kind === "restore") {
+      scrollPositionRestorerRef.current?.restore(action.scrollTop);
+      return;
+    }
+
+    // 真实会话切换应打开当前末尾;新会话 undefined -> id 回填保留已建立的 user 消息锚点。
+    if (previousConversationId && previousConversationId !== conversationId) {
+      scrollPositionRestorerRef.current?.followEnd();
+    }
+  }, [conversationId, savedScroll]);
   const handleViewportScroll = useCallback(() => {
     const vp = viewportRef.current;
     if (!vp || !conversationId) return;
-    scrollMemory.set(conversationId, vp.scrollTop);
+    scrollMemory.set(conversationId, captureChatScrollMemory(vp));
   }, [conversationId]);
   useEffect(() => {
     const compute = () => {
@@ -229,7 +275,11 @@ export function ChatMessageList({
     return () => document.removeEventListener("mouseup", compute);
   }, []);
   return (
-    <MessageScroller.Provider autoScroll={false} defaultScrollPosition="end" scrollEdgeThreshold={24}>
+    <MessageScroller.Provider
+      autoScroll
+      defaultScrollPosition="end"
+      scrollEdgeThreshold={CHAT_SCROLL_EDGE_THRESHOLD}
+    >
       {/* Root 即消息区外层容器,对话大纲/回到最新按钮锚定其内 */}
       <MessageScroller.Root className="relative flex-1 min-h-0 animate-in fade-in slide-in-from-bottom-2 duration-200">
         <MessageScroller.Viewport
@@ -281,6 +331,8 @@ export function ChatMessageList({
         {/* 对话大纲:贴消息区右边缘(滚动条左侧),hover 整列弹出完整轮次列表。
             高亮/跳转由其内部 useMessageScrollerVisibility/useMessageScroller 承载(在 Provider 内)。 */}
         <ChatOutline messages={messages} streaming={streaming} />
+
+        <ScrollPositionRestorer ref={scrollPositionRestorerRef} viewportRef={viewportRef} />
 
         {/* 重新生成的锚定信号消费者(须在 Provider 内) */}
         <ScrollAnchor target={regenTarget} messages={messages} streaming={streaming} viewportRef={viewportRef} />

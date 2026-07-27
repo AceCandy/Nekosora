@@ -1,0 +1,6 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端技术栈、预开发清单与质量入口"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Chat message-scroller 流式滚动与 ScrollAnchor 契约"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "高频交互控制、ref 与滚动行为约定"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "纯策略模块与同目录测试的归属"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "常量与恢复策略单一事实来源"}
