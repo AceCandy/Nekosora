@@ -280,8 +280,8 @@ export default function Sidebar({
 
   // 合并乐观新会话项。SSR 未带上时插入列表头;SSR 已命中同 id 时,用乐观项 title
   // 覆盖 SSR title —— SSR 的 title 可能停在 "新会话"(revalidatePath 重取早于
-  // maybeGenerateTitle 写库),而乐观项 title 被 SSE title_updated 持续刷新成
-  // fallback / 真实摘要。新会话场景跳过 router.refresh(),SSR 不会自动追上,
+  // 后台 worker 写库),而乐观项 title 由会话标题短轮询刷新成 fallback / 真实摘要。
+  // 新会话场景跳过 router.refresh(),SSR 不会自动追上,
   // 必须由乐观项 title 接管显示,直到整页刷新(store 重置、SSR 读 DB 最新值)。
   const allConversations = useMemo(() => {
     if (!optimisticConversation) return conversations;

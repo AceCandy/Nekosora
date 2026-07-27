@@ -3,6 +3,7 @@ import { eq, and, or, desc, isNull, asc, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { requireSession } from "@/lib/session";
+import { getConversationTitleState } from "@/lib/conversation-title/service";
 import type { ReasoningLevel } from "@/db/types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -130,6 +131,12 @@ export async function getGeneratingStatuses() {
     .from(s.conversations)
     .where(eq(s.conversations.userId, user.id));
   return rows as { id: string; generating: boolean }[];
+}
+
+/** 供新会话短轮询的属主隔离标题状态。 */
+export async function getConversationTitleStateAction(conversationId: string) {
+  const user = await requireSession();
+  return getConversationTitleState(user.id, conversationId);
 }
 
 /** 新会话首次发送时携带的输入区状态(已选输出模式 / 输出样式 / 联网 / 指令卡 / 知识库)。 */

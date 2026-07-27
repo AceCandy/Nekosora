@@ -1,7 +1,11 @@
 "use client";
 
 import { create } from "zustand";
-import { createConversation, type CreateConversationOptions } from "@/features/chat/actions/conversations";
+import {
+  createConversation,
+  getConversationTitleStateAction,
+  type CreateConversationOptions,
+} from "@/features/chat/actions/conversations";
 import { retryFromMessage, editMessage, getMessageSiblings, selectMessageVersion, softDeleteMessage, continueMessage } from "@/features/chat/actions/branch";
 import { consumeChatSSE, handleStreamError } from "@/features/chat/model/sse";
 import type { ChatMessage, MessageFeedback, ToolCallRecord } from "@/features/chat/model/types";
@@ -10,7 +14,7 @@ import type { ReasoningLevel } from "@/db/types";
 /** 新会话(尚无会话 id)在 store 内使用的隔离键。 */
 export const NEW_CONVERSATION_KEY = "__new__";
 
-/** 从首条用户消息派生乐观标题(≤16 字符);后台真实标题写入后由 SSR 覆盖。 */
+/** 从首条用户消息派生乐观标题(≤16 字符);后台真实标题写入后由短轮询覆盖。 */
 function titleFrom(text: string): string {
   const v = text.trim().replace(/\s+/g, " ").replace(/^[\s"'`“”‘’]+|[\s"'`“”‘’]+$/g, "");
   if (!v) return "";
@@ -118,6 +122,73 @@ const MAX_CONTENT_CHARS_PER_FRAME = 15;
  * 另起 setTimeout 兜底,后台时仍能(被降频到 ~1s)推进 flush;前台时 rAF(~16ms)总先到并 cancel 它,基本不触发。
  */
 const STREAM_FLUSH_FALLBACK_MS = 50;
+const TITLE_POLL_INTERVAL_MS = 1_000;
+const TITLE_POLL_MAX_DURATION_MS = 60_000;
+const titlePolls = new Map<string, Promise<void>>();
+
+function waitForTitlePoll(ms: number): Promise<void> {
+  return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
+}
+
+function queryTitleBeforeDeadline(
+  conversationId: string,
+  deadline: number,
+): Promise<
+  | { kind: "state"; state: Awaited<ReturnType<typeof getConversationTitleStateAction>> }
+  | { kind: "error" }
+  | { kind: "deadline" }
+> {
+  return new Promise((resolve) => {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      resolve({ kind: "deadline" });
+      return;
+    }
+
+    const timer = globalThis.setTimeout(() => resolve({ kind: "deadline" }), remaining);
+    void getConversationTitleStateAction(conversationId).then(
+      (state) => {
+        globalThis.clearTimeout(timer);
+        resolve({ kind: "state", state });
+      },
+      () => {
+        globalThis.clearTimeout(timer);
+        resolve({ kind: "error" });
+      },
+    );
+  });
+}
+
+async function pollConversationTitle(conversationId: string): Promise<void> {
+  const deadline = Date.now() + TITLE_POLL_MAX_DURATION_MS;
+  while (Date.now() < deadline) {
+    const result = await queryTitleBeforeDeadline(conversationId, deadline);
+    if (result.kind === "deadline") return;
+    if (result.kind === "state" && result.state) {
+      const state = result.state;
+      useChatStreamStore.setState((current) => {
+        const optimistic = current.optimisticConversation;
+        if (!optimistic || optimistic.id !== conversationId || optimistic.title === state.title) {
+          return current;
+        }
+        return { optimisticConversation: { ...optimistic, title: state.title } };
+      });
+      if (!state.pending) return;
+    }
+
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) return;
+    await waitForTitlePoll(Math.min(TITLE_POLL_INTERVAL_MS, remaining));
+  }
+}
+
+function startConversationTitlePoll(conversationId: string): void {
+  if (titlePolls.has(conversationId)) return;
+  const poll = pollConversationTitle(conversationId).finally(() => {
+    if (titlePolls.get(conversationId) === poll) titlePolls.delete(conversationId);
+  });
+  titlePolls.set(conversationId, poll);
+}
 
 /**
  * 每帧最多一次:把积压增量按会话合并,单次 setState 写回各 runtime。
@@ -374,6 +445,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
       });
       if (!res.ok || !res.body) throw new Error("请求失败");
       hooks?.onAttachmentsConsumed?.(fileIds);
+      if (newConvId) startConversationTitlePoll(newConvId);
 
       const activeKey = resolvedConvId!;
       await consumeChatSSE(res.body, {
@@ -410,9 +482,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
           }));
         },
         onTitleUpdated: (title, conversationId) => {
-          // 后端推来真实标题(fallback + LLM 摘要各一次):覆盖新会话乐观项的截断标题,
-          // Sidebar 订阅 optimisticConversation 即异步刷新,无需 router.refresh(避免重挂)。
-          // 历史会话标题仍由上层 hooks.onTitleUpdated 的 router.refresh() 走 SSR 刷新。
+          // 保留 SSE 标题事件兼容路径；后台 worker 的最终标题由独立短轮询收敛。
           const opt = get().optimisticConversation;
           if (opt && opt.id === conversationId) {
             set({ optimisticConversation: { ...opt, title } });

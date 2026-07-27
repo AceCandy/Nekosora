@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   desc: vi.fn((field: unknown) => ({ op: "desc", field })),
   isNull: vi.fn(),
   asc: vi.fn(),
+  getConversationTitleState: vi.fn(),
   sql: vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => ({
     op: "sql",
     text: strings.join("?"),
@@ -32,8 +33,15 @@ vi.mock("@/lib/infra/db", () => ({
   getDb: mocks.getDb,
   getSchema: mocks.getSchema,
 }));
+vi.mock("@/lib/conversation-title/service", () => ({
+  getConversationTitleState: mocks.getConversationTitleState,
+}));
 
-import { getGeneratingStatuses, listConversations } from "./conversations";
+import {
+  getConversationTitleStateAction,
+  getGeneratingStatuses,
+  listConversations,
+} from "./conversations";
 
 const schema = {
   conversations: {
@@ -108,5 +116,23 @@ describe("会话 generating 派生", () => {
         schema.runs.leaseExpiresAt,
       ]),
     }));
+  });
+});
+
+describe("会话标题状态 action", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.requireSession.mockResolvedValue({ id: "user-1" });
+    mocks.getConversationTitleState.mockResolvedValue({ title: "最终标题", pending: false });
+  });
+
+  it("使用当前会话用户查询标题状态", async () => {
+    await expect(getConversationTitleStateAction("conversation-1")).resolves.toEqual({
+      title: "最终标题",
+      pending: false,
+    });
+
+    expect(mocks.requireSession).toHaveBeenCalledOnce();
+    expect(mocks.getConversationTitleState).toHaveBeenCalledWith("user-1", "conversation-1");
   });
 });

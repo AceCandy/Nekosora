@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   consumeChatSSE: vi.fn(),
   handleStreamError: vi.fn(),
   createConversation: vi.fn(),
+  getConversationTitleStateAction: vi.fn(),
   retryFromMessage: vi.fn(),
   getMessageSiblings: vi.fn(),
   selectMessageVersion: vi.fn(),
@@ -15,6 +16,7 @@ vi.mock("@/features/chat/model/sse", () => ({
 }));
 vi.mock("@/features/chat/actions/conversations", () => ({
   createConversation: mocks.createConversation,
+  getConversationTitleStateAction: mocks.getConversationTitleStateAction,
 }));
 vi.mock("@/features/chat/actions/branch", () => ({
   retryFromMessage: mocks.retryFromMessage,
@@ -25,10 +27,122 @@ vi.mock("@/features/chat/actions/branch", () => ({
   continueMessage: vi.fn(),
 }));
 
-import { useChatStreamStore } from "@/features/chat/store/chatStreamStore";
+import { NEW_CONVERSATION_KEY, useChatStreamStore } from "@/features/chat/store/chatStreamStore";
 import type { ChatMessage, ToolCallRecord } from "@/features/chat/model/types";
 
 const sendOptions = { model: "model-a", modelId: "model-id-a" };
+
+describe("chatStreamStore 会话标题轮询", () => {
+  let conversationSeq = 0;
+  let conversationId = "";
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.clearAllMocks();
+    conversationId = `conversation-title-${++conversationSeq}`;
+    useChatStreamStore.setState({
+      runtimes: {},
+      activeConversationId: null,
+      optimisticConversation: null,
+    });
+    mocks.createConversation.mockResolvedValue(conversationId);
+    mocks.consumeChatSSE.mockResolvedValue(undefined);
+    mocks.handleStreamError.mockReturnValue({ content: "[错误] request failed" });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("data: done\n\n")));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  async function sendFirstMessage() {
+    await useChatStreamStore.getState().send(
+      NEW_CONVERSATION_KEY,
+      "这是第一句话",
+      sendOptions,
+    );
+    await vi.advanceTimersByTimeAsync(0);
+  }
+
+  it("标题完成后更新乐观标题并停止轮询", async () => {
+    mocks.getConversationTitleStateAction
+      .mockResolvedValueOnce({ title: "这是第一句话", pending: true })
+      .mockResolvedValueOnce({ title: "最终摘要标题", pending: false });
+
+    await sendFirstMessage();
+    expect(mocks.getConversationTitleStateAction).toHaveBeenCalledOnce();
+
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(useChatStreamStore.getState().optimisticConversation).toMatchObject({
+      id: conversationId,
+      title: "最终摘要标题",
+    });
+    expect(mocks.getConversationTitleStateAction).toHaveBeenCalledTimes(2);
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(mocks.getConversationTitleStateAction).toHaveBeenCalledTimes(2);
+  });
+
+  it("会话切换不停止原轮询且不串写其他标题", async () => {
+    mocks.getConversationTitleStateAction
+      .mockResolvedValueOnce({ title: "这是第一句话", pending: true })
+      .mockResolvedValueOnce({ title: "原会话最终标题", pending: false });
+
+    await sendFirstMessage();
+    useChatStreamStore.setState({
+      optimisticConversation: { id: "conversation-other", title: "其他会话", createdAt: 1 },
+    });
+
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(mocks.getConversationTitleStateAction).toHaveBeenNthCalledWith(2, conversationId);
+    expect(useChatStreamStore.getState().optimisticConversation).toMatchObject({
+      id: "conversation-other",
+      title: "其他会话",
+    });
+  });
+
+  it("临时查询失败后继续到标题完成", async () => {
+    mocks.getConversationTitleStateAction
+      .mockRejectedValueOnce(new Error("temporary"))
+      .mockResolvedValueOnce({ title: "最终摘要标题", pending: false });
+
+    await sendFirstMessage();
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(mocks.getConversationTitleStateAction).toHaveBeenCalledTimes(2);
+    expect(useChatStreamStore.getState().optimisticConversation?.title).toBe("最终摘要标题");
+  });
+
+  it("达到一分钟上限后停止轮询", async () => {
+    mocks.getConversationTitleStateAction.mockResolvedValue({
+      title: "这是第一句话",
+      pending: true,
+    });
+
+    await sendFirstMessage();
+    await vi.advanceTimersByTimeAsync(60_000);
+    const callsAtDeadline = mocks.getConversationTitleStateAction.mock.calls.length;
+
+    expect(callsAtDeadline).toBeGreaterThan(1);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(mocks.getConversationTitleStateAction).toHaveBeenCalledTimes(callsAtDeadline);
+  });
+
+  it("单次查询永久 pending 时仍在一分钟上限结束", async () => {
+    mocks.getConversationTitleStateAction.mockReturnValue(new Promise(() => undefined));
+
+    await sendFirstMessage();
+    expect(mocks.getConversationTitleStateAction).toHaveBeenCalledOnce();
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    expect(mocks.getConversationTitleStateAction).toHaveBeenCalledOnce();
+  });
+});
 
 describe("chatStreamStore 附件消费边界", () => {
   beforeEach(() => {

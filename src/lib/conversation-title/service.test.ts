@@ -152,7 +152,12 @@ vi.mock("@/lib/infra/db", () => {
 });
 
 import { generateChat } from "@/lib/stream";
-import { generateConversationTitle, maybeGenerateTitle, writeFallbackTitle } from "./service";
+import {
+  generateConversationTitle,
+  getConversationTitleState,
+  maybeGenerateTitle,
+  writeFallbackTitle,
+} from "./service";
 
 const titleJob = {
   id: "job-1",
@@ -181,6 +186,39 @@ beforeEach(() => {
 });
 
 describe("conversation title service", () => {
+  it("按属主返回 pending fallback", async () => {
+    mockData.conversations[0].title = "问题";
+
+    await expect(getConversationTitleState("u1", "c1")).resolves.toEqual({
+      title: "问题",
+      pending: true,
+    });
+  });
+
+  it("任务完成后返回 settled 最终标题", async () => {
+    mockData.conversations[0].title = "最终标题";
+    mockData.titleJobs = [];
+
+    await expect(getConversationTitleState("u1", "c1")).resolves.toEqual({
+      title: "最终标题",
+      pending: false,
+    });
+  });
+
+  it("人工改名后即使 outbox 尚在也返回 settled", async () => {
+    mockData.conversations[0].title = "用户标题";
+
+    await expect(getConversationTitleState("u1", "c1")).resolves.toEqual({
+      title: "用户标题",
+      pending: false,
+    });
+  });
+
+  it("会话不存在或不属于当前用户时不返回状态", async () => {
+    await expect(getConversationTitleState("u2", "c1")).resolves.toBeNull();
+    await expect(getConversationTitleState("u1", "missing")).resolves.toBeNull();
+  });
+
   it("事务写 fallback 与 outbox，worker 按配置 modelId 生成并清理任务", async () => {
     mockData.titleJobs = [];
     const job = await writeFallbackTitle(

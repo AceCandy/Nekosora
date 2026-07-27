@@ -33,6 +33,12 @@ export interface ConversationTitleJob {
   chatModelId?: string;
 }
 
+/** 客户端轮询使用的标题投影；pending=false 表示标题已收敛或已被用户改名。 */
+export interface ConversationTitleState {
+  title: string;
+  pending: boolean;
+}
+
 interface ResolvedTitleModel {
   name: string;
   id?: string;
@@ -101,6 +107,41 @@ export async function writeFallbackTitle(
       });
     return job;
   });
+}
+
+/** 按会话属主读取标题状态，不改变 outbox 或 worker 的生命周期。 */
+export async function getConversationTitleState(
+  userId: string,
+  conversationId: string,
+): Promise<ConversationTitleState | null> {
+  const db = await getDb();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const s = getSchema() as any;
+
+  // 先读 job 再读标题，避免 worker 在两次读取之间完成时把旧 fallback 误判为 settled。
+  const [job] = await db
+    .select({ fallbackTitle: s.conversationTitleJobs.fallbackTitle })
+    .from(s.conversationTitleJobs)
+    .where(and(
+      eq(s.conversationTitleJobs.conversationId, conversationId),
+      eq(s.conversationTitleJobs.userId, userId),
+    ))
+    .limit(1);
+  const [conversation] = await db
+    .select({ title: s.conversations.title })
+    .from(s.conversations)
+    .where(and(
+      eq(s.conversations.id, conversationId),
+      eq(s.conversations.userId, userId),
+    ))
+    .limit(1);
+  if (!conversation) return null;
+
+  const title = String(conversation.title);
+  return {
+    title,
+    pending: !!job && canReplaceTitle(title, String(job.fallbackTitle)),
+  };
 }
 
 /** Worker 调用：用 job id 双重 fencing，并仅覆盖本轮 fallback。 */
