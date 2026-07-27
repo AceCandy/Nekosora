@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 62
+- **Total Sessions**: 63
 - **Last Active**: 2026-07-27
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~58 | Active |
+| `journal-2.md` | ~79 | Active |
 | `journal-1.md` | ~1981 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 63 | 2026-07-27 | 修复会话标题实时更新 | `feacb1e` | `main` |
 | 62 | 2026-07-27 | 修复本地开发 Server Action 清单失配 | `d832cc5` | `main` |
 | 61 | 2026-07-27 | 修复 Chat 流式回复底部跟随 | `c13f4ed` | `main` |
 | 60 | 2026-07-27 | 完成网盘式对话分享 | `aafd181` | `main` |

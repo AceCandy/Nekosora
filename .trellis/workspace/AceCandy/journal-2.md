@@ -56,3 +56,24 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 63: 修复会话标题实时更新
+
+**Date**: 2026-07-27
+**Task**: 修复会话标题实时更新
+**Branch**: `main`
+
+### Summary
+
+新增属主隔离标题状态查询与一分钟有界短轮询，使后台 worker 生成标题后无需刷新即可更新 ChatHeader 和 Sidebar；补充切换、异常、超时与卡住查询回归测试。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `feacb1e` | (see git log) |
+
+### Status
+
+[OK] **Completed**
