@@ -8,7 +8,12 @@ import {
 } from "@/features/chat/actions/conversations";
 import { retryFromMessage, editMessage, getMessageSiblings, selectMessageVersion, softDeleteMessage, continueMessage } from "@/features/chat/actions/branch";
 import { consumeChatSSE, handleStreamError } from "@/features/chat/model/sse";
-import type { ChatMessage, MessageFeedback, ToolCallRecord } from "@/features/chat/model/types";
+import type {
+  ChatMessage,
+  MessageFeedback,
+  MessageRunMetadata,
+  ToolCallRecord,
+} from "@/features/chat/model/types";
 import type { ReasoningLevel } from "@/db/types";
 
 /** 新会话(尚无会话 id)在 store 内使用的隔离键。 */
@@ -294,6 +299,26 @@ function appendContentAt(key: string, idx: number, text: string) {
   });
 }
 
+/** 用终态 run 元数据覆盖目标 assistant,保持其他流式字段不变。 */
+function setRunMetadataAt(
+  key: string,
+  idx: number,
+  runMetadata: MessageRunMetadata,
+): void {
+  useChatStreamStore.setState((state) => {
+    const runtime = state.runtimes[key];
+    if (!runtime || idx < 0 || idx >= runtime.messages.length) return state;
+    const messages = [...runtime.messages];
+    messages[idx] = { ...messages[idx], runMetadata };
+    return {
+      runtimes: {
+        ...state.runtimes,
+        [key]: { ...runtime, messages },
+      },
+    };
+  });
+}
+
 export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
   runtimes: {},
   activeConversationId: null,
@@ -344,13 +369,6 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
     let newConvId: string | null = null;
 
     // 正文/思考增量走合批(enqueueDelta),每帧最多落库一次;其余为低频直接 set。
-    const mergeTraceAt = (k: string, idx: number, trace: ChatMessage["trace"]) =>
-      set((s) => patchRuntime(s, k, (r) => {
-        if (idx < 0 || idx >= r.messages.length) return r;
-        const copy = [...r.messages];
-        copy[idx] = { ...copy[idx], trace };
-        return { ...r, messages: copy };
-      }));
     const setSearchResultsAt = (k: string, idx: number, results: ChatMessage["searchResults"]) =>
       set((s) => patchRuntime(s, k, (r) => {
         if (idx < 0 || idx >= r.messages.length) return r;
@@ -459,7 +477,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
           flushDeltasNow();
           appendContentAt(activeKey, assistantIdx, `\n\n[错误] ${err}`);
         },
-        onTrace: (trace) => mergeTraceAt(activeKey, assistantIdx, trace),
+        onFinish: (metadata) => setRunMetadataAt(activeKey, assistantIdx, metadata),
         onUserMessage: (publicId) => {
           set((s) => patchRuntime(s, activeKey, (r) => {
             if (userMsgIdx >= r.messages.length) return r;
@@ -545,6 +563,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
       await consumeChatSSE(res.body, {
         onDelta: (t) => enqueueDelta(key, assistantIdx, "content", t),
         onReasoning: (t) => enqueueDelta(key, assistantIdx, "reasoning", t),
+        onFinish: (metadata) => setRunMetadataAt(key, assistantIdx, metadata),
         // 回填后端真实 publicId,覆盖 retryFromMessage 生成的占位 UUID;
         // 否则生成结束后 refreshVersionInfo 拿占位 id 查不到兄弟,版本切换器无法显示。
         onAssistantMessage: (publicId) => {
@@ -617,6 +636,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
       await consumeChatSSE(res.body, {
         onDelta: (t) => enqueueDelta(key, assistantIdx, "content", t),
         onReasoning: (t) => enqueueDelta(key, assistantIdx, "reasoning", t),
+        onFinish: (metadata) => setRunMetadataAt(key, assistantIdx, metadata),
       });
     } catch (err) {
       flushDeltasNow();
@@ -649,7 +669,13 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
     if (key === NEW_CONVERSATION_KEY || rt.streaming || !assistantPublicId) return;
     const assistantIdx = rt.messages.findIndex((x) => x.publicId === assistantPublicId);
     if (assistantIdx < 0) return; // 续写必须落在既有 assistant 消息上
-    set((s) => patchRuntime(s, key, (r) => ({ ...r, streaming: true })));
+    set((s) => patchRuntime(s, key, (r) => ({
+      ...r,
+      streaming: true,
+      messages: r.messages.map((message, index) =>
+        index === assistantIdx ? { ...message, runMetadata: undefined } : message,
+      ),
+    })));
     const controller = new AbortController();
     set((s) => patchRuntime(s, key, (r) => ({ ...r, abortController: controller })));
 
@@ -674,6 +700,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
         // 续写增量同样走合批:流式期间该 idx 消息 publicId 稳定(switchVersion 被 streaming 阻止),可省 publicId 校验。
         onDelta: (t) => enqueueDelta(key, assistantIdx, "content", t),
         onReasoning: (t) => enqueueDelta(key, assistantIdx, "reasoning", t),
+        onFinish: (metadata) => setRunMetadataAt(key, assistantIdx, metadata),
       });
       // 续写完整结束:把该 assistant 从 interrupted 转为 success,避免对已补全内容再次续写
       set((s) => patchRuntime(s, key, (r) => ({
@@ -712,8 +739,8 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
           publicId: target.publicId,
           content: target.content,
           reasoning: target.reasoning ?? undefined,
+          runMetadata: target.runMetadata,
           artifacts: undefined,
-          trace: undefined,
           // P1-B: 用目标版本自身的 toolCalls 覆盖,无则清掉旧版本残留。
           toolCalls: target.toolCalls,
           searchResults: undefined,

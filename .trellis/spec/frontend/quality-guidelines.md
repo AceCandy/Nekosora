@@ -30,7 +30,7 @@
 
 - **单测范围**：纯逻辑（stream 解析、错误码映射、token 估算、路由决策）。文件 `<被测名>.test.ts` 与被测文件同目录。
 - **可测试性设计**：需要 DB 的逻辑抽 `repositories/` 接口，测试注入内存 mock（见 `route-repository.test` 配套模式）。
-- **vitest 配置**：`environment: node`，include `src/**/*.test.ts`，别名与 tsconfig 同步映射 `@` / `@shared` / `@features`。
+- **vitest 配置**：`environment: node`，include `src/**/*.test.{ts,tsx}`，别名与 tsconfig 同步映射 `@` / `@shared` / `@features`。含 JSX 的组件测试使用 `.test.tsx`，与被测组件同目录。
 - 组件 / 页面暂不要求测试；流式、鉴权、错误码这类核心契约优先覆盖。
 
 ---
@@ -41,7 +41,7 @@
 - **不要在 Client Component 顶部直接 import 含 `"use server"` 的动作之外还混入 server-only 依赖** → 用专门的 `actions.ts` 集中导出。
 - **不要绕过 `requireSession` 直连 DB** → 所有服务端入口先鉴权。
 - **不要用裸 hex / `text-gray-500` 这类非品牌色** → 用设计 token。
-- **不要把测试放进 `src/**/*.test.ts` 之外** → 会被 vitest 漏掉、也会被 tsconfig include 干扰。
+- **不要把测试放进 `src/**/*.test.{ts,tsx}` 之外** → 会被 vitest 漏掉、也会被 tsconfig include 干扰。
 
 ---
 

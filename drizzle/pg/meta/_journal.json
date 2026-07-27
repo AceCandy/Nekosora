@@ -120,6 +120,13 @@
       "when": 1785123953486,
       "tag": "0016_conversation_share_controls",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1785156047308,
+      "tag": "0017_petite_star_brand",
+      "breakpoints": true
     }
   ]
 }

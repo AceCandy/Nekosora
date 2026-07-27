@@ -49,6 +49,10 @@ const schema = {
   runs: {
     runId: "runs.runId",
     conversationId: "runs.conversationId",
+    platformModelName: "runs.platformModelName",
+    tokenUsage: "runs.tokenUsage",
+    durationMs: "runs.durationMs",
+    completedAt: "runs.completedAt",
   },
   toolCalls: {
     runId: "toolCalls.runId",
@@ -481,6 +485,53 @@ describe("getVisibleBranch 历史 toolCalls 回填", () => {
     },
   ];
 
+  it("按 runId 批量回填会话内运行元数据,保留真实零值", async () => {
+    const completedAt = new Date("2026-07-25T00:00:02.000Z");
+    const select = selectQueue([
+      [{ id: "conversation-1", userId: "user-1" }],
+      baseMsgs,
+      [{
+        runId: "run_a",
+        model: "GPT Test",
+        tokenUsage: {
+          promptTokens: 12,
+          completionTokens: 0,
+          cacheReadTokens: 3,
+          reasoningTokens: 0,
+        },
+        durationMs: 0,
+        completedAt,
+      }],
+      [], // tool_calls
+      [], // feedback
+    ]);
+    mocks.getDb.mockResolvedValue({ select });
+
+    const result = await getVisibleBranch("conversation-1");
+    const assistant = result.messages.find((message) => message.id === "asst-1");
+
+    expect(assistant?.runMetadata).toEqual({
+      model: "GPT Test",
+      tokenUsage: {
+        promptTokens: 12,
+        completionTokens: 0,
+        cacheReadTokens: 3,
+        reasoningTokens: 0,
+      },
+      durationMs: 0,
+      completedAt: "2026-07-25T00:00:02.000Z",
+    });
+    expect(mocks.eq).toHaveBeenCalledWith(schema.runs.conversationId, "conversation-1");
+    expect(mocks.inArray).toHaveBeenCalledWith(schema.runs.runId, ["run_a"]);
+    expect(select).toHaveBeenNthCalledWith(3, {
+      runId: schema.runs.runId,
+      model: schema.runs.platformModelName,
+      tokenUsage: schema.runs.tokenUsage,
+      durationMs: schema.runs.durationMs,
+      completedAt: schema.runs.completedAt,
+    });
+  });
+
   it("按主线 runId 批量关联 tool_calls,并映射 status/args", async () => {
     const toolRows = [
       {
@@ -516,6 +567,7 @@ describe("getVisibleBranch 历史 toolCalls 回填", () => {
       select: selectQueue([
         [{ id: "conversation-1", userId: "user-1" }],
         baseMsgs,
+        [], // run metadata
         toolRows,
         [], // feedback
       ]),
@@ -549,6 +601,7 @@ describe("getVisibleBranch 历史 toolCalls 回填", () => {
       select: selectQueue([
         [{ id: "conversation-1", userId: "user-1" }],
         baseMsgs,
+        [], // run metadata
         // 即使 DB 层若未约束会返回外会话行,本实现 where 已限定;此处模拟空(外会话被过滤)
         [],
         [], // feedback
@@ -678,6 +731,7 @@ describe("getVisibleBranch 历史 toolCalls 回填", () => {
       select: selectQueue([
         [{ id: "conversation-1", userId: "user-1" }],
         msgs,
+        [], // run metadata
         toolRows,
         [], // feedback
       ]),
@@ -910,10 +964,27 @@ describe("getMessageSiblings 版本切换 toolCalls 回填", () => {
         createdAt: "2026-07-25T00:00:02.200Z",
       },
     ];
+    const runRows = [
+      {
+        runId: "run_v1",
+        model: "Model V1",
+        tokenUsage: { promptTokens: 8, completionTokens: 4 },
+        durationMs: 900,
+        completedAt: new Date("2026-07-25T00:00:01.900Z"),
+      },
+      {
+        runId: "run_v2",
+        model: "Model V2",
+        tokenUsage: null,
+        durationMs: null,
+        completedAt: null,
+      },
+    ];
     const select = selectQueue([
       [currentMsg],
       [{ id: "conversation-1", userId: "user-1" }],
       siblingRows,
+      runRows,
       toolRows,
       [], // feedback
     ]);
@@ -929,6 +1000,12 @@ describe("getMessageSiblings 版本切换 toolCalls 回填", () => {
       content: "v1 answer",
       reasoning: "think-1",
       branchReason: null,
+      runMetadata: {
+        model: "Model V1",
+        tokenUsage: { promptTokens: 8, completionTokens: 4 },
+        durationMs: 900,
+        completedAt: "2026-07-25T00:00:01.900Z",
+      },
       toolCalls: [{ toolName: "search", status: "done", args: { q: "v1" } }],
     });
     expect(result.siblings[1]).toEqual({
@@ -936,13 +1013,14 @@ describe("getMessageSiblings 版本切换 toolCalls 回填", () => {
       content: "v2 answer",
       reasoning: "think-2",
       branchReason: "retry",
+      runMetadata: { model: "Model V2" },
       toolCalls: [
         { toolName: "read_file", status: "error", args: { path: "/v2" } },
         { toolName: "search", status: "calling", args: { q: "v2" } },
       ],
     });
-    // 消息 + 会话 + 兄弟 + tool_calls + feedback
-    expect(select).toHaveBeenCalledTimes(5);
+    // 消息 + 会话 + 兄弟 + run metadata + tool_calls + feedback
+    expect(select).toHaveBeenCalledTimes(6);
     expect(mocks.eq).toHaveBeenCalledWith(schema.runs.conversationId, "conversation-1");
     expect(mocks.inArray).toHaveBeenCalledWith(
       schema.toolCalls.runId,

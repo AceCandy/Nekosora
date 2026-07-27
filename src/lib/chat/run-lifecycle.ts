@@ -216,6 +216,8 @@ export interface FinalizeRunParams {
   status: RunTerminalStatus;
   tokenUsage?: TokenUsage | null;
   firstTokenLatencyMs?: number | null;
+  durationMs?: number | null;
+  completedAt?: Date | null;
 }
 
 /**
@@ -235,6 +237,8 @@ export async function finalizeRun(params: FinalizeRunParams): Promise<void> {
           status: params.status,
           tokenUsage: params.tokenUsage ?? null,
           firstTokenLatencyMs: params.firstTokenLatencyMs ?? null,
+          durationMs: params.durationMs ?? null,
+          completedAt: params.completedAt ?? null,
         })
         .where(and(eq(s.runs.runId, params.runId), eq(s.runs.status, "running")));
     },

@@ -1,5 +1,5 @@
 /**
- * SSE 流消费器 —— 解析 /api/chat 的流式响应,分发 delta/error/trace 事件。
+ * SSE 流消费器 —— 解析 /api/chat 的流式响应,分发文本与终态事件。
  *
  * 抽离自 ChatComposer 的 send/regenerate 两处重复的 reader 循环。
  * 纯异步函数,无 React 依赖,便于单测。
@@ -13,10 +13,12 @@
  *   data: {"type":"tool_result","toolName":"...","isError":false}
  *   data: {"type":"search_result","results":[{"title":"...","url":"...","snippet":"..."}]}
  *   data: {"type":"error","error":"..."}
- *   data: {"type":"trace","trace":{...}}
+ *   data: {"type":"finish","metadata":{...}}
  *   data: {"type":"title_updated","title":"...","conversationId":"..."}
  *   data: [DONE]
  */
+import type { MessageRunMetadata } from "@/features/chat/model/types";
+
 export interface SSEEvent {
   type:
     | "user_message"
@@ -27,7 +29,7 @@ export interface SSEEvent {
     | "tool_result"
     | "search_result"
     | "error"
-    | "trace"
+    | "finish"
     | "title_updated";
   text?: string;
   toolName?: string;
@@ -35,11 +37,7 @@ export interface SSEEvent {
   isError?: boolean;
   results?: { title: string; url: string; snippet: string }[];
   error?: string;
-  trace?: {
-    totalTokenEstimate?: number;
-    sentMessageCount?: number;
-    blocks?: { kind: string; title?: string; tokenEstimate?: number }[];
-  };
+  metadata?: MessageRunMetadata;
   /** title_updated:会话自动生成的新标题。 */
   title?: string;
   /** title_updated:对应的会话 ID。 */
@@ -55,7 +53,7 @@ export interface SSEHandlers {
   onToolResult?: (toolName: string, isError: boolean) => void;
   onSearchResult?: (results: { title: string; url: string; snippet: string }[]) => void;
   onError?: (error: string) => void;
-  onTrace?: (trace: SSEEvent["trace"]) => void;
+  onFinish?: (metadata: MessageRunMetadata) => void;
   /** 会话标题自动生成完成后触发(用于刷新侧栏会话列表)。 */
   onTitleUpdated?: (title: string, conversationId: string) => void;
   /** 收到本轮 user 消息的稳定标识(供前端回填后支持编辑重发)。 */
@@ -109,8 +107,8 @@ export async function consumeChatSSE(
             handlers.onSearchResult?.(ev.results);
           } else if (ev.type === "error" && ev.error !== undefined) {
             handlers.onError?.(ev.error);
-          } else if (ev.type === "trace" && ev.trace !== undefined) {
-            handlers.onTrace?.(ev.trace);
+          } else if (ev.type === "finish" && ev.metadata !== undefined) {
+            handlers.onFinish?.(ev.metadata);
           } else if (ev.type === "title_updated" && ev.title !== undefined && ev.conversationId !== undefined) {
             handlers.onTitleUpdated?.(ev.title, ev.conversationId);
           } else if (ev.type === "user_message" && ev.publicId !== undefined) {

@@ -1,0 +1,7 @@
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"执行 lint/typecheck/test、浏览器与可访问性复核门槛"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"复核 hover/focus、粗指针、语义字号、主题和布局稳定性"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"复核 nullable 字段、timestamptz、迁移 SQL/journal/snapshot 和 run 租约不变"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"复核实际 Token、Agent 聚合、run finalize 与失败降级语义"}
+{"file":".trellis/spec/backend/chat-message-references.md","reason":"复核 conversation 授权、assistant 收尾和 finish/DONE 时序"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"复核实时与历史、普通发送与分支路径的端到端往返"}
+{"file":"DESIGN.md","reason":"复核聊天 UI 品牌、移动端、暗色主题和无障碍表现"}

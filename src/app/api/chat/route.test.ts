@@ -407,6 +407,8 @@ describe("POST /api/chat 消息引用并发收敛", () => {
   });
 
   it("引用有效时在两个短事务后完成正常发送", async () => {
+    const tokenUsage = { promptTokens: 10, completionTokens: 0 };
+    mocks.irUsageToTokenUsage.mockReturnValue(tokenUsage);
     let markFinalizeStarted: () => void = () => {};
     const finalizeStarted = new Promise<void>((resolve) => {
       markFinalizeStarted = resolve;
@@ -493,12 +495,14 @@ describe("POST /api/chat 消息引用并发收敛", () => {
     const reader = response.body!.getReader();
     const decoder = new TextDecoder();
     let payload = "";
-    for (let index = 0; index < 5; index += 1) {
+    for (let index = 0; index < 3; index += 1) {
       const chunk = await reader.read();
       expect(chunk.done).toBe(false);
       payload += decoder.decode(chunk.value, { stream: true });
     }
     expect(payload).not.toContain("[DONE]");
+    expect(payload).not.toContain('"type":"finish"');
+    expect(payload).not.toContain('"type":"trace"');
 
     let terminalReadSettled = false;
     const terminalRead = reader.read().then((chunk) => {
@@ -511,12 +515,15 @@ describe("POST /api/chat 消息引用并发收敛", () => {
     releaseFinalize();
     const terminalChunk = await terminalRead;
     payload += decoder.decode(terminalChunk.value, { stream: true });
+    const doneChunk = await reader.read();
+    payload += decoder.decode(doneChunk.value, { stream: true });
     payload += decoder.decode();
 
     expect(response.status).toBe(200);
     expect(doneArrivedBeforeFinalize).toBe(false);
     expect(payload).toContain("[DONE]");
     expect(payload).not.toContain('"type":"error"');
+    expect(payload).not.toContain('"type":"trace"');
     expect(transaction).toHaveBeenCalledTimes(2);
     expect(mocks.writeFallbackTitle).toHaveBeenCalledWith(
       "user-1",
@@ -535,9 +542,41 @@ describe("POST /api/chat 消息引用并发收敛", () => {
     for (const [conversationPatch] of updateSet.mock.calls) {
       expect(conversationPatch).not.toHaveProperty("generating");
     }
-    expect(mocks.finalizeRun).toHaveBeenCalledWith(
-      expect.objectContaining({ runId: "run-1", status: "success" }),
-    );
+    const finalizeParams = mocks.finalizeRun.mock.calls[0][0] as {
+      runId: string;
+      status: string;
+      tokenUsage: typeof tokenUsage;
+      durationMs: number;
+      completedAt: Date;
+    };
+    expect(finalizeParams).toEqual(expect.objectContaining({
+      runId: "run-1",
+      status: "success",
+      tokenUsage,
+      durationMs: expect.any(Number),
+      completedAt: expect.any(Date),
+    }));
+    expect(Number.isInteger(finalizeParams.durationMs)).toBe(true);
+    expect(finalizeParams.durationMs).toBeGreaterThanOrEqual(0);
+
+    const finishFrames = payload
+      .split("\n\n")
+      .filter((frame) => frame.includes('"type":"finish"'));
+    expect(finishFrames).toHaveLength(1);
+    const finishEvent = JSON.parse(finishFrames[0].slice(6)) as {
+      type: string;
+      metadata: Record<string, unknown>;
+    };
+    expect(finishEvent).toEqual({
+      type: "finish",
+      metadata: {
+        model: "model-1",
+        tokenUsage,
+        durationMs: finalizeParams.durationMs,
+        completedAt: finalizeParams.completedAt.toISOString(),
+      },
+    });
+    expect(payload.indexOf(finishFrames[0])).toBeLessThan(payload.indexOf("data: [DONE]"));
   });
 
   it("生成期间每 30 秒续租且完成后停止心跳", async () => {

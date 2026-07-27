@@ -40,6 +40,7 @@ import {
 import { redactErrorMessage } from "@/lib/redaction";
 import type { IRRequest, IRUsage } from "@/lib/providers/types";
 import type { ReasoningLevel } from "@/db/types";
+import type { MessageRunMetadata } from "@/features/chat/model/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,6 +48,7 @@ export const dynamic = "force-dynamic";
 const RUN_HEARTBEAT_INTERVAL_MS = 30_000;
 
 export async function POST(req: NextRequest) {
+  const requestStartedAt = performance.now();
   const user = await getSession();
   if (!user) {
     return NextResponse.json({ error: "未登录" }, { status: 401 });
@@ -375,6 +377,8 @@ export async function POST(req: NextRequest) {
       let persistenceFailed = false;
       let completionPersisted = false;
       let finalUsage: IRUsage | undefined;
+      let durationMs: number | null = null;
+      let completedAt: Date | null = null;
       // 回传本轮 user 消息的 publicId,供前端回填后支持编辑重发。
       // 续写模式下 user 沿用原消息,前端无需回填,跳过该帧。
       if (!isContinue) {
@@ -406,10 +410,6 @@ export async function POST(req: NextRequest) {
           ),
         );
       }
-      // 发 process_trace 事件(供 UI 调试折叠面板)
-      safeEnqueue(
-        encoder.encode(`data: ${JSON.stringify({ type: "trace", trace })}\n\n`),
-      );
       try {
         // P1-A:解析 MCP server。有可用工具则走 agent loop,否则普通 streamChat。
         const mcpServers = await resolveMcpServers(ctx).catch(() => []);
@@ -446,7 +446,6 @@ export async function POST(req: NextRequest) {
           } else if (ev.type === "finish") {
             finished = true;
             finalUsage = ev.usage;
-            safeEnqueue(encoder.encode(`data: ${JSON.stringify({ type: "finish", usage: ev.usage })}\n\n`));
           } else if (ev.type === "tool-call") {
             // 审计落库 best-effort(内部吞错);SSE 载荷保持兼容(仅 toolName/args)。
             await recordToolCallStart({
@@ -608,6 +607,8 @@ export async function POST(req: NextRequest) {
               );
           }
 
+          completedAt = new Date();
+          durationMs = Math.max(0, Math.round(performance.now() - requestStartedAt));
           completionPersisted = true;
         } catch (err) {
           persistenceFailed = true;
@@ -632,6 +633,7 @@ export async function POST(req: NextRequest) {
         } finally {
           // 无论消息落库是否成功,都必须把 runs 从 running 收敛到终态。
           stopHeartbeat();
+          const tokenUsage = irUsageToTokenUsage(finalUsage);
           await finalizeRun({
             runId,
             status: resolveRunTerminalStatus({
@@ -640,10 +642,23 @@ export async function POST(req: NextRequest) {
               sawError: sawStreamError,
               persistenceFailed,
             }),
-            tokenUsage: irUsageToTokenUsage(finalUsage),
+            tokenUsage,
+            durationMs,
+            completedAt,
           });
           // DONE 是可靠完成信号：必要消息持久化与 run 终结处理均已完成。
-          if (completionPersisted) {
+          if (completionPersisted && completedAt && durationMs !== null) {
+            const metadata: MessageRunMetadata = {
+              model: body.model,
+              durationMs,
+              completedAt: completedAt.toISOString(),
+            };
+            if (tokenUsage) metadata.tokenUsage = tokenUsage;
+            safeEnqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({ type: "finish", metadata })}\n\n`,
+              ),
+            );
             safeEnqueue(encoder.encode("data: [DONE]\n\n"));
           }
           req.signal.removeEventListener("abort", onRequestAbort);

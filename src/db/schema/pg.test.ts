@@ -14,6 +14,14 @@ describe("runs schema", () => {
       .toEqual(["conversation_id", "lease_expires_at"]);
     expect(activeIndex?.config.where).toBeDefined();
   });
+
+  it("声明 nullable 的整轮耗时与完成时间", () => {
+    expect(runs.durationMs.name).toBe("duration_ms");
+    expect(runs.durationMs.notNull).toBe(false);
+    expect(runs.completedAt.name).toBe("completed_at");
+    expect(runs.completedAt.notNull).toBe(false);
+    expect(runs.completedAt.getSQLType()).toBe("timestamp with time zone");
+  });
 });
 
 describe("conversation share schema", () => {

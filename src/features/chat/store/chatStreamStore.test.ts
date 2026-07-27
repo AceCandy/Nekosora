@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({
   createConversation: vi.fn(),
   getConversationTitleStateAction: vi.fn(),
   retryFromMessage: vi.fn(),
+  editMessage: vi.fn(),
+  continueMessage: vi.fn(),
   getMessageSiblings: vi.fn(),
   selectMessageVersion: vi.fn(),
 }));
@@ -20,17 +22,154 @@ vi.mock("@/features/chat/actions/conversations", () => ({
 }));
 vi.mock("@/features/chat/actions/branch", () => ({
   retryFromMessage: mocks.retryFromMessage,
-  editMessage: vi.fn(),
+  editMessage: mocks.editMessage,
   getMessageSiblings: mocks.getMessageSiblings,
   selectMessageVersion: mocks.selectMessageVersion,
   softDeleteMessage: vi.fn(),
-  continueMessage: vi.fn(),
+  continueMessage: mocks.continueMessage,
 }));
 
 import { NEW_CONVERSATION_KEY, useChatStreamStore } from "@/features/chat/store/chatStreamStore";
-import type { ChatMessage, ToolCallRecord } from "@/features/chat/model/types";
+import type { ChatMessage, MessageRunMetadata, ToolCallRecord } from "@/features/chat/model/types";
+import type { SSEHandlers } from "@/features/chat/model/sse";
 
 const sendOptions = { model: "model-a", modelId: "model-id-a" };
+const finishMetadata: MessageRunMetadata = {
+  model: "Model A",
+  tokenUsage: { promptTokens: 12, completionTokens: 0 },
+  durationMs: 0,
+  completedAt: "2026-07-27T08:09:10.000Z",
+};
+
+describe("chatStreamStore finish metadata", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useChatStreamStore.setState({
+      runtimes: {
+        "conversation-finish": {
+          messages: [],
+          streaming: false,
+          abortController: null,
+        },
+      },
+      activeConversationId: "conversation-finish",
+      optimisticConversation: null,
+    });
+    mocks.handleStreamError.mockReturnValue({ content: "[错误] request failed" });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("data: done\n\n")));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("普通发送在 finish 后即时回填 assistant 运行元数据", async () => {
+    mocks.consumeChatSSE.mockImplementationOnce(
+      async (_body: ReadableStream<Uint8Array>, handlers: SSEHandlers) => {
+        handlers.onFinish?.(finishMetadata);
+      },
+    );
+
+    await useChatStreamStore
+      .getState()
+      .send("conversation-finish", "hello", sendOptions);
+
+    const messages = useChatStreamStore.getState().runtimes["conversation-finish"].messages;
+    expect(messages.at(-1)).toMatchObject({
+      role: "assistant",
+      runMetadata: finishMetadata,
+    });
+  });
+
+  it("编辑重发把 finish 元数据写入新 assistant", async () => {
+    useChatStreamStore.setState({
+      runtimes: {
+        "conversation-finish": {
+          messages: [
+            { role: "user", publicId: "user-1", content: "old question" },
+            {
+              role: "assistant",
+              publicId: "assistant-old",
+              content: "old answer",
+              runMetadata: { model: "Old Model" },
+            },
+          ],
+          streaming: false,
+          abortController: null,
+        },
+      },
+    });
+    mocks.editMessage.mockResolvedValue({
+      messages: [{ role: "user", content: "new question" }],
+    });
+    mocks.consumeChatSSE.mockImplementationOnce(
+      async (_body: ReadableStream<Uint8Array>, handlers: SSEHandlers) => {
+        handlers.onFinish?.(finishMetadata);
+      },
+    );
+
+    await useChatStreamStore.getState().editAndResend(
+      "conversation-finish",
+      "user-1",
+      "new question",
+      "model-a",
+      "model-id-a",
+    );
+
+    const messages = useChatStreamStore.getState().runtimes["conversation-finish"].messages;
+    expect(messages).toHaveLength(2);
+    expect(messages[1]).toMatchObject({
+      role: "assistant",
+      content: "",
+      runMetadata: finishMetadata,
+    });
+  });
+
+  it("续写开始时清掉旧元数据,并用新 finish 覆盖", async () => {
+    useChatStreamStore.setState({
+      runtimes: {
+        "conversation-finish": {
+          messages: [{
+            role: "assistant",
+            publicId: "assistant-1",
+            content: "partial",
+            status: "interrupted",
+            runMetadata: { model: "Old Model", durationMs: 500 },
+          }],
+          streaming: false,
+          abortController: null,
+        },
+      },
+    });
+    mocks.continueMessage.mockResolvedValue({
+      messages: [{ role: "assistant", content: "partial" }],
+    });
+    mocks.consumeChatSSE.mockImplementationOnce(
+      async (_body: ReadableStream<Uint8Array>, handlers: SSEHandlers) => {
+        expect(
+          useChatStreamStore.getState().runtimes["conversation-finish"].messages[0]
+            .runMetadata,
+        ).toBeUndefined();
+        handlers.onFinish?.(finishMetadata);
+      },
+    );
+
+    await useChatStreamStore.getState().continueGeneration(
+      "conversation-finish",
+      "assistant-1",
+      "model-a",
+      "model-id-a",
+    );
+
+    expect(
+      useChatStreamStore.getState().runtimes["conversation-finish"].messages[0],
+    ).toMatchObject({
+      publicId: "assistant-1",
+      status: "success",
+      runMetadata: finishMetadata,
+    });
+  });
+});
 
 describe("chatStreamStore 会话标题轮询", () => {
   let conversationSeq = 0;
@@ -226,7 +365,7 @@ describe("chatStreamStore switchVersion toolCalls", () => {
               content: "version 1",
               toolCalls: oldToolCalls,
               reasoning: "old-reason",
-              trace: { totalTokenEstimate: 1 },
+              runMetadata: { model: "Model V1", durationMs: 1_500 },
               searchResults: [{ title: "t", url: "https://x", snippet: "s" }],
               ...extra,
             },
@@ -256,6 +395,12 @@ describe("chatStreamStore switchVersion toolCalls", () => {
           content: "version 2",
           reasoning: "think-v2",
           branchReason: "retry",
+          runMetadata: {
+            model: "Model V2",
+            tokenUsage: { completionTokens: 0 },
+            durationMs: 0,
+            completedAt: "2026-07-25T00:00:02.000Z",
+          },
           toolCalls: targetToolCalls,
         },
       ],
@@ -267,8 +412,13 @@ describe("chatStreamStore switchVersion toolCalls", () => {
     expect(msg.publicId).toBe("pub-v2");
     expect(msg.content).toBe("version 2");
     expect(msg.reasoning).toBe("think-v2");
+    expect(msg.runMetadata).toEqual({
+      model: "Model V2",
+      tokenUsage: { completionTokens: 0 },
+      durationMs: 0,
+      completedAt: "2026-07-25T00:00:02.000Z",
+    });
     expect(msg.toolCalls).toEqual(targetToolCalls);
-    expect(msg.trace).toBeUndefined();
     expect(msg.searchResults).toBeUndefined();
     expect(msg.versionInfo).toEqual({ current: 2, total: 2 });
   });
@@ -293,6 +443,7 @@ describe("chatStreamStore switchVersion toolCalls", () => {
     const msg = useChatStreamStore.getState().runtimes[key].messages[0];
     expect(msg.publicId).toBe("pub-v2");
     expect(msg.toolCalls).toBeUndefined();
+    expect(msg.runMetadata).toBeUndefined();
   });
 
   it("不能保留旧版本的 toolCalls", async () => {
@@ -424,7 +575,12 @@ describe("chatStreamStore regenerate version selection", () => {
     useChatStreamStore.setState({
       runtimes: {
         [key]: {
-          messages: [{ role: "assistant", publicId: "assistant-old", content: "Old answer" }],
+          messages: [{
+            role: "assistant",
+            publicId: "assistant-old",
+            content: "Old answer",
+            runMetadata: { model: "Old Model", durationMs: 500 },
+          }],
           streaming: false,
           abortController: null,
         },
@@ -449,15 +605,21 @@ describe("chatStreamStore regenerate version selection", () => {
   it("流成功结束后持久化后端返回的真实版本 ID", async () => {
     mocks.consumeChatSSE.mockImplementationOnce(async (
       _body: ReadableStream<Uint8Array>,
-      handlers: { onAssistantMessage?: (publicId: string) => void },
+      handlers: SSEHandlers,
     ) => {
+      expect(useChatStreamStore.getState().runtimes[key].messages[0].runMetadata)
+        .toBeUndefined();
       handlers.onAssistantMessage?.("assistant-real");
+      handlers.onFinish?.(finishMetadata);
     });
 
     await useChatStreamStore.getState().regenerate(key, "assistant-old", "model-a", "model-id-a");
 
     expect(mocks.selectMessageVersion).toHaveBeenCalledWith("assistant-real");
-    expect(useChatStreamStore.getState().runtimes[key].messages[0].publicId).toBe("assistant-real");
+    expect(useChatStreamStore.getState().runtimes[key].messages[0]).toMatchObject({
+      publicId: "assistant-real",
+      runMetadata: finishMetadata,
+    });
   });
 
   it("版本选择持久化失败不把已完成生成标记为失败", async () => {

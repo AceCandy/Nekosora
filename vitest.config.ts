@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 const src = fileURLToPath(new URL("./src/", import.meta.url));
 
 export default defineConfig({
+  oxc: { jsx: { runtime: "automatic" } },
   resolve: {
     alias: {
       "@": src,
@@ -13,6 +14,6 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.{ts,tsx}"],
   },
 });

@@ -180,14 +180,17 @@ describe("run lifecycle DB writes", () => {
     );
   });
 
-  it("finalizeRun 仅更新 running 行并写入 tokenUsage", async () => {
+  it("finalizeRun 仅更新 running 行并写入完整终态元数据", async () => {
     const { db, updateSet, updateWhere } = createDb();
     mocks.getDb.mockResolvedValue(db);
+    const completedAt = new Date("2026-07-27T08:09:10.000Z");
 
     await finalizeRun({
       runId: "run_1",
       status: "success",
       tokenUsage: { promptTokens: 1, completionTokens: 2 },
+      durationMs: 1_234,
+      completedAt,
     });
 
     expect(db.update).toHaveBeenCalledWith(schema.runs);
@@ -195,6 +198,8 @@ describe("run lifecycle DB writes", () => {
       status: "success",
       tokenUsage: { promptTokens: 1, completionTokens: 2 },
       firstTokenLatencyMs: null,
+      durationMs: 1_234,
+      completedAt,
     });
     expect(updateWhere).toHaveBeenCalledWith({
       op: "and",

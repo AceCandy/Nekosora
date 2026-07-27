@@ -1,0 +1,8 @@
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"遵守 Chat 流式 UI、语义字号、触屏目标、hover/focus 和响应式契约"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"保持 chatStreamStore 多会话隔离和 SSE 状态更新模式"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"约束 DB/Server 到 Client 的可序列化 DTO 与 unknown 收敛"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"遵守 runs 生命周期、timestamptz、PG 迁移 journal/snapshot 契约"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"保持 run 审计、Token 聚合与 best-effort finalize 语义"}
+{"file":".trellis/spec/backend/chat-message-references.md","reason":"保持 conversation 消息引用、收尾持久化与 DONE 时序隔离"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"核对 DB、API、SSE、store、历史投影和 UI 的端到端字段契约"}
+{"file":"DESIGN.md","reason":"遵守星枢天流聊天界面的低干扰、可访问和响应式设计规范"}

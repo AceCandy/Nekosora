@@ -12,6 +12,7 @@ import {
 } from "@/features/chat/model/feedback";
 import type { MessageVersionSelections } from "@/db/types";
 import { resolveVisibleBranch } from "@/features/chat/lib/visible-branch";
+import type { MessageRunMetadata } from "@/features/chat/model/types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const S = () => getSchema() as any;
@@ -25,6 +26,51 @@ function mapDbToolCallStatus(status: string): ToolCallUiStatus {
   if (status === "pending" || status === "running") return "calling";
   if (status === "failed") return "error";
   return "done";
+}
+
+/** 按 runId 批量加载当前会话的可公开运行元数据。 */
+async function loadRunMetadataByRunIds(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  s: any,
+  conversationId: string,
+  runIds: string[],
+): Promise<Map<string, MessageRunMetadata>> {
+  const byRunId = new Map<string, MessageRunMetadata>();
+  if (runIds.length === 0) return byRunId;
+
+  const rows = (await db
+    .select({
+      runId: s.runs.runId,
+      model: s.runs.platformModelName,
+      tokenUsage: s.runs.tokenUsage,
+      durationMs: s.runs.durationMs,
+      completedAt: s.runs.completedAt,
+    })
+    .from(s.runs)
+    .where(
+      and(
+        eq(s.runs.conversationId, conversationId),
+        inArray(s.runs.runId, runIds),
+      ),
+    )) as Array<{
+    runId: string;
+    model: string | null;
+    tokenUsage: MessageRunMetadata["tokenUsage"] | null;
+    durationMs: number | null;
+    completedAt: Date | null;
+  }>;
+
+  for (const row of rows) {
+    const metadata: MessageRunMetadata = {};
+    if (row.model) metadata.model = row.model;
+    if (row.tokenUsage != null) metadata.tokenUsage = row.tokenUsage;
+    if (row.durationMs != null) metadata.durationMs = row.durationMs;
+    if (row.completedAt) metadata.completedAt = row.completedAt.toISOString();
+    if (Object.keys(metadata).length > 0) byRunId.set(row.runId, metadata);
+  }
+  return byRunId;
 }
 
 /**
@@ -126,6 +172,7 @@ export async function getMessageSiblings(messagePublicId: string): Promise<{
     content: string;
     reasoning: string | null;
     branchReason: string | null;
+    runMetadata?: MessageRunMetadata;
     toolCalls?: ToolCallRecord[];
     feedback?: MessageFeedback;
   }[];
@@ -175,6 +222,12 @@ export async function getMessageSiblings(messagePublicId: string): Promise<{
         .map((m) => m.runId as string),
     ),
   );
+  const runMetadataByRunId = await loadRunMetadataByRunIds(
+    db,
+    s,
+    msg.conversationId,
+    runIds,
+  );
   const toolCallsByRunId = await loadToolCallsByRunIds(db, s, msg.conversationId, runIds);
 
   // P2-A: 各兄弟版本批量回填当前用户 feedback。
@@ -195,6 +248,7 @@ export async function getMessageSiblings(messagePublicId: string): Promise<{
       content: string;
       reasoning: string | null;
       branchReason: string | null;
+      runMetadata?: MessageRunMetadata;
       toolCalls?: ToolCallRecord[];
       feedback?: MessageFeedback;
     } = {
@@ -204,6 +258,8 @@ export async function getMessageSiblings(messagePublicId: string): Promise<{
       branchReason: m.branchReason,
     };
     if (typeof m.runId === "string") {
+      const runMetadata = runMetadataByRunId.get(m.runId);
+      if (runMetadata) base.runMetadata = runMetadata;
       const toolCalls = toolCallsByRunId.get(m.runId);
       if (toolCalls && toolCalls.length > 0) base.toolCalls = toolCalls;
     }
@@ -474,6 +530,12 @@ export async function getVisibleBranch(conversationId: string): Promise<{
         .map((m) => m.runId as string),
     ),
   );
+  const runMetadataByRunId = await loadRunMetadataByRunIds(
+    db,
+    s,
+    conversationId,
+    runIds,
+  );
   const toolCallsByRunId = await loadToolCallsByRunIds(db, s, conversationId, runIds);
 
   // P2-A: 主线消息批量回填当前用户 feedback(userId + conversationId + messageIds)。
@@ -491,6 +553,8 @@ export async function getVisibleBranch(conversationId: string): Promise<{
   const messages = mainMessages.map((m) => {
     let next = m;
     if (m.role === "assistant" && typeof m.runId === "string") {
+      const runMetadata = runMetadataByRunId.get(m.runId);
+      if (runMetadata) next = { ...next, runMetadata };
       const toolCalls = toolCallsByRunId.get(m.runId);
       if (toolCalls && toolCalls.length > 0) next = { ...next, toolCalls };
     }

@@ -429,6 +429,8 @@ export const runs = pgTable(
     platformModelName: text("platform_model_name"),
     routedBindingCode: text("routed_binding_code"),
     firstTokenLatencyMs: integer("first_token_latency_ms"),
+    durationMs: integer("duration_ms"),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
     tokenUsage: jsonb("token_usage").$type<TokenUsage>(),
     status: text("status").notNull().default("running"),
     leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true })

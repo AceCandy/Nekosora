@@ -1,18 +1,51 @@
 "use client";
 
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useTranslations } from "next-intl";
-import { Sparkles, RefreshCw, Loader2, Pencil, X, Check, Wrench, CheckCircle2, AlertCircle, ExternalLink, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Copy, Trash2, CornerDownRight, ThumbsUp, ThumbsDown } from "lucide-react";
+import React, { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
+import {
+  AlertCircle,
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  Bot,
+  Brain,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  Clock3,
+  Copy,
+  CornerDownRight,
+  Database,
+  ExternalLink,
+  Info,
+  Loader2,
+  Pencil,
+  RefreshCw,
+  Sparkles,
+  ThumbsDown,
+  ThumbsUp,
+  Trash2,
+  Wrench,
+  X,
+} from "lucide-react";
 import { clsx } from "clsx";
 import { Markdown } from "@/shared/components/markdown/Markdown";
 import { ErrorBoundary } from "@/shared/components/ErrorBoundary";
 import { Badge } from "@/shared/ui/Badge";
-import type { ChatMessage, MessageFeedback, ModelOption } from "@/features/chat/model/types";
+import type {
+  ChatMessage,
+  MessageFeedback,
+  MessageRunMetadata,
+  ModelOption,
+} from "@/features/chat/model/types";
 import type { Artifact } from "@/features/artifacts/ArtifactPanel";
 import { FEEDBACK_REASONS, type FeedbackReason } from "@/features/chat/model/feedback";
 import { setMessageFeedback } from "@/features/chat/actions/feedback";
 
 import { copyToClipboard } from "@/shared/lib/clipboard";
+import { formatDateTimeLocal, formatDuration } from "@/shared/lib/format";
 import { ASSISTANT_MESSAGE_CLASS, USER_MESSAGE_BUBBLE_CLASS } from "@/features/chat/components/messagePresentation";
 import { useClickOutside } from "@/shared/lib/useClickOutside";
 
@@ -28,6 +61,146 @@ const FEEDBACK_REASON_I18N: Record<FeedbackReason, string> = {
   unsafe: "feedbackReasonUnsafe",
   other: "feedbackReasonOther",
 };
+
+interface RunMetadataFieldsProps {
+  metadata: MessageRunMetadata;
+  className?: string;
+}
+
+/** 以固定顺序投影真实可用字段；未知值隐藏，数值 0 保留。 */
+function RunMetadataFields({ metadata, className }: RunMetadataFieldsProps) {
+  const t = useTranslations("chat");
+  const locale = useLocale();
+  const model = metadata.model?.trim();
+  const tokenItems = [
+    {
+      key: "input",
+      label: t("inputTokens"),
+      value: metadata.tokenUsage?.promptTokens,
+      Icon: ArrowDownToLine,
+    },
+    {
+      key: "cache",
+      label: t("cacheReadTokens"),
+      value: metadata.tokenUsage?.cacheReadTokens,
+      Icon: Database,
+    },
+    {
+      key: "reasoning",
+      label: t("reasoningTokens"),
+      value: metadata.tokenUsage?.reasoningTokens,
+      Icon: Brain,
+    },
+    {
+      key: "output",
+      label: t("outputTokens"),
+      value: metadata.tokenUsage?.completionTokens,
+      Icon: ArrowUpFromLine,
+    },
+  ];
+
+  return (
+    <dl
+      className={clsx(
+        "flex min-w-0 max-w-full flex-wrap items-center gap-x-2 gap-y-0.5 text-ui-micro text-space-ink/50 dark:text-nebula-silver/50",
+        className,
+      )}
+    >
+      {model && (
+        <div className="inline-flex min-w-0 max-w-full items-center gap-1">
+          <dt className="inline-flex shrink-0 items-center gap-1">
+            <Bot className="size-2.5" aria-hidden="true" />
+            <span>{t("responseModel")}</span>
+          </dt>
+          <dd
+            className="min-w-0 max-w-[min(18rem,60vw)] truncate text-space-ink/55 dark:text-nebula-silver/55"
+            title={model}
+          >
+            {model}
+          </dd>
+        </div>
+      )}
+      {tokenItems.map(({ key, label, value, Icon }) => (
+        typeof value === "number" ? (
+          <div key={key} className="inline-flex items-center gap-1">
+            <dt className="inline-flex items-center gap-1">
+              <Icon className="size-2.5" aria-hidden="true" />
+              <span>{label}</span>
+            </dt>
+            <dd className="font-mono tabular-nums text-space-ink/55 dark:text-nebula-silver/55">
+              {value.toLocaleString(locale)}
+            </dd>
+          </div>
+        ) : null
+      ))}
+      {typeof metadata.durationMs === "number" && (
+        <div className="inline-flex items-center gap-1">
+          <dt className="inline-flex items-center gap-1">
+            <Clock3 className="size-2.5" aria-hidden="true" />
+            <span>{t("responseDuration")}</span>
+          </dt>
+          <dd className="font-mono tabular-nums text-space-ink/55 dark:text-nebula-silver/55">
+            {formatDuration(metadata.durationMs)}
+          </dd>
+        </div>
+      )}
+    </dl>
+  );
+}
+
+interface MessageRunMetadataDisplayProps {
+  metadata: MessageRunMetadata;
+  expanded: boolean;
+  panelId: string;
+}
+
+function hasRunDetails(metadata: MessageRunMetadata) {
+  return Boolean(
+    metadata.model?.trim()
+      || typeof metadata.tokenUsage?.promptTokens === "number"
+      || typeof metadata.tokenUsage?.cacheReadTokens === "number"
+      || typeof metadata.tokenUsage?.reasoningTokens === "number"
+      || typeof metadata.tokenUsage?.completionTokens === "number"
+      || typeof metadata.durationMs === "number",
+  );
+}
+
+function hasRunMetadata(metadata: MessageRunMetadata) {
+  return hasRunDetails(metadata) || Boolean(metadata.completedAt);
+}
+
+/** assistant 回复底部的低干扰运行元数据入口。 */
+export function MessageRunMetadataDisplay({
+  metadata,
+  expanded,
+  panelId,
+}: MessageRunMetadataDisplayProps) {
+  const t = useTranslations("chat");
+
+  if (!hasRunDetails(metadata)) return null;
+
+  return (
+    <>
+      <div
+        role="group"
+        aria-label={t("responseDetails")}
+        className="min-w-0 max-w-full [@media(pointer:coarse)]:hidden"
+      >
+        <RunMetadataFields metadata={metadata} className="justify-start" />
+      </div>
+      {expanded && (
+        <div
+          id={panelId}
+          role="region"
+          aria-label={t("responseDetails")}
+          className="hidden min-w-0 max-w-full border-t border-morning-mist/80 pt-2 dark:border-deep-space/80 [@media(pointer:coarse)]:block"
+        >
+          <RunMetadataFields metadata={metadata} className="justify-start" />
+        </div>
+      )}
+    </>
+  );
+}
 
 interface ChatMessageItemProps {
   message: ChatMessage;
@@ -58,7 +231,7 @@ interface ChatMessageItemProps {
   domId?: string;
 }
 
-export const ChatMessageItem = React.memo(function ChatMessageItem({
+function ChatMessageItemContent({
   message,
   isLast,
   isStreaming,
@@ -77,8 +250,23 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
   domId,
 }: ChatMessageItemProps) {
   const t = useTranslations("chat");
-  const { role, content, reasoning, publicId, status, trace, toolCalls, searchResults, versionInfo, feedback } = message;
+  const metadataPanelId = `run-metadata-${useId()}`;
+  const {
+    role,
+    content,
+    reasoning,
+    publicId,
+    status,
+    toolCalls,
+    searchResults,
+    versionInfo,
+    feedback,
+    runMetadata,
+  } = message;
   const hasReasoning = Boolean(reasoning);
+  const visibleRunMetadata = runMetadata && status !== "interrupted" && hasRunMetadata(runMetadata)
+    ? runMetadata
+    : undefined;
 
   // 用户消息编辑态
   const [editing, setEditing] = useState(false);
@@ -86,6 +274,8 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
 
   // 复制按钮反馈
   const [copied, setCopied] = useState(false);
+  // 粗指针设备的回复元数据展开状态
+  const [metadataExpanded, setMetadataExpanded] = useState(false);
 
   // 重新生成换模型选择弹层(仅多模型时启用)
   const [regenOpen, setRegenOpen] = useState(false);
@@ -97,11 +287,6 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
   const [reasonMenuOpen, setReasonMenuOpen] = useState(false);
   const feedbackMenuRef = useRef<HTMLDivElement>(null);
   const feedbackRequestRef = useRef(0);
-  const feedbackPublicIdRef = useRef(publicId);
-  if (feedbackPublicIdRef.current !== publicId) {
-    feedbackPublicIdRef.current = publicId;
-    feedbackRequestRef.current += 1;
-  }
 
   // 思考样式条弹层状态:点击样式条打开侧边浮层查看完整思考内容
   const [reasoningPanelOpen, setReasoningPanelOpen] = useState(false);
@@ -124,24 +309,12 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
   // contextmenu 触发后抑制紧随的 click,避免长按后又误触折叠 toggle
   const contextMenuFiredRef = useRef(false);
 
-  // 重新生成原地替换为新 assistant 占位时,重置思考计时与弹层状态
+  // 消息身份变化会由外层 key 重挂；卸载时使未完成的反馈请求失效。
   useEffect(() => {
-    reasoningStartRef.current = null;
-    reasoningEndRef.current = null;
-    setElapsed(null);
-    setReasoningPanelOpen(false);
-  }, [publicId]);
-
-  // 版本切换 / SSR 回填时同步 feedback,并关闭原因菜单
-  useEffect(() => {
-    setLocalFeedback(feedback);
-    setReasonMenuOpen(false);
-    setFeedbackFailed(false);
-  }, [publicId, feedback]);
-
-  useEffect(() => {
-    setFeedbackPending(false);
-  }, [publicId]);
+    return () => {
+      feedbackRequestRef.current += 1;
+    };
+  }, []);
 
   // 记录思考开始/结束时间,并计算耗时
   useEffect(() => {
@@ -227,10 +400,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
     const requestId = feedbackRequestRef.current + 1;
     feedbackRequestRef.current = requestId;
     const requestPublicId = publicId;
-    const isCurrentRequest = () => (
-      feedbackRequestRef.current === requestId
-      && feedbackPublicIdRef.current === requestPublicId
-    );
+    const isCurrentRequest = () => feedbackRequestRef.current === requestId;
     const prev = localFeedback;
     // 与服务端契约对齐:up 无 reason;down 仅在传入 reason 时带上
     const optimistic: MessageFeedback | undefined =
@@ -312,7 +482,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
   const canShowMenu = canEdit || canDelete;
 
   return (
-    <div id={domId} className={clsx("relative flex animate-in fade-in duration-200 scroll-mt-4", role === "user" ? "justify-end" : "justify-start")}>
+    <div id={domId} className={clsx("group/message relative flex animate-in fade-in duration-200 scroll-mt-4", role === "user" ? "justify-end" : "justify-start")}>
       {role === "assistant" && (
         <div className="absolute inset-y-0 -left-11 hidden w-7 @min-[54rem]:block">
           <button
@@ -587,12 +757,13 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
         )}
 
         {role === "assistant" && publicId && !(isStreaming && isLast) && (
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex min-w-0 max-w-full flex-col items-start gap-1 opacity-0 pointer-events-none transition-opacity duration-150 group-hover/message:pointer-events-auto group-hover/message:opacity-100 group-focus-within/message:pointer-events-auto group-focus-within/message:opacity-100 [@media(pointer:coarse)]:pointer-events-auto [@media(pointer:coarse)]:opacity-100 motion-reduce:transition-none">
+            <div className="flex min-w-0 max-w-full flex-wrap items-center gap-x-1 gap-y-1">
             {versionInfo && versionInfo.total > 1 && onSwitchVersion && (
-              <div className="inline-flex items-center gap-1 text-ui-caption font-semibold text-neutral-400">
+              <div className="inline-flex items-center gap-1 text-ui-caption font-medium text-space-ink/50 dark:text-nebula-silver/50">
                 <button
                   onClick={() => onSwitchVersion(publicId, "prev")}
-                  className="p-0.5 rounded hover:text-neutral-600 dark:hover:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-900 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer disabled:opacity-30"
+                  className="p-0.5 rounded hover:text-space-ink/75 dark:hover:text-nebula-silver/75 hover:bg-nebula-silver/45 dark:hover:bg-deep-space/55 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer disabled:opacity-30"
                   aria-label={t("prevVersion")}
                   disabled={versionInfo.current <= 1}
                 >
@@ -603,7 +774,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
                 </span>
                 <button
                   onClick={() => onSwitchVersion(publicId, "next")}
-                  className="p-0.5 rounded hover:text-neutral-600 dark:hover:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-900 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer disabled:opacity-30"
+                  className="p-0.5 rounded hover:text-space-ink/75 dark:hover:text-nebula-silver/75 hover:bg-nebula-silver/45 dark:hover:bg-deep-space/55 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer disabled:opacity-30"
                   aria-label={t("nextVersion")}
                   disabled={versionInfo.current >= versionInfo.total}
                 >
@@ -614,15 +785,15 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
             <button
               onClick={handleCopy}
               disabled={!content}
-              className="inline-flex items-center gap-1 text-ui-caption font-semibold text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue rounded cursor-pointer disabled:opacity-40"
-              aria-label={t("copy")}
+              className="touch-target inline-flex h-8 w-8 items-center justify-center rounded-md text-space-ink/50 transition-colors duration-150 hover:bg-nebula-silver/45 hover:text-space-ink/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer disabled:opacity-40 dark:text-nebula-silver/50 dark:hover:bg-deep-space/55 dark:hover:text-nebula-silver/75"
+              title={copied ? t("copied") : t("copy")}
+              aria-label={copied ? t("copied") : t("copy")}
             >
               {copied ? (
-                <Check className="w-3 h-3 text-sora-blue" aria-hidden="true" />
+                <Check className="size-3.5 text-sora-blue" aria-hidden="true" />
               ) : (
-                <Copy className="w-3 h-3" aria-hidden="true" />
+                <Copy className="size-3.5" aria-hidden="true" />
               )}
-              <span>{copied ? t("copied") : t("copy")}</span>
             </button>
             {/* 质量反馈:icon-only 赞/踩,紧邻原因菜单,不改变其它操作语义 */}
             <div ref={feedbackMenuRef} className="relative inline-flex items-center gap-0.5">
@@ -634,7 +805,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
                   "touch-target inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed",
                   localFeedback?.rating === "up"
                     ? "text-sora-blue bg-sora-blue/10"
-                    : "text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-900",
+                    : "text-space-ink/50 hover:text-space-ink/75 dark:text-nebula-silver/50 dark:hover:text-nebula-silver/75 hover:bg-nebula-silver/45 dark:hover:bg-deep-space/55",
                 )}
                 aria-label={localFeedback?.rating === "up" ? t("feedbackClear") : t("feedbackUp")}
                 title={
@@ -659,7 +830,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
                   "touch-target inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed",
                   localFeedback?.rating === "down"
                     ? "text-red-600 dark:text-red-400 bg-red-500/10"
-                    : "text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-900",
+                    : "text-space-ink/50 hover:text-space-ink/75 dark:text-nebula-silver/50 dark:hover:text-nebula-silver/75 hover:bg-nebula-silver/45 dark:hover:bg-deep-space/55",
                 )}
                 aria-label={localFeedback?.rating === "down" ? t("feedbackClear") : t("feedbackDown")}
                 title={
@@ -684,7 +855,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
                 <button
                   type="button"
                   onClick={() => setReasonMenuOpen((open) => !open)}
-                  className="touch-target inline-flex h-8 w-8 items-center justify-center rounded-md text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-900 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
+                  className="touch-target inline-flex h-8 w-8 items-center justify-center rounded-md text-space-ink/50 hover:text-space-ink/75 dark:text-nebula-silver/50 dark:hover:text-nebula-silver/75 hover:bg-nebula-silver/45 dark:hover:bg-deep-space/55 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
                   aria-label={t("feedbackReasons")}
                   title={t("feedbackReasons")}
                   aria-haspopup="menu"
@@ -729,13 +900,13 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
                   if (models.length > 1) setRegenOpen((v) => !v);
                   else onRegenerate(publicId, model);
                 }}
-                className="inline-flex items-center gap-1 text-ui-caption font-semibold text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue rounded cursor-pointer"
+                className="touch-target inline-flex h-8 w-8 items-center justify-center rounded-md text-space-ink/50 transition-colors duration-150 hover:bg-nebula-silver/45 hover:text-space-ink/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer dark:text-nebula-silver/50 dark:hover:bg-deep-space/55 dark:hover:text-nebula-silver/75"
+                title={t("regenerate")}
                 aria-label={t("regenerate")}
                 aria-haspopup={models.length > 1 ? "listbox" : undefined}
                 aria-expanded={models.length > 1 ? regenOpen : undefined}
               >
-                <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>{t("regenerate")}</span>
+                <RefreshCw className="size-3.5" aria-hidden="true" />
               </button>
               {regenOpen && models.length > 1 && (
                 <div className="absolute bottom-full mb-2 right-0 z-40 w-48 max-h-60 overflow-y-auto rounded-lg border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink py-1 shadow-md">
@@ -768,13 +939,43 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
               <button
                 type="button"
                 onClick={() => onContinue?.(publicId)}
-                className="inline-flex items-center gap-1 text-ui-caption font-semibold text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue rounded cursor-pointer"
+                className="inline-flex items-center gap-1 text-ui-caption font-medium text-space-ink/50 hover:text-space-ink/75 dark:text-nebula-silver/50 dark:hover:text-nebula-silver/75 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue rounded cursor-pointer"
                 aria-label={t("continueGenerating")}
                 title={t("continueGenerating")}
               >
                 <CornerDownRight className="w-3.5 h-3.5" aria-hidden="true" />
                 <span>{t("continueGenerating")}</span>
               </button>
+            )}
+            {visibleRunMetadata && hasRunDetails(visibleRunMetadata) && (
+              <button
+                type="button"
+                onClick={() => setMetadataExpanded((value) => !value)}
+                className="touch-target hidden h-8 w-8 items-center justify-center rounded-md text-space-ink/50 transition-colors duration-150 hover:bg-nebula-silver/45 hover:text-space-ink/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:text-nebula-silver/50 dark:hover:bg-deep-space/55 dark:hover:text-nebula-silver/75 [@media(pointer:coarse)]:inline-flex"
+                aria-label={t("responseDetails")}
+                title={t("responseDetails")}
+                aria-controls={metadataPanelId}
+                aria-expanded={metadataExpanded}
+              >
+                <Info className="size-3.5" aria-hidden="true" />
+              </button>
+            )}
+            {visibleRunMetadata?.completedAt && (
+              <time
+                dateTime={visibleRunMetadata.completedAt}
+                title={formatDateTimeLocal(visibleRunMetadata.completedAt)}
+                className="inline-flex h-8 shrink-0 items-center font-mono text-ui-body tabular-nums text-space-ink/50 dark:text-nebula-silver/50"
+              >
+                {formatDateTimeLocal(visibleRunMetadata.completedAt)}
+              </time>
+            )}
+            </div>
+            {visibleRunMetadata && (
+              <MessageRunMetadataDisplay
+                metadata={visibleRunMetadata}
+                expanded={metadataExpanded}
+                panelId={metadataPanelId}
+              />
             )}
           </div>
         )}
@@ -807,29 +1008,6 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
           </details>
         )}
 
-        {role === "assistant" && trace && (
-          <details className="text-ui-caption text-neutral-400 border border-morning-mist dark:border-deep-space/80 rounded-md bg-neutral-50/30 dark:bg-[#0d0f14]/10 overflow-hidden">
-            <summary className="cursor-pointer hover:text-neutral-600 dark:hover:text-neutral-300 px-3 py-1.5 font-mono select-none flex items-center gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue">
-              <span>
-                🔍 {t("routeTrace")} (
-                {trace.fullMessageCount != null && trace.fullMessageCount > (trace.sentMessageCount ?? 0)
-                  ? `${trace.fullMessageCount}→${trace.sentMessageCount ?? 0}`
-                  : `${trace.sentMessageCount ?? 0}`}{" "}
-                {t("contextCount")} · {trace.sentTokenEstimate ?? trace.totalTokenEstimate ?? 0} {t("tokensUsed")})
-              </span>
-            </summary>
-            <div className="px-3 pb-2 pt-0.5 space-y-1 font-mono text-ui-caption text-neutral-450 dark:text-neutral-500 border-t border-morning-mist dark:border-deep-space/60 mt-1">
-              {trace.blocks?.map((b, bi) => (
-                <div key={bi} className="flex justify-between gap-4">
-                  <span>
-                    <span className="text-neutral-400 dark:text-neutral-600">[{b.kind}]</span> {b.title}
-                  </span>
-                  <span className="font-semibold text-neutral-500">~{b.tokenEstimate}t</span>
-                </div>
-              ))}
-            </div>
-          </details>
-        )}
       </div>
       {role === "user" && menuOpen && canShowMenu && (
         <div
@@ -864,5 +1042,14 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
         </div>
       )}
     </div>
+  );
+}
+
+export const ChatMessageItem = React.memo(function ChatMessageItem(props: ChatMessageItemProps) {
+  return (
+    <ChatMessageItemContent
+      key={props.message.publicId ?? props.domId ?? props.message.role}
+      {...props}
+    />
   );
 });

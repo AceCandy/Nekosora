@@ -4,12 +4,20 @@
  * 从 ChatComposer.tsx 抽离,避免 hooks 之间互相 import 组件文件。
  */
 import type { Artifact } from "@/features/artifacts/ArtifactPanel";
-import type { ModelCapabilities } from "@/db/types";
+import type { ModelCapabilities, TokenUsage } from "@/db/types";
 import type { MessageFeedback } from "@/features/chat/model/feedback";
 
 export type { FeedbackReason, FeedbackRating, MessageFeedback } from "@/features/chat/model/feedback";
 
-/** 单条聊天消息(含可选的追踪/产物元数据)。 */
+/** assistant 消息对应的可序列化 run 投影。 */
+export interface MessageRunMetadata {
+  model?: string;
+  tokenUsage?: TokenUsage;
+  durationMs?: number;
+  completedAt?: string;
+}
+
+/** 单条聊天消息(含可选的运行与产物元数据)。 */
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
@@ -25,13 +33,8 @@ export interface ChatMessage {
   versionInfo?: { current: number; total: number };
   /** 当前用户对该 assistant 回复的质量反馈(无记录时缺省)。 */
   feedback?: MessageFeedback;
-  trace?: {
-    totalTokenEstimate?: number;
-    sentTokenEstimate?: number;
-    fullMessageCount?: number;
-    sentMessageCount?: number;
-    blocks?: { kind: string; title?: string; tokenEstimate?: number }[];
-  };
+  /** 该 assistant 回复对应的 run 元数据。 */
+  runMetadata?: MessageRunMetadata;
   artifacts?: Artifact[]; // 关联的可渲染产物
 }
 
