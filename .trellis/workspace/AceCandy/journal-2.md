@@ -140,3 +140,25 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 67: 聊天消息本地时间分隔
+
+**Date**: 2026-07-28
+**Task**: 聊天消息本地时间分隔
+**Branch**: `main`
+
+### Summary
+
+按访问者本地自然日为 Chat 与公开分享展示消息时间分隔，贯通历史 DTO、SSE、store 与分享快照，并补齐跨时区、旧快照和续写时间保留验证。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9a60204` | (see git log) |
+| `885b6e3` | (see git log) |
+
+### Status
+
+[OK] **Completed**
