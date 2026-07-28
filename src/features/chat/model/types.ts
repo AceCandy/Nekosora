@@ -17,10 +17,18 @@ export interface MessageRunMetadata {
   completedAt?: string;
 }
 
+/** 用户消息中可持久恢复的图片附件；展示 URL 在读取时按 fileId 生成。 */
+export interface ChatMessageAttachment {
+  fileId: string;
+  filename: string;
+  mime: string;
+}
+
 /** 单条聊天消息(含可选的运行与产物元数据)。 */
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+  attachments?: ChatMessageAttachment[];
   /** 消息绝对创建时间的 ISO 字符串，仅用于本地化展示。 */
   createdAt?: string;
   reasoning?: string; // 推理过程(thinking),仅 reasoning 模型产出
@@ -52,6 +60,7 @@ export interface UploadFileItem {
   id: string;
   fileId?: string;
   filename: string;
+  mime?: string;
   file?: File;
   status: "pending" | "uploading" | "uploaded" | "error";
   progress?: number;

@@ -127,6 +127,13 @@
       "when": 1785156047308,
       "tag": "0017_petite_star_brand",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1785234155836,
+      "tag": "0018_message_file_objects",
+      "breakpoints": true
     }
   ]
 }

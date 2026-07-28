@@ -124,6 +124,8 @@
     "attachPending": "(pending)",
     "attachUploading": "(uploading...)",
     "attachError": "(failed)",
+    "attachmentUploadFailed": "Image upload failed. Retry or remove it before sending.",
+    "attachmentLoadFailed": "Image unavailable",
     "attachRemove": "Remove",
     "attachPreview": "Click to preview",
     "attachSelectFile": "Upload attachment",

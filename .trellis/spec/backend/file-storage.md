@@ -530,14 +530,14 @@ Apply this contract whenever client-supplied file IDs, knowledge-base IDs, RAG r
 - `retrieve(query, fileIds, { userId, ...opts })` requires the authenticated owner id.
 - `getFileIdsByKnowledgeBases(kbIds, userId)` returns only that user's rag-ready files.
 - `BuildContextInput` includes `userId`.
-- `buildMultimodalUserMessage(text, imageFileIds, userId)` requires the owner id.
+- `buildMultimodalUserMessage(text, files: ResolvedChatImage[])` accepts only file rows already validated at the chat/RAG boundary.
 
 ### 3. Contracts
 
 - Every DB query that selects files for context, vector candidates, image storage reads, or KB expansion includes `file_objects.user_id = userId`.
 - `retrieve(..., fileIds=[], { userId })` means all rag-ready files owned by that user, never all rows in the database.
 - Context must derive the IDs sent to retrieve from the owner-filtered file rows, not reuse raw client IDs.
-- WebChat's initial image classification and multimodal assembly both enforce owner filtering; this is intentional defense in depth.
+- WebChat validates owner and conversation membership before persistence, then passes the resolved rows to multimodal assembly without a second file lookup.
 - Unauthorized and missing IDs collapse to empty results without revealing whether another user's resource exists.
 
 ### 4. Validation & Error Matrix
@@ -560,9 +560,9 @@ Apply this contract whenever client-supplied file IDs, knowledge-base IDs, RAG r
 
 - Retrieve tests cover explicit and empty file ID lists and assert owner + rag-ready SQL conditions.
 - Context tests assert only IDs from owner-filtered rows reach retrieve with the same userId.
-- Multimodal tests assert owner filtering and zero storage calls for an empty owned result.
+- Multimodal tests assert that only supplied resolved rows reach storage and an empty batch performs no storage calls.
 - KB service tests assert kbIds + owner + rag-ready conditions.
-- Search all call sites and run typecheck so no legacy signature can omit userId.
+- Search all call sites and run typecheck so no legacy raw-ID multimodal call remains.
 
 ### 7. Wrong vs Correct
 

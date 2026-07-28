@@ -42,6 +42,15 @@ import type { IRRequest, IRUsage } from "@/lib/providers/types";
 import type { ReasoningLevel } from "@/db/types";
 import type { MessageRunMetadata } from "@/features/chat/model/types";
 import { toMessageCreatedAtIso } from "@/features/chat/model/messageTime";
+import {
+  assertVisionModel,
+  ChatAttachmentError,
+  insertMessageAttachments,
+  loadMessageAttachmentsByMessageIds,
+  normalizeAttachmentFileIds,
+  resolveChatImageAttachments,
+  type ResolvedChatImage,
+} from "@/lib/chat/message-attachments";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -61,7 +70,7 @@ export async function POST(req: NextRequest) {
     /** 模型 id(WebChat byId 路由解析;缺省则回退 by name)。 */
     modelId?: string;
     messages: IRRequest["messages"];
-    fileIds?: string[];
+    fileIds?: unknown;
     // 分支支持:可选指定父消息/源消息的 publicId(retry/edit 时)
     parentPublicId?: string;
     sourcePublicId?: string;
@@ -119,6 +128,46 @@ export async function POST(req: NextRequest) {
     typeof lastUserMsg?.content === "string"
       ? lastUserMsg.content
       : JSON.stringify(lastUserMsg?.content ?? "");
+
+  let messageAttachments: ResolvedChatImage[] = [];
+  let visionValidated = false;
+  const attachmentError = (error: unknown) => {
+    const message = error instanceof Error ? error.message : "图片附件无效";
+    return NextResponse.json({ error: message }, { status: 400 });
+  };
+
+  // 普通发送由客户端声明本轮附件；编辑/重试必须从既有用户消息关联读取。
+  if (!body.userPublicId && !body.continueFromPublicId) {
+    try {
+      messageAttachments = await resolveChatImageAttachments(db, s, {
+        userId: user.id,
+        conversationId: body.conversationId,
+        fileIds: body.fileIds,
+      });
+      if (messageAttachments.length > 0) {
+        await assertVisionModel(db, s, {
+          userId: user.id,
+          model: body.model,
+          modelId: body.modelId,
+        });
+        visionValidated = true;
+      }
+    } catch (error) {
+      if (error instanceof ChatAttachmentError) return attachmentError(error);
+      throw error;
+    }
+  } else {
+    try {
+      if (normalizeAttachmentFileIds(body.fileIds).length > 0) {
+        return NextResponse.json(
+          { error: "编辑、重试或续写不能重新声明历史附件" },
+          { status: 400 },
+        );
+      }
+    } catch (error) {
+      return attachmentError(error);
+    }
+  }
 
   // 分支:将 parentPublicId/sourcePublicId 解析为内部 id
   let parentIdInternal: string | null = null;
@@ -209,7 +258,29 @@ export async function POST(req: NextRequest) {
     userPublicId = body.userPublicId;
     userMessageInternalId = userMessage.id as string;
     userCreatedAt = toMessageCreatedAtIso(userMessage.createdAt);
+    const attachmentsByMessageId = await loadMessageAttachmentsByMessageIds(db, s, {
+      userId: user.id,
+      conversationId: body.conversationId,
+      messageIds: [userMessageInternalId],
+    });
+    messageAttachments = attachmentsByMessageId.get(userMessageInternalId) ?? [];
+    if (messageAttachments.length > 0) {
+      try {
+        await assertVisionModel(db, s, {
+          userId: user.id,
+          model: body.model,
+          modelId: body.modelId,
+        });
+        visionValidated = true;
+      } catch (error) {
+        if (error instanceof ChatAttachmentError) return attachmentError(error);
+        throw error;
+      }
+    }
   } else {
+    if (!userContent.trim() && messageAttachments.length === 0) {
+      return NextResponse.json({ error: "消息内容和图片不能同时为空" }, { status: 400 });
+    }
     userPublicId = crypto.randomUUID();
     const createdAt = new Date();
     userCreatedAt = createdAt.toISOString();
@@ -253,6 +324,7 @@ export async function POST(req: NextRequest) {
             createdAt,
           })
           .returning({ id: s.messages.id });
+        await insertMessageAttachments(tx, s, inserted.id as string, messageAttachments);
         return { id: inserted.id as string };
       },
     );
@@ -301,7 +373,8 @@ export async function POST(req: NextRequest) {
     modelId: body.modelId,
     messages: body.messages,
     branchLeafPublicId: isContinue ? body.continueFromPublicId! : userPublicId,
-    fileIds: body.fileIds,
+    messageAttachments,
+    visionValidated,
     knowledgeBaseIds: body.knowledgeBaseIds,
     webSearch: body.webSearch,
     templateId: body.templateId,

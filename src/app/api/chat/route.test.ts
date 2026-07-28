@@ -23,6 +23,11 @@ const mocks = vi.hoisted(() => ({
   resolveRunTerminalStatus: vi.fn(),
   startRun: vi.fn(),
   redactErrorMessage: vi.fn(),
+  assertVisionModel: vi.fn(),
+  insertMessageAttachments: vi.fn(),
+  loadMessageAttachmentsByMessageIds: vi.fn(),
+  normalizeAttachmentFileIds: vi.fn((value: unknown) => Array.isArray(value) ? value : []),
+  resolveChatImageAttachments: vi.fn(),
   eq: vi.fn((left: unknown, right: unknown) => ({ op: "eq", left, right })),
   and: vi.fn((...conditions: unknown[]) => ({ op: "and", conditions })),
   isNull: vi.fn((field: unknown) => ({ op: "isNull", field })),
@@ -61,6 +66,17 @@ vi.mock("@/lib/chat/run-lifecycle", () => ({
   startRun: mocks.startRun,
 }));
 vi.mock("@/lib/redaction", () => ({ redactErrorMessage: mocks.redactErrorMessage }));
+vi.mock("@/lib/chat/message-attachments", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/chat/message-attachments")>();
+  return {
+    ...actual,
+    assertVisionModel: mocks.assertVisionModel,
+    insertMessageAttachments: mocks.insertMessageAttachments,
+    loadMessageAttachmentsByMessageIds: mocks.loadMessageAttachmentsByMessageIds,
+    normalizeAttachmentFileIds: mocks.normalizeAttachmentFileIds,
+    resolveChatImageAttachments: mocks.resolveChatImageAttachments,
+  };
+});
 
 import { POST } from "./route";
 
@@ -244,6 +260,10 @@ describe("POST /api/chat 消息引用并发收敛", () => {
     mocks.redactErrorMessage.mockImplementation(
       (_error: unknown, _secrets: unknown[], fallback: string) => fallback,
     );
+    mocks.resolveChatImageAttachments.mockResolvedValue([]);
+    mocks.loadMessageAttachmentsByMessageIds.mockResolvedValue(new Map());
+    mocks.assertVisionModel.mockResolvedValue(undefined);
+    mocks.insertMessageAttachments.mockResolvedValue(undefined);
     mocks.streamChat.mockImplementation(async function* () {
       yield { type: "text-delta", text: " continuation" };
       yield { type: "finish", usage: {} };
@@ -430,7 +450,39 @@ describe("POST /api/chat 消息引用并发收敛", () => {
     expect(mocks.prepareChatContext).not.toHaveBeenCalled();
   });
 
+  it("图片附件校验失败时不进入消息写事务", async () => {
+    const transaction = vi.fn();
+    mocks.getDb.mockResolvedValue({
+      select: selectQueue([
+        [{ id: "conversation-1", userId: "user-1", outputModeId: null }],
+      ]),
+      transaction,
+    });
+    mocks.resolveChatImageAttachments.mockRejectedValue(
+      new (await import("@/lib/chat/message-attachments")).ChatAttachmentError("图片附件无效"),
+    );
+
+    const response = await POST(request({
+      conversationId: "conversation-1",
+      model: "model-1",
+      messages: [{ role: "user", content: "question" }],
+      fileIds: ["file-1"],
+    }) as never);
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: "图片附件无效" });
+    expect(transaction).not.toHaveBeenCalled();
+    expect(mocks.prepareChatContext).not.toHaveBeenCalled();
+  });
+
   it("引用有效时在两个短事务后完成正常发送", async () => {
+    const attachment = {
+      fileId: "file-1",
+      filename: "image.png",
+      mime: "image/png",
+      storagePath: "chat/file-1.png",
+    };
+    mocks.resolveChatImageAttachments.mockResolvedValue([attachment]);
     const tokenUsage = { promptTokens: 10, completionTokens: 0 };
     mocks.irUsageToTokenUsage.mockReturnValue(tokenUsage);
     let markFinalizeStarted: () => void = () => {};
@@ -514,6 +566,7 @@ describe("POST /api/chat 消息引用并发收敛", () => {
       conversationId: "conversation-1",
       model: "model-1",
       messages: [{ role: "user", content: "next question" }],
+      fileIds: ["file-1"],
       parentPublicId: "assistant-public-1",
     }) as never);
     const reader = response.body!.getReader();
@@ -549,6 +602,23 @@ describe("POST /api/chat 消息引用并发收敛", () => {
     expect(payload).not.toContain('"type":"error"');
     expect(payload).not.toContain('"type":"trace"');
     expect(transaction).toHaveBeenCalledTimes(2);
+    expect(mocks.assertVisionModel).toHaveBeenCalledWith(
+      expect.anything(),
+      schema,
+      { userId: "user-1", model: "model-1", modelId: undefined },
+    );
+    expect(mocks.insertMessageAttachments).toHaveBeenCalledWith(
+      userTx,
+      schema,
+      "user-message-2",
+      [attachment],
+    );
+    expect(mocks.prepareChatContext).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messageAttachments: [attachment],
+        visionValidated: true,
+      }),
+    );
     expect(mocks.writeFallbackTitle).toHaveBeenCalledWith(
       "user-1",
       "conversation-1",

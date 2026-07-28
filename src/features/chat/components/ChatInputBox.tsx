@@ -11,6 +11,8 @@ interface ChatInputBoxProps {
   onChange: (v: string) => void;
   /** 发送（Enter 或点击发送按钮）。 */
   onSend: () => void;
+  /** 存在附件时允许空文本发送。 */
+  hasAttachments?: boolean;
   /** 流式中禁用输入，且显示停止按钮。 */
   disabled: boolean;
   /** 停止生成。 */
@@ -39,6 +41,7 @@ export function ChatInputBox({
   value,
   onChange,
   onSend,
+  hasAttachments = false,
   disabled,
   onStop,
   onPasteFiles,
@@ -50,7 +53,7 @@ export function ChatInputBox({
   trailingControl,
 }: ChatInputBoxProps) {
   const t = useTranslations("chat");
-  const hasContent = value.trim().length > 0;
+  const canSend = value.trim().length > 0 || hasAttachments;
 
   // 斜杠命令:输入以 / 开头(单行,无空格隔断)时弹出指令卡列表,模糊匹配 trigger / title
   const slashActive = !disabled && cards.length > 0 && value.startsWith("/") && !value.includes("\n");
@@ -207,7 +210,7 @@ export function ChatInputBox({
             }
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
-              onSend();
+              if (canSend) onSend();
             }
           }}
           placeholder={t("placeholder")}
@@ -238,18 +241,18 @@ export function ChatInputBox({
           ) : (
             <button
               type="button"
-              onClick={hasContent ? onSend : undefined}
-              aria-disabled={!hasContent}
+              onClick={canSend ? onSend : undefined}
+              aria-disabled={!canSend}
               className={clsx(
                 "group touch-target pointer-events-auto inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-transparent transition-[background-color,color,transform] duration-200 ease-out hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue active:translate-y-0 active:scale-95 motion-reduce:transition-none motion-reduce:hover:transform-none",
-                hasContent
+                canSend
                   ? "cursor-pointer text-sora-blue hover:bg-sora-blue/[0.08] hover:text-sora-blue-hover dark:hover:bg-sora-blue/[0.12]"
                   : "cursor-default text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800",
               )}
-              title={hasContent ? t("send") : t("voicePlaceholder")}
-              aria-label={hasContent ? t("send") : t("voicePlaceholder")}
+              title={canSend ? t("send") : t("voicePlaceholder")}
+              aria-label={canSend ? t("send") : t("voicePlaceholder")}
             >
-              {hasContent ? (
+              {canSend ? (
                 <ArrowUp strokeWidth={2.5} className="h-4 w-4 transition-transform duration-200 ease-out group-hover:-translate-y-px motion-reduce:transition-none motion-reduce:group-hover:transform-none" aria-hidden="true" />
               ) : (
                 <AudioLines className="h-4 w-4 transition-transform duration-200 ease-out group-hover:scale-105 motion-reduce:transition-none motion-reduce:group-hover:transform-none" aria-hidden="true" />

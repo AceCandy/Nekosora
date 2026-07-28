@@ -12,8 +12,18 @@ import {
 } from "@/features/chat/model/feedback";
 import type { MessageVersionSelections } from "@/db/types";
 import { resolveVisibleBranch } from "@/features/chat/lib/visible-branch";
-import type { MessageRunMetadata } from "@/features/chat/model/types";
+import type {
+  ChatMessageAttachment,
+  MessageRunMetadata,
+} from "@/features/chat/model/types";
 import { toMessageCreatedAtIso } from "@/features/chat/model/messageTime";
+import {
+  assertVisionModel,
+  loadMessageAttachmentsByMessageIds,
+  replaceMessageAttachments,
+  resolveChatImageAttachments,
+  toChatMessageAttachments,
+} from "@/lib/chat/message-attachments";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const S = () => getSchema() as any;
@@ -321,7 +331,7 @@ export async function retryFromMessage(
   assistantPublicId: string,
 ): Promise<{
   newAssistantPublicId: string;
-  parentPublicId: string | null;
+  parentPublicId: string;
   messages: { role: string; content: string }[];
 }> {
   const user = await requireSession();
@@ -338,8 +348,11 @@ export async function retryFromMessage(
   let parentPublicId: string | null = null;
   if (typeof oldAssistant.parentId === "string") {
     const parent = await findConversationMessage(db, s, conversationId, { id: oldAssistant.parentId });
-    parentPublicId = typeof parent?.publicId === "string" ? parent.publicId : null;
+    if (parent?.role === "user" && typeof parent.publicId === "string") {
+      parentPublicId = parent.publicId;
+    }
   }
+  if (!parentPublicId) throw new Error("无法重生成:该消息缺少上级用户消息(数据异常)");
 
   // 构造历史:从会话开始到 parent(含)沿当前路径
   const allMsgs = (await db
@@ -389,8 +402,12 @@ export async function editMessage(
   conversationId: string,
   messagePublicId: string,
   newContent: string,
+  attachmentFileIds: string[],
+  model: string,
+  modelId?: string,
 ): Promise<{
   messages: { role: string; content: string }[];
+  attachments: ChatMessageAttachment[];
 }> {
   const user = await requireSession();
   const db = await getDb();
@@ -408,6 +425,17 @@ export async function editMessage(
       if (!oldMsg) throw new Error("消息不存在");
       if (oldMsg.role !== "user") throw new Error("仅支持编辑用户消息");
       const oldMessageId = oldMsg.id as string;
+      const resolvedAttachments = await resolveChatImageAttachments(tx, s, {
+        userId: user.id,
+        conversationId,
+        fileIds: attachmentFileIds,
+      });
+      if (!newContent.trim() && resolvedAttachments.length === 0) {
+        throw new Error("消息内容和图片不能同时为空");
+      }
+      if (resolvedAttachments.length > 0) {
+        await assertVisionModel(tx, s, { userId: user.id, model, modelId });
+      }
 
       // 获锁后读取最新消息树，等待锁期间提交的新后代也会进入删除集合。
       const allMsgs = (await tx
@@ -455,6 +483,7 @@ export async function editMessage(
         )
         .returning({ id: s.messages.id });
       if (!updated) throw new Error("消息已失效");
+      await replaceMessageAttachments(tx, s, oldMessageId, resolvedAttachments);
 
       // 构造重生成所需历史:沿 parentId 向上回溯到根,再追加改写后的新内容
       const pathMsgs: { role: string; content: string }[] = [];
@@ -485,7 +514,10 @@ export async function editMessage(
       }
       pathMsgs.push({ role: "user", content: newContent });
 
-      return { messages: pathMsgs };
+      return {
+        messages: pathMsgs,
+        attachments: toChatMessageAttachments(resolvedAttachments),
+      };
     },
   );
   if (result === null) throw new Error("无权操作");
@@ -555,6 +587,15 @@ export async function getVisibleBranch(conversationId: string): Promise<{
     conversationId,
     mainMessageIds,
   );
+  const userMessageIds = mainMessages
+    .filter((message) => message.role === "user")
+    .map((message) => message.id as string)
+    .filter((id): id is string => typeof id === "string" && id.length > 0);
+  const attachmentsByMessageId = await loadMessageAttachmentsByMessageIds(db, s, {
+    userId: user.id,
+    conversationId,
+    messageIds: userMessageIds,
+  });
 
   const messages = mainMessages.map((m) => {
     let next = m;
@@ -566,6 +607,10 @@ export async function getVisibleBranch(conversationId: string): Promise<{
     }
     const feedback = feedbackByMessageId.get(m.id as string);
     if (feedback) next = { ...next, feedback };
+    const attachments = attachmentsByMessageId.get(m.id as string);
+    if (attachments && attachments.length > 0) {
+      next = { ...next, attachments: toChatMessageAttachments(attachments) };
+    }
     return next;
   });
 

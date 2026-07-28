@@ -236,13 +236,16 @@ deltaFlushTimeout = window.setTimeout(() => flushDeltas(), STREAM_FLUSH_FALLBACK
 
 ### 2. Signatures
 
-- `uploadAttachments(conversationId): Promise<string[]>` 返回本轮请求携带的 fileIds。
+- `ChatMessageAttachment = { fileId: string; filename: string; mime: string }`。
+- `uploadAttachments(conversationId): Promise<ChatMessageAttachment[]>` 返回完整、有序的本轮消息附件；任一上传失败时 reject，不返回成功子集。
 - `onAttachmentsConsumed(fileIds: string[]): void` 表示 `/api/chat` 已接受这些 fileIds。
 - `clearConsumedAttachments(fileIds)` 只清理本轮已消费的 uploaded 项。
 
 ### 3. Contracts
 
 - `chatStreamStore.send` 在 `response.ok && response.body` 之后、`consumeChatSSE` 之前调用一次 `onAttachmentsConsumed(fileIds)`。
+- 乐观 user/assistant 只能在全部附件上传成功后追加；上传失败时不调用 `/api/chat`，新会话允许只留下为上传归属而创建的空会话。
+- 乐观 user 消息保存同一批附件 DTO；空文字但附件非空可以发送，二者都为空才禁止。
 - 非 2xx、无 body、fetch 或上传失败时不得调用；响应已接受后的 SSE 中断不恢复附件。
 - 回调必须携带本轮 fileIds，不能无参清空全部 uploaded 项，否则请求等待期间并发新增的附件会被误删。
 - 附件 hook 使用 functional update，仅移除 `status === "uploaded"` 且 fileId 位于参数集合中的项；保留 pending/uploading/error 和其他 uploaded 项。
@@ -252,7 +255,7 @@ deltaFlushTimeout = window.setTimeout(() => flushDeltas(), STREAM_FLUSH_FALLBACK
 
 | 时机 | 消费回调 | 附件状态 |
 | --- | --- | --- |
-| 上传或 fetch 失败 | 不调用 | 全部保留 |
+| 任一上传失败 | 不调用且不请求 `/api/chat` | 全部保留，不创建乐观消息 |
 | HTTP 非成功 / 无 body | 不调用 | 全部保留 |
 | HTTP 成功且有流 body | 本轮 fileIds 调用一次 | 仅清本轮 uploaded |
 | 后续 SSE 中断 | 已调用，不恢复 | 新增/失败项仍保留 |
@@ -260,12 +263,14 @@ deltaFlushTimeout = window.setTimeout(() => flushDeltas(), STREAM_FLUSH_FALLBACK
 ### 5. Good / Base / Bad Cases
 
 - Good：本轮 `file-1` 被接受，等待期间新增的 `file-2` 继续留在 Composer。
-- Base：无附件消息回调空 fileIds，不改变附件 state。
+- Good：仅图片消息的乐观 user 保存 `content: ""` 和同一附件 DTO。
+- Base：纯文本消息保持原发送路径，不产生附件 DTO。
 - Bad：从不清理 uploaded 项会让每条后续消息重复携带旧 fileIds；成功后无参 reset 又会误删并发新增或失败项。
 
 ### 6. Tests Required
 
 - Store 单测断言成功 response 的 request body fileIds 与消费回调参数一致，且回调先于 SSE 消费。
+- Store 单测断言任一上传失败时没有乐观消息和 chat 请求；仅图片消息同时写入 DTO 与请求 fileIds。
 - 非成功 response 不调用消费回调。
 - 成功 response 后 SSE 失败仍只调用一次消费回调。
 - lint/typecheck 必须证明 Composer -> runtime hook -> store 的带参回调完整透传。
@@ -279,7 +284,8 @@ await fetch("/api/chat", request);
 resetAttachments();
 
 // Correct:服务器接受后只消费本轮 fileIds。
-const fileIds = await uploadAttachments(conversationId);
+const attachments = await uploadAttachments(conversationId);
+const fileIds = attachments.map((attachment) => attachment.fileId);
 const response = await fetch("/api/chat", request);
 if (!response.ok || !response.body) throw new Error("请求失败");
 onAttachmentsConsumed?.(fileIds);

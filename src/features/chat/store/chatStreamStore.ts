@@ -10,6 +10,7 @@ import { retryFromMessage, editMessage, getMessageSiblings, selectMessageVersion
 import { consumeChatSSE, handleStreamError } from "@/features/chat/model/sse";
 import type {
   ChatMessage,
+  ChatMessageAttachment,
   MessageFeedback,
   MessageRunMetadata,
   ToolCallRecord,
@@ -65,15 +66,25 @@ interface ChatStreamState {
     text: string,
     opts: SendOptions,
     hooks?: {
-      uploadAttachments?: (convId: string) => Promise<string[]>;
+      hasAttachments?: boolean;
+      uploadAttachments?: (convId: string) => Promise<ChatMessageAttachment[]>;
       onAttachmentsConsumed?: (fileIds: string[]) => void;
+      onRequestAccepted?: () => void;
+      onRequestRejected?: (message: string) => void;
       onUserMessagePublicId?: (publicId: string) => void;
       onTitleUpdated?: () => void;
       onConversationCreated?: (newConvId: string) => void;
     },
   ) => Promise<void>;
   regenerate: (key: string, assistantPublicId: string, model: string, modelId: string) => Promise<void>;
-  editAndResend: (key: string, userPublicId: string, newContent: string, model: string, modelId: string) => Promise<void>;
+  editAndResend: (
+    key: string,
+    userPublicId: string,
+    newContent: string,
+    attachmentFileIds: string[],
+    model: string,
+    modelId: string,
+  ) => Promise<void>;
   deleteMessage: (key: string, publicId: string) => Promise<void>;
   continueGeneration: (key: string, assistantPublicId: string, model: string, modelId: string) => Promise<void>;
   switchVersion: (key: string, publicId: string, direction: "prev" | "next") => Promise<void>;
@@ -354,16 +365,8 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
 
   send: async (key, text, opts, hooks) => {
     const rt = getRuntime(get(), key);
-    if (!text.trim() || !opts.model || rt.streaming) return;
-
-    const userMsg: ChatMessage = {
-      role: "user",
-      content: text.trim(),
-      createdAt: new Date().toISOString(),
-    };
-    const userMsgIdx = rt.messages.length;
-    const nextMessages = [...rt.messages, userMsg];
-    set((s) => patchRuntime(s, key, (r) => ({ ...r, messages: nextMessages, streaming: true })));
+    if ((!text.trim() && !hooks?.hasAttachments) || !opts.model || rt.streaming) return;
+    set((s) => patchRuntime(s, key, (r) => ({ ...r, streaming: true })));
 
     const controller = new AbortController();
     set((s) => patchRuntime(s, key, (r) => ({ ...r, abortController: controller })));
@@ -371,6 +374,11 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
     // 从已迁移后的运行时中读取真实会话 id(若存在)
     const convId = key === NEW_CONVERSATION_KEY ? null : key;
     let newConvId: string | null = null;
+    let activeKey = key;
+    let userMsgIdx = -1;
+    let assistantIdx = -1;
+    let requestMessagesAppended = false;
+    let preflightRolledBack = false;
 
     // 正文/思考增量走合批(enqueueDelta),每帧最多落库一次;其余为低频直接 set。
     const setSearchResultsAt = (k: string, idx: number, results: ChatMessage["searchResults"]) =>
@@ -429,28 +437,36 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
         hooks?.onConversationCreated?.(resolvedConvId);
       }
 
-      const fileIds = hooks?.uploadAttachments ? await hooks.uploadAttachments(resolvedConvId) : [];
-
-      const assistantIdx = (() => {
-        let idx = -1;
-        set((s) => patchRuntime(s, resolvedConvId!, (r) => {
-          idx = r.messages.length;
-          return {
-            ...r,
-            messages: [
-              ...r.messages,
-              { role: "assistant", content: "", createdAt: new Date().toISOString() },
-            ],
-          };
-        }));
-        return idx;
-      })();
+      activeKey = resolvedConvId;
+      const attachments = hooks?.uploadAttachments
+        ? await hooks.uploadAttachments(resolvedConvId)
+        : [];
+      if (!text.trim() && attachments.length === 0) throw new Error("消息内容和图片不能同时为空");
+      const fileIds = attachments.map((attachment) => attachment.fileId);
+      const baseMessages = getRuntime(get(), activeKey).messages;
+      const userMsg: ChatMessage = {
+        role: "user",
+        content: text.trim(),
+        attachments: attachments.length > 0 ? attachments : undefined,
+        createdAt: new Date().toISOString(),
+      };
+      const nextMessages = [...baseMessages, userMsg];
+      userMsgIdx = baseMessages.length;
+      assistantIdx = userMsgIdx + 1;
+      set((s) => patchRuntime(s, activeKey, (runtime) => ({
+        ...runtime,
+        messages: [
+          ...nextMessages,
+          { role: "assistant", content: "", createdAt: new Date().toISOString() },
+        ],
+      })));
+      requestMessagesAppended = true;
 
       // 取上一轮 assistant 的 publicId 作为 parentPublicId,使后端能把本轮 user 正确挂到主线上。
       // 缺失会导致 parentId 断链,刷新后 getVisibleBranch 回溯主线时前面历史会被丢弃。
       const parentPublicId = (() => {
-        for (let i = rt.messages.length - 1; i >= 0; i--) {
-          if (rt.messages[i].role === "assistant") return rt.messages[i].publicId;
+        for (let i = baseMessages.length - 1; i >= 0; i--) {
+          if (baseMessages[i].role === "assistant") return baseMessages[i].publicId;
         }
         return undefined;
       })();
@@ -471,11 +487,26 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
         }),
         signal: controller.signal,
       });
-      if (!res.ok || !res.body) throw new Error("请求失败");
+      if (!res.ok || !res.body) {
+        let message = "请求失败";
+        try {
+          const payload = (await res.json()) as { error?: string };
+          if (payload.error) message = payload.error;
+        } catch {
+          /* 非 JSON 错误沿用通用文案。 */
+        }
+        set((s) => patchRuntime(s, activeKey, (runtime) => ({
+          ...runtime,
+          messages: baseMessages,
+        })));
+        preflightRolledBack = true;
+        hooks?.onRequestRejected?.(message);
+        throw new Error(message);
+      }
       hooks?.onAttachmentsConsumed?.(fileIds);
+      hooks?.onRequestAccepted?.();
       if (newConvId) startConversationTitlePoll(newConvId);
 
-      const activeKey = resolvedConvId!;
       await consumeChatSSE(res.body, {
         onDelta: (t) => enqueueDelta(activeKey, assistantIdx, "content", t),
         onReasoning: (t) => enqueueDelta(activeKey, assistantIdx, "reasoning", t),
@@ -527,15 +558,17 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
     } catch (err) {
       // 先 flush 缓冲的限速正文,再追加错误/停止标记,否则标记会落在 finally flushDeltasNow 的残留正文之前,夹在正文中间。
       flushDeltasNow();
-      const activeKey = convId ?? newConvId ?? NEW_CONVERSATION_KEY;
       const { content } = handleStreamError(err, "网络错误");
       if (!content.includes("[错误]")) console.error("send failed:", err);
-      appendContentAt(activeKey, lastMessageIdx(activeKey), content);
+      if (requestMessagesAppended && !preflightRolledBack) {
+        appendContentAt(activeKey, assistantIdx, content);
+      } else if (!preflightRolledBack) {
+        hooks?.onRequestRejected?.(err instanceof Error ? err.message : "图片上传失败");
+      }
     } finally {
-      const finalKey = convId ?? newConvId ?? NEW_CONVERSATION_KEY;
       // 流式结束前同步 flush 残留 delta,避免最后一帧积压丢失,再置 streaming:false。
       flushDeltasNow();
-      set((s) => patchRuntime(s, finalKey, (r) => ({ ...r, streaming: false, abortController: null })));
+      set((s) => patchRuntime(s, activeKey, (r) => ({ ...r, streaming: false, abortController: null })));
     }
   },
 
@@ -545,6 +578,8 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
     set((s) => patchRuntime(s, key, (r) => ({ ...r, streaming: true })));
     const controller = new AbortController();
     set((s) => patchRuntime(s, key, (r) => ({ ...r, abortController: controller })));
+    const originalMessages = rt.messages;
+    let preflightRolledBack = false;
 
     try {
       let generatedAssistantPublicId: string | null = null;
@@ -579,7 +614,14 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
         }),
         signal: controller.signal,
       });
-      if (!res.ok || !res.body) throw new Error("请求失败");
+      if (!res.ok || !res.body) {
+        set((s) => patchRuntime(s, key, (runtime) => ({
+          ...runtime,
+          messages: originalMessages,
+        })));
+        preflightRolledBack = true;
+        throw new Error("请求失败");
+      }
 
       await consumeChatSSE(res.body, {
         onDelta: (t) => enqueueDelta(key, assistantIdx, "content", t),
@@ -612,26 +654,42 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
       flushDeltasNow();
       const { content } = handleStreamError(err, "网络错误");
       if (!content.includes("[错误]")) console.error("regenerate failed:", err);
-      appendContentAt(key, lastMessageIdx(key), content);
+      if (!preflightRolledBack) appendContentAt(key, lastMessageIdx(key), content);
     } finally {
       flushDeltasNow();
       set((s) => patchRuntime(s, key, (r) => ({ ...r, streaming: false, abortController: null })));
     }
   },
 
-  editAndResend: async (key, userPublicId, newContent, model, modelId) => {
+  editAndResend: async (key, userPublicId, newContent, attachmentFileIds, model, modelId) => {
     const rt = getRuntime(get(), key);
-    if (key === NEW_CONVERSATION_KEY || rt.streaming || !userPublicId || !newContent.trim()) return;
+    if (
+      key === NEW_CONVERSATION_KEY
+      || rt.streaming
+      || !userPublicId
+      || (!newContent.trim() && attachmentFileIds.length === 0)
+    ) return;
     set((s) => patchRuntime(s, key, (r) => ({ ...r, streaming: true })));
     const controller = new AbortController();
     set((s) => patchRuntime(s, key, (r) => ({ ...r, abortController: controller })));
 
     try {
-      const result = await editMessage(key, userPublicId, newContent.trim());
+      const result = await editMessage(
+        key,
+        userPublicId,
+        newContent.trim(),
+        attachmentFileIds,
+        model,
+        modelId,
+      );
       set((s) => patchRuntime(s, key, (r) => {
         const idx = r.messages.findIndex((x) => x.publicId === userPublicId);
         if (idx < 0) return r;
-        const replaced: ChatMessage = { ...r.messages[idx], content: newContent.trim() };
+        const replaced: ChatMessage = {
+          ...r.messages[idx],
+          content: newContent.trim(),
+          attachments: result.attachments.length > 0 ? result.attachments : undefined,
+        };
         return { ...r, messages: [...r.messages.slice(0, idx), replaced] };
       }));
       const assistantIdx = (() => {

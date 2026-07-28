@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { getTableConfig } from "drizzle-orm/pg-core";
-import { conversationShares, conversationShareUnlockAttempts, conversations, runs } from "./pg";
+import {
+  conversationShares,
+  conversationShareUnlockAttempts,
+  conversations,
+  messageFileObjects,
+  runs,
+} from "./pg";
 
 describe("runs schema", () => {
   it("声明租约列与 running conversation 部分索引", () => {
@@ -44,5 +50,28 @@ describe("conversation share schema", () => {
     expect(bucketIndex?.config.unique).toBe(true);
     expect(bucketIndex?.config.columns.map((column) => "name" in column ? column.name : null))
       .toEqual(["share_id", "scope", "client_fingerprint"]);
+  });
+});
+
+describe("message file objects schema", () => {
+  it("声明消息附件主键、稳定顺序和文件反向索引", () => {
+    const config = getTableConfig(messageFileObjects);
+
+    expect(config.primaryKeys[0]?.name).toBe("message_file_objects_message_file_pk");
+    expect(config.primaryKeys[0]?.columns.map((column) => column.name))
+      .toEqual(["message_id", "file_id"]);
+
+    const sortIndex = config.indexes.find(
+      (candidate) => candidate.config.name === "message_file_objects_message_sort_unique_idx",
+    );
+    expect(sortIndex?.config.unique).toBe(true);
+    expect(sortIndex?.config.columns.map((column) => "name" in column ? column.name : null))
+      .toEqual(["message_id", "sort_order"]);
+
+    const reverseIndex = config.indexes.find(
+      (candidate) => candidate.config.name === "message_file_objects_file_message_idx",
+    );
+    expect(reverseIndex?.config.columns.map((column) => "name" in column ? column.name : null))
+      .toEqual(["file_id", "message_id"]);
   });
 });

@@ -1,0 +1,10 @@
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"PostgreSQL schema、事务、追加迁移以及 journal/snapshot 同步约束。"}
+{"file":".trellis/spec/backend/file-storage.md","reason":"私有文件读取、Range、签名 URL 与鉴权读取边界。"}
+{"file":".trellis/spec/backend/model-message-boundary.md","reason":"图片附件转换为模型多模态消息时的 IR/AI SDK 边界。"}
+{"file":".trellis/spec/backend/chat-message-references.md","reason":"编辑、重试和消息写操作的会话属主隔离。"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"聊天组件、Modal 复用、交互与无障碍约定。"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"Zustand 多会话运行时、乐观状态和失败回滚约定。"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"数据库行到可序列化 ChatMessage DTO 的类型边界。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"完整附件数据流、单点校验和跨层往返检查。"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"复用现有 FilePreviewModal 与共享附件投影，避免重复实现。"}
+{"file":".trellis/tasks/07-28-persist-chat-image-attachments/research/current-data-flow.md","reason":"已核验根因、调用链、方案比较、现有查看器和测试缺口。"}

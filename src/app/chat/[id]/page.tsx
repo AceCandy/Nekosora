@@ -57,6 +57,9 @@ export default async function ChatConversationPage({
     reasoning: (m.reasoning as string | null) ?? undefined,
     publicId: m.publicId as string | undefined,
     status: m.status as ChatMessage["status"] | undefined,
+    attachments: Array.isArray(m.attachments)
+      ? (m.attachments as ChatMessage["attachments"])
+      : undefined,
     toolCalls: Array.isArray(m.toolCalls) ? (m.toolCalls as ChatMessage["toolCalls"]) : undefined,
     runMetadata: (m.runMetadata as ChatMessage["runMetadata"] | undefined) ?? undefined,
     // 无反馈时必须为 undefined,避免把旧版本反馈残留到前端

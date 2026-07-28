@@ -1,0 +1,9 @@
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"复核迁移、外键、索引、事务与 Drizzle 元数据一致性。"}
+{"file":".trellis/spec/backend/file-storage.md","reason":"复核展示 URL 未持久化且文件读取继续执行属主鉴权。"}
+{"file":".trellis/spec/backend/chat-message-references.md","reason":"复核所有编辑、重试和关联写入均限定当前用户会话。"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"复核消息图片、无边框查看器、键盘和移动端交互。"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"复核上传失败、乐观消息、编辑取消和多会话状态不会漂移。"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"前端测试、i18n、可访问性与质量门禁。"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"复核附件 DTO 在所有消息构造和投影中保持类型完整。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"逐层复核附件从上传到持久化、模型请求、历史恢复和 UI 的往返。"}
+{"file":".trellis/tasks/07-28-persist-chat-image-attachments/research/current-data-flow.md","reason":"对照已确认根因和测试缺口检查实现没有遗漏路径。"}

@@ -171,3 +171,40 @@ describe("MessageRunMetadataDisplay", () => {
     expect(timeOnlyHtml).not.toContain('role="region"');
   });
 });
+
+describe("ChatMessageItem 用户图片", () => {
+  it("图片位于文字之前且仅图片消息不渲染空文本气泡", () => {
+    const withText = renderToStaticMarkup(
+      <ChatMessageItem
+        message={{
+          role: "user",
+          content: "caption",
+          attachments: [{ fileId: "image-1", filename: "photo.png", mime: "image/png" }],
+        }}
+        isLast
+        isStreaming={false}
+        model="model-a"
+        onRegenerate={() => undefined}
+        onOpenArtifact={() => undefined}
+      />,
+    );
+    expect(withText.indexOf('/api/files/image-1')).toBeLessThan(withText.indexOf("caption"));
+
+    const imageOnly = renderToStaticMarkup(
+      <ChatMessageItem
+        message={{
+          role: "user",
+          content: "",
+          attachments: [{ fileId: "image-1", filename: "photo.png", mime: "image/png" }],
+        }}
+        isLast
+        isStreaming={false}
+        model="model-a"
+        onRegenerate={() => undefined}
+        onOpenArtifact={() => undefined}
+      />,
+    );
+    expect(imageOnly).toContain('/api/files/image-1');
+    expect(imageOnly).not.toContain("overflow-hidden whitespace-pre-wrap");
+  });
+});

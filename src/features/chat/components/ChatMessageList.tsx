@@ -44,7 +44,7 @@ interface ChatMessageListProps {
   renderStyleClass?: string | null;
   renderStyleRenderer?: "streamdown" | "custom";
   onRegenerate: (publicId: string, model: string) => void;
-  onEdit?: (publicId: string, newContent: string, model: string) => void;
+  onEdit?: (publicId: string, newContent: string, attachmentFileIds: string[], model: string) => void;
   onSwitchVersion?: (publicId: string, direction: "prev" | "next") => void;
   onOpenArtifact: (a: Artifact) => void;
   /** 软删除一条消息。 */
@@ -221,12 +221,17 @@ export function ChatMessageList({
     if (uIdx >= 0) setRegenTarget(`msg-${uIdx}#${Date.now()}`);
     onRegenerate?.(publicId, model);
   };
-  const handleEdit = (publicId: string, newContent: string, model: string) => {
+  const handleEdit = (
+    publicId: string,
+    newContent: string,
+    attachmentFileIds: string[],
+    model: string,
+  ) => {
     // 编辑的是 user 消息,直接锚定它到中上部(同重新生成机制);editAndResend 会截断到该 user
     // 并追加空 assistant,ScrollAnchor 据此锚定 + 接管到底跟随。
     const uIdx = messages.findIndex((m) => m.publicId === publicId);
     if (uIdx >= 0) setRegenTarget(`msg-${uIdx}#${Date.now()}`);
-    onEdit?.(publicId, newContent, model);
+    onEdit?.(publicId, newContent, attachmentFileIds, model);
   };
   // 视口 ref:供选区检测判断选区是否落在消息区内
   const viewportRef = useRef<HTMLDivElement>(null);

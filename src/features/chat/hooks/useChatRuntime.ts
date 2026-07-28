@@ -4,7 +4,11 @@ import { useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useShallow } from "zustand/react/shallow";
 import { useChatStreamStore, NEW_CONVERSATION_KEY, type SendOptions } from "@/features/chat/store/chatStreamStore";
-import type { ChatMessage, MessageFeedback } from "@/features/chat/model/types";
+import type {
+  ChatMessage,
+  ChatMessageAttachment,
+  MessageFeedback,
+} from "@/features/chat/model/types";
 import type { ReasoningLevel } from "@/db/types";
 
 interface UseChatRuntimeOptions {
@@ -13,7 +17,8 @@ interface UseChatRuntimeOptions {
   /** SSR 初始消息(仅当 store 内无该会话数据时注入)。 */
   initialMessages?: ChatMessage[];
   /** 发送前上传附件,返回 fileId 数组(由 useChatAttachments 提供)。 */
-  uploadAttachments?: (convId: string) => Promise<string[]>;
+  hasAttachments?: boolean;
+  uploadAttachments?: (convId: string) => Promise<ChatMessageAttachment[]>;
   /** /api/chat 接受附件后清理已消费的上传项。 */
   onAttachmentsConsumed?: (fileIds: string[]) => void;
   /** 新会话建会后回调(用于上层更新活动会话 id);本 hook 会在此前静默替换 URL。 */
@@ -30,6 +35,7 @@ interface UseChatRuntimeOptions {
 export function useChatRuntime({
   conversationId = null,
   initialMessages = [],
+  hasAttachments = false,
   uploadAttachments,
   onAttachmentsConsumed,
   onConversationCreated,
@@ -99,11 +105,15 @@ export function useChatRuntime({
         webSearch?: boolean,
         knowledgeBaseIds?: string[],
         createOptions?: { outputModeId?: string | null; renderStyleId?: string | null; reasoning?: ReasoningLevel },
+        lifecycle?: { onAccepted?: () => void; onRejected?: (message: string) => void },
       ) => {
         const opts: SendOptions = { model: modelName, modelId, instructionCardIds, webSearch, knowledgeBaseIds, createOptions };
         void actions.send(key, text, opts, {
+          hasAttachments,
           uploadAttachments,
           onAttachmentsConsumed,
+          onRequestAccepted: lifecycle?.onAccepted,
+          onRequestRejected: lifecycle?.onRejected,
           onTitleUpdated: () => { if (!wasNewConversation.current) router.refresh(); },
           // 静默换 URL,不触发 Next.js RSC 导航(避免组件重挂、流式中断);同时通知上层更新活动会话 id。
           onConversationCreated: (newConvId) => {
@@ -112,7 +122,7 @@ export function useChatRuntime({
           },
         });
       },
-    [actions, key, uploadAttachments, onAttachmentsConsumed, router, onConversationCreated],
+    [actions, key, hasAttachments, uploadAttachments, onAttachmentsConsumed, router, onConversationCreated],
   );
 
   const regenerate = useMemo(
@@ -123,8 +133,21 @@ export function useChatRuntime({
   );
 
   const editAndResend = useMemo(
-    () => (userPublicId: string, newContent: string, modelName: string, modelId: string) => {
-      void actions.editAndResend(key, userPublicId, newContent, modelName, modelId);
+    () => (
+      userPublicId: string,
+      newContent: string,
+      attachmentFileIds: string[],
+      modelName: string,
+      modelId: string,
+    ) => {
+      void actions.editAndResend(
+        key,
+        userPublicId,
+        newContent,
+        attachmentFileIds,
+        modelName,
+        modelId,
+      );
     },
     [actions, key],
   );

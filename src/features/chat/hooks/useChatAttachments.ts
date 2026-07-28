@@ -1,7 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { UploadFileItem } from "@/features/chat/model/types";
+import { useTranslations } from "next-intl";
+import type {
+  ChatMessageAttachment,
+  UploadFileItem,
+} from "@/features/chat/model/types";
 
 /**
  * 聊天附件管理 —— 封装附件 state + 上传逻辑 + 粘贴/拖拽入口。
@@ -10,14 +14,16 @@ import type { UploadFileItem } from "@/features/chat/model/types";
  *   - 维护 attached 列表(本地预览 + 上传状态)
  *   - handleUpload:接收 FileList/File[],立即上传(若已有 conversationId)或标 pending(等发送时上传)
  *   - removeAttachment:移除单项
- *   - uploadPending:发送消息时,把 pending 项上传,返回 fileId 数组
+ *   - uploadPending:发送消息时等待全部附件上传,返回消息附件 DTO
  *
  * 上传端点:/api/upload(FormData:file, conversationId)
  * 文件来源仅粘贴/拖拽,不再提供独立上传按钮。
  */
 export function useChatAttachments(conversationId: string | null) {
+  const t = useTranslations("chat");
   const [attached, setAttached] = useState<UploadFileItem[]>([]);
   const previewUrlsRef = useRef(new Set<string>());
+  const uploadTasksRef = useRef(new Map<string, Promise<string | null>>());
 
   useEffect(() => {
     const activeUrls = new Set(
@@ -77,6 +83,7 @@ export function useChatAttachments(conversationId: string | null) {
         return {
           id: Math.random().toString(36).substring(7),
           filename: file.name,
+          mime: file.type || "application/octet-stream",
           file,
           status: conversationId ? "uploading" : "pending",
           isImage: file.type.startsWith("image/"),
@@ -88,41 +95,67 @@ export function useChatAttachments(conversationId: string | null) {
 
       if (conversationId) {
         for (const item of newItems) {
-          await uploadOne(item, conversationId);
+          const task = uploadOne(item, conversationId);
+          uploadTasksRef.current.set(item.id, task);
+          void task.then((fileId) => {
+            if (!fileId) uploadTasksRef.current.delete(item.id);
+          });
         }
       }
     },
     [conversationId, uploadOne],
   );
 
-  /** 发送消息时,把 pending 项上传,返回所有 uploaded 的 fileId。 */
+  /** 发送消息时等待整批附件；任一失败则整轮失败，不返回成功子集。 */
   const uploadPending = useCallback(
-    async (targetConvId: string): Promise<string[]> => {
-      const uploadedFileIds: string[] = attached
-        .filter((a) => a.status === "uploaded" && a.fileId)
-        .map((a) => a.fileId!);
-
-      const pendingFiles = attached.filter((x) => x.status === "pending");
-      if (pendingFiles.length > 0) {
-        setAttached((prev) =>
-          prev.map((x) => (x.status === "pending" ? { ...x, status: "uploading" } : x)),
-        );
-        for (const item of pendingFiles) {
-          const fid = await uploadOne(item, targetConvId);
-          if (fid) uploadedFileIds.push(fid);
+    async (targetConvId: string): Promise<ChatMessageAttachment[]> => {
+      const resolveItem = async (item: UploadFileItem): Promise<ChatMessageAttachment> => {
+        let fileId = item.status === "uploaded" ? item.fileId : undefined;
+        if (!fileId) {
+          setAttached((prev) =>
+            prev.map((candidate) =>
+              candidate.id === item.id ? { ...candidate, status: "uploading" } : candidate,
+            ),
+          );
+          let task = uploadTasksRef.current.get(item.id);
+          if (!task) {
+            task = uploadOne(item, targetConvId);
+            uploadTasksRef.current.set(item.id, task);
+          }
+          fileId = (await task) ?? undefined;
+          if (!fileId) {
+            uploadTasksRef.current.delete(item.id);
+            throw new Error(t("attachmentUploadFailed"));
+          }
         }
+        return {
+          fileId,
+          filename: item.filename,
+          mime: item.mime || item.file?.type || "application/octet-stream",
+        };
+      };
+
+      try {
+        return await Promise.all(attached.map(resolveItem));
+      } catch (error) {
+        throw error instanceof Error ? error : new Error(t("attachmentUploadFailed"));
       }
-      return uploadedFileIds;
     },
-    [attached, uploadOne],
+    [attached, t, uploadOne],
   );
 
   const removeAttachment = useCallback((id: string) => {
+    uploadTasksRef.current.delete(id);
     setAttached((prev) => prev.filter((item) => item.id !== id));
   }, []);
 
   const clearConsumedAttachments = useCallback((fileIds: string[]) => {
     const consumedIds = new Set(fileIds);
+    for (const [itemId, task] of uploadTasksRef.current) {
+      void task.then((fileId) => {
+        if (fileId && consumedIds.has(fileId)) uploadTasksRef.current.delete(itemId);
+      });
+    }
     setAttached((prev) =>
       prev.filter((item) => {
         const consumed =

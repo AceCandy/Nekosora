@@ -28,6 +28,10 @@ import { getTemplate, renderTemplate, incUseCount as incTplUseCount } from "@/li
 import { getCardsByIds, renderCardContext, incUseCount as incCardUseCount } from "@/lib/instruction-cards/service";
 import { assembleContext } from "@/lib/context-assembler";
 import { buildTrace } from "@/lib/trace";
+import {
+  assertVisionModel,
+  type ResolvedChatImage,
+} from "@/lib/chat/message-attachments";
 
 /** 兼容默认:model_catalog 缺失时的上下文窗口与输出上限。 */
 const DEFAULT_CONTEXT_WINDOW = 32_000;
@@ -76,6 +80,10 @@ export interface PrepareContextInput {
   branchLeafPublicId: string;
   /** 附件 fileIds。 */
   fileIds?: string[];
+  /** route 已完成属主/会话/MIME 校验的本轮消息图片。 */
+  messageAttachments?: ResolvedChatImage[];
+  /** route 已在消息写入前完成模型视觉能力校验。 */
+  visionValidated?: boolean;
   /** 挂载的知识库 ID。 */
   knowledgeBaseIds?: string[];
   /** 联网搜索开关。 */
@@ -110,13 +118,16 @@ export async function prepareChatContext(
 ): Promise<PrepareContextResult | { error: NextResponse }> {
   const {
     userId, conversationId, conv, userContent, model, modelId, messages, branchLeafPublicId,
-    fileIds: bodyFileIds, knowledgeBaseIds, webSearch: webSearchOn,
+    fileIds: bodyFileIds, messageAttachments = [], visionValidated = false,
+    knowledgeBaseIds, webSearch: webSearchOn,
     templateId, templateVars, instructionCardIds,
     db, schema: s,
   } = input;
 
   // ===== 阶段 1:知识库 fileIds 合并(后续 vision/RAG 链强依赖,先算)=====
-  let fileIds = bodyFileIds ?? [];
+  let fileIds = messageAttachments.length > 0
+    ? messageAttachments.map((attachment) => attachment.fileId)
+    : bodyFileIds ?? [];
   if (knowledgeBaseIds && knowledgeBaseIds.length > 0) {
     const kbFileIds = await getFileIdsByKnowledgeBases(knowledgeBaseIds, userId);
     fileIds = [...new Set([...fileIds, ...kbFileIds])];
@@ -138,58 +149,47 @@ export async function prepareChatContext(
       let ragStatus: string | null = null;
 
       // vision 图片附件分离
-      let imageFileIds: string[] = [];
-      if (fileIds.length > 0) {
+      const knownImages = new Map(
+        messageAttachments.map((attachment) => [attachment.fileId, attachment]),
+      );
+      const unresolvedFileIds = fileIds.filter((fileId) => !knownImages.has(fileId));
+      if (unresolvedFileIds.length > 0) {
         const fileRows = await db
-          .select({ id: s.fileObjects.id, mime: s.fileObjects.mime })
+          .select({
+            fileId: s.fileObjects.id,
+            filename: s.fileObjects.filename,
+            mime: s.fileObjects.mime,
+            storagePath: s.fileObjects.storagePath,
+          })
           .from(s.fileObjects)
           .where(
             and(
-              inArray(s.fileObjects.id, fileIds),
+              inArray(s.fileObjects.id, unresolvedFileIds),
               eq(s.fileObjects.userId, userId),
             ),
           );
-        imageFileIds = fileRows
-          .filter((r: { mime: string }) => (r.mime as string).startsWith("image/"))
-          .map((r: { id: string }) => r.id);
+        for (const row of fileRows as ResolvedChatImage[]) {
+          if (row.mime.startsWith("image/")) knownImages.set(row.fileId, row);
+        }
       }
+      const imageFiles = fileIds.flatMap((fileId) => {
+        const file = knownImages.get(fileId);
+        return file ? [file] : [];
+      });
 
-      if (imageFileIds.length > 0) {
-        // WebChat 可见性:public ∪ (private && owner=自己)。优先 by id;缺省回退 by name。
-        const [modelRow] = modelId
-          ? await db
-              .select({ capabilities: s.modelCatalog.capabilities })
-              .from(s.models)
-              .innerJoin(s.modelCatalog, eq(s.models.catalogId, s.modelCatalog.id))
-              .where(
-                and(
-                  eq(s.models.id, modelId),
-                  eq(s.models.enabled, true),
-                  or(eq(s.models.visibility, "public"), eq(s.models.ownerUserId, userId)),
-                ),
-              )
-              .limit(1)
-          : await db
-              .select({ capabilities: s.modelCatalog.capabilities })
-              .from(s.models)
-              .innerJoin(s.modelCatalog, eq(s.models.catalogId, s.modelCatalog.id))
-              .where(
-                and(
-                  eq(s.models.name, model),
-                  eq(s.models.enabled, true),
-                  or(eq(s.models.visibility, "public"), eq(s.models.ownerUserId, userId)),
-                ),
-              )
-              .limit(1);
-        const caps = modelRow?.capabilities as { vision?: boolean } | undefined;
-        if (!caps?.vision) {
-          return {
-            ok: false,
-            error: NextResponse.json(
-              { error: "当前模型不支持图片输入(需 capabilities.vision=true)" },
-              { status: 400 },
-            ),
-          };
+      if (imageFiles.length > 0) {
+        if (!visionValidated) {
+          try {
+            await assertVisionModel(db, s, { userId, model, modelId });
+          } catch (error) {
+            const message = error instanceof Error
+              ? error.message
+              : "当前模型不支持图片输入(需 capabilities.vision=true)";
+            return {
+              ok: false,
+              error: NextResponse.json({ error: message }, { status: 400 }),
+            };
+          }
         }
         const lastUserIdx = effectiveMessages.length - 1;
         if (lastUserIdx >= 0) {
@@ -199,8 +199,7 @@ export async function prepareChatContext(
               : userContent;
           effectiveMessages[lastUserIdx] = await buildMultimodalUserMessage(
             lastContent,
-            imageFileIds,
-            userId,
+            imageFiles,
           );
         }
       }

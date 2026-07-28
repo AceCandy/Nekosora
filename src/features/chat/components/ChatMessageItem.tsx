@@ -35,6 +35,7 @@ import { ErrorBoundary } from "@/shared/components/ErrorBoundary";
 import { Badge } from "@/shared/ui/Badge";
 import type {
   ChatMessage,
+  ChatMessageAttachment,
   MessageFeedback,
   MessageRunMetadata,
   ModelOption,
@@ -47,6 +48,7 @@ import { copyToClipboard } from "@/shared/lib/clipboard";
 import { formatDateTimeLocal, formatDuration } from "@/shared/lib/format";
 import { ASSISTANT_MESSAGE_CLASS, USER_MESSAGE_BUBBLE_CLASS } from "@/features/chat/components/messagePresentation";
 import { useClickOutside } from "@/shared/lib/useClickOutside";
+import { MessageImageAttachments } from "@/features/chat/components/MessageImageAttachments";
 
 /** 用户消息超过此行数才折叠(长消息默认收起,避免撑高会话)。 */
 const USER_MESSAGE_COLLAPSE_LINES = 6;
@@ -206,7 +208,12 @@ interface ChatMessageItemProps {
   onRegenerate: (publicId: string, model: string) => void;
   onOpenArtifact: (a: Artifact) => void;
   /** 编辑用户消息后重发(publicId 为被编辑 user 消息的稳定标识)。 */
-  onEdit?: (publicId: string, newContent: string, model: string) => void;
+  onEdit?: (
+    publicId: string,
+    newContent: string,
+    attachmentFileIds: string[],
+    model: string,
+  ) => void;
   /** 切换该 assistant 消息的版本(同级兄弟)。 */
   onSwitchVersion?: (publicId: string, direction: "prev" | "next") => void;
   /** 请求删除该消息(由父层弹统一确认弹窗,确认后真正执行)。 */
@@ -254,6 +261,7 @@ function ChatMessageItemContent({
     versionInfo,
     feedback,
     runMetadata,
+    attachments = [],
   } = message;
   const hasReasoning = Boolean(reasoning);
   const visibleRunMetadata = runMetadata && status !== "interrupted" && hasRunMetadata(runMetadata)
@@ -263,6 +271,25 @@ function ChatMessageItemContent({
   // 用户消息编辑态
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(content);
+  const [draftAttachments, setDraftAttachments] = useState<ChatMessageAttachment[]>(attachments);
+
+  const attachmentIdsChanged =
+    draftAttachments.length !== attachments.length
+    || draftAttachments.some((attachment, index) => attachment.fileId !== attachments[index]?.fileId);
+  const canSubmitEdit = Boolean(
+    (draft.trim() || draftAttachments.length > 0)
+    && (draft.trim() !== content.trim() || attachmentIdsChanged),
+  );
+  const submitEdit = () => {
+    if (!publicId || !onEdit || !canSubmitEdit) return;
+    onEdit(
+      publicId,
+      draft.trim(),
+      draftAttachments.map((attachment) => attachment.fileId),
+      model,
+    );
+    setEditing(false);
+  };
 
   // 复制按钮反馈
   const [copied, setCopied] = useState(false);
@@ -501,10 +528,7 @@ function ChatMessageItemContent({
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
-                  if (publicId && draft.trim() && onEdit) {
-                    onEdit(publicId, draft, model);
-                    setEditing(false);
-                  }
+                  submitEdit();
                 }
                 if (e.key === "Escape") setEditing(false);
               }}
@@ -512,11 +536,20 @@ function ChatMessageItemContent({
               className="w-full rounded-2xl bg-neutral-900 text-white dark:bg-white dark:text-black px-4 py-2.5 text-ui-reading leading-7 resize-none border border-sora-blue/40 focus:outline-none focus:border-sora-blue"
               autoFocus
             />
+            <MessageImageAttachments
+              attachments={draftAttachments}
+              onRemove={(fileId) => {
+                setDraftAttachments((current) =>
+                  current.filter((attachment) => attachment.fileId !== fileId),
+                );
+              }}
+            />
             <div className="flex items-center justify-end gap-2">
               <button
                 type="button"
                 onClick={() => {
                   setDraft(content);
+                  setDraftAttachments(attachments);
                   setEditing(false);
                 }}
                 className="inline-flex items-center gap-1 text-ui-caption font-semibold text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors cursor-pointer"
@@ -526,21 +559,18 @@ function ChatMessageItemContent({
               </button>
               <button
                 type="button"
-                disabled={!draft.trim() || draft.trim() === content.trim()}
-                onClick={() => {
-                  if (publicId && draft.trim() && onEdit) {
-                    onEdit(publicId, draft, model);
-                    setEditing(false);
-                  }
-                }}
+                disabled={!canSubmitEdit}
+                onClick={submitEdit}
                 className="inline-flex items-center gap-1 text-ui-caption font-semibold text-sora-blue hover:opacity-80 disabled:opacity-40 transition-opacity cursor-pointer"
               >
                 <Check className="w-3 h-3" aria-hidden="true" />
                 <span>{t("editSaveAndResend")}</span>
               </button>
             </div>
-          </div>) : (<div className="group relative">
-            <div
+          </div>) : (<div className="group relative w-full">
+            <div className="flex w-full flex-col items-end gap-1.5">
+              <MessageImageAttachments attachments={attachments} />
+            {content ? (<div
               ref={userMsgRef}
               onContextMenu={(e) => {
                 if (!canShowMenu) return;
@@ -571,8 +601,8 @@ function ChatMessageItemContent({
               {userMsgCanCollapse && !userMsgExpanded ? (
                 <div className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-b from-transparent to-neutral-900 dark:to-white" />
               ) : null}
-            </div>
-            {userMsgCanCollapse ? (
+            </div>) : null}
+            {content && userMsgCanCollapse ? (
               <button
                 type="button"
                 onClick={() => setUserMsgExpanded((v) => !v)}
@@ -589,11 +619,13 @@ function ChatMessageItemContent({
                 </span>
               </button>
             ) : null}
+            </div>
             {publicId && onEdit && !isStreaming && !conversationStreaming && (
               <button
                 type="button"
                 onClick={() => {
                   setDraft(content);
+                  setDraftAttachments(attachments);
                   setEditing(true);
                 }}
                 className="absolute -left-7 top-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"

@@ -14,6 +14,7 @@ import {
   uniqueIndex,
   vector,
   pgEnum,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type {
@@ -683,6 +684,31 @@ export const fileChunks = pgTable(
     // pgvector 的 HNSW 相似度索引由迁移后置 SQL 创建(drizzle 暂无声明式向量索引 API):
     //   CREATE INDEX file_chunks_embedding_idx ON file_chunks
     //     USING hnsw (embedding vector_cosine_ops);
+  ],
+);
+
+/** 用户消息与聊天图片文件的有序关联；文件实体沿用既有生命周期。 */
+export const messageFileObjects = pgTable(
+  "message_file_objects",
+  {
+    messageId: text("message_id")
+      .notNull()
+      .references(() => messages.id, { onDelete: "cascade" }),
+    fileId: text("file_id")
+      .notNull()
+      .references(() => fileObjects.id, { onDelete: "cascade" }),
+    sortOrder: integer("sort_order").notNull(),
+  },
+  (t) => [
+    primaryKey({
+      name: "message_file_objects_message_file_pk",
+      columns: [t.messageId, t.fileId],
+    }),
+    uniqueIndex("message_file_objects_message_sort_unique_idx").on(
+      t.messageId,
+      t.sortOrder,
+    ),
+    index("message_file_objects_file_message_idx").on(t.fileId, t.messageId),
   ],
 );
 

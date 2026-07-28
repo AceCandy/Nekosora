@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useTransition } from "react";
 import Image from "next/image";
 import { useTranslations } from "next-intl";
-import { Cpu } from "lucide-react";
+import { AlertCircle, Cpu } from "lucide-react";
 import { clsx } from "clsx";
 import { ArtifactPanel, type Artifact } from "@/features/artifacts/ArtifactPanel";
 import FilePreviewModal, { type PreviewableFile } from "@/shared/components/file-preview/FilePreviewModal";
@@ -100,6 +100,7 @@ export default function ChatComposer({
   const [input, setInput] = useState("");
   const [activeArtifact, setActiveArtifact] = useState<Artifact | null>(null);
   const [previewFile, setPreviewFile] = useState<PreviewableFile | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
   const [selectedCardIds, setSelectedCardIds] = useState<string[]>(initialCardIds);
   const [cardPickerOpen, setCardPickerOpen] = useState(false);
   const [webSearch, setWebSearch] = useState(initialWebSearch);
@@ -142,6 +143,7 @@ export default function ChatComposer({
   const runtime = useChatRuntime({
     conversationId: activeConvId ?? null,
     initialMessages,
+    hasAttachments: attached.length > 0,
     uploadAttachments: uploadPending,
     onAttachmentsConsumed: clearConsumedAttachments,
     onConversationCreated: setActiveConvId,
@@ -159,8 +161,23 @@ export default function ChatComposer({
 
   const handleSend = () => {
     // 滚动锚定由 message-scroller 的 scrollAnchor(user 消息)自动处理,无需手动 pin。
-    runtime.send(input, modelName, model, selectedCardIds, webSearch, selectedKbIds, { outputModeId, renderStyleId, reasoning });
-    setInput("");
+    setSendError(null);
+    runtime.send(
+      input,
+      modelName,
+      model,
+      selectedCardIds,
+      webSearch,
+      selectedKbIds,
+      { outputModeId, renderStyleId, reasoning },
+      {
+        onAccepted: () => {
+          setInput("");
+          setSendError(null);
+        },
+        onRejected: setSendError,
+      },
+    );
   };
 
   // 选中文本「引用」:以 Markdown 引用块插入输入框末尾
@@ -356,9 +373,9 @@ export default function ChatComposer({
             const name = models.find((m) => m.modelId === modelId)?.name ?? modelId;
             runtime.regenerate(publicId, name, modelId);
           }}
-          onEdit={(publicId, newContent, modelId) => {
+          onEdit={(publicId, newContent, attachmentFileIds, modelId) => {
             const name = models.find((m) => m.modelId === modelId)?.name ?? modelId;
-            runtime.editAndResend(publicId, newContent, name, modelId);
+            runtime.editAndResend(publicId, newContent, attachmentFileIds, name, modelId);
           }}
           onSwitchVersion={runtime.switchVersion}
           onOpenArtifact={setActiveArtifact}
@@ -398,9 +415,20 @@ export default function ChatComposer({
               onStop={runtime.stopGeneration}
               onPasteFiles={handleUpload}
               onDropFiles={handleUpload}
+              hasAttachments={attached.length > 0}
               cards={cards}
               onCardToggle={handleCardToggle}
-              topContent={<ChatToolbar {...toolbarProps} />}
+              topContent={(
+                <>
+                  <ChatToolbar {...toolbarProps} />
+                  {sendError && (
+                    <p role="alert" className="flex items-center gap-1.5 px-3 pb-1 text-ui-caption text-red-600 dark:text-red-400">
+                      <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                      <span>{sendError}</span>
+                    </p>
+                  )}
+                </>
+              )}
               leadingControl={<ComposerPlusMenu {...toolbarProps} />}
               trailingControl={<ModelControlMenu {...toolbarProps} />}
             />

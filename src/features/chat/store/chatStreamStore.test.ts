@@ -110,6 +110,7 @@ describe("chatStreamStore finish metadata", () => {
     });
     mocks.editMessage.mockResolvedValue({
       messages: [{ role: "user", content: "new question" }],
+      attachments: [],
     });
     mocks.consumeChatSSE.mockImplementationOnce(
       async (_body: ReadableStream<Uint8Array>, handlers: SSEHandlers) => {
@@ -122,6 +123,16 @@ describe("chatStreamStore finish metadata", () => {
       "conversation-finish",
       "user-1",
       "new question",
+      [],
+      "model-a",
+      "model-id-a",
+    );
+
+    expect(mocks.editMessage).toHaveBeenCalledWith(
+      "conversation-finish",
+      "user-1",
+      "new question",
+      [],
       "model-a",
       "model-id-a",
     );
@@ -316,7 +327,9 @@ describe("chatStreamStore 附件消费边界", () => {
 
   it("服务器接受请求后消费本轮 fileIds", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response("data: done\n\n"));
-    const uploadAttachments = vi.fn().mockResolvedValue(["file-1"]);
+    const uploadAttachments = vi.fn().mockResolvedValue([
+      { fileId: "file-1", filename: "one.png", mime: "image/png" },
+    ]);
     const onAttachmentsConsumed = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     mocks.consumeChatSSE.mockImplementationOnce(async () => {
@@ -339,7 +352,9 @@ describe("chatStreamStore 附件消费边界", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 500 })));
 
     await useChatStreamStore.getState().send("conversation-1", "hello", sendOptions, {
-      uploadAttachments: vi.fn().mockResolvedValue(["file-1"]),
+      uploadAttachments: vi.fn().mockResolvedValue([
+        { fileId: "file-1", filename: "one.png", mime: "image/png" },
+      ]),
       onAttachmentsConsumed,
     });
 
@@ -352,11 +367,85 @@ describe("chatStreamStore 附件消费边界", () => {
     mocks.consumeChatSSE.mockRejectedValue(new Error("stream interrupted"));
 
     await useChatStreamStore.getState().send("conversation-1", "hello", sendOptions, {
-      uploadAttachments: vi.fn().mockResolvedValue(["file-1"]),
+      uploadAttachments: vi.fn().mockResolvedValue([
+        { fileId: "file-1", filename: "one.png", mime: "image/png" },
+      ]),
       onAttachmentsConsumed,
     });
 
     expect(onAttachmentsConsumed).toHaveBeenCalledWith(["file-1"]);
+  });
+
+  it("任一上传失败时不创建消息也不调用 chat API", async () => {
+    const fetchMock = vi.fn();
+    const onRequestRejected = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await useChatStreamStore.getState().send("conversation-1", "caption", sendOptions, {
+      hasAttachments: true,
+      uploadAttachments: vi.fn().mockRejectedValue(new Error("upload failed")),
+      onRequestRejected,
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(useChatStreamStore.getState().runtimes["conversation-1"].messages).toEqual([]);
+    expect(onRequestRejected).toHaveBeenCalledWith("upload failed");
+  });
+
+  it("允许仅图片消息并把同一附件写入乐观消息与请求", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("data: done\n\n"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await useChatStreamStore.getState().send("conversation-1", "", sendOptions, {
+      hasAttachments: true,
+      uploadAttachments: vi.fn().mockResolvedValue([
+        { fileId: "file-1", filename: "one.png", mime: "image/png" },
+      ]),
+    });
+
+    const request = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(JSON.parse(request.body as string)).toMatchObject({
+      fileIds: ["file-1"],
+      messages: [{ role: "user", content: "" }],
+    });
+    expect(useChatStreamStore.getState().runtimes["conversation-1"].messages[0])
+      .toMatchObject({
+        role: "user",
+        content: "",
+        attachments: [{ fileId: "file-1", filename: "one.png", mime: "image/png" }],
+      });
+  });
+
+  it("预流式 4xx 恢复原消息并保留附件", async () => {
+    const original: ChatMessage[] = [
+      { role: "assistant", content: "previous", publicId: "assistant-1" },
+    ];
+    useChatStreamStore.setState({
+      runtimes: {
+        "conversation-1": { messages: original, streaming: false, abortController: null },
+      },
+    });
+    const onAttachmentsConsumed = vi.fn();
+    const onRequestRejected = vi.fn();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: "vision unsupported" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      }),
+    ));
+
+    await useChatStreamStore.getState().send("conversation-1", "caption", sendOptions, {
+      hasAttachments: true,
+      uploadAttachments: vi.fn().mockResolvedValue([
+        { fileId: "file-1", filename: "one.png", mime: "image/png" },
+      ]),
+      onAttachmentsConsumed,
+      onRequestRejected,
+    });
+
+    expect(useChatStreamStore.getState().runtimes["conversation-1"].messages).toEqual(original);
+    expect(onAttachmentsConsumed).not.toHaveBeenCalled();
+    expect(onRequestRejected).toHaveBeenCalledWith("vision unsupported");
   });
 });
 

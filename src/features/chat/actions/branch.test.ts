@@ -6,6 +6,11 @@ const mocks = vi.hoisted(() => ({
   getSchema: vi.fn(),
   findConversationMessage: vi.fn(),
   withConversationMessageWrite: vi.fn(),
+  assertVisionModel: vi.fn(),
+  loadMessageAttachmentsByMessageIds: vi.fn(),
+  replaceMessageAttachments: vi.fn(),
+  resolveChatImageAttachments: vi.fn(),
+  toChatMessageAttachments: vi.fn(),
   eq: vi.fn((left: unknown, right: unknown) => ({ op: "eq", left, right })),
   and: vi.fn((...conditions: unknown[]) => ({ op: "and", conditions })),
   isNull: vi.fn((field: unknown) => ({ op: "isNull", field })),
@@ -23,6 +28,13 @@ vi.mock("@/lib/infra/db", () => ({ getDb: mocks.getDb, getSchema: mocks.getSchem
 vi.mock("@/lib/chat/message-reference", () => ({
   findConversationMessage: mocks.findConversationMessage,
   withConversationMessageWrite: mocks.withConversationMessageWrite,
+}));
+vi.mock("@/lib/chat/message-attachments", () => ({
+  assertVisionModel: mocks.assertVisionModel,
+  loadMessageAttachmentsByMessageIds: mocks.loadMessageAttachmentsByMessageIds,
+  replaceMessageAttachments: mocks.replaceMessageAttachments,
+  resolveChatImageAttachments: mocks.resolveChatImageAttachments,
+  toChatMessageAttachments: mocks.toChatMessageAttachments,
 }));
 
 import {
@@ -94,11 +106,36 @@ function selectQueue(responses: Record<string, unknown>[][]) {
   });
 }
 
+beforeEach(() => {
+  mocks.assertVisionModel.mockResolvedValue(undefined);
+  mocks.loadMessageAttachmentsByMessageIds.mockResolvedValue(new Map());
+  mocks.replaceMessageAttachments.mockResolvedValue(undefined);
+  mocks.resolveChatImageAttachments.mockResolvedValue([]);
+  mocks.toChatMessageAttachments.mockImplementation((attachments) =>
+    attachments.map(({ fileId, filename, mime }: { fileId: string; filename: string; mime: string }) => ({
+      fileId,
+      filename,
+      mime,
+    })),
+  );
+});
+
 describe("聊天分支消息属主隔离", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.requireSession.mockResolvedValue({ id: "user-1" });
     mocks.getSchema.mockReturnValue(schema);
+    mocks.loadMessageAttachmentsByMessageIds.mockResolvedValue(new Map());
+    mocks.replaceMessageAttachments.mockResolvedValue(undefined);
+    mocks.resolveChatImageAttachments.mockResolvedValue([]);
+    mocks.toChatMessageAttachments.mockImplementation((attachments) =>
+      attachments.map(({ fileId, filename, mime }: { fileId: string; filename: string; mime: string }) => ({
+        fileId,
+        filename,
+        mime,
+      })),
+    );
+    mocks.assertVisionModel.mockResolvedValue(undefined);
     mocks.withConversationMessageWrite.mockImplementation(
       async (
         db: unknown,
@@ -123,7 +160,14 @@ describe("聊天分支消息属主隔离", () => {
     mocks.getDb.mockResolvedValue(db);
     mocks.findConversationMessage.mockResolvedValue(null);
 
-    await expect(editMessage("conversation-1", "foreign-message", "new content"))
+    await expect(editMessage(
+      "conversation-1",
+      "foreign-message",
+      "new content",
+      [],
+      "model-1",
+      "model-id-1",
+    ))
       .rejects.toThrow("消息不存在");
 
     expect(mocks.findConversationMessage).toHaveBeenCalledWith(
@@ -160,7 +204,14 @@ describe("聊天分支消息属主隔离", () => {
     mocks.withConversationMessageWrite.mockResolvedValueOnce(null);
 
     await expect(
-      editMessage("conversation-1", "user-public-1", "new content"),
+      editMessage(
+        "conversation-1",
+        "user-public-1",
+        "new content",
+        [],
+        "model-1",
+        "model-id-1",
+      ),
     ).rejects.toThrow("无权操作");
 
     expect(update).not.toHaveBeenCalled();
@@ -188,11 +239,25 @@ describe("聊天分支消息属主隔离", () => {
       role: "user",
       content: "old content",
     });
+    mocks.resolveChatImageAttachments.mockResolvedValueOnce([{
+      fileId: "file-1",
+      filename: "one.png",
+      mime: "image/png",
+      storagePath: "user-1/one.png",
+    }]);
 
     await expect(
-      editMessage("conversation-1", "user-public-1", "new content"),
+      editMessage(
+        "conversation-1",
+        "user-public-1",
+        "new content",
+        ["file-1"],
+        "model-1",
+        "model-id-1",
+      ),
     ).resolves.toEqual({
       messages: [{ role: "user", content: "new content" }],
+      attachments: [{ fileId: "file-1", filename: "one.png", mime: "image/png" }],
     });
 
     expect(mocks.withConversationMessageWrite).toHaveBeenCalledWith(
@@ -206,7 +271,52 @@ describe("聊天分支消息属主隔离", () => {
     expect(mocks.eq).toHaveBeenCalledWith(schema.messages.role, "user");
     expect(mocks.isNull).toHaveBeenCalledWith(schema.messages.deletedAt);
     expect(returning).toHaveBeenCalledWith({ id: schema.messages.id });
+    expect(mocks.replaceMessageAttachments).toHaveBeenCalledWith(
+      db,
+      schema,
+      "user-message-1",
+      [expect.objectContaining({ fileId: "file-1" })],
+    );
+    expect(mocks.assertVisionModel).toHaveBeenCalledWith(db, schema, {
+      userId: "user-1",
+      model: "model-1",
+      modelId: "model-id-1",
+    });
     expect(remove).not.toHaveBeenCalled();
+  });
+
+  it("编辑图片消息时模型不支持 vision 不改写消息树", async () => {
+    const update = vi.fn();
+    const remove = vi.fn();
+    const db = { update, delete: remove };
+    mocks.getDb.mockResolvedValue(db);
+    mocks.findConversationMessage.mockResolvedValueOnce({
+      id: "user-message-1",
+      publicId: "user-public-1",
+      parentId: null,
+      role: "user",
+      content: "old content",
+    });
+    mocks.resolveChatImageAttachments.mockResolvedValueOnce([{
+      fileId: "file-1",
+      filename: "one.png",
+      mime: "image/png",
+      storagePath: "user-1/one.png",
+    }]);
+    mocks.assertVisionModel.mockRejectedValueOnce(new Error("当前模型不支持图片输入"));
+
+    await expect(editMessage(
+      "conversation-1",
+      "user-public-1",
+      "new content",
+      ["file-1"],
+      "text-model",
+      "text-model-id",
+    )).rejects.toThrow("当前模型不支持图片输入");
+
+    expect(update).not.toHaveBeenCalled();
+    expect(remove).not.toHaveBeenCalled();
+    expect(mocks.replaceMessageAttachments).not.toHaveBeenCalled();
   });
 
   it("删除其他用户的 assistant 消息时不泄露消息角色", async () => {
@@ -484,6 +594,42 @@ describe("getVisibleBranch 历史 toolCalls 回填", () => {
       runId: "run_a",
     },
   ];
+
+  it("一次批量投影主线用户消息附件", async () => {
+    mocks.loadMessageAttachmentsByMessageIds.mockResolvedValueOnce(new Map([[
+      "user-1-msg",
+      [{
+        fileId: "file-1",
+        filename: "one.png",
+        mime: "image/png",
+        storagePath: "user-1/one.png",
+      }],
+    ]]));
+    mocks.getDb.mockResolvedValue({
+      select: selectQueue([
+        [{ id: "conversation-1", userId: "user-1" }],
+        baseMsgs,
+        [],
+        [],
+        [],
+      ]),
+    });
+
+    const result = await getVisibleBranch("conversation-1");
+    expect(result.messages[0]).toMatchObject({
+      id: "user-1-msg",
+      attachments: [{ fileId: "file-1", filename: "one.png", mime: "image/png" }],
+    });
+    expect(mocks.loadMessageAttachmentsByMessageIds).toHaveBeenCalledWith(
+      expect.anything(),
+      schema,
+      {
+        userId: "user-1",
+        conversationId: "conversation-1",
+        messageIds: ["user-1-msg"],
+      },
+    );
+  });
 
   it("按 runId 批量回填会话内运行元数据,保留真实零值", async () => {
     const completedAt = new Date("2026-07-25T00:00:02.000Z");

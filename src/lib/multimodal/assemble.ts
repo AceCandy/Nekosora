@@ -12,9 +12,8 @@
  * 避免 base64 膨胀 token 上限。
  */
 import { getStorage } from "@/lib/infra/storage";
-import { getDb, getSchema } from "@/lib/infra/db";
-import { and, eq, inArray } from "drizzle-orm";
 import type { IRMessage } from "@/lib/providers/types";
+import type { ResolvedChatImage } from "@/lib/chat/message-attachments";
 
 /** 内联 base64 的体积上限(压缩目标,字节)。 */
 const MAX_INLINE_BYTES = 512 * 1024;
@@ -37,10 +36,9 @@ export function isImageMime(mime: string): boolean {
  */
 export async function buildMultimodalUserMessage(
   text: string,
-  imageFileIds: string[],
-  userId: string,
+  files: ResolvedChatImage[],
 ): Promise<IRMessage> {
-  if (imageFileIds.length === 0) {
+  if (files.length === 0) {
     return { role: "user", content: text };
   }
 
@@ -48,19 +46,6 @@ export async function buildMultimodalUserMessage(
   if (text) parts.push({ type: "text", text });
 
   const storage = await getStorage();
-  const db = await getDb();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const s = getSchema() as any;
-
-  const files = await db
-    .select()
-    .from(s.fileObjects)
-    .where(
-      and(
-        inArray(s.fileObjects.id, imageFileIds),
-        eq(s.fileObjects.userId, userId),
-      ),
-    );
 
   for (const file of files) {
     const mime = file.mime as string;
