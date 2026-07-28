@@ -41,6 +41,7 @@ import { redactErrorMessage } from "@/lib/redaction";
 import type { IRRequest, IRUsage } from "@/lib/providers/types";
 import type { ReasoningLevel } from "@/db/types";
 import type { MessageRunMetadata } from "@/features/chat/model/types";
+import { toMessageCreatedAtIso } from "@/features/chat/model/messageTime";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -148,6 +149,8 @@ export async function POST(req: NextRequest) {
   let continueAssistantInternalId: string | null = null;
   let continueParentUserInternalId: string | null = null;
   let continueParentUserPublicId: string | null = null;
+  let continueAssistantCreatedAt: string | undefined;
+  let continueParentUserCreatedAt: string | undefined;
   if (body.continueFromPublicId) {
     const contMsg = await findConversationMessage(db, s, body.conversationId, {
       publicId: body.continueFromPublicId,
@@ -160,6 +163,7 @@ export async function POST(req: NextRequest) {
     }
     isContinue = true;
     continueAssistantInternalId = contMsg.id as string;
+    continueAssistantCreatedAt = toMessageCreatedAtIso(contMsg.createdAt);
     continuePrefixText =
       typeof contMsg.content === "string" ? contMsg.content : String(contMsg.content ?? "");
     if (contMsg.parentId) {
@@ -169,6 +173,7 @@ export async function POST(req: NextRequest) {
       if (parentUser?.role === "user") {
         continueParentUserInternalId = parentUser.id as string;
         continueParentUserPublicId = parentUser.publicId as string;
+        continueParentUserCreatedAt = toMessageCreatedAtIso(parentUser.createdAt);
       }
     }
     if (!continueParentUserPublicId) {
@@ -185,6 +190,7 @@ export async function POST(req: NextRequest) {
   // - continue:沿用原 user 父消息,不改其 runId。
   let userPublicId: string;
   let userMessageInternalId: string | null = null;
+  let userCreatedAt: string | undefined;
   if (isContinue) {
     if (!continueParentUserPublicId) {
       return NextResponse.json({ error: "续写消息缺少用户父消息" }, { status: 400 });
@@ -192,6 +198,7 @@ export async function POST(req: NextRequest) {
     // 续写沿用原 user 父消息,不插入新 user
     userPublicId = continueParentUserPublicId;
     userMessageInternalId = continueParentUserInternalId;
+    userCreatedAt = continueParentUserCreatedAt;
   } else if (body.userPublicId) {
     const userMessage = await findConversationMessage(db, s, body.conversationId, {
       publicId: body.userPublicId,
@@ -201,8 +208,11 @@ export async function POST(req: NextRequest) {
     }
     userPublicId = body.userPublicId;
     userMessageInternalId = userMessage.id as string;
+    userCreatedAt = toMessageCreatedAtIso(userMessage.createdAt);
   } else {
     userPublicId = crypto.randomUUID();
+    const createdAt = new Date();
+    userCreatedAt = createdAt.toISOString();
     const insertedUser = await withConversationMessageWrite(
       db,
       s,
@@ -240,6 +250,7 @@ export async function POST(req: NextRequest) {
             role: "user",
             content: userContent,
             status: "success",
+            createdAt,
           })
           .returning({ id: s.messages.id });
         return { id: inserted.id as string };
@@ -322,6 +333,10 @@ export async function POST(req: NextRequest) {
   // 提前生成 assistant 消息 publicId:在流首帧回传给前端,使生成期间即可显示操作按钮;
   // finally 落库时复用同一标识。
   const assistantPublicId = isContinue ? body.continueFromPublicId! : crypto.randomUUID();
+  const assistantCreatedAt = new Date();
+  const assistantCreatedAtIso = isContinue
+    ? continueAssistantCreatedAt
+    : assistantCreatedAt.toISOString();
   // 客户端断开(刷新 / 关页 / HMR / req.signal abort)→ 中止上游生成,避免继续写已关闭 socket
   // 触发 Socket closed unexpectedly → uncaughtException 反复冲击 dev server。req.signal 在部分场景
   // 不可靠,由 ReadableStream.cancel() 兜底,二者都触发同一个 AbortController。
@@ -383,12 +398,16 @@ export async function POST(req: NextRequest) {
       // 续写模式下 user 沿用原消息,前端无需回填,跳过该帧。
       if (!isContinue) {
         safeEnqueue(
-          encoder.encode(`data: ${JSON.stringify({ type: "user_message", publicId: userPublicId })}\n\n`),
+          encoder.encode(
+            `data: ${JSON.stringify({ type: "user_message", publicId: userPublicId, createdAt: userCreatedAt })}\n\n`,
+          ),
         );
       }
       // 回传本轮 assistant 占位消息的 publicId,供前端回填后无需刷新即可显示操作按钮。
       safeEnqueue(
-        encoder.encode(`data: ${JSON.stringify({ type: "assistant_message", publicId: assistantPublicId })}\n\n`),
+        encoder.encode(
+          `data: ${JSON.stringify({ type: "assistant_message", publicId: assistantPublicId, createdAt: assistantCreatedAtIso })}\n\n`,
+        ),
       );
       // 如有联网搜索结果,发 search_result 事件供 UI 展示引用
       if (searchBundle?.hit) {
@@ -546,6 +565,7 @@ export async function POST(req: NextRequest) {
                 reasoning: assistantReasoning || null,
                 status: finished ? "success" : "interrupted",
                 processTrace: trace,
+                createdAt: assistantCreatedAt,
               });
             },
           );

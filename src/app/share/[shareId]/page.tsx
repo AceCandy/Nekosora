@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 import { getShare } from "@/features/chat/actions/share";
 import { ReadonlyChatMessage } from "@/features/chat/components/ReadonlyChatMessage";
+import { MessageTimeSeparator } from "@/features/chat/components/MessageTimeSeparator";
 import { ShareUnlockForm } from "@/features/chat/components/ShareUnlockForm";
 
 export const metadata: Metadata = { robots: { index: false, follow: false } };
@@ -31,7 +32,21 @@ export default async function SharePage({ params }: { params: Promise<{ shareId:
           <p className="mt-3 text-ui-caption text-neutral-500 dark:text-neutral-400">{t("readonly")}</p>
         </header>
         <section className="space-y-8" aria-label={t("conversation")}>
-          {share.messages.map((message, index) => <ReadonlyChatMessage key={`${index}-${message.role}`} role={message.role} content={message.content} renderStyleClass={share.renderStyle?.cssClass} renderer={share.renderStyle?.renderer} />)}
+          {share.messages.map((message, index) => (
+            <div key={`${index}-${message.role}`}>
+              <MessageTimeSeparator
+                createdAt={message.createdAt}
+                previousCreatedAt={share.messages[index - 1]?.createdAt}
+                isFirst={index === 0}
+              />
+              <ReadonlyChatMessage
+                role={message.role}
+                content={message.content}
+                renderStyleClass={share.renderStyle?.cssClass}
+                renderer={share.renderStyle?.renderer}
+              />
+            </div>
+          ))}
         </section>
       </div>
     </main>

@@ -5,8 +5,8 @@
  * 纯异步函数,无 React 依赖,便于单测。
  *
  * SSE 帧格式(见 /api/chat route):
- *   data: {"type":"user_message","publicId":"..."}       (本轮 user 消息稳定标识,最先发送)
- *   data: {"type":"assistant_message","publicId":"..."}  (本轮 assistant 占位消息稳定标识)
+ *   data: {"type":"user_message","publicId":"...","createdAt":"..."}       (本轮 user 消息身份)
+ *   data: {"type":"assistant_message","publicId":"...","createdAt":"..."}  (本轮 assistant 消息身份)
  *   data: {"type":"delta","text":"..."}
  *   data: {"type":"reasoning","text":"..."}
  *   data: {"type":"tool_call","toolName":"...","args":{...}}
@@ -44,6 +44,8 @@ export interface SSEEvent {
   conversationId?: string;
   /** user_message / assistant_message:对应消息的稳定标识(供前端回填)。 */
   publicId?: string;
+  /** user_message / assistant_message:对应消息的绝对创建时间。 */
+  createdAt?: string;
 }
 
 export interface SSEHandlers {
@@ -57,9 +59,9 @@ export interface SSEHandlers {
   /** 会话标题自动生成完成后触发(用于刷新侧栏会话列表)。 */
   onTitleUpdated?: (title: string, conversationId: string) => void;
   /** 收到本轮 user 消息的稳定标识(供前端回填后支持编辑重发)。 */
-  onUserMessage?: (publicId: string) => void;
+  onUserMessage?: (publicId: string, createdAt?: string) => void;
   /** 收到本轮 assistant 占位消息的稳定标识(供前端回填,无需刷新即可显示操作按钮)。 */
-  onAssistantMessage?: (publicId: string) => void;
+  onAssistantMessage?: (publicId: string, createdAt?: string) => void;
 }
 
 /**
@@ -112,9 +114,9 @@ export async function consumeChatSSE(
           } else if (ev.type === "title_updated" && ev.title !== undefined && ev.conversationId !== undefined) {
             handlers.onTitleUpdated?.(ev.title, ev.conversationId);
           } else if (ev.type === "user_message" && ev.publicId !== undefined) {
-            handlers.onUserMessage?.(ev.publicId);
+            handlers.onUserMessage?.(ev.publicId, ev.createdAt);
           } else if (ev.type === "assistant_message" && ev.publicId !== undefined) {
-            handlers.onAssistantMessage?.(ev.publicId);
+            handlers.onAssistantMessage?.(ev.publicId, ev.createdAt);
           }
         } catch {
           /* ignore parse errors */

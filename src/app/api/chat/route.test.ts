@@ -149,6 +149,7 @@ function mockContinuationDb(options?: {
       parentId: "user-message-1",
       role: "assistant",
       content: "prefix",
+      createdAt: new Date("2026-07-20T08:00:00.000Z"),
       deletedAt: null,
     }],
     [{
@@ -157,6 +158,7 @@ function mockContinuationDb(options?: {
       conversationId: "conversation-1",
       role: "user",
       content: "question",
+      createdAt: new Date("2026-07-20T07:00:00.000Z"),
       deletedAt: null,
     }],
   ]);
@@ -166,7 +168,7 @@ function mockContinuationDb(options?: {
   ]);
   const returning = vi.fn().mockResolvedValue([{ id: "assistant-1" }]);
   const transactionWhere = vi.fn(() => ({ returning }));
-  const transactionSet = vi.fn(() => ({ where: transactionWhere }));
+  const transactionSet = vi.fn((_value: Record<string, unknown>) => ({ where: transactionWhere }));
   const transactionUpdate = vi.fn(() => ({ set: transactionSet }));
   const updateWhere = vi
     .fn()
@@ -189,7 +191,7 @@ function mockContinuationDb(options?: {
       },
     ),
   });
-  return { updateWhere };
+  return { transactionSet, updateWhere };
 }
 
 function mockPendingGeneration() {
@@ -246,6 +248,28 @@ describe("POST /api/chat 消息引用并发收敛", () => {
       yield { type: "text-delta", text: " continuation" };
       yield { type: "finish", usage: {} };
     });
+  });
+
+  it("续写身份帧复用原 assistant 创建时间", async () => {
+    const { transactionSet } = mockContinuationDb();
+
+    const response = await POST(request() as never);
+    const payload = await response.text();
+    const identityFrames = payload
+      .split("\n\n")
+      .filter(
+        (frame) =>
+          frame.includes('"type":"user_message"') ||
+          frame.includes('"type":"assistant_message"'),
+      )
+      .map((frame) => JSON.parse(frame.slice(6)) as Record<string, unknown>);
+
+    expect(identityFrames).toEqual([{
+      type: "assistant_message",
+      publicId: "assistant-public-1",
+      createdAt: "2026-07-20T08:00:00.000Z",
+    }]);
+    expect(transactionSet.mock.calls[0][0]).not.toHaveProperty("createdAt");
   });
 
   it("生成后引用失效时发送错误且不发送 DONE", async () => {
@@ -534,11 +558,42 @@ describe("POST /api/chat 消息引用并发收敛", () => {
     );
     expect(mocks.dispatchConversationTitleJob).toHaveBeenCalledWith("title-job-1");
     expect(userValues).toHaveBeenCalledWith(
-      expect.objectContaining({ parentId: "assistant-1", role: "user" }),
+      expect.objectContaining({
+        parentId: "assistant-1",
+        role: "user",
+        createdAt: expect.any(Date),
+      }),
     );
     expect(assistantValues).toHaveBeenCalledWith(
-      expect.objectContaining({ parentId: "user-message-2", role: "assistant" }),
+      expect.objectContaining({
+        parentId: "user-message-2",
+        role: "assistant",
+        createdAt: expect.any(Date),
+      }),
     );
+    const userInsertValue = userValues.mock.calls[0][0] as { createdAt: Date };
+    const assistantInsertValue = assistantValues.mock.calls[0][0] as { createdAt: Date };
+    const identityFrames = payload
+      .split("\n\n")
+      .filter(
+        (frame) =>
+          frame.includes('"type":"user_message"') ||
+          frame.includes('"type":"assistant_message"'),
+      )
+      .map((frame) => JSON.parse(frame.slice(6)) as {
+        type: string;
+        createdAt?: string;
+      });
+    expect(identityFrames).toEqual([
+      expect.objectContaining({
+        type: "user_message",
+        createdAt: userInsertValue.createdAt.toISOString(),
+      }),
+      expect.objectContaining({
+        type: "assistant_message",
+        createdAt: assistantInsertValue.createdAt.toISOString(),
+      }),
+    ]);
     for (const [conversationPatch] of updateSet.mock.calls) {
       expect(conversationPatch).not.toHaveProperty("generating");
     }

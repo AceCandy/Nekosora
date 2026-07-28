@@ -113,8 +113,18 @@ describe("conversation share actions", () => {
       mode: "snapshot",
       titleSnapshot: "Title",
       messageSnapshotsJson: [
-        { publicId: "u1-public", role: "user", content: "Question" },
-        { publicId: "a1-public", role: "assistant", content: "Answer" },
+        {
+          publicId: "u1-public",
+          role: "user",
+          content: "Question",
+          createdAt: "2026-01-01T00:00:00.000Z",
+        },
+        {
+          publicId: "a1-public",
+          role: "assistant",
+          content: "Answer",
+          createdAt: "2026-01-01T00:01:00.000Z",
+        },
       ],
       renderStyleSnapshot: expect.objectContaining({ sourceId: "style-1", cssClass: "paper", renderer: "custom" }),
     }));
@@ -159,13 +169,51 @@ describe("conversation share actions", () => {
     const { db } = dbWithRows([ [{
       shareId: "share-1", conversationId: "conversation-1", mode: "snapshot", status: "active",
       revokedAt: null, expiresAt: null, passwordVerifier: null, titleSnapshot: "Title", modelSnapshot: "model",
-      messageSnapshotsJson: [{ publicId: "deleted-later", role: "assistant", content: "Frozen" }],
+      messageSnapshotsJson: [{
+        publicId: "deleted-later",
+        role: "assistant",
+        content: "Frozen",
+        createdAt: "2026-01-01T00:01:00.000Z",
+      }],
     }] ]);
     mocks.getDb.mockResolvedValue(db);
 
     await expect(getShare("share-1")).resolves.toEqual({
       status: "ready", title: "Title", model: "model", renderStyle: null,
-      messages: [{ role: "assistant", content: "Frozen" }],
+      messages: [{
+        role: "assistant",
+        content: "Frozen",
+        createdAt: "2026-01-01T00:01:00.000Z",
+      }],
+    });
+    expect(db.select).toHaveBeenCalledTimes(1);
+  });
+
+  it("旧快照缺少消息时间时不回查原会话", async () => {
+    const { db } = dbWithRows([[{
+      shareId: "share-old-snapshot",
+      conversationId: "conversation-1",
+      mode: "snapshot",
+      status: "active",
+      revokedAt: null,
+      expiresAt: null,
+      passwordVerifier: null,
+      titleSnapshot: "Old snapshot",
+      modelSnapshot: "model",
+      messageSnapshotsJson: [{
+        publicId: "message-1",
+        role: "assistant",
+        content: "Still readable",
+      }],
+    }]]);
+    mocks.getDb.mockResolvedValue(db);
+
+    await expect(getShare("share-old-snapshot")).resolves.toEqual({
+      status: "ready",
+      title: "Old snapshot",
+      model: "model",
+      renderStyle: null,
+      messages: [{ role: "assistant", content: "Still readable" }],
     });
     expect(db.select).toHaveBeenCalledTimes(1);
   });
@@ -186,7 +234,10 @@ describe("conversation share actions", () => {
     const result = await getShare("share-live");
     expect(result).toEqual(expect.objectContaining({
       status: "ready", title: "Current", model: "new-model",
-      messages: [{ role: "user", content: "Q" }, { role: "assistant", content: "Chosen" }],
+      messages: [
+        { role: "user", content: "Q", createdAt: "2026-01-01T00:00:00.000Z" },
+        { role: "assistant", content: "Chosen", createdAt: "2026-01-01T00:01:00.000Z" },
+      ],
       renderStyle: expect.objectContaining({ sourceId: "style-2", cssClass: "compact" }),
     }));
   });
@@ -204,7 +255,7 @@ describe("conversation share actions", () => {
       status: "ready",
       title: "Current",
       model: "model",
-      messages: [{ role: "user", content: "Q" }],
+      messages: [{ role: "user", content: "Q", createdAt: "2026-01-01T00:00:00.000Z" }],
       renderStyle: null,
     });
   });

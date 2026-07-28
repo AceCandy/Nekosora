@@ -998,6 +998,7 @@ describe("getMessageSiblings 版本切换 toolCalls 回填", () => {
     expect(result.siblings[0]).toEqual({
       publicId: "pub-v1",
       content: "v1 answer",
+      createdAt: "2026-07-25T00:00:01.000Z",
       reasoning: "think-1",
       branchReason: null,
       runMetadata: {
@@ -1011,6 +1012,7 @@ describe("getMessageSiblings 版本切换 toolCalls 回填", () => {
     expect(result.siblings[1]).toEqual({
       publicId: "pub-v2",
       content: "v2 answer",
+      createdAt: "2026-07-25T00:00:02.000Z",
       reasoning: "think-2",
       branchReason: "retry",
       runMetadata: { model: "Model V2" },
@@ -1070,8 +1072,20 @@ describe("getMessageSiblings 版本切换 toolCalls 回填", () => {
     const result = await getMessageSiblings("pub-1");
 
     expect(result.siblings).toEqual([
-      { publicId: "pub-1", content: "a", reasoning: null, branchReason: null },
-      { publicId: "pub-2", content: "b", reasoning: null, branchReason: "retry" },
+      {
+        publicId: "pub-1",
+        content: "a",
+        createdAt: "2026-07-25T00:00:01.000Z",
+        reasoning: null,
+        branchReason: null,
+      },
+      {
+        publicId: "pub-2",
+        content: "b",
+        createdAt: "2026-07-25T00:00:02.000Z",
+        reasoning: null,
+        branchReason: "retry",
+      },
     ]);
     expect(result.siblings[0].toolCalls).toBeUndefined();
     expect(result.siblings[1].toolCalls).toBeUndefined();

@@ -13,6 +13,7 @@ import {
 import type { MessageVersionSelections } from "@/db/types";
 import { resolveVisibleBranch } from "@/features/chat/lib/visible-branch";
 import type { MessageRunMetadata } from "@/features/chat/model/types";
+import { toMessageCreatedAtIso } from "@/features/chat/model/messageTime";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const S = () => getSchema() as any;
@@ -170,6 +171,7 @@ export async function getMessageSiblings(messagePublicId: string): Promise<{
   siblings: {
     publicId: string;
     content: string;
+    createdAt?: string;
     reasoning: string | null;
     branchReason: string | null;
     runMetadata?: MessageRunMetadata;
@@ -211,6 +213,7 @@ export async function getMessageSiblings(messagePublicId: string): Promise<{
     role: string;
     branchReason: string | null;
     runId: string | null;
+    createdAt?: Date | string;
   }[];
   const assistantSiblings = all.filter((m) => m.role === "assistant");
 
@@ -246,6 +249,7 @@ export async function getMessageSiblings(messagePublicId: string): Promise<{
     const base: {
       publicId: string;
       content: string;
+      createdAt?: string;
       reasoning: string | null;
       branchReason: string | null;
       runMetadata?: MessageRunMetadata;
@@ -257,6 +261,8 @@ export async function getMessageSiblings(messagePublicId: string): Promise<{
       reasoning: m.reasoning,
       branchReason: m.branchReason,
     };
+    const createdAt = toMessageCreatedAtIso(m.createdAt);
+    if (createdAt) base.createdAt = createdAt;
     if (typeof m.runId === "string") {
       const runMetadata = runMetadataByRunId.get(m.runId);
       if (runMetadata) base.runMetadata = runMetadata;

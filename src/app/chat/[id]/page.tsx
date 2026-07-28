@@ -9,6 +9,7 @@ import { listEnabledRenderStyles } from "@/lib/render-styles/service";
 import ChatComposer, { type ModelOption } from "@/features/chat/components/ChatComposer";
 import type { ModelCapabilities } from "@/db/types";
 import type { ChatMessage } from "@/features/chat/model/types";
+import { toMessageCreatedAtIso } from "@/features/chat/model/messageTime";
 
 export default async function ChatConversationPage({
   params,
@@ -52,6 +53,7 @@ export default async function ChatConversationPage({
   const initialMessages = (msgs as Record<string, unknown>[]).map((m) => ({
     role: m.role as "user" | "assistant",
     content: typeof m.content === "string" ? m.content : String(m.content ?? ""),
+    createdAt: toMessageCreatedAtIso(m.createdAt),
     reasoning: (m.reasoning as string | null) ?? undefined,
     publicId: m.publicId as string | undefined,
     status: m.status as ChatMessage["status"] | undefined,

@@ -17,6 +17,7 @@ import { ChevronDown, Copy, Reply, MessagesSquare, Volume2, Square } from "lucid
 import { clsx } from "clsx";
 import { ChatMessageItem } from "@/features/chat/components/ChatMessageItem";
 import { ChatOutline } from "@/features/chat/components/ChatOutline";
+import { MessageTimeSeparator } from "@/features/chat/components/MessageTimeSeparator";
 import { ErrorBoundary } from "@/shared/components/ErrorBoundary";
 import ConfirmDialog from "@/shared/ui/ConfirmDialog";
 import type { ChatMessage, MessageFeedback, ModelOption } from "@/features/chat/model/types";
@@ -298,6 +299,11 @@ export function ChatMessageList({
                 scrollAnchor={m.role === "user"}
                 className="py-4"
               >
+                <MessageTimeSeparator
+                  createdAt={m.createdAt}
+                  previousCreatedAt={messages[i - 1]?.createdAt}
+                  isFirst={i === 0}
+                />
                 <ErrorBoundary name="message">
                   <ChatMessageItem
                     domId={`msg-${i}`}

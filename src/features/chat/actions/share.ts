@@ -10,6 +10,7 @@ import type {
   MessageVersionSelections,
 } from "@/db/types";
 import { resolveVisibleBranch } from "@/features/chat/lib/visible-branch";
+import { toMessageCreatedAtIso } from "@/features/chat/model/messageTime";
 import {
   createShareUnlockToken,
   fingerprintShareClient,
@@ -65,7 +66,7 @@ export type PublicShareState =
       status: "ready";
       title: string;
       model: string | null;
-      messages: { role: string; content: string }[];
+      messages: { role: string; content: string; createdAt?: string }[];
       renderStyle: ConversationShareRenderStyleSnapshot | null;
     };
 
@@ -101,18 +102,30 @@ function toListItem(share: Record<string, unknown>, now: Date): ConversationShar
 }
 
 function snapshotMessages(messages: Record<string, unknown>[]): ConversationShareMessageSnapshot[] {
-  return messages.map((message) => ({
-    publicId: message.publicId as string,
-    role: message.role as string,
-    content: message.content,
-  }));
+  return messages.map((message) => {
+    const snapshot: ConversationShareMessageSnapshot = {
+      publicId: message.publicId as string,
+      role: message.role as string,
+      content: message.content,
+    };
+    const createdAt = toMessageCreatedAtIso(message.createdAt);
+    if (createdAt) snapshot.createdAt = createdAt;
+    return snapshot;
+  });
 }
 
-function normalizeMessages(messages: ConversationShareMessageSnapshot[]): { role: string; content: string }[] {
-  return messages.map((message) => ({
-    role: message.role,
-    content: typeof message.content === "string" ? message.content : String(message.content ?? ""),
-  }));
+function normalizeMessages(
+  messages: ConversationShareMessageSnapshot[],
+): { role: string; content: string; createdAt?: string }[] {
+  return messages.map((message) => {
+    const normalized: { role: string; content: string; createdAt?: string } = {
+      role: message.role,
+      content: typeof message.content === "string" ? message.content : String(message.content ?? ""),
+    };
+    const createdAt = toMessageCreatedAtIso(message.createdAt);
+    if (createdAt) normalized.createdAt = createdAt;
+    return normalized;
+  });
 }
 
 async function loadVisibleMessages(db: DrizzleBoundary, s: DrizzleBoundary, conversationId: string, selections: MessageVersionSelections | null) {

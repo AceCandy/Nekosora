@@ -21,6 +21,8 @@ export interface MessageRunMetadata {
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+  /** 消息绝对创建时间的 ISO 字符串，仅用于本地化展示。 */
+  createdAt?: string;
   reasoning?: string; // 推理过程(thinking),仅 reasoning 模型产出
   publicId?: string;
   /** 生成状态:interrupted 表示被中途停止(可继续生成);success 表示完整结束。缺省视作完整。 */

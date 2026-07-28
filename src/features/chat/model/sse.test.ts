@@ -4,6 +4,36 @@ import { consumeChatSSE } from "./sse";
 const encoder = new TextEncoder();
 
 describe("consumeChatSSE", () => {
+  it("解析消息身份帧的稳定标识和创建时间", async () => {
+    const onUserMessage = vi.fn();
+    const onAssistantMessage = vi.fn();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode(
+          'data: {"type":"user_message","publicId":"user-1","createdAt":"2026-07-28T01:02:03.000Z"}\n\n' +
+          'data: {"type":"assistant_message","publicId":"assistant-1","createdAt":"2026-07-28T01:02:04.000Z"}\n\n' +
+          "data: [DONE]\n\n",
+        ));
+        controller.close();
+      },
+    });
+
+    await consumeChatSSE(body, {
+      onDelta: vi.fn(),
+      onUserMessage,
+      onAssistantMessage,
+    });
+
+    expect(onUserMessage).toHaveBeenCalledWith(
+      "user-1",
+      "2026-07-28T01:02:03.000Z",
+    );
+    expect(onAssistantMessage).toHaveBeenCalledWith(
+      "assistant-1",
+      "2026-07-28T01:02:04.000Z",
+    );
+  });
+
   it("解析 finish 的运行元数据,并保留真实零值", async () => {
     const onFinish = vi.fn();
     const body = new ReadableStream<Uint8Array>({

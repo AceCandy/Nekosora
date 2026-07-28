@@ -356,7 +356,11 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
     const rt = getRuntime(get(), key);
     if (!text.trim() || !opts.model || rt.streaming) return;
 
-    const userMsg: ChatMessage = { role: "user", content: text.trim() };
+    const userMsg: ChatMessage = {
+      role: "user",
+      content: text.trim(),
+      createdAt: new Date().toISOString(),
+    };
     const userMsgIdx = rt.messages.length;
     const nextMessages = [...rt.messages, userMsg];
     set((s) => patchRuntime(s, key, (r) => ({ ...r, messages: nextMessages, streaming: true })));
@@ -431,7 +435,13 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
         let idx = -1;
         set((s) => patchRuntime(s, resolvedConvId!, (r) => {
           idx = r.messages.length;
-          return { ...r, messages: [...r.messages, { role: "assistant", content: "" }] };
+          return {
+            ...r,
+            messages: [
+              ...r.messages,
+              { role: "assistant", content: "", createdAt: new Date().toISOString() },
+            ],
+          };
         }));
         return idx;
       })();
@@ -478,24 +488,30 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
           appendContentAt(activeKey, assistantIdx, `\n\n[错误] ${err}`);
         },
         onFinish: (metadata) => setRunMetadataAt(activeKey, assistantIdx, metadata),
-        onUserMessage: (publicId) => {
+        onUserMessage: (publicId, createdAt) => {
           set((s) => patchRuntime(s, activeKey, (r) => {
             if (userMsgIdx >= r.messages.length) return r;
             if (r.messages[userMsgIdx].role !== "user") return r;
-            if (r.messages[userMsgIdx].publicId) return r;
             const updated = [...r.messages];
-            updated[userMsgIdx] = { ...updated[userMsgIdx], publicId };
+            updated[userMsgIdx] = {
+              ...updated[userMsgIdx],
+              publicId,
+              createdAt: createdAt ?? updated[userMsgIdx].createdAt,
+            };
             return { ...r, messages: updated };
           }));
           hooks?.onUserMessagePublicId?.(publicId);
         },
-        onAssistantMessage: (publicId) => {
+        onAssistantMessage: (publicId, createdAt) => {
           // 回填 assistant 占位的 publicId,使生成期间即可显示操作按钮(无需刷新)
           set((s) => patchRuntime(s, activeKey, (r) => {
             if (assistantIdx < 0 || assistantIdx >= r.messages.length) return r;
-            if (r.messages[assistantIdx].publicId) return r;
             const updated = [...r.messages];
-            updated[assistantIdx] = { ...updated[assistantIdx], publicId };
+            updated[assistantIdx] = {
+              ...updated[assistantIdx],
+              publicId,
+              createdAt: createdAt ?? updated[assistantIdx].createdAt,
+            };
             return { ...r, messages: updated };
           }));
         },
@@ -538,7 +554,12 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
         set((s) => patchRuntime(s, key, (r) => {
           idx = r.messages.findIndex((x) => x.publicId === assistantPublicId);
           if (idx < 0) return r;
-          const replaced: ChatMessage = { role: "assistant", content: "", publicId: result.newAssistantPublicId };
+          const replaced: ChatMessage = {
+            role: "assistant",
+            content: "",
+            publicId: result.newAssistantPublicId,
+            createdAt: new Date().toISOString(),
+          };
           return { ...r, messages: [...r.messages.slice(0, idx), replaced] };
         }));
         return idx;
@@ -566,12 +587,16 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
         onFinish: (metadata) => setRunMetadataAt(key, assistantIdx, metadata),
         // 回填后端真实 publicId,覆盖 retryFromMessage 生成的占位 UUID;
         // 否则生成结束后 refreshVersionInfo 拿占位 id 查不到兄弟,版本切换器无法显示。
-        onAssistantMessage: (publicId) => {
+        onAssistantMessage: (publicId, createdAt) => {
           generatedAssistantPublicId = publicId;
           set((s) => patchRuntime(s, key, (r) => {
             if (assistantIdx < 0 || assistantIdx >= r.messages.length) return r;
             const copy = [...r.messages];
-            copy[assistantIdx] = { ...copy[assistantIdx], publicId };
+            copy[assistantIdx] = {
+              ...copy[assistantIdx],
+              publicId,
+              createdAt: createdAt ?? copy[assistantIdx].createdAt,
+            };
             return { ...r, messages: copy };
           }));
         },
@@ -613,7 +638,17 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
         let idx = -1;
         set((s) => patchRuntime(s, key, (r) => {
           idx = r.messages.length;
-          return { ...r, messages: [...r.messages, { role: "assistant" as const, content: "" }] };
+          return {
+            ...r,
+            messages: [
+              ...r.messages,
+              {
+                role: "assistant" as const,
+                content: "",
+                createdAt: new Date().toISOString(),
+              },
+            ],
+          };
         }));
         return idx;
       })();
@@ -637,6 +672,18 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
         onDelta: (t) => enqueueDelta(key, assistantIdx, "content", t),
         onReasoning: (t) => enqueueDelta(key, assistantIdx, "reasoning", t),
         onFinish: (metadata) => setRunMetadataAt(key, assistantIdx, metadata),
+        onAssistantMessage: (publicId, createdAt) => {
+          set((s) => patchRuntime(s, key, (r) => {
+            if (assistantIdx < 0 || assistantIdx >= r.messages.length) return r;
+            const copy = [...r.messages];
+            copy[assistantIdx] = {
+              ...copy[assistantIdx],
+              publicId,
+              createdAt: createdAt ?? copy[assistantIdx].createdAt,
+            };
+            return { ...r, messages: copy };
+          }));
+        },
       });
     } catch (err) {
       flushDeltasNow();
@@ -701,6 +748,18 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
         onDelta: (t) => enqueueDelta(key, assistantIdx, "content", t),
         onReasoning: (t) => enqueueDelta(key, assistantIdx, "reasoning", t),
         onFinish: (metadata) => setRunMetadataAt(key, assistantIdx, metadata),
+        onAssistantMessage: (publicId, createdAt) => {
+          set((s) => patchRuntime(s, key, (r) => {
+            if (assistantIdx < 0 || assistantIdx >= r.messages.length) return r;
+            const copy = [...r.messages];
+            copy[assistantIdx] = {
+              ...copy[assistantIdx],
+              publicId,
+              createdAt: createdAt ?? copy[assistantIdx].createdAt,
+            };
+            return { ...r, messages: copy };
+          }));
+        },
       });
       // 续写完整结束:把该 assistant 从 interrupted 转为 success,避免对已补全内容再次续写
       set((s) => patchRuntime(s, key, (r) => ({
@@ -738,6 +797,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
           ...r.messages[idx],
           publicId: target.publicId,
           content: target.content,
+          createdAt: target.createdAt ?? r.messages[idx].createdAt,
           reasoning: target.reasoning ?? undefined,
           runMetadata: target.runMetadata,
           artifacts: undefined,

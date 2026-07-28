@@ -66,6 +66,8 @@ describe("chatStreamStore finish metadata", () => {
   it("普通发送在 finish 后即时回填 assistant 运行元数据", async () => {
     mocks.consumeChatSSE.mockImplementationOnce(
       async (_body: ReadableStream<Uint8Array>, handlers: SSEHandlers) => {
+        handlers.onUserMessage?.("user-real", "2026-07-28T01:02:03.000Z");
+        handlers.onAssistantMessage?.("assistant-real", "2026-07-28T01:02:04.000Z");
         handlers.onFinish?.(finishMetadata);
       },
     );
@@ -75,8 +77,15 @@ describe("chatStreamStore finish metadata", () => {
       .send("conversation-finish", "hello", sendOptions);
 
     const messages = useChatStreamStore.getState().runtimes["conversation-finish"].messages;
-    expect(messages.at(-1)).toMatchObject({
+    expect(messages[0]).toMatchObject({
+      role: "user",
+      publicId: "user-real",
+      createdAt: "2026-07-28T01:02:03.000Z",
+    });
+    expect(messages[1]).toMatchObject({
       role: "assistant",
+      publicId: "assistant-real",
+      createdAt: "2026-07-28T01:02:04.000Z",
       runMetadata: finishMetadata,
     });
   });
@@ -104,6 +113,7 @@ describe("chatStreamStore finish metadata", () => {
     });
     mocks.consumeChatSSE.mockImplementationOnce(
       async (_body: ReadableStream<Uint8Array>, handlers: SSEHandlers) => {
+        handlers.onAssistantMessage?.("assistant-new", "2026-07-28T02:00:00.000Z");
         handlers.onFinish?.(finishMetadata);
       },
     );
@@ -120,6 +130,8 @@ describe("chatStreamStore finish metadata", () => {
     expect(messages).toHaveLength(2);
     expect(messages[1]).toMatchObject({
       role: "assistant",
+      publicId: "assistant-new",
+      createdAt: "2026-07-28T02:00:00.000Z",
       content: "",
       runMetadata: finishMetadata,
     });
@@ -133,6 +145,7 @@ describe("chatStreamStore finish metadata", () => {
             role: "assistant",
             publicId: "assistant-1",
             content: "partial",
+            createdAt: "2026-07-28T03:00:00.000Z",
             status: "interrupted",
             runMetadata: { model: "Old Model", durationMs: 500 },
           }],
@@ -150,6 +163,7 @@ describe("chatStreamStore finish metadata", () => {
           useChatStreamStore.getState().runtimes["conversation-finish"].messages[0]
             .runMetadata,
         ).toBeUndefined();
+        handlers.onAssistantMessage?.("assistant-1", "2026-07-27T03:00:00.000Z");
         handlers.onFinish?.(finishMetadata);
       },
     );
@@ -165,6 +179,7 @@ describe("chatStreamStore finish metadata", () => {
       useChatStreamStore.getState().runtimes["conversation-finish"].messages[0],
     ).toMatchObject({
       publicId: "assistant-1",
+      createdAt: "2026-07-27T03:00:00.000Z",
       status: "success",
       runMetadata: finishMetadata,
     });
@@ -393,6 +408,7 @@ describe("chatStreamStore switchVersion toolCalls", () => {
         {
           publicId: "pub-v2",
           content: "version 2",
+          createdAt: "2026-07-25T00:00:02.000Z",
           reasoning: "think-v2",
           branchReason: "retry",
           runMetadata: {
@@ -411,6 +427,7 @@ describe("chatStreamStore switchVersion toolCalls", () => {
     const msg = useChatStreamStore.getState().runtimes[key].messages[0];
     expect(msg.publicId).toBe("pub-v2");
     expect(msg.content).toBe("version 2");
+    expect(msg.createdAt).toBe("2026-07-25T00:00:02.000Z");
     expect(msg.reasoning).toBe("think-v2");
     expect(msg.runMetadata).toEqual({
       model: "Model V2",
@@ -609,7 +626,7 @@ describe("chatStreamStore regenerate version selection", () => {
     ) => {
       expect(useChatStreamStore.getState().runtimes[key].messages[0].runMetadata)
         .toBeUndefined();
-      handlers.onAssistantMessage?.("assistant-real");
+      handlers.onAssistantMessage?.("assistant-real", "2026-07-28T04:00:00.000Z");
       handlers.onFinish?.(finishMetadata);
     });
 
@@ -618,6 +635,7 @@ describe("chatStreamStore regenerate version selection", () => {
     expect(mocks.selectMessageVersion).toHaveBeenCalledWith("assistant-real");
     expect(useChatStreamStore.getState().runtimes[key].messages[0]).toMatchObject({
       publicId: "assistant-real",
+      createdAt: "2026-07-28T04:00:00.000Z",
       runMetadata: finishMetadata,
     });
   });

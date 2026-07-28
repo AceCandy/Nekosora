@@ -101,6 +101,8 @@ export interface ConversationShareMessageSnapshot {
   publicId: string;
   role: string;
   content: unknown;
+  /** 消息绝对创建时间；旧分享快照可能缺失。 */
+  createdAt?: string;
 }
 
 /** 新版对话分享模式；null 仅用于识别历史分享。 */
