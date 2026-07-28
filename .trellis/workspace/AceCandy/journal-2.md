@@ -184,3 +184,25 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 69: 持久化聊天图片附件
+
+**Date**: 2026-07-28
+**Task**: 持久化聊天图片附件
+**Branch**: `main`
+
+### Summary
+
+持久化用户消息图片附件，补齐发送、历史恢复、编辑重发、重新生成与无边框预览；修复 Trellis Python 3.11 兼容语法。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `efba233` | (see git log) |
+| `0be0299` | (see git log) |
+
+### Status
+
+[OK] **Completed**

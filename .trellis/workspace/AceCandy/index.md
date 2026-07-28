@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 68
+- **Total Sessions**: 69
 - **Last Active**: 2026-07-28
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~186 | Active |
+| `journal-2.md` | ~208 | Active |
 | `journal-1.md` | ~1981 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 69 | 2026-07-28 | 持久化聊天图片附件 | `efba233`, `0be0299` | `main` |
 | 68 | 2026-07-28 | 修复图片消息 ModelMessage 校验错误 | `eb1c302`, `0f3f502` | `main` |
 | 67 | 2026-07-28 | 聊天消息本地时间分隔 | `9a60204`, `885b6e3` | `main` |
 | 66 | 2026-07-28 | 完成分享弹窗修复 | `f1ee597` | `main` |
