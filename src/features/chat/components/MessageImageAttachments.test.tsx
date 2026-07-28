@@ -19,10 +19,11 @@ describe("MessageImageAttachments", () => {
 
     expect(html).toContain('src="/api/files/image-1"');
     expect(html).toContain('alt="photo.png"');
-    expect(html).toContain("aspect-[4/3]");
     expect(html).toContain("w-80");
     expect(html).toContain("max-w-full");
-    expect(html).toContain("object-contain");
+    expect(html).toContain("h-auto");
+    expect(html).not.toContain("aspect-[4/3]");
+    expect(html).not.toContain("object-contain");
     expect(html).not.toContain("grid w-full");
     expect(html).not.toContain("<header");
     expect(html).not.toContain("border-morning-mist");

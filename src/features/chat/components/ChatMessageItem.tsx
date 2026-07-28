@@ -567,85 +567,86 @@ function ChatMessageItemContent({
                 <span>{t("editSaveAndResend")}</span>
               </button>
             </div>
-          </div>) : (<div className="group relative w-fit max-w-full">
-            <div className="flex w-full flex-col items-end gap-1.5">
-              <MessageImageAttachments attachments={attachments} />
-            {content ? (<div
-              ref={userMsgRef}
-              onContextMenu={(e) => {
-                if (!canShowMenu) return;
-                e.preventDefault();
-                contextMenuFiredRef.current = true;
-                setMenuOpen(true);
-              }}
-              onClick={() => {
-                if (contextMenuFiredRef.current) { contextMenuFiredRef.current = false; return; }
-                if (!userMsgCanCollapse) return;
-                // 有选区时(划词选择)不触发,避免与复制/引用冲突
-                const sel = window.getSelection();
-                if (sel && sel.toString().trim()) return;
-                setUserMsgExpanded((v) => !v);
-              }}
-              className={clsx(
-                USER_MESSAGE_BUBBLE_CLASS,
-                "transition-[max-height] duration-300 ease-out",
-                userMsgCanCollapse && "cursor-pointer",
-              )}
-              style={
-                userMsgCanCollapse && !userMsgExpanded
-                  ? { maxHeight: userMsgCollapsedHeight }
-                  : undefined
-              }
-            >
-              {content}
-              {userMsgCanCollapse && !userMsgExpanded ? (
-                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-b from-transparent to-neutral-900 dark:to-white" />
-              ) : null}
-            </div>) : null}
-            {content && userMsgCanCollapse ? (
-              <button
-                type="button"
-                onClick={() => setUserMsgExpanded((v) => !v)}
-                className="mt-1 flex w-fit ml-auto items-center gap-1 text-ui-caption font-semibold text-white/70 dark:text-black/60 hover:text-white dark:hover:text-black transition-colors cursor-pointer"
-                aria-expanded={userMsgExpanded}
-              >
-                {userMsgExpanded ? (
-                  <ChevronUp className="w-3 h-3" aria-hidden="true" />
-                ) : (
-                  <ChevronDown className="w-3 h-3" aria-hidden="true" />
-                )}
-                <span>
-                  {userMsgExpanded ? t("collapseUserMessage") : t("expandUserMessage")}
-                </span>
-              </button>
-            ) : null}
-            </div>
-            {publicId && onEdit && !isStreaming && !conversationStreaming && (
-              <button
-                type="button"
-                onClick={() => {
-                  setDraft(content);
-                  setDraftAttachments(attachments);
-                  setEditing(true);
+          </div>) : (<div className="flex w-full flex-col items-end gap-1.5">
+            {content ? <MessageImageAttachments attachments={attachments} /> : null}
+            <div className="group relative w-fit max-w-full">
+              {!content ? <MessageImageAttachments attachments={attachments} /> : null}
+              {content ? (<div
+                ref={userMsgRef}
+                onContextMenu={(e) => {
+                  if (!canShowMenu) return;
+                  e.preventDefault();
+                  contextMenuFiredRef.current = true;
+                  setMenuOpen(true);
                 }}
-                className="absolute -left-7 top-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
-                title={t("edit")}
-                aria-label={t("edit")}
+                onClick={() => {
+                  if (contextMenuFiredRef.current) { contextMenuFiredRef.current = false; return; }
+                  if (!userMsgCanCollapse) return;
+                  // 有选区时(划词选择)不触发,避免与复制/引用冲突
+                  const sel = window.getSelection();
+                  if (sel && sel.toString().trim()) return;
+                  setUserMsgExpanded((v) => !v);
+                }}
+                className={clsx(
+                  USER_MESSAGE_BUBBLE_CLASS,
+                  "transition-[max-height] duration-300 ease-out",
+                  userMsgCanCollapse && "cursor-pointer",
+                )}
+                style={
+                  userMsgCanCollapse && !userMsgExpanded
+                    ? { maxHeight: userMsgCollapsedHeight }
+                    : undefined
+                }
               >
-                <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
-              </button>
-            )}
-            {publicId && onRequestDelete && !conversationStreaming && (
-              <button
-                type="button"
-                onClick={() => onRequestDelete?.(publicId)}
-                className="absolute -left-7 top-7 p-1 rounded opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-red-500 dark:hover:text-red-400 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
-                title={t("delete")}
-                aria-label={t("delete")}
-              >
-                <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
-              </button>
-            )}
+                {content}
+                {userMsgCanCollapse && !userMsgExpanded ? (
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-b from-transparent to-neutral-900 dark:to-white" />
+                ) : null}
+              </div>) : null}
+              {content && userMsgCanCollapse ? (
+                <button
+                  type="button"
+                  onClick={() => setUserMsgExpanded((v) => !v)}
+                  className="mt-1 flex w-fit ml-auto items-center gap-1 text-ui-caption font-semibold text-white/70 dark:text-black/60 hover:text-white dark:hover:text-black transition-colors cursor-pointer"
+                  aria-expanded={userMsgExpanded}
+                >
+                  {userMsgExpanded ? (
+                    <ChevronUp className="w-3 h-3" aria-hidden="true" />
+                  ) : (
+                    <ChevronDown className="w-3 h-3" aria-hidden="true" />
+                  )}
+                  <span>
+                    {userMsgExpanded ? t("collapseUserMessage") : t("expandUserMessage")}
+                  </span>
+                </button>
+              ) : null}
+              {publicId && onEdit && !isStreaming && !conversationStreaming && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDraft(content);
+                    setDraftAttachments(attachments);
+                    setEditing(true);
+                  }}
+                  className="absolute -left-7 top-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
+                  title={t("edit")}
+                  aria-label={t("edit")}
+                >
+                  <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
+                </button>
+              )}
+              {publicId && onRequestDelete && !conversationStreaming && (
+                <button
+                  type="button"
+                  onClick={() => onRequestDelete?.(publicId)}
+                  className="absolute -left-7 top-7 p-1 rounded opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-red-500 dark:hover:text-red-400 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
+                  title={t("delete")}
+                  aria-label={t("delete")}
+                >
+                  <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                </button>
+              )}
+            </div>
           </div>))
         ) : (
           /* Assistant 消息: 流式 markdown 渲染 */

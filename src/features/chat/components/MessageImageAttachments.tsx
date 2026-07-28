@@ -39,14 +39,19 @@ export function MessageImageAttachments({
             <div
               key={attachment.fileId}
               className={clsx(
-                "group/image relative min-w-0 overflow-hidden rounded-lg bg-black/5 dark:bg-white/5",
-                single ? "aspect-[4/3]" : "aspect-square",
+                "group/image relative min-w-0 overflow-hidden rounded-lg",
+                single
+                  ? failed && "aspect-[4/3] bg-black/5 dark:bg-white/5"
+                  : "aspect-square bg-black/5 dark:bg-white/5",
               )}
             >
               <button
                 type="button"
                 onClick={() => setPreview(attachment)}
-                className="block h-full w-full cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sora-blue"
+                className={clsx(
+                  "block cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sora-blue",
+                  !single || failed ? "h-full w-full" : "w-full",
+                )}
                 aria-label={`${t("attachPreview")}: ${attachment.filename}`}
               >
                 {failed ? (
@@ -60,8 +65,8 @@ export function MessageImageAttachments({
                     src={`/api/files/${attachment.fileId}`}
                     alt={attachment.filename}
                     className={clsx(
-                      "block h-full w-full",
-                      single ? "object-contain" : "object-cover",
+                      "block w-full",
+                      single ? "h-auto" : "h-full object-cover",
                     )}
                     loading="lazy"
                     onError={() => {

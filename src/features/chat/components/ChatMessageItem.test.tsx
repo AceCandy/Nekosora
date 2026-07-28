@@ -179,6 +179,7 @@ describe("ChatMessageItem 用户图片", () => {
         message={{
           role: "user",
           content: "caption",
+          publicId: "user-1",
           attachments: [{ fileId: "image-1", filename: "photo.png", mime: "image/png" }],
         }}
         isLast
@@ -186,9 +187,16 @@ describe("ChatMessageItem 用户图片", () => {
         model="model-a"
         onRegenerate={() => undefined}
         onOpenArtifact={() => undefined}
+        onEdit={() => undefined}
+        onRequestDelete={() => undefined}
       />,
     );
-    expect(withText.indexOf('/api/files/image-1')).toBeLessThan(withText.indexOf("caption"));
+    const imageIndex = withText.indexOf('/api/files/image-1');
+    const actionAnchorIndex = withText.indexOf('class="group relative w-fit max-w-full"');
+    expect(imageIndex).toBeLessThan(actionAnchorIndex);
+    expect(actionAnchorIndex).toBeLessThan(withText.indexOf("caption"));
+    expect(withText).toContain('aria-label="edit"');
+    expect(withText).toContain('aria-label="delete"');
     expect(withText).toContain("w-fit max-w-full");
     expect(withText).toContain("max-w-[88%]");
     expect(withText).toContain("sm:max-w-[70%]");
@@ -198,6 +206,7 @@ describe("ChatMessageItem 用户图片", () => {
         message={{
           role: "user",
           content: "",
+          publicId: "user-2",
           attachments: [{ fileId: "image-1", filename: "photo.png", mime: "image/png" }],
         }}
         isLast
@@ -205,9 +214,13 @@ describe("ChatMessageItem 用户图片", () => {
         model="model-a"
         onRegenerate={() => undefined}
         onOpenArtifact={() => undefined}
+        onEdit={() => undefined}
+        onRequestDelete={() => undefined}
       />,
     );
     expect(imageOnly).toContain('/api/files/image-1');
+    expect(imageOnly).toContain('aria-label="edit"');
+    expect(imageOnly).toContain('aria-label="delete"');
     expect(imageOnly).not.toContain("overflow-hidden whitespace-pre-wrap");
   });
 });
