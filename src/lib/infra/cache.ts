@@ -23,9 +23,10 @@ function buildCache(): Cache {
     const redisStore = new KeyvRedis(redisUrl);
     // ⚠️ @keyv/redis 内部 createClient 未挂 'error' listener:Redis socket 中途断开时
     // 'error' 事件无 listener 会冒泡成 uncaughtException(SocketClosedUnexpectedlyError),
-    // 反复冲击 dev server 致卡死。补上 listener 降级为 warn;自动重连由 @keyv/redis
-    // 默认 reconnectStrategy 负责。
+    // 反复冲击 dev server 致卡死。补上 listener;已知的 socket 关闭异常静默处理,
+    // 其他错误仍告警,自动重连由 @keyv/redis 默认 reconnectStrategy 负责。
     redisStore.client.on("error", (err) => {
+      if (err.message === "Socket closed unexpectedly") return;
       console.warn("[cache] redis socket error(已降级,自动重连中):", err.message);
     });
     stores.push(new Keyv({ store: redisStore, namespace: "nekusora" }));
