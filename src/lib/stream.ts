@@ -11,7 +11,7 @@
  * 用量记录在 streamChat 层(持有 ctx),不塞进 streamText 的 onFinish 闭包。
  * 借鉴 DEEIX:run_id 标识一次生成;用量含 cache 拆分。
  */
-import { streamText, generateText, Output } from "ai";
+import { streamText, generateText, Output, type ModelMessage } from "ai";
 import { resolveRoutes, resolveRoutesById, RoutingError } from "@/lib/routing";
 import { buildLanguageModelWithKey } from "@/lib/providers/registry";
 import { getChatUA } from "@/lib/system-settings/ua";
@@ -436,6 +436,33 @@ export async function* streamChat(
   }
 }
 
+/** 在 AI SDK 边界把 OpenAI 图片 part 转为 ModelMessage 文件 part。 */
+export function toModelMessages(messages: IRMessage[]): ModelMessage[] {
+  return messages.map((message) => {
+    if (message.role !== "user" || typeof message.content === "string") {
+      return message as ModelMessage;
+    }
+
+    return {
+      ...message,
+      role: "user" as const,
+      content: message.content.map((part) => {
+        if (part.type === "text") {
+          return { type: "text" as const, text: part.text ?? "" };
+        }
+        if (!part.image_url?.url) {
+          throw new Error("消息无效:图片缺少 URL");
+        }
+        return {
+          type: "file" as const,
+          data: new URL(part.image_url.url),
+          mediaType: "image",
+        };
+      }),
+    };
+  });
+}
+
 /**
  * 把 messages 里的 system 消息抽到顶层 system 参数。
  * 符合 AI SDK v5 推荐用法:system 不应混入 messages(会触发安全告警),
@@ -445,7 +472,7 @@ export async function* streamChat(
  */
 export function separateSystem(request: IRRequest): {
   system: string | undefined;
-  messages: IRMessage[];
+  messages: ModelMessage[];
 } {
   const systemMessages = request.messages.filter((m) => m.role === "system");
   const dialogueMessages = request.messages.filter((m) => m.role !== "system");
@@ -457,7 +484,7 @@ export function separateSystem(request: IRRequest): {
       .map((m) => (typeof m.content === "string" ? m.content : ""))
       .filter(Boolean)
       .join("\n\n") || undefined;
-  return { system, messages: dialogueMessages };
+  return { system, messages: toModelMessages(dialogueMessages) };
 }
 
 /** 用单条路由 + 指定 key 执行 streamText,产出统一事件。用量由调用方在 finish 事件后记录。 */
@@ -503,7 +530,7 @@ async function* streamWithRoute(
     // 故障转移由上层 streamChat 的多 key + 多路由 + 熔断接管。
     maxRetries: 0,
     instructions: instructionsParam as never,
-    messages: messagesParam as never,
+    messages: messagesParam,
     temperature: request.temperature,
     maxOutputTokens: request.max_tokens,
     topP: request.top_p,
@@ -650,7 +677,7 @@ export async function generateChat(opts: GenerateChatOptions): Promise<GenerateC
             // 禁用 AI SDK 自动重试,理由同 streamWithRoute(429 不放大、5xx 不施压),故障转移由上层接管。
             maxRetries: 0,
             instructions: system,
-            messages: messages as never,
+            messages,
             temperature: request.temperature,
             maxOutputTokens: request.max_tokens,
             topP: request.top_p,

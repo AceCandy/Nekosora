@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { isFailoverableError, isKeyAuthError, isRetryableForKey, separateSystem, classifyStreamError } from "@/lib/stream";
+import { generateText, modelMessageSchema } from "ai";
+import { MockLanguageModelV4 } from "ai/test";
+import {
+  isFailoverableError,
+  isKeyAuthError,
+  isRetryableForKey,
+  separateSystem,
+  classifyStreamError,
+} from "@/lib/stream";
 import type { IRRequest } from "@/lib/providers/types";
 
 describe("isFailoverableError", () => {
@@ -152,6 +160,86 @@ describe("separateSystem", () => {
     const { system, messages } = separateSystem(request);
     expect(system).toBeUndefined();
     expect(messages).toHaveLength(1);
+  });
+
+  it("将远程 URL 和 data URL 图片转换为 AI SDK 文件 part", async () => {
+    const remoteUrl = "https://s3.example.com/image.png?signature=test";
+    const dataUrl = "data:image/png;base64,aGVsbG8=";
+    const request: IRRequest = {
+      model: "gpt-4",
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "描述图片" },
+            { type: "image_url", image_url: { url: remoteUrl } },
+            { type: "image_url", image_url: { url: dataUrl } },
+          ],
+        },
+      ],
+    };
+
+    const { messages } = separateSystem(request);
+
+    expect(messages).toEqual([
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "描述图片" },
+          { type: "file", data: new URL(remoteUrl), mediaType: "image" },
+          { type: "file", data: new URL(dataUrl), mediaType: "image" },
+        ],
+      },
+    ]);
+    expect(messages.every((message) => modelMessageSchema.safeParse(message).success)).toBe(true);
+
+    const model = new MockLanguageModelV4({
+      supportedUrls: { "image/*": [/^https?:\/\//] },
+      doGenerate: {
+        content: [{ type: "text", text: "ok" }],
+        finishReason: { unified: "stop", raw: "stop" },
+        usage: {
+          inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+          outputTokens: { total: 1, text: 1, reasoning: 0 },
+        },
+        warnings: [],
+      },
+    });
+
+    await generateText({ model, messages });
+
+    expect(model.doGenerateCalls[0].prompt).toEqual([
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "描述图片", providerOptions: undefined },
+          {
+            type: "file",
+            data: { type: "url", url: new URL(remoteUrl) },
+            filename: undefined,
+            mediaType: "image",
+            providerOptions: undefined,
+          },
+          {
+            type: "file",
+            data: { type: "data", data: "aGVsbG8=" },
+            filename: undefined,
+            mediaType: "image/png",
+            providerOptions: undefined,
+          },
+        ],
+        providerOptions: undefined,
+      },
+    ]);
+  });
+
+  it("纯文本消息转换后保持不变", () => {
+    const request: IRRequest = {
+      model: "gpt-4",
+      messages: [{ role: "user", content: "你好" }],
+    };
+
+    expect(separateSystem(request).messages).toEqual(request.messages);
   });
 
   it("对话消息为空时抛错(从源头杜绝上游 400)", () => {
