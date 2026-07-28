@@ -31,6 +31,7 @@
 - **单测范围**：纯逻辑（stream 解析、错误码映射、token 估算、路由决策）。文件 `<被测名>.test.ts` 与被测文件同目录。
 - **可测试性设计**：需要 DB 的逻辑抽 `repositories/` 接口，测试注入内存 mock（见 `route-repository.test` 配套模式）。
 - **vitest 配置**：`environment: node`，include `src/**/*.test.{ts,tsx}`，别名与 tsconfig 同步映射 `@` / `@shared` / `@features`。含 JSX 的组件测试使用 `.test.tsx`，与被测组件同目录。
+- **浏览器权限 API**：Clipboard 等依赖用户激活的 API 必须在真实点击中调用并做浏览器验证，不能跨服务端请求等 `await` 后再自动触发；原生 `<dialog>` 内的焦点型回退元素必须挂载在当前 dialog 内。
 - 组件 / 页面暂不要求测试；流式、鉴权、错误码这类核心契约优先覆盖。
 
 ---
@@ -55,3 +56,4 @@
 - [ ] selector 返回值引用稳定（无无限渲染风险）。
 - [ ] import 用了正确的路径别名。
 - [ ] 删除/替换 UI 入口后,已清理 orphan:无引用的 props、state、ref、import,以及无人使用的 i18n 键。
+- [ ] 涉及 Clipboard 等浏览器权限 API 时，已用真实用户点击验证成功与回退路径。

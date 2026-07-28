@@ -339,8 +339,6 @@ export default function ChatComposer({
             title={conversationTitle}
             conversationId={activeConvId}
             canShare={canShare}
-            renderStyles={renderStyles}
-            currentRenderStyleId={renderStyleId}
             createShareAction={createShareAction}
             listSharesAction={listSharesAction}
             revokeShareAction={revokeShareAction}

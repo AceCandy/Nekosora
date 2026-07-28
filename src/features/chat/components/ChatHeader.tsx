@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Share2 } from "lucide-react";
 import type { ConversationShareListItem, CreateShareInput } from "@/features/chat/actions/share";
-import type { RenderStyleOption } from "@/features/chat/model/types";
 import ShareDialog from "@/features/chat/components/ShareDialog";
 
 interface ChatHeaderProps {
@@ -13,8 +12,6 @@ interface ChatHeaderProps {
   conversationId?: string;
   /** 点击时可完整快照的当前可见消息 ID;空数组表示暂不可分享。 */
   canShare: boolean;
-  renderStyles: RenderStyleOption[];
-  currentRenderStyleId: string | null;
   createShareAction: (input: CreateShareInput) => Promise<ConversationShareListItem>;
   listSharesAction: (conversationId: string) => Promise<ConversationShareListItem[]>;
   revokeShareAction: (shareId: string) => Promise<void>;
@@ -24,8 +21,6 @@ export default function ChatHeader({
   title,
   conversationId,
   canShare,
-  renderStyles,
-  currentRenderStyleId,
   createShareAction,
   listSharesAction,
   revokeShareAction,
@@ -48,7 +43,7 @@ export default function ChatHeader({
       >
         <Share2 className="h-5 w-5" aria-hidden="true" />
       </button>
-      {conversationId && dialogOpen && <ShareDialog open onClose={() => setDialogOpen(false)} conversationId={conversationId} canShare={canShare} renderStyles={renderStyles} currentRenderStyleId={currentRenderStyleId} createShareAction={createShareAction} listSharesAction={listSharesAction} revokeShareAction={revokeShareAction} />}
+      {conversationId && dialogOpen && <ShareDialog open onClose={() => setDialogOpen(false)} conversationId={conversationId} canShare={canShare} createShareAction={createShareAction} listSharesAction={listSharesAction} revokeShareAction={revokeShareAction} />}
     </header>
   );
 }

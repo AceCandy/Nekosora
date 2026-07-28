@@ -14,22 +14,29 @@ export async function copyToClipboard(text: string): Promise<boolean> {
     }
   }
   let textarea: HTMLTextAreaElement | null = null;
+  let container: Element | null = null;
   let appended = false;
   try {
     textarea = document.createElement("textarea");
     textarea.value = text;
+    textarea.setAttribute("readonly", "");
     textarea.style.position = "fixed";
+    textarea.style.top = "0";
+    textarea.style.left = "-9999px";
     textarea.style.opacity = "0";
-    document.body.appendChild(textarea);
+    container = document.activeElement?.closest("dialog[open]") ?? document.body;
+    container.appendChild(textarea);
     appended = true;
+    textarea.focus({ preventScroll: true });
     textarea.select();
+    textarea.setSelectionRange(0, text.length);
     return document.execCommand("copy");
   } catch {
     return false;
   } finally {
-    if (appended && textarea) {
+    if (appended && textarea && container) {
       try {
-        document.body.removeChild(textarea);
+        container.removeChild(textarea);
       } catch { /* cleanup best effort */ }
     }
   }

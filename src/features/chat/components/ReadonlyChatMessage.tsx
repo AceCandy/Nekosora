@@ -17,7 +17,7 @@ export function ReadonlyChatMessage({ role, content, renderStyleClass, renderer 
   if (role === "user") {
     return (
       <div className="flex justify-end">
-        <div className="w-full max-w-[82%]">
+        <div className="flex w-full max-w-[82%] flex-col items-end">
           <div className={USER_MESSAGE_BUBBLE_CLASS}>{content}</div>
         </div>
       </div>
