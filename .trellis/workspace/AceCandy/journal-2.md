@@ -162,3 +162,25 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 68: 修复图片消息 ModelMessage 校验错误
+
+**Date**: 2026-07-28
+**Task**: 修复图片消息 ModelMessage 校验错误
+**Branch**: `main`
+
+### Summary
+
+在 AI SDK 边界将 OpenAI image_url 转换为 ModelMessage file part，覆盖远程 URL 与 data URL，并补充运行时集成测试和后端规范。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `eb1c302` | (see git log) |
+| `0f3f502` | (see git log) |
+
+### Status
+
+[OK] **Completed**
