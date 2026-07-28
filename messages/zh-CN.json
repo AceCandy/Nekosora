@@ -111,7 +111,6 @@
     "responseModel": "模型",
     "inputTokens": "输入",
     "cacheReadTokens": "缓存读取",
-    "reasoningTokens": "思考",
     "outputTokens": "输出",
     "responseDuration": "耗时",
     "newConversation": "新对话",

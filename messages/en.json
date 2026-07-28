@@ -111,7 +111,6 @@
     "responseModel": "Model",
     "inputTokens": "Input",
     "cacheReadTokens": "Cache read",
-    "reasoningTokens": "Reasoning",
     "outputTokens": "Output",
     "responseDuration": "Duration",
     "newConversation": "New conversation",

@@ -7,7 +7,6 @@ import {
   ArrowDownToLine,
   ArrowUpFromLine,
   Bot,
-  Brain,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -86,12 +85,6 @@ function RunMetadataFields({ metadata, className }: RunMetadataFieldsProps) {
       Icon: Database,
     },
     {
-      key: "reasoning",
-      label: t("reasoningTokens"),
-      value: metadata.tokenUsage?.reasoningTokens,
-      Icon: Brain,
-    },
-    {
       key: "output",
       label: t("outputTokens"),
       value: metadata.tokenUsage?.completionTokens,
@@ -159,7 +152,6 @@ function hasRunDetails(metadata: MessageRunMetadata) {
     metadata.model?.trim()
       || typeof metadata.tokenUsage?.promptTokens === "number"
       || typeof metadata.tokenUsage?.cacheReadTokens === "number"
-      || typeof metadata.tokenUsage?.reasoningTokens === "number"
       || typeof metadata.tokenUsage?.completionTokens === "number"
       || typeof metadata.durationMs === "number",
   );

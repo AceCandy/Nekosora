@@ -70,7 +70,6 @@ describe("MessageRunMetadataDisplay", () => {
       "responseModel",
       "inputTokens",
       "cacheReadTokens",
-      "reasoningTokens",
       "outputTokens",
       "responseDuration",
     ];
@@ -83,6 +82,7 @@ describe("MessageRunMetadataDisplay", () => {
 
     expect(html).toContain("1,234");
     expect(html).toContain("0ms");
+    expect(html).not.toContain("reasoningTokens");
     expect(html).toContain(`title="${model}"`);
     expect(html).toContain("max-w-[min(18rem,60vw)] truncate");
     expect(html).not.toContain("completedAt");
@@ -104,6 +104,13 @@ describe("MessageRunMetadataDisplay", () => {
     expect(html).toMatch(/outputTokens<\/span><\/dt><dd[^>]*>0<\/dd>/);
     expect(renderMetadata({})).toBe("");
     expect(renderMetadata({ completedAt: "2026-07-25T00:00:02.000Z" })).toBe("");
+    expect(renderMetadata({ tokenUsage: { reasoningTokens: 56 } })).toBe("");
+
+    const assistantHtml = renderAssistantMessage({
+      tokenUsage: { reasoningTokens: 56 },
+      completedAt: "2026-07-25T00:00:02.000Z",
+    });
+    expect(assistantHtml).not.toContain('aria-label="responseDetails"');
   });
 
   it("仅在粗指针展开时渲染详情面板", () => {
