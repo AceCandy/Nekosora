@@ -40,6 +40,7 @@
 | [State Management](./state-management.md) | zustand 多实例隔离、selector 稳定引用、server state | Filled |
 | [Quality Guidelines](./quality-guidelines.md) | lint/typecheck/test 门槛、必需/禁止模式、review checklist | Filled |
 | [Type Safety](./type-safety.md) | DB 行 unknown 收敛、zod 边界校验、DTO 组织 | Filled |
+| [Chat Message Time Separators](./chat-message-time-separators.md) | 消息绝对时间、SSE/store/分享投影与浏览器本地自然日分隔 | Filled |
 | [Structured Blocks](./structured-blocks.md) | chart/metric/table/callout 双链路渲染、流式渐进、降级 | Filled |
 | [List Drag-Sort](./list-drag-sort.md) | 列表拖动排序:dnd-kit + useOptimistic + reorder action 模式与 async transition 坑 | Filled |
 
