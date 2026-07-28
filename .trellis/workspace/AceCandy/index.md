@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 64
+- **Total Sessions**: 65
 - **Last Active**: 2026-07-28
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~100 | Active |
+| `journal-2.md` | ~121 | Active |
 | `journal-1.md` | ~1981 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 65 | 2026-07-28 | 优化聊天图片附件与预览 | `bf8084a` | `main` |
 | 64 | 2026-07-28 | 聊天回复运行元数据 | `9590436` | `main` |
 | 63 | 2026-07-27 | 修复会话标题实时更新 | `feacb1e` | `main` |
 | 62 | 2026-07-27 | 修复本地开发 Server Action 清单失配 | `d832cc5` | `main` |

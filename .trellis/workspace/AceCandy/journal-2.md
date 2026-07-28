@@ -98,3 +98,24 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 65: 优化聊天图片附件与预览
+
+**Date**: 2026-07-28
+**Task**: 优化聊天图片附件与预览
+**Branch**: `main`
+
+### Summary
+
+将粘贴附件放入聊天输入框，增加缩略图、格式、大小与状态信息；图片预览改为无标题、无边框视图，并完成明暗主题、窄屏、关闭交互和全量测试验证。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `bf8084a` | (see git log) |
+
+### Status
+
+[OK] **Completed**
