@@ -27,7 +27,12 @@ export function MessageImageAttachments({
   const single = attachments.length === 1;
   return (
     <>
-      <div className={clsx("grid w-full gap-1.5", single ? "grid-cols-1" : "grid-cols-2")}>
+      <div
+        className={clsx(
+          "grid max-w-full gap-2",
+          single ? "w-80 grid-cols-1" : "w-64 grid-cols-2",
+        )}
+      >
         {attachments.map((attachment) => {
           const failed = failedIds.has(attachment.fileId);
           return (
@@ -35,7 +40,7 @@ export function MessageImageAttachments({
               key={attachment.fileId}
               className={clsx(
                 "group/image relative min-w-0 overflow-hidden rounded-lg bg-black/5 dark:bg-white/5",
-                single ? "aspect-[4/3] max-h-80" : "aspect-square",
+                single ? "aspect-[4/3]" : "aspect-square",
               )}
             >
               <button
@@ -54,7 +59,10 @@ export function MessageImageAttachments({
                   <img
                     src={`/api/files/${attachment.fileId}`}
                     alt={attachment.filename}
-                    className="block h-full w-full object-cover"
+                    className={clsx(
+                      "block h-full w-full",
+                      single ? "object-contain" : "object-cover",
+                    )}
                     loading="lazy"
                     onError={() => {
                       setFailedIds((current) => new Set(current).add(attachment.fileId));

@@ -20,6 +20,10 @@ describe("MessageImageAttachments", () => {
     expect(html).toContain('src="/api/files/image-1"');
     expect(html).toContain('alt="photo.png"');
     expect(html).toContain("aspect-[4/3]");
+    expect(html).toContain("w-80");
+    expect(html).toContain("max-w-full");
+    expect(html).toContain("object-contain");
+    expect(html).not.toContain("grid w-full");
     expect(html).not.toContain("<header");
     expect(html).not.toContain("border-morning-mist");
   });
@@ -36,6 +40,9 @@ describe("MessageImageAttachments", () => {
     );
 
     expect(html).toContain("grid-cols-2");
+    expect(html).toContain("w-64");
+    expect(html).toContain("aspect-square");
+    expect(html).toContain("object-cover");
     expect(html.match(/aria-label="attachRemove:/g)).toHaveLength(2);
     expect(html).toContain("h-8 w-8");
   });

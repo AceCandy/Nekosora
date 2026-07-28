@@ -189,6 +189,9 @@ describe("ChatMessageItem 用户图片", () => {
       />,
     );
     expect(withText.indexOf('/api/files/image-1')).toBeLessThan(withText.indexOf("caption"));
+    expect(withText).toContain("w-fit max-w-full");
+    expect(withText).toContain("max-w-[88%]");
+    expect(withText).toContain("sm:max-w-[70%]");
 
     const imageOnly = renderToStaticMarkup(
       <ChatMessageItem

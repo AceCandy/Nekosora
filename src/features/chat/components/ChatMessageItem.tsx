@@ -518,7 +518,7 @@ function ChatMessageItemContent({
           </button>
         </div>
       )}
-      <div className={clsx("space-y-2", role === "user" ? "flex flex-col items-end w-full max-w-[70%]" : "flex-1 min-w-0")}>
+      <div className={clsx("space-y-2", role === "user" ? "flex w-full max-w-[88%] flex-col items-end sm:max-w-[70%]" : "flex-1 min-w-0")}>
         {role === "user" ? (
           /* 用户消息: 可编辑文本气泡 */
           (editing ? (<div className="w-full space-y-1.5">
@@ -567,7 +567,7 @@ function ChatMessageItemContent({
                 <span>{t("editSaveAndResend")}</span>
               </button>
             </div>
-          </div>) : (<div className="group relative w-full">
+          </div>) : (<div className="group relative w-fit max-w-full">
             <div className="flex w-full flex-col items-end gap-1.5">
               <MessageImageAttachments attachments={attachments} />
             {content ? (<div
