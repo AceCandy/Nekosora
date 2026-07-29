@@ -1,206 +1,107 @@
 # Logging Guidelines
 
-> Nekusora 网关调用日志架构契约。权威实现：`src/lib/usage.ts`、`src/lib/stream.ts`、`src/lib/error-classify.ts`、`src/db/schema/pg.ts`。
+> Nekusora 网关执行观测契约。权威实现：`src/lib/gateway-execution/`、`src/db/schema/pg.ts`、`src/lib/usage-aggregate.ts` 与 `src/lib/repositories/error-log-repository.ts`。
 
----
-
-## Overview
-
-两类日志：
-
-1. **运行时日志**：`console.*`（开发）+ prom-client `/metrics`（运维）。轻量、不持久化业务上下文。
-2. **网关调用日志**：落库持久化，供 admin/panel 用量与错误分析。**本文聚焦此类。**
-
-网关调用日志采用**物理双表**，参考 sub2api 的分离思路：
-
-| 表 | 存什么 | 写入条件 |
-|----|--------|----------|
-| `usage_logs` | 成功且计费的调用（chat + gateway） | `status === "success"` |
-| `ops_error_logs` | 失败 / 中断的调用（high-write） | `status === "failed" \| "interrupted"` |
-
----
-
-## 分流契约（logUsage）
-
-`logUsage(params)`（`src/lib/usage.ts`）是唯一写入入口，**按 `status` 自动路由到两表**，调用方不感知表结构：
-
-```
-success            → insert usage_logs   (含 TTFT/providerName/routeId/routeName/upstreamModel)
-failed/interrupted → insert ops_error_logs
-```
-
-**硬规则**：
-
-- 写入**永不阻断主流程**：导出入口通过 `withBestEffortTimeout` 限制为固定 5 秒等待，失败或超时只记录脱敏 `console.error`并 resolve `void`。
-- 应用层超时只停止调用方等待，不伪装成已取消 Drizzle/pg 查询；底层 Promise 允许晚完成且晚 reject 不得形成 unhandled rejection。
-- `errorCode` 列 NOT NULL，写入时 `?? "unknown"` 兜底；`userId` 空串收敛 `null`（FK 安全）。
-- Prometheus `observeRequest` 埋点不变（source/model/status/latency/tokens）。
-- `ops_error_logs.errorMessage` 写入前必须经过共享 `redactSensitiveText()` 通用兜底；其他错误分类、status 和 category 字段不受影响。
-
----
-
-## 必填 / 关键字段
-
-**`usage_logs`**（成功用量，新增列均 nullable 兼容历史）：
-
-- `firstTokenLatencyMs` — TTFT
-- `providerName` — 可读服务商名快照（替代裸 `providerRef` 展示）
-- `routeId` / `routeName` — 命中路由溯源
-- `upstreamModel` — 真实上游模型名（区别于对外 `model`）
-
-**`ops_error_logs`**（错误请求）：`requestId`(runId) / source / 身份(user/key) / model / 路由信息 / `requestPath` / `stream` / `httpStatus` / `errorCode` / `errorMessage` / `errorPhase` / `errorType` / token / `latencyMs` / `firstTokenLatencyMs`。索引：userId / createdAt / errorCode / httpStatus / providerRef / source。
-
----
-
-## TTFT 采样（first token latency）
-
-- **流式 `streamChat`**：`streamWithRoute` 在首个 `text-delta` / `reasoning-delta` 时回写共享 `timing.firstTokenAt`（`if undefined` 守卫，**first-token-wins across failover**）；`finally` 计算 `firstTokenLatencyMs = firstTokenAt - startedAt`。
-- **非流式 `generateChat`**：`undefined`（一次性返回，无首 token 概念）。
-- 路由解析失败 / 全路由失败：`null`。
-
----
-
-## 可读 Provider / Route（写入快照）
-
-`global_routes` / `user_routes` **无 `name` 列**，可读信息来源：
-
-- `providerName` ← `global_providers.name` / `user_providers.name`，在 `toResolvedProvider` 注入 `ResolvedProvider.name`，logUsage 时快照。
-- `routeName = ${providerName} · ${upstreamModelName}`（组合展示名）。
-- `routeId` ← route 原始 id（`ResolvedRoute.routeId`）。
-- `providerRef`（`<source>:<providerId>`）两表都保留，用于溯源；**前端优先展示 `providerName`，缺失降级到 `providerRef` 或 `-`**。
-
-日志是历史记录 → 写入时**快照**，provider 改名不影响历史行。
-
----
-
-## 错误分类（error-classify.ts）
-
-`classifyError({ errorCode?, httpStatus?, errorMessage? }) → { phase, category }`，单一来源：
-
-- **优先级**：errorCode 精确匹配 > httpStatus > errorMessage 关键字 > 兜底 `internal/other`。
-- **`errorPhase`**（生命周期）：`routing` / `upstream` / `network` / `internal` / `auth` / `request`。
-- **`category`**（粗分类，前端 i18n key `admin.usage.errors.categories.*`）：`auth` / `service_unavailable` / `upstream` / `internal` / `rate_limit` / `quota` / `invalid_request` / `other`。
-
-**硬规则**：新增 `ErrorCode`（`src/lib/errors.ts`）或 RoutingError 短码时，**必须同步补 `classifyError` 映射 + 单测**，否则落到兜底分类。
-
----
-
-## 错误落库边界（避免双写）
-
-| 错误发生点 | 谁写 ops_error_logs |
-|------------|---------------------|
-| `streamChat`/`generateChat` **内部**（路由解析失败、生成失败） | `stream.ts` 的 `finally` |
-| `route.ts` **层**（调 streamChat/adapter **之前**：auth / json / missing-field / RoutingError） | `route.ts` 自己（`logRouteError`） |
-
-**边界**：`route.ts` 只写 pre-streamChat 错误，**不重复写** stream 内部错误（stream.ts 独占 chat 写入；多模态 adapter 自身不写日志）。
-
-stream 层 failed 行 `httpStatus` 由 `SHORT_HTTP_STATUS`（stream 内部短码→HTTP 映射，**不动 errorCode 字面值**）补全；`requestPath` 留 null。route 层错误补全两字段。
-
----
-
-## 副任务区分（task_kind）
-
-`usage_logs` / `ops_error_logs` 均有 `task_kind`（nullable text）。**主回复 / 网关请求 = `null`；后台副任务传值**：
-
-| 副任务 | 入口 | task_kind |
-|---|---|---|
-| 会话标题生成 | `conversation-title` → `generateChat` | `title` |
-| 记忆抽取 | `memory/extract` → `streamChat` | `memory` |
-| 摘要压缩 | `compact` → `streamChat` | `compact` |
-
-**硬规则**：副任务复用 `streamChat`/`generateChat`（其 `finally` 各写一条日志），**必须在调用时透传 `taskKind`**，否则与主回复混在 `source=chat`，造成「一请求多日志」。主回复（`/api/chat`）、网关（`/v1/chat/completions`）、多模态 adapter 不传 → `null`。
-
-> 聚合统计（`getTimeSeries` 等）目前**不按 task_kind 过滤**，副任务 token 仍计入总量；如需排除，聚合 SQL 加 `where task_kind is null`。
-
----
-
-## What NOT to Log
-
-- ❌ 完整 request body / response body（错误表只存脱敏摘要 / requestPath）。
-- ❌ 凭证、Authorization header、api key 明文（上游 key 只存脱敏快照 `upstreamKeyMasked`）。
-
-`logUsage()` 的模式清洗只是 defense in depth。持有实际 provider key 或自定义 header 的 probe、stream 和 multimodal adapter 必须先按精确值脱敏，再把 safe message 交给 console、响应与 `logUsage()`；否则任意 opaque secret 无法由最终 sink 推断。完整边界和测试矩阵见 [Error Handling](./error-handling.md#scenario-provider-error-credential-redaction)。
-
-## Scenario: MCP Agent 聚合用量
+## Scenario: Gateway Execution / Attempt Facts
 
 ### 1. Scope / Trigger
 
-- `streamChatWithTools` 通过多轮 `streamChat` 完成一条用户可见的 Agent 回复时。
+- 修改 Chat、Image、TTS、STT 的 route/key 执行、上游错误、用量统计、管理页查询或网关 metrics 时适用。
+- `gateway_executions` / `gateway_attempts` 是当前统一事实模型。旧 `usage_logs` / `ops_error_logs` 已破坏性删除，不得恢复双表分流。
+- `runs` / `tool_calls` 是 WebChat 业务审计，不属于网关执行观测，禁止合并或清空。
 
 ### 2. Signatures
 
-- `streamChat(opts: StreamChatOptions)`：内部步骤可传 `suppressFinalUsageLog` 与 `onFinalUsage`。
-- `streamChatWithTools(opts: StreamChatWithToolsOptions)`：Agent 外层负责唯一的 `logUsage` 调用。
+- `executeGateway<TEvent, TResult>(options): AsyncGenerator<TEvent, GatewayExecutionOutcome<TResult>, void>`
+- `GatewayTelemetryPort.startExecution(input): Promise<void>`
+- `GatewayTelemetryPort.recordAttempt(input): Promise<void>`
+- `GatewayTelemetryPort.finalizeExecution(input): Promise<void>`
+- `listErrorLogs(...)` / `getErrorLog(...)` / `listAttemptsByRequestIds(...)`
+- `listUsageLogs(...)` / `getTimeSeries(...)` / `getModelBreakdown(...)` / `getSourceBreakdown(...)`
+
+Database facts:
+
+- `gateway_executions`: one row per logical execution, status `running | success | failed | interrupted`.
+- `gateway_attempts`: one row per real or rejected upstream attempt, unique `(execution_id, attempt)`, status `success | failed | interrupted | rejected`.
+- `gateway_attempts.execution_id -> gateway_executions.id ON DELETE CASCADE`; caller identity FKs use `ON DELETE SET NULL`.
 
 ### 3. Contracts
 
-- 同一 Agent run 只写一条最终 `usage_logs` 或 `ops_error_logs`，token 按步骤聚合，耗时从 Agent 开始计算。
-- key/路由尝试失败仍由 `logAttemptFailure` 独立写入 `ops_error_logs`，且 `skipMetrics=true`。
-- 终轮路由信息作为聚合记录的路由快照；首 token 使用整个 Agent 内最早的 token 时刻。
+- Engine creates one running execution, records exactly one attempt row per adapter invocation/rejection, and finalizes the execution once.
+- Final usage and logical execution metrics are counted once. Attempt metrics are separate and may count retries.
+- Attempt metric labels are limited to `operation`, `status`, and provider `protocol`; model, route, provider id, request id, and key are forbidden high-cardinality labels.
+- Telemetry is best-effort and bounded. DB or metrics failures never alter the gateway outcome; repository sinks apply redaction again before persistence or console output.
+- Raw provider `Error`, API key, headers, and base URL never enter telemetry. Only `SafeGatewayError`, `GatewayRouteSnapshot`, and `upstreamKeyMasked` may cross the engine boundary.
+- Route/provider/upstream names are write-time snapshots. Historical rows do not change when configuration names change.
+- `taskKind` is nullable: main reply/gateway request is `null`; background title/memory/compact calls use their stable task kind.
+- Route-layer auth/body failures occurring before the engine may use the compatibility `logUsage` entry to insert one final execution row. Engine-owned failures must not be written again by route handlers.
+- Agent tool loops share one telemetry session and one execution id. Internal steps globally renumber attempts and aggregate usage; only the outer loop finalizes.
+- `firstTokenLatencyMs` is measured from logical execution start to the first committed stream event. Atomic operations may leave it null.
 
 ### 4. Validation & Error Matrix
 
-| 条件 | 聚合终态 | 日志 / 指标 |
+| Condition | Attempt fact | Execution fact / metric |
 |---|---|---|
-| 最终模型停止调用工具 | success | 一条聚合 success + 一次指标 |
-| 上游或路由失败 | failed | 一条聚合 failed；尝试失败日志保留 |
-| 客户端中止或 maxSteps 耗尽 | interrupted | 一条聚合 interrupted + 一次指标 |
+| First key fails, second succeeds | failed then success | one success execution; one logical metric |
+| Unsupported route protocol | rejected | continue before commit; final outcome follows later attempt |
+| All routes fail | one row per attempt | one failed execution |
+| Abort | interrupted attempt when an attempt started | one interrupted execution; no breaker failure |
+| Telemetry DB/metrics throws or times out | best-effort may be missing | gateway outcome remains unchanged |
+| Route auth/body rejection before engine | no upstream attempt | one compatibility execution row |
+| Agent has multiple model steps | globally ordered attempts | one aggregated final execution |
 
 ### 5. Good / Base / Bad Cases
 
-- Good：两轮工具链只生成一条 success，prompt/completion token 为两轮之和。
-- Base：无工具时退化为单次 `streamChat`，保持原日志行为。
-- Bad：每个步骤各写一条 success，会把同一用户回复重复计量。
+- Good: a two-route request records two attempts and one final execution; only the final execution contributes to usage totals.
+- Good: an error containing key/header/base URL reaches storage only after exact-value and generic redaction.
+- Base: a single successful attempt creates one attempt and one success execution.
+- Bad: each retry writes another final execution, inflating calls and tokens.
+- Bad: a route catches an engine failure and inserts a second final row.
+- Bad: attempt labels include `model`, `routeId`, `providerId`, or key masks.
 
 ### 6. Tests Required
 
-- `stream-agent-loop.test.ts` 断言多轮仅一条 success、聚合 token 正确。
-- 断言 `maxSteps` 耗尽不发 finish 且记录一条 interrupted。
-- 失败链测试须保留步骤级 attempt 日志与唯一终态指标的边界。
+- `gateway-execution/engine.test.ts`: key retry, route failover, commit-before-yield, Abort, deterministic errors, rejected protocols, credential/route redaction, telemetry failure isolation.
+- `gateway-execution/telemetry.test.ts`: start/attempt/finalize mappings, DB/metrics best-effort, persistence redaction.
+- Schema/migration tests: both facts, unique attempt number, FK actions, journal/snapshot, no `CASCADE` drop, and only old log tables removed.
+- Usage/error repository tests: success-only aggregation, time range/user isolation, failed attempt-chain filtering, pagination count consistency.
+- Agent loop tests: one execution finalization, globally ordered attempts, aggregated tokens, one final metric.
+- Metrics smoke: execution counter, attempt counter, execution duration, and absence of high-cardinality labels.
 
 ### 7. Wrong vs Correct
 
 ```typescript
-// Wrong:每个 Agent 步骤各自写最终成功日志。
-for await (const event of streamChat(stepOptions)) yield event;
+// Wrong: retry is represented as another logical request.
+await logUsage({ status: "failed", ...attempt });
+await logUsage({ status: "success", ...final });
 
-// Correct:步骤只上报终态，Agent 外层汇总后写一次。
-for await (const event of streamChat({ ...stepOptions, suppressFinalUsageLog: true })) yield event;
-await logUsage(aggregatedFinalUsage);
+// Correct: attempts and final outcome have separate facts.
+await telemetry.recordAttempt(attempt);
+await telemetry.finalizeExecution(final);
 ```
 
----
+## Query And Presentation Contracts
 
-## 用户端隔离（panel）
+- Usage aggregates and totals read only successful `gateway_executions` and apply the same user/time range.
+- Error lists read failed/interrupted executions. Retry details read only failed/interrupted/rejected attempts; successful attempts must not inherit the final execution error.
+- `userId` passed to repository methods is a mandatory server-side isolation predicate for panel users; admin omission means all users.
+- Error detail fields are visible to their owning user. Authorization relies on the query predicate, not destructive field blanking.
+- Default auth-noise exclusion remains a query filter; an explicit phase filter overrides it.
+- `createdAt` ranges are inclusive (`gte`/`lte`) and list/count queries must share one where expression.
 
-panel **不做字段级脱敏**——错误日志均为用户自己调用产生，全字段可见（含 errorMessage/provider/上游 key 快照），便于用户定位自己的错误。防越权靠查询层强制 userId 隔离：
+## What Not To Log
 
-- `listErrorLogs({ userId })` / `getErrorLog(id, userId)`：userId 传入即强制 `where user_id = ?`，panel 只能查到自己的行。
-- panel `page.tsx` 调用时必传 `userId = session.id`；admin 不传看全部。
-- panel 与 admin 共用 `ErrorLogsTable` / `ErrorDetailDrawer`，仅 panel 不渲染用户列/用户筛选（variant=panel）。
-
-> 历史：曾对 panel 做字段级脱敏（服务端置空 errorMessage/provider 等白名单外字段），后发现用户看自己的错误需要全字段，改为 userId 隔离 + 全字段下发。
-
----
-
-## 查询层
-
-- `src/lib/repositories/error-log-repository.ts`：`listErrorLogs({ page, pageSize, userId?, filters? })` / `getErrorLog(id, userId?)`。**userId 传入即强制 `where`**（panel 防越权），admin 不传看全部。
-- `src/lib/usage-aggregate.ts` `listUsageLogs`：用量明细分页 + 筛选。
-- 聚合（`getTimeSeries` / `getModelBreakdown` / `getSourceBreakdown`）只查 `usage_logs` → 失败不进 → **自然只统计成功**，无需改。
-- AUTH 噪声：`ops_error_logs` 默认 `excludeErrorPhase: "auth"`（扫描流量放大），用户可显式显示。
-
----
+- Complete request/response bodies, raw `Error` objects, causes, or stacks.
+- Plaintext API keys, Authorization/custom header values, provider base URLs, cookies, tokens, or connection strings.
+- Raw `ResolvedRoute`; use `GatewayRouteSnapshot` and a masked upstream key.
 
 ## Common Mistakes
 
-- **在调用点手写 insert usage_logs/ops_error_logs** → 必须走 `logUsage`，由它按 status 分流。
-- **route.ts 重复写 stream 内部错误** → 只写 pre-streamChat 错误，避免双写。
-- **新增 ErrorCode 没补 `classifyError` 映射** → 错误落到兜底 `internal/other`，分类失真。
-- **panel 防越权靠字段置空** → 靠查询层 `userId` 强制 where（`listErrorLogs` / `getErrorLog`）；字段级脱敏会让用户无法定位自己的错误。
-- **`logUsage` 抛错阻断主流程** → 永不抛错，失败只 `console.error`。
-- **副任务调 streamChat/generateChat 不传 `taskKind`** → 与主回复混在 source=chat，用量明细出现「一请求多日志」；标题/记忆/压缩必须透传。
-- **认为 `logUsage` 兜底足以清理任意 key** → 它只识别凭据形态；provider 边界必须传入当前 key/header 做精确替换。
+- Writing engine-owned final facts in route handlers causes duplicate calls and tokens.
+- Treating each failed attempt as a failed logical request corrupts availability metrics.
+- Querying all attempts into an error-only DTO makes successful attempts inherit misleading final errors.
+- Applying a time range to charts but not totals creates internally inconsistent dashboards.
+- Assuming sink regex can discover opaque secrets ignores values known only inside the provider boundary.
 
 ## Scenario: WebChat Run 审计生命周期
 
@@ -230,6 +131,7 @@ panel **不做字段级脱敏**——错误日志均为用户自己调用产生�
 - `heartbeatRun` 保留原始 DB Promise 作为单飞信号，不套 5 秒 wrapper；前一次未完成时后续 tick 必须跳过。request abort、stream cancel 与 finally 共用幂等停止函数，立即停止后续调度，但不伪装取消已进入 pg 的单次心跳。
 - 所有 SSE 帧必须经取消安全的 `safeEnqueue` 写入；run 必须在最内层 `finally` 从 `running` 收敛，并在成功路径发送 `[DONE]` 前 `await finalizeRun(...)`。
 - `finish` 是权威完成信号；完成后的客户端 abort 不得把成功 run 降级，收尾持久化失败除外。
+- Gateway execution telemetry 与 run 审计并行存在：前者描述上游尝试，后者描述会话业务生命周期；不得互相级联删除。
 
 ### 4. Validation & Error Matrix
 

@@ -23,7 +23,7 @@ Apply this contract when changing authenticated chat run completion, `runs` usag
 
 ## 3. Contracts
 
-- `runs` is the only run-metadata fact source. Do not copy model or usage into `messages`, and do not reconstruct message metadata from `usage_logs`.
+- `runs` is the only run-metadata fact source. Do not copy model or usage into `messages`, and do not reconstruct message metadata from `gateway_executions`.
 - Model means `runs.platformModelName`, not provider, routed binding, upstream model, key, or failover details.
 - `durationMs` is the non-negative wall-clock interval from `/api/chat` request entry through required assistant persistence. `completedAt` and `durationMs` are computed once after that persistence, then the same values enter `finalizeRun` and the SSE DTO.
 - Final usage comes from the normalized upstream finish usage. Missing token subfields stay missing; numeric zero is valid data. Cache/reasoning tokens are not re-added into a synthetic total.
@@ -55,7 +55,7 @@ Apply this contract when changing authenticated chat run completion, `runs` usag
 - Good: a continuation clears old metadata while streaming and replaces it with the continuation run on finish.
 - Base: an old run with only model and aggregate prompt/completion usage renders only those known fields.
 - Base: a model that reports cache or reasoning token `0` renders the explicit zero.
-- Bad: using browser elapsed time or a single `usage_logs.latencyMs` as the whole-run duration.
+- Bad: using browser elapsed time or a single `gateway_executions.latencyMs` as the whole-run duration.
 - Bad: selecting a complete run row for the client or omitting the conversation predicate because run IDs are globally unique.
 - Bad: sending metadata as soon as the provider emits finish, before assistant persistence has succeeded.
 - Bad: adding run metadata to the share DTO for display convenience.

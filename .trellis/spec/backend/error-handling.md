@@ -83,7 +83,7 @@ stream 生成失败时,从 AI SDK 错误提取**真实上游 statusCode** 归类
   - `5xx` -> `upstream_error`(phase=upstream)
   - 无 statusCode + 命中网络关键字(`NETWORK_KEYWORDS`) -> `network_error`(phase=network)
   - 其余(400/404 等 4xx 或未知)-> `generation_failed`(兜底,phase=upstream)
-- 落库(`ops_error_logs`):`httpStatus` 用真实 statusCode(无则 `SHORT_HTTP_STATUS[errorCode]`);`errorPhase` 经 `classifyError({ errorCode, httpStatus, errorMessage })` 三参同传,429 归 `rate_limit` 而非 `upstream`。`errorMessage` 保留 `lastError.message`(含 "Too Many Requests" 等原文)。
+- 落库(`gateway_executions` / `gateway_attempts`):`httpStatus` 使用真实 statusCode；`errorPhase` 经 `classifyError({ errorCode, httpStatus, errorMessage })` 三参同传，429 归 `rate_limit` 而非 `upstream`。只持久化脱敏后的 safe message。
 
 ### 重试策略
 - `streamText`/`generateText` 显式 `maxRetries: 0`,**禁用 AI SDK 自动重试**(默认 2 次 = 3 次尝试)。
@@ -166,18 +166,18 @@ The shared implementation lives in `src/lib/redaction.ts`; provider-specific cal
 
 ### 3. Contracts
 
-- A boundary that holds an actual API key or custom provider headers passes the key and every header value as exact secrets before the error leaves that boundary.
+- A boundary that holds an actual API key, custom provider headers, or provider base URL passes the key, base URL, and every header value as exact secrets before the error leaves that boundary.
 - Exact secrets are replaced literally, longest first; empty secrets are ignored. Query credentials, Authorization/Bearer, `x-api-key`, JSON fields, and key/value diagnostics also receive pattern-based redaction.
 - Retry, HTTP status extraction, auth classification, failover, and circuit-breaker decisions may inspect the raw error in-process. Only the derived safe message may enter downstream sinks.
-- Image, TTS, and STT adapters throw a new `Error(safeMessage)` without retaining the raw `cause` or stack. Their routes may only log, persist, or return that safe message.
-- `logUsage()` and structured run/tool normalization apply generic redaction as defense in depth. They cannot discover an arbitrary opaque secret that the owning caller failed to provide.
+- Gateway engine owns raw errors for Chat, Image, TTS, and STT and emits only `SafeGatewayError`; routes may only log, persist, or return that safe message.
+- Gateway telemetry, compatibility `logUsage()`, and structured run/tool normalization apply generic redaction as defense in depth. They cannot discover an arbitrary opaque secret that the owning caller failed to provide.
 - The replacement marker is `[REDACTED]`; non-sensitive diagnostic text and existing API error codes/statuses remain unchanged.
 
 ### 4. Validation & Error Matrix
 
 | Input / condition | Required result |
 | --- | --- |
-| Error contains the current API key or custom header value | Replace every exact occurrence with `[REDACTED]` |
+| Error contains the current API key, custom header value, or provider base URL | Replace every exact occurrence with `[REDACTED]` |
 | Error contains `?key=`, Authorization/Bearer, `x-api-key`, or a sensitive JSON/key-value field | Replace only the credential value |
 | Error contains no credential | Preserve the diagnostic message |
 | Raw error contains `statusCode` or retry metadata | Classify and route using the raw error, then publish only the safe message |
@@ -185,30 +185,29 @@ The shared implementation lives in `src/lib/redaction.ts`; provider-specific cal
 
 ### 5. Good / Base / Bad Cases
 
-- Good: each key attempt builds `secrets = [tryKey, ...Object.values(route.provider.headers ?? {})]`, classifies the raw error, then reuses one safe message for events, console, and logs.
+- Good: each key attempt builds `secrets = [tryKey, route.provider.baseUrl, ...Object.values(route.provider.headers ?? {})]`, classifies the raw error, then reuses one safe message for events, console, and logs.
 - Base: `upstream timeout after 30s` remains readable and otherwise unchanged.
-- Bad: passing the raw `Error` to `console.error`, an API details object, or `ops_error_logs` can expose a URL query, header, `cause`, or stack containing credentials.
+- Bad: passing the raw `Error` to `console.error`, an API details object, or gateway telemetry can expose a URL, header, `cause`, or stack containing credentials.
 
 ### 6. Tests Required
 
 - Unit-test literal secrets with regex metacharacters, overlapping values, and empty entries.
 - Cover URL query, Authorization/Bearer, `x-api-key`, quoted JSON/key-value forms, idempotence, and ordinary-message preservation.
 - Probe tests must cover fetch errors, model-construction errors, non-stream/stream errors, and custom header values.
-- Stream tests must prove raw status/retry behavior is retained while events, return values, console, and log parameters exclude the attempted key.
-- Media adapter and route tests must prove HTTP, console, `ops_error_logs`, and job error fields receive only safe messages.
+- Engine tests must prove raw status/retry behavior is retained while events, outcomes, telemetry, and console exclude attempted keys, header values, and base URLs.
+- Media adapter and route tests must prove HTTP, console, execution/attempt facts, and job error fields receive only safe messages.
 - Structured audit tests must retain depth, circular-reference, and truncation behavior while redacting sensitive fields and embedded credential text.
 
 ### 7. Wrong vs Correct
 
 ```typescript
-// Wrong: the raw provider error crosses a sink boundary.
-console.error("provider failed", error);
-await logUsage({ ...params, errorMessage: error.message });
+// Wrong: the raw provider error crosses the engine boundary.
+throw error;
 
-// Correct: classify with the raw error, then reuse only the safe message.
-const classification = classifyStreamError(error, secrets);
-console.error("provider failed", classification.message);
-await logUsage({ ...params, errorMessage: classification.message });
+// Correct: classify while exact route secrets are available.
+const safeError = classifyGatewayError(error, providerSecrets(route, apiKey));
+await telemetry.recordAttempt({ ...attempt, error: safeError });
+return { status: "failed", error: safeError };
 ```
 
 ---
@@ -220,5 +219,5 @@ await logUsage({ ...params, errorMessage: classification.message });
 - **新增错误码只改了 `ErrorCode` 没补 `ERROR_META`** → 编译/运行会缺映射。
 - **新增错误码没补 i18n 文案** → message 退回错误码字符串。
 - **在网关直接用 `RoutingError.code` 短码返回** → 必须经 `routingCodeToErrorCode` 映射成点分码。
-- **只在最终日志 sink 做脱敏** → sink 不知道任意 opaque key；持有实际 key/header 的 provider 边界必须先做精确替换。
+- **只在最终日志 sink 做脱敏** → sink 不知道任意 opaque key；持有实际 key/header/base URL 的 engine 安全域必须先做精确替换。
 - **把原始 provider `Error` 交给 console 或 route** → `cause`/stack 可能保留凭据；跨边界只传 safe message 或新建的 safe `Error`。
