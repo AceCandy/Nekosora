@@ -1,4 +1,10 @@
 import { defineConfig } from "drizzle-kit";
+import { existsSync } from "node:fs";
+import { loadEnvFile } from "node:process";
+
+if (!process.env.DATABASE_URL && existsSync(".env.local")) {
+  loadEnvFile(".env.local");
+}
 
 // PostgreSQL 迁移配置。配合 pgvector 扩展。
 // 运行:pnpm db:generate:pg  /  pnpm db:migrate:pg

@@ -686,6 +686,20 @@ export interface JournalEntry {
   breakpoints?: boolean;
 }
 
+export interface DrizzleSnapshot {
+  id: string;
+  prevId: string;
+  [key: string]: unknown;
+}
+
+/** 为不改变 schema 的数据迁移生成下一份 Drizzle snapshot。 */
+export function nextDataMigrationSnapshot<T extends DrizzleSnapshot>(
+  previous: T,
+  nextId: string,
+): T {
+  return { ...previous, id: nextId, prevId: previous.id };
+}
+
 /** 计算下一条数据迁移的 idx/tag(不覆盖已有 sync 迁移)。 */
 export function nextSyncMigrationSlot(
   entries: JournalEntry[],

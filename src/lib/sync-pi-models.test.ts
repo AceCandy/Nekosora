@@ -2,7 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   match, pickProvider, parsePiModelsApi, planCatalogSync, planMissingImports,
   canonicalFromPi, resolveThinkingFormat, resolveThinkingLevelMap, translate,
-  passesInvariants, buildUpsert, buildImportUpsert, nextSyncMigrationSlot,
+  passesInvariants, buildUpsert, buildImportUpsert, nextDataMigrationSnapshot,
+  nextSyncMigrationSlot,
   type PiModel, type CatalogRow,
 } from "./sync-pi-models";
 import type { ModelCapabilities } from "@/db/types";
@@ -280,6 +281,27 @@ describe("nextSyncMigrationSlot", () => {
       { idx: 8, tag: "0008_model_catalog_configured" },
     ]);
     expect(slot).toEqual({ idx: 9, tag: "0009_sync_pi_models" });
+  });
+});
+
+describe("nextDataMigrationSnapshot", () => {
+  it("保留 schema 并推进 snapshot id 链", () => {
+    const previous = {
+      id: "previous-id",
+      prevId: "older-id",
+      version: "7",
+      dialect: "postgresql",
+      tables: { "public.model_catalog": { name: "model_catalog" } },
+    };
+
+    const next = nextDataMigrationSnapshot(previous, "next-id");
+
+    expect(next).toEqual({
+      ...previous,
+      id: "next-id",
+      prevId: "previous-id",
+    });
+    expect(next).not.toBe(previous);
   });
 });
 

@@ -109,6 +109,30 @@ pnpm dev                      # 启动 http://localhost:3000
 2. 进入 `/admin/models` 创建对外模型名,绑定到 Provider 的上游模型
 3. 进入 `/panel/keys` 生成主密钥,或创建子密钥并绑定模型
 
+### 同步 pi 模型目录
+
+同步前需在 `.env.local` 中配置 `DATABASE_URL`。先分别预览已有模型变化和缺失模型:
+
+```bash
+pnpm sync:pi-models
+pnpm sync:pi-models -- --import-missing
+```
+
+确认结果后生成“导入缺失模型 + 更新已有模型”的 PostgreSQL 迁移:
+
+```bash
+pnpm sync:pi-models -- --import-missing --also-update --write
+pnpm exec vitest run src/lib/reasoning.test.ts src/lib/sync-pi-models.test.ts src/lib/model-catalog.test.ts
+```
+
+人工审查新生成的 `drizzle/pg/*.sql`，确认 pi 全量模型、迁移 SQL、`meta/_journal.json` 和新 snapshot 一致后应用:
+
+```bash
+pnpm db:migrate:pg
+```
+
+不要在正式同步中使用 `--apply`；统一通过版本化迁移应用数据库变更，避免执行中断后出现部分更新。
+
 ### 调用网关(OpenAI 兼容)
 
 ```bash

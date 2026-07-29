@@ -19,7 +19,8 @@
  *   pnpm tsx scripts/sync-pi-models.ts --import-missing --write --apply  # 导入+更新
  */
 import { eq, sql } from "drizzle-orm";
-import { mkdirSync, writeFileSync, readFileSync, copyFileSync, existsSync } from "node:fs";
+import { mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getDb, getSchema, closeDb } from "@/lib/infra/db";
@@ -32,8 +33,10 @@ import {
   passesInvariants,
   buildUpsert,
   buildImportUpsert,
+  nextDataMigrationSnapshot,
   nextSyncMigrationSlot,
   type CatalogRow,
+  type DrizzleSnapshot,
   type JournalEntry,
   type PiCatalog,
   type ImportCandidate,
@@ -165,7 +168,9 @@ function writeMigration(tag: string, idx: number, stmts: string[], kind: string)
   const prevSnap = join(migDir, "meta", `${prevIdx}_snapshot.json`);
   const nextSnap = join(migDir, "meta", `${nextIdx}_snapshot.json`);
   if (existsSync(prevSnap) && !existsSync(nextSnap)) {
-    copyFileSync(prevSnap, nextSnap);
+    const previous = JSON.parse(readFileSync(prevSnap, "utf8")) as DrizzleSnapshot;
+    const next = nextDataMigrationSnapshot(previous, randomUUID());
+    writeFileSync(nextSnap, `${JSON.stringify(next, null, 2)}\n`);
   }
   return sqlPath;
 }
