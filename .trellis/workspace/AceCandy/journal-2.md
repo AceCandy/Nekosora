@@ -206,3 +206,25 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 70: 统一 Gateway execution engine
+
+**Date**: 2026-07-30
+**Task**: 统一 Gateway execution engine
+**Branch**: `dev_0729`
+
+### Summary
+
+统一 Chat、Image、TTS、STT 的 route/key 执行状态机；以 gateway_executions/gateway_attempts 破坏性替换旧日志表并迁移查询、指标与规范。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `beaeb6f` | (see git log) |
+| `b636b62` | (see git log) |
+
+### Status
+
+[OK] **Completed**
