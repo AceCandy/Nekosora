@@ -4,10 +4,10 @@ import { describe, expect, it } from "vitest";
 
 const migrationDir = join(process.cwd(), "drizzle/pg");
 
-describe("0013 file processing lease migration", () => {
-  it("追加可恢复文件处理租约并保持迁移元数据连续", () => {
+describe("file processing lease baseline", () => {
+  it("包含可恢复文件处理租约及基线元数据", () => {
     const migration = readFileSync(
-      join(migrationDir, "0013_add_file_processing_lease.sql"),
+      join(migrationDir, "0000_baseline.sql"),
       "utf8",
     );
     expect(migration).toContain(
@@ -33,25 +33,14 @@ describe("0013 file processing lease migration", () => {
         breakpoints: boolean;
       }>;
     };
-    const currentIndex = journal.entries.findIndex(
-      (entry) => entry.idx === 13 && entry.tag === "0013_add_file_processing_lease",
-    );
-    expect(currentIndex).toBeGreaterThan(0);
-    const previousEntry = journal.entries[currentIndex - 1];
-    const currentEntry = journal.entries[currentIndex];
-    expect(currentEntry).toEqual(expect.objectContaining({
-      idx: 13,
-      tag: "0013_add_file_processing_lease",
+    expect(journal.entries).toEqual([expect.objectContaining({
+      idx: 0,
+      tag: "0000_baseline",
       breakpoints: true,
-    }));
-    expect(previousEntry.idx).toBe(12);
-    expect(currentEntry.when).toBeGreaterThan(previousEntry.when);
+    })]);
 
-    const previousSnapshot = JSON.parse(
-      readFileSync(join(migrationDir, "meta/0012_snapshot.json"), "utf8"),
-    ) as { id: string };
     const currentSnapshot = JSON.parse(
-      readFileSync(join(migrationDir, "meta/0013_snapshot.json"), "utf8"),
+      readFileSync(join(migrationDir, "meta/0000_snapshot.json"), "utf8"),
     ) as {
       prevId: string;
       tables: Record<string, {
@@ -59,7 +48,7 @@ describe("0013 file processing lease migration", () => {
         indexes: Record<string, { where?: string }>;
       }>;
     };
-    expect(currentSnapshot.prevId).toBe(previousSnapshot.id);
+    expect(currentSnapshot.prevId).toBe("00000000-0000-0000-0000-000000000000");
     expect(currentSnapshot.tables["public.file_objects"].columns.processing_lease_id)
       .toEqual(expect.objectContaining({ type: "text", notNull: false }));
     expect(currentSnapshot.tables["public.file_objects"].columns.processing_lease_expires_at)

@@ -4,10 +4,10 @@ import { describe, expect, it } from "vitest";
 
 const migrationDir = join(process.cwd(), "drizzle/pg");
 
-describe("0015 pending file recovery migration", () => {
-  it("追加 pending 扫描部分索引并保持迁移元数据连续", () => {
+describe("pending file recovery baseline", () => {
+  it("包含 pending 扫描部分索引及基线元数据", () => {
     const migration = readFileSync(
-      join(migrationDir, "0015_pending_file_recovery.sql"),
+      join(migrationDir, "0000_baseline.sql"),
       "utf8",
     );
     expect(migration).toContain(
@@ -19,25 +19,14 @@ describe("0015 pending file recovery migration", () => {
     ) as {
       entries: Array<{ idx: number; when: number; tag: string; breakpoints: boolean }>;
     };
-    const currentIndex = journal.entries.findIndex(
-      (entry) => entry.idx === 15 && entry.tag === "0015_pending_file_recovery",
-    );
-    expect(currentIndex).toBeGreaterThan(0);
-    const previousEntry = journal.entries[currentIndex - 1];
-    const currentEntry = journal.entries[currentIndex];
-    expect(previousEntry.idx).toBe(14);
-    expect(currentEntry).toEqual(expect.objectContaining({
-      idx: 15,
-      tag: "0015_pending_file_recovery",
+    expect(journal.entries).toEqual([expect.objectContaining({
+      idx: 0,
+      tag: "0000_baseline",
       breakpoints: true,
-    }));
-    expect(currentEntry.when).toBeGreaterThan(previousEntry.when);
+    })]);
 
-    const previousSnapshot = JSON.parse(
-      readFileSync(join(migrationDir, "meta/0014_snapshot.json"), "utf8"),
-    ) as { id: string };
     const currentSnapshot = JSON.parse(
-      readFileSync(join(migrationDir, "meta/0015_snapshot.json"), "utf8"),
+      readFileSync(join(migrationDir, "meta/0000_snapshot.json"), "utf8"),
     ) as {
       prevId: string;
       tables: Record<string, {
@@ -49,7 +38,7 @@ describe("0015 pending file recovery migration", () => {
     };
     const index = currentSnapshot.tables["public.file_objects"]
       .indexes.file_objects_pending_processing_idx;
-    expect(currentSnapshot.prevId).toBe(previousSnapshot.id);
+    expect(currentSnapshot.prevId).toBe("00000000-0000-0000-0000-000000000000");
     expect(index.columns.map((column) => column.expression)).toEqual(["created_at", "id"]);
     expect(index.where).toBe('"file_objects"."processing_status" = \'pending\'');
   });

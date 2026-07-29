@@ -4,10 +4,10 @@ import { describe, expect, it } from "vitest";
 
 const migrationDir = join(process.cwd(), "drizzle/pg");
 
-describe("0014 conversation title outbox migration", () => {
-  it("追加持久标题任务表并保持迁移元数据连续", () => {
+describe("conversation title outbox baseline", () => {
+  it("包含持久标题任务表和基线元数据", () => {
     const migration = readFileSync(
-      join(migrationDir, "0014_conversation_title_outbox.sql"),
+      join(migrationDir, "0000_baseline.sql"),
       "utf8",
     );
     expect(migration).toContain('CREATE TABLE "conversation_title_jobs"');
@@ -33,25 +33,14 @@ describe("0014 conversation title outbox migration", () => {
     ) as {
       entries: Array<{ idx: number; when: number; tag: string; breakpoints: boolean }>;
     };
-    const currentIndex = journal.entries.findIndex(
-      (entry) => entry.idx === 14 && entry.tag === "0014_conversation_title_outbox",
-    );
-    expect(currentIndex).toBeGreaterThan(0);
-    const previousEntry = journal.entries[currentIndex - 1];
-    const currentEntry = journal.entries[currentIndex];
-    expect(previousEntry.idx).toBe(13);
-    expect(currentEntry).toEqual(expect.objectContaining({
-      idx: 14,
-      tag: "0014_conversation_title_outbox",
+    expect(journal.entries).toEqual([expect.objectContaining({
+      idx: 0,
+      tag: "0000_baseline",
       breakpoints: true,
-    }));
-    expect(currentEntry.when).toBeGreaterThan(previousEntry.when);
+    })]);
 
-    const previousSnapshot = JSON.parse(
-      readFileSync(join(migrationDir, "meta/0013_snapshot.json"), "utf8"),
-    ) as { id: string };
     const currentSnapshot = JSON.parse(
-      readFileSync(join(migrationDir, "meta/0014_snapshot.json"), "utf8"),
+      readFileSync(join(migrationDir, "meta/0000_snapshot.json"), "utf8"),
     ) as {
       prevId: string;
       tables: Record<string, {
@@ -61,7 +50,7 @@ describe("0014 conversation title outbox migration", () => {
       }>;
     };
     const table = currentSnapshot.tables["public.conversation_title_jobs"];
-    expect(currentSnapshot.prevId).toBe(previousSnapshot.id);
+    expect(currentSnapshot.prevId).toBe("00000000-0000-0000-0000-000000000000");
     expect(table.columns.dispatch_after).toEqual(expect.objectContaining({
       type: "timestamp with time zone",
       notNull: true,

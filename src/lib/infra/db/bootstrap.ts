@@ -81,7 +81,8 @@ export async function runMigrations(db: unknown): Promise<void> {
           "lock table drizzle.__drizzle_migrations in share row exclusive mode",
         );
         await adoptExistingPgBaselineIfNeeded(tx);
-        await reconcileRetimedPgMigrations(tx, migrationsFolder);
+        const compacted = await compactPreSquashPgMigrationLedgerIfNeeded(tx, migrationsFolder);
+        if (!compacted) await reconcileRetimedPgMigrations(tx, migrationsFolder);
       });
 
       const { migrate } = await import("drizzle-orm/node-postgres/migrator");
@@ -102,10 +103,35 @@ const PG_BASELINE_TYPES = [
   "provider_protocol",
 ] as const;
 
-// 0000 发布后只做过幂等化修订；存量数据库仍保留原始 SQL 的迁移 hash。
-const PG_LEGACY_BASELINE_HASHES = new Set([
+// 合并为单基线前的 0000 存在两个已执行版本；仅完整旧迁移链可使用这些 hash。
+const PG_PRE_SQUASH_BASELINE_HASHES = new Set([
   "0f852461b32b9e206d15e4229ea861c7143efe9b220e341d3bcb0dcee8f6511c",
+  "de7459d7adc1a1cbe515d04f99bfd6a5434082d6d7439d5d85dff08cbed12601",
 ]);
+
+/** 合并前 0000-0019 的 canonical hash，用于证明旧账本已完整执行。 */
+const PG_PRE_SQUASH_MIGRATION_HASHES = [
+  "de7459d7adc1a1cbe515d04f99bfd6a5434082d6d7439d5d85dff08cbed12601",
+  "9b6f59ad1abfbce5040cddedec2177ad961d1062f3b68f9c41dd987fa2a19299",
+  "67deb42fc6262bb3d5fe0df5733859269f8f196ea074deee0b2600181940bd54",
+  "f6dc7f2caeb794d43e32b553f835f573f6623b345963ee5c56a45b34b09a836c",
+  "0a36293bea556f6afe2e146ea5c4eb322a508f872c37d6efca4794941eab3fe0",
+  "302456d54626d85edea481d16001d471d81db680e823bfbe084a1ebee5f7ef8b",
+  "756216e54ab122f03cdfbba9a86468755948258c7db66dc1e155ee056ef2c751",
+  "a52e52f02839c9eaa4d7018c7a13b37d00b8f1211e5ce6c0f8ad09cfec25d512",
+  "dac9a2e8729110274d50e6ae367fe4b26e1982183c8bf9735aa0d8576892a24f",
+  "e4d04b5ee2a24ed11c7bb513aac3d838b3a6f7dcbb90e1ed9a12a0c2a8d97469",
+  "4cc2f0c7ca7a9203cdecf52efb64176d3273bd7afc07aca22df5a190b11dd280",
+  "81ad1c9234b0ac5993b96658e2d7bfe4a2e1cd61852e237bc4b1e31546f55bc1",
+  "e85eeb79b677dbe060e625a71913fab5dac965437b5e9ed341473313803add3b",
+  "a4ae7889201b55f76aecf1431b54f7cff64cf9b2a8ea6fc643fbb8a00b5ed173",
+  "450ac08e5d3c41458c3643c9101e15c4be95d8fa39ac46669dc644705d2f017f",
+  "401e2ba3ee6c1757e972c218f0d87e5afd07bb077a518bfb9b8ea8b6cbf116e5",
+  "18bc0460adaeeae9462db2388681cabc1c972ade43f30a5cb42b483e85c5f773",
+  "7846c8a42746047eda8f2630202134892abf62a37ca6547c7b5f388f74b11b98",
+  "4fca4ff501801f3cc7df8c8e82e362182666bae8a1f11121b8016abcc3c3a52d",
+  "66dffda6f13f95f24b6b53016919f6699a8dc72203c86d53e2394ea738629b3d",
+] as const;
 
 const PG_MIGRATION_LOCK_SQL =
   "select pg_advisory_lock(hashtext(current_database()), hashtext('drizzle.__drizzle_migrations'))";
@@ -289,6 +315,67 @@ interface PgMigrationReconciliation {
 }
 
 /**
+ * 开发期将 0000-0019 合并为单基线后，完整旧账本可安全收敛为新基线记录。
+ * 只有全部旧 hash 按顺序匹配时才改写；部分迁移或未知记录交给后续严格校验阻断。
+ */
+async function compactPreSquashPgMigrationLedgerIfNeeded(
+  db: unknown,
+  migrationsFolder: string,
+): Promise<boolean> {
+  const rawRows = await pgRows<{ id: unknown; hash: unknown; created_at: unknown }>(
+    db,
+    "select id, hash, created_at from drizzle.__drizzle_migrations order by id",
+  );
+  if (rawRows.length !== PG_PRE_SQUASH_MIGRATION_HASHES.length) return false;
+
+  const ledger = rawRows.map((row, index): PgMigrationLedgerRow => ({
+    id: validatePositiveInteger(row.id, `ledger[${index}].id`),
+    hash: validateMigrationHash(row.hash, `ledger[${index}]`),
+    createdAt: validatePositiveInteger(row.created_at, `ledger[${index}].created_at`),
+  }));
+  const orderedLedger = [...ledger].sort((left, right) => left.createdAt - right.createdAt);
+  const matches = orderedLedger.every((row, index) => {
+    if (index === 0) return PG_PRE_SQUASH_BASELINE_HASHES.has(row.hash);
+    return row.hash === PG_PRE_SQUASH_MIGRATION_HASHES[index];
+  });
+  const hasUniqueIds = new Set(ledger.map((row) => row.id)).size === ledger.length;
+  const hasUniqueTimes = new Set(ledger.map((row) => row.createdAt)).size === ledger.length;
+  if (!matches || !hasUniqueIds || !hasUniqueTimes) return false;
+
+  const { readMigrationFiles } = await import("drizzle-orm/migrator");
+  const [baseline] = readMigrationFiles({ migrationsFolder });
+  if (!baseline) throw new Error(`[bootstrap] 未找到迁移基线:${migrationsFolder}`);
+  const baselineHash = validateMigrationHash(baseline.hash, "journal[0]");
+  const baselineTime = validatePositiveInteger(baseline.folderMillis, "journal[0].when");
+  const [first, ...trailing] = orderedLedger;
+
+  const updateResult = await pgExecute(
+    db,
+    `update drizzle.__drizzle_migrations ` +
+      `set hash = '${baselineHash}', created_at = ${baselineTime} ` +
+      `where id = ${first.id} and hash = '${first.hash}' and created_at = ${first.createdAt}`,
+  );
+  const updateCount = updateResult && typeof updateResult === "object"
+    ? (updateResult as { rowCount?: unknown }).rowCount
+    : undefined;
+  if (updateCount !== 1) throw new Error("[bootstrap] PostgreSQL 旧迁移账本基线归并失败");
+
+  const deleteResult = await pgExecute(
+    db,
+    `delete from drizzle.__drizzle_migrations where id in (${trailing.map((row) => row.id).join(", ")})`,
+  );
+  const deleteCount = deleteResult && typeof deleteResult === "object"
+    ? (deleteResult as { rowCount?: unknown }).rowCount
+    : undefined;
+  if (deleteCount !== trailing.length) {
+    throw new Error("[bootstrap] PostgreSQL 旧迁移账本尾部归并失败");
+  }
+
+  console.log(`[bootstrap] ✅ 已将 ${ledger.length} 条旧迁移账本归并为当前基线`);
+  return true;
+}
+
+/**
  * Drizzle 只按最新 created_at 判断待执行迁移。若已发布 migration 的 journal 时间被
  * 改写,同一 SQL 会被当成新迁移重复执行。这里只在完整连续前缀可证明安全时校正账本,
  * 其余漂移一律阻断,避免把未执行 SQL 伪装成已完成。
@@ -340,9 +427,7 @@ async function reconcileRetimedPgMigrations(db: unknown, migrationsFolder: strin
     const withSameHash = ledger.find((row) => row.hash === migration.hash);
 
     if (atCanonicalTime) {
-      const isKnownLegacyBaseline = migration.index === 0
-        && PG_LEGACY_BASELINE_HASHES.has(atCanonicalTime.hash);
-      if (atCanonicalTime.hash !== migration.hash && !isKnownLegacyBaseline) {
+      if (atCanonicalTime.hash !== migration.hash) {
         throw new Error(
           `[bootstrap] PostgreSQL 迁移账本 hash 与 journal 不一致:index=${migration.index}`,
         );

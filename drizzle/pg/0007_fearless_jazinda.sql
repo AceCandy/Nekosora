@@ -1,1 +1,0 @@
-ALTER TABLE "ops_error_logs" ADD COLUMN "attempt" integer;

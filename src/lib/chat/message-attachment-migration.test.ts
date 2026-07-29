@@ -4,10 +4,10 @@ import { describe, expect, it } from "vitest";
 
 const migrationDir = join(process.cwd(), "drizzle/pg");
 
-describe("0018 message file objects migration", () => {
-  it("声明关联约束、稳定顺序与连续 Drizzle 元数据", () => {
+describe("message file objects baseline", () => {
+  it("声明关联约束、稳定顺序与 Drizzle 基线元数据", () => {
     const migration = readFileSync(
-      join(migrationDir, "0018_message_file_objects.sql"),
+      join(migrationDir, "0000_baseline.sql"),
       "utf8",
     );
     expect(migration).toContain('CREATE TABLE "message_file_objects"');
@@ -22,16 +22,14 @@ describe("0018 message file objects migration", () => {
     ) as {
       entries: Array<{ idx: number; when: number; tag: string; breakpoints: boolean }>;
     };
-    const index = journal.entries.findIndex((entry) => entry.tag === "0018_message_file_objects");
-    expect(index).toBeGreaterThan(0);
-    expect(journal.entries[index]).toEqual(expect.objectContaining({ idx: 18, breakpoints: true }));
-    expect(journal.entries[index]!.when).toBeGreaterThan(journal.entries[index - 1]!.when);
+    expect(journal.entries).toEqual([expect.objectContaining({
+      idx: 0,
+      tag: "0000_baseline",
+      breakpoints: true,
+    })]);
 
-    const previous = JSON.parse(
-      readFileSync(join(migrationDir, "meta/0017_snapshot.json"), "utf8"),
-    ) as { id: string };
     const current = JSON.parse(
-      readFileSync(join(migrationDir, "meta/0018_snapshot.json"), "utf8"),
+      readFileSync(join(migrationDir, "meta/0000_snapshot.json"), "utf8"),
     ) as {
       prevId: string;
       tables: Record<string, {
@@ -41,7 +39,7 @@ describe("0018 message file objects migration", () => {
         compositePrimaryKeys: Record<string, unknown>;
       }>;
     };
-    expect(current.prevId).toBe(previous.id);
+    expect(current.prevId).toBe("00000000-0000-0000-0000-000000000000");
     const table = current.tables["public.message_file_objects"];
     expect(table.columns).toEqual(expect.objectContaining({
       message_id: expect.any(Object),

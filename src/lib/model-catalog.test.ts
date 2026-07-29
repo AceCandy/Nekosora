@@ -253,17 +253,15 @@ describe("current mainstream catalog seed", () => {
   });
 });
 
-describe("Kimi fixed reasoning repair migration", () => {
-  const migration = readFileSync("drizzle/pg/0011_fix_kimi_fixed_reasoning.sql", "utf8");
+describe("Kimi fixed reasoning baseline", () => {
+  const baseline = readFileSync("drizzle/pg/0000_baseline.sql", "utf8");
+  const migration = baseline
+    .split("-- Squashed from 0011_fix_kimi_fixed_reasoning.sql")[1]
+    ?.split("-- Squashed from 0012_add_run_lease.sql")[0] ?? "";
   const journal = JSON.parse(readFileSync("drizzle/pg/meta/_journal.json", "utf8")) as {
     entries: Array<{ idx: number; tag: string; when: number; breakpoints: boolean }>;
   };
-  const previousSnapshot = JSON.parse(readFileSync("drizzle/pg/meta/0010_snapshot.json", "utf8")) as {
-    id: string;
-    prevId: string;
-    [key: string]: unknown;
-  };
-  const currentSnapshot = JSON.parse(readFileSync("drizzle/pg/meta/0011_snapshot.json", "utf8")) as {
+  const currentSnapshot = JSON.parse(readFileSync("drizzle/pg/meta/0000_snapshot.json", "utf8")) as {
     id: string;
     prevId: string;
     [key: string]: unknown;
@@ -300,26 +298,13 @@ describe("Kimi fixed reasoning repair migration", () => {
     expect(targetIds).toEqual(["kimi-k2.7-code", "kimi-k2.7-code-highspeed"]);
   });
 
-  it("appends migration metadata without changing the schema snapshot", () => {
-    const currentEntryIndex = journal.entries.findIndex(
-      (entry) => entry.tag === "0011_fix_kimi_fixed_reasoning",
-    );
-    expect(currentEntryIndex).toBeGreaterThan(0);
-    const previousEntry = journal.entries[currentEntryIndex - 1];
-    const currentEntry = journal.entries[currentEntryIndex];
-    expect(previousEntry).toBeDefined();
-    expect(currentEntry).toMatchObject({
-      idx: 11,
-      tag: "0011_fix_kimi_fixed_reasoning",
+  it("keeps a single baseline journal and root snapshot", () => {
+    expect(journal.entries).toEqual([expect.objectContaining({
+      idx: 0,
+      tag: "0000_baseline",
       breakpoints: true,
-    });
-    expect(currentEntry?.when).toBeGreaterThan(previousEntry?.when ?? Number.POSITIVE_INFINITY);
-
-    const { id: previousId, prevId: previousPrevId, ...previousSchema } = previousSnapshot;
-    const { id: currentId, prevId: currentPrevId, ...currentSchema } = currentSnapshot;
-    expect(currentPrevId).toBe(previousId);
-    expect(currentId).not.toBe(previousId);
-    expect(previousPrevId).toBeTypeOf("string");
-    expect(currentSchema).toEqual(previousSchema);
+    })]);
+    expect(currentSnapshot.id).toBeTypeOf("string");
+    expect(currentSnapshot.prevId).toBe("00000000-0000-0000-0000-000000000000");
   });
 });

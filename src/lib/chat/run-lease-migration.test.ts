@@ -4,10 +4,10 @@ import { describe, expect, it } from "vitest";
 
 const migrationDir = join(process.cwd(), "drizzle/pg");
 
-describe("0012 run lease migration", () => {
-  it("追加租约 schema、滚动升级数据兼容与连续元数据", () => {
+describe("run lease baseline", () => {
+  it("包含租约 schema、数据兼容语义与基线元数据", () => {
     const migration = readFileSync(
-      join(migrationDir, "0012_add_run_lease.sql"),
+      join(migrationDir, "0000_baseline.sql"),
       "utf8",
     );
     expect(migration).toContain(
@@ -34,22 +34,14 @@ describe("0012 run lease migration", () => {
         breakpoints: boolean;
       }>;
     };
-    const currentIndex = journal.entries.findIndex((entry) => entry.tag === "0012_add_run_lease");
-    expect(currentIndex).toBeGreaterThan(0);
-    const previousEntry = journal.entries[currentIndex - 1]!;
-    const currentEntry = journal.entries[currentIndex]!;
-    expect(currentEntry).toEqual(expect.objectContaining({
-      idx: 12,
-      tag: "0012_add_run_lease",
+    expect(journal.entries).toEqual([expect.objectContaining({
+      idx: 0,
+      tag: "0000_baseline",
       breakpoints: true,
-    }));
-    expect(currentEntry.when).toBeGreaterThan(previousEntry.when);
+    })]);
 
-    const previousSnapshot = JSON.parse(
-      readFileSync(join(migrationDir, "meta/0011_snapshot.json"), "utf8"),
-    ) as { id: string };
     const currentSnapshot = JSON.parse(
-      readFileSync(join(migrationDir, "meta/0012_snapshot.json"), "utf8"),
+      readFileSync(join(migrationDir, "meta/0000_snapshot.json"), "utf8"),
     ) as {
       prevId: string;
       tables: Record<string, {
@@ -57,7 +49,7 @@ describe("0012 run lease migration", () => {
         indexes: Record<string, { where?: string }>;
       }>;
     };
-    expect(currentSnapshot.prevId).toBe(previousSnapshot.id);
+    expect(currentSnapshot.prevId).toBe("00000000-0000-0000-0000-000000000000");
     expect(currentSnapshot.tables["public.runs"].columns.lease_expires_at)
       .toEqual(expect.objectContaining({
         type: "timestamp with time zone",

@@ -1,1 +1,0 @@
-CREATE INDEX "file_objects_pending_processing_idx" ON "file_objects" USING btree ("created_at","id") WHERE "file_objects"."processing_status" = 'pending';

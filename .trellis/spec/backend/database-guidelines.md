@@ -205,6 +205,8 @@ if (job) void dispatchConversationTitleJob(job.id);
 #### 3. Contracts
 - `drizzle/pg/meta/**` 必须与 SQL 文件一起提交;`.gitignore` 不得忽略 `meta`。
 - **已发布并可能在任一数据库执行过的 SQL、journal `when/tag/idx` 均不可改写**；结构变更必须追加新迁移。
+- “尚未上线”不等于“没有存量数据库”：压缩开发期迁移前必须盘点本地/测试库账本。需要保留数据时，只能在锁与事务内，将 hash 完整匹配旧迁移全集的账本归并为新基线；不能靠环境名称或记录数量推断已完整执行。
+- 旧账本的 `id` 只用于条件更新/删除，不代表 canonical 迁移顺序；验证完整历史时按唯一 `created_at` 排序后逐项匹配已知 hash，兼容历史重定时造成的插入顺序差异。
 - PG baseline enum 用 `DO ... EXCEPTION WHEN duplicate_object` 幂等。
 - 全部 PG 表/enum 存在但 `drizzle.__drizzle_migrations` 为空 → 启动补基线记录后继续。
 - 只有 enum 残留 → 继续幂等建表。
@@ -221,6 +223,7 @@ if (job) void dispatchConversationTitleJob(job.id);
 - canonical 时间上的 hash 不匹配当前迁移且不在 `0000` 白名单 → 阻断启动。
 - 相同 hash 位于旧时间且完整连续前缀可证明 → 条件修正 `created_at`，再由官方 migrator 执行尾部迁移。
 - 前序缺失、后续提前登记、未知记录、重复 id/hash/时间或目标时间冲突 → 不 UPDATE、不调用 migrator。
+- 开发期 squash 后完整旧 hash 集合匹配 → 精确更新首条为新基线 hash/time、删除其余旧记录并校验各自 `rowCount`；任一 hash 缺失/未知、时间重复或行数异常 → 整个事务回滚并阻断启动。
 - 条件 UPDATE 未命中或无明确 `rowCount` → 视为并发变化，回滚并阻断启动。
 - advisory lock 获取/释放失败 → 阻断启动；无法确认解锁时销毁连接。
 - 全表存在无 Drizzle 记录 → 补基线记录后 migrate 继续。
@@ -228,17 +231,20 @@ if (job) void dispatchConversationTitleJob(job.id);
 
 #### 5. Good / Base / Bad Cases
 - Good: SQL + `_journal.json` + snapshot 一起生成并提交。
+- Good: 测试库已执行全部 squash 前迁移，启动在事务内归并账本后由官方 migrator 跳过新基线。
 - Good: 已发布迁移需要调整时追加下一个迁移，不修改旧 SQL 或旧 journal entry。
 - Base: 空账本或正常连续前缀不产生协调 UPDATE，直接进入官方 migrator。
 - Base: 已核实的同 hash 旧时间记录只修正账本时间，不重跑该 SQL。
 - Bad: 只提交 `0000_*.sql`,忽略 `meta/**`。
 - Bad: 把 partial schema 标记为已迁移。
 - Bad: 为整理编号、文件名或时间线而改写已发布 journal 的 `when/tag/idx`。
+- Bad: 因为产品未上线就假定测试库可丢弃，压缩 journal 后让已有完整账本变成未知记录。
 - Bad: 在 Pool 上先拿 advisory lock，再调用可能切换连接的 migrator。
 
 #### 6. Tests Required
 - PG 迁移单测:complete-existing-schema adoption + partial-schema rejection(见 `src/lib/infra/db/bootstrap.test.ts`)。
 - 协调单测:安全重定时、连续前缀/空账本、journal 与 ledger 重复、断层、未知记录、baseline 白名单、UPDATE `rowCount`。
+- squash 账本单测:两个已知旧 baseline hash、完整旧链成功、`id`/时间顺序不同、任一 hash 不匹配、仅旧 baseline、UPDATE/DELETE `rowCount` 异常。
 - 连接生命周期单测:锁获取失败、migrate 失败、unlock 返回 false/抛错，断言 unlock 与 `release(destroy)`。
 - 断言点:`insert/update drizzle.__drizzle_migrations`、表锁与 advisory lock 顺序、错误路径不调用 migrator。
 - 真实启动验证:启动日志只协调目标 hash，尾部迁移新增账本记录，目标 schema 对象存在，健康检查通过，调试服务关闭。

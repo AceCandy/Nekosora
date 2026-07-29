@@ -1,1 +1,0 @@
-ALTER TABLE "conversation_shares" ADD COLUMN "message_snapshots_json" jsonb;

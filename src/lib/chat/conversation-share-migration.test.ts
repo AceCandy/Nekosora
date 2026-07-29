@@ -4,10 +4,10 @@ import { describe, expect, it } from "vitest";
 
 const migrationDir = join(process.cwd(), "drizzle/pg");
 
-describe("0016 conversation share controls migration", () => {
-  it("追加分享配置、版本选择、限流约束与连续元数据", () => {
+describe("conversation share controls baseline", () => {
+  it("包含分享配置、版本选择、限流约束与基线元数据", () => {
     const migration = readFileSync(
-      join(migrationDir, "0016_conversation_share_controls.sql"),
+      join(migrationDir, "0000_baseline.sql"),
       "utf8",
     );
     expect(migration).toContain('CREATE TABLE "conversation_share_unlock_attempts"');
@@ -23,17 +23,17 @@ describe("0016 conversation share controls migration", () => {
     const journal = JSON.parse(readFileSync(join(migrationDir, "meta/_journal.json"), "utf8")) as {
       entries: Array<{ idx: number; when: number; tag: string; breakpoints: boolean }>;
     };
-    const index = journal.entries.findIndex((entry) => entry.tag === "0016_conversation_share_controls");
-    expect(index).toBeGreaterThan(0);
-    expect(journal.entries[index]).toEqual(expect.objectContaining({ idx: 16, breakpoints: true }));
-    expect(journal.entries[index]!.when).toBeGreaterThan(journal.entries[index - 1]!.when);
+    expect(journal.entries).toEqual([expect.objectContaining({
+      idx: 0,
+      tag: "0000_baseline",
+      breakpoints: true,
+    })]);
 
-    const previous = JSON.parse(readFileSync(join(migrationDir, "meta/0015_snapshot.json"), "utf8")) as { id: string };
-    const current = JSON.parse(readFileSync(join(migrationDir, "meta/0016_snapshot.json"), "utf8")) as {
+    const current = JSON.parse(readFileSync(join(migrationDir, "meta/0000_snapshot.json"), "utf8")) as {
       prevId: string;
       tables: Record<string, { columns: Record<string, unknown>; indexes: Record<string, unknown> }>;
     };
-    expect(current.prevId).toBe(previous.id);
+    expect(current.prevId).toBe("00000000-0000-0000-0000-000000000000");
     expect(current.tables["public.conversation_shares"].columns).toEqual(expect.objectContaining({
       mode: expect.any(Object), expires_at: expect.any(Object), password_verifier: expect.any(Object),
       render_style_snapshot: expect.any(Object),

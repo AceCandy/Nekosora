@@ -57,6 +57,45 @@ const PG_BASELINE_TABLES = [
 
 const TEST_MIGRATION_HASHES = ["a".repeat(64), "b".repeat(64), "c".repeat(64)];
 const LEGACY_BASELINE_HASH = "0f852461b32b9e206d15e4229ea861c7143efe9b220e341d3bcb0dcee8f6511c";
+const PRE_SQUASH_MIGRATION_HASHES = [
+  "de7459d7adc1a1cbe515d04f99bfd6a5434082d6d7439d5d85dff08cbed12601",
+  "9b6f59ad1abfbce5040cddedec2177ad961d1062f3b68f9c41dd987fa2a19299",
+  "67deb42fc6262bb3d5fe0df5733859269f8f196ea074deee0b2600181940bd54",
+  "f6dc7f2caeb794d43e32b553f835f573f6623b345963ee5c56a45b34b09a836c",
+  "0a36293bea556f6afe2e146ea5c4eb322a508f872c37d6efca4794941eab3fe0",
+  "302456d54626d85edea481d16001d471d81db680e823bfbe084a1ebee5f7ef8b",
+  "756216e54ab122f03cdfbba9a86468755948258c7db66dc1e155ee056ef2c751",
+  "a52e52f02839c9eaa4d7018c7a13b37d00b8f1211e5ce6c0f8ad09cfec25d512",
+  "dac9a2e8729110274d50e6ae367fe4b26e1982183c8bf9735aa0d8576892a24f",
+  "e4d04b5ee2a24ed11c7bb513aac3d838b3a6f7dcbb90e1ed9a12a0c2a8d97469",
+  "4cc2f0c7ca7a9203cdecf52efb64176d3273bd7afc07aca22df5a190b11dd280",
+  "81ad1c9234b0ac5993b96658e2d7bfe4a2e1cd61852e237bc4b1e31546f55bc1",
+  "e85eeb79b677dbe060e625a71913fab5dac965437b5e9ed341473313803add3b",
+  "a4ae7889201b55f76aecf1431b54f7cff64cf9b2a8ea6fc643fbb8a00b5ed173",
+  "450ac08e5d3c41458c3643c9101e15c4be95d8fa39ac46669dc644705d2f017f",
+  "401e2ba3ee6c1757e972c218f0d87e5afd07bb077a518bfb9b8ea8b6cbf116e5",
+  "18bc0460adaeeae9462db2388681cabc1c972ade43f30a5cb42b483e85c5f773",
+  "7846c8a42746047eda8f2630202134892abf62a37ca6547c7b5f388f74b11b98",
+  "4fca4ff501801f3cc7df8c8e82e362182666bae8a1f11121b8016abcc3c3a52d",
+  "66dffda6f13f95f24b6b53016919f6699a8dc72203c86d53e2394ea738629b3d",
+];
+const SQUASHED_BASELINE_HASH = "f".repeat(64);
+
+function mockSquashedBaselineMigrationFile() {
+  vi.doMock("drizzle-orm/migrator", () => ({
+    readMigrationFiles: () => [{ hash: SQUASHED_BASELINE_HASH, folderMillis: 100 }],
+  }));
+}
+
+function preSquashLedger() {
+  const ledger = PRE_SQUASH_MIGRATION_HASHES.map((hash, index) => ({
+    id: index + 1,
+    hash,
+    created_at: (index + 1) * 100,
+  }));
+  [ledger[8].id, ledger[9].id] = [ledger[9].id, ledger[8].id];
+  return ledger.sort((left, right) => left.id - right.id);
+}
 
 function mockTestMigrationFiles() {
   vi.doMock("drizzle-orm/migrator", () => ({
@@ -117,7 +156,7 @@ function pooledMigrationDb(
 
 function migrationLedgerDb(
   ledger: Array<{ id: number; hash: string; created_at: number }>,
-  updateResult: unknown = { rows: [], rowCount: 1 },
+  mutationResult: unknown | ((text: string) => unknown) = { rows: [], rowCount: 1 },
   options: PooledMigrationDbOptions = {},
 ) {
   const latest = [...ledger].sort((left, right) => right.created_at - left.created_at)[0];
@@ -126,8 +165,11 @@ function migrationLedgerDb(
       return { rows: latest ? [latest] : [] };
     }
     if (text.includes("order by id")) return { rows: ledger };
-    if (text.startsWith("update drizzle.__drizzle_migrations")) {
-      return updateResult;
+    if (
+      text.startsWith("update drizzle.__drizzle_migrations")
+      || text.startsWith("delete from drizzle.__drizzle_migrations")
+    ) {
+      return typeof mutationResult === "function" ? mutationResult(text) : mutationResult;
     }
     return { rows: [] };
   }, options);
@@ -275,7 +317,67 @@ describe("runMigrations", () => {
     expect(migrate).not.toHaveBeenCalled();
   });
 
-  it("baseline canonical 时间上的已知旧 hash 保持兼容", async () => {
+  it.each([PRE_SQUASH_MIGRATION_HASHES[0], LEGACY_BASELINE_HASH])(
+    "完整旧迁移链自动归并为当前单基线账本(baseline hash: %s)",
+    async (baselineHash) => {
+      mockSquashedBaselineMigrationFile();
+      const migrate = vi.fn(async () => undefined);
+      vi.doMock("drizzle-orm/node-postgres/migrator", () => ({ migrate }));
+      const ledger = preSquashLedger();
+      ledger[0].hash = baselineHash;
+      const { db, executedSql } = migrationLedgerDb(ledger, (text) => ({
+        rows: [],
+        rowCount: text.startsWith("delete from") ? 19 : 1,
+      }));
+      const trailingIds = [...ledger]
+        .sort((left, right) => left.created_at - right.created_at)
+        .slice(1)
+        .map((row) => row.id)
+        .join(", ");
+      const { runMigrations } = await import("@/lib/infra/db/bootstrap");
+
+      await expect(runMigrations(db)).resolves.toBeUndefined();
+      expect(executedSql).toContain(
+        `update drizzle.__drizzle_migrations set hash = '${SQUASHED_BASELINE_HASH}', ` +
+          `created_at = 100 where id = 1 and hash = '${baselineHash}' ` +
+          `and created_at = 100`,
+      );
+      expect(executedSql).toContain(
+        `delete from drizzle.__drizzle_migrations where id in (${trailingIds})`,
+      );
+      expect(migrate).toHaveBeenCalledWith(db, { migrationsFolder: "drizzle/pg" });
+    },
+  );
+
+  it("旧迁移链任一 hash 不匹配时拒绝归并", async () => {
+    mockSquashedBaselineMigrationFile();
+    const migrate = vi.fn(async () => undefined);
+    vi.doMock("drizzle-orm/node-postgres/migrator", () => ({ migrate }));
+    const ledger = preSquashLedger();
+    ledger[10].hash = "e".repeat(64);
+    const { db, executedSql } = migrationLedgerDb(ledger);
+    const { runMigrations } = await import("@/lib/infra/db/bootstrap");
+
+    await expect(runMigrations(db)).rejects.toThrow("迁移账本 hash 与 journal 不一致:index=0");
+    expect(executedSql.some((text) => text.startsWith("delete from"))).toBe(false);
+    expect(migrate).not.toHaveBeenCalled();
+  });
+
+  it("完整旧迁移链归并行数异常时阻断迁移", async () => {
+    mockSquashedBaselineMigrationFile();
+    const migrate = vi.fn(async () => undefined);
+    vi.doMock("drizzle-orm/node-postgres/migrator", () => ({ migrate }));
+    const { db } = migrationLedgerDb(preSquashLedger(), (text) => ({
+      rows: [],
+      rowCount: text.startsWith("delete from") ? 18 : 1,
+    }));
+    const { runMigrations } = await import("@/lib/infra/db/bootstrap");
+
+    await expect(runMigrations(db)).rejects.toThrow("旧迁移账本尾部归并失败");
+    expect(migrate).not.toHaveBeenCalled();
+  });
+
+  it("只有旧 baseline hash 时拒绝兼容", async () => {
     mockTestMigrationFiles();
     const migrate = vi.fn(async () => undefined);
     vi.doMock("drizzle-orm/node-postgres/migrator", () => ({ migrate }));
@@ -284,9 +386,9 @@ describe("runMigrations", () => {
     ]);
     const { runMigrations } = await import("@/lib/infra/db/bootstrap");
 
-    await expect(runMigrations(db)).resolves.toBeUndefined();
+    await expect(runMigrations(db)).rejects.toThrow("迁移账本 hash 与 journal 不一致:index=0");
     expect(executedSql.some((text) => text.startsWith("update drizzle.__drizzle_migrations"))).toBe(false);
-    expect(migrate).toHaveBeenCalledWith(db, { migrationsFolder: "drizzle/pg" });
+    expect(migrate).not.toHaveBeenCalled();
   });
 
   it("账本协调 UPDATE 缺少明确 rowCount 时拒绝继续迁移", async () => {
