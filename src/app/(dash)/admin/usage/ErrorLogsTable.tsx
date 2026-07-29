@@ -1,6 +1,6 @@
 "use client";
 /**
- * 错误请求表(Client Component)—— ops_error_logs 列表。
+ * 错误请求表(Client Component)，数据来自失败的 gateway executions。
  *
  * admin / panel 共用,variant 区分:
  *   - admin:含用户列 + 用户筛选(可跨用户)。
@@ -73,8 +73,8 @@ interface ErrorLogsTableProps {
   basePath: string;
   variant: "admin" | "panel";
   /**
-   * 当前页涉及 requestId 的全部尝试(方案 X:每次 key 失败各记一条)。
-   * key=requestId,value=按 attempt 升序的尝试链(含当前页可见行 + 跨页的其他尝试)。
+   * 当前页涉及 requestId 的全部失败类尝试。
+   * key=requestId,value=按 attempt 升序的失败链(含跨页尝试)。
    * 供详情 drawer 展示完整重试链。缺省时 drawer 不展示重试链。
    */
   attemptsByRequestId?: Record<string, ErrorLogClientRow[]>;

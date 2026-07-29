@@ -127,6 +127,6 @@ export type ProviderProtocol =
   // P1-D:非 chat 协议族(图像生成 / 语音转写 / 语音合成,均 OpenAI 兼容格式)
   | "openai-images" | "openai-audio-stt" | "openai-audio-tts";
 export type MessageStatus = "pending" | "streaming" | "success" | "interrupted";
-/** 错误请求的生命周期阶段(ops_error_logs.errorPhase,双 dialect 均以 text 存储)。 */
+/** 网关执行错误的生命周期阶段(gateway_executions.errorPhase，以 text 存储)。 */
 export type ErrorPhase =
   | "routing" | "upstream" | "network" | "internal" | "auth" | "request";

@@ -12,14 +12,13 @@
  * 借鉴 DEEIX:run_id 标识一次生成;用量含 cache 拆分。
  */
 import { streamText, generateText, Output, type ModelMessage } from "ai";
-import { resolveRoutes, resolveRoutesById, RoutingError } from "@/lib/routing";
+import { resolveRoutes, resolveRoutesById } from "@/lib/routing";
 import { buildLanguageModelWithKey } from "@/lib/providers/registry";
 import { getChatUA } from "@/lib/system-settings/ua";
-import { orderedWeightedKeys } from "@/lib/providers/keys";
 import { recordSuccess, recordFailure } from "@/lib/circuit-breaker";
-import { logUsage, maskKey, type LogUsageParams } from "@/lib/usage";
-import { classifyError, NETWORK_KEYWORDS } from "@/lib/error-classify";
-import { redactErrorMessage, redactSensitiveText } from "@/lib/redaction";
+import type { LogUsageParams } from "@/lib/usage";
+import { classifyError } from "@/lib/error-classify";
+import { redactErrorMessage } from "@/lib/redaction";
 import { buildReasoningProviderOptions, getDefaultReasoningLevel } from "@/lib/reasoning";
 import type {
   CallContext,
@@ -29,6 +28,23 @@ import type {
   IRUsage,
   ResolvedRoute,
 } from "@/lib/providers/types";
+import {
+  executeAtomicGateway,
+  executeGateway,
+  gatewayTelemetry,
+  type GatewayAttemptAdapter,
+  type GatewayExecutionOutcome,
+  type GatewayTelemetryPort,
+  type StartExecutionTelemetry,
+} from "@/lib/gateway-execution";
+
+export {
+  classifyStreamError,
+  isAbortError,
+  isFailoverableError,
+  isKeyAuthError,
+  isRetryableForKey,
+} from "@/lib/gateway-execution";
 
 export interface StreamChatOptions {
   ctx: CallContext;
@@ -59,6 +75,8 @@ export interface StreamChatOptions {
   suppressFinalUsageLog?: boolean;
   /** 仅与 suppressFinalUsageLog 配合使用,接收步骤终态信息。 */
   onFinalUsage?: (result: StreamChatFinalUsage) => void;
+  /** Agent loop 内部注入共享 execution session；普通调用不传。 */
+  telemetry?: GatewayTelemetryPort;
 }
 
 interface StreamChatFinalUsage {
@@ -66,373 +84,114 @@ interface StreamChatFinalUsage {
   firstTokenAt?: number;
 }
 
-function reportFinalUsage(
-  opts: StreamChatOptions,
-  result: StreamChatFinalUsage,
-): Promise<void> | void {
-  if (opts.suppressFinalUsageLog) {
-    opts.onFinalUsage?.(result);
-    return;
-  }
-  return logUsage(result.params);
-}
-
-/** 判断错误是否值得路由级故障转移(连接/5xx/限流类),而非确定性失败。 */
-export function isFailoverableError(err: unknown): boolean {
-  const msg = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
-  // 参数/模型类错误通常对所有路由都一样,不转移。
-  if (/model_not_found|invalid_request|context.*length/i.test(msg)) {
-    return false;
-  }
-  return true; // 连接/超时/5xx/限流/认证 → 转移(认证类由 key 级先处理)
-}
-
-/** 判断错误是否像是"该 key 无效"(应换 key 重试,而非判定整个 provider 不可用)。 */
-export function isKeyAuthError(err: unknown): boolean {
-  const msg = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
-  return /invalid_api_key|authentication|incorrect.*api.*key|401|403/i.test(msg);
-}
-
-/**
- * 判断错误是否值得在同 provider 内换 key 重试。
- *
- * 同一 provider 下的多个 key 通常共享上游但独立计费/限流,因此:
- *   - 认证类(401/403):该 key 无效,换 key 有意义。
- *   - 限流(429):不同 key 独立限流窗口,换 key 有意义。
- *   - 连接/超时/5xx:偶发上游故障,换 key 重试成本低收益高。
- * 请求本身的确定性错误(model_not_found/invalid_request/context_length)
- * 换 key 也会失败,不重试--由 isFailoverableError 统一排除。
- */
-export function isRetryableForKey(err: unknown): boolean {
-  if (isKeyAuthError(err)) return true;
-  // 429 限流:不同 key 独立限流窗口。复刻 classifyStreamError 的 statusCode 提取
-  // (RetryError.lastError / 直接 statusCode),避免依赖错误类 import。
-  const lastError = (err as { lastError?: unknown } | null)?.lastError;
-  const source = (lastError ?? err) as { statusCode?: number };
-  if (typeof source?.statusCode === "number" && source.statusCode === 429) return true;
-  // 其余按路由级可转移判定(已排除 model_not_found/invalid_request/context_length)。
-  return isFailoverableError(err);
-}
-
-/** 同 provider 内换 key 重试的总尝试次数上限(含首次)。避免 key 过多时单请求撞太多次上游。 */
-const MAX_KEY_ATTEMPTS = 6;
-
-/** 判断错误是否是主动中止(abortSignal 触发)。中止不重试 key、不转移路由,用量记 interrupted。 */
-export function isAbortError(err: unknown): boolean {
-  if (err instanceof Error && err.name === "AbortError") return true;
-  const msg = err instanceof Error ? err.message : String(err);
-  return /this operation was aborted|aborted/i.test(msg);
-}
-
-/**
- * stream 内部短码 → HTTP 状态码(失败落库 httpStatus 用)。
- * 与 error-classify 的短码收录对齐;不动 errorCode 字面值(保护历史数据 + 分类)。
- * 路由层失败兜底 503,生成失败 502,未知兜底 500。
- */
-const SHORT_HTTP_STATUS: Record<string, number> = {
-  generation_failed: 502,
-  routing_error: 503,
-  model_not_found: 404,
-  model_not_available: 404,
-  model_not_bound: 403,
-  no_route: 503,
-  capability_not_supported: 400,
-  // stream.ts 按真实上游 statusCode 提取的细码(与 error-classify ERROR_CODE_MAP 对齐)。
-  rate_limited: 429,
-  auth_error: 401,
-  upstream_error: 502,
-  network_error: 503,
-};
-
-function providerSecrets(route: ResolvedRoute, apiKey: string): string[] {
-  return [apiKey, ...Object.values(route.provider.headers ?? {})];
-}
-
-/**
- * 从生成错误提取真实上游 statusCode 与分类短码,供落库 httpStatus/errorCode/errorPhase 使用。
- *
- * AI SDK 的 RetryError(maxRetriesExceeded)把真实错误包在 lastError(AI_APICallError 带 statusCode);
- * 直接抛出的 AI_APICallError 自带 statusCode。duck-typing 提取,不依赖错误类 import。
- * 优先按真实 statusCode 分类(429/401/403/5xx),无 statusCode 时按 message 网络关键字,最后兜底 generation_failed。
- */
-export function classifyStreamError(
-  err: unknown,
-  secrets: readonly (string | null | undefined)[] = [],
-): {
-  statusCode?: number;
-  errorCode: string;
-  message: string;
-} {
-  // RetryError.lastError 是最后一次真实错误;非 RetryError 则 err 本身即真实错误源。
-  const lastError = (err as { lastError?: unknown } | null)?.lastError;
-  const source = (lastError ?? err) as { statusCode?: number };
-  const statusCode = typeof source?.statusCode === "number" ? source.statusCode : undefined;
-  const rawMessage = err instanceof Error ? err.message : err != null ? String(err) : "生成失败";
-  const message = redactSensitiveText(rawMessage, secrets);
-
-  if (statusCode === 429) return { statusCode, errorCode: "rate_limited", message };
-  if (statusCode === 401 || statusCode === 403) return { statusCode, errorCode: "auth_error", message };
-  if (statusCode !== undefined && statusCode >= 500) return { statusCode, errorCode: "upstream_error", message };
-  if (NETWORK_KEYWORDS.test(rawMessage)) return { statusCode, errorCode: "network_error", message };
-  // 其余(400/404/402 等 4xx 或无 statusCode 的未知错误):归 generation_failed。
-  return { statusCode, errorCode: "generation_failed", message };
-}
-
-/**
- * 记录单次 key 尝试失败到 ops_error_logs(方案 X)。
- *
- * 每次换 key / 换路由前的失败各记一条,带递增 attempt 序号,同一 runId 串联。
- * 跳过 metrics 埋点(skipMetrics):一次请求只在最终结果(success/interrupted/failed)
- * 埋一次点,避免中间失败导致 nekusora_requests_total 重复计数。
- * 失败不抛错(日志记录不应阻断故障转移)。
- */
-async function logAttemptFailure(opts: {
-  ctx: CallContext;
-  runId: string;
-  model: string;
-  route: ResolvedRoute;
-  apiKey: string;
-  err: unknown;
-  attempt: number;
-  stream: boolean;
-  taskKind?: string;
-}): Promise<void> {
-  const classified = classifyStreamError(opts.err, providerSecrets(opts.route, opts.apiKey));
-  const phase = classifyError({
-    errorCode: classified.errorCode,
-    httpStatus: classified.statusCode,
-    errorMessage: classified.message,
-  }).phase;
-  await logUsage({
-    ctx: opts.ctx,
-    runId: opts.runId,
-    model: opts.model,
-    providerRef: `${opts.route.source}:${opts.route.provider.id}`,
-    usage: {},
-    // 单次尝试的独立耗时未计量,留 null(前端显示 "-");重试链以 key/错误码为主。
-    status: "failed",
-    errorCode: classified.errorCode,
-    errorMessage: classified.message,
-    errorPhase: phase,
-    errorType: classified.errorCode,
-    httpStatus: classified.statusCode ?? SHORT_HTTP_STATUS[classified.errorCode] ?? 500,
-    providerName: opts.route.provider.name,
-    routeId: opts.route.routeId,
-    routeName: `${opts.route.provider.name} · ${opts.route.upstreamModelName}`,
-    upstreamModel: opts.route.upstreamModelName,
-    stream: opts.stream,
-    taskKind: opts.taskKind,
-    upstreamKeyMasked: maskKey(opts.apiKey),
-    attempt: opts.attempt,
-    skipMetrics: true,
-  });
-}
-
-/**
- * 执行一次流式生成。async generator,产出 StreamEvent。
- *
- * 用法(WebChat):  for await (const ev of streamChat({ ctx, request })) { ... }
- * 用法(网关):    把事件转成 OpenAI SSE 帧。
- */
+/** 统一 execution engine 驱动的 Chat 流式入口。 */
 export async function* streamChat(
   opts: StreamChatOptions,
 ): AsyncGenerator<StreamEvent, void, unknown> {
   const { ctx, request, runId = `run_${crypto.randomUUID()}` } = opts;
-  const startedAt = Date.now();
-  let finalUsage: IRUsage = {};
-  let usedRoute: ResolvedRoute | undefined;
-  // 首 token 时刻(TTFT)。用 mutable 对象传给 streamWithRoute,使其能在收到首个
-  // text-delta / reasoning-delta 时回写;finally 据此计算 firstTokenLatencyMs。
-  const timing: { firstTokenAt?: number } = {};
-  // 客户端中止标记:命中则跳过故障转移、不发 error 帧,finally 记 interrupted。
-  let aborted = false;
-  // 正文、推理或工具调用一旦发给客户端就无法撤回,后续失败不得再拼接其他 key/路由的输出。
-  let responseCommitted = false;
-
-  // 活跃流式连接计数(metrics)。惰性加载,metrics 不可用时降级为 no-op。
   let releaseStream: () => void = () => {};
   try {
-    const m = await import("@/lib/infra/metrics");
-    m.acquireStream();
-    releaseStream = m.releaseStream;
+    const metrics = await import("@/lib/infra/metrics");
+    metrics.acquireStream();
+    releaseStream = metrics.releaseStream;
   } catch {
-    /* metrics 不可用,忽略 */
+    /* metrics 不可用时降级为 no-op */
   }
 
-  // 1. 解析路由链(WebChat 传 modelId → byId;网关/副任务缺省 → by name)。
-  let routes: ResolvedRoute[];
+  const adapter: GatewayAttemptAdapter<StreamEvent, void> = async function* ({
+    route,
+    apiKey,
+    abortSignal,
+  }) {
+    const timing: { firstTokenAt?: number } = {};
+    let usage: IRUsage = {};
+    for await (const event of streamWithRoute(
+      route,
+      request,
+      apiKey,
+      timing,
+      opts.cacheKey,
+      abortSignal,
+      opts.userAgent,
+    )) {
+      if (event.type === "finish") usage = event.usage;
+      yield {
+        value: event,
+        commitsResponse:
+          event.type === "text-delta"
+          || event.type === "reasoning-delta"
+          || event.type === "tool-call",
+      };
+    }
+    return { value: undefined, usage, firstTokenAt: timing.firstTokenAt };
+  };
+
+  let outcome: GatewayExecutionOutcome<void> | undefined;
   try {
-    routes = opts.modelId
-      ? await resolveRoutesById(ctx, opts.modelId)
-      : await resolveRoutes(ctx, request.model);
-  } catch (err) {
-    const errCode = err instanceof RoutingError ? err.code : "routing_error";
-    const errMsg = redactErrorMessage(err, [], "路由解析失败");
-    yield { type: "error", error: errMsg, code: errCode };
-    await reportFinalUsage(opts, {
-      params: {
-        ctx, runId, model: request.model, usage: {},
-        latencyMs: Date.now() - startedAt, status: "failed", errorCode: errCode,
-        errorMessage: errMsg,
-        errorPhase: classifyError({ errorCode: errCode }).phase,
-        errorType: errCode,
-        httpStatus: SHORT_HTTP_STATUS[errCode] ?? 503,
-        stream: true,
-        taskKind: opts.taskKind,
-        upstreamKeyMasked: maskKey(usedRoute?.provider.apiKey),
-      },
+    const execution = executeGateway({
+      ctx,
+      requestId: runId,
+      operation: "chat.stream",
+      model: request.model,
+      modelId: opts.modelId,
+      requestPath: ctx.source === "gateway" ? "/v1/chat/completions" : undefined,
+      taskKind: opts.taskKind,
+      abortSignal: opts.abortSignal,
+      resolveRoutes: () => opts.modelId
+        ? resolveRoutesById(ctx, opts.modelId)
+        : resolveRoutes(ctx, request.model),
+      selectAdapter: () => adapter,
+      telemetry: opts.telemetry ?? gatewayTelemetry,
+      breaker: { recordSuccess, recordFailure },
     });
-    return;
-  }
-
-  // 2. 逐条路由尝试(故障转移);路由内再按 key 加权顺序重试(认证类错误换 key)
-  let lastError: unknown = null;
-  let lastSafeError = "生成失败";
-  let succeeded = false;
-  // 尝试序号(跨路由连续递增):每次 key 失败记一条 ops_error_logs(attempt=N),供前端重试链排序。
-  let attemptCount = 0;
-  try {
-    for (let i = 0; i < routes.length; i++) {
-      const route = routes[i];
-      usedRoute = route;
-
-      // 路由内 key 尝试序列:加权随机打乱,权重高的先试。
-      const keySeq = orderedWeightedKeys(route.provider.keys);
-      // 换 key 重试上限:总尝试次数 ≤ MAX_KEY_ATTEMPTS(key 过多时只试权重高的前若干个)。
-      const maxAttempts = Math.min(keySeq.length, MAX_KEY_ATTEMPTS);
-
-      let routeDone = false;
-      for (let k = 0; k < maxAttempts; k++) {
-        const tryKey = keySeq[k].key;
-        try {
-          for await (const ev of streamWithRoute(route, request, tryKey, timing, opts.cacheKey, opts.abortSignal, opts.userAgent)) {
-            if (ev.type === "text-delta" || ev.type === "reasoning-delta" || ev.type === "tool-call") {
-              responseCommitted = true;
-            }
-            yield ev;
-            if (ev.type === "finish") finalUsage = ev.usage;
-          }
-          succeeded = true;
-          routeDone = true;
-          // 成功 → 重置该 provider 的熔断器(closed)。
-          if (route.provider.id) recordSuccess(route.provider.id);
-          break; // 正常完成
-        } catch (err) {
-          lastError = err;
-          lastSafeError = redactErrorMessage(
-            err,
-            providerSecrets(route, tryKey),
-            "生成失败",
-          );
-          // 客户端中止:不重试 key、不转移路由,直接结束(用量记 interrupted)。
-          if (isAbortError(err)) {
-            aborted = true;
-            break;
-          }
-          // 方案 X:每次尝试失败各记一条 ops_error_logs(带 attempt,不走 metrics)。
-          // 不管后续是否换 key/换路由,这次失败都已发生,独立落库。
-          attemptCount += 1;
-          await logAttemptFailure({
-            ctx, runId, model: request.model, route, apiKey: tryKey,
-            err, attempt: attemptCount, stream: true, taskKind: opts.taskKind,
-          });
-          // 可换 key 重试的错误(认证/限流/连接/5xx)+ 还有尝试额度 -> 换 key 重试(不跨路由)。
-          // 请求本身的确定性错误(model_not_found/invalid_request/context_length)不换 key。
-          const hasMoreAttempts = k < maxAttempts - 1;
-          if (!responseCommitted && hasMoreAttempts && isRetryableForKey(err)) {
-            console.warn(
-              `[streamChat] key 重试 ${k + 2}/${maxAttempts} (model=${route.upstreamModelName}):`,
-              lastSafeError,
-            );
-            continue;
-          }
-          // 否则跳出 key 循环,交由路由级故障转移判定。
-          break;
-        }
+    while (true) {
+      const next = await execution.next();
+      if (next.done) {
+        outcome = next.value;
+        break;
       }
-      if (succeeded || routeDone || aborted) break;
-
-      // 路由级故障转移。可转移错误(连接/5xx/限流)→ 上报熔断器,尝试下一条。
-      const failoverable = isFailoverableError(lastError);
-      if (failoverable && route.provider.id) recordFailure(route.provider.id);
-      if (responseCommitted || i === routes.length - 1 || !failoverable) break;
-      console.warn(
-        `[streamChat] 路由转移 ${i + 1}/${routes.length} (model=${route.upstreamModelName}):`,
-        lastSafeError,
-      );
+      yield next.value;
     }
 
-    if (!succeeded && !aborted) {
-      yield { type: "error", error: lastSafeError, code: "generation_failed" };
+    if (outcome.status === "failed") {
+      yield {
+        type: "error",
+        error: outcome.error?.message ?? "生成失败",
+        code: "generation_failed",
+      };
     }
   } finally {
     releaseStream();
-    // 首 token 延迟(TTFT):仅有首 token 产出时才有值;路由解析失败 / 全路由失败 / 未产出首 token -> undefined。
-    const firstTokenLatencyMs =
-      timing.firstTokenAt !== undefined ? timing.firstTokenAt - startedAt : undefined;
-    if (succeeded || aborted) {
-      // 成功 / 中断:记最终结果(usage_logs 或 ops_error_logs interrupted)+ metrics 埋点。
-      await reportFinalUsage(opts, {
-        params: {
-          ctx,
-          runId,
-          model: request.model,
-          providerRef: usedRoute ? `${usedRoute.source}:${usedRoute.provider.id}` : undefined,
-          usage: finalUsage,
-          latencyMs: Date.now() - startedAt,
-          status: succeeded ? "success" : "interrupted",
-          // 路由可读信息快照(provider 改名不影响历史行)。
-          providerName: usedRoute?.provider.name,
-          routeId: usedRoute?.routeId,
-          routeName: usedRoute
-            ? `${usedRoute.provider.name} · ${usedRoute.upstreamModelName}`
-            : undefined,
-          upstreamModel: usedRoute?.upstreamModelName,
-          firstTokenLatencyMs,
-          stream: true,
-          taskKind: opts.taskKind,
-          upstreamKeyMasked: maskKey(usedRoute?.provider.apiKey),
-        },
-        firstTokenAt: timing.firstTokenAt,
-      });
-    } else {
-      if (opts.suppressFinalUsageLog) {
-        await reportFinalUsage(opts, {
-          params: {
-            ctx,
-            runId,
-            model: request.model,
-            providerRef: usedRoute ? `${usedRoute.source}:${usedRoute.provider.id}` : undefined,
-            usage: finalUsage,
-            latencyMs: Date.now() - startedAt,
-            status: "failed",
-            errorCode: "generation_failed",
-            errorMessage: lastSafeError,
-            errorPhase: classifyError({ errorCode: "generation_failed" }).phase,
-            errorType: "generation_failed",
-            stream: true,
-            taskKind: opts.taskKind,
-            upstreamKeyMasked: maskKey(usedRoute?.provider.apiKey),
-          },
-          firstTokenAt: timing.firstTokenAt,
-        });
-        return;
-      }
-      // 方案 X:每次尝试失败已在 catch 记 ops_error_logs(attempt=1..N),此处不重复记库,只补 metrics 埋点。
-      try {
-        const { observeRequest } = await import("@/lib/infra/metrics");
-        observeRequest({
-          source: ctx.source,
-          model: request.model,
-          status: "failed",
-          latencyMs: Date.now() - startedAt,
-          promptTokens: finalUsage.inputTokens ?? 0,
-          completionTokens: finalUsage.outputTokens ?? 0,
-        });
-      } catch {
-        /* metrics 不可用,忽略 */
-      }
-    }
+  }
+
+  if (opts.suppressFinalUsageLog && outcome) {
+    opts.onFinalUsage?.({
+      params: {
+        ctx,
+        runId,
+        model: request.model,
+        providerRef: outcome.route
+          ? `${outcome.route.source}:${outcome.route.provider.id}`
+          : undefined,
+        usage: outcome.usage,
+        status: outcome.status,
+        errorCode: outcome.error?.code,
+        errorMessage: outcome.error?.message,
+        errorPhase: outcome.error?.phase,
+        errorType: outcome.error?.code,
+        httpStatus: outcome.error?.httpStatus,
+        providerName: outcome.route?.provider.name,
+        routeId: outcome.route?.routeId,
+        routeName: outcome.route
+          ? `${outcome.route.provider.name} · ${outcome.route.upstreamModelName}`
+          : undefined,
+        upstreamModel: outcome.route?.upstreamModelName,
+        stream: true,
+        taskKind: opts.taskKind,
+        upstreamKeyMasked: outcome.upstreamKeyMasked,
+      },
+      firstTokenAt: outcome.firstTokenAt,
+    });
   }
 }
 
@@ -607,176 +366,53 @@ export interface GenerateChatOptions extends StreamChatOptions {
   output?: "text" | "json";
 }
 
-/**
- * 非流式生成。与 streamChat 共享路由解析、key 加权、熔断、用量记录,
- * 但内部用 generateText 一次性返回(不产出可见 reasoning,thinking 默认关闭)。
- *
- * 适用于标题生成、记忆抽取等「只要最终文本」的轻量副任务。
- */
+/** 统一 execution engine 驱动的非流式 Chat 入口。 */
 export async function generateChat(opts: GenerateChatOptions): Promise<GenerateChatResult> {
   const { ctx, request, runId = `run_${crypto.randomUUID()}` } = opts;
-  const startedAt = Date.now();
-  // 副任务统一用聊天 UA(opts.userAgent 缺省时读配置);注入 registry customFetch 覆盖 AI SDK 默认 UA。
-  const chatUA = opts.userAgent ?? await getChatUA();
-  let finalUsage: IRUsage = {};
-  let usedRoute: ResolvedRoute | undefined;
-
-  // metrics 惰性降级,与 streamChat 一致。
-  let releaseStream: () => void = () => {};
-  try {
-    const m = await import("@/lib/infra/metrics");
-    m.acquireStream();
-    releaseStream = m.releaseStream;
-  } catch {
-    /* metrics 不可用,忽略 */
-  }
-
-  let routes: ResolvedRoute[];
-  try {
-    routes = opts.modelId
-      ? await resolveRoutesById(ctx, opts.modelId)
-      : await resolveRoutes(ctx, request.model);
-  } catch (err) {
-    const errCode = err instanceof RoutingError ? err.code : "routing_error";
-    const errMsg = redactErrorMessage(err, [], "路由解析失败");
-    await logUsage({
-      ctx, runId, model: request.model, usage: {},
-      latencyMs: Date.now() - startedAt, status: "failed", errorCode: errCode,
-      errorMessage: errMsg,
-      errorPhase: classifyError({ errorCode: errCode }).phase,
-      errorType: errCode,
-      httpStatus: SHORT_HTTP_STATUS[errCode] ?? 503,
-      stream: false,
-      taskKind: opts.taskKind,
-      upstreamKeyMasked: maskKey(usedRoute?.provider.apiKey),
+  const userAgent = opts.userAgent ?? await getChatUA();
+  const adapter: GatewayAttemptAdapter<never, string> = async function* ({ route, apiKey }) {
+    const model = buildLanguageModelWithKey(route, apiKey, undefined, undefined, userAgent);
+    const { system, messages } = separateSystem(request);
+    const result = await generateText({
+      model,
+      maxRetries: 0,
+      instructions: system,
+      messages,
+      temperature: request.temperature,
+      maxOutputTokens: request.max_tokens,
+      topP: request.top_p,
+      output: opts.output === "json" ? Output.json() : undefined,
     });
-    return { text: "", error: errMsg };
+    return {
+      value: result.text,
+      usage: {
+        inputTokens: result.usage.inputTokens,
+        outputTokens: result.usage.outputTokens,
+        totalTokens: result.usage.totalTokens,
+        reasoningTokens: result.usage.outputTokenDetails?.reasoningTokens,
+        cachedInputTokens: result.usage.inputTokenDetails?.cacheReadTokens,
+      },
+    };
+  };
+  const outcome = await executeAtomicGateway({
+    ctx,
+    requestId: runId,
+    operation: "chat.generate",
+    model: request.model,
+    modelId: opts.modelId,
+    taskKind: opts.taskKind,
+    resolveRoutes: () => opts.modelId
+      ? resolveRoutesById(ctx, opts.modelId)
+      : resolveRoutes(ctx, request.model),
+    selectAdapter: () => adapter,
+    telemetry: gatewayTelemetry,
+    breaker: { recordSuccess, recordFailure },
+  });
+  if (outcome.status === "success") {
+    return { text: outcome.result ?? "", usage: outcome.usage };
   }
-
-  let lastError: unknown = null;
-  let lastSafeError = "生成失败";
-  let succeeded = false;
-  let text = "";
-  // 尝试序号(跨路由连续递增):每次 key 失败记一条 ops_error_logs(attempt=N),供前端重试链排序。
-  let attemptCount = 0;
-  try {
-    for (let i = 0; i < routes.length; i++) {
-      const route = routes[i];
-      usedRoute = route;
-      const keySeq = orderedWeightedKeys(route.provider.keys);
-      const maxAttempts = Math.min(keySeq.length, MAX_KEY_ATTEMPTS);
-
-      let routeDone = false;
-      for (let k = 0; k < maxAttempts; k++) {
-        const tryKey = keySeq[k].key;
-        try {
-          const model = buildLanguageModelWithKey(route, tryKey, undefined, undefined, chatUA);
-          const { system, messages } = separateSystem(request);
-          const result = await generateText({
-            model,
-            // 禁用 AI SDK 自动重试,理由同 streamWithRoute(429 不放大、5xx 不施压),故障转移由上层接管。
-            maxRetries: 0,
-            instructions: system,
-            messages,
-            temperature: request.temperature,
-            maxOutputTokens: request.max_tokens,
-            topP: request.top_p,
-            // Mem0 等后台任务要求 JSON object;由 AI SDK 统一翻译到各 provider。
-            output: opts.output === "json" ? Output.json() : undefined,
-          });
-          text = result.text;
-          const u = result.usage;
-          finalUsage = {
-            inputTokens: u.inputTokens,
-            outputTokens: u.outputTokens,
-            totalTokens: u.totalTokens,
-            reasoningTokens: u.outputTokenDetails?.reasoningTokens,
-            cachedInputTokens: u.inputTokenDetails?.cacheReadTokens,
-          };
-          succeeded = true;
-          routeDone = true;
-          if (route.provider.id) recordSuccess(route.provider.id);
-          break;
-        } catch (err) {
-          lastError = err;
-          lastSafeError = redactErrorMessage(
-            err,
-            providerSecrets(route, tryKey),
-            "生成失败",
-          );
-          // 方案 X:每次尝试失败各记一条 ops_error_logs(带 attempt,不走 metrics)。
-          attemptCount += 1;
-          await logAttemptFailure({
-            ctx, runId, model: request.model, route, apiKey: tryKey,
-            err, attempt: attemptCount, stream: false, taskKind: opts.taskKind,
-          });
-          const hasMoreAttempts = k < maxAttempts - 1;
-          if (hasMoreAttempts && isRetryableForKey(err)) continue;
-          break;
-        }
-      }
-      if (succeeded || routeDone) break;
-
-      const failoverable = isFailoverableError(lastError);
-      if (failoverable && route.provider.id) recordFailure(route.provider.id);
-      if (i === routes.length - 1 || !failoverable) break;
-      console.warn(
-        `[generateChat] 路由转移 ${i + 1}/${routes.length} (model=${route.upstreamModelName}):`,
-        lastSafeError,
-      );
-    }
-
-    if (!succeeded) {
-      return { text: "", usage: finalUsage, error: lastSafeError };
-    }
-    return { text, usage: finalUsage };
-  } finally {
-    releaseStream();
-    if (succeeded) {
-      // 成功:记 usage_logs + metrics 埋点。
-      await logUsage({
-        ctx,
-        runId,
-        model: request.model,
-        providerRef: usedRoute ? `${usedRoute.source}:${usedRoute.provider.id}` : undefined,
-        usage: finalUsage,
-        latencyMs: Date.now() - startedAt,
-        status: "success",
-        // 路由可读信息快照。
-        providerName: usedRoute?.provider.name,
-        routeId: usedRoute?.routeId,
-        routeName: usedRoute
-          ? `${usedRoute.provider.name} · ${usedRoute.upstreamModelName}`
-          : undefined,
-        upstreamModel: usedRoute?.upstreamModelName,
-        // 非流式 generateText 一次性返回,无首 token 概念,TTFT 恒为 undefined。
-        firstTokenLatencyMs: undefined,
-        stream: false,
-        taskKind: opts.taskKind,
-        upstreamKeyMasked: maskKey(usedRoute?.provider.apiKey),
-      });
-    } else {
-      // 方案 X:每次尝试失败已在 catch 记 ops_error_logs(attempt=1..N),此处只补 metrics 埋点(不重复记库)。
-      try {
-        const { observeRequest } = await import("@/lib/infra/metrics");
-        observeRequest({
-          source: ctx.source,
-          model: request.model,
-          status: "failed",
-          latencyMs: Date.now() - startedAt,
-          promptTokens: finalUsage.inputTokens ?? 0,
-          completionTokens: finalUsage.outputTokens ?? 0,
-        });
-      } catch {
-        /* metrics 不可用,忽略 */
-      }
-    }
-  }
+  return { text: "", usage: outcome.usage, error: outcome.error?.message ?? "生成失败" };
 }
-
-// ===========================================================================
-// P1-A:Agent loop —— 多轮工具调用(MCP)
-// ===========================================================================
 
 export interface StreamChatWithToolsOptions extends StreamChatOptions {
   /** 允许的最大工具调用轮数(默认 5)。 */
@@ -804,6 +440,7 @@ export async function* streamChatWithTools(
   const { maxSteps = 5, mcpServers = [] } = opts;
   const agentRunId = opts.runId ?? `run_${crypto.randomUUID()}`;
   const startedAt = Date.now();
+  const telemetrySession = createAgentTelemetrySession(opts, agentRunId, startedAt);
   let aggregateUsage: IRUsage = {};
   const finalUsages: StreamChatFinalUsage[] = [];
   let firstTokenAt: number | undefined;
@@ -856,6 +493,7 @@ export async function* streamChatWithTools(
         userAgent: opts.userAgent,
         suppressFinalUsageLog: true,
         onFinalUsage: collectFinalUsage,
+        telemetry: telemetrySession.port,
       })) {
       if (ev.type === "tool-call") {
         pendingToolCalls.push({
@@ -940,67 +578,99 @@ export async function* streamChatWithTools(
     throw err;
   } finally {
     if (shouldLogAgentUsage) {
-      const finalUsage = finalUsages.at(-1);
-      if (finalUsage) {
-        const errorCode = terminalStatus === "success"
-          ? finalUsage.params.errorCode
-          : terminalStatus === "interrupted"
-            ? "interrupted"
-            : finalUsage.params.errorCode ?? "generation_failed";
-        await logUsage({
-          ...finalUsage.params,
-          runId: agentRunId,
-          usage: aggregateUsage,
-          status: terminalStatus,
-          errorCode,
-          errorMessage: terminalStatus === "failed"
-            ? finalUsage.params.errorMessage
-              ?? (terminalError == null ? undefined : redactErrorMessage(terminalError))
-            : finalUsage.params.errorMessage,
-          errorPhase: terminalStatus === "failed"
-            ? finalUsage.params.errorPhase ?? classifyError({ errorCode }).phase
-            : finalUsage.params.errorPhase,
-          errorType: terminalStatus === "success"
-            ? finalUsage.params.errorType
-            : errorCode,
-          latencyMs: Date.now() - startedAt,
-          firstTokenLatencyMs: firstTokenAt === undefined ? undefined : firstTokenAt - startedAt,
-        });
-      } else {
-        const failed = terminalStatus === "failed";
-        await logUsage({
-          ctx: opts.ctx,
-          runId: agentRunId,
-          model: opts.request.model,
-          providerRef: undefined,
-          usage: {
-            inputTokens: 0,
-            outputTokens: 0,
-            totalTokens: 0,
-            reasoningTokens: 0,
-            cachedInputTokens: 0,
-          },
-          latencyMs: Date.now() - startedAt,
-          status: terminalStatus,
-          errorCode: failed ? "generation_failed" : "interrupted",
-          errorMessage: failed
-            ? redactErrorMessage(terminalError, [], "生成失败")
-            : undefined,
-          errorPhase: failed ? classifyError({ errorCode: "generation_failed" }).phase : undefined,
-          errorType: failed ? "generation_failed" : "interrupted",
-          providerName: undefined,
-          routeId: undefined,
-          routeName: undefined,
-          upstreamModel: undefined,
-          firstTokenLatencyMs: undefined,
-          stream: true,
-          taskKind: opts.taskKind,
-          upstreamKeyMasked: undefined,
-        });
-      }
+      await telemetrySession.finalize(terminalStatus, terminalError, aggregateUsage, firstTokenAt);
     }
   }
   // maxSteps 耗尽且仍停在 tool-calls:finally 记 interrupted,不发最终 finish。
+}
+
+function createAgentTelemetrySession(
+  opts: StreamChatWithToolsOptions,
+  requestId: string,
+  startedAt: number,
+) {
+  const executionId = crypto.randomUUID();
+  const initial: StartExecutionTelemetry = {
+    executionId,
+    requestId,
+    operation: "chat.stream",
+    ctx: opts.ctx,
+    model: opts.request.model,
+    modelId: opts.modelId,
+    requestPath: opts.ctx.source === "gateway" ? "/v1/chat/completions" : undefined,
+    stream: true,
+    taskKind: opts.taskKind,
+    startedAt,
+  };
+  let started = false;
+  let attempt = 0;
+  let lastOutcome: GatewayExecutionOutcome<void> | undefined;
+
+  const ensureStarted = async () => {
+    if (started) return;
+    started = true;
+    await gatewayTelemetry.startExecution(initial);
+  };
+
+  const port: GatewayTelemetryPort = {
+    async startExecution() {
+      await ensureStarted();
+    },
+    async recordAttempt(input) {
+      await ensureStarted();
+      attempt += 1;
+      await gatewayTelemetry.recordAttempt({
+        ...input,
+        executionId,
+        attempt,
+      });
+    },
+    async finalizeExecution(input) {
+      lastOutcome = input.outcome as GatewayExecutionOutcome<void>;
+    },
+  };
+
+  return {
+    port,
+    async finalize(
+      status: LogUsageParams["status"],
+      terminalError: unknown,
+      usage: IRUsage,
+      firstTokenAt?: number,
+    ) {
+      await ensureStarted();
+      const failed = status === "failed";
+      const errorMessage = failed
+        ? lastOutcome?.error?.message ?? redactErrorMessage(terminalError, [], "生成失败")
+        : undefined;
+      const errorCode = failed
+        ? lastOutcome?.error?.code ?? "generation_failed"
+        : status === "interrupted" ? "interrupted" : undefined;
+      const completedAt = Date.now();
+      await gatewayTelemetry.finalizeExecution({
+        initial,
+        outcome: {
+          executionId,
+          status,
+          usage,
+          route: lastOutcome?.route,
+          upstreamKeyMasked: lastOutcome?.upstreamKeyMasked,
+          error: errorCode ? {
+            code: errorCode,
+            message: errorMessage ?? errorCode,
+            phase: failed
+              ? lastOutcome?.error?.phase ?? classifyError({ errorCode }).phase
+              : "internal",
+            httpStatus: lastOutcome?.error?.httpStatus,
+          } : undefined,
+          committed: lastOutcome?.committed ?? false,
+        },
+        latencyMs: completedAt - startedAt,
+        firstTokenLatencyMs: firstTokenAt === undefined ? undefined : firstTokenAt - startedAt,
+        completedAt,
+      });
+    },
+  };
 }
 
 function addUsage(total: IRUsage, usage: IRUsage): IRUsage {

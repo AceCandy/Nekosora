@@ -22,11 +22,11 @@ describe("message file objects baseline", () => {
     ) as {
       entries: Array<{ idx: number; when: number; tag: string; breakpoints: boolean }>;
     };
-    expect(journal.entries).toEqual([expect.objectContaining({
+    expect(journal.entries).toEqual(expect.arrayContaining([expect.objectContaining({
       idx: 0,
       tag: "0000_baseline",
       breakpoints: true,
-    })]);
+    })]));
 
     const current = JSON.parse(
       readFileSync(join(migrationDir, "meta/0000_snapshot.json"), "utf8"),

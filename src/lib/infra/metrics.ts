@@ -44,6 +44,30 @@ export const requestDurationMs = new Histogram({
   registers: [registry],
 });
 
+/** 逻辑网关执行计数，不携带模型或 route 等高基数标签。 */
+export const gatewayExecutionsTotal = new Counter({
+  name: "nekusora_gateway_executions_total",
+  help: "Final gateway executions",
+  labelNames: ["operation", "source", "status"],
+  registers: [registry],
+});
+
+/** 上游尝试计数，与逻辑执行计数分离。 */
+export const gatewayAttemptsTotal = new Counter({
+  name: "nekusora_gateway_attempts_total",
+  help: "Gateway upstream attempts",
+  labelNames: ["operation", "status", "protocol"],
+  registers: [registry],
+});
+
+export const gatewayExecutionDurationMs = new Histogram({
+  name: "nekusora_gateway_execution_duration_ms",
+  help: "Gateway execution latency in milliseconds",
+  labelNames: ["operation", "source", "status"],
+  buckets: [100, 300, 500, 1000, 3000, 5000, 10000, 30000, 60000],
+  registers: [registry],
+});
+
 /** 当前活跃流式连接数(Gauge,反映实时并发)。 */
 export const activeStreams = new Gauge({
   name: "nekusora_active_streams",
@@ -77,6 +101,34 @@ export function observeRequest(params: {
   requestDurationMs.observe(labels, params.latencyMs);
   if (params.promptTokens > 0) tokensTotal.inc({ type: "prompt", model: params.model }, params.promptTokens);
   if (params.completionTokens > 0) tokensTotal.inc({ type: "completion", model: params.model }, params.completionTokens);
+}
+
+export function observeGatewayExecution(params: {
+  operation: string;
+  source: string;
+  status: string;
+  latencyMs: number;
+  promptTokens: number;
+  completionTokens: number;
+}): void {
+  gatewayExecutionsTotal.inc({
+    operation: params.operation,
+    source: params.source,
+    status: params.status,
+  });
+  gatewayExecutionDurationMs.observe({
+    operation: params.operation,
+    source: params.source,
+    status: params.status,
+  }, params.latencyMs);
+}
+
+export function observeGatewayAttempt(params: {
+  operation: string;
+  status: string;
+  protocol: string;
+}): void {
+  gatewayAttemptsTotal.inc(params);
 }
 
 /** 进入 streamChat 时 +1(配合 releaseStream 在 finally 调用)。 */

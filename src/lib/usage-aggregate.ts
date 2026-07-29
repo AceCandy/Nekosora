@@ -39,7 +39,7 @@ function rangeStart(range: TimeRange): Date {
 function bucketExpr(range: TimeRange): unknown {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
-  const col = s.usageLogs.createdAt;
+  const col = s.gatewayExecutions.createdAt;
   const unit = range === "24h" ? "hour" : "day";
   return sql`date_trunc(${unit}, ${col})`.as("bucket");
 }
@@ -50,17 +50,17 @@ export async function getTimeSeries(range: TimeRange, userId?: string): Promise<
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
   const start = rangeStart(range);
-  const conds = [gte(s.usageLogs.createdAt, start)];
-  if (userId) conds.push(eq(s.usageLogs.userId, userId));
+  const conds = [gte(s.gatewayExecutions.createdAt, start), eq(s.gatewayExecutions.status, "success")];
+  if (userId) conds.push(eq(s.gatewayExecutions.userId, userId));
 
   const rows = await db
     .select({
       bucket: bucketExpr(range),
       calls: sql<number>`count(*)`,
-      promptTokens: sql<number>`coalesce(sum(${s.usageLogs.promptTokens}),0)`,
-      completionTokens: sql<number>`coalesce(sum(${s.usageLogs.completionTokens}),0)`,
+      promptTokens: sql<number>`coalesce(sum(${s.gatewayExecutions.promptTokens}),0)`,
+      completionTokens: sql<number>`coalesce(sum(${s.gatewayExecutions.completionTokens}),0)`,
     })
-    .from(s.usageLogs)
+    .from(s.gatewayExecutions)
     .where(and(...conds))
     .groupBy(sql`bucket`)
     .orderBy(sql`bucket`);
@@ -79,19 +79,19 @@ export async function getModelBreakdown(range: TimeRange, userId?: string): Prom
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
   const start = rangeStart(range);
-  const conds = [gte(s.usageLogs.createdAt, start)];
-  if (userId) conds.push(eq(s.usageLogs.userId, userId));
+  const conds = [gte(s.gatewayExecutions.createdAt, start), eq(s.gatewayExecutions.status, "success")];
+  if (userId) conds.push(eq(s.gatewayExecutions.userId, userId));
 
   const rows = await db
     .select({
-      model: s.usageLogs.model,
+      model: s.gatewayExecutions.model,
       calls: sql<number>`count(*)`,
-      promptTokens: sql<number>`coalesce(sum(${s.usageLogs.promptTokens}),0)`,
-      completionTokens: sql<number>`coalesce(sum(${s.usageLogs.completionTokens}),0)`,
+      promptTokens: sql<number>`coalesce(sum(${s.gatewayExecutions.promptTokens}),0)`,
+      completionTokens: sql<number>`coalesce(sum(${s.gatewayExecutions.completionTokens}),0)`,
     })
-    .from(s.usageLogs)
+    .from(s.gatewayExecutions)
     .where(and(...conds))
-    .groupBy(s.usageLogs.model)
+    .groupBy(s.gatewayExecutions.model)
     .orderBy(sql`count(*) DESC`);
 
   return (rows as Record<string, unknown>[]).map((r) => ({
@@ -108,17 +108,17 @@ export async function getSourceBreakdown(range: TimeRange, userId?: string): Pro
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
   const start = rangeStart(range);
-  const conds = [gte(s.usageLogs.createdAt, start)];
-  if (userId) conds.push(eq(s.usageLogs.userId, userId));
+  const conds = [gte(s.gatewayExecutions.createdAt, start), eq(s.gatewayExecutions.status, "success")];
+  if (userId) conds.push(eq(s.gatewayExecutions.userId, userId));
 
   const rows = await db
     .select({
-      source: s.usageLogs.source,
+      source: s.gatewayExecutions.source,
       calls: sql<number>`count(*)`,
     })
-    .from(s.usageLogs)
+    .from(s.gatewayExecutions)
     .where(and(...conds))
-    .groupBy(s.usageLogs.source)
+    .groupBy(s.gatewayExecutions.source)
     .orderBy(sql`count(*) DESC`);
 
   return (rows as Record<string, unknown>[]).map((r) => ({
@@ -199,8 +199,8 @@ export interface ListUsageLogsResult {
 function buildUsageWhere(opts: ListUsageLogsOptions): SQL | undefined {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
-  const t = s.usageLogs;
-  const conds: SQL[] = [];
+  const t = s.gatewayExecutions;
+  const conds: SQL[] = [eq(t.status, "success")];
   if (opts.userId) conds.push(eq(t.userId, opts.userId));
   const f = opts.filters;
   if (f) {
@@ -262,7 +262,7 @@ export async function listUsageLogs(
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
-  const t = s.usageLogs;
+  const t = s.gatewayExecutions;
   const where = buildUsageWhere(opts);
   const page = Math.max(1, opts.page);
   const pageSize = Math.max(1, opts.pageSize);
@@ -314,21 +314,22 @@ export async function listUsageFilterOptions(userId?: string): Promise<UsageFilt
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
-  const t = s.usageLogs;
+  const t = s.gatewayExecutions;
   const userCond = userId ? eq(t.userId, userId) : undefined;
+  const successCond = eq(t.status, "success");
 
   const [modelRows, providerRows, routeRows] = await Promise.all([
-    db.selectDistinct({ v: t.model }).from(t).where(userCond).orderBy(t.model).limit(100),
+    db.selectDistinct({ v: t.model }).from(t).where(and(successCond, userCond)).orderBy(t.model).limit(100),
     db
       .selectDistinct({ v: t.providerName })
       .from(t)
-      .where(and(userCond, isNotNull(t.providerName)))
+      .where(and(successCond, userCond, isNotNull(t.providerName)))
       .orderBy(t.providerName)
       .limit(100),
     db
       .selectDistinct({ v: t.routeName })
       .from(t)
-      .where(and(userCond, isNotNull(t.routeName)))
+      .where(and(successCond, userCond, isNotNull(t.routeName)))
       .orderBy(t.routeName)
       .limit(100),
   ]);
@@ -340,7 +341,7 @@ export async function listUsageFilterOptions(userId?: string): Promise<UsageFilt
         .selectDistinct({ id: t.userId, name: s.user.name, email: s.user.email })
         .from(t)
         .leftJoin(s.user, eq(t.userId, s.user.id))
-        .where(isNotNull(t.userId))
+        .where(and(successCond, isNotNull(t.userId)))
         .limit(100);
 
   const users = (userRows as { id: string | null; name: string | null; email: string | null }[])
@@ -394,7 +395,7 @@ export async function searchUsageCandidates(opts: SearchUsageCandidatesOpts): Pr
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
-  const t = s.usageLogs;
+  const t = s.gatewayExecutions;
   const limit = Math.min(opts.limit ?? 30, 50);
   const q = opts.q?.trim();
   const userCond = opts.userId ? eq(t.userId, opts.userId) : undefined;
@@ -405,7 +406,7 @@ export async function searchUsageCandidates(opts: SearchUsageCandidatesOpts): Pr
       .selectDistinct({ id: t.userId, name: s.user.name, email: s.user.email })
       .from(t)
       .leftJoin(s.user, eq(t.userId, s.user.id))
-      .where(and(isNotNull(t.userId), q ? or(iLike(s.user.name, q), iLike(s.user.email, q)) : undefined))
+      .where(and(eq(t.status, "success"), isNotNull(t.userId), q ? or(iLike(s.user.name, q), iLike(s.user.email, q)) : undefined))
       .limit(limit)) as { id: string | null; name: string | null; email: string | null }[];
     return rows
       .filter((u) => u.id)
@@ -416,7 +417,7 @@ export async function searchUsageCandidates(opts: SearchUsageCandidatesOpts): Pr
       .selectDistinct({ id: t.apiKeyId, name: s.apiKeys.name })
       .from(t)
       .leftJoin(s.apiKeys, eq(t.apiKeyId, s.apiKeys.id))
-      .where(and(isNotNull(t.apiKeyId), userCond, q ? iLike(s.apiKeys.name, q) : undefined))
+      .where(and(eq(t.status, "success"), isNotNull(t.apiKeyId), userCond, q ? iLike(s.apiKeys.name, q) : undefined))
       .limit(limit)) as { id: string | null; name: string | null }[];
     return rows.filter((r) => r.id).map((r) => ({ id: String(r.id), label: String(r.name ?? r.id) }));
   }
@@ -424,7 +425,7 @@ export async function searchUsageCandidates(opts: SearchUsageCandidatesOpts): Pr
     const rows = (await db
       .selectDistinct({ v: t.providerName })
       .from(t)
-      .where(and(isNotNull(t.providerName), userCond, q ? iLike(t.providerName, q) : undefined))
+      .where(and(eq(t.status, "success"), isNotNull(t.providerName), userCond, q ? iLike(t.providerName, q) : undefined))
       .orderBy(t.providerName)
       .limit(limit)) as { v: string | null }[];
     return rows.map((r) => r.v).filter(Boolean).map((v) => ({ id: v as string, label: v as string }));
@@ -433,7 +434,7 @@ export async function searchUsageCandidates(opts: SearchUsageCandidatesOpts): Pr
     const rows = (await db
       .selectDistinct({ v: t.model })
       .from(t)
-      .where(and(userCond, providerCond, q ? iLike(t.model, q) : undefined))
+      .where(and(eq(t.status, "success"), userCond, providerCond, q ? iLike(t.model, q) : undefined))
       .orderBy(t.model)
       .limit(limit)) as { v: string | null }[];
     return rows.map((r) => r.v).filter(Boolean).map((v) => ({ id: v as string, label: v as string }));
@@ -442,7 +443,7 @@ export async function searchUsageCandidates(opts: SearchUsageCandidatesOpts): Pr
   const rows = (await db
     .selectDistinct({ v: t.upstreamKeyMasked })
     .from(t)
-    .where(and(isNotNull(t.upstreamKeyMasked), userCond, providerCond, q ? iLike(t.upstreamKeyMasked, q) : undefined))
+    .where(and(eq(t.status, "success"), isNotNull(t.upstreamKeyMasked), userCond, providerCond, q ? iLike(t.upstreamKeyMasked, q) : undefined))
     .orderBy(t.upstreamKeyMasked)
     .limit(limit)) as { v: string | null }[];
   return rows.map((r) => r.v).filter(Boolean).map((v) => ({ id: v as string, label: v as string }));

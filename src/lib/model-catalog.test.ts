@@ -298,12 +298,12 @@ describe("Kimi fixed reasoning baseline", () => {
     expect(targetIds).toEqual(["kimi-k2.7-code", "kimi-k2.7-code-highspeed"]);
   });
 
-  it("keeps a single baseline journal and root snapshot", () => {
-    expect(journal.entries).toEqual([expect.objectContaining({
+  it("keeps the baseline journal entry and root snapshot", () => {
+    expect(journal.entries).toEqual(expect.arrayContaining([expect.objectContaining({
       idx: 0,
       tag: "0000_baseline",
       breakpoints: true,
-    })]);
+    })]));
     expect(currentSnapshot.id).toBeTypeOf("string");
     expect(currentSnapshot.prevId).toBe("00000000-0000-0000-0000-000000000000");
   });

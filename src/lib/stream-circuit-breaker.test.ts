@@ -8,6 +8,9 @@ vi.mock("ai", () => ({
 
 const mocks = vi.hoisted(() => ({
   logUsage: vi.fn(async () => undefined),
+  startExecution: vi.fn(async () => undefined),
+  recordAttempt: vi.fn(async () => undefined),
+  finalizeExecution: vi.fn(async () => undefined),
 }));
 
 vi.mock("@/lib/usage", async () => {
@@ -15,6 +18,17 @@ vi.mock("@/lib/usage", async () => {
   return {
     ...actual,
     logUsage: (...args: unknown[]) => mocks.logUsage(...args),
+  };
+});
+vi.mock("@/lib/gateway-execution", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/gateway-execution")>();
+  return {
+    ...actual,
+    gatewayTelemetry: {
+      startExecution: mocks.startExecution,
+      recordAttempt: mocks.recordAttempt,
+      finalizeExecution: mocks.finalizeExecution,
+    },
   };
 });
 
@@ -132,6 +146,9 @@ describe("chat generation circuit breaker reporting", () => {
     vi.mocked(generateText).mockReset();
     vi.mocked(streamText).mockReset();
     mocks.logUsage.mockClear();
+    mocks.startExecution.mockClear();
+    mocks.recordAttempt.mockClear();
+    mocks.finalizeExecution.mockClear();
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
   });
@@ -197,11 +214,14 @@ describe("chat generation circuit breaker reporting", () => {
     });
 
     expect(result.error).toBe("upstream failed for [REDACTED] and [REDACTED]");
-    expect(mocks.logUsage).toHaveBeenCalledWith(
+    expect(mocks.recordAttempt).toHaveBeenCalledWith(
       expect.objectContaining({
-        errorCode: "auth_error",
-        httpStatus: 401,
-        errorMessage: "upstream failed for [REDACTED] and [REDACTED]",
+        status: "failed",
+        error: expect.objectContaining({
+          code: "auth_error",
+          httpStatus: 401,
+          message: "upstream failed for [REDACTED] and [REDACTED]",
+        }),
       }),
     );
   });
@@ -239,7 +259,7 @@ describe("chat generation circuit breaker reporting", () => {
         // Consume the stream so the retry path reaches its console sink.
       }
 
-      const output = JSON.stringify(vi.mocked(console.warn).mock.calls);
+      const output = JSON.stringify(mocks.recordAttempt.mock.calls);
       expect(streamText).toHaveBeenCalledTimes(2);
       expect(output).toContain("[REDACTED]");
       expect(output).not.toContain("sk-first-fake");
@@ -312,13 +332,9 @@ describe("chat generation circuit breaker reporting", () => {
       expectedEvent,
       { type: "error", error: "connect ETIMEDOUT", code: "generation_failed" },
     ]);
-    expect(mocks.logUsage).toHaveBeenCalledTimes(1);
-    expect(mocks.logUsage).toHaveBeenCalledWith(expect.objectContaining({
-      status: "failed",
-      providerRef: "byo:provider-a",
-    }));
-    expect(mocks.logUsage).not.toHaveBeenCalledWith(expect.objectContaining({
-      status: "success",
+    expect(mocks.recordAttempt).toHaveBeenCalledTimes(1);
+    expect(mocks.finalizeExecution).toHaveBeenCalledWith(expect.objectContaining({
+      outcome: expect.objectContaining({ status: "failed" }),
     }));
     expect(snapshotBreakers()["provider-a"]).toMatchObject({
       status: "closed",
@@ -353,10 +369,12 @@ describe("chat generation circuit breaker reporting", () => {
         usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
       },
     ]);
-    expect(mocks.logUsage).toHaveBeenCalledTimes(2);
-    expect(mocks.logUsage).toHaveBeenCalledWith(expect.objectContaining({
-      status: "success",
-      providerRef: "byo:provider-b",
+    expect(mocks.recordAttempt).toHaveBeenCalledTimes(2);
+    expect(mocks.finalizeExecution).toHaveBeenCalledWith(expect.objectContaining({
+      outcome: expect.objectContaining({
+        status: "success",
+        route: expect.objectContaining({ routeId: "route-b" }),
+      }),
     }));
     expect(snapshotBreakers()["provider-a"]).toMatchObject({
       status: "closed",
@@ -388,9 +406,9 @@ describe("chat generation circuit breaker reporting", () => {
         { type: "text-delta", text: "primary" },
         { type: "error", error: "connect ETIMEDOUT", code: "generation_failed" },
       ]);
-      expect(mocks.logUsage).toHaveBeenCalledTimes(1);
-      expect(mocks.logUsage).not.toHaveBeenCalledWith(expect.objectContaining({
-        status: "success",
+      expect(mocks.recordAttempt).toHaveBeenCalledTimes(1);
+      expect(mocks.finalizeExecution).toHaveBeenCalledWith(expect.objectContaining({
+        outcome: expect.objectContaining({ status: "failed", committed: true }),
       }));
       expect(snapshotBreakers()["provider-a"]).toMatchObject({
         status: "closed",
@@ -418,10 +436,12 @@ describe("chat generation circuit breaker reporting", () => {
 
     expect(streamText).toHaveBeenCalledTimes(1);
     expect(events).toEqual([{ type: "text-delta", text: "primary" }]);
-    expect(mocks.logUsage).toHaveBeenCalledTimes(1);
-    expect(mocks.logUsage).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mocks.recordAttempt).toHaveBeenCalledTimes(1);
+    expect(mocks.recordAttempt).toHaveBeenCalledWith(expect.objectContaining({
       status: "interrupted",
-      providerRef: "byo:provider-a",
+    }));
+    expect(mocks.finalizeExecution).toHaveBeenCalledWith(expect.objectContaining({
+      outcome: expect.objectContaining({ status: "interrupted" }),
     }));
     expect(snapshotBreakers()["provider-a"]).toMatchObject({
       status: "closed",
@@ -484,10 +504,12 @@ describe("chat generation circuit breaker reporting", () => {
       type: "error",
       error: "connect ETIMEDOUT for [REDACTED] and [REDACTED]",
     });
-    expect(mocks.logUsage).toHaveBeenCalledWith(
+    expect(mocks.recordAttempt).toHaveBeenCalledWith(
       expect.objectContaining({
-        errorCode: "network_error",
-        errorMessage: "connect ETIMEDOUT for [REDACTED] and [REDACTED]",
+        error: expect.objectContaining({
+          code: "network_error",
+          message: "connect ETIMEDOUT for [REDACTED] and [REDACTED]",
+        }),
       }),
     );
   });

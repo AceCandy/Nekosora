@@ -1,9 +1,9 @@
 /**
  * 错误分类 —— 把一次失败请求的 errorCode / httpStatus / errorMessage
- * 映射成两层分类,供 ops_error_logs.errorPhase + 前端粗分类 i18n 文案使用。
+ * 映射成两层分类,供 gateway execution errorPhase + 前端粗分类 i18n 文案使用。
  *
  *   - errorPhase:请求生命周期阶段(routing/upstream/network/internal/auth/request),
- *     对齐 db/types.ts 的 ErrorPhase,直接落 ops_error_logs.error_phase 列。
+ *     对齐 db/types.ts 的 ErrorPhase,直接落 gateway_executions.error_phase 列。
  *   - category:用户友好的粗分类(前端 i18n key,对应 messages/*.json 的
  *     admin.usage.errors.categories.*),不落库,由前端查询时按需派生。
  *

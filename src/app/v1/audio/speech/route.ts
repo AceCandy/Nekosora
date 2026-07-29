@@ -88,21 +88,6 @@ export async function POST(req: NextRequest) {
       voice,
       outputFormat,
     });
-    await safeLogUsage({
-      ctx,
-      runId: `tts_${crypto.randomUUID()}`,
-      model,
-      providerRef: result.providerRef,
-      usage: {},
-      latencyMs: Date.now() - startedAt,
-      status: "success",
-      // 路由可读信息快照(与 stream.ts 同款)。
-      providerName: result.providerName,
-      routeId: result.routeId,
-      routeName: result.routeName,
-      upstreamModel: result.upstreamModel,
-      upstreamKeyMasked: result.upstreamKeyMasked,
-    });
     return new NextResponse(new Uint8Array(result.audioBuffer), {
       status: 200,
       headers: {
@@ -113,28 +98,13 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     const safeMessage = redactErrorMessage(err);
-    // 路由/能力解析失败(适配器内部抛 RoutingError):补写 ops_error_logs。
+    // 路由/能力解析失败由 route 层写入最终 execution 事实。
     if (err instanceof RoutingError) {
       const code = routingCodeToErrorCode(err.code);
-      await logRouteError({ startedAt, ctx, model, code, errorMessage: safeMessage });
       return apiErrorLocalized(code, req);
     }
     console.error("[/v1/audio/speech] 失败:", safeMessage);
     const code = ErrorCode.MEDIA_TTS_FAILED;
-    await safeLogUsage({
-      ctx,
-      runId: `tts_${crypto.randomUUID()}`,
-      model,
-      usage: {},
-      latencyMs: Date.now() - startedAt,
-      status: "failed",
-      errorCode: code,
-      errorMessage: safeMessage,
-      httpStatus: ERROR_META[code].status,
-      requestPath: REQUEST_PATH,
-      errorPhase: classifyError({ errorCode: code, httpStatus: ERROR_META[code].status }).phase,
-      errorType: code,
-    });
     return apiErrorLocalized(
       code,
       req,
@@ -144,7 +114,7 @@ export async function POST(req: NextRequest) {
 }
 
 /**
- * 记录一条 route 层(调适配器前)的失败请求到 ops_error_logs。
+ * 记录一条发生在执行引擎之外的 route 层失败请求。
  * ctx 缺失(鉴权失败)时构造空身份,userId 由 logUsage 收敛为 null。
  */
 async function logRouteError(opts: {
@@ -178,13 +148,5 @@ async function logRouteError(opts: {
     });
   } catch {
     /* 日志失败不阻断主流程 */
-  }
-}
-
-async function safeLogUsage(params: Parameters<typeof logUsage>[0]): Promise<void> {
-  try {
-    await logUsage(params);
-  } catch {
-    /* 用量记录失败不阻断 */
   }
 }

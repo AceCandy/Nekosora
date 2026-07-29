@@ -21,6 +21,17 @@ vi.mock("@ai-sdk/openai", () => ({
     image: vi.fn().mockReturnValue({ modelId: "mock-image-model" }),
   }),
 }));
+vi.mock("@/lib/gateway-execution", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/gateway-execution")>();
+  return {
+    ...actual,
+    gatewayTelemetry: {
+      startExecution: vi.fn(async () => undefined),
+      recordAttempt: vi.fn(async () => undefined),
+      finalizeExecution: vi.fn(async () => undefined),
+    },
+  };
+});
 
 import { generateImage } from "ai";
 import { generateImageViaRoute, RoutingError } from "@/lib/providers/multimodal/image-gen";
@@ -37,6 +48,7 @@ type Row = Record<string, any>;
 
 const ENC_KEY_PLAIN = JSON.stringify({ keys: [{ key: "sk-test-fake", weight: 1 }] });
 let ENC_KEY = "";
+let ENC_TWO_KEYS = "";
 
 interface MockModel {
   id: string;
@@ -135,9 +147,19 @@ describe("generateImageViaRoute (image byId 可见性)", () => {
     process.env.DATA_ENCRYPTION_KEY =
       "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
     ENC_KEY = encrypt(ENC_KEY_PLAIN);
+    ENC_TWO_KEYS = encrypt(JSON.stringify({
+      keys: [
+        { key: "sk-image-first", weight: 1 },
+        { key: "sk-image-second", weight: 1 },
+      ],
+    }));
   });
 
   beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(generateImage).mockReset().mockResolvedValue({
+      images: [{ base64: "ZmFrZQ==" }],
+    } as never);
     data = makeDefaultData();
     setRouteRepository(makeMockRepo(data));
   });
@@ -218,5 +240,72 @@ describe("generateImageViaRoute (image byId 可见性)", () => {
     expect(caught?.message).toBe("image failed for [REDACTED] and [REDACTED]");
     expect(caught?.stack).not.toContain("sk-test-fake");
     expect(caught?.stack).not.toContain("HEADER_SECRET");
+  });
+
+  it("首 key 可转移失败后使用同一 provider 的下一 key", async () => {
+    data.providers[0].apiKeysEnc = ENC_TWO_KEYS;
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    vi.mocked(generateImage)
+      .mockRejectedValueOnce(Object.assign(new Error("temporary upstream failure"), {
+        statusCode: 503,
+      }))
+      .mockResolvedValueOnce({ images: [{ base64: "c2Vjb25kLWtleQ==" }] } as never);
+
+    const result = await generateImageViaRoute(
+      { userId: "U_A", keyKind: null, source: "gateway" },
+      "dalle-pub",
+      { prompt: "一只猫" },
+    );
+
+    expect(result.images[0].base64).toBe("c2Vjb25kLWtleQ==");
+    expect(generateImage).toHaveBeenCalledTimes(2);
+  });
+
+  it("首 route 可转移失败后使用下一 route", async () => {
+    data.providers.push({
+      id: "PB", name: "上游B", protocol: "openai",
+      baseUrl: "https://b.example.com/v1", apiKeysEnc: ENC_KEY, enabled: true,
+    });
+    data.routes.push({
+      id: "R_PUB_B", modelId: "M_PUB", providerId: "PB", upstreamModelName: "dall-e-backup",
+      priority: 1, weight: 1, enabled: true,
+    });
+    vi.mocked(generateImage)
+      .mockRejectedValueOnce(Object.assign(new Error("temporary upstream failure"), {
+        statusCode: 503,
+      }))
+      .mockResolvedValueOnce({ images: [{ base64: "YmFja3Vw" }] } as never);
+
+    const result = await generateImageViaRoute(
+      { userId: "U_A", keyKind: null, source: "gateway" },
+      "dalle-pub",
+      { prompt: "一只猫" },
+    );
+
+    expect(result.providerName).toBe("上游B");
+    expect(result.routeId).toBe("R_PUB_B");
+    expect(generateImage).toHaveBeenCalledTimes(2);
+  });
+
+  it("不兼容的 route 不调用上游并继续使用兼容 route", async () => {
+    data.providers[0].protocol = "anthropic";
+    data.providers.push({
+      id: "PB", name: "上游B", protocol: "openai-images",
+      baseUrl: "https://b.example.com/v1", apiKeysEnc: ENC_KEY, enabled: true,
+    });
+    data.routes.push({
+      id: "R_PUB_B", modelId: "M_PUB", providerId: "PB", upstreamModelName: "dall-e-backup",
+      priority: 1, weight: 1, enabled: true,
+    });
+
+    const result = await generateImageViaRoute(
+      { userId: "U_A", keyKind: null, source: "gateway" },
+      "dalle-pub",
+      { prompt: "一只猫" },
+    );
+
+    expect(result.providerName).toBe("上游B");
+    expect(result.routeId).toBe("R_PUB_B");
+    expect(generateImage).toHaveBeenCalledTimes(1);
   });
 });

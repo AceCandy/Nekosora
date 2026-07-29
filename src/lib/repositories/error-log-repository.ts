@@ -1,5 +1,5 @@
 /**
- * ErrorLogRepository —— ops_error_logs 的查询访问层。
+ * ErrorLogRepository —— 网关执行失败与 attempt chain 的查询访问层。
  *
  * 业务层(admin / panel 前端 + server actions)统一调用。
  * 鉴权隔离:任何按 userId 过滤的查询,userId 必填且强制 where,防越权。
@@ -94,8 +94,8 @@ export interface ListErrorLogsOptions {
 function buildWhere(opts: ListErrorLogsOptions): SQL | undefined {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
-  const t = s.opsErrorLogs;
-  const conds: SQL[] = [];
+  const t = s.gatewayExecutions;
+  const conds: SQL[] = [inArray(t.status, ["failed", "interrupted"])];
   // userId 隔离(panel 必传,admin 不传)。
   if (opts.userId) conds.push(eq(t.userId, opts.userId));
 
@@ -115,6 +115,37 @@ function buildWhere(opts: ListErrorLogsOptions): SQL | undefined {
     if (f.endAt) conds.push(lte(t.createdAt, f.endAt));
   }
   return conds.length > 0 ? and(...conds) : undefined;
+}
+
+/** 把 attempt 与所属 execution 合并为现有错误日志 DTO。 */
+function toAttemptRow(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  attempt: any,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  execution: any,
+  meta: { apiKeyName?: string | null; userName?: string | null; userEmail?: string | null } = {},
+): ErrorLogRow {
+  return toRow({
+    ...execution,
+    id: attempt.id,
+    upstreamModel: attempt.upstreamModel,
+    providerName: attempt.providerName,
+    providerRef: attempt.providerRef,
+    routeId: attempt.routeId,
+    routeName: attempt.routeName,
+    upstreamKeyMasked: attempt.upstreamKeyMasked,
+    httpStatus: attempt.httpStatus,
+    errorCode: attempt.errorCode ?? execution.errorCode ?? "unknown",
+    errorMessage: attempt.errorMessage ?? execution.errorMessage,
+    errorPhase: attempt.errorPhase ?? execution.errorPhase,
+    errorType: attempt.errorType ?? execution.errorType,
+    promptTokens: attempt.promptTokens,
+    completionTokens: attempt.completionTokens,
+    latencyMs: attempt.latencyMs,
+    firstTokenLatencyMs: attempt.firstTokenLatencyMs,
+    attempt: attempt.attempt,
+    createdAt: attempt.createdAt,
+  }, meta);
 }
 
 /** 把 drizzle 原始行收敛为 ErrorLogRow DTO。apiKeyName 来自 LEFT JOIN apiKeys。 */
@@ -167,7 +198,7 @@ export async function listErrorLogs(
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
-  const t = s.opsErrorLogs;
+  const t = s.gatewayExecutions;
   const where = buildWhere(opts);
   const page = Math.max(1, opts.page);
   const pageSize = Math.max(1, opts.pageSize);
@@ -208,8 +239,8 @@ export async function getErrorLog(
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
-  const t = s.opsErrorLogs;
-  const conds: SQL[] = [eq(t.id, id)];
+  const t = s.gatewayExecutions;
+  const conds: SQL[] = [eq(t.id, id), inArray(t.status, ["failed", "interrupted"])];
   if (userId) conds.push(eq(t.userId, userId));
   const [rowRaw] = await db
     .select({ row: t, apiKeyName: s.apiKeys.name, userName: s.user.name, userEmail: s.user.email })
@@ -227,9 +258,8 @@ export async function getErrorLog(
 /**
  * 批量查询多个 requestId 的全部错误尝试(供详情重试链展示)。
  *
- * 方案 X:一次请求的每次 key 失败各记一条 ops_error_logs(同 requestId,attempt=1..N),
- * 中断/最终记录 attempt=null。此方法按 requestId 聚合,组内按 attempt 升序(null 排最后),
- * 调用方据此渲染完整重试链。userId 传入时强制隔离(防越权)。
+ * attempt 通过 execution_id 关联逻辑请求。此方法按 requestId 聚合并按 attempt 升序，
+ * userId 传入时强制在 execution 上隔离。
  */
 export async function listAttemptsByRequestIds(
   requestIds: string[],
@@ -239,30 +269,37 @@ export async function listAttemptsByRequestIds(
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
-  const t = s.opsErrorLogs;
-  const conds: SQL[] = [inArray(t.requestId, requestIds)];
-  if (userId) conds.push(eq(t.userId, userId));
+  const t = s.gatewayAttempts;
+  const e = s.gatewayExecutions;
+  const conds: SQL[] = [
+    inArray(e.requestId, requestIds),
+    inArray(t.status, ["failed", "interrupted", "rejected"]),
+  ];
+  if (userId) conds.push(eq(e.userId, userId));
   const rowsRaw = await db
-    .select({ row: t, apiKeyName: s.apiKeys.name, userName: s.user.name, userEmail: s.user.email })
+    .select({
+      row: t,
+      execution: e,
+      apiKeyName: s.apiKeys.name,
+      userName: s.user.name,
+      userEmail: s.user.email,
+    })
     .from(t)
-    .leftJoin(s.apiKeys, eq(t.apiKeyId, s.apiKeys.id))
-    .leftJoin(s.user, eq(t.userId, s.user.id))
+    .innerJoin(e, eq(t.executionId, e.id))
+    .leftJoin(s.apiKeys, eq(e.apiKeyId, s.apiKeys.id))
+    .leftJoin(s.user, eq(e.userId, s.user.id))
     .where(and(...conds));
   const out = new Map<string, ErrorLogRow[]>();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  for (const { row, apiKeyName, userName, userEmail } of rowsRaw as any[]) {
-    const r = toRow(row, { apiKeyName, userName, userEmail });
+  for (const { row, execution, apiKeyName, userName, userEmail } of rowsRaw as any[]) {
+    const r = toAttemptRow(row, execution, { apiKeyName, userName, userEmail });
     const list = out.get(r.requestId) ?? [];
     list.push(r);
     out.set(r.requestId, list);
   }
-  // 组内按 attempt 升序(null 排最后:中断/最终记录置于尝试链末尾)。
+  // 组内按 attempt 升序。
   for (const list of out.values()) {
-    list.sort((a, b) => {
-      if (a.attempt == null) return 1;
-      if (b.attempt == null) return -1;
-      return a.attempt - b.attempt;
-    });
+    list.sort((a, b) => (a.attempt ?? 0) - (b.attempt ?? 0));
   }
   return out;
 }
@@ -296,7 +333,7 @@ function iLike(col: SQL, q: string): SQL {
 }
 
 /**
- * 错误表 typeahead 候选搜索。语义同 searchUsageCandidates,作用于 ops_error_logs。
+ * 错误表 typeahead 候选搜索。语义同 searchUsageCandidates,作用于失败 execution。
  * - users(admin):distinct userId JOIN user,q 匹配 name/email
  * - keys:distinct apiKeyId JOIN apiKeys,按 userId 过滤
  * - providers:distinct providerName,按 userId 过滤
@@ -307,7 +344,7 @@ export async function searchErrorCandidates(opts: SearchErrorCandidatesOpts): Pr
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
-  const t = s.opsErrorLogs;
+  const t = s.gatewayExecutions;
   const limit = Math.min(opts.limit ?? 30, 50);
   const q = opts.q?.trim();
   const userCond = opts.userId ? eq(t.userId, opts.userId) : undefined;
@@ -318,7 +355,7 @@ export async function searchErrorCandidates(opts: SearchErrorCandidatesOpts): Pr
       .selectDistinct({ id: t.userId, name: s.user.name, email: s.user.email })
       .from(t)
       .leftJoin(s.user, eq(t.userId, s.user.id))
-      .where(and(isNotNull(t.userId), q ? or(iLike(s.user.name, q), iLike(s.user.email, q)) : undefined))
+      .where(and(inArray(t.status, ["failed", "interrupted"]), isNotNull(t.userId), q ? or(iLike(s.user.name, q), iLike(s.user.email, q)) : undefined))
       .limit(limit)) as { id: string | null; name: string | null; email: string | null }[];
     return rows
       .filter((u) => u.id)
@@ -329,7 +366,7 @@ export async function searchErrorCandidates(opts: SearchErrorCandidatesOpts): Pr
       .selectDistinct({ id: t.apiKeyId, name: s.apiKeys.name })
       .from(t)
       .leftJoin(s.apiKeys, eq(t.apiKeyId, s.apiKeys.id))
-      .where(and(isNotNull(t.apiKeyId), userCond, q ? iLike(s.apiKeys.name, q) : undefined))
+      .where(and(inArray(t.status, ["failed", "interrupted"]), isNotNull(t.apiKeyId), userCond, q ? iLike(s.apiKeys.name, q) : undefined))
       .limit(limit)) as { id: string | null; name: string | null }[];
     return rows.filter((r) => r.id).map((r) => ({ id: String(r.id), label: String(r.name ?? r.id) }));
   }
@@ -337,7 +374,7 @@ export async function searchErrorCandidates(opts: SearchErrorCandidatesOpts): Pr
     const rows = (await db
       .selectDistinct({ v: t.providerName })
       .from(t)
-      .where(and(isNotNull(t.providerName), userCond, q ? iLike(t.providerName, q) : undefined))
+      .where(and(inArray(t.status, ["failed", "interrupted"]), isNotNull(t.providerName), userCond, q ? iLike(t.providerName, q) : undefined))
       .orderBy(t.providerName)
       .limit(limit)) as { v: string | null }[];
     return rows.map((r) => r.v).filter(Boolean).map((v) => ({ id: v as string, label: v as string }));
@@ -346,7 +383,7 @@ export async function searchErrorCandidates(opts: SearchErrorCandidatesOpts): Pr
     const rows = (await db
       .selectDistinct({ v: t.model })
       .from(t)
-      .where(and(isNotNull(t.model), userCond, providerCond, q ? iLike(t.model, q) : undefined))
+      .where(and(inArray(t.status, ["failed", "interrupted"]), isNotNull(t.model), userCond, providerCond, q ? iLike(t.model, q) : undefined))
       .orderBy(t.model)
       .limit(limit)) as { v: string | null }[];
     return rows.map((r) => r.v).filter(Boolean).map((v) => ({ id: v as string, label: v as string }));
@@ -355,7 +392,7 @@ export async function searchErrorCandidates(opts: SearchErrorCandidatesOpts): Pr
   const rows = (await db
     .selectDistinct({ v: t.upstreamKeyMasked })
     .from(t)
-    .where(and(isNotNull(t.upstreamKeyMasked), userCond, providerCond, q ? iLike(t.upstreamKeyMasked, q) : undefined))
+    .where(and(inArray(t.status, ["failed", "interrupted"]), isNotNull(t.upstreamKeyMasked), userCond, providerCond, q ? iLike(t.upstreamKeyMasked, q) : undefined))
     .orderBy(t.upstreamKeyMasked)
     .limit(limit)) as { v: string | null }[];
   return rows.map((r) => r.v).filter(Boolean).map((v) => ({ id: v as string, label: v as string }));

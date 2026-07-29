@@ -1,4 +1,4 @@
-import { sql, eq, and } from "drizzle-orm";
+import { sql, eq, and, gte, lte } from "drizzle-orm";
 import { getTranslations } from "next-intl/server";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { requireSession } from "@/lib/session";
@@ -67,11 +67,16 @@ export default async function PanelUsagePage({
     db
       .select({
         calls: sql<number>`count(*)`,
-        promptTokens: sql<number>`coalesce(sum(${s.usageLogs.promptTokens}),0)`,
-        completionTokens: sql<number>`coalesce(sum(${s.usageLogs.completionTokens}),0)`,
+        promptTokens: sql<number>`coalesce(sum(${s.gatewayExecutions.promptTokens}),0)`,
+        completionTokens: sql<number>`coalesce(sum(${s.gatewayExecutions.completionTokens}),0)`,
       })
-      .from(s.usageLogs)
-      .where(effectiveUserId ? eq(s.usageLogs.userId, effectiveUserId) : undefined),
+      .from(s.gatewayExecutions)
+      .where(and(
+        eq(s.gatewayExecutions.status, "success"),
+        effectiveUserId ? eq(s.gatewayExecutions.userId, effectiveUserId) : undefined,
+        timeRange.startAt ? gte(s.gatewayExecutions.createdAt, timeRange.startAt) : undefined,
+        timeRange.endAt ? lte(s.gatewayExecutions.createdAt, timeRange.endAt) : undefined,
+      )),
   ]);
 
   return (

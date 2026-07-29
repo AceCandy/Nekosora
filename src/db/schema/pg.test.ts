@@ -4,9 +4,28 @@ import {
   conversationShares,
   conversationShareUnlockAttempts,
   conversations,
+  gatewayAttempts,
+  gatewayExecutions,
   messageFileObjects,
   runs,
 } from "./pg";
+
+describe("gateway observability schema", () => {
+  it("声明 execution final fact 与唯一 attempt 序号", () => {
+    expect(gatewayExecutions.requestId.name).toBe("request_id");
+    expect(gatewayExecutions.operation.notNull).toBe(true);
+    expect(gatewayExecutions.status.default).toBe("running");
+
+    const attemptConfig = getTableConfig(gatewayAttempts);
+    const uniqueAttempt = attemptConfig.indexes.find(
+      (candidate) => candidate.config.name === "gateway_attempts_execution_attempt_unique_idx",
+    );
+    expect(uniqueAttempt?.config.unique).toBe(true);
+    expect(uniqueAttempt?.config.columns.map((column) => "name" in column ? column.name : null))
+      .toEqual(["execution_id", "attempt"]);
+    expect(attemptConfig.foreignKeys[0]?.reference().foreignTable).toBe(gatewayExecutions);
+  });
+});
 
 describe("runs schema", () => {
   it("声明租约列与 running conversation 部分索引", () => {

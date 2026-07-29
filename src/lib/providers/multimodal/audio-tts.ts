@@ -8,8 +8,9 @@ import { generateSpeech as generateSpeech } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import type { CallContext } from "@/lib/providers/types";
 import { resolveRoutesByCapability, RoutingError } from "@/lib/routing";
-import { redactErrorMessage } from "@/lib/redaction";
-import { maskKey } from "@/lib/usage";
+import { recordFailure, recordSuccess } from "@/lib/circuit-breaker";
+import { executeAtomicGateway, gatewayTelemetry, type GatewayAttemptAdapter } from "@/lib/gateway-execution";
+import { selectMediaAdapter } from "@/lib/gateway-execution/media-registry";
 
 export interface SynthesizeOptions {
   text: string;
@@ -49,13 +50,12 @@ export async function synthesizeViaRoute(
   modelName: string,
   opts: SynthesizeOptions,
 ): Promise<SynthesizeResult> {
-  const routes = await resolveRoutesByCapability(ctx, modelName, "audioSynthesis");
-  const route = routes[0];
-  try {
+  const adapter: GatewayAttemptAdapter<never, { audioBuffer: Buffer; mime: string }> =
+    async function* ({ route, apiKey, abortSignal }) {
     const format = opts.outputFormat ?? "mp3";
     const provider = createOpenAI({
       baseURL: route.provider.baseUrl,
-      apiKey: route.provider.apiKey,
+      apiKey,
       name: route.provider.id,
       headers: route.provider.headers,
     });
@@ -66,30 +66,43 @@ export async function synthesizeViaRoute(
       text: opts.text,
       voice: opts.voice,
       providerOptions: { openai: { response_format: format } },
+      abortSignal,
     });
 
     // AI SDK v5 的 SpeechResult.audio 是 GeneratedAudioFile(含 uint8Array + format)。
     const u8 = result.audio.uint8Array;
     if (!u8) throw new Error("TTS 上游未返回音频数据");
-    return {
+    return { value: {
       audioBuffer: Buffer.from(u8),
       mime: FORMAT_MIME[format] ?? "audio/mpeg",
-      providerRef: `${route.source}:${route.provider.id}`,
-      providerName: route.provider.name,
-      routeId: route.routeId,
-      routeName: `${route.provider.name} · ${route.upstreamModelName}`,
-      upstreamModel: route.upstreamModelName,
-      upstreamKeyMasked: maskKey(route.provider.apiKey),
-    };
-  } catch (error) {
-    throw new Error(
-      redactErrorMessage(
-        error,
-        [route.provider.apiKey, ...Object.values(route.provider.headers ?? {})],
-        "语音合成失败",
-      ),
-    );
+    } };
+  };
+  const outcome = await executeAtomicGateway({
+    ctx,
+    requestId: `tts_${crypto.randomUUID()}`,
+    operation: "audio.speech",
+    model: modelName,
+    requestPath: "/v1/audio/speech",
+    resolveRoutes: () => resolveRoutesByCapability(ctx, modelName, "audioSynthesis"),
+    selectAdapter: (route) => selectMediaAdapter("audio.speech", route.protocol, adapter),
+    telemetry: gatewayTelemetry,
+    breaker: { recordSuccess, recordFailure },
+  });
+  if (outcome.status !== "success" || !outcome.result || !outcome.route) {
+    if (outcome.error?.phase === "routing" || outcome.error?.phase === "request") {
+      throw new RoutingError(outcome.error.code, outcome.error.message);
+    }
+    throw new Error(outcome.error?.message ?? "语音合成失败");
   }
+  return {
+    ...outcome.result,
+    providerRef: `${outcome.route.source}:${outcome.route.provider.id}`,
+    providerName: outcome.route.provider.name,
+    routeId: outcome.route.routeId,
+    routeName: `${outcome.route.provider.name} · ${outcome.route.upstreamModelName}`,
+    upstreamModel: outcome.route.upstreamModelName,
+    upstreamKeyMasked: outcome.upstreamKeyMasked ?? null,
+  };
 }
 
 export { RoutingError };

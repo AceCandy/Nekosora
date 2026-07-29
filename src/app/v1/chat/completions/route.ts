@@ -254,7 +254,7 @@ async function nonStreamResponse(
 }
 
 /**
- * 记录一条 route 层(调 streamChat 前)的失败请求到 ops_error_logs。
+ * 记录一条发生在执行引擎之外的 route 层失败请求。
  * 这些错误发生在 streamChat 之外(鉴权 / 请求体校验),stream.ts 不会记录,route 必须自己写。
  * ctx 缺失(鉴权失败)时构造空身份,userId 由 logUsage 收敛为 null。
  */
