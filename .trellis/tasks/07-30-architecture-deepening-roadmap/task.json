@@ -1,0 +1,43 @@
+{
+  "id": "architecture-deepening-roadmap",
+  "name": "architecture-deepening-roadmap",
+  "title": "架构深化路线图",
+  "description": "以已完成的 Gateway execution engine 为基线，按顺序深化 Chat 完成事务、RAG 状态机、Worker/queue 生命周期、Model catalog 同步与 Composer 状态边界。",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P1",
+  "creator": "AceCandy",
+  "assignee": "AceCandy",
+  "createdAt": "2026-07-30",
+  "completedAt": null,
+  "branch": "dev_0729",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "07-30-chat-completion-transaction-boundary",
+    "07-30-rag-file-processing-state-machine",
+    "07-30-worker-queue-lifecycle",
+    "07-30-model-catalog-sync-contract",
+    "07-30-chat-composer-state-coordinator"
+  ],
+  "parent": null,
+  "relatedFiles": [
+    "src/app/api/chat/route.ts",
+    "src/lib/rag/process.ts",
+    "src/lib/rag/recovery.ts",
+    "src/lib/infra/queue.ts",
+    "src/worker.ts",
+    "src/lib/sync-pi-models.ts",
+    "src/features/chat/components/ChatComposer.tsx"
+  ],
+  "notes": "",
+  "meta": {
+    "implementation_policy": "activate_one_child_at_a_time",
+    "completed_baseline": "07-29-gateway-execution-engine"
+  }
+}
