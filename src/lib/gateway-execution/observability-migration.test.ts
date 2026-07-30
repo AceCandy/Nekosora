@@ -22,10 +22,10 @@ describe("gateway execution observability migration", () => {
     const journal = JSON.parse(
       readFileSync(join(migrationDir, "meta/_journal.json"), "utf8"),
     ) as { entries: Array<{ idx: number; tag: string }> };
-    expect(journal.entries.at(-1)).toMatchObject({
+    expect(journal.entries).toContainEqual(expect.objectContaining({
       idx: 1,
       tag: "0001_adorable_dragon_lord",
-    });
+    }));
 
     const snapshot = JSON.parse(
       readFileSync(join(migrationDir, "meta/0001_snapshot.json"), "utf8"),

@@ -78,6 +78,12 @@ export interface TokenUsage {
   reasoningTokens?: number;
 }
 
+/** 记忆提取任务持久化的最小消息快照。 */
+export interface MemoryExtractionMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
 export interface ProcessTraceBlock {
   kind: string;
   title?: string;

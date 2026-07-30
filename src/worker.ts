@@ -21,11 +21,13 @@ export async function startWorker(runtime: WorkerRuntime = process): Promise<voi
   const { getQueue } = await import("@/lib/infra/queue");
   const { processFile } = await import("@/lib/rag/process");
   const { startFileProcessingRecovery } = await import("@/lib/rag/recovery");
-  const { extractMemories } = await import("@/lib/memory/extract");
+  const { processMemoryExtractionJob } = await import("@/lib/memory/jobs");
+  const { startMemoryExtractionRecovery } = await import("@/lib/memory/dispatch");
   const { generateConversationTitle } = await import("@/lib/conversation-title/service");
   const { startConversationTitleRecovery } = await import("@/lib/conversation-title/dispatch");
   const queue = await getQueue();
   let stopFileRecovery: (() => Promise<void>) | null = null;
+  let stopMemoryRecovery: (() => Promise<void>) | null = null;
   let stopTitleRecovery: (() => Promise<void>) | null = null;
   try {
     await queue.start();
@@ -41,15 +43,10 @@ export async function startWorker(runtime: WorkerRuntime = process): Promise<voi
     );
     console.log("[worker] 已注册 file-process handler");
 
-    // 记忆提取:LLM 抽取 + 向量去重 + 写库(extractMemories 内部已兜底,失败静默;10 分钟/用户频率保护)
-    await queue.work<{
-      userId: string;
-      conversationId: string;
-      recentMessages: { role: string; content: string }[];
-      model?: string;
-    }>("memory-extract", async (data) => {
-      console.log("[worker] memory-extract:", data.userId);
-      await extractMemories(data.userId, data.conversationId, data.recentMessages, data.model);
+    // 记忆提取：只消费 durable intent id，业务完成后由 service 删除对应 row。
+    await queue.work<{ id: string }>("memory-extract", async (data) => {
+      console.log("[worker] memory-extract:", data.id);
+      await processMemoryExtractionJob(data.id);
     });
     console.log("[worker] 已注册 memory-extract handler");
 
@@ -64,10 +61,12 @@ export async function startWorker(runtime: WorkerRuntime = process): Promise<voi
     console.log("[worker] 已注册 conversation-title handler");
 
     stopFileRecovery = startFileProcessingRecovery();
+    stopMemoryRecovery = startMemoryExtractionRecovery();
     stopTitleRecovery = startConversationTitleRecovery();
 
     // 优雅关闭
     const fileRecoveryStop = stopFileRecovery;
+    const memoryRecoveryStop = stopMemoryRecovery;
     const titleRecoveryStop = stopTitleRecovery;
     let shutdownPromise: Promise<void> | null = null;
     const shutdown = () => {
@@ -80,6 +79,12 @@ export async function startWorker(runtime: WorkerRuntime = process): Promise<voi
         } catch {
           failed = true;
           console.error("[worker] 标题恢复调度停止失败");
+        }
+        try {
+          await memoryRecoveryStop();
+        } catch {
+          failed = true;
+          console.error("[worker] 记忆恢复调度停止失败");
         }
         try {
           await fileRecoveryStop();
@@ -105,6 +110,13 @@ export async function startWorker(runtime: WorkerRuntime = process): Promise<voi
         await stopTitleRecovery();
       } catch {
         console.error("[worker] 启动失败后无法停止标题恢复调度");
+      }
+    }
+    if (stopMemoryRecovery) {
+      try {
+        await stopMemoryRecovery();
+      } catch {
+        console.error("[worker] 启动失败后无法停止记忆恢复调度");
       }
     }
     if (stopFileRecovery) {

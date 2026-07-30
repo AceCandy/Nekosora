@@ -4,16 +4,22 @@ const mocks = vi.hoisted(() => ({
   validateEnv: vi.fn(),
   getQueue: vi.fn(),
   processFile: vi.fn(),
-  extractMemories: vi.fn(),
+  processMemoryExtractionJob: vi.fn(),
   generateConversationTitle: vi.fn(),
   startFileProcessingRecovery: vi.fn(),
+  startMemoryExtractionRecovery: vi.fn(),
   startConversationTitleRecovery: vi.fn(),
 }));
 
 vi.mock("@/lib/infra/env", () => ({ validateEnv: mocks.validateEnv }));
 vi.mock("@/lib/infra/queue", () => ({ getQueue: mocks.getQueue }));
 vi.mock("@/lib/rag/process", () => ({ processFile: mocks.processFile }));
-vi.mock("@/lib/memory/extract", () => ({ extractMemories: mocks.extractMemories }));
+vi.mock("@/lib/memory/jobs", () => ({
+  processMemoryExtractionJob: mocks.processMemoryExtractionJob,
+}));
+vi.mock("@/lib/memory/dispatch", () => ({
+  startMemoryExtractionRecovery: mocks.startMemoryExtractionRecovery,
+}));
 vi.mock("@/lib/conversation-title/service", () => ({
   generateConversationTitle: mocks.generateConversationTitle,
 }));
@@ -49,6 +55,9 @@ describe("worker lifecycle", () => {
     const stopTitleRecovery = vi.fn(async () => {
       calls.push("title-recovery.stop");
     });
+    const stopMemoryRecovery = vi.fn(async () => {
+      calls.push("memory-recovery.stop");
+    });
     mocks.validateEnv.mockImplementation(() => {
       calls.push("env.validate");
     });
@@ -63,6 +72,10 @@ describe("worker lifecycle", () => {
     mocks.startConversationTitleRecovery.mockImplementation(() => {
       calls.push("title-recovery.start");
       return stopTitleRecovery;
+    });
+    mocks.startMemoryExtractionRecovery.mockImplementation(() => {
+      calls.push("memory-recovery.start");
+      return stopMemoryRecovery;
     });
     const handlers = new Map<string, () => Promise<void>>();
     const runtime = {
@@ -85,19 +98,22 @@ describe("worker lifecycle", () => {
       "queue.work:memory-extract",
       "queue.work:conversation-title",
       "file-recovery.start",
+      "memory-recovery.start",
       "title-recovery.start",
     ]);
     const firstShutdown = handlers.get("SIGINT")!();
     const secondShutdown = handlers.get("SIGTERM")!();
     await Promise.all([firstShutdown, secondShutdown]);
-    expect(calls.slice(-4)).toEqual([
+    expect(calls.slice(-5)).toEqual([
       "title-recovery.stop",
+      "memory-recovery.stop",
       "file-recovery.stop",
       "queue.stop",
       "runtime.exit",
     ]);
     expect(stopFileRecovery).toHaveBeenCalledOnce();
     expect(stopTitleRecovery).toHaveBeenCalledOnce();
+    expect(stopMemoryRecovery).toHaveBeenCalledOnce();
     expect(queue.stop).toHaveBeenCalledOnce();
     expect(runtime.exit).toHaveBeenCalledOnce();
   });
@@ -113,6 +129,7 @@ describe("worker lifecycle", () => {
     };
     mocks.getQueue.mockResolvedValue(queue);
     mocks.startFileProcessingRecovery.mockReturnValue(vi.fn());
+    mocks.startMemoryExtractionRecovery.mockReturnValue(vi.fn());
     mocks.startConversationTitleRecovery.mockReturnValue(vi.fn());
     const runtime = {
       on: vi.fn(),
@@ -132,6 +149,29 @@ describe("worker lifecycle", () => {
     })).rejects.toBe(generationError);
   });
 
+  it("记忆 handler 传播提取失败供队列重试", async () => {
+    const taskHandlers = new Map<string, (data: unknown) => Promise<void>>();
+    const queue = {
+      start: vi.fn().mockResolvedValue(undefined),
+      work: vi.fn(async (name: string, handler: (data: unknown) => Promise<void>) => {
+        taskHandlers.set(name, handler);
+      }),
+      stop: vi.fn().mockResolvedValue(undefined),
+    };
+    mocks.getQueue.mockResolvedValue(queue);
+    mocks.startFileProcessingRecovery.mockReturnValue(vi.fn());
+    mocks.startMemoryExtractionRecovery.mockReturnValue(vi.fn());
+    mocks.startConversationTitleRecovery.mockReturnValue(vi.fn());
+    const runtime = { on: vi.fn(), exit: vi.fn() };
+    const extractionError = new Error("memory extraction failed");
+    mocks.processMemoryExtractionJob.mockRejectedValueOnce(extractionError);
+    const { startWorker } = await import("@/worker");
+    await startWorker(runtime);
+
+    await expect(taskHandlers.get("memory-extract")!({ id: "job-1" }))
+      .rejects.toBe(extractionError);
+  });
+
   it("环境校验失败时不获取队列或注册运行时副作用", async () => {
     const validationError = new Error("invalid environment");
     mocks.validateEnv.mockImplementation(() => {
@@ -147,6 +187,7 @@ describe("worker lifecycle", () => {
 
     expect(mocks.getQueue).not.toHaveBeenCalled();
     expect(mocks.startFileProcessingRecovery).not.toHaveBeenCalled();
+    expect(mocks.startMemoryExtractionRecovery).not.toHaveBeenCalled();
     expect(mocks.startConversationTitleRecovery).not.toHaveBeenCalled();
     expect(runtime.on).not.toHaveBeenCalled();
     expect(runtime.exit).not.toHaveBeenCalled();
@@ -164,6 +205,7 @@ describe("worker lifecycle", () => {
       throw startupError;
     });
     mocks.startConversationTitleRecovery.mockReturnValue(vi.fn());
+    mocks.startMemoryExtractionRecovery.mockReturnValue(vi.fn());
     const runtime = {
       on: vi.fn(),
       exit: vi.fn(),
@@ -174,6 +216,7 @@ describe("worker lifecycle", () => {
 
     expect(queue.stop).toHaveBeenCalledOnce();
     expect(mocks.startConversationTitleRecovery).not.toHaveBeenCalled();
+    expect(mocks.startMemoryExtractionRecovery).not.toHaveBeenCalled();
     expect(runtime.on).not.toHaveBeenCalled();
     expect(runtime.exit).not.toHaveBeenCalled();
   });
@@ -190,6 +233,7 @@ describe("worker lifecycle", () => {
     mocks.getQueue.mockResolvedValue(queue);
     mocks.startFileProcessingRecovery.mockReturnValue(vi.fn());
     mocks.startConversationTitleRecovery.mockReturnValue(vi.fn());
+    mocks.startMemoryExtractionRecovery.mockReturnValue(vi.fn());
     const runtime = {
       on: vi.fn(),
       exit: vi.fn(),
@@ -212,9 +256,11 @@ describe("worker lifecycle", () => {
     };
     const stopFileRecovery = vi.fn().mockRejectedValue(shutdownError);
     const stopTitleRecovery = vi.fn().mockResolvedValue(undefined);
+    const stopMemoryRecovery = vi.fn().mockResolvedValue(undefined);
     mocks.getQueue.mockResolvedValue(queue);
     mocks.startFileProcessingRecovery.mockReturnValue(stopFileRecovery);
     mocks.startConversationTitleRecovery.mockReturnValue(stopTitleRecovery);
+    mocks.startMemoryExtractionRecovery.mockReturnValue(stopMemoryRecovery);
     const handlers = new Map<string, () => Promise<void>>();
     const runtime = {
       on: vi.fn((signal: string, handler: () => Promise<void>) => {

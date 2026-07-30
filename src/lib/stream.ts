@@ -428,7 +428,7 @@ export interface StreamChatWithToolsOptions extends StreamChatOptions {
  * 事件契约:
  *   - text-delta / reasoning-delta / usage / tool-call / tool-result 按发生顺序透传
  *   - 中间轮 streamChat 的 finish 仅用于循环控制,不向外层 yield
- *   - 整个 agent loop 最多向外层发一次最终 finish(usage/finishReason 取最终一轮)
+ *   - 整个 agent loop 最多向外层发一次最终 finish(finishReason 取最终一轮,usage 跨轮聚合)
  *   - error 原样透传并立即终止 loop(不伪造 success finish)
  *
  * 用量日志契约:每个 Agent run 只由外层写一条聚合终态日志;
@@ -528,7 +528,7 @@ export async function* streamChatWithTools(
           ? "success"
           : finalUsages.at(-1)?.params.status ?? "interrupted";
         if (stepFinish) {
-          yield stepFinish;
+          yield { ...stepFinish, usage: aggregateUsage };
         }
         return;
       }

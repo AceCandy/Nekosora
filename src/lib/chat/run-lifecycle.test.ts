@@ -26,8 +26,7 @@ import {
   irUsageToTokenUsage,
   recordToolCallResult,
   recordToolCallStart,
-  resolveRunTerminalStatus,
-  startRun,
+  startRunStrict,
   toSafeJsonb,
 } from "./run-lifecycle";
 
@@ -52,6 +51,14 @@ function createDb() {
     update: vi.fn(() => ({ set: updateSet })),
   };
   return { db, insertValues, updateSet, updateWhere };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
 }
 
 afterEach(() => {
@@ -114,70 +121,53 @@ describe("toSafeJsonb / irUsageToTokenUsage", () => {
   });
 });
 
-describe("resolveRunTerminalStatus", () => {
-  it("收尾持久化失败优先 failed", () => {
-    expect(
-      resolveRunTerminalStatus({
-        finished: true,
-        aborted: false,
-        sawError: false,
-        persistenceFailed: true,
-      }),
-    ).toBe("failed");
-  });
-
-  it("finish 优先 success", () => {
-    expect(
-      resolveRunTerminalStatus({ finished: true, aborted: true, sawError: true }),
-    ).toBe("success");
-  });
-
-  it("abort → interrupted; error → failed; 无 finish → interrupted", () => {
-    expect(
-      resolveRunTerminalStatus({ finished: false, aborted: true, sawError: false }),
-    ).toBe("interrupted");
-    expect(
-      resolveRunTerminalStatus({ finished: false, aborted: false, sawError: true }),
-    ).toBe("failed");
-    expect(
-      resolveRunTerminalStatus({ finished: false, aborted: false, sawError: false }),
-    ).toBe("interrupted");
-  });
-});
-
 describe("run lifecycle DB writes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getSchema.mockReturnValue(schema);
   });
 
-  it("startRun 用数据库时间创建租约并返回成功", async () => {
+  it("startRunStrict 只在 run 插入确认后返回", async () => {
     const { db, insertValues } = createDb();
+    const pending = deferred<void>();
+    insertValues.mockReturnValueOnce(pending.promise);
     mocks.getDb.mockResolvedValue(db);
 
-    await expect(
-      startRun({
-        runId: "run_1",
-        conversationId: "c1",
-        userId: "u1",
-        platformModelName: "gpt-test",
-      }),
-    ).resolves.toBe(true);
+    let settled = false;
+    const starting = startRunStrict({
+      runId: "run_strict",
+      conversationId: "conversation-1",
+      userId: "user-1",
+      platformModelName: "model-a",
+    }).finally(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
 
-    expect(db.insert).toHaveBeenCalledWith(schema.runs);
-    expect(insertValues).toHaveBeenCalledWith(
-      expect.objectContaining({
-        runId: "run_1",
-        conversationId: "c1",
-        userId: "u1",
-        platformModelName: "gpt-test",
-        status: "running",
-        leaseExpiresAt: expect.objectContaining({
-          op: "sql",
-          text: expect.stringContaining("now()"),
-        }),
-      }),
+    pending.resolve();
+    await expect(starting).resolves.toBeUndefined();
+    expect(insertValues).toHaveBeenCalledWith(expect.objectContaining({
+      runId: "run_strict",
+      status: "running",
+    }));
+  });
+
+  it("startRunStrict 失败时抛通用错误且不泄露底层信息", async () => {
+    const { db, insertValues } = createDb();
+    insertValues.mockRejectedValueOnce(
+      new Error("postgres password=secret connection failed"),
     );
+    mocks.getDb.mockResolvedValue(db);
+
+    await expect(startRunStrict({
+      runId: "run_strict_failed",
+      conversationId: "conversation-1",
+      userId: "user-1",
+    })).rejects.toMatchObject({
+      name: "RunStartError",
+      message: "生成任务启动失败",
+    });
   });
 
   it("finalizeRun 仅更新 running 行并写入完整终态元数据", async () => {
@@ -281,13 +271,13 @@ describe("run lifecycle DB writes", () => {
     });
   });
 
-  it("DB 失败不抛错(不阻断流)", async () => {
+  it("DB 失败时 strict start 拒绝，其他审计写入不抛", async () => {
     mocks.getDb.mockRejectedValue(new Error("db down"));
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     await expect(
-      startRun({ runId: "run_x", conversationId: "c", userId: "u" }),
-    ).resolves.toBe(false);
+      startRunStrict({ runId: "run_x", conversationId: "c", userId: "u" }),
+    ).rejects.toMatchObject({ name: "RunStartError", message: "生成任务启动失败" });
     await expect(
       finalizeRun({ runId: "run_x", status: "failed" }),
     ).resolves.toBeUndefined();
@@ -312,19 +302,19 @@ describe("run lifecycle DB writes", () => {
     errSpy.mockRestore();
   });
 
-  it("挂起的 start/finalize/tool 写入在等待预算后释放调用方", async () => {
+  it("挂起的 strict start/finalize/tool 写入在等待预算后释放调用方", async () => {
     vi.useFakeTimers();
     mocks.getDb.mockReturnValue(new Promise(() => {}));
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    let startResult: boolean | undefined;
+    let startError: unknown;
     let completedVoidWrites = 0;
 
-    void startRun({
+    void startRunStrict({
       runId: "run_timeout",
       conversationId: "conversation_timeout",
       userId: "sk-sensitive-user",
-    }).then((result) => {
-      startResult = result;
+    }).catch((error) => {
+      startError = error;
     });
     void finalizeRun({ runId: "run_timeout", status: "failed" }).then(() => {
       completedVoidWrites += 1;
@@ -348,7 +338,10 @@ describe("run lifecycle DB writes", () => {
 
     await vi.advanceTimersByTimeAsync(BEST_EFFORT_TIMEOUT_MS);
 
-    expect(startResult).toBe(false);
+    expect(startError).toMatchObject({
+      name: "RunStartError",
+      message: "生成任务启动失败",
+    });
     expect(completedVoidWrites).toBe(3);
     expect(errSpy).toHaveBeenCalledTimes(4);
     for (const call of errSpy.mock.calls) {

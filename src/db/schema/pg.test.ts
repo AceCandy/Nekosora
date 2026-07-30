@@ -7,6 +7,7 @@ import {
   gatewayAttempts,
   gatewayExecutions,
   messageFileObjects,
+  memoryExtractionJobs,
   runs,
 } from "./pg";
 
@@ -46,6 +47,25 @@ describe("runs schema", () => {
     expect(runs.completedAt.name).toBe("completed_at");
     expect(runs.completedAt.notNull).toBe(false);
     expect(runs.completedAt.getSQLType()).toBe("timestamp with time zone");
+  });
+});
+
+describe("memory extraction jobs schema", () => {
+  it("声明 run 唯一 durable intent、级联外键与恢复索引", () => {
+    expect(memoryExtractionJobs.runId.isUnique).toBe(true);
+    expect(memoryExtractionJobs.messages.notNull).toBe(true);
+
+    const config = getTableConfig(memoryExtractionJobs);
+    const foreignTables = config.foreignKeys.map((foreignKey) =>
+      foreignKey.reference().foreignTable[Symbol.for("drizzle:Name")]
+    );
+    expect(foreignTables).toEqual(expect.arrayContaining(["runs", "conversations", "user"]));
+
+    const dispatchIndex = config.indexes.find(
+      (candidate) => candidate.config.name === "memory_extraction_jobs_dispatch_idx",
+    );
+    expect(dispatchIndex?.config.columns.map((column) => "name" in column ? column.name : null))
+      .toEqual(["dispatch_after", "created_at"]);
   });
 });
 

@@ -5,7 +5,7 @@
  *   - 正常:extractMemories 调 mem0.add(messages, {userId, metadata:{scope:project,source:ai}})
  *   - 消息少于 2 条跳过
  *   - 频率保护:10 分钟内不重复提取
- *   - 失败静默:mem0.add 抛错时不传播
+ *   - 核心失败传播通用错误供 worker 重试
  *
  * 通过 mock @/lib/memory/mem0(getMemory)+ mock @/lib/memory/service(invalidateMemoryCache)
  * + mock cache 隔离真实依赖。
@@ -50,7 +50,7 @@ vi.mock("@/lib/infra/cache", () => ({
   cacheDel: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { extractMemories } from "./extract";
+import { extractMemories, normalizeMemoryMessages } from "./extract";
 
 beforeEach(() => {
   mockData.addCalls = [];
@@ -94,10 +94,28 @@ describe("extractMemories", () => {
     expect(mockData.addCalls).toHaveLength(1);
   });
 
-  it("失败静默:mem0.add 抛错时不传播", async () => {
+  it("mem0.add 失败时传播不含上游详情的通用错误", async () => {
     mockData.addImpl = async () => {
       throw new Error("mem0 down");
     };
-    await expect(extractMemories("u1", "conv1", TURNS)).resolves.toBeUndefined();
+    await expect(extractMemories("u1", "conv1", TURNS)).rejects.toMatchObject({
+      name: "MemoryExtractionError",
+      message: "记忆提取失败",
+    });
+  });
+
+  it("持久化前只保留最后 6 条并规范 role/content 长度", () => {
+    const normalized = normalizeMemoryMessages([
+      { role: "system", content: "ignored role" },
+      ...Array.from({ length: 6 }, (_, index) => ({
+        role: index % 2 === 0 ? "assistant" : "tool",
+        content: index === 5 ? "x".repeat(600) : String(index),
+      })),
+    ]);
+
+    expect(normalized).toHaveLength(6);
+    expect(normalized[0]).toEqual({ role: "assistant", content: "0" });
+    expect(normalized[1]).toEqual({ role: "user", content: "1" });
+    expect(normalized[5]?.content).toHaveLength(500);
   });
 });

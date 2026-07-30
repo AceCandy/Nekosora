@@ -28,6 +28,7 @@ import type {
   ConversationShareMode,
   ConversationShareRenderStyleSnapshot,
   MessageVersionSelections,
+  MemoryExtractionMessage,
 } from "@/db/types";
 
 // ===========================================================================
@@ -442,6 +443,30 @@ export const runs = pgTable(
     index("runs_active_conversation_idx")
       .on(t.conversationId, t.leaseExpiresAt)
       .where(sql`${t.status} = 'running'`),
+  ],
+);
+
+/** Chat 完成事务写入的记忆提取 durable intent；业务完成前保留。 */
+export const memoryExtractionJobs = pgTable(
+  "memory_extraction_jobs",
+  {
+    id: text("id").primaryKey(),
+    runId: text("run_id")
+      .notNull()
+      .unique()
+      .references(() => runs.runId, { onDelete: "cascade" }),
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    messages: jsonb("messages").$type<MemoryExtractionMessage[]>().notNull(),
+    dispatchAfter: timestamp("dispatch_after", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("memory_extraction_jobs_dispatch_idx").on(t.dispatchAfter, t.createdAt),
   ],
 );
 

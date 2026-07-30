@@ -181,7 +181,7 @@ describe("streamChatWithTools agent loop finish signal", () => {
     });
   });
 
-  it("工具链:中间 finish 不外发,最终文本轮发一次 finish 且 usage 取终轮", async () => {
+  it("工具链:中间 finish 不外发,最终文本轮发一次 finish 且 usage 跨轮聚合", async () => {
     vi.mocked(streamText)
       .mockReturnValueOnce(mockStreamResult(
         [
@@ -217,7 +217,7 @@ describe("streamChatWithTools agent loop finish signal", () => {
     expect(finishes).toHaveLength(1);
     expect(finishes[0]).toMatchObject({
       finishReason: "stop",
-      usage: { inputTokens: 20, outputTokens: 6, totalTokens: 26 },
+      usage: { inputTokens: 30, outputTokens: 10, totalTokens: 40 },
     });
     expect(events.find((e) => e.type === "tool-result")).toMatchObject({
       type: "tool-result",
