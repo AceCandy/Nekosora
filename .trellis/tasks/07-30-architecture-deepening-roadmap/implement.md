@@ -34,9 +34,9 @@
 
 ## Phase 4: Model Catalog Sync Contract
 
-- [ ] 进入 `07-30-model-catalog-sync-contract`。
-- [ ] 核对官方资料、当前 pi 数据和项目版本后完成规划。
-- [ ] 实现、验证 catalog → Chat/UI/routing/request body 全链、规格同步、归档。
+- [x] 进入 `07-30-model-catalog-sync-contract`。
+- [x] 核对官方资料、当前 pi 数据和项目版本后完成规划。
+- [x] 实现、验证 catalog → Chat/UI/routing/request body 全链、规格同步、归档。
 - Gate：非法或不一致输入不能污染目录；权威能力降级可被正确传播。
 
 ## Phase 5: Chat Composer State Coordinator
