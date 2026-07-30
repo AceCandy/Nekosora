@@ -17,10 +17,6 @@ vi.mock("@/lib/infra/queue", () => ({
   getQueue: vi.fn(async () => ({ send: mocks.send })),
 }));
 
-vi.mock("@/lib/redaction", () => ({
-  redactErrorMessage: vi.fn((_error: unknown, _secrets: unknown[], fallback: string) => fallback),
-}));
-
 vi.mock("@/lib/infra/db", () => {
   function matches(row: Record<string, unknown>, cond: unknown): boolean {
     const value = cond as { type?: string; col?: string; val?: unknown; conds?: unknown[] };
@@ -72,8 +68,8 @@ vi.mock("@/lib/infra/db", () => {
 import {
   dispatchMemoryExtractionJob,
   recoverMemoryExtractionJobs,
-  startMemoryExtractionRecovery,
 } from "./dispatch";
+import { MEMORY_EXTRACTION_QUEUE } from "@/lib/jobs/catalog";
 
 function job(id: string, dispatchAfter = -1, createdAt = 0) {
   return { id, dispatchAfter, createdAt };
@@ -95,7 +91,10 @@ describe("memory extraction dispatch", () => {
 
     expect(results.sort()).toEqual([false, true]);
     expect(mocks.send).toHaveBeenCalledOnce();
-    expect(mocks.send).toHaveBeenCalledWith("memory-extract", { id: "job-1" });
+    expect(mocks.send).toHaveBeenCalledWith(
+      MEMORY_EXTRACTION_QUEUE,
+      { id: "job-1" },
+    );
   });
 
   it("send 失败保留 intent 并可在 claim 窗口后重投", async () => {
@@ -112,26 +111,16 @@ describe("memory extraction dispatch", () => {
   it("恢复扫描最多 25 条并隔离单项失败", async () => {
     mocks.jobs = Array.from({ length: 26 }, (_, index) => job(`job-${index}`, -1, index));
     mocks.send.mockRejectedValueOnce(new Error("first send failed"));
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
     await recoverMemoryExtractionJobs();
 
     expect(mocks.send).toHaveBeenCalledTimes(25);
-  });
-
-  it("scheduler 单飞且 stop 等待在途扫描", async () => {
-    vi.useFakeTimers();
-    let resolveScan!: () => void;
-    const scan = vi.fn(() => new Promise<void>((resolve) => { resolveScan = resolve; }));
-    const stop = startMemoryExtractionRecovery(scan);
-    await vi.advanceTimersByTimeAsync(0);
-    expect(scan).toHaveBeenCalledOnce();
-
-    await vi.advanceTimersByTimeAsync(120_000);
-    expect(scan).toHaveBeenCalledOnce();
-    const stopped = stop();
-    resolveScan();
-    await stopped;
-    vi.useRealTimers();
+    expect(errorSpy).toHaveBeenCalledWith(
+      "[memory-extraction-recovery] dispatch failed",
+    );
+    const logged = errorSpy.mock.calls.flat().join(" ");
+    expect(logged).not.toContain("job-0");
+    expect(logged).not.toContain("first send failed");
   });
 });

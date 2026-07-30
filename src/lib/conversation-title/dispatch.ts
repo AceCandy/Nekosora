@@ -1,13 +1,11 @@
 import { and, asc, eq, lte, sql } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { getQueue } from "@/lib/infra/queue";
-import { redactErrorMessage } from "@/lib/redaction";
-import type { ConversationTitleJob } from "./service";
+import { CONVERSATION_TITLE_QUEUE } from "@/lib/jobs/catalog";
 
 const DATABASE_NOW = sql`now()`;
 const NEXT_DISPATCH_AT = sql`now() + interval '15 minutes'`;
 const RECOVERY_SCAN_LIMIT = 25;
-const RECOVERY_INTERVAL_MS = 60_000;
 
 /** 原子 claim 到期任务并发送队列；业务完成前始终保留 outbox。 */
 export async function dispatchConversationTitleJob(jobId: string): Promise<boolean> {
@@ -21,19 +19,11 @@ export async function dispatchConversationTitleJob(jobId: string): Promise<boole
       eq(s.conversationTitleJobs.id, jobId),
       lte(s.conversationTitleJobs.dispatchAfter, DATABASE_NOW),
     ))
-    .returning({
-      id: s.conversationTitleJobs.id,
-      userId: s.conversationTitleJobs.userId,
-      conversationId: s.conversationTitleJobs.conversationId,
-      firstUserMessage: s.conversationTitleJobs.firstUserMessage,
-      fallbackTitle: s.conversationTitleJobs.fallbackTitle,
-      chatModel: s.conversationTitleJobs.chatModel,
-      chatModelId: s.conversationTitleJobs.chatModelId,
-    });
+    .returning({ id: s.conversationTitleJobs.id });
   if (!claimed) return false;
 
   const queue = await getQueue();
-  await queue.send("conversation-title", toConversationTitleJob(claimed));
+  await queue.send(CONVERSATION_TITLE_QUEUE, { id: String(claimed.id) });
   return true;
 }
 
@@ -55,57 +45,8 @@ export async function recoverConversationTitleJobs(): Promise<void> {
   for (const job of jobs) {
     try {
       await dispatchConversationTitleJob(String(job.id));
-    } catch (error) {
-      console.error(
-        `[conversation-title-recovery] dispatch failed for ${String(job.id)}:`,
-        redactErrorMessage(error, [], "会话标题任务投递失败").slice(0, 200),
-      );
+    } catch {
+      console.error("[conversation-title-recovery] dispatch failed");
     }
   }
-}
-
-/** 启动立即执行且单飞的恢复扫描，停止时等待当前扫描完成。 */
-export function startConversationTitleRecovery(
-  recover: () => Promise<void> = recoverConversationTitleJobs,
-): () => Promise<void> {
-  let stopped = false;
-  let inFlight: Promise<void> | null = null;
-
-  const run = () => {
-    if (stopped || inFlight) return;
-    const pending = Promise.resolve()
-      .then(recover)
-      .catch((error) => {
-        console.error(
-          "[conversation-title-recovery] scan failed:",
-          redactErrorMessage(error, [], "会话标题恢复扫描失败").slice(0, 200),
-        );
-      });
-    inFlight = pending;
-    void pending.finally(() => {
-      if (inFlight === pending) inFlight = null;
-    });
-  };
-
-  run();
-  const timer = setInterval(run, RECOVERY_INTERVAL_MS);
-  timer.unref();
-
-  return async () => {
-    stopped = true;
-    clearInterval(timer);
-    await inFlight;
-  };
-}
-
-function toConversationTitleJob(row: Record<string, unknown>): ConversationTitleJob {
-  return {
-    id: String(row.id),
-    userId: String(row.userId),
-    conversationId: String(row.conversationId),
-    firstUserMessage: String(row.firstUserMessage),
-    fallbackTitle: String(row.fallbackTitle),
-    ...(row.chatModel ? { chatModel: String(row.chatModel) } : {}),
-    ...(row.chatModelId ? { chatModelId: String(row.chatModelId) } : {}),
-  };
 }

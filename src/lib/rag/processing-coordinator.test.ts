@@ -65,7 +65,7 @@ describe("file processing coordinator", () => {
   });
 
   it("只接收 fileId 并使用 claim 返回的 canonical metadata", async () => {
-    await processFile("file-1");
+    await expect(processFile("file-1")).resolves.toBe("completed");
 
     expect(mocks.claimFileProcessing).toHaveBeenCalledWith("file-1");
     expect(mocks.extractText).toHaveBeenCalledWith(
@@ -82,7 +82,7 @@ describe("file processing coordinator", () => {
   it("claim miss 是并发 loser no-op", async () => {
     mocks.claimFileProcessing.mockResolvedValue(null);
 
-    await expect(processFile("file-1")).resolves.toBeUndefined();
+    await expect(processFile("file-1")).resolves.toBe("noop");
 
     expect(mocks.extractText).not.toHaveBeenCalled();
     expect(mocks.transitionFileProcessing).not.toHaveBeenCalled();
@@ -94,7 +94,7 @@ describe("file processing coordinator", () => {
       reason: "token=secret",
     });
 
-    await processFile("file-1");
+    await expect(processFile("file-1")).resolves.toBe("completed");
 
     expect(mocks.completeFileProcessingWithoutChunks).toHaveBeenCalledWith(
       lease,
@@ -116,7 +116,7 @@ describe("file processing coordinator", () => {
     mocks.isEmbeddingAvailable.mockResolvedValue(true);
     mocks.embedTexts.mockResolvedValue([[0.1, 0.2]]);
 
-    await processFile("file-1");
+    await expect(processFile("file-1")).resolves.toBe("completed");
 
     expect(mocks.transitionFileProcessing.mock.calls).toEqual([
       [lease, "extracting", { type: "complete-extraction", chars: 5, pages: 1 }],
@@ -147,7 +147,7 @@ describe("file processing coordinator", () => {
     });
     mocks.chunkText.mockReturnValue([]);
 
-    await processFile("file-1");
+    await expect(processFile("file-1")).resolves.toBe("completed");
 
     expect(mocks.completeFileProcessingWithoutChunks).toHaveBeenLastCalledWith(
       lease,
@@ -170,7 +170,7 @@ describe("file processing coordinator", () => {
     ]);
     mocks.isEmbeddingAvailable.mockResolvedValue(false);
 
-    await processFile("file-1");
+    await expect(processFile("file-1")).resolves.toBe("completed");
 
     expect(mocks.transitionFileProcessing).toHaveBeenLastCalledWith(
       lease,
@@ -204,7 +204,7 @@ describe("file processing coordinator", () => {
     mocks.isEmbeddingAvailable.mockResolvedValue(true);
     mocks.embedTexts.mockRejectedValue(error);
 
-    await processFile("file-1");
+    await expect(processFile("file-1")).resolves.toBe("completed");
 
     const failedCommand = mocks.transitionFileProcessing.mock.calls.find(
       ([, , command]) => command.type === "mark-embedding-failed",
@@ -219,6 +219,7 @@ describe("file processing coordinator", () => {
     );
     expect(errorSpy.mock.calls.flat().join(" ")).not.toContain("provider.example");
     expect(errorSpy.mock.calls.flat().join(" ")).not.toContain("secret");
+    expect(errorSpy.mock.calls.flat().join(" ")).not.toContain("file-1");
     expect(errorSpy.mock.calls.flat().join(" ")).not.toContain(claimed.storagePath);
   });
 
@@ -237,7 +238,7 @@ describe("file processing coordinator", () => {
     mocks.isEmbeddingAvailable.mockResolvedValue(true);
     mocks.embedTexts.mockResolvedValue([[0.1, 0.2]]);
 
-    await processFile("file-1");
+    await expect(processFile("file-1")).resolves.toBe("completed");
 
     expect(mocks.transitionFileProcessing).toHaveBeenCalledWith(
       lease,
@@ -280,7 +281,7 @@ describe("file processing coordinator", () => {
       mocks.transitionFileProcessing.mockRejectedValueOnce(new Error("postgresql://user:pass@db/app"));
     }],
   ] as const)("%s 写 stable error 后向调用方抛固定错误", async (reason, arrange) => {
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     arrange();
 
     const rejection = processFile("file-1");
@@ -292,6 +293,7 @@ describe("file processing coordinator", () => {
     expect(mocks.failFileProcessing).toHaveBeenCalledWith(lease, reason);
     const caught = await rejection.catch((error) => error as Error);
     expect(caught).not.toHaveProperty("cause");
+    expect(errorSpy.mock.calls.flat().join(" ")).not.toContain("file-1");
   });
 
   it("阶段写入失租后不写 error", async () => {
@@ -299,7 +301,7 @@ describe("file processing coordinator", () => {
       new FileProcessingLeaseLostError(),
     );
 
-    await expect(processFile("file-1")).resolves.toBeUndefined();
+    await expect(processFile("file-1")).resolves.toBe("noop");
 
     expect(mocks.failFileProcessing).not.toHaveBeenCalled();
   });
@@ -309,7 +311,7 @@ describe("file processing coordinator", () => {
     mocks.failFileProcessing.mockRejectedValue(new FileProcessingLeaseLostError());
     vi.spyOn(console, "error").mockImplementation(() => undefined);
 
-    await expect(processFile("file-1")).resolves.toBeUndefined();
+    await expect(processFile("file-1")).resolves.toBe("noop");
   });
 
   it("claim 数据库失败也只向调用方抛固定错误", async () => {

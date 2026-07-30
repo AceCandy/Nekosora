@@ -17,10 +17,6 @@ vi.mock("@/lib/infra/queue", () => ({
   getQueue: vi.fn(async () => ({ send: mocks.send })),
 }));
 
-vi.mock("@/lib/redaction", () => ({
-  redactErrorMessage: vi.fn((_error: unknown, _secrets: unknown[], fallback: string) => fallback),
-}));
-
 vi.mock("@/lib/infra/db", () => {
   function matches(row: Record<string, unknown>, cond: unknown): boolean {
     const value = cond as { type?: string; col?: string; val?: unknown; conds?: unknown[] };
@@ -88,8 +84,8 @@ vi.mock("@/lib/infra/db", () => {
 import {
   dispatchConversationTitleJob,
   recoverConversationTitleJobs,
-  startConversationTitleRecovery,
 } from "./dispatch";
+import { CONVERSATION_TITLE_QUEUE } from "@/lib/jobs/catalog";
 
 function job(id: string, dispatchAfter = -1, createdAt = 0) {
   return {
@@ -121,10 +117,10 @@ describe("conversation title dispatch", () => {
 
     expect(results.sort()).toEqual([false, true]);
     expect(mocks.send).toHaveBeenCalledOnce();
-    expect(mocks.send).toHaveBeenCalledWith("conversation-title", expect.objectContaining({
-      id: "job-1",
-      conversationId: "conversation-job-1",
-    }));
+    expect(mocks.send).toHaveBeenCalledWith(
+      CONVERSATION_TITLE_QUEUE,
+      { id: "job-1" },
+    );
   });
 
   it("未到期 job no-op，send 失败仍保留 outbox 且窗口后可重投", async () => {
@@ -149,37 +145,17 @@ describe("conversation title dispatch", () => {
       26 - index,
     ));
     mocks.send.mockRejectedValueOnce(new Error("first send failed"));
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
     await recoverConversationTitleJobs();
 
     expect(mocks.send).toHaveBeenCalledTimes(25);
     expect(mocks.jobs.filter((item) => Number(item.dispatchAfter) <= 0)).toHaveLength(1);
-  });
-
-  it("启动立即扫描、周期单飞，停止等待在途扫描并禁止后续 tick", async () => {
-    vi.useFakeTimers();
-    let resolveScan!: () => void;
-    const scan = vi.fn(() => new Promise<void>((resolve) => {
-      resolveScan = resolve;
-    }));
-    const stop = startConversationTitleRecovery(scan);
-    await vi.advanceTimersByTimeAsync(0);
-    expect(scan).toHaveBeenCalledOnce();
-
-    await vi.advanceTimersByTimeAsync(180_000);
-    expect(scan).toHaveBeenCalledOnce();
-
-    const stopped = stop();
-    let didStop = false;
-    void stopped.then(() => { didStop = true; });
-    await Promise.resolve();
-    expect(didStop).toBe(false);
-    resolveScan();
-    await stopped;
-
-    await vi.advanceTimersByTimeAsync(60_000);
-    expect(scan).toHaveBeenCalledOnce();
-    vi.useRealTimers();
+    expect(errorSpy).toHaveBeenCalledWith(
+      "[conversation-title-recovery] dispatch failed",
+    );
+    const logged = errorSpy.mock.calls.flat().join(" ");
+    expect(logged).not.toContain("job-0");
+    expect(logged).not.toContain("first send failed");
   });
 });

@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import type { MemoryExtractionMessage } from "@/db/types";
 import { getDb, getSchema } from "@/lib/infra/db";
+import type { JobOutcome } from "@/lib/jobs/catalog";
 import { extractMemories, normalizeMemoryMessages } from "./extract";
 
 export interface MemoryExtractionJob {
@@ -34,7 +35,7 @@ export function createMemoryExtractionJob(
 }
 
 /** Worker 处理 durable intent；成功或明确 no-op 后删除，失败保留供重试。 */
-export async function processMemoryExtractionJob(jobId: string): Promise<void> {
+export async function processMemoryExtractionJob(jobId: string): Promise<JobOutcome> {
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
@@ -48,9 +49,9 @@ export async function processMemoryExtractionJob(jobId: string): Promise<void> {
     .from(s.memoryExtractionJobs)
     .where(eq(s.memoryExtractionJobs.id, jobId))
     .limit(1);
-  if (!job) return;
+  if (!job) return "noop";
 
-  await extractMemories(
+  const outcome = await extractMemories(
     String(job.userId),
     String(job.conversationId),
     job.messages as MemoryExtractionMessage[],
@@ -58,4 +59,5 @@ export async function processMemoryExtractionJob(jobId: string): Promise<void> {
   await db
     .delete(s.memoryExtractionJobs)
     .where(eq(s.memoryExtractionJobs.id, jobId));
+  return outcome;
 }

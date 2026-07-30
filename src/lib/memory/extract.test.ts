@@ -65,7 +65,8 @@ const TURNS = [
 
 describe("extractMemories", () => {
   it("正常:调 mem0.add with scope=project, source=ai", async () => {
-    await extractMemories("u1", "conv1", TURNS);
+    await expect(extractMemories("u1", "conv1", TURNS))
+      .resolves.toBe("completed");
 
     expect(mockData.addCalls).toHaveLength(1);
     const { messages, config } = mockData.addCalls[0] as {
@@ -84,13 +85,17 @@ describe("extractMemories", () => {
   });
 
   it("消息少于 2 条跳过(不调 add)", async () => {
-    await extractMemories("u1", "conv1", [{ role: "user", content: "only one" }]);
+    await expect(extractMemories(
+      "u1",
+      "conv1",
+      [{ role: "user", content: "only one" }],
+    )).resolves.toBe("noop");
     expect(mockData.addCalls).toHaveLength(0);
   });
 
   it("频率保护:10 分钟内不重复提取", async () => {
-    await extractMemories("u1", "conv1", TURNS);
-    await extractMemories("u1", "conv1", TURNS); // 第二次应被 cache 拦截
+    await expect(extractMemories("u1", "conv1", TURNS)).resolves.toBe("completed");
+    await expect(extractMemories("u1", "conv1", TURNS)).resolves.toBe("noop");
     expect(mockData.addCalls).toHaveLength(1);
   });
 

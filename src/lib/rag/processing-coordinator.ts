@@ -1,6 +1,7 @@
 import { chunkText } from "./chunk";
 import { embedTexts, isEmbeddingAvailable } from "./embedding";
 import { extractText } from "./extract";
+import type { JobOutcome } from "@/lib/jobs/catalog";
 import {
   claimFileProcessing,
   completeFileProcessingWithoutChunks,
@@ -55,14 +56,14 @@ function startFileProcessingHeartbeat(
 }
 
 /** 以数据库记录为事实源，执行 extract -> chunk -> embed -> persist。 */
-export async function processFile(fileId: string): Promise<void> {
+export async function processFile(fileId: string): Promise<JobOutcome> {
   let claimed;
   try {
     claimed = await claimFileProcessing(fileId);
   } catch {
     throw new RetryableFileProcessingError();
   }
-  if (!claimed) return;
+  if (!claimed) return "noop";
 
   const { lease, storagePath, mime } = claimed;
   const heartbeat = startFileProcessingHeartbeat(lease);
@@ -77,7 +78,7 @@ export async function processFile(fileId: string): Promise<void> {
         type: "complete-unsupported",
         reason: normalizeUnsupportedReason(extracted.reason),
       });
-      return;
+      return "completed";
     }
 
     retryableReason = "persistence_failed";
@@ -100,7 +101,7 @@ export async function processFile(fileId: string): Promise<void> {
       await completeFileProcessingWithoutChunks(lease, "embedding", {
         type: "complete-empty",
       });
-      return;
+      return "completed";
     }
 
     let embeddings: number[][] = [];
@@ -122,7 +123,7 @@ export async function processFile(fileId: string): Promise<void> {
         type: "mark-embedding-failed",
         diagnostic,
       });
-      console.error(`[file-processing] embedding degraded for ${fileId}:`, diagnostic);
+      console.error("[file-processing] embedding degraded:", diagnostic);
       embeddingAvailable = false;
       degradedReason = "embedding_failed";
     }
@@ -158,7 +159,7 @@ export async function processFile(fileId: string): Promise<void> {
           type: "mark-embedding-failed",
           diagnostic,
         });
-        console.error(`[file-processing] embedding degraded for ${fileId}:`, diagnostic);
+        console.error("[file-processing] embedding degraded:", diagnostic);
         degradedReason = "embedding_failed";
       }
     }
@@ -177,15 +178,16 @@ export async function processFile(fileId: string): Promise<void> {
       ragReady: embeddingSucceeded,
       ragReason: embeddingSucceeded ? null : degradedReason ?? "embedding_failed",
     });
+    return "completed";
   } catch (error) {
-    if (error instanceof FileProcessingLeaseLostError) return;
+    if (error instanceof FileProcessingLeaseLostError) return "noop";
     const diagnostic = formatFileProcessingError(error, [storagePath], retryableReason);
     try {
       await failFileProcessing(lease, retryableReason);
     } catch (failureError) {
-      if (failureError instanceof FileProcessingLeaseLostError) return;
+      if (failureError instanceof FileProcessingLeaseLostError) return "noop";
     }
-    console.error(`[file-processing] ${retryableReason} for ${fileId}:`, diagnostic);
+    console.error(`[file-processing] ${retryableReason}:`, diagnostic);
     throw new RetryableFileProcessingError();
   } finally {
     await heartbeat.stop();

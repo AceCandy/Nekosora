@@ -7,6 +7,7 @@
  * 触发频率保护:同一用户 10 分钟内最多提取一次。核心失败向 worker 抛通用错误以触发重试。
  */
 import type { MemoryExtractionMessage } from "@/db/types";
+import type { JobOutcome } from "@/lib/jobs/catalog";
 import { getMemory } from "./mem0";
 import { cacheWrap, cacheSet } from "@/lib/infra/cache";
 import { invalidateMemoryCache, toProjectExpirationDate } from "./service";
@@ -43,17 +44,17 @@ export async function extractMemories(
   _conversationId: string,
   recentMessages: { role: string; content: string }[],
   _model?: string,
-): Promise<void> {
+): Promise<JobOutcome> {
   // 频率保护:10 分钟内不重复提取
   const recentlyExtracted = await cacheWrap(
     `memextract:${userId}`,
     async () => false,
     600_000,
   );
-  if (recentlyExtracted) return;
+  if (recentlyExtracted) return "noop";
 
   const turns = normalizeMemoryMessages(recentMessages);
-  if (turns.length < 2) return;
+  if (turns.length < 2) return "noop";
 
   try {
     const memory = await getMemory({ refreshModel: true });
@@ -71,4 +72,5 @@ export async function extractMemories(
   cacheSet(`memextract:${userId}`, true, 600_000).catch(() => {});
   // 失效记忆缓存(mem0 写入后,getMemories 的 60s 缓存需刷新)
   invalidateMemoryCache(userId).catch(() => {});
+  return "completed";
 }

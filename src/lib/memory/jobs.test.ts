@@ -40,7 +40,7 @@ function createDb(job?: Record<string, unknown>) {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.getSchema.mockReturnValue(schema);
-  mocks.extractMemories.mockResolvedValue(undefined);
+  mocks.extractMemories.mockResolvedValue("completed");
 });
 
 describe("memory extraction jobs", () => {
@@ -71,7 +71,7 @@ describe("memory extraction jobs", () => {
     const { db, deleteWhere } = createDb();
     mocks.getDb.mockResolvedValue(db);
 
-    await expect(processMemoryExtractionJob("job-1")).resolves.toBeUndefined();
+    await expect(processMemoryExtractionJob("job-1")).resolves.toBe("noop");
 
     expect(mocks.extractMemories).not.toHaveBeenCalled();
     expect(deleteWhere).not.toHaveBeenCalled();
@@ -87,13 +87,29 @@ describe("memory extraction jobs", () => {
     const { db, deleteWhere } = createDb(row);
     mocks.getDb.mockResolvedValue(db);
 
-    await processMemoryExtractionJob("job-1");
+    await expect(processMemoryExtractionJob("job-1")).resolves.toBe("completed");
 
     expect(mocks.extractMemories).toHaveBeenCalledWith(
       "user-1",
       "conversation-1",
       row.messages,
     );
+    expect(deleteWhere).toHaveBeenCalledWith({ left: "jobs.id", right: "job-1" });
+  });
+
+  it("领域提取 no-op 后仍删除 durable row 并传播 outcome", async () => {
+    const row = {
+      id: "job-1",
+      userId: "user-1",
+      conversationId: "conversation-1",
+      messages: [{ role: "user", content: "a" }, { role: "assistant", content: "b" }],
+    };
+    const { db, deleteWhere } = createDb(row);
+    mocks.getDb.mockResolvedValue(db);
+    mocks.extractMemories.mockResolvedValueOnce("noop");
+
+    await expect(processMemoryExtractionJob("job-1")).resolves.toBe("noop");
+
     expect(deleteWhere).toHaveBeenCalledWith({ left: "jobs.id", right: "job-1" });
   });
 

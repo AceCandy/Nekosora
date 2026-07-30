@@ -37,6 +37,7 @@ vi.mock("@/lib/infra/queue", () => ({ getQueue: mocks.getQueue }));
 vi.mock("@/lib/rag/processing-coordinator", () => ({ processFile: mocks.processFile }));
 
 import { RequestBodyTooLargeError } from "@/lib/multipart";
+import { FILE_PROCESS_QUEUE } from "@/lib/jobs/catalog";
 import {
   MAX_UPLOAD_BODY_BYTES,
   MAX_UPLOAD_FILE_BYTES,
@@ -161,8 +162,8 @@ describe("POST /api/upload", () => {
       }),
     );
     expect(mocks.queueSend).toHaveBeenCalledWith(
-      "file-process",
-      expect.objectContaining({ mime: "text/plain" }),
+      FILE_PROCESS_QUEUE,
+      { fileId: body.fileId },
     );
     expect(mocks.storageDelete).not.toHaveBeenCalled();
     expect(mocks.processFile).not.toHaveBeenCalled();
@@ -260,7 +261,11 @@ describe("POST /api/upload", () => {
 
   it("补偿删除失败时记录清理错误但仍保留 DB 异常", async () => {
     const dbError = new Error("db unavailable");
-    const cleanupError = new Error("storage unavailable");
+    const cleanupError = new Error(
+      "https://storage.example/private authorization=header-secret credential-secret",
+      { cause: new Error("cause-secret") },
+    );
+    cleanupError.stack = "stack-secret";
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     mocks.dbValues.mockRejectedValue(dbError);
     mocks.storageDelete.mockRejectedValue(cleanupError);
@@ -269,9 +274,18 @@ describe("POST /api/upload", () => {
 
     expect(mocks.storageDelete).toHaveBeenCalledOnce();
     expect(consoleError).toHaveBeenCalledWith(
-      "[upload] failed to clean up stored file:",
-      cleanupError,
+      "[upload] failed to clean up stored file",
     );
+    const logged = consoleError.mock.calls.flat().join(" ");
+    for (const secret of [
+      "storage.example",
+      "header-secret",
+      "credential-secret",
+      "cause-secret",
+      "stack-secret",
+    ]) {
+      expect(logged).not.toContain(secret);
+    }
     expect(mocks.getQueue).not.toHaveBeenCalled();
   });
 
@@ -310,9 +324,9 @@ describe("POST /api/upload", () => {
   it("队列投递失败时保留对象与 DB 行并回退同步处理", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     mocks.parseFormData.mockResolvedValue(uploadForm(5, "hello.bin", ""));
-    mocks.queueSend.mockImplementation((_name, payload) => Promise.reject(
-      new Error(`send failed ${payload.storagePath}?token=secret`),
-    ));
+    mocks.queueSend.mockRejectedValue(
+      new Error("send failed https://queue.example/jobs?token=secret"),
+    );
 
     const response = await POST(request());
     const body = await response.json();
@@ -321,7 +335,7 @@ describe("POST /api/upload", () => {
     expect(response.status).toBe(200);
     expect(consoleError).toHaveBeenCalledWith(
       "[upload] queue dispatch failed, using sync fallback:",
-      "send failed [REDACTED]?token=[REDACTED]",
+      "send failed [REDACTED]",
     );
     expect(mocks.processFile).toHaveBeenCalledOnce();
     expect(mocks.processFile).toHaveBeenCalledWith(body.fileId);

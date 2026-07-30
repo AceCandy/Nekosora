@@ -1,6 +1,7 @@
 import { redactErrorMessage } from "@/lib/redaction";
+import { FILE_PROCESS_QUEUE } from "@/lib/jobs/catalog";
 
-export const FILE_PROCESSING_RETRYABLE_MESSAGE = "文件处理失败，可重试";
+export const FILE_PROCESSING_RETRYABLE_MESSAGE = FILE_PROCESS_QUEUE.retryMessage;
 const MAX_FILE_PROCESSING_ERROR_LENGTH = 200;
 const URL_RE = /\b(?:https?|postgres(?:ql)?):\/\/[^\s"'<>]+/gi;
 

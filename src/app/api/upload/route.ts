@@ -18,6 +18,7 @@ import { and, eq } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { getSession } from "@/lib/session";
 import { getQueue } from "@/lib/infra/queue";
+import { FILE_PROCESS_QUEUE } from "@/lib/jobs/catalog";
 import { getStorage } from "@/lib/infra/storage";
 import { processFile } from "@/lib/rag/processing-coordinator";
 import { formatFileProcessingError } from "@/lib/rag/processing-state";
@@ -111,8 +112,8 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     try {
       await storage.delete(storagePath);
-    } catch (cleanupError) {
-      console.error("[upload] failed to clean up stored file:", cleanupError);
+    } catch {
+      console.error("[upload] failed to clean up stored file");
     }
     throw error;
   }
@@ -122,7 +123,7 @@ export async function POST(req: NextRequest) {
   try {
     const queue = await getQueue();
     if (queue.available) {
-      await queue.send("file-process", { fileId, storagePath, mime });
+      await queue.send(FILE_PROCESS_QUEUE, { fileId });
     } else {
       useSyncFallback = true;
     }

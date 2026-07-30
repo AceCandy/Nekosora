@@ -6,6 +6,7 @@
  */
 import { and, eq, or, sql } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
+import type { JobOutcome } from "@/lib/jobs/catalog";
 import { generateChat } from "@/lib/stream";
 import { getSetting } from "@/lib/system-settings/service";
 import type { IRRequest } from "@/lib/providers/types";
@@ -251,6 +252,38 @@ export async function generateConversationTitle(job: ConversationTitleJob): Prom
     await deleteTitleJob(tx, s, job.id);
     return updated.length > 0 ? title : null;
   });
+}
+
+/** Worker 仅接收 outbox id，并在执行时读取完整 durable fact。 */
+export async function processConversationTitleJob(jobId: string): Promise<JobOutcome> {
+  const db = await getDb();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const s = getSchema() as any;
+  const [row] = await db
+    .select({
+      id: s.conversationTitleJobs.id,
+      userId: s.conversationTitleJobs.userId,
+      conversationId: s.conversationTitleJobs.conversationId,
+      firstUserMessage: s.conversationTitleJobs.firstUserMessage,
+      fallbackTitle: s.conversationTitleJobs.fallbackTitle,
+      chatModel: s.conversationTitleJobs.chatModel,
+      chatModelId: s.conversationTitleJobs.chatModelId,
+    })
+    .from(s.conversationTitleJobs)
+    .where(eq(s.conversationTitleJobs.id, jobId))
+    .limit(1);
+  if (!row) return "noop";
+
+  const title = await generateConversationTitle({
+    id: String(row.id),
+    userId: String(row.userId),
+    conversationId: String(row.conversationId),
+    firstUserMessage: String(row.firstUserMessage),
+    fallbackTitle: String(row.fallbackTitle),
+    ...(row.chatModel ? { chatModel: String(row.chatModel) } : {}),
+    ...(row.chatModelId ? { chatModelId: String(row.chatModelId) } : {}),
+  });
+  return title === null ? "noop" : "completed";
 }
 
 /** 兼容旧调用：fallback 与最终标题仍依次回调。Chat 主链路不再使用。 */
