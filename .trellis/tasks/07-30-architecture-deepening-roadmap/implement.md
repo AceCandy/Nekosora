@@ -27,9 +27,9 @@
 
 ## Phase 3: Worker And Queue Lifecycle
 
-- [ ] 进入 `07-30-worker-queue-lifecycle`。
-- [ ] 以 Phase 1 durable intent 和 Phase 2 recovery adapter 为输入完成规划。
-- [ ] 实现、验证启动/失败/信号/drain 矩阵、规格同步、归档。
+- [x] 进入 `07-30-worker-queue-lifecycle`。
+- [x] 以 Phase 1 durable intent 和 Phase 2 recovery adapter 为输入完成规划。
+- [x] 实现、验证启动/失败/信号/drain 矩阵、规格同步、归档。
 - Gate：启动或关闭的任一局部失败都不会留下继续调度的新工作或错误确认 job 成功。
 
 ## Phase 4: Model Catalog Sync Contract
