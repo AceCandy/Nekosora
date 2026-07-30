@@ -3,7 +3,7 @@
   "name": "rag-file-processing-state-machine",
   "title": "RAG 文件处理状态机",
   "description": "收拢文件处理 claim、lease heartbeat、阶段转换、fencing、失败恢复与 chunk 原子替换。",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

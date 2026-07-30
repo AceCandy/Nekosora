@@ -1,1 +1,8 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file":".trellis/tasks/07-30-rag-file-processing-state-machine/research/file-storage-contract.md","reason":"注入 file-storage 权威规范中与 upload compensation、fenced processing、recovery 和 user-owned RAG 直接相关的精选契约，避免完整文件超限截断。"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"实现 PostgreSQL clock、Drizzle 条件写、chunk 原子事务、动态 import 边界与 no-migration gate 时必须遵守。"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"定义 retryable/terminal/ownership 错误边界以及不得向调用方传播原始基础设施异常。"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"约束 processing/recovery/upload 日志的分类、脱敏、长度与数据库诊断边界。"}
+{"file":".trellis/spec/backend/directory-structure.md","reason":"约束 RAG state/repository/coordinator 留在领域目录，route 与 worker 只保留薄适配。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"核对 upload -> queue -> coordinator -> database -> retrieval 的 payload、错误和事实源边界。"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"防止 lease predicate、状态字符串、失败码和安全 formatter 在新模块与 adapters 间重复。"}
+{"file":".trellis/tasks/07-30-rag-file-processing-state-machine/research/evidence.md","reason":"汇总当前 writer、schema、状态消费者、并发 tests、安全缺口与无迁移决策的证据。"}

@@ -27,8 +27,8 @@
 | 顺序 | 任务 | 优先级 | 依赖 | 状态 |
 |---|---|---|---|---|
 | 0 | Gateway execution engine | P1 | 无 | 已完成：`archive/2026-07/07-29-gateway-execution-engine` |
-| 1 | Chat 完成事务边界 | P1 | Phase 0 | planning |
-| 2 | RAG 文件处理状态机 | P1 | 无代码依赖；顺序上晚于 Phase 1 | planning |
+| 1 | Chat 完成事务边界 | P1 | Phase 0 | 已完成：`archive/2026-07/07-30-chat-completion-transaction-boundary` |
+| 2 | RAG 文件处理状态机 | P1 | 无代码依赖；顺序上晚于 Phase 1 | in_progress：实现与验证完成，待归档 |
 | 3 | Worker 与 Queue 生命周期 | P1 | Phase 1 的 durable intent 契约、Phase 2 的 recovery/lease 契约 | planning |
 | 4 | Model Catalog 同步契约强化 | P1 | 独立；为降低并行大改风险排在 Phase 3 后 | planning |
 | 5 | Chat Composer 状态协调 | P2 | Phase 1 稳定 Chat 完成边界 | planning |

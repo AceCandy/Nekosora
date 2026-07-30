@@ -12,16 +12,17 @@
 
 ## Phase 1: Chat Completion Transaction Boundary
 
-- [ ] 进入 `07-30-chat-completion-transaction-boundary`。
-- [ ] 研究并审阅该 child 的 design/implement。
-- [ ] 实现、验证、规格同步、独立复核、归档。
+- [x] 进入 `07-30-chat-completion-transaction-boundary`。
+- [x] 研究并审阅该 child 的 design/implement。
+- [x] 实现、验证、规格同步、独立复核、归档。
 - Gate：必要消息与 run 终态完成前绝不发送可靠完成信号；副作用意图可恢复。
 
 ## Phase 2: RAG File Processing State Machine
 
-- [ ] 进入 `07-30-rag-file-processing-state-machine`。
-- [ ] 研究并审阅该 child 的 design/implement。
-- [ ] 实现、运行 unit + PostgreSQL lease tests、规格同步、归档。
+- [x] 进入 `07-30-rag-file-processing-state-machine`。
+- [x] 研究并审阅该 child 的 design/implement。
+- [x] 实现、运行 unit + PostgreSQL lease tests、规格同步与独立复核。
+- [ ] 归档。
 - Gate：任一旧 lease owner 在丢失所有权后不能写 chunk 或终态。
 
 ## Phase 3: Worker And Queue Lifecycle

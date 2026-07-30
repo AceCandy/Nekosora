@@ -1,1 +1,8 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file":".trellis/tasks/07-30-rag-file-processing-state-machine/research/file-storage-contract.md","reason":"复核 upload compensation、claim/fencing/heartbeat/chunk replacement/recovery 与 owner/rag-ready 消费者契约，且避免完整 spec 超限截断。"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"独立复核数据库时钟、事务 rollback、single-winner 条件写、动态 import 及 schema/journal 无意外变更。"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"复核 retryable generic rejection、lease-loss no-op 和异常不跨安全边界。"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"复核 DB、console、queue 与 upload fallback 不泄露 credential、URL、path、cause 或 stack。"}
+{"file":".trellis/spec/backend/directory-structure.md","reason":"复核 repository/coordinator/adapters 的所有权分离以及旧 process 编排已删除。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"复核 fileId-only payload、canonical DB metadata、HTTP wire 与 retrieval consumer 全链一致。"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"复核状态、predicate、failure code、formatter 和 chunk writer 都只有一个事实源。"}
+{"file":".trellis/tasks/07-30-rag-file-processing-state-machine/research/evidence.md","reason":"按现状锚点与已知风险检查是否遗漏 writer、consumer、PG race 或数据影响。"}
