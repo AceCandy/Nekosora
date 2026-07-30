@@ -251,3 +251,26 @@ Implemented strict run start, atomic assistant/run/memory completion persistence
 ### Status
 
 [OK] **Completed**
+
+
+## Session 72: RAG 文件处理状态机
+
+**Date**: 2026-07-30
+**Task**: RAG 文件处理状态机
+**Branch**: `dev_0729`
+
+### Summary
+
+统一 fileId-only coordinator、typed state 与 fenced repository；补锁后 freshness、embedding 降级、原子 chunk replacement 和真实 PostgreSQL 并发验证。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `883a423` | (see git log) |
+| `7bda3e0` | (see git log) |
+| `843372c` | (see git log) |
+
+### Status
+
+[OK] **Completed**
