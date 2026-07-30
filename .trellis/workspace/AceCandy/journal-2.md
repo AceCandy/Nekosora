@@ -298,3 +298,26 @@ Implemented strict run start, atomic assistant/run/memory completion persistence
 ### Status
 
 [OK] **Completed**
+
+
+## Session 74: Model Catalog 同步契约强化
+
+**Date**: 2026-07-30
+**Task**: Model Catalog 同步契约强化
+**Branch**: `dev_0729`
+
+### Summary
+
+统一 model catalog 同步 planner 与 migration-only 写入路径，完成权威降级、原子 reasoning bundle、迁移验证和运行时消费链复核，并将架构路线图推进到 4/5。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `fa4aebb` | (see git log) |
+| `1526147` | (see git log) |
+| `e8ed9b7` | (see git log) |
+
+### Status
+
+[OK] **Completed**
