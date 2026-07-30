@@ -321,3 +321,26 @@ Implemented strict run start, atomic assistant/run/memory completion persistence
 ### Status
 
 [OK] **Completed**
+
+
+## Session 75: Chat Composer 状态协调
+
+**Date**: 2026-07-31
+**Task**: Chat Composer 状态协调
+**Branch**: `dev_0729`
+
+### Summary
+
+统一 Composer 七类选择状态与 latest-only 持久化，原子保存完整快照，补齐请求优先级、会话 scope 隔离、失败重试、规格和测试；认证后浏览器回归仍待最终集成阶段验证。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c81e94a` | (see git log) |
+| `e122c7b` | (see git log) |
+| `470212a` | (see git log) |
+
+### Status
+
+[OK] **Completed**

@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 74
-- **Last Active**: 2026-07-30
+- **Total Sessions**: 75
+- **Last Active**: 2026-07-31
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~323 | Active |
+| `journal-2.md` | ~346 | Active |
 | `journal-1.md` | ~1981 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 75 | 2026-07-31 | Chat Composer 状态协调 | `c81e94a`, `e122c7b`, `470212a` | `dev_0729` |
 | 74 | 2026-07-30 | Model Catalog 同步契约强化 | `fa4aebb`, `1526147`, `e8ed9b7` | `dev_0729` |
 | 73 | 2026-07-30 | Worker 与 Queue 生命周期统一 | `36285d7`, `916939a`, `f62c1a5`, `d970ddb` | `dev_0729` |
 | 72 | 2026-07-30 | RAG 文件处理状态机 | `883a423`, `7bda3e0`, `843372c` | `dev_0729` |
