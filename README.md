@@ -111,27 +111,27 @@ pnpm dev                      # 启动 http://localhost:3000
 
 ### 同步 pi 模型目录
 
-同步前需在 `.env.local` 中配置 `DATABASE_URL`。先分别预览已有模型变化和缺失模型:
+同步前需在 `.env.local` 中配置 `DATABASE_URL`。默认从 pi 拉取数据并仅输出审计报告:
 
 ```bash
 pnpm sync:pi-models
-pnpm sync:pi-models -- --import-missing
 ```
 
-确认结果后生成“导入缺失模型 + 更新已有模型”的 PostgreSQL 迁移:
+离线审计或生成迁移时，必须显式指定已审查的本地 JSON snapshot。`--write` 只把 planner 接受的 direct 变更写入下一条 PostgreSQL migration:
 
 ```bash
-pnpm sync:pi-models -- --import-missing --also-update --write
-pnpm exec vitest run src/lib/reasoning.test.ts src/lib/sync-pi-models.test.ts src/lib/model-catalog.test.ts
+PI_MODELS_FILE=/path/to/pi-models.json pnpm sync:pi-models
+PI_MODELS_FILE=/path/to/pi-models.json pnpm sync:pi-models -- --write
+pnpm exec vitest run src/lib/reasoning.test.ts src/lib/sync-pi-models.test.ts src/lib/sync-pi-models-cli.test.ts src/lib/model-catalog.test.ts
 ```
 
-人工审查新生成的 `drizzle/pg/*.sql`，确认 pi 全量模型、迁移 SQL、`meta/_journal.json` 和新 snapshot 一致后应用:
+人工审查新生成的 `drizzle/pg/*.sql`、source digest、`meta/_journal.json` 和新 snapshot 一致后应用:
 
 ```bash
 pnpm db:migrate:pg
 ```
 
-不要在正式同步中使用 `--apply`；统一通过版本化迁移应用数据库变更，避免执行中断后出现部分更新。
+同步器不再支持批量导入缺失模型、混合更新或直接 apply。新增模型须核对官方资料并显式编写迁移；聚合商、区域变体和模糊匹配只出现在审计报告中。
 
 ### 调用网关(OpenAI 兼容)
 

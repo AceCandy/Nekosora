@@ -55,58 +55,71 @@
 
 ---
 
-## Scenario: fixed 推理目录与 pi 同步
+## Scenario: 模型目录同步信任边界
 
 ### 1. Scope / Trigger
-- Scope: `model_catalog.capabilities`、`src/lib/reasoning.ts`、`src/lib/sync-pi-models.ts` 与目录数据迁移。
-- Trigger: 新增或调整 `thinkingFormat: "fixed"` 模型、同步 pi 模型元数据，或修复 fixed 存量目录时，必须遵守本契约。
-- Boundary: `fixed` 只描述模型官方请求语义；不得据 Provider URL 改写，也不得在 Chat 或路由层另写能力判断。
+- Scope:`model_catalog`、`src/lib/sync-pi-models.ts`、`scripts/sync-pi-models.ts`、`src/lib/reasoning.ts` 与 PostgreSQL 目录迁移。
+- Trigger:读取 pi 模型目录、调整模型 capability/thinking 元数据，或生成目录数据迁移时，必须遵守本契约。
+- Boundary:`model_catalog` 是运行时唯一事实源；pi payload 是不可信的外部 proposal，Chat、routing 和 provider adapter 不得另建模型能力白名单。
 
 ### 2. Signatures
-- 目录形状:`ModelCapabilities { reasoning: true, thinkingFormat: "fixed", thinkingLevelMap }`。
-- 运行时:`getSupportedReasoningLevels(capabilities): ReasoningLevel[]`。
-- 同步:`resolveThinkingLevelMap(current, pi): ThinkingLevelMap | undefined` 与 `passesInvariants(capabilities): boolean`。
-- 数据修复:追加 PostgreSQL 迁移，以 `capabilities || patch::jsonb` 按 `canonical_model_id` 定向更新。
+- Planner:`planCatalogSync(rows: CatalogRow[], payload: unknown): SyncPlan`。
+- SQL renderer:`buildCatalogSyncSql(plan: SyncPlan): string[]`，只接受 planner 的 `changes`。
+- 匹配证据:`MatchEvidence { provider, modelKey, via, kind, authority }`，其中 `authority` 为 `direct | reference`。
+- reasoning bundle:`reasoning + thinkingFormat + thinkingLevelMap + reasoningEffort`。
+- CLI:`pnpm sync:pi-models` 只审计；`PI_MODELS_FILE=<snapshot> pnpm sync:pi-models -- --write` 生成下一条 migration、journal entry 和 snapshot。
 
 ### 3. Contracts
-- fixed map 必须恰好有一个显式非空字符串值的非 `off` 档位；`off` 必须为 `null`，表示不可关闭。
-- fixed 的缺省键不继承普通格式的 `off/minimal/low/medium/high` 默认支持语义。运行时只返回 map 中显式非空字符串值的非 `off` 档位，不自动猜测 `high`。
-- 合法 fixed 的默认值和失效会话值均夹到唯一档位；`buildReasoningProviderOptions` 返回 `undefined`，compatible 请求体保持原样，不伪造启停或强度参数。
-- 当前目录已经声明 fixed 时，pi 同步必须同时保留 curated `thinkingFormat` 与 `thinkingLevelMap`；不得采用 pi 的 toggle map。保留现有空字符串规范化规则。
-- `passesInvariants` 对 fixed 要求支持档位数量严格等于 1；其他 reasoning 模型仍要求至少一个可用档位。
-- 已发布目录迁移不得改写。存量修复必须追加迁移并同步 journal/snapshot，JSONB 顶层合并只能替换推理键，保留其他 capabilities。
+- Decoder 保留 `missing / false / true` 三态。非法 model id、compat 形状、map key、非 `string|null` value 和空字符串必须产生稳定 rejection code，不能 cast、过滤或回退后写入。
+- 只有非聚合官方 provider 的精确 `provider/id`，或全目录唯一的官方裸 ID 命中，才是 `direct` proposal。aggregate、variant、path/tail fallback 和多官方来源歧义都只能进入 `references` 审计。
+- `direct` 只表示结构上允许提案，不替代厂商官方资料核对。迁移中每条 accepted change 都必须有官方事实依据。
+- reasoning bundle 原子更新。`reasoning=false` 且 current `reasoning===true` 时删除整个 bundle；候选 bundle 任一不变量失败时完整保留旧 bundle，vision 等独立 capability 仍可单独收敛。
+- 跨 `thinkingFormat` 变更只有在外部 map 与 `supportsReasoningEffort` 三态都显式存在时才重建整个 bundle；缺任一字段即拒绝并保留旧包。同一 format 的缺失字段才允许按 current 保留。
+- current 未启用 reasoning 时，孤立 `thinkingFormat`/map/effort 不自动清理；记录 `reasoning_disabled_extras_ignored` 并保留现状，避免把缺少明确能力迁移的元数据差异升级为写操作。
+- `fixed` 必须是 `off:null` 且恰好一个非 `off` 档位映射到非空字符串。运行时只显示该唯一档位，compatible/provider request 不伪造控制参数；同步不得用 pi toggle map 覆盖 curated fixed bundle。
+- planner 对行、对象 key、change、reference、rejection 和 unmatched 输出做稳定排序。dry-run、审计与 SQL 共享这一份 plan，CLI 不得重新 match、translate 或 fallback。
+- `--write` 只接受显式本地 snapshot，并在 SQL 中记录 SHA-256；禁止 `--apply`、bulk import、隐式 cache fallback 和 live-source write。失败输出只含稳定 stage/reason，不含 URL、路径、payload、credential、cause 或 stack。
+- 数据修复只追加 forward migration。SQL 使用定向 JSONB delete/patch 与 `IS DISTINCT FROM`，保留无关字段且仅在真实变化时刷新 `updated_at`；SQL、journal、snapshot 必须一起生成和提交。
+- reasoning 降级的 operation 必须规范化为四个 bundle key 的 delete，即使旧行缺少其中部分 key；这样生成的 migration 对前序允许范围内的稀疏数据仍能收敛到同一结果。
 
 ### 4. Validation & Error Matrix
-| Condition | Runtime | Sync / Migration |
+| Condition | Planner / CLI result | Runtime / Data result |
 | --- | --- | --- |
-| 合法 fixed，唯一开启档 | 返回唯一档，默认与失效值夹到该档 | 不变量通过 |
-| fixed 只有 `{off:null}` | 返回空数组，不显示假档位 | 不变量失败，禁止作为合法同步结果 |
-| fixed 有多个开启档 | 返回显式档位，不猜测所有权 | 不变量失败，禁止落盘 |
-| current fixed + pi `deepseek` toggle map | 继续使用 current curated map | 不产生 capabilities 覆盖差异 |
-| 存量 fixed 数据损坏 | 防御性隐藏无效控件 | 追加定向迁移修复，不覆盖其他 capability |
+| 外部 map 含未知 key、空串或非法 value | rejection；reasoning bundle 不变 | 继续消费原 catalog |
+| 跨 format proposal 缺 map 或 effort 三态 | `invalid_reasoning_bundle` | 旧 reasoning bundle 原样保留 |
+| direct `reasoning=false`，current reasoning=true | accepted bundle delete | Chat 隐藏档位，stale model state 收敛到 `off`，请求不发送 thinking |
+| reasoning=false 但携带 thinking extras | extras 记审计；若 current 未启用 reasoning 则无 change | 孤立 current 元数据原样保留 |
+| aggregate/tail/path/歧义匹配 | reference only | catalog 不变 |
+| fixed 不是 `off:null + 唯一开启档` | `invalid_reasoning_bundle` | malformed fixed 防御性隐藏控件 |
+| `--write` 未提供本地 snapshot | `write_requires_snapshot` | 不产生任何迁移产物 |
+| migration 重复执行 | `IS DISTINCT FROM` 不命中 | capability 与 `updated_at` 均不变 |
 
 ### 5. Good / Base / Bad Cases
-- Good:Kimi K2.7 使用 `off:null + high:"default"`，Chat 显示固定开启，请求体不增加控制字段。
-- Base:非 fixed 模型继续按目录 map 与格式默认值生成可用档位，既有翻译行为不变。
-- Bad:保留 current `fixed` 格式，却用 pi 的 `{off:null}` 覆盖 map，形成格式与档位所有权不一致的混合配置。
-- Bad:在运行时为 malformed fixed 自动补 `high`；这会掩盖目录损坏并绕过同步闸门。
+- Good:官方确认模型不再支持 reasoning，planner 生成整包删除；迁移保留 tools/systemPrompt 等无关 key，消费者自动隐藏档位。
+- Good:Kimi K2.7 的 curated fixed bundle 遇到 pi toggle 元数据时保持不变。
+- Base:generic、未匹配和 reference 模型只出现在审计报告，目录数据不变。
+- Bad:脚本读取 pi 后自行构造 upsert，导致 dry-run 与 SQL 使用两套 match/fallback 逻辑。
+- Bad:看到 reasoning=false + thinkingFormat 就清理一个从未启用 reasoning 的 catalog 行；这缺少明确的能力迁移证据。
 
 ### 6. Tests Required
-- `reasoning.test.ts`:覆盖 `{off:null}` 与空字符串返回空数组、合法 fixed 唯一档、默认/夹取与请求体原样。
-- `sync-pi-models.test.ts`:覆盖 current fixed 遇 pi toggle map 时保留、fixed 零/一/多档不变量。
-- `model-catalog.test.ts`:读取追加迁移，断言目标 canonical ID、完整 fixed map、JSONB 合并与 `updated_at`。
-- 迁移元数据:断言新 snapshot 的 `prevId` 指向上一 snapshot，且 custom 数据迁移不引入 schema 差异。
+- `sync-pi-models.test.ts`:覆盖三态 decoder、非法 map/compat、direct/reference/歧义、双向 capability 变更、reasoning 原子回退、孤立 thinking 审计、fixed 不变量、确定性 plan 和 SQL operation。
+- `sync-pi-models-cli.test.ts`:覆盖参数分隔符、旧 flag 拒绝、snapshot-only write、固定脱敏错误和审计脱敏。
+- `reasoning.test.ts`:覆盖 levels/default/clamp/modelId stale state，以及 reasoning 降级后 compatible/provider 请求不发送 thinking。
+- `model-catalog.test.ts`:断言 migration 目标与精确 JSONB 表达式、source digest、journal idx/time 和 snapshot prevId/schema。
+- 隔离 PostgreSQL:先应用前序迁移，再应用最新 migration 两次；断言行数、外键、无关 capability 与第二次 `updated_at` 不变，最后删除随机测试库。
 
 ### 7. Wrong vs Correct
 #### Wrong
 ```typescript
-if (pi.thinkingLevelMap) return pi.thinkingLevelMap;
+const next = translate(current, match(pi));
+await db.execute(buildUpsert(next));
 ```
 
 #### Correct
 ```typescript
-if (current.thinkingFormat === "fixed") return normalize(current.thinkingLevelMap);
-if (pi.thinkingLevelMap) return pi.thinkingLevelMap;
+const plan = planCatalogSync(rows, payload);
+const statements = buildCatalogSyncSql(plan);
+// 人工核对 accepted changes 与官方资料后，写入 forward migration。
 ```
 
 ---
@@ -138,14 +151,14 @@ const v = capabilities?.thinkingLevelMap?.[level] ?? DEFAULT_MAP[protocol]?.[lev
 新增/修正模型 `thinkingFormat` 与 `reasoningEffort` 时,参数名与取值必须以**厂商官方 API 文档原文**为准,不得依赖中转层或聚合层文档。
 
 **What**:
-- 首选 `docs/cankao/pi`(`packages/ai/src/providers/*.models.ts`)对齐:`thinkingFormat`、`supportsReasoningEffort`、`thinkingLevelMap` 均有现成权威值。
-- pi 未收录的模型(如 StepFun step-3.7),**必须查厂商官方文档原文**(`platform.stepfun.com`、`api.xiaomimimo.com` 等),不看阿里云 Model Studio、OpenRouter 转发、HF 讨论等二手/中转描述。
+- pi API 与 `docs/cankao/pi/packages/ai` 只用于发现模型、兼容格式和待审 proposal；它们不能单独授权目录写入。
+- 新增或修正模型时，**必须查厂商官方文档原文**(`platform.stepfun.com`、`api.xiaomimimo.com` 等),不看阿里云 Model Studio、OpenRouter 转发、HF 讨论等二手/中转描述。
 - 同一模型经不同上游接入,参数语义不同:`enable_thinking` / `reasoning_effort` / `reasoning.effort` 分别对应 DashScope 直连 / OpenAI 系 / OpenRouter。`thinkingFormat` 跟随该模型实际路由的 `protocol` + `base_url`,不按 alias 前缀猜。
 - 推理模型若本质上无法关闭思考(默认总思考),用 `thinkingLevelMap:{off:null,...}` 反映,不向用户暴露假的「关闭」选项;档位按官方实际支持的强度(low/medium/high 等)配置。
 
 **Why**:曾据阿里云 Model Studio 中转层把 step-3.7 配成 `qwen`(发 `enable_thinking`),但 StepFun 官方 `api.stepfun.com` 用 `reasoning_effort`,不认 `enable_thinking`,导致「选关仍思考」。中转层常额外封装参数,与官方原生 API 不一致。
 
 **Wrong**:据 WebSearch 二手结果或中转平台文档配 `thinkingFormat`;按 alias 前缀(`qwen/`、`xiaomi/`)猜接入协议。
-**Correct**:先查 pi;pi 没有则查厂商官方文档原文,确认参数名 + 取值 + 是否可关闭。
+**Correct**:先用 pi 定位兼容语义，再由厂商官方文档确认参数名、取值、输入能力和是否可关闭；只有两者通过 planner 与人工门禁后才写 migration。
 
 **相关**:`AGENTS.md`「模型目录维护」;`src/lib/reasoning.ts` 各 `thinkingFormat` 分支。

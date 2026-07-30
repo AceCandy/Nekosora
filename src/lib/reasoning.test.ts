@@ -77,6 +77,16 @@ describe("model-driven reasoning levels", () => {
     expect(resolveReasoningForModel(caps, "model-b", stored)).toBe("high");
     expect(resolveReasoningForModel(caps, "model-c", stored)).toBe("low");
   });
+
+  it("ignores stale Kimi reasoning state after the catalog disables reasoning", () => {
+    const caps: ModelCapabilities = { tools: true, systemPrompt: true };
+    const body = { model: "kimi-k2" };
+
+    expect(getSupportedReasoningLevels(caps)).toEqual([]);
+    expect(resolveReasoningForModel(caps, "kimi-k2", { "kimi-k2": "high" })).toBe("off");
+    expect(applyReasoningToCompatibleBody(body, caps, "high")).toBe(body);
+    expect(buildReasoningProviderOptions("openai-compatible", caps, "high")).toBeUndefined();
+  });
 });
 
 describe("OpenAI-compatible reasoning body formats", () => {
@@ -123,6 +133,26 @@ describe("OpenAI-compatible reasoning body formats", () => {
       { reasoning: true, thinkingFormat: "zai", thinkingLevelMap: { high: "high" } },
       "high",
     )).toEqual({ model: "test", thinking: { type: "enabled", clear_thinking: false } });
+  });
+
+  it("keeps the existing GLM 5.2 zai request semantics", () => {
+    const glm: ModelCapabilities = {
+      reasoning: true,
+      thinkingFormat: "zai",
+      thinkingLevelMap: {
+        minimal: null,
+        low: null,
+        medium: null,
+        high: "high",
+        max: "max",
+      },
+    };
+
+    expect(getSupportedReasoningLevels(glm)).toEqual(["off", "high", "max"]);
+    expect(applyReasoningToCompatibleBody(body, glm, "high")).toEqual({
+      model: "test",
+      thinking: { type: "enabled", clear_thinking: false },
+    });
   });
 });
 

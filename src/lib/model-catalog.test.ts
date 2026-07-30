@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import {
   findCatalogMatch,
   normalizeCatalogModelId,
@@ -306,5 +306,59 @@ describe("Kimi fixed reasoning baseline", () => {
     })]));
     expect(currentSnapshot.id).toBeTypeOf("string");
     expect(currentSnapshot.prevId).toBe("00000000-0000-0000-0000-000000000000");
+  });
+});
+
+describe("model catalog capability sync migration", () => {
+  const migrationPath = "drizzle/pg/0003_model_catalog_sync.sql";
+  const journalPath = "drizzle/pg/meta/_journal.json";
+  const previousSnapshotPath = "drizzle/pg/meta/0002_snapshot.json";
+  const snapshotPath = "drizzle/pg/meta/0003_snapshot.json";
+
+  it("生成 SQL、journal 和 snapshot 三件套", () => {
+    expect(existsSync(migrationPath)).toBe(true);
+    expect(existsSync(snapshotPath)).toBe(true);
+  });
+
+  it("只定向修正 GLM 视觉与 Kimi reasoning bundle", () => {
+    const migration = readFileSync(migrationPath, "utf8");
+    const statements = migration.split("--> statement-breakpoint");
+    expect(statements).toHaveLength(2);
+    expect(migration).toMatch(/source-sha256: [a-f0-9]{64}/);
+    expect(migration).not.toContain("INSERT INTO");
+
+    const targets = [...migration.matchAll(/WHERE "canonical_model_id" = '([^']+)'/g)]
+      .map((match) => match[1]);
+    expect(targets).toEqual(["glm-5.2", "kimi-k2"]);
+
+    const glm = statements.find((statement) => statement.includes("'glm-5.2'"));
+    expect(glm).toMatch(
+      /SET\s+"capabilities" = \("capabilities" - 'vision'\),\s+"updated_at" = now\(\)\s+WHERE/,
+    );
+    expect(glm).toContain('"capabilities" IS DISTINCT FROM');
+
+    const kimi = statements.find((statement) => statement.includes("'kimi-k2'"));
+    expect(kimi).toMatch(
+      /SET\s+"capabilities" = \(\(\(\("capabilities" - 'reasoning'\) - 'reasoningEffort'\) - 'thinkingFormat'\) - 'thinkingLevelMap'\),\s+"updated_at" = now\(\)\s+WHERE/,
+    );
+    expect(migration.match(/"updated_at" = now\(\)/g)).toHaveLength(2);
+  });
+
+  it("追加严格递增 journal 并保持 schema snapshot 不变", () => {
+    const journal = JSON.parse(readFileSync(journalPath, "utf8")) as {
+      entries: Array<{ idx: number; tag: string; when: number; breakpoints: boolean }>;
+    };
+    const previous = JSON.parse(readFileSync(previousSnapshotPath, "utf8")) as Record<string, unknown>;
+    const snapshot = JSON.parse(readFileSync(snapshotPath, "utf8")) as Record<string, unknown>;
+    expect(journal.entries.at(-1)).toMatchObject({
+      idx: 3,
+      tag: "0003_model_catalog_sync",
+      breakpoints: true,
+    });
+    expect(journal.entries.at(-1)?.when).toBeGreaterThan(journal.entries.at(-2)?.when ?? 0);
+    expect(snapshot.prevId).toBe(previous.id);
+    const { id: _previousId, prevId: _previousPrevId, ...previousSchema } = previous;
+    const { id: _snapshotId, prevId: _snapshotPrevId, ...snapshotSchema } = snapshot;
+    expect(snapshotSchema).toEqual(previousSchema);
   });
 });
