@@ -22,7 +22,7 @@
 - [x] 进入 `07-30-rag-file-processing-state-machine`。
 - [x] 研究并审阅该 child 的 design/implement。
 - [x] 实现、运行 unit + PostgreSQL lease tests、规格同步与独立复核。
-- [ ] 归档。
+- [x] 归档。
 - Gate：任一旧 lease owner 在丢失所有权后不能写 chunk 或终态。
 
 ## Phase 3: Worker And Queue Lifecycle

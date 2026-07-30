@@ -28,7 +28,8 @@
   "parent": null,
   "relatedFiles": [
     "src/app/api/chat/route.ts",
-    "src/lib/rag/process.ts",
+    "src/lib/rag/processing-coordinator.ts",
+    "src/lib/rag/processing-repository.ts",
     "src/lib/rag/recovery.ts",
     "src/lib/infra/queue.ts",
     "src/worker.ts",
