@@ -95,6 +95,65 @@ await telemetry.finalizeExecution(final);
 - Plaintext API keys, Authorization/custom header values, provider base URLs, cookies, tokens, or connection strings.
 - Raw `ResolvedRoute`; use `GatewayRouteSnapshot` and a masked upstream key.
 
+## Scenario: Queue And Worker Lifecycle Logs
+
+### 1. Scope / Trigger
+
+Apply this contract to pg-boss adapter events, worker handler outcomes, recovery scans, startup rollback, signal shutdown, and queue-backed producer fallback. These are operational low-cardinality logs, not entity audit records.
+
+### 2. Signatures
+
+- Handler success: `[worker] <catalog-job-name>: completed|noop`
+- Handler failure: `[worker] <catalog-job-name>: retryable_failure`
+- Queue event: `[queue] pg-boss error`
+- Recovery failure: `RecoveryDefinition.failureMessage`
+- Lifecycle failure: fixed stage text, optionally followed by a catalog job name
+
+### 3. Contracts
+
+- Job name comes from the catalog definition; outcome is limited to `completed`, `noop`, or `retryable_failure`.
+- Never append queue payload, job/file/conversation/user ID, user text, storage path, model context, or durable-row contents.
+- Never pass raw `Error`, `cause`, or stack to `console`. Queue/provider/database URLs, Authorization/custom headers, credentials, cookies, and connection strings are forbidden even in development logs.
+- pg-boss events and generic recovery/runtime cleanup use fixed messages rather than redacting unknown third-party error text.
+- A domain boundary may emit an already bounded and redacted diagnostic when that diagnostic is part of its existing contract, but worker orchestration must not enrich it with payload or raw infrastructure errors.
+- Shutdown continues cleanup after logging a stage failure. Logs do not replace exit status: incomplete cleanup or drain still exits with code 1.
+
+### 4. Validation & Error Matrix
+
+| Event | Allowed fields | Forbidden fields |
+| --- | --- | --- |
+| Handler resolved | Catalog name, `completed|noop` | Payload, entity ID |
+| Handler rejected | Catalog name, `retryable_failure` | Raw message/cause/stack |
+| pg-boss error event | Fixed queue event text | Event argument |
+| Recovery scan/item failure | Fixed recovery name/stage | Row ID, raw DB/provider error |
+| Startup/shutdown cleanup failure | Fixed lifecycle stage, catalog name when identifying a scheduler | URL, connection string, Error object |
+| Upload compensation delete failure | Fixed cleanup stage | Storage key and cleanup Error |
+
+### 5. Good / Base / Bad Cases
+
+- Good: `[worker] file-process: noop` records an ownership loser without revealing `fileId`.
+- Good: `[memory-extraction-recovery] dispatch failed` allows alert grouping without exposing durable job IDs.
+- Base: `[worker] ready` and `[worker] stopping` mark lifecycle stages.
+- Bad: `[worker] file-process <fileId> failed: <error>` creates high-cardinality logs and leaks entity/infrastructure data.
+- Bad: logging a pg-boss event argument after regex redaction assumes arbitrary SQL parameters are discoverable secrets.
+
+### 6. Tests Required
+
+- Inject adversarial payload/user text/entity IDs plus provider and PostgreSQL URLs, headers, credentials, cause, and stack; assert none appear in handler, recovery, queue event, cleanup, or upload compensation logs.
+- Assert exact stable calls for pg-boss events, handler outcomes, scan failures, lifecycle cleanup failures, and upload compensation failures.
+- Assert per-item recovery failure does not stop later items and repeated signals do not duplicate cleanup/exit logs through multiple shutdown runs.
+- Keep domain bounded/redacted diagnostic tests separate from generic runtime tests.
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong: entity and raw infrastructure error cross the orchestration boundary.
+console.error(`[worker] ${definition.job.name} ${payload.id}`, error);
+
+// Correct: fixed catalog name and bounded outcome only.
+console.error(`[worker] ${definition.job.name}: retryable_failure`);
+```
+
 ## Common Mistakes
 
 - Writing engine-owned final facts in route handlers causes duplicate calls and tokens.

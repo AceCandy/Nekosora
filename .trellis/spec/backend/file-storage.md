@@ -222,7 +222,7 @@ Apply this contract when `/api/upload` changes the sequence between `StorageDriv
 - Complete DB acquisition, schema access, and any client-supplied relationship authorization before `getStorage()` or `put()`.
 - After put succeeds, wrap the `file_objects` row insertion in the compensation boundary.
 - If row insertion throws, attempt exactly one delete for the same generated storage key, then rethrow the original DB error.
-- If delete also throws, log the cleanup error without replacing the original DB error.
+- If delete also throws, log only the fixed stage message `[upload] failed to clean up stored file`; never pass the raw cleanup error, storage key, URL, header, credential, cause, or stack. The original DB error still wins.
 - A failed DB preflight must not reach storage. A failed put may follow a successful read-only DB preflight, but must not reach file insertion, delete, or queue code. A successful DB insert must not trigger delete.
 - Compensation is best effort, not a distributed transaction. A connection failure after an upstream DB commit can make commit status ambiguous and remains an operational residual risk.
 
@@ -233,7 +233,7 @@ Apply this contract when `/api/upload` changes the sequence between `StorageDriv
 | DB acquisition/schema/ownership query fails before put | None; storage is untouched | Original DB error |
 | Put fails after a successful DB preflight | None | Original storage error |
 | File row insertion fails after put | Delete once | Original DB error |
-| File row insertion and delete both fail | Delete attempted once; log cleanup error | Original DB error |
+| File row insertion and delete both fail | Delete attempted once; log fixed cleanup stage only | Original DB error |
 | DB insert succeeds | None | Existing queue/synchronous processing flow |
 
 ### 5. Good / Base / Bad Cases
@@ -247,7 +247,7 @@ Apply this contract when `/api/upload` changes the sequence between `StorageDriv
 
 - Assert DB acquisition and ownership-query failures do not acquire or write storage.
 - Assert file row insertion failures delete the exact key once and preserve Error object identity.
-- Assert cleanup failure is logged while the original DB Error still wins.
+- Assert cleanup failure logs the fixed message, excludes URL/header/credential/cause/stack, and preserves the original DB Error identity.
 - Assert put failure may follow the authorization query but does not call file insertion, delete, or queue.
 - Keep the success-path assertion that delete is never called.
 
@@ -283,8 +283,8 @@ try {
 } catch (error) {
   try {
     await storage.delete(storagePath);
-  } catch (cleanupError) {
-    console.error("[upload] failed to clean up stored file:", cleanupError);
+  } catch {
+    console.error("[upload] failed to clean up stored file");
   }
   throw error;
 }
@@ -374,8 +374,9 @@ Apply this contract when changing `/api/upload` dispatch to the `file-process` q
 ### 2. Signatures
 
 - `getQueue(): Promise<QueueAdapter>` may reject while initializing pg-boss.
-- `queue.send("file-process", { fileId, storagePath, mime })` starts pg-boss, ensures the named queue, and may reject during initialization/creation/dispatch or when pg-boss returns no job id.
-- `processFile(fileId, storagePath, mime): Promise<void>` is the existing no-queue fallback.
+- `FILE_PROCESS_QUEUE: QueueDefinition<{ fileId: string }>` owns the queue name, finite policy, and safe retry message.
+- `queue.send(FILE_PROCESS_QUEUE, { fileId })` starts pg-boss, ensures the named queue, and may reject during initialization/creation/dispatch or when pg-boss returns no job id.
+- `processFile(fileId): Promise<JobOutcome>` is the no-queue fallback and canonical coordinator entry.
 
 ### 3. Contracts
 
@@ -383,8 +384,8 @@ Apply this contract when changing `/api/upload` dispatch to the `file-process` q
 - `available: false`, queue acquisition failure, and send failure each start exactly one fire-and-forget `processFile` call.
 - Log acquisition/send errors before fallback. Explicit `available: false` is not an error and must not emit a queue-failure log.
 - Attach a rejection handler to fallback processing; a fallback failure is logged but does not turn the already-persisted upload response into an error.
-- Normalize MIME once and reuse it for storage, DB, queue payload, and fallback; an empty type becomes `application/octet-stream`.
-- A send that commits server-side but reports a client-side error can still race with fallback processing. Exactly-once dispatch and concurrent processing locks remain outside this contract.
+- Normalize MIME once for storage and DB; an empty type becomes `application/octet-stream`. Queue and fallback carry only `fileId` and reload canonical metadata from `file_objects` after claiming the lease.
+- A send that commits server-side but reports a client-side error can still race with fallback processing. Do not claim exactly-once dispatch; the fenced claim in the recoverable-processing contract converges duplicate executors.
 
 ### 4. Validation & Error Matrix
 
@@ -407,20 +408,20 @@ Apply this contract when changing `/api/upload` dispatch to the `file-process` q
 - Assert `available: false` falls back without a queue-error log.
 - Assert healthy send does not invoke fallback.
 - Assert fallback rejection is observed and logged without an unhandled rejection.
-- Cover empty MIME equality across storage, DB, queue/fallback.
+- Cover empty MIME equality across storage and DB, and assert queue/fallback receive only `fileId`.
 
 ### 7. Wrong vs Correct
 
 ```typescript
 // Wrong: queue exceptions escape after the upload has already been persisted.
 const queue = await getQueue();
-await queue.send("file-process", payload);
+await queue.send("file-process", { fileId, storagePath, mime });
 
 // Correct: all non-success dispatch paths converge on one fallback call.
 let useSyncFallback = false;
 try {
   const queue = await getQueue();
-  if (queue.available) await queue.send("file-process", payload);
+  if (queue.available) await queue.send(FILE_PROCESS_QUEUE, { fileId });
   else useSyncFallback = true;
 } catch (queueError) {
   console.error(
@@ -444,20 +445,21 @@ Apply this contract when changing `processFile`, file chunks, the `file-process`
 
 - `file_objects.processing_lease_id`: nullable text fencing token, replaced on every claim.
 - `file_objects.processing_lease_expires_at`: nullable `timestamptz`, compared with PostgreSQL time.
-- `processFile(fileId: string): Promise<void>` is the only coordinator entry; callers cannot provide storage metadata.
+- `processFile(fileId: string): Promise<JobOutcome>` is the only coordinator entry; callers cannot provide storage metadata.
 - `claimFileProcessing(fileId): Promise<{ lease, storagePath, mime } | null>` atomically claims and returns canonical database metadata.
 - `transitionFileProcessing(lease, current, stageCommand): Promise<void>` accepts only non-terminal typed state commands.
 - `completeFileProcessingWithoutChunks(lease, current, terminalCommand): Promise<void>` atomically removes stale chunks and writes unsupported/empty terminal state.
 - `replaceFileChunksAndComplete(lease, input): Promise<void>` atomically replaces chunks and writes successful/degraded terminal state.
 - `recoverStaleFileProcessing(): Promise<void>` scans and sequentially processes at most 25 pending or stale active rows.
-- `startFileProcessingRecovery(recover?): () => Promise<void>` starts immediate and 60-second single-flight scans and returns an asynchronous stop function.
-- `startWorker(runtime?): Promise<void>` registers queue handlers, starts recovery, and owns startup/shutdown cleanup.
+- `WORKER_DEFINITIONS` binds `FILE_PROCESS_QUEUE` to `processFile` and one recovery round.
+- `createWorkerRuntime(...)` owns handler registration, immediate/60-second recovery scheduling, rollback, and shutdown drain.
+- `startWorker(runtimeProcess?: WorkerProcess): Promise<void>` validates environment and assembles the shared runtime.
 
 ### 3. Contracts
 
 - `processing-state.ts` owns the exhaustive status commands and stable `rag_reason` codes; `processing-repository.ts` is the only post-upload writer for processing lease/state and chunk replacement; `processing-coordinator.ts` owns external work ordering and failure classification.
 - Claim with one conditional UPDATE for `pending/error`, or `extracting/embedding` whose lease is NULL or expired. Set a random token and `now() + interval '2 minutes'`, and return the row's `storage_path/mime`; an empty `RETURNING` is an immediate no-op.
-- Queue messages retain `{ fileId, storagePath, mime }` for rolling compatibility, but new workers discard the latter two fields. Upload fallback and recovery also call the fileId-only coordinator.
+- The catalog queue payload is exactly `{ fileId }`. Upload dispatch, fallback, worker handler, and recovery all call the fileId-only coordinator; storage path and MIME are database facts returned by the claim.
 - Every post-claim status write matches file id, token, active status, and `processing_lease_expires_at > now()`. A zero-row write means ownership is lost and no later database write may be attempted.
 - Heartbeat renews every 30 seconds, is single-flight, uses an unreferenced timer, and treats zero rows or a database error as lease loss. Stop the timer and await an in-flight renewal on every exit path.
 - Extraction and embedding APIs currently have no cancellation signal. Lease loss fences their late results; it does not claim to cancel external computation.
@@ -467,9 +469,9 @@ Apply this contract when changing `processFile`, file chunks, the `file-process`
 - `rag_reason` contains only stable codes. `embed_error` and processing logs use the same URL/secret-redacting formatter and are limited to 200 characters; raw errors, causes, stacks, storage paths, provider URLs, and connection strings do not cross the coordinator boundary.
 - Recovery scanning selects `pending`, or active rows with NULL/expired leases; it excludes `error` and terminal rows. Order the combined candidates by `created_at, id`, limit to 25, and process sequentially through the existing atomic claim. One candidate failure is redacted and does not stop later candidates; a SELECT failure rejects the round.
 - Keep partial indexes for both branches: stale active rows by lease/creation time and pending rows by `(created_at, id)`. Add schema changes through a new migration with matching journal and snapshot metadata; do not rewrite released migrations.
-- Recovery scheduling runs immediately and every 60 seconds without overlap. Its stop function clears the timer and waits for the active scan. The worker stops recovery before the queue; repeated signals reuse one shutdown promise.
-- Worker startup failure stops any started recovery and queue while preserving the original error. Shutdown continues remaining cleanup after a failure and exits non-zero when cleanup was incomplete.
-- This contract requires no schema migration or data reset. The unchanged queue envelope allows old and new Web/worker processes to roll independently; rollback is code-only and active leases converge through the existing two-minute expiry.
+- Generic runtime schedules each domain recovery immediately and every 60 seconds without overlap, uses an unreferenced timer, and waits for an active scan during stop. It starts all handlers before any recovery and stops recoveries in reverse order before queue drain; repeated signals reuse one shutdown Promise.
+- Worker startup failure stops every already-created recovery and queue while preserving the original error. Shutdown during startup waits for startup convergence; cleanup continues after failures and exits non-zero when incomplete.
+- This contract requires no schema migration or data reset. Existing old messages remain consumable because they contain `fileId` and extra JavaScript object fields are ignored, but the authoritative producer contract is now id-only. Rollback is code-only and active leases converge through the existing two-minute expiry.
 
 ### 4. Validation & Error Matrix
 
@@ -486,8 +488,8 @@ Apply this contract when changing `processFile`, file chunks, the `file-process`
 | Chunk insert fails | Roll back replacement, keep old chunks, then attempt the owned `persistence_failed` state |
 | Chunk transaction waits on the parent lock until its lease expires | Reject the old owner before deleting chunks; leave the prior row and chunks unchanged |
 | Final statement-time freshness check fails | Roll back replacement and leave the row for later stale recovery |
-| Recovery SELECT fails | Log a redacted scheduler error; retry on the next tick |
-| One recovery candidate throws | Log file id plus redacted error; continue the same batch |
+| Recovery SELECT fails | Generic scheduler logs the fixed scan-failure message; retry on the next tick |
+| One recovery candidate throws | Log fixed recovery stage without file id/raw error; continue the same batch |
 | Worker startup or shutdown cleanup fails | Continue available cleanup; preserve startup error or exit non-zero |
 
 ### 5. Good / Base / Bad Cases
@@ -509,7 +511,7 @@ Apply this contract when changing `processFile`, file chunks, the `file-process`
 - State/repository/coordinator unit tests must cover exhaustive legal/illegal commands, canonical claim metadata, heartbeat single-flight/reject/late result, all owned stages, atomic unsupported/empty cleanup, embedding failure and count-mismatch degradation, stable retry codes, transaction entry/final fencing, and safe bounded diagnostics.
 - Migration tests must assert nullable text/timestamptz columns, active-row NULL backfill with `now()`, stale-active and pending partial-index predicates, journal order, and snapshot `prevId` continuity.
 - A harness-created, fixed-prefix random PostgreSQL database must run full migrations and prove concurrent single-winner claim, parent-row lock waiting plus predicate re-evaluation, post-lock rejection when a chunk transaction waits past lease expiry, old-token rejection, owner-A late embedding after owner-B completion, vector persistence, unsupported stale-chunk cleanup, explicit chunk-insert rollback, final `statement_timestamp()` rollback, pending and stale-active scanning, candidate isolation, stable `(created_at, id)` ordering, non-retry of `error`/terminal rows, the mixed-candidate 25-row limit, and second-round processing of row 26.
-- Upload/worker/recovery tests must prove the queue envelope stays compatible, only `fileId` reaches the coordinator, generic rejection reaches pg-boss, individual recovery failures do not stop the batch, and no storage path, URL, token, connection string, cause, or stack reaches console output.
+- Upload/worker/recovery tests must prove the catalog envelope contains only `fileId`, only that ID reaches the coordinator, generic rejection reaches pg-boss, individual recovery failures do not stop the batch, and no entity ID, storage path, URL, token, connection string, cause, or stack reaches console output.
 - The harness must construct `TEST_DATABASE_URL` internally, close pools/processes, terminate only sessions for the generated database, and force-drop it in `finally` without printing connection strings.
 - Keep upload fallback, queue lifecycle, lint, typecheck, full tests, production build, Trellis validation, and diff checks green.
 

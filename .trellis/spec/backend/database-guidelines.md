@@ -19,91 +19,9 @@
 - 模式:函数内 `const { drizzle } = await import("drizzle-orm/node-postgres"); const { default: pg } = await import("pg");`。queue 用变量路径 `const m = "pg-boss"; await import(m)` 进一步阻断静态分析。
 - `pnpm build` 的 Edge instrumentation 编译是这条约束的验证 gate。
 
-## Scenario: pg-boss Producer Lifecycle And Readiness
+## Queue And Worker Lifecycle
 
-### 1. Scope / Trigger
-
-Apply this contract when changing `src/lib/infra/queue.ts`, Web/worker queue producers, queue workers, or `/healthz/ready`. Web and worker processes have separate in-memory adapters, so no producer may rely on another process having started pg-boss or created a named queue.
-
-### 2. Signatures
-
-- `getQueue(): Promise<QueueAdapter>`
-- `QueueAdapter.start(): Promise<void>` / `stop(): Promise<void>`
-- `QueueAdapter.send<T>(name, data, opts?): Promise<string>`
-- `QueueAdapter.work<T>(name, handler): Promise<void>`
-- `JobHandler<T> = (data: T) => Promise<void>`
-- `queueAvailable(): Promise<boolean>`
-- `GET /healthz/ready -> { status, checks, ts }`
-
-### 3. Contracts
-
-- Keep the variable-path `import("pg-boss")`; a top-level/static import breaks the Edge instrumentation build.
-- Adapter construction, start, stop, and same-name queue creation use in-flight promises. Concurrent callers await the same operation; a rejected operation removes only its own promise so a later call can retry.
-- A start/send/work arriving during stop waits for stop to finish, performs a fresh start, and only then continues.
-- Send/work operations remain concurrent, but stop waits for operations that already entered start/create/send/work before closing pg-boss.
-- `send()` and `work()` always await pg-boss start and idempotent `createQueue(name)`. Queue creation is lazy per name; do not maintain a second queue-name registry.
-- `send()` succeeds only with a non-empty job id. A `null`/empty id rejects so producer fallback or logging runs.
-- A worker handler resolves only after the job succeeded or reached an explicit business no-op. Recoverable service, provider, or persistence failure must reject so pg-boss can apply its finite retry policy; catching and returning silently acknowledges the job as completed.
-- Retried handlers must be idempotent or use conditional writes. `conversation-title` re-reads the current title and only updates `新会话` or the job's fallback, so a retry cannot overwrite a manual title.
-- Queue-facing errors must not include raw provider, connection, header, or credential details. Use a stable generic error for retry signaling and leave detailed failure recording to the owning, redaction-aware service boundary.
-- `queueAvailable()` awaits real pg-boss startup. Readiness requires both DB and queue checks; storage and Redis remain informational/degradable.
-- Queue readiness means that this process can initialize the queue backend. It does not prove that the independent worker is alive or consuming jobs.
-
-### 4. Validation & Error Matrix
-
-| Condition | Adapter result | Readiness / producer result |
-| --- | --- | --- |
-| Concurrent cold calls | One adapter/start/create per name | All callers await the same result |
-| Build/start/create rejects | Failed promise is cleared | Later call can retry |
-| `send()` returns a non-empty id | Resolve id | Producer treats dispatch as successful |
-| `send()` returns `null` or empty string | Reject | Upload fallback or chat async error path |
-| Worker handler succeeds or confirms an idempotent no-op | Resolve callback | pg-boss completes the job |
-| Worker handler rejects | Reject callback with the same error | pg-boss retries or fails the job according to its finite policy |
-| Worker service catches a recoverable failure and returns | False success | Job is permanently acknowledged; forbidden |
-| DB and queue startup succeed | Queue `{ available: true }` | HTTP 200 `ready` |
-| Queue false/error/timeout | Preserve queue diagnostic | HTTP 503 `unready` |
-| Worker is offline but queue backend is writable | Jobs remain durable in pg-boss | Readiness does not infer worker liveness |
-
-### 5. Good / Base / Bad Cases
-
-- Good: a Web producer can cold-start pg-boss, create `memory-extract`, and send before any worker process has registered `work()`.
-- Good: title generation returns a generic rejection on model failure; pg-boss retries, while a missing conversation or manual rename resolves as an idempotent no-op.
-- Base: a started worker calls `work()` for each handler and reuses the same adapter/start promises.
-- Base: a batch callback awaits jobs in order; the first rejection aborts that callback instead of continuing and acknowledging later work.
-- Bad: `getQueue()` returns `available: true` without starting, then `send()` assumes the worker already created the queue.
-- Bad: a service catches a model or database failure and returns `null` when `null` also means a valid no-op; the worker cannot distinguish failure and pg-boss records success.
-- Bad: readiness returns 200 based only on DB while queue startup errored or timed out.
-
-### 6. Tests Required
-
-- Queue unit tests: concurrent construction/start/create, operation ordering, build/start/create retry, null/empty job id, work registration, overlapping stop/start, and stop during an active create/send.
-- Execute the callback passed to pg-boss in a unit test. A rejecting business handler must reject that callback with the same error and stop the remaining jobs in the batch.
-- Worker service tests must separate explicit no-op from retryable failure. For `conversation-title`, cover missing/renamed conversations, thrown generation, error/empty responses, sanitized-empty output, compatibility best-effort behavior, and the worker handler rejection path.
-- Readiness route tests: healthy DB+queue, queue false, reject, timeout, and DB failure; assert HTTP status and `checks.queue` shape.
-- Upload regression: acquisition/send failures still call `processFile` fallback exactly once and return the existing success response.
-- Run `pnpm build` to protect the variable dynamic-import boundary.
-
-### 7. Wrong vs Correct
-
-```typescript
-// Wrong: a process-local flag says nothing about pg-boss startup or queue existence.
-const queue = await getQueue();
-if (queue.available) await queue.send(name, payload);
-
-// Correct: the adapter owns start + createQueue before resolving send.
-const queue = await getQueue();
-const jobId = await queue.send(name, payload);
-
-// Wrong: retryable failure is converted into a successful callback.
-try {
-  await generateConversationTitle(data);
-} catch {
-  return;
-}
-
-// Correct: only explicit no-op resolves; generation failure rejects generically.
-await generateConversationTitle(data);
-```
+The typed pg-boss catalog, replaceable generation, real-handler drain, generic recovery scheduler, and worker shutdown contract lives in [Queue And Worker Lifecycle](./queue-lifecycle.md). Database-specific title and memory durable-intent contracts remain below.
 
 ## Scenario: Conversation Title Durable Outbox
 
@@ -116,19 +34,21 @@ Apply this contract when changing conversation fallback titles, `conversation-ti
 - `writeFallbackTitle(userId, conversationId, firstUserMessage, chatModel?, chatModelId?): Promise<ConversationTitleJob | null>`
 - `ConversationTitleJob`: `id`, `userId`, `conversationId`, `firstUserMessage`, `fallbackTitle`, optional `chatModel` / `chatModelId`
 - `dispatchConversationTitleJob(jobId): Promise<boolean>`
+- `processConversationTitleJob(jobId): Promise<JobOutcome>`
 - `recoverConversationTitleJobs(): Promise<void>`
-- `startConversationTitleRecovery(): () => Promise<void>`
+- Queue payload: `{ id: string }`
 - `conversation_title_jobs`: one row per `conversation_id`, with random `id` as the fencing token and `dispatch_after` as the database-clock claim boundary
 
 ### 3. Contracts
 
 - Update the fallback and upsert the complete outbox payload in one transaction. A failed update creates no job; a failed upsert rolls back the fallback.
 - Claim only with one conditional `UPDATE ... WHERE id = ? AND dispatch_after <= now() RETURNING ...`, then move `dispatch_after` 15 minutes forward. Queue send success or failure never deletes the row.
+- Dispatch sends only `{ id }`; the worker reloads the complete outbox row at execution time before applying the existing preflight/final fencing.
 - Delivery is durable at-least-once. The worker checks the current job id before model generation and checks it again in the final short transaction.
 - The final transaction locks the owned conversation before reading the current outbox row, updates only the default/current fallback title, and deletes only the matching job id. This lock order matches the producer transaction.
 - Success and explicit business no-op delete the matching job. Generation or persistence failure preserves it and rejects the queue callback.
-- Recovery runs immediately and every 60 seconds, single-flight, in stable database-time order, at most 25 rows per scan. It processes rows sequentially, isolates per-row send failures, and its stop function waits for the active scan.
-- Outbox payloads and logs must not contain credentials, provider headers, connection strings, or complete request objects.
+- The domain recovery function performs one stable, database-time-ordered scan of at most 25 rows and isolates per-row send failures. Generic worker runtime owns immediate/60-second/unref/single-flight scheduling and stop-drain.
+- pg-boss payloads and logs must not contain the first user message, model context, entity IDs, credentials, provider headers, connection strings, or complete request objects.
 
 ### 4. Validation & Error Matrix
 
@@ -155,9 +75,10 @@ Apply this contract when changing conversation fallback titles, `conversation-ti
 
 - Migration tests assert SQL, journal, snapshot, primary key, conversation uniqueness, both cascade FKs, and `(dispatch_after, created_at)` index.
 - Service tests assert fallback/outbox rollback, payload replacement, preflight and final fencing, user rename no-op, atomic success cleanup, and failure preservation.
-- Dispatcher tests assert one winner for concurrent claims, not-due no-op, send failure preservation/reclaim, stable limit 25 scanning, per-item isolation, scheduler single-flight, and stop waiting.
+- Dispatcher tests assert `{ id }` payload, one winner for concurrent claims, not-due no-op, send failure preservation/reclaim, stable limit 25 scanning, and per-item isolation.
+- Processor tests assert missing/stale/manual-rename paths return `noop`, a committed title returns `completed`, and generation/persistence failure rejects while preserving durable intent.
 - Route tests assert complete model context enters `writeFallbackTitle` and immediate dispatch uses the returned job id.
-- Worker tests assert both recovery schedulers start after handler registration, stop in reverse order before queue stop, and all cleanup continues after an individual stop failure.
+- Runtime tests assert all handlers register before any recovery scheduler, schedulers stop in reverse order before queue stop, and cleanup continues after an individual stop failure.
 
 ### 7. Wrong vs Correct
 
@@ -351,7 +272,7 @@ Apply this contract when changing Chat completion persistence, memory extraction
 
 - `createMemoryExtractionJob({ runId, userId, conversationId, recentMessages }) -> MemoryExtractionJob | null`.
 - `dispatchMemoryExtractionJob(jobId) -> Promise<boolean>`.
-- `processMemoryExtractionJob(jobId) -> Promise<void>`.
+- `processMemoryExtractionJob(jobId) -> Promise<JobOutcome>`.
 - Database: unique `run_id`, run/conversation/user cascade FKs, JSONB `messages`, and `(dispatch_after, created_at)` recovery index.
 
 ### 3. Contracts
@@ -359,8 +280,8 @@ Apply this contract when changing Chat completion persistence, memory extraction
 - Produce the intent inside `persistChatCompletion`; never enqueue a full memory payload directly from the route.
 - Normalize to the last six user/assistant messages, at most 500 characters each. Fewer than two normalized messages is an explicit no-op.
 - Queue payload contains only `{ id }`. Queue acceptance never deletes the durable row.
-- Claim with one conditional database-time update that moves `dispatch_after` 15 minutes forward. Recovery scans at most 25 due rows in stable order, immediately and every 60 seconds, single-flight.
-- Worker reads by intent ID. Missing row is a no-op; provider/add failure rejects generically and preserves the row; success or explicit no-op deletes only that ID.
+- Claim with one conditional database-time update that moves `dispatch_after` 15 minutes forward. The domain recovery function scans at most 25 due rows in stable order; generic worker runtime owns immediate/60-second/unref/single-flight scheduling and stop-drain.
+- Worker reads by intent ID. Missing row returns `noop`; provider/add failure rejects generically and preserves the row; success returns `completed`, while input/rate-limit no-op returns `noop`; both resolved outcomes delete only that ID.
 - Delivery is at-least-once. Do not claim cross-system exactly-once; mem0 inference/deduplication only reduces replay effects.
 - Web and worker queue payload changes require coordinated deployment. Rollback preserves the table and pending rows.
 
@@ -386,8 +307,8 @@ Apply this contract when changing Chat completion persistence, memory extraction
 
 - Schema/migration assertions for unique run, all cascade FKs, dispatch index, SQL, journal, and snapshot.
 - Snapshot tests for role filtering, last-six selection, truncation, and fewer-than-two no-op.
-- Dispatcher tests for claim winner, not-due no-op, send failure preservation, limit 25, stable order, single-flight, and stop waiting.
-- Worker tests for missing ID, success deletion, provider failure preservation, payload `{ id }`, and recovery start/stop ordering.
+- Dispatcher tests for claim winner, not-due no-op, send failure preservation, limit 25, stable order, and per-item isolation.
+- Worker tests for missing-ID `noop`, completed/noop deletion, provider failure preservation, payload `{ id }`, and runtime-owned recovery ordering/stop-drain.
 - Completion repository and isolated PostgreSQL tests must prove an intent failure rolls back assistant, conversation time, and run terminal.
 
 ### 7. Wrong vs Correct

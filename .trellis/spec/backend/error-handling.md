@@ -269,6 +269,78 @@ return { status: "failed", error: safeError };
 
 ---
 
+## Scenario: Queue And Worker Failure Boundary
+
+### 1. Scope / Trigger
+
+Apply this contract when changing queue definitions, pg-boss callbacks/events, worker handlers/recovery, worker startup/shutdown, or an asynchronous producer fallback. Background failures are persisted by pg-boss or written to process logs, so raw `Error` objects cannot cross these boundaries.
+
+### 2. Signatures
+
+- `QueueDefinition<TPayload>.retryMessage: string`
+- `JobHandler<TPayload>: (payload) => Promise<"completed" | "noop">`
+- `QueueAdapter.work(definition, handler): Promise<void>`
+- `RecoveryDefinition.failureMessage: string`
+- `WorkerRuntimeController.start(): Promise<void>` / `shutdown(): Promise<void>`
+
+### 3. Contracts
+
+- Domain handlers may inspect and classify raw failures internally, but a rejecting pg-boss callback must throw a new `Error(definition.retryMessage)` with no original `cause` or raw stack content.
+- Runtime handler logs contain only definition name plus `completed`, `noop`, or `retryable_failure`. Runtime may rethrow internally because the queue adapter is the final callback boundary; it must never log that raw error.
+- pg-boss `error` events emit only `[queue] pg-boss error`. Do not pass the event argument through a generic formatter: SQL parameters and entity data are not guaranteed to be discoverable secrets.
+- Recovery scan failures emit only `RecoveryDefinition.failureMessage`; per-row recovery logs also omit durable IDs and raw errors.
+- Startup/shutdown cleanup logs only a fixed lifecycle stage and optional catalog job name. Cleanup failures continue remaining cleanup; startup preserves the original rejection, while signal shutdown exits non-zero.
+- Producer compensation that has no safe diagnostic owner, such as upload storage delete after a DB insert failure, logs a fixed stage message and preserves the original primary error.
+
+### 4. Validation & Error Matrix
+
+| Condition | Queue/runtime result | Published failure |
+| --- | --- | --- |
+| Handler returns `completed` / `noop` | Callback resolves | Stable outcome log only |
+| Handler throws provider/DB error | Callback rejects for retry | New catalog retry error; no raw cause/stack |
+| Handler returns invalid outcome | Callback rejects | Same catalog retry error |
+| pg-boss emits an error event | Adapter remains event-driven | Fixed queue event log only |
+| Recovery round rejects | Scheduler remains active | Fixed recovery failure message |
+| Queue drain/cleanup rejects | Continue cleanup; exit 1 on signal path | Fixed lifecycle failure message |
+| Upload DB insert and compensation delete both fail | Rethrow original DB error | Fixed cleanup-stage log only |
+
+### 5. Good / Base / Bad Cases
+
+- Good: a title provider error contains a URL, Authorization header, credential, cause, and custom stack; pg-boss stores only `会话标题生成失败`.
+- Good: one recovery row fails with an entity-specific database error; later rows continue and console receives only the stable recovery stage.
+- Base: a completed job logs its catalog name and `completed`.
+- Bad: `throw new Error(definition.retryMessage, { cause: error })`; pg-boss or process diagnostics can serialize the original secret-bearing error.
+- Bad: `console.error("worker failed", error)` at runtime, pg-boss event, recovery, or cleanup boundaries.
+
+### 6. Tests Required
+
+- Execute the actual callback registered with pg-boss and assert raw user text, entity ID, provider/DB URL, header, credential, cause, and stack are absent from both message and stack of the replacement error.
+- Inject a pg-boss event error containing connection data and assert the exact fixed log call.
+- Exercise completed/noop/retryable handler logs and recovery scan failure/continuation without payload or raw error output.
+- Cover every startup/shutdown cleanup failure, repeated SIGINT/SIGTERM, drain timeout, and exactly one exit code.
+- Upload compensation tests must preserve the original DB Error identity while proving the cleanup log is fixed and secret-free.
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong: raw error becomes pg-boss failure output and process log data.
+try {
+  return await handler(job.data);
+} catch (error) {
+  console.error("job failed", error);
+  throw error;
+}
+
+// Correct: diagnostics stay at their owning safe boundary; queue sees one stable error.
+try {
+  return await handler(job.data);
+} catch {
+  throw new Error(definition.retryMessage);
+}
+```
+
+---
+
 ## Common Mistakes
 
 - **不要硬编码错误字符串进响应** → 走 `ErrorCode` + i18n,保证前端可按 code 分支。
