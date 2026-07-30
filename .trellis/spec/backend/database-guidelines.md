@@ -428,6 +428,8 @@ void dispatchMemoryExtractionJob(memoryJob.id);
 
 ## Common Mistakes
 
+- **不要用等待行锁前捕获的数据库时间判断租约 freshness** —— PostgreSQL `now()` 固定在事务开始，`statement_timestamp()` 固定在语句开始；条件 UPDATE 等锁期间租约可能已经过期。需要先按 id/token/status `SELECT ... FOR UPDATE`，拿锁后再用新语句的 `statement_timestamp()` 校验并续租，最后提交前再次校验。真实 PostgreSQL 测试必须覆盖“等待跨过 expiry”而不只覆盖 token 被替换。
+- **Drizzle pgvector 双重序列化** —— `vector(...)` 列的 `mapToDriverValue` 已对 `number[]` 执行 `JSON.stringify`;insert/update 必须传原始数组。业务层先 `JSON.stringify(vector)` 会产生带额外引号的非法 vector。至少用一次真实 PostgreSQL insert 回归，mock 只能检查入参形状。
 - **不要静态 import pg / pg-boss 顶层驱动** —— Turbopack 会打进 Edge instrumentation(`util/types` 解析失败)。用动态 `await import`。
 - **不要在 instrumentation.ts 静态 import 业务模块** —— 触发 Edge 编译。用变量路径 `const p = "@/lib/infra/db/bootstrap"; await import(p)`。
 - **删除 dialect 限制 guard 时,判断是删条件还是删整个 guard** —— `if (cond && !isPg)` 这类 guard 的存在意义是「sqlite 模式禁用某能力」;sqlite 删除后整个 guard 无意义,应**整体删除**,而非改成 `if (cond)`(那会变成「所有模式禁用」,造成功能回归)。本次 `registry.ts` stdio guard 照字面删 `!isPg` 导致 stdio MCP 全禁,trellis-check 独立复核捕获。
