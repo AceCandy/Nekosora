@@ -1,1 +1,11 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file":".trellis/spec/backend/index.md","reason":"独立复核需从 backend 规范入口检查 task 涉及的所有稳定约定。"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"复核 title/memory durable recovery、数据库时间 claim 与 Edge dynamic-import boundary。"}
+{"file":".trellis/tasks/07-30-worker-queue-lifecycle/research/file-worker-contract.md","reason":"复核 file-storage 权威条款中的 lease/no-op/retryable 语义、recovery 行为和 shutdown 影响，且避免完整规范截断。"}
+{"file":".trellis/spec/backend/chat-run-metadata.md","reason":"复核 memory intent 不因 queue acceptance、失败或进程重启而丢失。"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"复核 callback failure、pg-boss event 与 lifecycle log 不泄露 raw error、cause 或 secret。"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"复核日志字段低基数且不包含 payload、用户内容、id、URL、header 或 credential。"}
+{"file":".trellis/spec/backend/directory-structure.md","reason":"复核 infra 不依赖业务、catalog 不拖入 Node graph、worker entry 保持薄层。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"复核三类 job 的 producer/transport/handler/database/recovery 全链契约一致。"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"复核没有遗留旧 scheduler、裸 queue name、重复 policy 或第二 cleanup tree。"}
+{"file":".trellis/tasks/07-30-worker-queue-lifecycle/research/evidence.md","reason":"按第三方源码锚点、现有测试矩阵与已知风险检查实现是否漂移。"}
+{"file":".trellis/spec/backend/queue-lifecycle.md","reason":"复核 generation replacement、admission、recovery scheduler、signal single-flight 与真实 PostgreSQL drain gate。"}

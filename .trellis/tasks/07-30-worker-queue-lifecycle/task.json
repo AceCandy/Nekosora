@@ -3,7 +3,7 @@
   "name": "worker-queue-lifecycle",
   "title": "Worker 与 Queue 生命周期",
   "description": "统一 job 注册、启动、重试、恢复调度、shutdown drain 与队列可用性契约。",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,
@@ -21,6 +21,6 @@
   "children": [],
   "parent": "07-30-architecture-deepening-roadmap",
   "relatedFiles": [],
-  "notes": "",
+  "notes": "实现与完整质量门已通过；memory consumer 维持 at-least-once，不声称 exactly-once。",
   "meta": {}
 }

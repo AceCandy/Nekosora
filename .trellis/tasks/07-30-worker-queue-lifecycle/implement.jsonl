@@ -1,1 +1,11 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file":".trellis/spec/backend/index.md","reason":"提供 backend 规范索引与 pre-development 入口，确保 worker/queue 变更加载项目实际约定。"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"实现 title/memory durable intent、数据库时间 claim 与变量路径动态 import 时必须遵守。"}
+{"file":".trellis/tasks/07-30-worker-queue-lifecycle/research/file-worker-contract.md","reason":"注入 file-storage 权威规范中与 lease/no-op/retryable outcome、recovery round 和 worker shutdown 直接相关的精选条款，避免完整文件截断。"}
+{"file":".trellis/spec/backend/chat-run-metadata.md","reason":"保护 memory durable intent 的 completion transaction 与 post-commit dispatch 边界。"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"定义 queue callback、startup/shutdown 与日志中不得传播 raw infrastructure/provider error 的安全边界。"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"约束 worker/queue 只记录低基数 lifecycle/job outcome，禁止 payload、用户内容与凭据。"}
+{"file":".trellis/spec/backend/directory-structure.md","reason":"约束 catalog、worker orchestration、领域 service 与 infra queue 的依赖方向。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"核对 producer 到 queue、handler、durable row、recovery 的 payload与错误契约。"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"确保三套 scheduler、queue name、policy 与 cleanup 控制流只有一个实现。"}
+{"file":".trellis/tasks/07-30-worker-queue-lifecycle/research/evidence.md","reason":"提供现有 job/recovery 矩阵、pg-boss 11.1.2 start/stop 源码事实、测试缺口与无迁移决策。"}
+{"file":".trellis/spec/backend/queue-lifecycle.md","reason":"实现 typed catalog、pg-boss generation、真实 handler drain 与 generic worker runtime 时必须遵守。"}
