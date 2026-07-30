@@ -8,7 +8,7 @@
 
 - **全局状态**：`zustand`（单一 store，按业务域切片）。
 - **服务端状态**：不做客户端缓存层。Server Component 直接查库取数，Client Component 经 props 接收；写操作走 Server Action 后 `revalidatePath`。
-- **本地状态**：`useState` / `useRef`，仅限单个组件内部。
+- **局部状态**：简单状态使用 `useState` / `useRef`；需要同步快照与副作用排序时，可使用特性内 state machine + `useSyncExternalStore`，但生命周期仍不得越过所属组件树。
 - **URL 状态**：会话 id 等关键标识走路由参数（`chat/[id]`）。
 
 不引入 React Query / SWR。SSR + Server Action + zustand 已覆盖数据流需求。
@@ -20,6 +20,7 @@
 | 类别 | 落地方式 | 典型场景 |
 |------|----------|----------|
 | 全局客户端状态 | zustand store | 聊天流式运行时（多会话并行） |
+| 局部协调状态 | state machine + `useSyncExternalStore` | Composer 选择快照与持久化队列 |
 | 服务端状态 | SSR 注入 props + revalidate | 会话列表、配置项 |
 | 本地 UI 状态 | useState / useRef | 浮层开关、输入框草稿、滚动位置 |
 | URL 状态 | 路由参数 | 当前会话 id |
@@ -33,7 +34,7 @@
 1. **跨路由持久**：切走再回来要保留进行中的状态（如聊天流式：切会话不断流）。
 2. **跨组件共享且有写入**：多个非父子组件都要读写同一份状态。
 
-否则用本地 state 或 props 传递。聊天 store 之所以全局化，正是因为它需要在会话切换时维持流式连接。
+否则用局部 state、局部 coordinator 或 props 传递。聊天 store 之所以全局化，正是因为它需要在会话切换时维持流式连接；Composer 选择只服务当前组件生命周期，不得仅因逻辑复杂就迁入 zustand。
 
 ---
 
@@ -63,6 +64,35 @@ const { messages, streaming } = useChatStreamStore(
 ```
 
 **跨组件命令式访问**：用 `store.getState().method()` 在 effect/handler 中直接调用，无需经 hook 订阅。
+
+---
+
+## Composer 局部协调状态
+
+Chat Composer 的七类生成选择由 `ComposerStateMachine` 持有一个完整 `ComposerSelectionState`。组件只通过领域 transition 更新；普通发送和选区追问必须在事件发生时调用同步 `getSnapshot()`，不得从多个 render closure 拼装请求参数。
+
+```ts
+interface ComposerSelectionState {
+  modelId: string;
+  cardIds: string[];
+  kbIds: string[];
+  webSearch: boolean;
+  outputModeId: string | null;
+  renderStyleId: string | null;
+  reasoningByModelId: Record<string, ReasoningLevel>;
+}
+
+const next = machine.dispatch(transition);
+writer.update(next);
+```
+
+**持久化契约**：每个 Composer 实例只创建一个 `LatestSnapshotWriter`。同一时刻最多一个请求在途；期间的新变化只保留最新完整快照。失败保留最新 dirty snapshot 并进入 `error`，用户重试或下一次 transition 只提交当时最新快照，不回滚 UI，也不在组件 handler 中另开字段级写入。
+
+**scope 隔离**：writer 以 conversation ID 为 scope，并用 generation token 忽略旧 scope 请求的完成回调。历史会话 A/B 导航由 `chat/[id]/page.tsx` 的 conversation ID `key` 重建 Composer；旧实例的成功、错误或重试不得改变新实例。
+
+**新会话 create/adopt**：首次发送前捕获同一个 immutable selection snapshot，同时用于创建会话和本轮发送。创建成功后先调用 `adoptScope(realConversationId, createSnapshot)`，再切换活动会话 ID；若创建期间本地选择已变化，writer 只向真实 ID 补写最新快照。`history.replaceState` 不触发组件重挂，因此 draft 到真实 ID 必须走 adopt，不能依赖 SSR 重新初始化。
+
+Composer 的选择保存是高频乐观持久化：Server Action 成功后不 `revalidatePath`，当前 machine 继续作为页面内权威状态；刷新或 A/B 重挂时再从 SSR snapshot 初始化。
 
 ---
 

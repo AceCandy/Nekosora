@@ -14,18 +14,25 @@
 ### 2. Signatures
 - 会话 JSON:`composerState.reasoningByModelId?: Record<string, ReasoningLevel>`；历史 JSON 中遗留的 `temperature` / `topP` / `maxTokens` 允许保留，但不得被 WebChat 读取。
 - IR 中间表示:`IRRequest`(`src/lib/providers/types.ts`)加可选字段(其 `[key:string]:unknown` 兜底已允许透传)。
-- 前端持久化:推理档位走 `setConversationModelReasoning(convId, modelId, level)`，写入 `reasoningByModelId`；不得新增 WebChat 的普通参数写入 action。
-- 后端读取:`app/api/chat/route.ts` 只读取 `reasoningByModelId` 并设置 `irRequest.reasoning`；不得从 `composerState` 覆盖 `temperature`、`top_p` 或 `max_tokens`。
-- SSR 回填:`getConversationComposerState` 返回 reasoning 字段 + `app/chat/[id]/page.tsx` 的 `initialReasoningByModelId` prop + `ChatComposer` 本地状态。
+- 前端持久化：`saveConversationComposerState(conversationId, snapshot): Promise<void>` 一次保存 `modelName`、`outputModeId`、`renderStyleId`、`webSearch`、`cardIds`、`kbIds` 和 `reasoningByModelId`；不得恢复字段级 Composer action，也不得新增 WebChat 普通生成参数写入。
+- 内部 WebChat 请求：`POST /api/chat` 可选接收 `outputModeId?: string | null` 与 `reasoning?: ReasoningLevel`。新 Composer 显式发送点击时的解析值；旧调用可缺省。
+- 后端读取：`app/api/chat/route.ts` 优先读取已校验的请求体 `reasoning`；字段缺省时按 `modelId` 回退 `composerState.reasoningByModelId`，再设置 `irRequest.reasoning`。不得从 `composerState` 覆盖 `temperature`、`top_p` 或 `max_tokens`。
+- SSR 回填：`getConversationComposerState` 返回 reasoning 字段，经 `app/chat/[id]/page.tsx` 的 `initialReasoningByModelId` 初始化 `ComposerStateMachine`；运行时按具体 `modelId` 从 coordinator snapshot 解析。
 
 ### 3. Contracts
 - 推理档位包含 `off`，按具体 `modelId` 保存；切换模型时恢复该模型在当前会话中的选择。
-- 已有会话从 `composerState` 读取；新会话首次发送时通过创建选项把当前 `modelId + level` 一并写入，保证首轮生效。
+- 已有会话从 `composerState` 读取；前端通过 coordinator 的 `setModelReasoning` transition 更新完整 selection snapshot，并由 latest-only writer 串行调用完整快照 Action。
+- 新会话首次发送捕获一个 selection snapshot，同时用于创建选项和本轮 `/api/chat` 请求；创建成功后以同一 snapshot adopt 真实 conversation scope。创建期间的后续变化只能作为最新完整快照补写，不能冒充创建请求已经持久化的基线。
+- `/api/chat` 中 `outputModeId` 和 `reasoning` 只在字段缺省时回退会话行/`reasoningByModelId`；显式 `null` 和 `off` 必须优先，保证本轮生成不依赖异步 Composer 持久化是否完成。
+- `saveConversationComposerState` 必须校验输入与当前用户属主，并用一次 `UPDATE ... WHERE id AND userId RETURNING id` 原子写独立列和完整 `composerState`，不得预读 JSON 后 merge。
 - WebChat 的 `temperature`、`topP`、`maxTokens` 始终由 `prepareChatContext` 与上游模型默认策略决定；旧会话中的同名 JSON 字段必须被忽略。
 - 上游专属参数走 AI SDK **请求级 `providerOptions`**,不走 provider 构造级(`createOpenAI`/`createAnthropic` 等)。因为每请求的值可能不同,且 provider 实例每次按路由/key 新建。
 
 ### 4. Validation & Error Matrix
 - composerState 字段被篡改为非法值 → route 读取处用类型守卫忽略(如 `typeof x === "number"`)。
+- `/api/chat` 显式 `outputModeId` 或 `reasoning` 不符合 schema → 返回 400，不回退数据库掩盖非法输入。
+- `outputModeId: null` / `reasoning: "off"` → 视为显式有效值，不被 truthy/空值逻辑吞掉。
+- 完整快照输入非法或 conversation 不属当前用户 → Action 抛出稳定错误且不写库。
 - composerState 含历史 `temperature` / `topP` / `maxTokens` → WebChat 忽略，不覆盖 `IRRequest` 默认值。
 - reasoning 级别该模型不支持时，按完整档位顺序夹到最近可用档。
 - OpenAI-compatible 不复用 `openai` namespace，按模型目录 `thinkingFormat` 转换最终请求体。
@@ -33,12 +40,18 @@
 
 ### 5. Good/Base/Bad Cases
 - Good:模型 `capabilities.reasoning===true`,用户选 high → 上游请求携带对应 `providerOptions`,思考过程经既有 SSE `reasoning` 链路展示。
+- Good：用户点击发送时选择 `outputModeId: null`、`reasoning: "off"`，请求显式携带两值并优先于尚未完成的异步持久化。
 - Base:非推理模型 → 工具栏不露控件,上游请求与普通对话逐字节一致。
+- Base：旧 WebChat 调用缺省 snapshot 字段 → route 从会话行回退，保持兼容。
 - Base:旧会话仍有历史生成参数字段 → 请求不携带这些字段，使用模型默认值。
 - Bad:某级被该模型声明为不支持 → 夹到最近可用档，绝不把无效档位发送给上游。
+- Bad：恢复字段级 reasoning/card/KB action 或并行 JSON 读改写，导致最后可见 Composer 状态被旧请求覆盖。
 
 ### 6. Tests Required
 - 覆盖完整档位、默认选择、最近档夹取、固定推理、Anthropic budget/adaptive、Gemini budget/level 和各 compatible `thinkingFormat`。
+- `conversations.test.ts` 覆盖完整快照、`null`/空数组、非法输入、非属主、单次 `UPDATE` 且无 JSON 预读。
+- `/api/chat` route tests 覆盖显式 `null`/`off`、非法字段、请求体优先和字段缺省时数据库 fallback。
+- Composer reducer/writer tests 覆盖 per-model reasoning、latest-only、失败/retry 和 draft create/adopt；store tests 断言新调用发送快照且旧调用保持字段缺省。
 - 覆盖含历史生成参数字段的会话，断言 `/api/chat` 不把它们写入 `IRRequest`。
 - 网关 `resolveReasoningLevel` 保留 `minimal/low/medium/high/xhigh/max`，`none` 映射为 `off`。
 
@@ -51,7 +64,7 @@
 #### Correct
 - WebChat 只持久化 `reasoningByModelId`；历史普通生成参数字段保留也不读取，默认值由上下文准备和上游模型决定。
 - 走 `streamText` 的 `providerOptions`,由 `lib/reasoning.ts` 按 `protocol`+`capabilities` 翻译。
-- 前端按 `modelId` 调用 `setConversationModelReasoning`；新会话创建时同时写入首个模型档位。
+- 前端按 `modelId` dispatch `setModelReasoning`，由 coordinator 通过 `saveConversationComposerState` 原子保存完整快照；新会话的 create、首轮 send 与 adopt 使用同一 selection snapshot。
 
 ---
 
