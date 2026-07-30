@@ -41,9 +41,9 @@
 
 ## Phase 5: Chat Composer State Coordinator
 
-- [ ] 进入 `07-30-chat-composer-state-coordinator`。
-- [ ] 完成前端状态/持久化 race 的 characterization 与设计审阅。
-- [ ] 实现、验证快速交错操作与会话切换、规格同步、归档。
+- [x] 进入 `07-30-chat-composer-state-coordinator`。
+- [x] 完成前端状态/持久化 race 的 characterization 与设计审阅。
+- [x] 实现、验证快速交错操作与会话切换、规格同步、归档。
 - Gate：服务器最终状态与用户最后一次可见选择一致，旧会话响应不能覆盖新会话。
 
 ## Final Integration Review

@@ -36,7 +36,7 @@
     "src/lib/sync-pi-models.ts",
     "src/features/chat/components/ChatComposer.tsx"
   ],
-  "notes": "",
+  "notes": "五个架构深化子任务均已完成并归档；父任务仅剩最终集成复核与收尾。",
   "meta": {
     "implementation_policy": "activate_one_child_at_a_time",
     "completed_baseline": "07-29-gateway-execution-engine"
