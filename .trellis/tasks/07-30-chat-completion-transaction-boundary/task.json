@@ -3,7 +3,7 @@
   "name": "chat-completion-transaction-boundary",
   "title": "Chat 完成事务边界",
   "description": "统一模型终态、assistant 消息持久化、run 终态、可恢复副作用意图与 SSE finish/[DONE] 的可靠顺序。",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,
