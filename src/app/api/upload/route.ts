@@ -19,7 +19,8 @@ import { getDb, getSchema } from "@/lib/infra/db";
 import { getSession } from "@/lib/session";
 import { getQueue } from "@/lib/infra/queue";
 import { getStorage } from "@/lib/infra/storage";
-import { processFile } from "@/lib/rag/process";
+import { processFile } from "@/lib/rag/processing-coordinator";
+import { formatFileProcessingError } from "@/lib/rag/processing-state";
 import { apiError, ErrorCode } from "@/lib/errors";
 import {
   parseBoundedMultipartFormData,
@@ -126,13 +127,19 @@ export async function POST(req: NextRequest) {
       useSyncFallback = true;
     }
   } catch (queueError) {
-    console.error("[upload] queue dispatch failed, using sync fallback:", queueError);
+    console.error(
+      "[upload] queue dispatch failed, using sync fallback:",
+      formatFileProcessingError(queueError, [storagePath], "队列投递失败"),
+    );
     useSyncFallback = true;
   }
   if (useSyncFallback) {
     // 队列不可用或投递失败时:后台 fire-and-forget 处理,不阻塞上传响应。
-    processFile(fileId, storagePath, mime).catch((e) =>
-      console.error("[upload] sync process failed:", e),
+    processFile(fileId).catch((error) =>
+      console.error(
+        "[upload] sync process failed:",
+        formatFileProcessingError(error, [storagePath], "文件处理失败"),
+      ),
     );
   }
 

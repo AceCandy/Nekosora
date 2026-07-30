@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/infra/env", () => ({ validateEnv: mocks.validateEnv }));
 vi.mock("@/lib/infra/queue", () => ({ getQueue: mocks.getQueue }));
-vi.mock("@/lib/rag/process", () => ({ processFile: mocks.processFile }));
+vi.mock("@/lib/rag/processing-coordinator", () => ({ processFile: mocks.processFile }));
 vi.mock("@/lib/memory/jobs", () => ({
   processMemoryExtractionJob: mocks.processMemoryExtractionJob,
 }));
@@ -34,6 +34,7 @@ describe("worker lifecycle", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.validateEnv.mockReset();
+    mocks.processFile.mockReset().mockResolvedValue(undefined);
   });
 
   it("注册任务后启动恢复，并单飞执行有序关闭", async () => {
@@ -147,6 +148,37 @@ describe("worker lifecycle", () => {
       firstUserMessage: "问题",
       fallbackTitle: "问题",
     })).rejects.toBe(generationError);
+  });
+
+  it("文件 handler 只传 fileId 并传播失败供队列重试", async () => {
+    const taskHandlers = new Map<string, (data: unknown) => Promise<void>>();
+    const queue = {
+      start: vi.fn().mockResolvedValue(undefined),
+      work: vi.fn(async (name: string, handler: (data: unknown) => Promise<void>) => {
+        taskHandlers.set(name, handler);
+      }),
+      stop: vi.fn().mockResolvedValue(undefined),
+    };
+    mocks.getQueue.mockResolvedValue(queue);
+    mocks.startFileProcessingRecovery.mockReturnValue(vi.fn());
+    mocks.startMemoryExtractionRecovery.mockReturnValue(vi.fn());
+    mocks.startConversationTitleRecovery.mockReturnValue(vi.fn());
+    const runtime = { on: vi.fn(), exit: vi.fn() };
+    const processingError = new Error("文件处理失败，可重试");
+    mocks.processFile.mockRejectedValueOnce(processingError);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const { startWorker } = await import("@/worker");
+    await startWorker(runtime);
+
+    await expect(taskHandlers.get("file-process")!({
+      fileId: "file-1",
+      storagePath: "private/secret.txt",
+      mime: "text/plain",
+    })).rejects.toBe(processingError);
+
+    expect(mocks.processFile).toHaveBeenCalledWith("file-1");
+    expect(mocks.processFile.mock.calls[0]).toHaveLength(1);
+    expect(logSpy.mock.calls.flat().join(" ")).not.toContain("private/secret.txt");
   });
 
   it("记忆 handler 传播提取失败供队列重试", async () => {

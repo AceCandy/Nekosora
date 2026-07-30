@@ -19,7 +19,7 @@ export async function startWorker(runtime: WorkerRuntime = process): Promise<voi
   validateEnv();
 
   const { getQueue } = await import("@/lib/infra/queue");
-  const { processFile } = await import("@/lib/rag/process");
+  const { processFile } = await import("@/lib/rag/processing-coordinator");
   const { startFileProcessingRecovery } = await import("@/lib/rag/recovery");
   const { processMemoryExtractionJob } = await import("@/lib/memory/jobs");
   const { startMemoryExtractionRecovery } = await import("@/lib/memory/dispatch");
@@ -38,7 +38,7 @@ export async function startWorker(runtime: WorkerRuntime = process): Promise<voi
       "file-process",
       async (data) => {
         console.log("[worker] file-process:", data.fileId);
-        await processFile(data.fileId, data.storagePath, data.mime);
+        await processFile(data.fileId);
       },
     );
     console.log("[worker] 已注册 file-process handler");

@@ -1,46 +1,20 @@
-import { and, asc, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
-import { getDb, getSchema } from "@/lib/infra/db";
-import { redactErrorMessage } from "@/lib/redaction";
-import { processFile } from "./process";
+import { processFile } from "./processing-coordinator";
+import { findRecoverableFileIds } from "./processing-repository";
+import { formatFileProcessingError } from "./processing-state";
 
-const DATABASE_NOW = sql`now()`;
-const STALE_FILE_SCAN_LIMIT = 25;
 const STALE_FILE_SCAN_INTERVAL_MS = 60_000;
 
 /** 顺序恢复 pending 或租约为空/已过期的文件处理任务。 */
 export async function recoverStaleFileProcessing(): Promise<void> {
-  const db = await getDb();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const s = getSchema() as any;
-  const files = await db
-    .select({
-      id: s.fileObjects.id,
-      storagePath: s.fileObjects.storagePath,
-      mime: s.fileObjects.mime,
-    })
-    .from(s.fileObjects)
-    .where(
-      or(
-        eq(s.fileObjects.processingStatus, "pending"),
-        and(
-          inArray(s.fileObjects.processingStatus, ["extracting", "embedding"]),
-          or(
-            isNull(s.fileObjects.processingLeaseExpiresAt),
-            lte(s.fileObjects.processingLeaseExpiresAt, DATABASE_NOW),
-          ),
-        ),
-      ),
-    )
-    .orderBy(asc(s.fileObjects.createdAt), asc(s.fileObjects.id))
-    .limit(STALE_FILE_SCAN_LIMIT);
+  const fileIds = await findRecoverableFileIds();
 
-  for (const file of files) {
+  for (const fileId of fileIds) {
     try {
-      await processFile(file.id, file.storagePath, file.mime);
+      await processFile(fileId);
     } catch (error) {
       console.error(
-        `[file-processing-recovery] failed for ${file.id}:`,
-        redactErrorMessage(error, [], "文件恢复失败").slice(0, 200),
+        `[file-processing-recovery] failed for ${fileId}:`,
+        formatFileProcessingError(error, [], "文件恢复失败"),
       );
     }
   }
@@ -60,7 +34,7 @@ export function startFileProcessingRecovery(
       .catch((error) => {
         console.error(
           "[file-processing-recovery] scan failed:",
-          redactErrorMessage(error, [], "文件恢复扫描失败").slice(0, 200),
+          formatFileProcessingError(error, [], "文件恢复扫描失败"),
         );
       });
     inFlight = pending;
