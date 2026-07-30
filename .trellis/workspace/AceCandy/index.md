@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 70
+- **Total Sessions**: 71
 - **Last Active**: 2026-07-30
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~230 | Active |
+| `journal-2.md` | ~253 | Active |
 | `journal-1.md` | ~1981 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 71 | 2026-07-30 | Chat completion transaction boundary | `39d78db`, `99af4e1`, `fbcb214` | `dev_0729` |
 | 70 | 2026-07-30 | 统一 Gateway execution engine | `beaeb6f`, `b636b62` | `dev_0729` |
 | 69 | 2026-07-28 | 持久化聊天图片附件 | `efba233`, `0be0299` | `main` |
 | 68 | 2026-07-28 | 修复图片消息 ModelMessage 校验错误 | `eb1c302`, `0f3f502` | `main` |

@@ -228,3 +228,26 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 71: Chat completion transaction boundary
+
+**Date**: 2026-07-30
+**Task**: Chat completion transaction boundary
+**Branch**: `dev_0729`
+
+### Summary
+
+Implemented strict run start, atomic assistant/run/memory completion persistence, first-terminal-cause coordination, durable memory recovery, Agent usage aggregation, route cutover, PostgreSQL rollback tests, and updated backend contracts.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `39d78db` | (see git log) |
+| `99af4e1` | (see git log) |
+| `fbcb214` | (see git log) |
+
+### Status
+
+[OK] **Completed**
