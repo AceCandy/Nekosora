@@ -274,3 +274,27 @@ Implemented strict run start, atomic assistant/run/memory completion persistence
 ### Status
 
 [OK] **Completed**
+
+
+## Session 73: Worker 与 Queue 生命周期统一
+
+**Date**: 2026-07-30
+**Task**: Worker 与 Queue 生命周期统一
+**Branch**: `dev_0729`
+
+### Summary
+
+统一 typed job catalog、可替换 pg-boss generation、真实 handler drain、generic recovery/runtime 与安全日志；完成真实 PostgreSQL gate、规格同步并归档 Phase 3。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `36285d7` | (see git log) |
+| `916939a` | (see git log) |
+| `f62c1a5` | (see git log) |
+| `d970ddb` | (see git log) |
+
+### Status
+
+[OK] **Completed**

@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 72
+- **Total Sessions**: 73
 - **Last Active**: 2026-07-30
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~276 | Active |
+| `journal-2.md` | ~300 | Active |
 | `journal-1.md` | ~1981 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 73 | 2026-07-30 | Worker 与 Queue 生命周期统一 | `36285d7`, `916939a`, `f62c1a5`, `d970ddb` | `dev_0729` |
 | 72 | 2026-07-30 | RAG 文件处理状态机 | `883a423`, `7bda3e0`, `843372c` | `dev_0729` |
 | 71 | 2026-07-30 | Chat completion transaction boundary | `39d78db`, `99af4e1`, `fbcb214` | `dev_0729` |
 | 70 | 2026-07-30 | 统一 Gateway execution engine | `beaeb6f`, `b636b62` | `dev_0729` |
