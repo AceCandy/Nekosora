@@ -150,6 +150,63 @@ for await (const event of streamChat({ ctx, request, abortSignal })) consume(eve
 if (!abortSignal.aborted) controller.enqueue(doneFrame);
 ```
 
+## Scenario: WebChat Completion Cancellation
+
+### 1. Scope / Trigger
+
+Apply this contract when changing `/api/chat`, `executeChatCompletion`, provider iteration, Chat heartbeat, completion persistence, or WebChat terminal SSE.
+
+### 2. Signatures
+
+- `executeChatCompletion({ signal, emit, ... }): Promise<ChatCompletionOutcome>`.
+- `ChatCompletionOutcome.kind`: `cancelled_before_start | start_failed | committed_success | committed_failed | committed_interrupted | persistence_failed`.
+- Route adapter event tail: one domain `finish` becomes one SSE finish plus `[DONE]`.
+
+### 3. Contracts
+
+- Request abort and `ReadableStream.cancel()` abort one shared controller; the same signal reaches coordinator and provider stream.
+- Before strict start, Abort creates no run and no model call. After start, Abort is the first terminal cause only if success/error has not already latched.
+- Race every provider `iterator.next()` against Abort. If Abort wins, request iterator return without awaiting an unresponsive provider and proceed to interrupted persistence.
+- Once completion commit begins, Abort controls transport only; it does not cancel the short database transaction or downgrade an already-latched success.
+- Cancelled transport receives no later error, finish, DONE, or explicit close write. Normal committed success receives finish then DONE.
+- Expose only generic start/persistence errors and already-sanitized provider errors; raw DB/provider errors never enter SSE.
+
+### 4. Validation & Error Matrix
+
+| Condition | Coordinator result | Transport result |
+| --- | --- | --- |
+| Signal aborted before start | `cancelled_before_start` | No events |
+| Abort before upstream finish | `committed_interrupted` | No terminal success writes |
+| Finish before Abort | `committed_success` if commit succeeds | Suppress late writes if cancelled |
+| Provider ignores Abort | Interrupted commit still completes | No hang waiting for `next()` |
+| Provider error first | `committed_failed` | One error; no finish/DONE |
+| Completion commit rejects | `persistence_failed` | Generic error if open; no finish/DONE |
+
+### 5. Good / Base / Bad Cases
+
+- Good: reader cancel aborts the exact signal held by coordinator and an unresponsive iterator cannot hold the route open indefinitely.
+- Base: ordinary provider failure is persisted as failed and emits one existing error envelope.
+- Bad: recomputing status from `signal.aborted` after provider finish downgrades a committed success.
+- Bad: awaiting `iterator.return()` after Abort lets a non-compliant provider block interruption forever.
+
+### 6. Tests Required
+
+- Coordinator tests cover pre-start Abort, Abort-before-finish, finish-before-Abort during commit, error-before-late-finish, natural EOF, and an iterator that never resolves after Abort.
+- Route tests cancel the exported response reader and assert the coordinator signal is aborted.
+- Assert no finish/DONE for failed, interrupted, start-failed, or persistence-failed outcomes.
+- Assert success finish is serialized immediately before DONE and controller close is cancellation-safe.
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong: provider compliance is the only cancellation boundary.
+for await (const event of providerStream) consume(event);
+
+// Correct: coordinator convergence does not depend on provider next() returning.
+const next = await Promise.race([iterator.next(), abortPromise(signal)]);
+if (next === STREAM_ABORTED) persistInterrupted();
+```
+
 ## Scenario: Provider Error Credential Redaction
 
 ### 1. Scope / Trigger

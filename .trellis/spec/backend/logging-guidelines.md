@@ -112,13 +112,13 @@ await telemetry.finalizeExecution(final);
 
 ### 2. Signatures
 
-- `startRun({ runId, conversationId, userId, platformModelName }): Promise<boolean>`
+- `startRunStrict({ runId, conversationId, userId, platformModelName }): Promise<void>`
 - `withBestEffortTimeout<T>(operation: () => Promise<T>): Promise<T>`，固定等待预算 5 秒
 - `heartbeatRun(runId): Promise<void>`
 - `recordToolCallStart({ runId, toolCallId, toolName, args })`
 - `recordToolCallResult({ runId, toolCallId, result, isError })`
-- `finalizeRun({ runId, status, tokenUsage }): Promise<void>`
-- `resolveRunTerminalStatus({ finished, aborted, sawError, persistenceFailed })`
+- `persistChatCompletion(...)`：同一事务写 assistant、conversation 时间、memory intent 与 terminal run。
+- `executeChatCompletion(...)`：first-terminal-cause、stream fold、heartbeat 与唯一成功信号。
 - 活动谓词：`runs.status = 'running' AND runs.lease_expires_at > now()`。
 
 ### 3. Contracts
@@ -126,11 +126,12 @@ await telemetry.finalizeExecution(final);
 - 普通发送、重试、编辑重发与续写每轮生成唯一 `runId`；同一 Agent 多轮必须共享该值。
 - 新建 user 与本轮新建/续写 assistant 写入 `runId`；复用历史 user 时不得改写其归属。
 - `runs` 是活动状态唯一事实源；会话列表与轮询共用有效租约谓词动态派生 `generating`。`conversations.generating` 仅供旧版本回滚，新 runtime 不读写。
-- `startRun` 使用 PostgreSQL `now() + interval '2 minutes'` 创建租约。仅 start 成功时每 30 秒调用 `heartbeatRun`，timer 必须 `unref()` 并在所有完成、失败和取消路径清除。
-- start/finalize 与 tool DB 写入均为有界 best-effort，包含 `getDb()` 在内最多等待 5 秒；失败或超时只记录脱敏短错误，不阻断模型流或记录工具敏感参数。start 失败/超时不启动心跳；finalize 失败/超时时活动投影最多保留到租约过期。
-- `heartbeatRun` 保留原始 DB Promise 作为单飞信号，不套 5 秒 wrapper；前一次未完成时后续 tick 必须跳过。request abort、stream cancel 与 finally 共用幂等停止函数，立即停止后续调度，但不伪装取消已进入 pg 的单次心跳。
-- 所有 SSE 帧必须经取消安全的 `safeEnqueue` 写入；run 必须在最内层 `finally` 从 `running` 收敛，并在成功路径发送 `[DONE]` 前 `await finalizeRun(...)`。
-- `finish` 是权威完成信号；完成后的客户端 abort 不得把成功 run 降级，收尾持久化失败除外。
+- `startRunStrict` 使用 PostgreSQL `now() + interval '2 minutes'` 创建租约；失败或超时禁止模型调用。只有确认成功后才每 30 秒调用 `heartbeatRun`。
+- start 是生成门禁，assistant/run/memory completion 是成功门禁，均不得 best-effort。tool audit、失败后的 run 收敛、post-commit artifact 与即时 memory dispatch 仍可 best-effort。
+- `heartbeatRun` 保留原始 DB Promise 作为单飞信号，不套 5 秒 wrapper；coordinator 在 Abort、stream terminal 与进入 completion transaction 前停止后续 tick。
+- coordinator 锁存首个终态原因；Agent 多轮共享 runId，最终 run usage 使用跨轮聚合值。
+- terminal run update 必须匹配 `runId + conversationId + userId + running` 并 `RETURNING` 一行，否则整个 completion transaction 回滚。
+- 所有 SSE 帧经 route 的取消安全 adapter 写入；只有 committed success 产生一个 `finish`，adapter 紧接 `[DONE]`。
 - Gateway execution telemetry 与 run 审计并行存在：前者描述上游尝试，后者描述会话业务生命周期；不得互相级联删除。
 
 ### 4. Validation & Error Matrix
@@ -141,8 +142,8 @@ await telemetry.finalizeExecution(final);
 | 同会话一条 run 终结，另一条仍 fresh | 当前 run 终态，另一条 `running` | `generating=true` |
 | 最后一条 fresh run 终结 | `success` / `failed` / `interrupted` | `generating=false`；成功时 finalize 后发 `[DONE]` |
 | 进程崩溃或心跳停止 | 行可保持 `running`，租约最终过期 | 过期后 `generating=false` |
-| start 写入失败 | 无可用活动 run | 模型流继续；不启动心跳 |
-| finalize 写入失败 | 行暂时 `running` | 模型流按 best-effort 契约结束；租约过期后转为 inactive |
+| strict start 写入失败 | 无已确认活动 run | 不调用模型；error；无 `[DONE]` |
+| completion 任一核心写失败 | transaction 全回滚；失败收敛可另行 best-effort | error；无 `finish` / `[DONE]` |
 | assistant / 会话收尾持久化失败 | 当前 run 最终标记 `failed` | error SSE；无 `[DONE]` |
 
 ### 5. Good / Base / Bad Cases
@@ -155,22 +156,23 @@ await telemetry.finalizeExecution(final);
 
 ### 6. Tests Required
 
-- `best-effort.test.ts` 覆盖快速 resolve/reject、5 秒 timeout、timer cleanup/`unref()` 和底层 late reject；`run-lifecycle.test.ts` 额外覆盖 pending `getDb()` 时 start/finalize/tool 写入的有界收敛与脱敏日志。
+- `run-lifecycle.test.ts` 覆盖 strict start 确认/通用失败，以及 tool/失败收敛写入的有界、脱敏行为。
 - Agent loop 测试断言每轮 `streamChat` 接收同一 `runId`。
 - 会话 action 测试覆盖 fresh/expired/null/terminal 真值表，并断言列表与轮询共用同一活动谓词。
-- route 接线复核须覆盖 send/retry/edit/continue 的消息 `runId` 规则、heartbeat pending 时单飞、abort/cancel 后不再调度，以及 `[DONE]` 晚于有界 finalize 尝试的时序。
+- coordinator 测试覆盖 heartbeat 单飞、first-terminal-cause、Abort-ignoring iterator、事务失败与 committed-success-only finish。
+- route 接线复核覆盖 send/retry/edit/continue 身份、现有 SSE 字段、cancel signal，以及 `finish` 紧邻 `[DONE]`。
 - bootstrap 回归须断言启动流程不再全量更新 `conversations.generating`。
 
 ### 7. Wrong vs Correct
 
 ```typescript
-// Wrong:一个 run 结束便覆盖整个会话,并在终态持久化前宣告完成。
+// Wrong:assistant、run 与成功信号分开提交。
 await db.update(conversations).set({ generating: false });
 safeEnqueue(doneFrame);
 await finalizeRun({ runId, status, tokenUsage });
 
-// Correct:只终结当前 run；查询从剩余有效租约派生活动状态。
-clearHeartbeat();
-await finalizeRun({ runId, status, tokenUsage });
+// Correct:当前 run 与 assistant 在一个事务终结，提交后才允许成功信号。
+const committed = await persistChatCompletion(input);
+safeEnqueue(finishFrame(committed));
 safeEnqueue(doneFrame);
 ```

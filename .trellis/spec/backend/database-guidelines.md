@@ -281,7 +281,7 @@ Correct:
 - `runs.lease_expires_at`: nullable `timestamptz`，数据库默认值 `now() + interval '2 minutes'`。
 - `runs_active_conversation_idx`: `(conversation_id, lease_expires_at) WHERE status = 'running'`。
 - 活动谓词：`EXISTS (... status = 'running' AND lease_expires_at > now())`。
-- `startRun(...) -> Promise<boolean>`；`heartbeatRun(runId) -> Promise<void>`；`finalizeRun(...) -> Promise<void>`。
+- `startRunStrict(...) -> Promise<void>`；`heartbeatRun(runId) -> Promise<void>`；`persistChatCompletion(...) -> committed result`。
 
 #### 3. Contracts
 
@@ -290,8 +290,9 @@ Correct:
 - 新 runtime 显式写入两分钟租约；数据库列默认值同时覆盖滚动升级期间仍由旧 runtime 插入、未携带该列的新 running row。
 - 迁移只回填 `status='running' AND lease_expires_at IS NULL` 的行，不全表更新 legacy `conversations.generating`。
 - 心跳仅按 `runId + status='running'` 更新当前 run；finalize 也只更新当前 running run。任何请求都不得清理同会话其他 run。
-- start/finalize/tool/用量等阻塞主流程的 best-effort 写入使用固定 5 秒应用层等待预算，且必须包住 `getDb()` 本身。该超时不是 PostgreSQL `statement_timeout/query_timeout`，不取消已提交的查询，晚写入允许完成。
-- heartbeat 不使用应用层超时伪装底层完成；route 以原始 Promise 单飞调度，并在 abort/cancel/finally 停止后续 tick。在 Drizzle node-postgres 未提供 AbortSignal 通道时，不得声称已取消进行中的 update。
+- strict start 使用固定 5 秒等待预算，但失败/超时禁止模型调用；该应用层超时不取消底层 PostgreSQL 查询，迟到 running row 由租约过期收敛。
+- heartbeat 不使用应用层超时伪装底层完成；completion coordinator 以原始 Promise 单飞调度，并在 abort/terminal/commit 前停止后续 tick。
+- assistant、conversation 时间、可选 memory intent 与 terminal run 必须在 conversation-first 短事务中提交。run 条件更新零行必须抛错并回滚，而不是退化为 best-effort success。
 - 会话列表与轻量轮询必须复用同一个相关 `EXISTS` 表达式，避免活动定义漂移。
 - 普通 `CREATE INDEX` 可能等待大表锁；执行真实生产迁移前必须评估锁窗口。若改用 `CONCURRENTLY`，须独立设计 Drizzle 事务外迁移流程，不得直接塞入现有事务型 migrator。
 
@@ -321,8 +322,8 @@ Correct:
 - schema 测试断言 nullable `timestamptz`、数据库默认表达式与部分索引谓词。
 - 迁移测试断言 add column、set default、仅回填 running NULL、创建部分索引，且不更新 `conversations.generating`。
 - 查询测试断言 conversation 关联、running、`lease_expires_at > now()` 三个条件，并覆盖并发/fresh/expired/null/terminal 真值表。
-- lifecycle 测试断言 start/heartbeat 使用数据库时间，heartbeat/finalize 只匹配 running row，所有 DB 失败仍遵循 best-effort，且 pending `getDb()` 在 5 秒后释放 start/finalize/tool 调用方。
-- route 测试使用未完成 heartbeat Promise 验证多个 tick 仍只有一次 update，完成后才恢复；abort/cancel 后推进时钟不得产生新 update。
+- lifecycle 测试断言 strict start/heartbeat 使用数据库时间，strict start 失败阻断生成，heartbeat 只匹配 running row。
+- coordinator 测试使用未完成 heartbeat Promise 验证单飞，并断言 abort/terminal 后没有新 tick。
 - 迁移元数据测试断言 SQL、journal 与 snapshot 链同步；发布前另行记录是否在真实 PostgreSQL 验证以及索引锁风险。
 
 #### 7. Wrong vs Correct
@@ -338,6 +339,67 @@ SELECT EXISTS (
     AND runs.status = 'running'
     AND runs.lease_expires_at > now()
 );
+```
+
+## Scenario: Chat Memory Durable Intent
+
+### 1. Scope / Trigger
+
+Apply this contract when changing Chat completion persistence, memory extraction queue payloads, `memory_extraction_jobs`, memory worker handling, or memory recovery scheduling.
+
+### 2. Signatures
+
+- `createMemoryExtractionJob({ runId, userId, conversationId, recentMessages }) -> MemoryExtractionJob | null`.
+- `dispatchMemoryExtractionJob(jobId) -> Promise<boolean>`.
+- `processMemoryExtractionJob(jobId) -> Promise<void>`.
+- Database: unique `run_id`, run/conversation/user cascade FKs, JSONB `messages`, and `(dispatch_after, created_at)` recovery index.
+
+### 3. Contracts
+
+- Produce the intent inside `persistChatCompletion`; never enqueue a full memory payload directly from the route.
+- Normalize to the last six user/assistant messages, at most 500 characters each. Fewer than two normalized messages is an explicit no-op.
+- Queue payload contains only `{ id }`. Queue acceptance never deletes the durable row.
+- Claim with one conditional database-time update that moves `dispatch_after` 15 minutes forward. Recovery scans at most 25 due rows in stable order, immediately and every 60 seconds, single-flight.
+- Worker reads by intent ID. Missing row is a no-op; provider/add failure rejects generically and preserves the row; success or explicit no-op deletes only that ID.
+- Delivery is at-least-once. Do not claim cross-system exactly-once; mem0 inference/deduplication only reduces replay effects.
+- Web and worker queue payload changes require coordinated deployment. Rollback preserves the table and pending rows.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required result |
+| --- | --- |
+| Completion transaction rolls back | No memory intent exists |
+| Queue send fails after claim | Row remains; recover after claim window |
+| Worker receives stale/missing ID | Resolve no-op |
+| Message snapshot has fewer than two entries | Do not create a row |
+| Memory provider/add fails | Reject worker; preserve row |
+| Extraction succeeds or is an explicit business no-op | Delete matching row |
+
+### 5. Good / Base / Bad Cases
+
+- Good: Web commits and exits before queue send; recovery later dispatches the same intent ID.
+- Base: immediate dispatch succeeds, worker extracts, then deletes the intent.
+- Bad: route sends user/conversation/full messages directly to pg-boss after commit.
+- Bad: `extractMemories` catches provider failure and returns success, causing pg-boss to acknowledge permanently.
+
+### 6. Tests Required
+
+- Schema/migration assertions for unique run, all cascade FKs, dispatch index, SQL, journal, and snapshot.
+- Snapshot tests for role filtering, last-six selection, truncation, and fewer-than-two no-op.
+- Dispatcher tests for claim winner, not-due no-op, send failure preservation, limit 25, stable order, single-flight, and stop waiting.
+- Worker tests for missing ID, success deletion, provider failure preservation, payload `{ id }`, and recovery start/stop ordering.
+- Completion repository and isolated PostgreSQL tests must prove an intent failure rolls back assistant, conversation time, and run terminal.
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong: commit-to-queue crash window and oversized queue payload.
+await persistAssistant();
+await queue.send("memory-extract", { userId, conversationId, recentMessages });
+
+// Correct: durable intent shares the core completion transaction; queue carries only its ID.
+const committed = await persistChatCompletion({ ...input, memoryJob });
+void dispatchMemoryExtractionJob(memoryJob.id);
 ```
 
 ## Timestamps(时区)
