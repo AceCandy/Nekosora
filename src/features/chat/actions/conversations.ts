@@ -1,6 +1,7 @@
 "use server";
 import { eq, and, or, desc, isNull, asc, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { requireSession } from "@/lib/session";
 import { getConversationTitleState } from "@/lib/conversation-title/service";
@@ -211,104 +212,53 @@ export interface ConversationComposerState {
   reasoningByModelId: Record<string, ReasoningLevel>;
 }
 
-/** 校验当前用户对会话的属主关系,返回是否通过。 */
-async function assertConversationOwner(conversationId: string, userId: string) {
-  const db = await getDb();
-  const [conv] = await db
-    .select({ userId: S().conversations.userId })
-    .from(S().conversations)
-    .where(eq(S().conversations.id, conversationId))
-    .limit(1);
-  return !!conv && conv.userId === userId;
-}
+const reasoningLevelSchema = z.enum(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
+const composerSnapshotSchema = z.object({
+  modelName: z.string().min(1),
+  outputModeId: z.string().min(1).nullable(),
+  renderStyleId: z.string().min(1).nullable(),
+  webSearch: z.boolean(),
+  cardIds: z.array(z.string().min(1)),
+  kbIds: z.array(z.string().min(1)),
+  reasoningByModelId: z.record(z.string().min(1), reasoningLevelSchema),
+});
+const saveComposerSnapshotSchema = z.object({
+  conversationId: z.string().min(1),
+  snapshot: composerSnapshotSchema,
+});
 
-/** 设置会话的输出模式(null 表示清除,回到普通对话)。 */
-export async function setConversationOutputMode(conversationId: string, outputModeId: string | null) {
-  const user = await requireSession();
-  if (!(await assertConversationOwner(conversationId, user.id))) throw new Error("无权操作");
-  const db = await getDb();
-  await db
-    .update(S().conversations)
-    .set({ outputModeId })
-    .where(eq(S().conversations.id, conversationId));
-}
+export type ConversationComposerSnapshotInput = z.input<typeof composerSnapshotSchema>;
 
-/** 设置会话的输出样式(null 表示清除,回到默认渲染)。 */
-export async function setConversationRenderStyle(conversationId: string, renderStyleId: string | null) {
-  const user = await requireSession();
-  if (!(await assertConversationOwner(conversationId, user.id))) throw new Error("无权操作");
-  const db = await getDb();
-  await db
-    .update(S().conversations)
-    .set({ renderStyleId })
-    .where(eq(S().conversations.id, conversationId));
-}
-
-/** 设置会话使用的对外模型名(切换模型时落库)。 */
-export async function setConversationModel(conversationId: string, modelName: string) {
-  const user = await requireSession();
-  if (!(await assertConversationOwner(conversationId, user.id))) throw new Error("无权操作");
-  const db = await getDb();
-  await db
-    .update(S().conversations)
-    .set({ modelName })
-    .where(eq(S().conversations.id, conversationId));
-}
-
-/** 设置会话是否启用联网搜索。 */
-export async function setConversationWebSearch(conversationId: string, enabled: boolean) {
-  const user = await requireSession();
-  if (!(await assertConversationOwner(conversationId, user.id))) throw new Error("无权操作");
-  const db = await getDb();
-  await db
-    .update(S().conversations)
-    .set({ webSearch: enabled })
-    .where(eq(S().conversations.id, conversationId));
-}
-
-/** 设置会话的指令卡 / 知识库选择(整体替换 composerState)。 */
-export async function setConversationComposerState(
+/** 原子保存会话输入区完整快照，避免字段级请求与 JSON 读改写互相覆盖。 */
+export async function saveConversationComposerState(
   conversationId: string,
-  state: { cardIds?: string[]; kbIds?: string[] },
+  input: ConversationComposerSnapshotInput,
 ) {
-  const user = await requireSession();
-  if (!(await assertConversationOwner(conversationId, user.id))) throw new Error("无权操作");
-  const db = await getDb();
-  const [conv] = await db
-    .select({ composerState: S().conversations.composerState })
-    .from(S().conversations)
-    .where(eq(S().conversations.id, conversationId))
-    .limit(1);
-  const prev = (conv?.composerState as Record<string, unknown> | null) ?? {};
-  await db
-    .update(S().conversations)
-    .set({ composerState: { ...prev, ...state } })
-    .where(eq(S().conversations.id, conversationId));
-}
+  const parsed = saveComposerSnapshotSchema.safeParse({ conversationId, snapshot: input });
+  if (!parsed.success) throw new Error("会话输入区状态无效");
 
-/** 保存当前会话中某个具体模型的推理档位。 */
-export async function setConversationModelReasoning(
-  conversationId: string,
-  modelId: string,
-  reasoning: ReasoningLevel,
-) {
   const user = await requireSession();
-  if (!(await assertConversationOwner(conversationId, user.id))) throw new Error("无权操作");
   const db = await getDb();
-  const [conv] = await db
-    .select({ composerState: S().conversations.composerState })
-    .from(S().conversations)
-    .where(eq(S().conversations.id, conversationId))
-    .limit(1);
-  const prev = (conv?.composerState as Record<string, unknown> | null) ?? {};
-  const reasoningByModelId = {
-    ...((prev.reasoningByModelId as Record<string, ReasoningLevel> | undefined) ?? {}),
-    [modelId]: reasoning,
-  };
-  await db
+  const snapshot = parsed.data.snapshot;
+  const rows = await db
     .update(S().conversations)
-    .set({ composerState: { ...prev, reasoningByModelId } })
-    .where(eq(S().conversations.id, conversationId));
+    .set({
+      modelName: snapshot.modelName,
+      outputModeId: snapshot.outputModeId,
+      renderStyleId: snapshot.renderStyleId,
+      webSearch: snapshot.webSearch,
+      composerState: {
+        cardIds: snapshot.cardIds,
+        kbIds: snapshot.kbIds,
+        reasoningByModelId: snapshot.reasoningByModelId,
+      },
+    })
+    .where(and(
+      eq(S().conversations.id, parsed.data.conversationId),
+      eq(S().conversations.userId, user.id),
+    ))
+    .returning({ id: S().conversations.id });
+  if (rows.length === 0) throw new Error("无权操作");
 }
 
 /**

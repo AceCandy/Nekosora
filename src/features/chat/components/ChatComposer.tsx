@@ -1,23 +1,28 @@
 "use client";
-import { useState, useEffect, useRef, useTransition } from "react";
+import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { useTranslations } from "next-intl";
-import { AlertCircle, Cpu } from "lucide-react";
+import { AlertCircle, Cpu, RefreshCw } from "lucide-react";
 import { clsx } from "clsx";
 import { ArtifactPanel, type Artifact } from "@/features/artifacts/ArtifactPanel";
 import FilePreviewModal, { type PreviewableFile } from "@/shared/components/file-preview/FilePreviewModal";
 import { useChatRuntime } from "@/features/chat/hooks/useChatRuntime";
 import { useChatAttachments } from "@/features/chat/hooks/useChatAttachments";
+import { useComposerCoordinator } from "@/features/chat/hooks/useComposerCoordinator";
 import { ChatMessageList } from "@/features/chat/components/ChatMessageList";
 import { ChatToolbar, ComposerPlusMenu, ModelControlMenu, type ChatToolbarProps } from "@/features/chat/components/ChatToolbar";
 import { ChatInputBox } from "@/features/chat/components/ChatInputBox";
 import ChatHeader from "@/features/chat/components/ChatHeader";
 import { useChatStreamStore } from "@/features/chat/store/chatStreamStore";
-import { setConversationOutputMode, setConversationRenderStyle, setConversationModel, setConversationWebSearch, setConversationComposerState, setConversationModelReasoning } from "@/features/chat/actions/conversations";
+import { saveConversationComposerState } from "@/features/chat/actions/conversations";
 import type { ChatMessage, ModelOption, CardOption, KnowledgeBaseOption, OutputModeOption, RenderStyleOption } from "@/features/chat/model/types";
 import type { ReasoningLevel } from "@/db/types";
 import type { ConversationShareListItem, CreateShareInput } from "@/features/chat/actions/share";
-import { resolveReasoningForModel } from "@/lib/reasoning";
+import {
+  createComposerSelectionState,
+  resolveComposerSnapshot,
+  type ComposerSelectionState,
+} from "@/features/chat/model/composerState";
 
 export type { ChatMessage, ModelOption, CardOption, KnowledgeBaseOption, OutputModeOption, RenderStyleOption } from "@/features/chat/model/types";
 
@@ -85,34 +90,55 @@ export default function ChatComposer({
   initialMessages = [],
 }: ChatComposerProps) {
   const t = useTranslations("chat");
-  // model 状态持有 modelId(选项唯一 id,配合 byId 路由解析)。
-  // initialModelName 是会话回填的模型名(按 name 存库),映射回 modelId;重名时取首个(private 在前)。
-  const [model, setModel] = useState(() => {
-    if (initialModelName) {
-      const found = models.find((m) => m.name === initialModelName)?.modelId;
-      if (found) return found;
-    }
-    return models[0]?.modelId ?? "";
-  });
-  // 当前选中模型对外名(发消息/持久化仍需 name;子任务与用量日志沿用 name)。
-  const modelName = models.find((m) => m.modelId === model)?.name ?? "";
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [input, setInput] = useState("");
   const [activeArtifact, setActiveArtifact] = useState<Artifact | null>(null);
   const [previewFile, setPreviewFile] = useState<PreviewableFile | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
-  const [selectedCardIds, setSelectedCardIds] = useState<string[]>(initialCardIds);
   const [cardPickerOpen, setCardPickerOpen] = useState(false);
-  const [webSearch, setWebSearch] = useState(initialWebSearch);
-  const [selectedKbIds, setSelectedKbIds] = useState<string[]>(initialKbIds);
   const [kbPickerOpen, setKbPickerOpen] = useState(false);
-  const [outputModeId, setOutputModeId] = useState<string | null>(initialOutputModeId);
   const [outputModePickerOpen, setOutputModePickerOpen] = useState(false);
-  const [renderStyleId, setRenderStyleId] = useState<string | null>(initialRenderStyleId);
   const [renderStylePickerOpen, setRenderStylePickerOpen] = useState(false);
-  const [, startModeTransition] = useTransition();
   // 活动会话 id:历史会话来自路由参数;新会话建会后由 useChatRuntime 回写,使订阅键与持久化目标跟随切换。
   const [activeConvId, setActiveConvId] = useState<string | undefined>(initialConvId);
+  const [initialComposerState] = useState(() => createComposerSelectionState({
+    models,
+    initialModelName,
+    initialCardIds,
+    initialKbIds,
+    initialWebSearch,
+    initialOutputModeId,
+    initialRenderStyleId,
+    initialReasoningByModelId,
+  }));
+  const composer = useComposerCoordinator({
+    conversationId: initialConvId ?? null,
+    initialState: initialComposerState,
+    persistSnapshot: async (conversationId, selection) => {
+      const snapshot = resolveComposerSnapshot(selection, models);
+      await saveConversationComposerState(conversationId, {
+        modelName: snapshot.modelName,
+        outputModeId: snapshot.outputModeId,
+        renderStyleId: snapshot.renderStyleId,
+        webSearch: snapshot.webSearch,
+        cardIds: snapshot.cardIds,
+        kbIds: snapshot.kbIds,
+        reasoningByModelId: snapshot.reasoningByModelId,
+      });
+    },
+  });
+  const {
+    modelId: model,
+    cardIds: selectedCardIds,
+    kbIds: selectedKbIds,
+    webSearch,
+    outputModeId,
+    renderStyleId,
+  } = composer.state;
+  const resolvedComposer = resolveComposerSnapshot(composer.state, models);
+  const modelName = resolvedComposer.modelName;
+  const reasoning = resolvedComposer.reasoning;
+  const pendingCreateSnapshotRef = useRef<ComposerSelectionState | null>(null);
   const optimisticTitle = useChatStreamStore((state) =>
     activeConvId && state.optimisticConversation?.id === activeConvId
       ? state.optimisticConversation.title
@@ -146,7 +172,12 @@ export default function ChatComposer({
     hasAttachments: attached.length > 0,
     uploadAttachments: uploadPending,
     onAttachmentsConsumed: clearConsumedAttachments,
-    onConversationCreated: setActiveConvId,
+    onConversationCreated: (newConversationId) => {
+      const persistedSnapshot = pendingCreateSnapshotRef.current ?? composer.getSnapshot();
+      composer.adoptConversation(newConversationId, persistedSnapshot);
+      pendingCreateSnapshotRef.current = null;
+      setActiveConvId(newConversationId);
+    },
   });
   // 流式结束后,刷新有 publicId 的 assistant 消息版本信息(用于版本切换器)
   useEffect(() => {
@@ -159,25 +190,40 @@ export default function ChatComposer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runtime.streaming]);
 
+  const sendWithCurrentSnapshot = (
+    text: string,
+    lifecycle?: { onAccepted?: () => void; onRejected?: (message: string) => void },
+  ) => {
+    const selection = composer.getSnapshot();
+    const snapshot = resolveComposerSnapshot(selection, models);
+    if (!activeConvId) pendingCreateSnapshotRef.current = selection;
+    runtime.send(
+      text,
+      snapshot.modelName,
+      snapshot.modelId,
+      snapshot.cardIds,
+      snapshot.webSearch,
+      snapshot.kbIds,
+      {
+        outputModeId: snapshot.outputModeId,
+        renderStyleId: snapshot.renderStyleId,
+        reasoning: snapshot.reasoning,
+        reasoningByModelId: snapshot.reasoningByModelId,
+      },
+      lifecycle,
+    );
+  };
+
   const handleSend = () => {
     // 滚动锚定由 message-scroller 的 scrollAnchor(user 消息)自动处理,无需手动 pin。
     setSendError(null);
-    runtime.send(
-      input,
-      modelName,
-      model,
-      selectedCardIds,
-      webSearch,
-      selectedKbIds,
-      { outputModeId, renderStyleId, reasoning },
-      {
-        onAccepted: () => {
-          setInput("");
-          setSendError(null);
-        },
-        onRejected: setSendError,
+    sendWithCurrentSnapshot(input, {
+      onAccepted: () => {
+        setInput("");
+        setSendError(null);
       },
-    );
+      onRejected: setSendError,
+    });
   };
 
   // 选中文本「引用」:以 Markdown 引用块插入输入框末尾
@@ -186,22 +232,16 @@ export default function ChatComposer({
   };
   // 选中文本「追问」:以选中文本为新问题直接发送(继续当前会话,不走分支)
   const handleSelectionAsk = (text: string) => {
-    runtime.send(text, modelName, model, selectedCardIds, webSearch, selectedKbIds, { outputModeId, renderStyleId, reasoning });
+    sendWithCurrentSnapshot(text);
   };
 
   // 推理级别按「会话 + 具体模型」持久化,切换模型时恢复各自档位。
-  const [reasoningByModelId, setReasoningByModelId] = useState(initialReasoningByModelId);
-  const currentCapabilities = models.find((item) => item.modelId === model)?.capabilities;
-  const reasoning = resolveReasoningForModel(currentCapabilities, model, reasoningByModelId);
   const handleReasoningChange = (next: ReasoningLevel) => {
-    setReasoningByModelId((prev) => ({ ...prev, [model]: next }));
-    const convId = activeConvId;
-    if (convId) {
-      startModeTransition(async () => {
-        try { await setConversationModelReasoning(convId, model, next); }
-        catch (err) { console.error("set reasoning failed:", err); }
-      });
-    }
+    composer.dispatch({
+      type: "setModelReasoning",
+      modelId: composer.getSnapshot().modelId,
+      reasoning: next,
+    });
   };
 
   // 当前选中的样式 cssClass(供 ChatMessageList 套容器 class),null 表示用默认渲染
@@ -211,82 +251,31 @@ export default function ChatComposer({
   const activeRenderStyleClass = activeRenderStyle?.cssClass ?? null;
   const activeRenderStyleRenderer = activeRenderStyle?.renderer;
 
-  // ===== 持久化回调：本地立即更新 + 写回会话(已有会话时) =====
+  // ===== 选择回调：同步更新权威快照，由 coordinator 顺序持久化 =====
   const handleRenderStyleChange = (id: string) => {
-    const next = id || null;
-    setRenderStyleId(next);
-    const convId = activeConvId;
-    if (convId) {
-      startModeTransition(async () => {
-        try { await setConversationRenderStyle(convId, next); }
-        catch (err) { console.error("set render style failed:", err); }
-      });
-    }
+    composer.dispatch({ type: "selectRenderStyle", id: id || null });
   };
 
   const handleOutputModeChange = (id: string) => {
-    const next = id || null;
-    setOutputModeId(next);
-    const convId = activeConvId;
-    if (convId) {
-      startModeTransition(async () => {
-        try { await setConversationOutputMode(convId, next); }
-        catch (err) { console.error("set output mode failed:", err); }
-      });
-    }
+    composer.dispatch({ type: "selectOutputMode", id: id || null });
   };
 
   const handleModelChange = (next: string) => {
-    setModel(next);
-    const convId = activeConvId;
-    if (convId) {
-      // 会话仍按 name 存库(share 快照等沿用 name);next 是 modelId,反查 name。
-      const name = models.find((m) => m.modelId === next)?.name ?? next;
-      startModeTransition(async () => {
-        try { await setConversationModel(convId, name); }
-        catch (err) { console.error("set model failed:", err); }
-      });
-    }
+    composer.dispatch({ type: "selectModel", modelId: next });
   };
 
   const handleWebSearchToggle = () => {
-    const next = !webSearch;
-    setWebSearch(next);
-    const convId = activeConvId;
-    if (convId) {
-      startModeTransition(async () => {
-        try { await setConversationWebSearch(convId, next); }
-        catch (err) { console.error("set web search failed:", err); }
-      });
-    }
-  };
-
-  // 指令卡 / 知识库变化后,整体写回 composerState(已有会话时)
-  const persistComposerState = (nextCards: string[], nextKbs: string[]) => {
-    const convId = activeConvId;
-    if (!convId) return;
-    startModeTransition(async () => {
-      try { await setConversationComposerState(convId, { cardIds: nextCards, kbIds: nextKbs }); }
-      catch (err) { console.error("set composer state failed:", err); }
-    });
+    composer.dispatch({ type: "toggleWebSearch" });
   };
 
   // 指令卡 toggle(多选)
   const handleCardToggle = (id: string) => {
-    setSelectedCardIds((prev) => {
-      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
-      persistComposerState(next, selectedKbIds);
-      return next;
-    });
+    composer.dispatch({ type: "toggleCard", id });
   };
 
   // 知识库 toggle(多选)
   const handleKbToggle = (id: string) => {
-    setSelectedKbIds((prev) => {
-      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
-      persistComposerState(selectedCardIds, next);
-      return next;
-    });
+    composer.dispatch({ type: "toggleKnowledgeBase", id });
   };
 
   if (models.length === 0) {
@@ -426,6 +415,20 @@ export default function ChatComposer({
                       <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                       <span>{sendError}</span>
                     </p>
+                  )}
+                  {composer.syncStatus === "error" && (
+                    <div role="alert" className="flex items-center gap-1.5 px-3 pb-1 text-ui-caption text-red-600 dark:text-red-400">
+                      <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                      <span className="min-w-0 flex-1">{t("composerSyncFailed")}</span>
+                      <button
+                        type="button"
+                        onClick={composer.retry}
+                        className="touch-target inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 font-medium transition-colors duration-150 hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:hover:bg-red-950/30"
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+                        <span>{t("retry")}</span>
+                      </button>
+                    </div>
                   )}
                 </>
               )}

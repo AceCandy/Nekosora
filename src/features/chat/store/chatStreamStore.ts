@@ -42,7 +42,12 @@ export interface SendOptions {
   instructionCardIds?: string[];
   webSearch?: boolean;
   knowledgeBaseIds?: string[];
-  createOptions?: { outputModeId?: string | null; renderStyleId?: string | null; reasoning?: ReasoningLevel };
+  createOptions?: {
+    outputModeId?: string | null;
+    renderStyleId?: string | null;
+    reasoning?: ReasoningLevel;
+    reasoningByModelId?: Record<string, ReasoningLevel>;
+  };
 }
 
 interface ChatStreamState {
@@ -419,9 +424,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
           webSearch: opts.webSearch,
           cardIds: opts.instructionCardIds,
           kbIds: opts.knowledgeBaseIds,
-          reasoningByModelId: opts.createOptions?.reasoning
-            ? { [opts.modelId]: opts.createOptions.reasoning }
-            : undefined,
+          reasoningByModelId: opts.createOptions?.reasoningByModelId,
         };
         resolvedConvId = await createConversation(opts.model, createOpts);
         newConvId = resolvedConvId;
@@ -484,6 +487,12 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
           ...(opts.instructionCardIds && opts.instructionCardIds.length > 0 ? { instructionCardIds: opts.instructionCardIds } : {}),
           ...(opts.webSearch ? { webSearch: true } : {}),
           ...(opts.knowledgeBaseIds && opts.knowledgeBaseIds.length > 0 ? { knowledgeBaseIds: opts.knowledgeBaseIds } : {}),
+          ...(opts.createOptions?.outputModeId !== undefined
+            ? { outputModeId: opts.createOptions.outputModeId }
+            : {}),
+          ...(opts.createOptions?.reasoning !== undefined
+            ? { reasoning: opts.createOptions.reasoning }
+            : {}),
         }),
         signal: controller.signal,
       });

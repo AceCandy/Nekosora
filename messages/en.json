@@ -75,6 +75,7 @@
     "welcomeTitle": "Nekusora",
     "renderFailed": "This content failed to render",
     "retry": "Retry",
+    "composerSyncFailed": "Composer settings are not synced",
     "showRaw": "Show raw",
     "hideRaw": "Hide",
     "noModels": "No models available",

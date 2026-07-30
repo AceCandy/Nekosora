@@ -12,6 +12,7 @@
  */
 import { eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { getSession } from "@/lib/session";
 import { writeFallbackTitle } from "@/lib/conversation-title/service";
@@ -41,6 +42,11 @@ import {
   resolveChatImageAttachments,
   type ResolvedChatImage,
 } from "@/lib/chat/message-attachments";
+
+const chatComposerSnapshotSchema = z.object({
+  outputModeId: z.string().min(1).nullable().optional(),
+  reasoning: z.enum(["off", "minimal", "low", "medium", "high", "xhigh", "max"]).optional(),
+});
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -81,6 +87,9 @@ export async function POST(req: NextRequest) {
     webSearch?: boolean;
     // P2-10a:挂载的知识库 ID(检索其下文件 chunks)。
     knowledgeBaseIds?: string[];
+    /** WebChat 点击发送时的 Composer 快照；缺省兼容旧客户端并回退会话行。 */
+    outputModeId?: unknown;
+    reasoning?: unknown;
   };
   try {
     body = await req.json();
@@ -94,6 +103,10 @@ export async function POST(req: NextRequest) {
     body.messages.length === 0
   ) {
     return NextResponse.json({ error: "缺少 conversationId/model/messages" }, { status: 400 });
+  }
+  const composerSnapshot = chatComposerSnapshotSchema.safeParse(body);
+  if (!composerSnapshot.success) {
+    return NextResponse.json({ error: "输入区状态非法" }, { status: 400 });
   }
 
   const db = await getDb();
@@ -355,7 +368,11 @@ export async function POST(req: NextRequest) {
   const prepared = await prepareChatContext({
     userId: user.id,
     conversationId: body.conversationId,
-    conv: { outputModeId: conv.outputModeId },
+    conv: {
+      outputModeId: composerSnapshot.data.outputModeId === undefined
+        ? conv.outputModeId
+        : composerSnapshot.data.outputModeId,
+    },
     userContent,
     model: body.model,
     modelId: body.modelId,
@@ -376,8 +393,10 @@ export async function POST(req: NextRequest) {
   const { irRequest, trace, searchBundle, ragStatus, compaction } = prepared;
 
   const composerState = (conv.composerState as { reasoningByModelId?: Record<string, ReasoningLevel> } | null) ?? {};
-  if (body.modelId && composerState.reasoningByModelId?.[body.modelId]) {
-    irRequest.reasoning = composerState.reasoningByModelId[body.modelId];
+  const reasoning = composerSnapshot.data.reasoning
+    ?? (body.modelId ? composerState.reasoningByModelId?.[body.modelId] : undefined);
+  if (reasoning !== undefined) {
+    irRequest.reasoning = reasoning;
   }
 
   const ctx = { userId: user.id, keyKind: null as null, source: "chat" as const };

@@ -41,6 +41,74 @@ const finishMetadata: MessageRunMetadata = {
   completedAt: "2026-07-27T08:09:10.000Z",
 };
 
+describe("chatStreamStore Composer 请求快照", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useChatStreamStore.setState({
+      runtimes: {},
+      activeConversationId: null,
+      optimisticConversation: null,
+    });
+    mocks.consumeChatSSE.mockResolvedValue(undefined);
+    mocks.handleStreamError.mockReturnValue({ content: "[错误] request failed" });
+    mocks.createConversation.mockResolvedValue("conversation-created");
+    mocks.getConversationTitleStateAction.mockResolvedValue({
+      title: "Created conversation",
+      pending: false,
+    });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("data: done\n\n")));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("旧调用不发送新增字段，使 route 可以回退数据库", async () => {
+    await useChatStreamStore.getState().send("conversation-existing", "hello", sendOptions);
+
+    const fetchMock = vi.mocked(fetch);
+    const request = fetchMock.mock.calls[0][1] as RequestInit;
+    const body = JSON.parse(request.body as string) as Record<string, unknown>;
+    expect(body).not.toHaveProperty("outputModeId");
+    expect(body).not.toHaveProperty("reasoning");
+  });
+
+  it("新 Composer 显式发送 null/off 并用完整 reasoning map 创建会话", async () => {
+    await useChatStreamStore.getState().send(
+      NEW_CONVERSATION_KEY,
+      "hello",
+      {
+        model: "provider/model-a",
+        modelId: "model-a",
+        instructionCardIds: ["card-a"],
+        webSearch: true,
+        knowledgeBaseIds: ["kb-a"],
+        createOptions: {
+          outputModeId: null,
+          renderStyleId: "style-a",
+          reasoning: "off",
+          reasoningByModelId: { "model-a": "off", "model-b": "high" },
+        },
+      },
+    );
+
+    expect(mocks.createConversation).toHaveBeenCalledWith("provider/model-a", {
+      outputModeId: null,
+      renderStyleId: "style-a",
+      webSearch: true,
+      cardIds: ["card-a"],
+      kbIds: ["kb-a"],
+      reasoningByModelId: { "model-a": "off", "model-b": "high" },
+    });
+    const fetchMock = vi.mocked(fetch);
+    const request = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(JSON.parse(request.body as string)).toMatchObject({
+      outputModeId: null,
+      reasoning: "off",
+    });
+  });
+});
+
 describe("chatStreamStore finish metadata", () => {
   beforeEach(() => {
     vi.clearAllMocks();

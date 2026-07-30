@@ -178,6 +178,124 @@ beforeEach(() => {
 });
 
 describe("POST /api/chat coordinator adapter", () => {
+  it("显式 Composer 请求快照优先于数据库且保留 null/off", async () => {
+    mocks.getDb.mockResolvedValue({
+      select: selectQueue([
+        [{
+          id: "conversation-1",
+          userId: "user-1",
+          outputModeId: "db-mode",
+          composerState: { reasoningByModelId: { "model-1": "low" } },
+        }],
+        [{
+          id: "assistant-1",
+          publicId: "assistant-public-1",
+          conversationId: "conversation-1",
+          parentId: "user-message-1",
+          role: "assistant",
+          content: "prefix",
+          createdAt: new Date("2026-07-20T08:00:00.000Z"),
+          deletedAt: null,
+        }],
+        [{
+          id: "user-message-1",
+          publicId: "user-public-1",
+          conversationId: "conversation-1",
+          role: "user",
+          content: "question",
+          createdAt: new Date("2026-07-20T07:00:00.000Z"),
+          deletedAt: null,
+        }],
+      ]),
+    });
+
+    const response = await POST(request({
+      conversationId: "conversation-1",
+      model: "model-1",
+      modelId: "model-1",
+      messages: [
+        { role: "user", content: "question" },
+        { role: "assistant", content: "prefix" },
+      ],
+      continueFromPublicId: "assistant-public-1",
+      outputModeId: null,
+      reasoning: "off",
+    }) as never);
+    await response.text();
+
+    expect(mocks.prepareChatContext).toHaveBeenCalledWith(expect.objectContaining({
+      conv: { outputModeId: null },
+    }));
+    expect(mocks.executeChatCompletion).toHaveBeenCalledWith(expect.objectContaining({
+      request: expect.objectContaining({ reasoning: "off" }),
+    }));
+  });
+
+  it("旧请求缺少 Composer 快照时回退数据库", async () => {
+    mocks.getDb.mockResolvedValue({
+      select: selectQueue([
+        [{
+          id: "conversation-1",
+          userId: "user-1",
+          outputModeId: "db-mode",
+          composerState: { reasoningByModelId: { "model-1": "low" } },
+        }],
+        [{
+          id: "assistant-1",
+          publicId: "assistant-public-1",
+          conversationId: "conversation-1",
+          parentId: "user-message-1",
+          role: "assistant",
+          content: "prefix",
+          createdAt: new Date("2026-07-20T08:00:00.000Z"),
+          deletedAt: null,
+        }],
+        [{
+          id: "user-message-1",
+          publicId: "user-public-1",
+          conversationId: "conversation-1",
+          role: "user",
+          content: "question",
+          createdAt: new Date("2026-07-20T07:00:00.000Z"),
+          deletedAt: null,
+        }],
+      ]),
+    });
+
+    const response = await POST(request({
+      conversationId: "conversation-1",
+      model: "model-1",
+      modelId: "model-1",
+      messages: [
+        { role: "user", content: "question" },
+        { role: "assistant", content: "prefix" },
+      ],
+      continueFromPublicId: "assistant-public-1",
+    }) as never);
+    await response.text();
+
+    expect(mocks.prepareChatContext).toHaveBeenCalledWith(expect.objectContaining({
+      conv: { outputModeId: "db-mode" },
+    }));
+    expect(mocks.executeChatCompletion).toHaveBeenCalledWith(expect.objectContaining({
+      request: expect.objectContaining({ reasoning: "low" }),
+    }));
+  });
+
+  it("拒绝非法 Composer 请求快照", async () => {
+    const response = await POST(request({
+      conversationId: "conversation-1",
+      model: "model-1",
+      messages: [{ role: "user", content: "question" }],
+      outputModeId: 42,
+      reasoning: "extreme",
+    }) as never);
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: "输入区状态非法" });
+    expect(mocks.getDb).not.toHaveBeenCalled();
+  });
+
   it("续写复用 assistant 身份时间并传递 CAS 上下文", async () => {
     mockContinuationDb();
 

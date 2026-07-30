@@ -75,6 +75,7 @@
     "welcomeTitle": "Nekusora",
     "renderFailed": "该内容渲染失败",
     "retry": "重试",
+    "composerSyncFailed": "输入区设置未同步",
     "showRaw": "查看原始内容",
     "hideRaw": "收起",
     "noModels": "暂无可用模型",
