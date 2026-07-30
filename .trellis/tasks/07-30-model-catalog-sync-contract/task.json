@@ -3,7 +3,7 @@
   "name": "model-catalog-sync-contract",
   "title": "Model Catalog 同步契约强化",
   "description": "修复能力只升不降、非法 thinkingLevelMap 与跨字段 fallback，贯通 catalog 到运行时请求翻译。",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

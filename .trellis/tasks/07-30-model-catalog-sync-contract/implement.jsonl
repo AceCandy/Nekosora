@@ -1,1 +1,4 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file":".trellis/spec/backend/chat-generation-params.md","reason":"Runtime reasoning levels, fixed semantics, clamp and provider request translation contract."}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"PostgreSQL-only migration, journal/snapshot and model_catalog source-of-truth rules."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Catalog payload crosses external decode, planner, database, Chat and provider boundaries."}
+{"file":".trellis/tasks/07-30-model-catalog-sync-contract/research/evidence.md","reason":"Current payload statistics, official downgrade evidence, data impact and test gaps."}

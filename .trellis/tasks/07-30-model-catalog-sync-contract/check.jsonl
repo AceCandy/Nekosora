@@ -1,1 +1,4 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file":".trellis/spec/backend/chat-generation-params.md","reason":"Check catalog-to-runtime level and request-body semantics after sync refactor."}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"Check forward migration, data preservation and Drizzle metadata integrity."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Check decoder ownership and absence of duplicated capability decisions."}
+{"file":".trellis/tasks/07-30-model-catalog-sync-contract/research/evidence.md","reason":"Check implementation against verified payload, official facts and bounded data impact."}
