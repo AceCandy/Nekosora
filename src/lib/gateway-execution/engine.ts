@@ -1,5 +1,6 @@
 import { orderedWeightedKeys } from "@/lib/providers/keys";
 import { maskKey } from "@/lib/usage";
+import type { ResolvedRoute } from "@/lib/providers/types";
 import {
   classifyGatewayError,
   isAbortError,
@@ -17,6 +18,7 @@ import type {
 } from "./types";
 
 const DEFAULT_MAX_KEY_ATTEMPTS = 6;
+const ADAPTER_ABORTED = Symbol("adapter-aborted");
 
 export async function executeAtomicGateway<TResult>(
   options: ExecuteGatewayOptions<never, TResult>,
@@ -52,6 +54,12 @@ export async function* executeGateway<TEvent, TResult>(
   let firstTokenAt: number | undefined;
   let committed = false;
   let stopExecution = false;
+  let activeAttempt: {
+    route: ResolvedRoute;
+    apiKey: string;
+    attempt: number;
+    startedAt: number;
+  } | undefined;
 
   try {
     let routes;
@@ -101,6 +109,7 @@ export async function* executeGateway<TEvent, TResult>(
         const apiKey = keys[keyIndex].key;
         const attemptStartedAt = Date.now();
         attempt += 1;
+        activeAttempt = { route, apiKey, attempt, startedAt: attemptStartedAt };
         try {
           const iterator = adapter({
             executionId,
@@ -112,7 +121,30 @@ export async function* executeGateway<TEvent, TResult>(
           });
           let result;
           while (true) {
-            const next = await iterator.next();
+            const next = await nextAdapterOrAbort(iterator, options.abortSignal);
+            if (next === ADAPTER_ABORTED) {
+              const completedAt = Date.now();
+              await safeTelemetry(() => options.telemetry.recordAttempt({
+                executionId,
+                attempt,
+                operation: options.operation,
+                route: snapshotRoute(route),
+                upstreamKeyMasked: maskKey(apiKey) ?? undefined,
+                status: "interrupted",
+                latencyMs: completedAt - attemptStartedAt,
+                startedAt: attemptStartedAt,
+                completedAt,
+              }));
+              outcome = interruptedOutcome(
+                executionId,
+                snapshotRoute(route),
+                committed,
+                maskKey(apiKey) ?? undefined,
+              );
+              activeAttempt = undefined;
+              closeIterator(iterator);
+              return outcome;
+            }
             if (next.done) {
               result = next.value;
               break;
@@ -139,6 +171,7 @@ export async function* executeGateway<TEvent, TResult>(
             startedAt: attemptStartedAt,
             completedAt,
           }));
+          activeAttempt = undefined;
           options.breaker.recordSuccess(route.provider.id);
           outcome = {
             executionId,
@@ -165,6 +198,7 @@ export async function* executeGateway<TEvent, TResult>(
               startedAt: attemptStartedAt,
               completedAt,
             }));
+            activeAttempt = undefined;
             outcome = interruptedOutcome(
               executionId,
               snapshotRoute(route),
@@ -188,6 +222,7 @@ export async function* executeGateway<TEvent, TResult>(
             completedAt,
           };
           await safeTelemetry(() => options.telemetry.recordAttempt(attemptTelemetry));
+          activeAttempt = undefined;
 
           const failoverable = isFailoverableError(error);
           if (failoverable) options.breaker.recordFailure(route.provider.id);
@@ -222,6 +257,22 @@ export async function* executeGateway<TEvent, TResult>(
         message: "执行未正常收敛",
         phase: "internal",
       }, committed);
+    if (outcome.status === "interrupted" && activeAttempt) {
+      const completedAt = Date.now();
+      const interruptedAttempt = activeAttempt;
+      activeAttempt = undefined;
+      await safeTelemetry(() => options.telemetry.recordAttempt({
+        executionId,
+        attempt: interruptedAttempt.attempt,
+        operation: options.operation,
+        route: snapshotRoute(interruptedAttempt.route),
+        upstreamKeyMasked: maskKey(interruptedAttempt.apiKey) ?? undefined,
+        status: "interrupted",
+        latencyMs: completedAt - interruptedAttempt.startedAt,
+        startedAt: interruptedAttempt.startedAt,
+        completedAt,
+      }));
+    }
     const finalOutcome = outcome;
     const completedAt = Date.now();
     await safeTelemetry(() => options.telemetry.finalizeExecution({
@@ -240,6 +291,30 @@ async function safeTelemetry(operation: () => Promise<void>): Promise<void> {
   } catch {
     /* 观测失败不得改变网关执行结果。 */
   }
+}
+
+async function nextAdapterOrAbort<T>(
+  iterator: AsyncIterator<T>,
+  signal?: AbortSignal,
+): Promise<IteratorResult<T> | typeof ADAPTER_ABORTED> {
+  if (!signal) return iterator.next();
+  if (signal.aborted) return ADAPTER_ABORTED;
+
+  let onAbort!: () => void;
+  const aborted = new Promise<typeof ADAPTER_ABORTED>((resolve) => {
+    onAbort = () => resolve(ADAPTER_ABORTED);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+  try {
+    return await Promise.race([iterator.next(), aborted]);
+  } finally {
+    signal.removeEventListener("abort", onAbort);
+  }
+}
+
+function closeIterator(iterator: AsyncIterator<unknown>): void {
+  if (!iterator.return) return;
+  void iterator.return().catch(() => undefined);
 }
 
 function failedOutcome<TResult>(

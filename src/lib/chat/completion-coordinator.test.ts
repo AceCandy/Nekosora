@@ -88,6 +88,13 @@ function events(...items: unknown[]) {
   })();
 }
 
+function eventsWithTail(onTail: () => void, ...items: unknown[]) {
+  return (async function* () {
+    for (const item of items) yield item;
+    onTail();
+  })();
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (error: unknown) => void;
@@ -152,6 +159,30 @@ describe("executeChatCompletion", () => {
       memoryJob,
     }));
     expect(mocks.dispatchMemoryExtractionJob).toHaveBeenCalledWith("memory-job-1");
+  });
+
+  it.each([
+    [
+      "finish",
+      { type: "finish", finishReason: "stop", usage: { totalTokens: 7 } },
+      "committed_success",
+    ],
+    [
+      "error",
+      { type: "error", error: "upstream failed", code: "generation_failed" },
+      "committed_failed",
+    ],
+  ] as const)("终态 %s 后推进 stream iterator 完成内层收尾", async (_label, terminalEvent, expectedKind) => {
+    const tail = vi.fn();
+    mocks.streamChat.mockReturnValue(eventsWithTail(tail, terminalEvent));
+
+    await expect(executeChatCompletion({
+      ...baseInput,
+      signal: new AbortController().signal,
+      emit: vi.fn(),
+    })).resolves.toMatchObject({ kind: expectedKind });
+
+    expect(tail).toHaveBeenCalledOnce();
   });
 
   it("strict run 启动失败时不调用模型与 repository", async () => {

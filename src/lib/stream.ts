@@ -126,9 +126,10 @@ export async function* streamChat(
     return { value: undefined, usage, firstTokenAt: timing.firstTokenAt };
   };
 
+  let execution: AsyncIterator<StreamEvent, GatewayExecutionOutcome<void>, void> | undefined;
   let outcome: GatewayExecutionOutcome<void> | undefined;
   try {
-    const execution = executeGateway({
+    execution = executeGateway({
       ctx,
       requestId: runId,
       operation: "chat.stream",
@@ -161,37 +162,50 @@ export async function* streamChat(
       };
     }
   } finally {
+    // 外层消费者可能在某个事件后直接 return;确保内部 engine 也进入 finally。
+    if (!outcome && execution) {
+      try {
+        const closing = execution.return ? execution.return() : undefined;
+        void closing?.catch(() => undefined);
+      } catch {
+        /* 内部关闭失败不应覆盖已产生的流结果。 */
+      }
+    }
     releaseStream();
-  }
-
-  if (opts.suppressFinalUsageLog && outcome) {
-    opts.onFinalUsage?.({
-      params: {
-        ctx,
-        runId,
-        model: request.model,
-        providerRef: outcome.route
-          ? `${outcome.route.source}:${outcome.route.provider.id}`
-          : undefined,
-        usage: outcome.usage,
-        status: outcome.status,
-        errorCode: outcome.error?.code,
-        errorMessage: outcome.error?.message,
-        errorPhase: outcome.error?.phase,
-        errorType: outcome.error?.code,
-        httpStatus: outcome.error?.httpStatus,
-        providerName: outcome.route?.provider.name,
-        routeId: outcome.route?.routeId,
-        routeName: outcome.route
-          ? `${outcome.route.provider.name} · ${outcome.route.upstreamModelName}`
-          : undefined,
-        upstreamModel: outcome.route?.upstreamModelName,
-        stream: true,
-        taskKind: opts.taskKind,
-        upstreamKeyMasked: outcome.upstreamKeyMasked,
-      },
-      firstTokenAt: outcome.firstTokenAt,
-    });
+    if (opts.suppressFinalUsageLog) {
+      const finalStatus = outcome?.status ?? (opts.abortSignal?.aborted ? "interrupted" : "failed");
+      try {
+        opts.onFinalUsage?.({
+          params: {
+            ctx,
+            runId,
+            model: request.model,
+            providerRef: outcome?.route
+              ? `${outcome.route.source}:${outcome.route.provider.id}`
+              : undefined,
+            usage: outcome?.usage ?? {},
+            status: finalStatus,
+            errorCode: outcome?.error?.code ?? (outcome ? undefined : finalStatus),
+            errorMessage: outcome?.error?.message,
+            errorPhase: outcome?.error?.phase,
+            errorType: outcome?.error?.code ?? (outcome ? undefined : finalStatus),
+            httpStatus: outcome?.error?.httpStatus,
+            providerName: outcome?.route?.provider.name,
+            routeId: outcome?.route?.routeId,
+            routeName: outcome?.route
+              ? `${outcome.route.provider.name} · ${outcome.route.upstreamModelName}`
+              : undefined,
+            upstreamModel: outcome?.route?.upstreamModelName,
+            stream: true,
+            taskKind: opts.taskKind,
+            upstreamKeyMasked: outcome?.upstreamKeyMasked,
+          },
+          firstTokenAt: outcome?.firstTokenAt,
+        });
+      } catch {
+        /* Agent telemetry 回调失败不应改写流终态。 */
+      }
+    }
   }
 }
 

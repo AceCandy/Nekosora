@@ -157,13 +157,13 @@ export async function executeChatCompletion(
         } else if (event.type === "finish") {
           finalUsage = event.usage;
           latch("success");
-          closeIterator(iterator);
+          await settleIterator(iterator);
           break;
         } else if (event.type === "error") {
           latch("failed");
           errorEmitted = true;
           await input.emit(event);
-          closeIterator(iterator);
+          await settleIterator(iterator);
           break;
         }
       }
@@ -317,6 +317,15 @@ async function nextEventOrAbort(
 function closeIterator(iterator: AsyncIterator<StreamEvent>): void {
   if (!iterator.return) return;
   void iterator.return().catch(() => undefined);
+}
+
+/** 终态事件已被消费后推进一帧,让流内部完成 telemetry/Agent finally 收尾。 */
+async function settleIterator(iterator: AsyncIterator<StreamEvent>): Promise<void> {
+  try {
+    await iterator.next();
+  } catch {
+    /* 终态已锁存,内部收尾异常不能改写 Chat completion 结果。 */
+  }
 }
 
 async function persistArtifactsBestEffort(

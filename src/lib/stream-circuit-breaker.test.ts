@@ -117,6 +117,16 @@ function makeTwoRouteRepository(): RouteRepository {
   };
 }
 
+function mockStreamResult(parts: unknown[], finishReason: string, usage: Record<string, number>) {
+  return {
+    stream: (async function* () {
+      for (const part of parts) yield part;
+    })(),
+    usage: Promise.resolve(usage),
+    finishReason: Promise.resolve(finishReason),
+  } as never;
+}
+
 async function collectStream(abortSignal?: AbortSignal) {
   const events = [];
   for await (const event of streamChat({
@@ -380,6 +390,106 @@ describe("chat generation circuit breaker reporting", () => {
       status: "closed",
       failures: 1,
     });
+  });
+
+  it("streamChat 自然结束后回调最终 usage", async () => {
+    vi.mocked(streamText).mockReturnValue(mockStreamResult(
+      [{ type: "text-delta", text: "answer" }],
+      "stop",
+      { inputTokens: 2, outputTokens: 3, totalTokens: 5 },
+    ));
+    const onFinalUsage = vi.fn();
+
+    const events = [];
+    for await (const event of streamChat({
+      ctx: { userId: "user-a", keyKind: null, source: "chat" },
+      request: {
+        model: "test-model",
+        messages: [{ role: "user", content: "hello" }],
+      },
+      userAgent: "Nekusora-Test",
+      suppressFinalUsageLog: true,
+      onFinalUsage,
+    })) {
+      events.push(event);
+    }
+
+    expect(events).toEqual([
+      { type: "text-delta", text: "answer" },
+      { type: "finish", finishReason: "stop", usage: { inputTokens: 2, outputTokens: 3, totalTokens: 5 } },
+    ]);
+    expect(onFinalUsage).toHaveBeenCalledOnce();
+    expect(onFinalUsage).toHaveBeenCalledWith(expect.objectContaining({
+      params: expect.objectContaining({
+        status: "success",
+        usage: { inputTokens: 2, outputTokens: 3, totalTokens: 5 },
+      }),
+    }));
+  });
+
+  it("最终 usage 回调失败不改写 stream 结果", async () => {
+    vi.mocked(streamText).mockReturnValue(mockStreamResult(
+      [{ type: "text-delta", text: "answer" }],
+      "stop",
+      { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+    ));
+    const onFinalUsage = vi.fn(() => {
+      throw new Error("telemetry callback failed");
+    });
+
+    const events = [];
+    for await (const event of streamChat({
+      ctx: { userId: "user-a", keyKind: null, source: "chat" },
+      request: {
+        model: "test-model",
+        messages: [{ role: "user", content: "hello" }],
+      },
+      userAgent: "Nekusora-Test",
+      suppressFinalUsageLog: true,
+      onFinalUsage,
+    })) {
+      events.push(event);
+    }
+
+    expect(events.at(-1)).toMatchObject({ type: "finish" });
+    expect(onFinalUsage).toHaveBeenCalledOnce();
+  });
+
+  it("streamChat 被 Abort 后外部 return 仍终结内部 execution", async () => {
+    const abortController = new AbortController();
+    vi.mocked(streamText).mockReturnValue({
+      stream: (async function* () {
+        yield { type: "text-delta", text: "partial" };
+        await new Promise<void>(() => {});
+      })(),
+    } as never);
+    const onFinalUsage = vi.fn();
+    const iterator = streamChat({
+      ctx: { userId: "user-a", keyKind: null, source: "chat" },
+      request: {
+        model: "test-model",
+        messages: [{ role: "user", content: "hello" }],
+      },
+      abortSignal: abortController.signal,
+      userAgent: "Nekusora-Test",
+      suppressFinalUsageLog: true,
+      onFinalUsage,
+    })[Symbol.asyncIterator]();
+
+    await expect(iterator.next()).resolves.toMatchObject({
+      done: false,
+      value: { type: "text-delta", text: "partial" },
+    });
+    abortController.abort();
+    await iterator.return?.();
+
+    await vi.waitFor(() => expect(mocks.finalizeExecution).toHaveBeenCalledWith(expect.objectContaining({
+      outcome: expect.objectContaining({ status: "interrupted" }),
+    })));
+    expect(mocks.recordAttempt).toHaveBeenCalledWith(expect.objectContaining({ status: "interrupted" }));
+    expect(onFinalUsage).toHaveBeenCalledWith(expect.objectContaining({
+      params: expect.objectContaining({ status: "interrupted" }),
+    }));
   });
 
   it("同一 Provider 已输出正文后失败时不再尝试其他 key", async () => {

@@ -32,7 +32,11 @@ function route(id: string, keys = [`key-${id}`], protocol: ResolvedRoute["protoc
   };
 }
 
-function harness(routes: ResolvedRoute[], selectAdapter: (route: ResolvedRoute) => GatewayAttemptAdapter<Event, Result> | null) {
+function harness(
+  routes: ResolvedRoute[],
+  selectAdapter: (route: ResolvedRoute) => GatewayAttemptAdapter<Event, Result> | null,
+  abortSignal?: AbortSignal,
+) {
   const attempts: AttemptTelemetry[] = [];
   const finalized: unknown[] = [];
   const telemetry: GatewayTelemetryPort = {
@@ -49,6 +53,7 @@ function harness(routes: ResolvedRoute[], selectAdapter: (route: ResolvedRoute) 
     requestId: "request-1",
     operation: "chat.stream",
     model: "demo",
+    abortSignal,
     resolveRoutes: async () => routes,
     selectAdapter,
     telemetry,
@@ -138,6 +143,39 @@ describe("gateway execution engine", () => {
     expect(h.attempts.map((item) => item.status)).toEqual(["interrupted"]);
     expect(h.breaker.recordFailure).not.toHaveBeenCalled();
     expect(h.breaker.recordSuccess).not.toHaveBeenCalled();
+  });
+
+  it("adapter 不响应 AbortSignal 时 engine 仍立即终结 execution", async () => {
+    const abortController = new AbortController();
+    let release!: () => void;
+    const never = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let adapterStarted = false;
+    const adapter: GatewayAttemptAdapter<Event, Result> = async function* () {
+      adapterStarted = true;
+      await never;
+      return { value: { text: "never" } };
+    };
+    const h = harness([route("a")], () => adapter, abortController.signal);
+    const executing = consume(h.generator);
+
+    await vi.waitFor(() => expect(adapterStarted).toBe(true));
+    abortController.abort();
+    try {
+      const result = await Promise.race([
+        executing,
+        new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), 100)),
+      ]);
+
+      expect(result).not.toBe("timeout");
+      expect(result).toMatchObject({ outcome: { status: "interrupted" } });
+      expect(h.attempts.map((item) => item.status)).toEqual(["interrupted"]);
+      expect(h.finalized).toHaveLength(1);
+      expect(h.finalized[0]).toMatchObject({ outcome: { status: "interrupted" } });
+    } finally {
+      release();
+    }
   });
 
   it("确定性请求错误不重试、不 failover、不污染 breaker", async () => {
