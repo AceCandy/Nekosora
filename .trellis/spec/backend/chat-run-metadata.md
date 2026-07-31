@@ -27,6 +27,8 @@ Apply this contract when changing authenticated `/api/chat` generation, `runs`, 
 - The WebChat parser accepts success only when finish precedes terminal(success), and accepts any outcome only when terminal precedes DONE. DONE without terminal, success without finish, contradictory/duplicate terminal, or EOF before DONE is a protocol error.
 - Abort during commit closes transport intent but does not cancel the database transaction or downgrade a finish already latched as success. The committed database outcome remains authoritative.
 - `iterator.next()` races Abort. A provider that ignores its AbortSignal cannot indefinitely block coordinator convergence; iterator return is requested without awaiting an unresponsive provider.
+- After consuming a provider `finish` or `error`, the coordinator advances the stream iterator once so the plain stream or Agent loop can run its own telemetry/finally cleanup before completion persistence. The Abort path keeps non-blocking iterator return semantics.
+- A stream owns the nested gateway execution lifecycle: its `finally` requests nested engine closure on consumer `return()` without blocking the consumer, and runs any deferred final-usage callback from that same cleanup path. Final usage must not depend on code after the generator `finally` block.
 - Memory intent creation is part of the completion transaction. Immediate queue dispatch and artifact persistence are post-commit optimizations and cannot change the core outcome.
 - Public share DTOs never expose `MessageRunMetadata`. Historical loaders remain conversation-scoped and serialize dates as ISO strings.
 
@@ -61,8 +63,9 @@ Apply this contract when changing authenticated `/api/chat` generation, `runs`, 
 - Run lifecycle tests: strict start waits for insert confirmation, rejects generically, and never exposes database details.
 - Repository unit tests: insert/continue fields, reference validation, fixed write order, intent failure, run zero-row, and ownership fencing.
 - Isolated PostgreSQL tests: concurrent continue has one winner; memory insert failure and terminal-run conflict roll back assistant, conversation time, intent, and run changes.
-- Coordinator tests: finish-before-Abort, Abort-before-finish, error-before-late-finish, natural EOF, duplicate terminal events, commit failure, and an Abort-ignoring iterator.
+- Coordinator tests: finish-before-Abort, Abort-before-finish, error-before-late-finish, natural EOF, duplicate terminal events, commit failure, an Abort-ignoring iterator, and one-step iterator settlement after finish/error.
 - Agent-loop tests: one outer finish, one shared run ID, aggregate usage, and one aggregate telemetry finalization.
+- Stream telemetry tests: natural final-usage callback and consumer Abort/`return()` finalization of the nested execution.
 - Route tests: identity/context wire fields, delta/reasoning/tool/error mapping, all six outcome-to-terminal mappings, finish-before-terminal-before-DONE, no finish on failure, and reader-cancel signal propagation.
 - Client parser/store tests: strict terminal/DONE gate, contradictory/duplicate terminal, chunked final frame, EOF rejection, four generation actions mapping only terminal success to message success, and one visible error append.
 - Schema/migration tests: memory intent primary key, unique run, three cascade FKs, dispatch index, SQL, journal, and snapshot continuity.

@@ -38,6 +38,7 @@ Database facts:
 - Route-layer auth/body failures occurring before the engine may use the compatibility `logUsage` entry to insert one final execution row. Engine-owned failures must not be written again by route handlers.
 - Agent tool loops share one telemetry session and one execution id. Internal steps globally renumber attempts and aggregate usage; only the outer loop finalizes.
 - `firstTokenLatencyMs` is measured from logical execution start to the first committed stream event. Atomic operations may leave it null.
+- Stream consumers are allowed to stop after a terminal event only through the coordinator's settlement step; the stream itself must request nested engine closure non-blockingly in `finally` for Abort/consumer `return()`. Final usage callbacks run from that cleanup path so `gateway_executions` cannot remain `running` merely because generator tail code was skipped.
 
 ### 4. Validation & Error Matrix
 
@@ -62,12 +63,12 @@ Database facts:
 
 ### 6. Tests Required
 
-- `gateway-execution/engine.test.ts`: key retry, route failover, commit-before-yield, Abort, deterministic errors, rejected protocols, credential/route redaction, telemetry failure isolation.
+- `gateway-execution/engine.test.ts`: key retry, route failover, commit-before-yield, Abort, deterministic errors, rejected protocols, credential/route redaction, telemetry failure isolation, and iterator-close finalization.
 - `gateway-execution/telemetry.test.ts`: start/attempt/finalize mappings, DB/metrics best-effort, persistence redaction.
 - `redaction.test.ts`：断言 provider 与 PostgreSQL URL 不离开错误边界；RAG retrieve 与 Chat compaction 降级测试断言 console 只接收脱敏字符串。
 - Schema/migration tests: both facts, unique attempt number, FK actions, journal/snapshot, no `CASCADE` drop, and only old log tables removed.
 - Usage/error repository tests: success-only aggregation, time range/user isolation, failed attempt-chain filtering, pagination count consistency.
-- Agent loop tests: one execution finalization, globally ordered attempts, aggregated tokens, one final metric.
+- Agent loop tests: one execution finalization, globally ordered attempts, aggregated tokens, one final metric; stream tests also cover natural final usage and consumer Abort cleanup.
 - Metrics smoke: execution counter, attempt counter, execution duration, and absence of high-cardinality labels.
 
 ### 7. Wrong vs Correct

@@ -136,6 +136,22 @@ After implementation:
 - [ ] Checked that derived state points back to the source event identifier
       (`seq`, `id`, `version`) instead of inventing a second cursor
 
+### Streaming Terminal Consumers
+
+An async stream can expose a terminal event before its nested execution has
+finished recording telemetry. Treat the terminal event and generator cleanup as
+separate boundaries:
+
+- [ ] After consuming `finish` or `error`, the terminal consumer advances the
+      inner iterator to let its `finally`/telemetry path complete.
+- [ ] Abort races nested adapter reads; consumer `return()` requests nested
+      iterator closure from the stream's own `finally` without blocking the
+      consumer on an unresponsive provider.
+- [ ] Final usage callbacks run from the same cleanup path, not only from code
+      after a generator `finally` block.
+- [ ] Tests cover natural completion, terminal settlement, and consumer
+      cancellation across plain and Agent streams.
+
 ---
 
 ## Cross-Platform Template Consistency
