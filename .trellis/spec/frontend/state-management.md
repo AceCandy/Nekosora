@@ -197,33 +197,65 @@ store 的 `migrate(临时key → 真实id)` 先于回写执行，活动 id 一�
 
 ---
 
-## ChatMessage.status 状态机（续写触发）
+## Scenario: Chat SSE 终态与消息完整性
 
-`ChatMessage.status?: "success" | "interrupted"` 表征一条 assistant 消息的生成状态，缺省视作完整。它是「继续生成」按钮的唯一触发依据。
+### 1. Scope / Trigger
 
-**渲染契约**：`ChatMessageItem` 仅当 `role === "assistant" && content && status === "interrupted"` 时渲染续写按钮——完整回答（success/缺省）不显示，从源头避免在已结束文本上续写导致重复。
+修改内部 `/api/chat` SSE parser、send/regenerate/editAndResend/continueGeneration、停止生成或 `ChatMessage.status` 时适用。公开 `/v1/*` 不使用本契约。
 
-**status 必须双源维护**，单源都会破：
+### 2. Signatures
 
-| 来源 | 时机 | 作用 | 位置 |
-|------|------|------|------|
-| 前端 | `stopGeneration` abort 时把最后一条 assistant 标为 interrupted | 即时显示续写按钮，不等刷新 | `chatStreamStore.ts` |
-| 后端 | `/api/chat` finally 用 `finished` 标志落库（收到 finish 事件才 true，否则 interrupted） | 刷新会话后 `getMessages` → SSR 映射 hydrate 带回 status | `api/chat/route.ts` |
+- `consumeChatSSE(body, handlers): Promise<ChatTerminalStatus>`。
+- `ChatTerminalStatus = "success" | "failed" | "interrupted"`，唯一 owner 为 `src/lib/chat/sse-contract.ts`。
+- `ChatMessage.status?: "success" | "interrupted"`；缺省只用于历史完整消息兼容。
+
+### 3. Contracts
+
+- 内部成功 tail 固定为 `finish(metadata) -> terminal(success) -> [DONE]`；失败/中断为已有 error frame -> terminal(status) -> DONE。
+- Parser 只在收到合法 DONE 时返回 terminal status。DONE 缺 terminal、success 缺 finish、矛盾/重复 terminal 或 EOF 缺 DONE 必须抛协议错误。
+- 四条 Store 流式动作必须消费 parser 返回值：terminal success 写 message success；failed/interrupted 写 message interrupted；协议异常 catch 也写 interrupted。
+- `stopGeneration` 在本地 Abort 时立即写 interrupted。取消后的 wire 写入由服务端抑制，不等待 terminal。
+- `onError` 必须先 `flushDeltasNow()` 再向当前稳定 assistant index 追加一次错误。若 error frame 后又发生协议异常，catch 不得追加第二份错误。
+- Message status 表达“内容完整/可继续”，不是 run 失败分类。持久化 failed/interrupted assistant 均为 interrupted；`runs.status` 才是 success/failed/interrupted 的终态事实源。
+- `ChatMessageItem` 仅当 assistant 有正文且 status=interrupted 时显示继续生成；success/缺省不显示。
+
+### 4. Validation & Error Matrix
+
+| Wire / action | Parser result | Store message status | Error text |
+| --- | --- | --- | --- |
+| finish, terminal(success), DONE | success | success | none |
+| error, terminal(failed), DONE | failed | interrupted | exactly one |
+| error, terminal(interrupted), DONE | interrupted | interrupted | exactly one |
+| local Abort | AbortError | interrupted by stop | stopped marker |
+| terminal/DONE contract violation | throw protocol error | interrupted | one existing or fallback error |
+
+### 5. Good / Base / Bad Cases
+
+- Good: regenerate receives a failed terminal after partial delta, keeps the partial text, appends one error, and marks the exact regenerated assistant interrupted.
+- Base: continueGeneration receives success and changes the same assistant from interrupted to success, so the continue button disappears.
+- Bad: parser returns void on bare EOF and continueGeneration unconditionally writes success.
+- Bad: regenerate/edit catch uses the current last message instead of the assistant index captured for that request.
+
+### 6. Tests Required
+
+- Parser tests cover chunked frames, final frame without newline, DONE without terminal, success without finish, contradictory/duplicate/invalid terminal, event after terminal, and EOF before DONE.
+- Store table tests cover success/failed/interrupted plus protocol rejection for all four actions.
+- Assert failed/interrupted retain content, write interrupted, and contain one error marker; success preserves finish metadata and writes success.
+- Keep local Abort/stopGeneration and delta-before-error ordering regressions green.
+
+### 7. Wrong vs Correct
 
 ```ts
-// 后端 status 判定:基于 finish 事件,不是"有没有输出文本"
-let finished = false;
-for await (const ev of gen) {
-  if (ev.type === "finish") finished = true;
-  // ...
-}
-// finally 落库(续写 UPDATE 与普通 INSERT 两处都要用 finished)
-status: finished ? "success" : "interrupted",
+// Wrong: transport close is not a business success signal.
+await consumeChatSSE(body, handlers);
+setMessageStatus("success");
+
+// Correct: only the explicit terminal outcome can complete the message.
+const terminal = await consumeChatSSE(body, handlers);
+setCompletionStatusAt(key, assistantIdx, terminal);
 ```
 
-**续写完成的状态流转**（`continueGeneration`）：正常结束 → 把该消息 `status` 转为 `success`（避免对已补全内容再次续写）；被停止中断 → 保持 `interrupted`（可再次续写）。
-
-**为什么**：续写把目标 assistant 已有正文作为 messages 末尾的 assistant prefill。当 prefill 是被截断的半句话（interrupted）时，模型自然续写、不重复；当 prefill 是一段已完整结束的回答时，模型倾向复述，导致续写内容与原文雷同。因此续写必须限制在 interrupted 消息上。
+续写仍把 interrupted assistant 正文作为 prefill。完整回答若允许续写会倾向复述，因此只有 interrupted 消息可继续生成。
 
 ---
 

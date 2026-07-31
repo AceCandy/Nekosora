@@ -10,7 +10,7 @@ Apply this contract when changing authenticated `/api/chat` generation, `runs`, 
 - `executeChatCompletion(input): Promise<ChatCompletionOutcome>` owns streaming, first-terminal-cause, heartbeat, tool audit, completion commit, and the unique domain finish.
 - `persistChatCompletion(input): Promise<PersistChatCompletionResult>` commits assistant, conversation time, optional memory intent, and terminal run in one PostgreSQL transaction.
 - Terminal run predicate: `run_id + conversation_id + user_id + status='running'`, with `RETURNING` exactly one row.
-- SSE success tail: `data: {"type":"finish","metadata":MessageRunMetadata}` followed immediately by `data: [DONE]`.
+- Internal WebChat tail: success emits `finish(metadata) -> terminal(success) -> [DONE]`; failed/interrupted emit `terminal(status) -> [DONE]` after any existing error frame. `ChatTerminalStatus` is owned by `src/lib/chat/sse-contract.ts`.
 - `memory_extraction_jobs`: one row per `run_id`, with run/conversation/user cascade FKs and a minimal JSONB message snapshot.
 
 ## 3. Contracts
@@ -23,7 +23,8 @@ Apply this contract when changing authenticated `/api/chat` generation, `runs`, 
 - Lock order is conversation `FOR UPDATE`, active message/CAS validation, assistant write, conversation time, optional memory intent, then terminal run update.
 - Continue updates require the original assistant content in the SQL predicate. Parent and source references are re-read inside the locked transaction.
 - Compute `completedAt` and `durationMs` once before the completion call. The committed result, historical projection, and live finish metadata reuse those values.
-- Only a committed `success` can emit domain finish. The route adapter serializes that one finish and `[DONE]`; failed, interrupted, start-failed, and persistence-failed outcomes never emit success signals.
+- Only a committed `success` can emit domain finish. The route adapter maps the returned `ChatCompletionOutcomeKind` exhaustively to `terminal(success|failed|interrupted)`, then sends `[DONE]` as a transport-completion marker. Failed/interrupted outcomes never emit finish, but an open transport still receives terminal + DONE.
+- The WebChat parser accepts success only when finish precedes terminal(success), and accepts any outcome only when terminal precedes DONE. DONE without terminal, success without finish, contradictory/duplicate terminal, or EOF before DONE is a protocol error.
 - Abort during commit closes transport intent but does not cancel the database transaction or downgrade a finish already latched as success. The committed database outcome remains authoritative.
 - `iterator.next()` races Abort. A provider that ignores its AbortSignal cannot indefinitely block coordinator convergence; iterator return is requested without awaiting an unresponsive provider.
 - Memory intent creation is part of the completion transaction. Immediate queue dispatch and artifact persistence are post-commit optimizations and cannot change the core outcome.
@@ -33,23 +34,25 @@ Apply this contract when changing authenticated `/api/chat` generation, `runs`, 
 
 | Condition | Database result | SSE result |
 | --- | --- | --- |
-| Strict run start fails | No confirmed run; no model call | One generic error if transport is open; no finish/DONE |
+| Strict run start fails | No confirmed run; no model call | Generic error, terminal(failed), DONE if transport is open |
 | Upstream finish then Abort | Commit success if repository succeeds | No later write when transport is cancelled |
-| Abort then late finish | Commit interrupted partial assistant | No finish/DONE |
-| Upstream error then late finish | Commit failed partial assistant | One error; no finish/DONE |
-| Natural EOF | Commit interrupted partial assistant | Generic incomplete error; no finish/DONE |
-| Parent/source/continue CAS misses | Entire completion transaction rolls back | Persistence error; no finish/DONE |
-| Memory intent insert fails | Entire completion transaction rolls back | Persistence error; no finish/DONE |
-| Terminal run update returns zero rows | Entire completion transaction rolls back | Persistence error; no finish/DONE |
-| Completion commit succeeds | Assistant, conversation time, intent, and run are visible together | One finish, then DONE |
+| Abort then late finish | Commit interrupted partial assistant | Cancelled transport receives no later write |
+| Upstream error then late finish | Commit failed partial assistant | One error, terminal(failed), DONE |
+| Natural EOF | Commit interrupted partial assistant | Generic incomplete error, terminal(interrupted), DONE |
+| Parent/source/continue CAS misses | Entire completion transaction rolls back | Persistence error, terminal(failed), DONE |
+| Memory intent insert fails | Entire completion transaction rolls back | Persistence error, terminal(failed), DONE |
+| Terminal run update returns zero rows | Entire completion transaction rolls back | Persistence error, terminal(failed), DONE |
+| Completion commit succeeds | Assistant, conversation time, intent, and run are visible together | One finish, terminal(success), DONE |
 
 ## 5. Good / Base / Bad Cases
 
 - Good: a successful assistant, run terminal metadata, conversation time, and memory intent become visible in the same commit.
 - Good: two concurrent continues serialize on the conversation row; only one original-content CAS and run terminal update succeeds.
 - Good: an Agent tool chain exposes one outer finish whose usage includes every model step.
+- Good: an ordinary provider failure preserves its error frame, then sends terminal(failed) and DONE without emitting finish.
 - Base: an interrupted generation stores partial assistant text with message status `interrupted` and run status `interrupted`.
 - Bad: provider finish directly causes route `[DONE]` before the completion transaction commits.
+- Bad: treating `[DONE]` or bare EOF as success without a validated terminal.
 - Bad: assistant persistence and `finalizeRun` are separate success writes.
 - Bad: queue acceptance is treated as memory business completion or deletes the durable intent.
 
@@ -60,7 +63,8 @@ Apply this contract when changing authenticated `/api/chat` generation, `runs`, 
 - Isolated PostgreSQL tests: concurrent continue has one winner; memory insert failure and terminal-run conflict roll back assistant, conversation time, intent, and run changes.
 - Coordinator tests: finish-before-Abort, Abort-before-finish, error-before-late-finish, natural EOF, duplicate terminal events, commit failure, and an Abort-ignoring iterator.
 - Agent-loop tests: one outer finish, one shared run ID, aggregate usage, and one aggregate telemetry finalization.
-- Route tests: identity/context wire fields, delta/reasoning/tool/error mapping, finish-before-DONE, no success signals on failure, and reader-cancel signal propagation.
+- Route tests: identity/context wire fields, delta/reasoning/tool/error mapping, all six outcome-to-terminal mappings, finish-before-terminal-before-DONE, no finish on failure, and reader-cancel signal propagation.
+- Client parser/store tests: strict terminal/DONE gate, contradictory/duplicate terminal, chunked final frame, EOF rejection, four generation actions mapping only terminal success to message success, and one visible error append.
 - Schema/migration tests: memory intent primary key, unique run, three cascade FKs, dispatch index, SQL, journal, and snapshot continuity.
 - Existing history, version switching, client SSE parser, store, and public-share tests must remain green.
 
@@ -73,11 +77,11 @@ await finalizeRun({ runId, status: "success" });
 queue.send("memory-extract", fullPayload);
 enqueue(doneFrame);
 
-// Correct: the coordinator emits success only from the committed repository result.
-await startRunStrict(start);
-const committed = await persistChatCompletion(completion);
-emit({ type: "finish", metadata: toMetadata(committed) });
-emitDone();
+// Correct: coordinator finish comes only from committed success;
+// the route serializes the returned outcome as the separate wire terminal.
+const outcome = await executeChatCompletion(input);
+safeEnqueue(terminalFrame(TERMINAL_STATUS_BY_OUTCOME[outcome.kind]));
+safeEnqueue(doneFrame);
 ```
 
 ```typescript
