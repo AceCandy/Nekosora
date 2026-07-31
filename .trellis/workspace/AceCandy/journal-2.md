@@ -367,3 +367,26 @@ Implemented strict run start, atomic assistant/run/memory completion persistence
 ### Status
 
 [OK] **Completed**
+
+
+## Session 77: 修复 Chat SSE 失败与中断终态
+
+**Date**: 2026-07-31
+**Task**: 修复 Chat SSE 失败与中断终态
+**Branch**: `dev_0729`
+
+### Summary
+
+统一内部 Chat SSE 成功、失败与中断终态协议，强化客户端解析和四条发送路径的消息状态收敛，并同步规格与任务验证记录。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c83d2da` | (see git log) |
+| `b00b707` | (see git log) |
+| `bf5c860` | (see git log) |
+
+### Status
+
+[OK] **Completed**

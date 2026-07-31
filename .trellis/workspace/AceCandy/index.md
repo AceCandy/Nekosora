@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 76
+- **Total Sessions**: 77
 - **Last Active**: 2026-07-31
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~369 | Active |
+| `journal-2.md` | ~392 | Active |
 | `journal-1.md` | ~1981 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 77 | 2026-07-31 | 修复 Chat SSE 失败与中断终态 | `c83d2da`, `b00b707`, `bf5c860` | `dev_0729` |
 | 76 | 2026-07-31 | 完成架构深化路线图最终集成 | `0f32aa3`, `c85f3de`, `d09fd0e` | `dev_0729` |
 | 75 | 2026-07-31 | Chat Composer 状态协调 | `c81e94a`, `e122c7b`, `470212a` | `dev_0729` |
 | 74 | 2026-07-30 | Model Catalog 同步契约强化 | `fa4aebb`, `1526147`, `e8ed9b7` | `dev_0729` |
