@@ -42,7 +42,9 @@
 - [x] Worker/queue 的注册、启动、handler 失败、恢复调度、drain 和 shutdown 由一个生命周期边界拥有。
 - [x] Catalog 同步支持权威能力降级、输入规范化和跨字段原子 invariant fallback，且运行时消费者继续只读目录。
 - [x] Composer 快速连续切换不会因闭包快照或异步返回乱序覆盖最新选择。
-- [ ] 最终集成复核证明五个模块之间的数据流、错误语义、取消语义和关闭顺序一致；全量质量门禁通过。
+- [x] 最终集成复核证明五个模块之间的数据流、错误语义、取消语义和关闭顺序一致；全量质量门禁通过。
+
+最终集成证据见 `implement.md` 的 Final Verification Record。认证后的 Chat 桌面/390px 浏览器交互仍因登录态不可用而未验证；该限制不改写为通过。
 
 ## Out Of Scope
 

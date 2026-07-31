@@ -48,10 +48,21 @@
 
 ## Final Integration Review
 
-- [ ] 所有 child 已完成并归档，父任务 children 全部完成。
-- [ ] 运行项目全量 lint、typecheck、tests、必要的 build/PostgreSQL integration tests。
-- [ ] 复核跨模块数据流、取消/租约/关闭语义、敏感信息和迁移范围。
+- [x] 所有 child 已完成并归档，父任务 children 全部完成。
+- [x] 运行项目全量 lint、typecheck、tests、必要的 build/PostgreSQL integration tests。
+- [x] 复核跨模块数据流、取消/租约/关闭语义、敏感信息和迁移范围。
 - [ ] 更新父任务验收状态，提交路线图收尾并归档父任务。
+
+## Final Verification Record
+
+- `pnpm lint` 与 `pnpm typecheck` 通过；全量 Vitest 为 117 个文件通过、2 个文件跳过，981 个用例通过、17 个用例跳过。
+- `pnpm build` 通过，19 个静态页面生成完成；Chat、公开 `/v1/*`、管理端和 Edge instrumentation 均完成 production 编译。
+- RAG lease 隔离 PostgreSQL gate：14/14；queue lifecycle gate：clean drain 与 30 秒 timeout 均通过；Chat completion 原子事务 gate：3/3。
+- 三个 gate 均使用随机前缀临时数据库并在 `finally` 删除；最终残留数据库计数为 0。
+- 跨模块复核确认：Gateway 不写 Chat 业务终态；Chat completion transaction 同事务写 assistant/run/memory intent；worker 是 queue 注册、recovery 与 shutdown 的唯一 owner；RAG 终态受 DB lease/token fencing；model catalog capabilities 贯穿 UI、routing 与 request translation；Composer 不复制能力判断。
+- 集成复核修复了共享错误边界未移除基础设施 URL、RAG retrieve 与 Chat compaction 直接记录原始 `Error` 的隐私缺陷；定向测试 33/33 通过。
+- 未验证：认证后的 Chat 桌面与 390px 浏览器交互，沿用 Composer child 的登录态限制；未读取或创建本地凭据。
+- 保留协议风险：失败/中断 Chat SSE 不补 `[DONE]`，客户端依赖 error frame 或连接关闭；现有 route test 明确锁定该契约，本任务未擅自改变 wire behavior。
 
 ## Activation Commands
 

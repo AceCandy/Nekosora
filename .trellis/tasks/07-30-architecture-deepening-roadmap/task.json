@@ -3,7 +3,7 @@
   "name": "architecture-deepening-roadmap",
   "title": "架构深化路线图",
   "description": "以已完成的 Gateway execution engine 为基线，按顺序深化 Chat 完成事务、RAG 状态机、Worker/queue 生命周期、Model catalog 同步与 Composer 状态边界。",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,
@@ -36,7 +36,7 @@
     "src/lib/sync-pi-models.ts",
     "src/features/chat/components/ChatComposer.tsx"
   ],
-  "notes": "五个架构深化子任务均已完成并归档；父任务仅剩最终集成复核与收尾。",
+  "notes": "五个架构深化子任务与最终集成复核均已完成；自动化和隔离 PostgreSQL 门禁通过，认证后 Chat 浏览器回归未验证，等待路线图收尾提交授权。",
   "meta": {
     "implementation_policy": "activate_one_child_at_a_time",
     "completed_baseline": "07-29-gateway-execution-engine"
