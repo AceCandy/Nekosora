@@ -51,7 +51,7 @@
 - [x] 所有 child 已完成并归档，父任务 children 全部完成。
 - [x] 运行项目全量 lint、typecheck、tests、必要的 build/PostgreSQL integration tests。
 - [x] 复核跨模块数据流、取消/租约/关闭语义、敏感信息和迁移范围。
-- [ ] 更新父任务验收状态，提交路线图收尾并归档父任务。
+- [x] 更新父任务验收状态，提交路线图收尾并归档父任务。
 
 ## Final Verification Record
 
