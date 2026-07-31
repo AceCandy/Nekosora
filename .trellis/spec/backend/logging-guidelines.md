@@ -32,6 +32,7 @@ Database facts:
 - Attempt metric labels are limited to `operation`, `status`, and provider `protocol`; model, route, provider id, request id, and key are forbidden high-cardinality labels.
 - Telemetry is best-effort and bounded. DB or metrics failures never alter the gateway outcome; repository sinks apply redaction again before persistence or console output.
 - Raw provider `Error`, API key, headers, and base URL never enter telemetry. Only `SafeGatewayError`, `GatewayRouteSnapshot`, and `upstreamKeyMasked` may cross the engine boundary.
+- `redactErrorMessage(error, secrets, fallback)` 必须先清理已知凭据与敏感字段，再移除完整 `http` / `https` / PostgreSQL URL。调用方可以保留低敏错误阶段文本，但不得把原始 `Error` 作为第二个 console 参数绕过该边界。
 - Route/provider/upstream names are write-time snapshots. Historical rows do not change when configuration names change.
 - `taskKind` is nullable: main reply/gateway request is `null`; background title/memory/compact calls use their stable task kind.
 - Route-layer auth/body failures occurring before the engine may use the compatibility `logUsage` entry to insert one final execution row. Engine-owned failures must not be written again by route handlers.
@@ -63,6 +64,7 @@ Database facts:
 
 - `gateway-execution/engine.test.ts`: key retry, route failover, commit-before-yield, Abort, deterministic errors, rejected protocols, credential/route redaction, telemetry failure isolation.
 - `gateway-execution/telemetry.test.ts`: start/attempt/finalize mappings, DB/metrics best-effort, persistence redaction.
+- `redaction.test.ts`：断言 provider 与 PostgreSQL URL 不离开错误边界；RAG retrieve 与 Chat compaction 降级测试断言 console 只接收脱敏字符串。
 - Schema/migration tests: both facts, unique attempt number, FK actions, journal/snapshot, no `CASCADE` drop, and only old log tables removed.
 - Usage/error repository tests: success-only aggregation, time range/user isolation, failed attempt-chain filtering, pagination count consistency.
 - Agent loop tests: one execution finalization, globally ordered attempts, aggregated tokens, one final metric.
