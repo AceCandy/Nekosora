@@ -3,7 +3,6 @@ import { FILE_PROCESS_QUEUE } from "@/lib/jobs/catalog";
 
 export const FILE_PROCESSING_RETRYABLE_MESSAGE = FILE_PROCESS_QUEUE.retryMessage;
 const MAX_FILE_PROCESSING_ERROR_LENGTH = 200;
-const URL_RE = /\b(?:https?|postgres(?:ql)?):\/\/[^\s"'<>]+/gi;
 
 export type FileProcessingStatus =
   | "pending"
@@ -79,7 +78,6 @@ export function formatFileProcessingError(
   fallback = "文件处理失败",
 ): string {
   return redactErrorMessage(error, secrets, fallback)
-    .replace(URL_RE, "[REDACTED]")
     .slice(0, MAX_FILE_PROCESSING_ERROR_LENGTH);
 }
 

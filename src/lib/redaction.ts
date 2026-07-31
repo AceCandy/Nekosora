@@ -19,6 +19,7 @@ const SENSITIVE_ASSIGNMENT_RE = new RegExp(
   `(\\b${SENSITIVE_ASSIGNMENT_FIELD_SOURCE}\\b\\s*[:=]\\s*)[^\\s,;&#"']+`,
   "gi",
 );
+const INFRASTRUCTURE_URL_RE = /\b(?:https?|postgres(?:ql)?):\/\/[^\s"'<>]+/gi;
 
 type Secret = string | null | undefined;
 
@@ -65,5 +66,6 @@ export function redactErrorMessage(
     : error == null
       ? fallback
       : String(error);
-  return redactSensitiveText(message || fallback, secrets);
+  return redactSensitiveText(message || fallback, secrets)
+    .replace(INFRASTRUCTURE_URL_RE, REDACTED);
 }

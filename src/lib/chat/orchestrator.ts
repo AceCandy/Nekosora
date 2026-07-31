@@ -28,6 +28,7 @@ import { getTemplate, renderTemplate, incUseCount as incTplUseCount } from "@/li
 import { getCardsByIds, renderCardContext, incUseCount as incCardUseCount } from "@/lib/instruction-cards/service";
 import { assembleContext } from "@/lib/context-assembler";
 import { buildTrace } from "@/lib/trace";
+import { redactErrorMessage } from "@/lib/redaction";
 import {
   assertVisionModel,
   type ResolvedChatImage,
@@ -259,8 +260,11 @@ export async function prepareChatContext(
       let compaction: CompactionResult | null = null;
       try {
         compaction = await maybeCompact(conversationId, compactionMsgs);
-      } catch (err) {
-        console.warn("[chat] 压缩失败,跳过:", err);
+      } catch (error) {
+        console.warn(
+          "[chat] 压缩失败,跳过:",
+          redactErrorMessage(error, [], "压缩失败"),
+        );
       }
       return { compactionMsgs, compaction };
     })(),
