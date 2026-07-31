@@ -390,3 +390,25 @@ Implemented strict run start, atomic assistant/run/memory completion persistence
 ### Status
 
 [OK] **Completed**
+
+
+## Session 78: 修复 Chat execution telemetry 终态收敛
+
+**Date**: 2026-07-31
+**Task**: 修复 Chat execution telemetry 终态收敛
+**Branch**: `dev_0729`
+
+### Summary
+
+修复 coordinator 提前关闭 async iterator 导致的 gateway execution telemetry running 残留；补充 finish/error settlement、Abort 竞速与 active attempt 收尾、最终 usage 回调清理路径和跨层回归测试。更新 Chat/logging/cross-layer 规格，完成全量测试、lint、typecheck、build，并归档任务。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8dad396` | (see git log) |
+| `ce1d061` | (see git log) |
+
+### Status
+
+[OK] **Completed**
