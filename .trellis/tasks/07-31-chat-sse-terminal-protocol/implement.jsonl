@@ -1,0 +1,6 @@
+{"file":".trellis/spec/backend/chat-run-metadata.md","reason":"定义 Chat completion outcome、finish/DONE 顺序、Abort 与 route adapter 边界；本任务会升级失败/中断 wire terminal 契约。"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"约束内部 SSE error envelope、Abort 传播与错误信息边界。"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"定义 ChatMessage success/interrupted 恢复语义、四条流式 Store 路径和 delta/error flush 顺序。"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"新增跨 route/parser 的 terminal 类型时必须保持唯一 DTO owner 与严格联合类型。"}
+{"file":".trellis/tasks/07-31-chat-sse-terminal-protocol/research/evidence.md","reason":"记录当前 route、parser、Store 与数据库消息状态的代码事实和设计约束。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"terminal 是新增跨后端/前端事件契约，必须集中类型、验证与消费责任，避免重复私有解析。"}
