@@ -14,10 +14,16 @@
  *   data: {"type":"search_result","results":[{"title":"...","url":"...","snippet":"..."}]}
  *   data: {"type":"error","error":"..."}
  *   data: {"type":"finish","metadata":{...}}
+ *   data: {"type":"terminal","status":"success|failed|interrupted"}
  *   data: {"type":"title_updated","title":"...","conversationId":"..."}
  *   data: [DONE]
  */
 import type { MessageRunMetadata } from "@/features/chat/model/types";
+import {
+  isChatTerminalStatus,
+  type ChatTerminalEvent,
+  type ChatTerminalStatus,
+} from "@/lib/chat/sse-contract";
 
 export interface SSEEvent {
   type:
@@ -30,6 +36,7 @@ export interface SSEEvent {
     | "search_result"
     | "error"
     | "finish"
+    | ChatTerminalEvent["type"]
     | "title_updated";
   text?: string;
   toolName?: string;
@@ -38,6 +45,7 @@ export interface SSEEvent {
   results?: { title: string; url: string; snippet: string }[];
   error?: string;
   metadata?: MessageRunMetadata;
+  status?: unknown;
   /** title_updated:会话自动生成的新标题。 */
   title?: string;
   /** title_updated:对应的会话 ID。 */
@@ -74,54 +82,93 @@ export interface SSEHandlers {
 export async function consumeChatSSE(
   body: ReadableStream<Uint8Array>,
   handlers: SSEHandlers,
-): Promise<void> {
+): Promise<ChatTerminalStatus> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let finishSeen = false;
+  let terminalStatus: ChatTerminalStatus | null = null;
+
+  const consumeLine = (line: string): ChatTerminalStatus | null => {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("data: ")) return null;
+    const data = trimmed.slice(6);
+    if (data === "[DONE]") {
+      if (!terminalStatus) throw new Error("Chat SSE 缺少显式终态");
+      if (terminalStatus === "success" && !finishSeen) {
+        throw new Error("Chat SSE success 终态缺少 finish");
+      }
+      return terminalStatus;
+    }
+
+    let event: unknown;
+    try {
+      event = JSON.parse(data);
+    } catch {
+      return null;
+    }
+    if (!event || typeof event !== "object" || !("type" in event)) return null;
+    const ev = event as SSEEvent;
+    if (ev.type === "terminal") {
+      if (terminalStatus) throw new Error("Chat SSE 收到重复 terminal");
+      if (!isChatTerminalStatus(ev.status)) {
+        throw new Error("Chat SSE terminal status 非法");
+      }
+      if (finishSeen && ev.status !== "success") {
+        throw new Error("Chat SSE finish 与 terminal 状态冲突");
+      }
+      terminalStatus = ev.status;
+      return null;
+    }
+    if (terminalStatus) throw new Error("Chat SSE terminal 后仍有业务事件");
+
+    if (ev.type === "delta" && ev.text !== undefined) {
+      handlers.onDelta(ev.text);
+    } else if (ev.type === "reasoning" && ev.text !== undefined) {
+      handlers.onReasoning?.(ev.text);
+    } else if (ev.type === "tool_call" && ev.toolName !== undefined) {
+      handlers.onToolCall?.(ev.toolName, ev.args);
+    } else if (ev.type === "tool_result" && ev.toolName !== undefined) {
+      handlers.onToolResult?.(ev.toolName, ev.isError ?? false);
+    } else if (ev.type === "search_result" && ev.results !== undefined) {
+      handlers.onSearchResult?.(ev.results);
+    } else if (ev.type === "error" && ev.error !== undefined) {
+      handlers.onError?.(ev.error);
+    } else if (ev.type === "finish" && ev.metadata !== undefined) {
+      finishSeen = true;
+      handlers.onFinish?.(ev.metadata);
+    } else if (ev.type === "title_updated" && ev.title !== undefined && ev.conversationId !== undefined) {
+      handlers.onTitleUpdated?.(ev.title, ev.conversationId);
+    } else if (ev.type === "user_message" && ev.publicId !== undefined) {
+      handlers.onUserMessage?.(ev.publicId, ev.createdAt);
+    } else if (ev.type === "assistant_message" && ev.publicId !== undefined) {
+      handlers.onAssistantMessage?.(ev.publicId, ev.createdAt);
+    }
+    return null;
+  };
+
+  const consumeBufferedLines = (flush: boolean): ChatTerminalStatus | null => {
+    const lines = buffer.split("\n");
+    buffer = flush ? "" : (lines.pop() ?? "");
+    for (const line of lines) {
+      const result = consumeLine(line);
+      if (result) return result;
+    }
+    return null;
+  };
 
   try {
     while (true) {
       const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-
-      // 按行切分,最后一段可能不完整,留到下次拼接。
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed.startsWith("data: ")) continue;
-        const data = trimmed.slice(6);
-        // 服务端保证 DONE 仅在 assistant 与必要会话状态持久化后发送。
-        if (data === "[DONE]") return;
-        try {
-          const ev = JSON.parse(data) as SSEEvent;
-          if (ev.type === "delta" && ev.text !== undefined) {
-            handlers.onDelta(ev.text);
-          } else if (ev.type === "reasoning" && ev.text !== undefined) {
-            handlers.onReasoning?.(ev.text);
-          } else if (ev.type === "tool_call" && ev.toolName !== undefined) {
-            handlers.onToolCall?.(ev.toolName, ev.args);
-          } else if (ev.type === "tool_result" && ev.toolName !== undefined) {
-            handlers.onToolResult?.(ev.toolName, ev.isError ?? false);
-          } else if (ev.type === "search_result" && ev.results !== undefined) {
-            handlers.onSearchResult?.(ev.results);
-          } else if (ev.type === "error" && ev.error !== undefined) {
-            handlers.onError?.(ev.error);
-          } else if (ev.type === "finish" && ev.metadata !== undefined) {
-            handlers.onFinish?.(ev.metadata);
-          } else if (ev.type === "title_updated" && ev.title !== undefined && ev.conversationId !== undefined) {
-            handlers.onTitleUpdated?.(ev.title, ev.conversationId);
-          } else if (ev.type === "user_message" && ev.publicId !== undefined) {
-            handlers.onUserMessage?.(ev.publicId, ev.createdAt);
-          } else if (ev.type === "assistant_message" && ev.publicId !== undefined) {
-            handlers.onAssistantMessage?.(ev.publicId, ev.createdAt);
-          }
-        } catch {
-          /* ignore parse errors */
-        }
+      if (done) {
+        buffer += decoder.decode();
+        const result = consumeBufferedLines(true);
+        if (result) return result;
+        throw new Error("Chat SSE 在 [DONE] 前结束");
       }
+      buffer += decoder.decode(value, { stream: true });
+      const result = consumeBufferedLines(false);
+      if (result) return result;
     }
   } finally {
     reader.releaseLock();

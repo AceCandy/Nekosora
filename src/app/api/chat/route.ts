@@ -28,7 +28,9 @@ import {
 import {
   executeChatCompletion,
   type ChatCompletionEvent,
+  type ChatCompletionOutcomeKind,
 } from "@/lib/chat/completion-coordinator";
+import type { ChatTerminalStatus } from "@/lib/chat/sse-contract";
 import { redactErrorMessage } from "@/lib/redaction";
 import type { IRRequest } from "@/lib/providers/types";
 import type { ReasoningLevel } from "@/db/types";
@@ -47,6 +49,15 @@ const chatComposerSnapshotSchema = z.object({
   outputModeId: z.string().min(1).nullable().optional(),
   reasoning: z.enum(["off", "minimal", "low", "medium", "high", "xhigh", "max"]).optional(),
 });
+
+const TERMINAL_STATUS_BY_OUTCOME = {
+  cancelled_before_start: "interrupted",
+  start_failed: "failed",
+  committed_success: "success",
+  committed_failed: "failed",
+  committed_interrupted: "interrupted",
+  persistence_failed: "failed",
+} satisfies Record<ChatCompletionOutcomeKind, ChatTerminalStatus>;
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -489,12 +500,11 @@ export async function POST(req: NextRequest) {
           safeEnqueue(encoder.encode(
             `data: ${JSON.stringify({ type: "finish", metadata: event.metadata })}\n\n`,
           ));
-          safeEnqueue(encoder.encode("data: [DONE]\n\n"));
         }
       };
 
       try {
-        await executeChatCompletion({
+        const outcome = await executeChatCompletion({
           ctx,
           request: irRequest,
           modelId: body.modelId,
@@ -525,6 +535,13 @@ export async function POST(req: NextRequest) {
           signal: abortCtl.signal,
           emit,
         });
+        safeEnqueue(encoder.encode(
+          `data: ${JSON.stringify({
+            type: "terminal",
+            status: TERMINAL_STATUS_BY_OUTCOME[outcome.kind],
+          })}\n\n`,
+        ));
+        safeEnqueue(encoder.encode("data: [DONE]\n\n"));
       } finally {
         req.signal.removeEventListener("abort", onRequestAbort);
         try {

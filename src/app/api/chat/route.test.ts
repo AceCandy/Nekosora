@@ -324,7 +324,7 @@ describe("POST /api/chat coordinator adapter", () => {
     }));
   });
 
-  it("保持全部 domain event 的 SSE wire 并让 DONE 紧跟 finish", async () => {
+  it("保持全部 domain event 的 SSE wire 并让 terminal(success) 与 DONE 紧跟 finish", async () => {
     mockContinuationDb();
     mocks.prepareChatContext.mockResolvedValue({
       irRequest: { model: "model-1", messages: [{ role: "user", content: "question" }] },
@@ -363,11 +363,38 @@ describe("POST /api/chat coordinator adapter", () => {
       "tool_call",
       "tool_result",
       "finish",
+      "terminal",
     ]);
-    expect(payload.indexOf('"type":"finish"')).toBeLessThan(payload.indexOf("data: [DONE]"));
+    const finishIndex = payload.indexOf('"type":"finish"');
+    const terminalIndex = payload.indexOf('"type":"terminal","status":"success"');
+    const doneIndex = payload.indexOf("data: [DONE]");
+    expect(finishIndex).toBeLessThan(terminalIndex);
+    expect(terminalIndex).toBeLessThan(doneIndex);
   });
 
-  it("失败事件不由 adapter 补发 DONE", async () => {
+  it.each([
+    ["start_failed", "failed"],
+    ["committed_failed", "failed"],
+    ["persistence_failed", "failed"],
+    ["cancelled_before_start", "interrupted"],
+    ["committed_interrupted", "interrupted"],
+  ] as const)("%s 由 adapter 映射为 terminal(%s) 后再发送 DONE", async (kind, status) => {
+    mockContinuationDb();
+    mocks.executeChatCompletion.mockResolvedValue({
+      kind,
+      assistantText: "",
+      assistantReasoning: "",
+    });
+
+    const response = await POST(request() as never);
+    const payload = await response.text();
+
+    expect(payload).not.toContain('"type":"finish"');
+    expect(payload).toContain(`"type":"terminal","status":"${status}"`);
+    expect(payload.indexOf('"type":"terminal"')).toBeLessThan(payload.indexOf("data: [DONE]"));
+  });
+
+  it("保留 coordinator error 并在其后发送 failed terminal 与 DONE", async () => {
     mockContinuationDb();
     mocks.executeChatCompletion.mockImplementation(async ({ emit }) => {
       await emit({ type: "started" });
@@ -377,10 +404,13 @@ describe("POST /api/chat coordinator adapter", () => {
 
     const response = await POST(request() as never);
     const payload = await response.text();
+    const errorIndex = payload.indexOf('"type":"error"');
+    const terminalIndex = payload.indexOf('"type":"terminal","status":"failed"');
+    const doneIndex = payload.indexOf("data: [DONE]");
 
-    expect(payload).toContain('"type":"error"');
-    expect(payload).not.toContain('"type":"finish"');
-    expect(payload).not.toContain("[DONE]");
+    expect(errorIndex).toBeGreaterThanOrEqual(0);
+    expect(errorIndex).toBeLessThan(terminalIndex);
+    expect(terminalIndex).toBeLessThan(doneIndex);
   });
 
   it("父引用在用户消息短事务中失效时不调用 coordinator", async () => {

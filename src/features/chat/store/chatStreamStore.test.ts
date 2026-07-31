@@ -49,7 +49,7 @@ describe("chatStreamStore Composer 请求快照", () => {
       activeConversationId: null,
       optimisticConversation: null,
     });
-    mocks.consumeChatSSE.mockResolvedValue(undefined);
+    mocks.consumeChatSSE.mockResolvedValue("success");
     mocks.handleStreamError.mockReturnValue({ content: "[错误] request failed" });
     mocks.createConversation.mockResolvedValue("conversation-created");
     mocks.getConversationTitleStateAction.mockResolvedValue({
@@ -137,6 +137,7 @@ describe("chatStreamStore finish metadata", () => {
         handlers.onUserMessage?.("user-real", "2026-07-28T01:02:03.000Z");
         handlers.onAssistantMessage?.("assistant-real", "2026-07-28T01:02:04.000Z");
         handlers.onFinish?.(finishMetadata);
+        return "success" as const;
       },
     );
 
@@ -155,6 +156,7 @@ describe("chatStreamStore finish metadata", () => {
       publicId: "assistant-real",
       createdAt: "2026-07-28T01:02:04.000Z",
       runMetadata: finishMetadata,
+      status: "success",
     });
   });
 
@@ -184,6 +186,7 @@ describe("chatStreamStore finish metadata", () => {
       async (_body: ReadableStream<Uint8Array>, handlers: SSEHandlers) => {
         handlers.onAssistantMessage?.("assistant-new", "2026-07-28T02:00:00.000Z");
         handlers.onFinish?.(finishMetadata);
+        return "success" as const;
       },
     );
 
@@ -213,6 +216,7 @@ describe("chatStreamStore finish metadata", () => {
       createdAt: "2026-07-28T02:00:00.000Z",
       content: "",
       runMetadata: finishMetadata,
+      status: "success",
     });
   });
 
@@ -244,6 +248,7 @@ describe("chatStreamStore finish metadata", () => {
         ).toBeUndefined();
         handlers.onAssistantMessage?.("assistant-1", "2026-07-27T03:00:00.000Z");
         handlers.onFinish?.(finishMetadata);
+        return "success" as const;
       },
     );
 
@@ -265,6 +270,116 @@ describe("chatStreamStore finish metadata", () => {
   });
 });
 
+describe("chatStreamStore terminal 状态收敛", () => {
+  type StreamAction = "send" | "regenerate" | "edit" | "continue";
+  const actions = ["send", "regenerate", "edit", "continue"] as const;
+  const cases = actions.flatMap(
+    (action) => (["success", "failed", "interrupted"] as const).map(
+      (status) => [action, status] as const,
+    ),
+  );
+  const key = "conversation-terminal";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useChatStreamStore.setState({
+      runtimes: {
+        [key]: {
+          messages: [
+            { role: "user", publicId: "user-1", content: "question" },
+            {
+              role: "assistant",
+              publicId: "assistant-1",
+              content: "partial",
+              status: "interrupted",
+            },
+          ],
+          streaming: false,
+          abortController: null,
+        },
+      },
+      activeConversationId: key,
+      optimisticConversation: null,
+    });
+    mocks.retryFromMessage.mockResolvedValue({
+      newAssistantPublicId: "assistant-placeholder",
+      parentPublicId: "user-1",
+      messages: [{ role: "user", content: "question" }],
+    });
+    mocks.editMessage.mockResolvedValue({
+      messages: [{ role: "user", content: "edited" }],
+      attachments: [],
+    });
+    mocks.continueMessage.mockResolvedValue({
+      messages: [{ role: "assistant", content: "partial" }],
+    });
+    mocks.handleStreamError.mockReturnValue({ content: "[错误] request failed" });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("data: done\n\n")));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  async function runAction(
+    action: StreamAction,
+    result: "success" | "failed" | "interrupted" | Error,
+  ) {
+    mocks.consumeChatSSE.mockImplementationOnce(async (
+      _body: ReadableStream<Uint8Array>,
+      handlers: SSEHandlers,
+    ) => {
+      if (result !== "success") handlers.onError?.("生成失败");
+      if (result instanceof Error) throw result;
+      return result;
+    });
+    if (action === "send") {
+      await useChatStreamStore.getState().send(key, "next", sendOptions);
+    } else if (action === "regenerate") {
+      await useChatStreamStore.getState().regenerate(
+        key,
+        "assistant-1",
+        "model-a",
+        "model-id-a",
+      );
+    } else if (action === "edit") {
+      await useChatStreamStore.getState().editAndResend(
+        key,
+        "user-1",
+        "edited",
+        [],
+        "model-a",
+        "model-id-a",
+      );
+    } else {
+      await useChatStreamStore.getState().continueGeneration(
+        key,
+        "assistant-1",
+        "model-a",
+        "model-id-a",
+      );
+    }
+    return useChatStreamStore.getState().runtimes[key].messages.at(-1);
+  }
+
+  it.each(cases)("%s 收到 terminal(%s) 后写入对应消息完整性状态", async (action, status) => {
+    const message = await runAction(action, status);
+
+    expect(message?.status).toBe(status === "success" ? "success" : "interrupted");
+    if (status !== "success") {
+      expect(message?.content).toContain("[错误] 生成失败");
+      expect(message?.content.match(/\[错误\]/g)).toHaveLength(1);
+    }
+  });
+
+  it.each(actions)("%s 遇到缺少终态的协议异常后标记 interrupted", async (action) => {
+    const message = await runAction(action, new Error("Chat SSE 在 [DONE] 前结束"));
+
+    expect(message?.status).toBe("interrupted");
+    expect(message?.content.match(/\[错误\]/g)).toHaveLength(1);
+  });
+});
+
 describe("chatStreamStore 会话标题轮询", () => {
   let conversationSeq = 0;
   let conversationId = "";
@@ -279,7 +394,7 @@ describe("chatStreamStore 会话标题轮询", () => {
       optimisticConversation: null,
     });
     mocks.createConversation.mockResolvedValue(conversationId);
-    mocks.consumeChatSSE.mockResolvedValue(undefined);
+    mocks.consumeChatSSE.mockResolvedValue("success");
     mocks.handleStreamError.mockReturnValue({ content: "[错误] request failed" });
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("data: done\n\n")));
   });
@@ -385,7 +500,7 @@ describe("chatStreamStore 附件消费边界", () => {
       activeConversationId: null,
       optimisticConversation: null,
     });
-    mocks.consumeChatSSE.mockResolvedValue(undefined);
+    mocks.consumeChatSSE.mockResolvedValue("success");
     mocks.handleStreamError.mockReturnValue({ content: "[错误] request failed" });
   });
 
@@ -402,6 +517,7 @@ describe("chatStreamStore 附件消费边界", () => {
     vi.stubGlobal("fetch", fetchMock);
     mocks.consumeChatSSE.mockImplementationOnce(async () => {
       expect(onAttachmentsConsumed).toHaveBeenCalledWith(["file-1"]);
+      return "success" as const;
     });
 
     await useChatStreamStore.getState().send("conversation-1", "hello", sendOptions, {
@@ -785,6 +901,7 @@ describe("chatStreamStore regenerate version selection", () => {
         .toBeUndefined();
       handlers.onAssistantMessage?.("assistant-real", "2026-07-28T04:00:00.000Z");
       handlers.onFinish?.(finishMetadata);
+      return "success" as const;
     });
 
     await useChatStreamStore.getState().regenerate(key, "assistant-old", "model-a", "model-id-a");
@@ -804,6 +921,7 @@ describe("chatStreamStore regenerate version selection", () => {
       handlers: { onAssistantMessage?: (publicId: string) => void },
     ) => {
       handlers.onAssistantMessage?.("assistant-real");
+      return "success" as const;
     });
     mocks.selectMessageVersion.mockRejectedValue(new Error("write failed"));
 
