@@ -412,3 +412,24 @@ Implemented strict run start, atomic assistant/run/memory completion persistence
 ### Status
 
 [OK] **Completed**
+
+
+## Session 79: Memory extraction diagnostics
+
+**Date**: 2026-08-01
+**Task**: Memory extraction diagnostics
+**Branch**: `dev_0729`
+
+### Summary
+
+Added privacy-safe memory extraction stage logs, diagnosed mem0 SQLite native binding failure, and disabled unused mem0 history while preserving PostgreSQL-backed memory operations.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3e8aede` | (see git log) |
+
+### Status
+
+[OK] **Completed**

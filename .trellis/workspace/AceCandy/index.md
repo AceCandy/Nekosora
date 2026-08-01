@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 78
-- **Last Active**: 2026-07-31
+- **Total Sessions**: 79
+- **Last Active**: 2026-08-01
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~414 | Active |
+| `journal-2.md` | ~435 | Active |
 | `journal-1.md` | ~1981 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 79 | 2026-08-01 | Memory extraction diagnostics | `3e8aede` | `dev_0729` |
 | 78 | 2026-07-31 | 修复 Chat execution telemetry 终态收敛 | `8dad396`, `ce1d061` | `dev_0729` |
 | 77 | 2026-07-31 | 修复 Chat SSE 失败与中断终态 | `c83d2da`, `b00b707`, `bf5c860` | `dev_0729` |
 | 76 | 2026-07-31 | 完成架构深化路线图最终集成 | `0f32aa3`, `c85f3de`, `d09fd0e` | `dev_0729` |
