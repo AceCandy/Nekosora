@@ -37,14 +37,14 @@ export default async function OperationsPage() {
   // 各 provider 最近成功率(基于全部历史)
   const providerHealth = await db
     .select({
-      providerRef: s.usageLogs.providerRef,
+      providerRef: s.gatewayExecutions.providerRef,
       total: sql<number>`count(*)`,
-      success: sql<number>`sum(case when ${s.usageLogs.status} = 'success' then 1 else 0 end)`,
-      avgLatency: sql<number>`coalesce(avg(${s.usageLogs.latencyMs}),0)`,
+      success: sql<number>`sum(case when ${s.gatewayExecutions.status} = 'success' then 1 else 0 end)`,
+      avgLatency: sql<number>`coalesce(avg(${s.gatewayExecutions.latencyMs}),0)`,
     })
-    .from(s.usageLogs)
-    .where(sql`${s.usageLogs.providerRef} is not null`)
-    .groupBy(s.usageLogs.providerRef)
+    .from(s.gatewayExecutions)
+    .where(sql`${s.gatewayExecutions.providerRef} is not null`)
+    .groupBy(s.gatewayExecutions.providerRef)
     .orderBy(desc(sql`count(*)`));
 
   // 从 registry 文本输出读活跃流式计数(prom-client v15 get() 为异步,改走 metrics 文本)。
@@ -53,8 +53,8 @@ export default async function OperationsPage() {
   // createdAt 为 PG timestamp,统一用 now() - 1 hour。
   const lastHourCalls = await db
     .select({ calls: sql<number>`count(*)` })
-    .from(s.usageLogs)
-    .where(sql`${s.usageLogs.createdAt} > now() - interval '1 hour'`);
+    .from(s.gatewayExecutions)
+    .where(sql`${s.gatewayExecutions.createdAt} > now() - interval '1 hour'`);
 
   return (
     <div className="space-y-10">

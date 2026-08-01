@@ -1,9 +1,40 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+  getMemories: vi.fn(),
+  recallMemories: vi.fn(),
+  maybeCompact: vi.fn(),
+  assembleContext: vi.fn(),
+  buildTrace: vi.fn(),
+}));
+
+vi.mock("drizzle-orm", () => ({
+  eq: vi.fn((left, right) => ({ op: "eq", left, right })),
+  and: vi.fn((...conditions) => ({ op: "and", conditions })),
+  or: vi.fn((...conditions) => ({ op: "or", conditions })),
+  inArray: vi.fn((left, values) => ({ op: "inArray", left, values })),
+  isNull: vi.fn((value) => ({ op: "isNull", value })),
+}));
+vi.mock("@/lib/memory/service", () => ({ getMemories: mocks.getMemories }));
+vi.mock("@/lib/memory/recall", () => ({ recallMemories: mocks.recallMemories }));
+vi.mock("@/lib/compact/service", () => ({ maybeCompact: mocks.maybeCompact }));
+vi.mock("@/lib/context-assembler", () => ({ assembleContext: mocks.assembleContext }));
+vi.mock("@/lib/trace", () => ({ buildTrace: mocks.buildTrace }));
+
 import {
   calculateTokenBudgets,
+  prepareChatContext,
   replaceMessageText,
   selectCurrentBranchMessages,
 } from "@/lib/chat/orchestrator";
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.getMemories.mockResolvedValue([]);
+  mocks.recallMemories.mockResolvedValue([]);
+  mocks.assembleContext.mockImplementation(({ messages }) => messages);
+  mocks.buildTrace.mockReturnValue({ sources: [] });
+});
 
 describe("calculateTokenBudgets", () => {
   it("小窗口仍为输入和输出各保留有效预算", () => {
@@ -63,5 +94,64 @@ describe("replaceMessageText", () => {
 
   it("字符串内容直接替换", () => {
     expect(replaceMessageText("old", "rendered")).toBe("rendered");
+  });
+});
+
+describe("prepareChatContext 降级日志", () => {
+  it("压缩失败时不暴露原始错误或 provider URL", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    mocks.maybeCompact.mockRejectedValueOnce(
+      new Error("POST https://provider.example/v1?api_key=secret failed"),
+    );
+    const createFrom = () => ({
+      where: vi.fn(() => ({
+        orderBy: vi.fn().mockResolvedValue([]),
+        limit: vi.fn().mockResolvedValue([]),
+      })),
+      innerJoin: vi.fn(() => ({
+        where: vi.fn(() => ({ limit: vi.fn().mockResolvedValue([]) })),
+      })),
+    });
+    const db = {
+      select: vi.fn(() => ({ from: vi.fn(createFrom) })),
+    };
+    const schema = {
+      messages: {
+        conversationId: "messages.conversationId",
+        deletedAt: "messages.deletedAt",
+        createdAt: "messages.createdAt",
+      },
+      models: {
+        catalogId: "models.catalogId",
+        id: "models.id",
+        name: "models.name",
+        enabled: "models.enabled",
+        visibility: "models.visibility",
+        ownerUserId: "models.ownerUserId",
+      },
+      modelCatalog: {
+        id: "catalog.id",
+        contextWindow: "catalog.contextWindow",
+        maxOutputTokens: "catalog.maxOutputTokens",
+      },
+    };
+
+    const result = await prepareChatContext({
+      userId: "user-1",
+      conversationId: "conversation-1",
+      conv: { outputModeId: null },
+      userContent: "hello",
+      model: "model-a",
+      messages: [{ role: "user", content: "hello" }],
+      branchLeafPublicId: "message-1",
+      db,
+      schema,
+    });
+
+    expect("error" in result).toBe(false);
+    expect(warnSpy).toHaveBeenCalledWith(
+      "[chat] 压缩失败,跳过:",
+      "POST [REDACTED] failed",
+    );
   });
 });

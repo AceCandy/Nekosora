@@ -83,7 +83,7 @@ stream 生成失败时,从 AI SDK 错误提取**真实上游 statusCode** 归类
   - `5xx` -> `upstream_error`(phase=upstream)
   - 无 statusCode + 命中网络关键字(`NETWORK_KEYWORDS`) -> `network_error`(phase=network)
   - 其余(400/404 等 4xx 或未知)-> `generation_failed`(兜底,phase=upstream)
-- 落库(`ops_error_logs`):`httpStatus` 用真实 statusCode(无则 `SHORT_HTTP_STATUS[errorCode]`);`errorPhase` 经 `classifyError({ errorCode, httpStatus, errorMessage })` 三参同传,429 归 `rate_limit` 而非 `upstream`。`errorMessage` 保留 `lastError.message`(含 "Too Many Requests" 等原文)。
+- 落库(`gateway_executions` / `gateway_attempts`):`httpStatus` 使用真实 statusCode；`errorPhase` 经 `classifyError({ errorCode, httpStatus, errorMessage })` 三参同传，429 归 `rate_limit` 而非 `upstream`。只持久化脱敏后的 safe message。
 
 ### 重试策略
 - `streamText`/`generateText` 显式 `maxRetries: 0`,**禁用 AI SDK 自动重试**(默认 2 次 = 3 次尝试)。
@@ -150,6 +150,72 @@ for await (const event of streamChat({ ctx, request, abortSignal })) consume(eve
 if (!abortSignal.aborted) controller.enqueue(doneFrame);
 ```
 
+## Scenario: WebChat Completion Cancellation
+
+### 1. Scope / Trigger
+
+Apply this contract when changing `/api/chat`, `executeChatCompletion`, provider iteration, Chat heartbeat, completion persistence, or WebChat terminal SSE.
+
+### 2. Signatures
+
+- `executeChatCompletion({ signal, emit, ... }): Promise<ChatCompletionOutcome>`.
+- `ChatCompletionOutcome.kind`: `cancelled_before_start | start_failed | committed_success | committed_failed | committed_interrupted | persistence_failed`.
+- Route adapter event tail: `finish` remains success-only metadata; every open transport receives one `terminal(success|failed|interrupted)` followed by `[DONE]`.
+
+### 3. Contracts
+
+- Request abort and `ReadableStream.cancel()` abort one shared controller; the same signal reaches coordinator and provider stream.
+- Before strict start, Abort creates no run and no model call. After start, Abort is the first terminal cause only if success/error has not already latched.
+- Race every provider `iterator.next()` against Abort. If Abort wins, request iterator return without awaiting an unresponsive provider and proceed to interrupted persistence.
+- Once completion commit begins, Abort controls transport only; it does not cancel the short database transaction or downgrade an already-latched success.
+- Cancelled transport receives no later error, finish, terminal, DONE, or explicit close write. Normal committed success receives finish, terminal(success), then DONE.
+- Failed/interrupted outcomes preserve one sanitized error frame when available, then terminal + DONE. Terminal carries only status and never copies raw provider/database errors.
+- `[DONE]` is a transport marker, not a success signal. The internal parser rejects missing/invalid/duplicate terminal, success without finish, terminal after contradictory finish, and EOF before DONE.
+- Expose only generic start/persistence errors and already-sanitized provider errors; raw DB/provider errors never enter SSE.
+
+### 4. Validation & Error Matrix
+
+| Condition | Coordinator result | Transport result |
+| --- | --- | --- |
+| Signal aborted before start | `cancelled_before_start` | No events |
+| Abort before upstream finish | `committed_interrupted` | No terminal success writes |
+| Finish before Abort | `committed_success` if commit succeeds | Suppress late writes if cancelled |
+| Provider ignores Abort | Interrupted commit still completes | No hang waiting for `next()` |
+| Provider error first | `committed_failed` | One error, terminal(failed), DONE if open |
+| Natural provider EOF | `committed_interrupted` | Generic error, terminal(interrupted), DONE if open |
+| Completion commit rejects | `persistence_failed` | Generic error, terminal(failed), DONE if open |
+
+### 5. Good / Base / Bad Cases
+
+- Good: reader cancel aborts the exact signal held by coordinator and an unresponsive iterator cannot hold the route open indefinitely.
+- Base: ordinary provider failure is persisted as failed and emits one existing error envelope followed by terminal(failed) and DONE.
+- Bad: recomputing status from `signal.aborted` after provider finish downgrades a committed success.
+- Bad: awaiting `iterator.return()` after Abort lets a non-compliant provider block interruption forever.
+- Bad: appending DONE to every error without a machine-readable terminal leaves clients unable to distinguish completion from transport close.
+
+### 6. Tests Required
+
+- Coordinator tests cover pre-start Abort, Abort-before-finish, finish-before-Abort during commit, error-before-late-finish, natural EOF, and an iterator that never resolves after Abort.
+- Route tests cancel the exported response reader and assert the coordinator signal is aborted.
+- Assert failed, interrupted, start-failed, and persistence-failed outcomes have no finish but do have the mapped terminal + DONE while transport is open.
+- Assert success finish is serialized immediately before terminal(success) + DONE and controller close is cancellation-safe.
+- Parser tests reject DONE/EOF without terminal and ensure error + protocol failure is displayed once across send/regenerate/edit/continue.
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong: provider compliance is the only cancellation boundary.
+for await (const event of providerStream) consume(event);
+
+// Correct: coordinator convergence does not depend on provider next() returning,
+// and the route serializes only the returned outcome.
+const next = await Promise.race([iterator.next(), abortPromise(signal)]);
+if (next === STREAM_ABORTED) persistInterrupted();
+const outcome = await executeChatCompletion(input);
+safeEnqueue(terminalFrame(outcome.kind));
+safeEnqueue(doneFrame);
+```
+
 ## Scenario: Provider Error Credential Redaction
 
 ### 1. Scope / Trigger
@@ -166,18 +232,18 @@ The shared implementation lives in `src/lib/redaction.ts`; provider-specific cal
 
 ### 3. Contracts
 
-- A boundary that holds an actual API key or custom provider headers passes the key and every header value as exact secrets before the error leaves that boundary.
+- A boundary that holds an actual API key, custom provider headers, or provider base URL passes the key, base URL, and every header value as exact secrets before the error leaves that boundary.
 - Exact secrets are replaced literally, longest first; empty secrets are ignored. Query credentials, Authorization/Bearer, `x-api-key`, JSON fields, and key/value diagnostics also receive pattern-based redaction.
 - Retry, HTTP status extraction, auth classification, failover, and circuit-breaker decisions may inspect the raw error in-process. Only the derived safe message may enter downstream sinks.
-- Image, TTS, and STT adapters throw a new `Error(safeMessage)` without retaining the raw `cause` or stack. Their routes may only log, persist, or return that safe message.
-- `logUsage()` and structured run/tool normalization apply generic redaction as defense in depth. They cannot discover an arbitrary opaque secret that the owning caller failed to provide.
+- Gateway engine owns raw errors for Chat, Image, TTS, and STT and emits only `SafeGatewayError`; routes may only log, persist, or return that safe message.
+- Gateway telemetry, compatibility `logUsage()`, and structured run/tool normalization apply generic redaction as defense in depth. They cannot discover an arbitrary opaque secret that the owning caller failed to provide.
 - The replacement marker is `[REDACTED]`; non-sensitive diagnostic text and existing API error codes/statuses remain unchanged.
 
 ### 4. Validation & Error Matrix
 
 | Input / condition | Required result |
 | --- | --- |
-| Error contains the current API key or custom header value | Replace every exact occurrence with `[REDACTED]` |
+| Error contains the current API key, custom header value, or provider base URL | Replace every exact occurrence with `[REDACTED]` |
 | Error contains `?key=`, Authorization/Bearer, `x-api-key`, or a sensitive JSON/key-value field | Replace only the credential value |
 | Error contains no credential | Preserve the diagnostic message |
 | Raw error contains `statusCode` or retry metadata | Classify and route using the raw error, then publish only the safe message |
@@ -185,30 +251,101 @@ The shared implementation lives in `src/lib/redaction.ts`; provider-specific cal
 
 ### 5. Good / Base / Bad Cases
 
-- Good: each key attempt builds `secrets = [tryKey, ...Object.values(route.provider.headers ?? {})]`, classifies the raw error, then reuses one safe message for events, console, and logs.
+- Good: each key attempt builds `secrets = [tryKey, route.provider.baseUrl, ...Object.values(route.provider.headers ?? {})]`, classifies the raw error, then reuses one safe message for events, console, and logs.
 - Base: `upstream timeout after 30s` remains readable and otherwise unchanged.
-- Bad: passing the raw `Error` to `console.error`, an API details object, or `ops_error_logs` can expose a URL query, header, `cause`, or stack containing credentials.
+- Bad: passing the raw `Error` to `console.error`, an API details object, or gateway telemetry can expose a URL, header, `cause`, or stack containing credentials.
 
 ### 6. Tests Required
 
 - Unit-test literal secrets with regex metacharacters, overlapping values, and empty entries.
 - Cover URL query, Authorization/Bearer, `x-api-key`, quoted JSON/key-value forms, idempotence, and ordinary-message preservation.
 - Probe tests must cover fetch errors, model-construction errors, non-stream/stream errors, and custom header values.
-- Stream tests must prove raw status/retry behavior is retained while events, return values, console, and log parameters exclude the attempted key.
-- Media adapter and route tests must prove HTTP, console, `ops_error_logs`, and job error fields receive only safe messages.
+- Engine tests must prove raw status/retry behavior is retained while events, outcomes, telemetry, and console exclude attempted keys, header values, and base URLs.
+- Media adapter and route tests must prove HTTP, console, execution/attempt facts, and job error fields receive only safe messages.
 - Structured audit tests must retain depth, circular-reference, and truncation behavior while redacting sensitive fields and embedded credential text.
 
 ### 7. Wrong vs Correct
 
 ```typescript
-// Wrong: the raw provider error crosses a sink boundary.
-console.error("provider failed", error);
-await logUsage({ ...params, errorMessage: error.message });
+// Wrong: the raw provider error crosses the engine boundary.
+throw error;
 
-// Correct: classify with the raw error, then reuse only the safe message.
-const classification = classifyStreamError(error, secrets);
-console.error("provider failed", classification.message);
-await logUsage({ ...params, errorMessage: classification.message });
+// Correct: classify while exact route secrets are available.
+const safeError = classifyGatewayError(error, providerSecrets(route, apiKey));
+await telemetry.recordAttempt({ ...attempt, error: safeError });
+return { status: "failed", error: safeError };
+```
+
+---
+
+## Scenario: Queue And Worker Failure Boundary
+
+### 1. Scope / Trigger
+
+Apply this contract when changing queue definitions, pg-boss callbacks/events, worker handlers/recovery, worker startup/shutdown, or an asynchronous producer fallback. Background failures are persisted by pg-boss or written to process logs, so raw `Error` objects cannot cross these boundaries.
+
+### 2. Signatures
+
+- `QueueDefinition<TPayload>.retryMessage: string`
+- `JobHandler<TPayload>: (payload) => Promise<"completed" | "noop">`
+- `QueueAdapter.work(definition, handler): Promise<void>`
+- `RecoveryDefinition.failureMessage: string`
+- `WorkerRuntimeController.start(): Promise<void>` / `shutdown(): Promise<void>`
+
+### 3. Contracts
+
+- Domain handlers may inspect and classify raw failures internally, but a rejecting pg-boss callback must throw a new `Error(definition.retryMessage)` with no original `cause` or raw stack content.
+- Runtime handler logs contain only definition name plus `completed`, `noop`, or `retryable_failure`. Runtime may rethrow internally because the queue adapter is the final callback boundary; it must never log that raw error.
+- pg-boss `error` events emit only `[queue] pg-boss error`. Do not pass the event argument through a generic formatter: SQL parameters and entity data are not guaranteed to be discoverable secrets.
+- Recovery scan failures emit only `RecoveryDefinition.failureMessage`; per-row recovery logs also omit durable IDs and raw errors.
+- Startup/shutdown cleanup logs only a fixed lifecycle stage and optional catalog job name. Cleanup failures continue remaining cleanup; startup preserves the original rejection, while signal shutdown exits non-zero.
+- Producer compensation that has no safe diagnostic owner, such as upload storage delete after a DB insert failure, logs a fixed stage message and preserves the original primary error.
+
+### 4. Validation & Error Matrix
+
+| Condition | Queue/runtime result | Published failure |
+| --- | --- | --- |
+| Handler returns `completed` / `noop` | Callback resolves | Stable outcome log only |
+| Handler throws provider/DB error | Callback rejects for retry | New catalog retry error; no raw cause/stack |
+| Handler returns invalid outcome | Callback rejects | Same catalog retry error |
+| pg-boss emits an error event | Adapter remains event-driven | Fixed queue event log only |
+| Recovery round rejects | Scheduler remains active | Fixed recovery failure message |
+| Queue drain/cleanup rejects | Continue cleanup; exit 1 on signal path | Fixed lifecycle failure message |
+| Upload DB insert and compensation delete both fail | Rethrow original DB error | Fixed cleanup-stage log only |
+
+### 5. Good / Base / Bad Cases
+
+- Good: a title provider error contains a URL, Authorization header, credential, cause, and custom stack; pg-boss stores only `会话标题生成失败`.
+- Good: one recovery row fails with an entity-specific database error; later rows continue and console receives only the stable recovery stage.
+- Base: a completed job logs its catalog name and `completed`.
+- Bad: `throw new Error(definition.retryMessage, { cause: error })`; pg-boss or process diagnostics can serialize the original secret-bearing error.
+- Bad: `console.error("worker failed", error)` at runtime, pg-boss event, recovery, or cleanup boundaries.
+
+### 6. Tests Required
+
+- Execute the actual callback registered with pg-boss and assert raw user text, entity ID, provider/DB URL, header, credential, cause, and stack are absent from both message and stack of the replacement error.
+- Inject a pg-boss event error containing connection data and assert the exact fixed log call.
+- Exercise completed/noop/retryable handler logs and recovery scan failure/continuation without payload or raw error output.
+- Cover every startup/shutdown cleanup failure, repeated SIGINT/SIGTERM, drain timeout, and exactly one exit code.
+- Upload compensation tests must preserve the original DB Error identity while proving the cleanup log is fixed and secret-free.
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong: raw error becomes pg-boss failure output and process log data.
+try {
+  return await handler(job.data);
+} catch (error) {
+  console.error("job failed", error);
+  throw error;
+}
+
+// Correct: diagnostics stay at their owning safe boundary; queue sees one stable error.
+try {
+  return await handler(job.data);
+} catch {
+  throw new Error(definition.retryMessage);
+}
 ```
 
 ---
@@ -220,5 +357,5 @@ await logUsage({ ...params, errorMessage: classification.message });
 - **新增错误码只改了 `ErrorCode` 没补 `ERROR_META`** → 编译/运行会缺映射。
 - **新增错误码没补 i18n 文案** → message 退回错误码字符串。
 - **在网关直接用 `RoutingError.code` 短码返回** → 必须经 `routingCodeToErrorCode` 映射成点分码。
-- **只在最终日志 sink 做脱敏** → sink 不知道任意 opaque key；持有实际 key/header 的 provider 边界必须先做精确替换。
+- **只在最终日志 sink 做脱敏** → sink 不知道任意 opaque key；持有实际 key/header/base URL 的 engine 安全域必须先做精确替换。
 - **把原始 provider `Error` 交给 console 或 route** → `cause`/stack 可能保留凭据；跨边界只传 safe message 或新建的 safe `Error`。

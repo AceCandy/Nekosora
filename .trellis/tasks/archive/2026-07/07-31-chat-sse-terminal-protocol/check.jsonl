@@ -1,0 +1,6 @@
+{"file":".trellis/spec/backend/chat-run-metadata.md","reason":"复核 outcome 映射、success finish、terminal/DONE 顺序及 cancel 后零写。"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"复核协议异常、Abort 与用户错误文案不会泄露原始错误。"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"复核 send/regenerate/edit/continue 全部消费 terminal，且非成功保持 interrupted 恢复语义。"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"复核 terminal wire 类型没有在 route 与 parser 重复漂移。"}
+{"file":".trellis/tasks/07-31-chat-sse-terminal-protocol/research/evidence.md","reason":"按现状证据检查是否误改数据库、Gateway 或公开 /v1/* 协议。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"复核 route/parser 复用唯一 terminal contract，所有消费者都没有局部强转或重复状态定义。"}

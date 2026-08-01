@@ -8,6 +8,27 @@
       "when": 1783923353922,
       "tag": "0000_baseline",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1785339444933,
+      "tag": "0001_adorable_dragon_lord",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785372120519,
+      "tag": "0002_wet_hellcat",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1785405310209,
+      "tag": "0003_model_catalog_sync",
+      "breakpoints": true
     }
   ]
 }

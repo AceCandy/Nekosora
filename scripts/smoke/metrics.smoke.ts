@@ -3,7 +3,15 @@
  * 运行:pnpm tsx scripts/smoke/metrics.smoke.ts
  */
 import assert from "node:assert";
-import { observeRequest, acquireStream, releaseStream, metricsOutput, registry } from "@/lib/infra/metrics";
+import {
+  observeGatewayAttempt,
+  observeGatewayExecution,
+  observeRequest,
+  acquireStream,
+  releaseStream,
+  metricsOutput,
+  registry,
+} from "@/lib/infra/metrics";
 
 async function run() {
   // 注意:不调用 registry.resetMetrics() —— prom-client 的 resetMetrics 会从 registry
@@ -24,6 +32,11 @@ async function run() {
     promptTokens: 0, completionTokens: 0,
   });
   console.log("✓ observeRequest 多次调用通过");
+  observeGatewayExecution({
+    operation: "chat.stream", source: "chat", status: "success", latencyMs: 100,
+    promptTokens: 1, completionTokens: 1,
+  });
+  observeGatewayAttempt({ operation: "chat.stream", status: "success", protocol: "openai" });
 
   // 2. activeStreams gauge 增减(prom-client v15 的 get() 异步,改用 metrics 文本解析)
   acquireStream();
@@ -53,6 +66,9 @@ async function run() {
   assert.ok(names.includes("nekusora_request_duration_ms"), "应注册延迟直方图");
   assert.ok(names.includes("nekusora_active_streams"), "应注册活跃流式 gauge");
   assert.ok(names.includes("nekusora_file_uploads_total"), "应注册文件上传计数");
+  assert.ok(names.includes("nekusora_gateway_executions_total"), "应注册 execution 计数");
+  assert.ok(names.includes("nekusora_gateway_attempts_total"), "应注册 attempt 计数");
+  assert.ok(names.includes("nekusora_gateway_execution_duration_ms"), "应注册 execution 延迟");
   console.log("✓ 所有关键指标注册通过");
 
   console.log("\n全部通过 ✅");
@@ -62,4 +78,3 @@ run().catch((e) => {
   console.error(e);
   process.exit(1);
 });
-

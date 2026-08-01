@@ -140,11 +140,7 @@ describe("POST /v1/audio/transcriptions", () => {
 
     expect(JSON.stringify(body)).not.toContain("ROUTE_SECRET");
     expect(JSON.stringify(body)).toContain("[REDACTED]");
-    expect(mocks.logUsage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        errorMessage: "upstream failed Authorization: Bearer [REDACTED]",
-      }),
-    );
+    expect(mocks.logUsage).not.toHaveBeenCalled();
     expect(JSON.stringify(consoleSpy.mock.calls)).not.toContain("ROUTE_SECRET");
     consoleSpy.mockRestore();
   });

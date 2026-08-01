@@ -50,7 +50,7 @@ describe("maskKey", () => {
 describe("logUsage", () => {
   const values = vi.fn().mockResolvedValue(undefined);
   const insert = vi.fn(() => ({ values }));
-  const schema = { opsErrorLogs: "opsErrorLogs", usageLogs: "usageLogs" };
+  const schema = { gatewayExecutions: "gatewayExecutions" };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -69,7 +69,7 @@ describe("logUsage", () => {
       status: "success",
     });
 
-    expect(insert).toHaveBeenCalledWith(schema.usageLogs);
+    expect(insert).toHaveBeenCalledWith(schema.gatewayExecutions);
     expect(mocks.observeRequest).toHaveBeenCalledWith({
       source: "chat",
       model: "demo",
@@ -90,7 +90,7 @@ describe("logUsage", () => {
       skipMetrics: true,
     });
 
-    expect(insert).toHaveBeenCalledWith(schema.opsErrorLogs);
+    expect(insert).toHaveBeenCalledWith(schema.gatewayExecutions);
     expect(mocks.observeRequest).not.toHaveBeenCalled();
   });
 

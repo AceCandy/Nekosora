@@ -78,7 +78,15 @@ describe("redactErrorMessage", () => {
         ["SECRET"],
         "上游请求失败",
       ),
-    ).toBe("fetch failed: https://example.test/models?key=[REDACTED]");
+    ).toBe("fetch failed: [REDACTED]");
     expect(redactErrorMessage(null, [], "上游请求失败")).toBe("上游请求失败");
+  });
+
+  it("不让 provider 或 PostgreSQL URL 离开错误边界", () => {
+    expect(
+      redactErrorMessage(
+        new Error("POST https://provider.example/v1 failed via postgresql://user:pass@db/private"),
+      ),
+    ).toBe("POST [REDACTED] failed via [REDACTED]");
   });
 });

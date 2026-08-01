@@ -1,206 +1,169 @@
 # Logging Guidelines
 
-> Nekusora 网关调用日志架构契约。权威实现：`src/lib/usage.ts`、`src/lib/stream.ts`、`src/lib/error-classify.ts`、`src/db/schema/pg.ts`。
+> Nekusora 网关执行观测契约。权威实现：`src/lib/gateway-execution/`、`src/db/schema/pg.ts`、`src/lib/usage-aggregate.ts` 与 `src/lib/repositories/error-log-repository.ts`。
 
----
-
-## Overview
-
-两类日志：
-
-1. **运行时日志**：`console.*`（开发）+ prom-client `/metrics`（运维）。轻量、不持久化业务上下文。
-2. **网关调用日志**：落库持久化，供 admin/panel 用量与错误分析。**本文聚焦此类。**
-
-网关调用日志采用**物理双表**，参考 sub2api 的分离思路：
-
-| 表 | 存什么 | 写入条件 |
-|----|--------|----------|
-| `usage_logs` | 成功且计费的调用（chat + gateway） | `status === "success"` |
-| `ops_error_logs` | 失败 / 中断的调用（high-write） | `status === "failed" \| "interrupted"` |
-
----
-
-## 分流契约（logUsage）
-
-`logUsage(params)`（`src/lib/usage.ts`）是唯一写入入口，**按 `status` 自动路由到两表**，调用方不感知表结构：
-
-```
-success            → insert usage_logs   (含 TTFT/providerName/routeId/routeName/upstreamModel)
-failed/interrupted → insert ops_error_logs
-```
-
-**硬规则**：
-
-- 写入**永不阻断主流程**：导出入口通过 `withBestEffortTimeout` 限制为固定 5 秒等待，失败或超时只记录脱敏 `console.error`并 resolve `void`。
-- 应用层超时只停止调用方等待，不伪装成已取消 Drizzle/pg 查询；底层 Promise 允许晚完成且晚 reject 不得形成 unhandled rejection。
-- `errorCode` 列 NOT NULL，写入时 `?? "unknown"` 兜底；`userId` 空串收敛 `null`（FK 安全）。
-- Prometheus `observeRequest` 埋点不变（source/model/status/latency/tokens）。
-- `ops_error_logs.errorMessage` 写入前必须经过共享 `redactSensitiveText()` 通用兜底；其他错误分类、status 和 category 字段不受影响。
-
----
-
-## 必填 / 关键字段
-
-**`usage_logs`**（成功用量，新增列均 nullable 兼容历史）：
-
-- `firstTokenLatencyMs` — TTFT
-- `providerName` — 可读服务商名快照（替代裸 `providerRef` 展示）
-- `routeId` / `routeName` — 命中路由溯源
-- `upstreamModel` — 真实上游模型名（区别于对外 `model`）
-
-**`ops_error_logs`**（错误请求）：`requestId`(runId) / source / 身份(user/key) / model / 路由信息 / `requestPath` / `stream` / `httpStatus` / `errorCode` / `errorMessage` / `errorPhase` / `errorType` / token / `latencyMs` / `firstTokenLatencyMs`。索引：userId / createdAt / errorCode / httpStatus / providerRef / source。
-
----
-
-## TTFT 采样（first token latency）
-
-- **流式 `streamChat`**：`streamWithRoute` 在首个 `text-delta` / `reasoning-delta` 时回写共享 `timing.firstTokenAt`（`if undefined` 守卫，**first-token-wins across failover**）；`finally` 计算 `firstTokenLatencyMs = firstTokenAt - startedAt`。
-- **非流式 `generateChat`**：`undefined`（一次性返回，无首 token 概念）。
-- 路由解析失败 / 全路由失败：`null`。
-
----
-
-## 可读 Provider / Route（写入快照）
-
-`global_routes` / `user_routes` **无 `name` 列**，可读信息来源：
-
-- `providerName` ← `global_providers.name` / `user_providers.name`，在 `toResolvedProvider` 注入 `ResolvedProvider.name`，logUsage 时快照。
-- `routeName = ${providerName} · ${upstreamModelName}`（组合展示名）。
-- `routeId` ← route 原始 id（`ResolvedRoute.routeId`）。
-- `providerRef`（`<source>:<providerId>`）两表都保留，用于溯源；**前端优先展示 `providerName`，缺失降级到 `providerRef` 或 `-`**。
-
-日志是历史记录 → 写入时**快照**，provider 改名不影响历史行。
-
----
-
-## 错误分类（error-classify.ts）
-
-`classifyError({ errorCode?, httpStatus?, errorMessage? }) → { phase, category }`，单一来源：
-
-- **优先级**：errorCode 精确匹配 > httpStatus > errorMessage 关键字 > 兜底 `internal/other`。
-- **`errorPhase`**（生命周期）：`routing` / `upstream` / `network` / `internal` / `auth` / `request`。
-- **`category`**（粗分类，前端 i18n key `admin.usage.errors.categories.*`）：`auth` / `service_unavailable` / `upstream` / `internal` / `rate_limit` / `quota` / `invalid_request` / `other`。
-
-**硬规则**：新增 `ErrorCode`（`src/lib/errors.ts`）或 RoutingError 短码时，**必须同步补 `classifyError` 映射 + 单测**，否则落到兜底分类。
-
----
-
-## 错误落库边界（避免双写）
-
-| 错误发生点 | 谁写 ops_error_logs |
-|------------|---------------------|
-| `streamChat`/`generateChat` **内部**（路由解析失败、生成失败） | `stream.ts` 的 `finally` |
-| `route.ts` **层**（调 streamChat/adapter **之前**：auth / json / missing-field / RoutingError） | `route.ts` 自己（`logRouteError`） |
-
-**边界**：`route.ts` 只写 pre-streamChat 错误，**不重复写** stream 内部错误（stream.ts 独占 chat 写入；多模态 adapter 自身不写日志）。
-
-stream 层 failed 行 `httpStatus` 由 `SHORT_HTTP_STATUS`（stream 内部短码→HTTP 映射，**不动 errorCode 字面值**）补全；`requestPath` 留 null。route 层错误补全两字段。
-
----
-
-## 副任务区分（task_kind）
-
-`usage_logs` / `ops_error_logs` 均有 `task_kind`（nullable text）。**主回复 / 网关请求 = `null`；后台副任务传值**：
-
-| 副任务 | 入口 | task_kind |
-|---|---|---|
-| 会话标题生成 | `conversation-title` → `generateChat` | `title` |
-| 记忆抽取 | `memory/extract` → `streamChat` | `memory` |
-| 摘要压缩 | `compact` → `streamChat` | `compact` |
-
-**硬规则**：副任务复用 `streamChat`/`generateChat`（其 `finally` 各写一条日志），**必须在调用时透传 `taskKind`**，否则与主回复混在 `source=chat`，造成「一请求多日志」。主回复（`/api/chat`）、网关（`/v1/chat/completions`）、多模态 adapter 不传 → `null`。
-
-> 聚合统计（`getTimeSeries` 等）目前**不按 task_kind 过滤**，副任务 token 仍计入总量；如需排除，聚合 SQL 加 `where task_kind is null`。
-
----
-
-## What NOT to Log
-
-- ❌ 完整 request body / response body（错误表只存脱敏摘要 / requestPath）。
-- ❌ 凭证、Authorization header、api key 明文（上游 key 只存脱敏快照 `upstreamKeyMasked`）。
-
-`logUsage()` 的模式清洗只是 defense in depth。持有实际 provider key 或自定义 header 的 probe、stream 和 multimodal adapter 必须先按精确值脱敏，再把 safe message 交给 console、响应与 `logUsage()`；否则任意 opaque secret 无法由最终 sink 推断。完整边界和测试矩阵见 [Error Handling](./error-handling.md#scenario-provider-error-credential-redaction)。
-
-## Scenario: MCP Agent 聚合用量
+## Scenario: Gateway Execution / Attempt Facts
 
 ### 1. Scope / Trigger
 
-- `streamChatWithTools` 通过多轮 `streamChat` 完成一条用户可见的 Agent 回复时。
+- 修改 Chat、Image、TTS、STT 的 route/key 执行、上游错误、用量统计、管理页查询或网关 metrics 时适用。
+- `gateway_executions` / `gateway_attempts` 是当前统一事实模型。旧 `usage_logs` / `ops_error_logs` 已破坏性删除，不得恢复双表分流。
+- `runs` / `tool_calls` 是 WebChat 业务审计，不属于网关执行观测，禁止合并或清空。
 
 ### 2. Signatures
 
-- `streamChat(opts: StreamChatOptions)`：内部步骤可传 `suppressFinalUsageLog` 与 `onFinalUsage`。
-- `streamChatWithTools(opts: StreamChatWithToolsOptions)`：Agent 外层负责唯一的 `logUsage` 调用。
+- `executeGateway<TEvent, TResult>(options): AsyncGenerator<TEvent, GatewayExecutionOutcome<TResult>, void>`
+- `GatewayTelemetryPort.startExecution(input): Promise<void>`
+- `GatewayTelemetryPort.recordAttempt(input): Promise<void>`
+- `GatewayTelemetryPort.finalizeExecution(input): Promise<void>`
+- `listErrorLogs(...)` / `getErrorLog(...)` / `listAttemptsByRequestIds(...)`
+- `listUsageLogs(...)` / `getTimeSeries(...)` / `getModelBreakdown(...)` / `getSourceBreakdown(...)`
+
+Database facts:
+
+- `gateway_executions`: one row per logical execution, status `running | success | failed | interrupted`.
+- `gateway_attempts`: one row per real or rejected upstream attempt, unique `(execution_id, attempt)`, status `success | failed | interrupted | rejected`.
+- `gateway_attempts.execution_id -> gateway_executions.id ON DELETE CASCADE`; caller identity FKs use `ON DELETE SET NULL`.
 
 ### 3. Contracts
 
-- 同一 Agent run 只写一条最终 `usage_logs` 或 `ops_error_logs`，token 按步骤聚合，耗时从 Agent 开始计算。
-- key/路由尝试失败仍由 `logAttemptFailure` 独立写入 `ops_error_logs`，且 `skipMetrics=true`。
-- 终轮路由信息作为聚合记录的路由快照；首 token 使用整个 Agent 内最早的 token 时刻。
+- Engine creates one running execution, records exactly one attempt row per adapter invocation/rejection, and finalizes the execution once.
+- Final usage and logical execution metrics are counted once. Attempt metrics are separate and may count retries.
+- Attempt metric labels are limited to `operation`, `status`, and provider `protocol`; model, route, provider id, request id, and key are forbidden high-cardinality labels.
+- Telemetry is best-effort and bounded. DB or metrics failures never alter the gateway outcome; repository sinks apply redaction again before persistence or console output.
+- Raw provider `Error`, API key, headers, and base URL never enter telemetry. Only `SafeGatewayError`, `GatewayRouteSnapshot`, and `upstreamKeyMasked` may cross the engine boundary.
+- `redactErrorMessage(error, secrets, fallback)` 必须先清理已知凭据与敏感字段，再移除完整 `http` / `https` / PostgreSQL URL。调用方可以保留低敏错误阶段文本，但不得把原始 `Error` 作为第二个 console 参数绕过该边界。
+- Route/provider/upstream names are write-time snapshots. Historical rows do not change when configuration names change.
+- `taskKind` is nullable: main reply/gateway request is `null`; background title/memory/compact calls use their stable task kind.
+- Route-layer auth/body failures occurring before the engine may use the compatibility `logUsage` entry to insert one final execution row. Engine-owned failures must not be written again by route handlers.
+- Agent tool loops share one telemetry session and one execution id. Internal steps globally renumber attempts and aggregate usage; only the outer loop finalizes.
+- `firstTokenLatencyMs` is measured from logical execution start to the first committed stream event. Atomic operations may leave it null.
+- Stream consumers are allowed to stop after a terminal event only through the coordinator's settlement step; the stream itself must request nested engine closure non-blockingly in `finally` for Abort/consumer `return()`. Final usage callbacks run from that cleanup path so `gateway_executions` cannot remain `running` merely because generator tail code was skipped.
 
 ### 4. Validation & Error Matrix
 
-| 条件 | 聚合终态 | 日志 / 指标 |
+| Condition | Attempt fact | Execution fact / metric |
 |---|---|---|
-| 最终模型停止调用工具 | success | 一条聚合 success + 一次指标 |
-| 上游或路由失败 | failed | 一条聚合 failed；尝试失败日志保留 |
-| 客户端中止或 maxSteps 耗尽 | interrupted | 一条聚合 interrupted + 一次指标 |
+| First key fails, second succeeds | failed then success | one success execution; one logical metric |
+| Unsupported route protocol | rejected | continue before commit; final outcome follows later attempt |
+| All routes fail | one row per attempt | one failed execution |
+| Abort | interrupted attempt when an attempt started | one interrupted execution; no breaker failure |
+| Telemetry DB/metrics throws or times out | best-effort may be missing | gateway outcome remains unchanged |
+| Route auth/body rejection before engine | no upstream attempt | one compatibility execution row |
+| Agent has multiple model steps | globally ordered attempts | one aggregated final execution |
 
 ### 5. Good / Base / Bad Cases
 
-- Good：两轮工具链只生成一条 success，prompt/completion token 为两轮之和。
-- Base：无工具时退化为单次 `streamChat`，保持原日志行为。
-- Bad：每个步骤各写一条 success，会把同一用户回复重复计量。
+- Good: a two-route request records two attempts and one final execution; only the final execution contributes to usage totals.
+- Good: an error containing key/header/base URL reaches storage only after exact-value and generic redaction.
+- Base: a single successful attempt creates one attempt and one success execution.
+- Bad: each retry writes another final execution, inflating calls and tokens.
+- Bad: a route catches an engine failure and inserts a second final row.
+- Bad: attempt labels include `model`, `routeId`, `providerId`, or key masks.
 
 ### 6. Tests Required
 
-- `stream-agent-loop.test.ts` 断言多轮仅一条 success、聚合 token 正确。
-- 断言 `maxSteps` 耗尽不发 finish 且记录一条 interrupted。
-- 失败链测试须保留步骤级 attempt 日志与唯一终态指标的边界。
+- `gateway-execution/engine.test.ts`: key retry, route failover, commit-before-yield, Abort, deterministic errors, rejected protocols, credential/route redaction, telemetry failure isolation, and iterator-close finalization.
+- `gateway-execution/telemetry.test.ts`: start/attempt/finalize mappings, DB/metrics best-effort, persistence redaction.
+- `redaction.test.ts`：断言 provider 与 PostgreSQL URL 不离开错误边界；RAG retrieve 与 Chat compaction 降级测试断言 console 只接收脱敏字符串。
+- Schema/migration tests: both facts, unique attempt number, FK actions, journal/snapshot, no `CASCADE` drop, and only old log tables removed.
+- Usage/error repository tests: success-only aggregation, time range/user isolation, failed attempt-chain filtering, pagination count consistency.
+- Agent loop tests: one execution finalization, globally ordered attempts, aggregated tokens, one final metric; stream tests also cover natural final usage and consumer Abort cleanup.
+- Metrics smoke: execution counter, attempt counter, execution duration, and absence of high-cardinality labels.
 
 ### 7. Wrong vs Correct
 
 ```typescript
-// Wrong:每个 Agent 步骤各自写最终成功日志。
-for await (const event of streamChat(stepOptions)) yield event;
+// Wrong: retry is represented as another logical request.
+await logUsage({ status: "failed", ...attempt });
+await logUsage({ status: "success", ...final });
 
-// Correct:步骤只上报终态，Agent 外层汇总后写一次。
-for await (const event of streamChat({ ...stepOptions, suppressFinalUsageLog: true })) yield event;
-await logUsage(aggregatedFinalUsage);
+// Correct: attempts and final outcome have separate facts.
+await telemetry.recordAttempt(attempt);
+await telemetry.finalizeExecution(final);
 ```
 
----
+## Query And Presentation Contracts
 
-## 用户端隔离（panel）
+- Usage aggregates and totals read only successful `gateway_executions` and apply the same user/time range.
+- Error lists read failed/interrupted executions. Retry details read only failed/interrupted/rejected attempts; successful attempts must not inherit the final execution error.
+- `userId` passed to repository methods is a mandatory server-side isolation predicate for panel users; admin omission means all users.
+- Error detail fields are visible to their owning user. Authorization relies on the query predicate, not destructive field blanking.
+- Default auth-noise exclusion remains a query filter; an explicit phase filter overrides it.
+- `createdAt` ranges are inclusive (`gte`/`lte`) and list/count queries must share one where expression.
 
-panel **不做字段级脱敏**——错误日志均为用户自己调用产生，全字段可见（含 errorMessage/provider/上游 key 快照），便于用户定位自己的错误。防越权靠查询层强制 userId 隔离：
+## What Not To Log
 
-- `listErrorLogs({ userId })` / `getErrorLog(id, userId)`：userId 传入即强制 `where user_id = ?`，panel 只能查到自己的行。
-- panel `page.tsx` 调用时必传 `userId = session.id`；admin 不传看全部。
-- panel 与 admin 共用 `ErrorLogsTable` / `ErrorDetailDrawer`，仅 panel 不渲染用户列/用户筛选（variant=panel）。
+- Complete request/response bodies, raw `Error` objects, causes, or stacks.
+- Plaintext API keys, Authorization/custom header values, provider base URLs, cookies, tokens, or connection strings.
+- Raw `ResolvedRoute`; use `GatewayRouteSnapshot` and a masked upstream key.
 
-> 历史：曾对 panel 做字段级脱敏（服务端置空 errorMessage/provider 等白名单外字段），后发现用户看自己的错误需要全字段，改为 userId 隔离 + 全字段下发。
+## Scenario: Queue And Worker Lifecycle Logs
 
----
+### 1. Scope / Trigger
 
-## 查询层
+Apply this contract to pg-boss adapter events, worker handler outcomes, recovery scans, startup rollback, signal shutdown, and queue-backed producer fallback. These are operational low-cardinality logs, not entity audit records.
 
-- `src/lib/repositories/error-log-repository.ts`：`listErrorLogs({ page, pageSize, userId?, filters? })` / `getErrorLog(id, userId?)`。**userId 传入即强制 `where`**（panel 防越权），admin 不传看全部。
-- `src/lib/usage-aggregate.ts` `listUsageLogs`：用量明细分页 + 筛选。
-- 聚合（`getTimeSeries` / `getModelBreakdown` / `getSourceBreakdown`）只查 `usage_logs` → 失败不进 → **自然只统计成功**，无需改。
-- AUTH 噪声：`ops_error_logs` 默认 `excludeErrorPhase: "auth"`（扫描流量放大），用户可显式显示。
+### 2. Signatures
 
----
+- Handler success: `[worker] <catalog-job-name>: completed|noop`
+- Handler failure: `[worker] <catalog-job-name>: retryable_failure`
+- Queue event: `[queue] pg-boss error`
+- Recovery failure: `RecoveryDefinition.failureMessage`
+- Lifecycle failure: fixed stage text, optionally followed by a catalog job name
+
+### 3. Contracts
+
+- Job name comes from the catalog definition; outcome is limited to `completed`, `noop`, or `retryable_failure`.
+- Never append queue payload, job/file/conversation/user ID, user text, storage path, model context, or durable-row contents.
+- Never pass raw `Error`, `cause`, or stack to `console`. Queue/provider/database URLs, Authorization/custom headers, credentials, cookies, and connection strings are forbidden even in development logs.
+- pg-boss events and generic recovery/runtime cleanup use fixed messages rather than redacting unknown third-party error text.
+- A domain boundary may emit an already bounded and redacted diagnostic when that diagnostic is part of its existing contract, but worker orchestration must not enrich it with payload or raw infrastructure errors.
+- Shutdown continues cleanup after logging a stage failure. Logs do not replace exit status: incomplete cleanup or drain still exits with code 1.
+
+### 4. Validation & Error Matrix
+
+| Event | Allowed fields | Forbidden fields |
+| --- | --- | --- |
+| Handler resolved | Catalog name, `completed|noop` | Payload, entity ID |
+| Handler rejected | Catalog name, `retryable_failure` | Raw message/cause/stack |
+| pg-boss error event | Fixed queue event text | Event argument |
+| Recovery scan/item failure | Fixed recovery name/stage | Row ID, raw DB/provider error |
+| Startup/shutdown cleanup failure | Fixed lifecycle stage, catalog name when identifying a scheduler | URL, connection string, Error object |
+| Upload compensation delete failure | Fixed cleanup stage | Storage key and cleanup Error |
+
+### 5. Good / Base / Bad Cases
+
+- Good: `[worker] file-process: noop` records an ownership loser without revealing `fileId`.
+- Good: `[memory-extraction-recovery] dispatch failed` allows alert grouping without exposing durable job IDs.
+- Base: `[worker] ready` and `[worker] stopping` mark lifecycle stages.
+- Bad: `[worker] file-process <fileId> failed: <error>` creates high-cardinality logs and leaks entity/infrastructure data.
+- Bad: logging a pg-boss event argument after regex redaction assumes arbitrary SQL parameters are discoverable secrets.
+
+### 6. Tests Required
+
+- Inject adversarial payload/user text/entity IDs plus provider and PostgreSQL URLs, headers, credentials, cause, and stack; assert none appear in handler, recovery, queue event, cleanup, or upload compensation logs.
+- Assert exact stable calls for pg-boss events, handler outcomes, scan failures, lifecycle cleanup failures, and upload compensation failures.
+- Assert per-item recovery failure does not stop later items and repeated signals do not duplicate cleanup/exit logs through multiple shutdown runs.
+- Keep domain bounded/redacted diagnostic tests separate from generic runtime tests.
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong: entity and raw infrastructure error cross the orchestration boundary.
+console.error(`[worker] ${definition.job.name} ${payload.id}`, error);
+
+// Correct: fixed catalog name and bounded outcome only.
+console.error(`[worker] ${definition.job.name}: retryable_failure`);
+```
 
 ## Common Mistakes
 
-- **在调用点手写 insert usage_logs/ops_error_logs** → 必须走 `logUsage`，由它按 status 分流。
-- **route.ts 重复写 stream 内部错误** → 只写 pre-streamChat 错误，避免双写。
-- **新增 ErrorCode 没补 `classifyError` 映射** → 错误落到兜底 `internal/other`，分类失真。
-- **panel 防越权靠字段置空** → 靠查询层 `userId` 强制 where（`listErrorLogs` / `getErrorLog`）；字段级脱敏会让用户无法定位自己的错误。
-- **`logUsage` 抛错阻断主流程** → 永不抛错，失败只 `console.error`。
-- **副任务调 streamChat/generateChat 不传 `taskKind`** → 与主回复混在 source=chat，用量明细出现「一请求多日志」；标题/记忆/压缩必须透传。
-- **认为 `logUsage` 兜底足以清理任意 key** → 它只识别凭据形态；provider 边界必须传入当前 key/header 做精确替换。
+- Writing engine-owned final facts in route handlers causes duplicate calls and tokens.
+- Treating each failed attempt as a failed logical request corrupts availability metrics.
+- Querying all attempts into an error-only DTO makes successful attempts inherit misleading final errors.
+- Applying a time range to charts but not totals creates internally inconsistent dashboards.
+- Assuming sink regex can discover opaque secrets ignores values known only inside the provider boundary.
 
 ## Scenario: WebChat Run 审计生命周期
 
@@ -211,13 +174,13 @@ panel **不做字段级脱敏**——错误日志均为用户自己调用产生�
 
 ### 2. Signatures
 
-- `startRun({ runId, conversationId, userId, platformModelName }): Promise<boolean>`
+- `startRunStrict({ runId, conversationId, userId, platformModelName }): Promise<void>`
 - `withBestEffortTimeout<T>(operation: () => Promise<T>): Promise<T>`，固定等待预算 5 秒
 - `heartbeatRun(runId): Promise<void>`
 - `recordToolCallStart({ runId, toolCallId, toolName, args })`
 - `recordToolCallResult({ runId, toolCallId, result, isError })`
-- `finalizeRun({ runId, status, tokenUsage }): Promise<void>`
-- `resolveRunTerminalStatus({ finished, aborted, sawError, persistenceFailed })`
+- `persistChatCompletion(...)`：同一事务写 assistant、conversation 时间、memory intent 与 terminal run。
+- `executeChatCompletion(...)`：first-terminal-cause、stream fold、heartbeat 与唯一成功信号。
 - 活动谓词：`runs.status = 'running' AND runs.lease_expires_at > now()`。
 
 ### 3. Contracts
@@ -225,11 +188,13 @@ panel **不做字段级脱敏**——错误日志均为用户自己调用产生�
 - 普通发送、重试、编辑重发与续写每轮生成唯一 `runId`；同一 Agent 多轮必须共享该值。
 - 新建 user 与本轮新建/续写 assistant 写入 `runId`；复用历史 user 时不得改写其归属。
 - `runs` 是活动状态唯一事实源；会话列表与轮询共用有效租约谓词动态派生 `generating`。`conversations.generating` 仅供旧版本回滚，新 runtime 不读写。
-- `startRun` 使用 PostgreSQL `now() + interval '2 minutes'` 创建租约。仅 start 成功时每 30 秒调用 `heartbeatRun`，timer 必须 `unref()` 并在所有完成、失败和取消路径清除。
-- start/finalize 与 tool DB 写入均为有界 best-effort，包含 `getDb()` 在内最多等待 5 秒；失败或超时只记录脱敏短错误，不阻断模型流或记录工具敏感参数。start 失败/超时不启动心跳；finalize 失败/超时时活动投影最多保留到租约过期。
-- `heartbeatRun` 保留原始 DB Promise 作为单飞信号，不套 5 秒 wrapper；前一次未完成时后续 tick 必须跳过。request abort、stream cancel 与 finally 共用幂等停止函数，立即停止后续调度，但不伪装取消已进入 pg 的单次心跳。
-- 所有 SSE 帧必须经取消安全的 `safeEnqueue` 写入；run 必须在最内层 `finally` 从 `running` 收敛，并在成功路径发送 `[DONE]` 前 `await finalizeRun(...)`。
-- `finish` 是权威完成信号；完成后的客户端 abort 不得把成功 run 降级，收尾持久化失败除外。
+- `startRunStrict` 使用 PostgreSQL `now() + interval '2 minutes'` 创建租约；失败或超时禁止模型调用。只有确认成功后才每 30 秒调用 `heartbeatRun`。
+- start 是生成门禁，assistant/run/memory completion 是成功门禁，均不得 best-effort。tool audit、失败后的 run 收敛、post-commit artifact 与即时 memory dispatch 仍可 best-effort。
+- `heartbeatRun` 保留原始 DB Promise 作为单飞信号，不套 5 秒 wrapper；coordinator 在 Abort、stream terminal 与进入 completion transaction 前停止后续 tick。
+- coordinator 锁存首个终态原因；Agent 多轮共享 runId，最终 run usage 使用跨轮聚合值。
+- terminal run update 必须匹配 `runId + conversationId + userId + running` 并 `RETURNING` 一行，否则整个 completion transaction 回滚。
+- 所有 SSE 帧经 route 的取消安全 adapter 写入；只有 committed success 产生一个 `finish`，adapter 紧接 `[DONE]`。
+- Gateway execution telemetry 与 run 审计并行存在：前者描述上游尝试，后者描述会话业务生命周期；不得互相级联删除。
 
 ### 4. Validation & Error Matrix
 
@@ -239,8 +204,8 @@ panel **不做字段级脱敏**——错误日志均为用户自己调用产生�
 | 同会话一条 run 终结，另一条仍 fresh | 当前 run 终态，另一条 `running` | `generating=true` |
 | 最后一条 fresh run 终结 | `success` / `failed` / `interrupted` | `generating=false`；成功时 finalize 后发 `[DONE]` |
 | 进程崩溃或心跳停止 | 行可保持 `running`，租约最终过期 | 过期后 `generating=false` |
-| start 写入失败 | 无可用活动 run | 模型流继续；不启动心跳 |
-| finalize 写入失败 | 行暂时 `running` | 模型流按 best-effort 契约结束；租约过期后转为 inactive |
+| strict start 写入失败 | 无已确认活动 run | 不调用模型；error；无 `[DONE]` |
+| completion 任一核心写失败 | transaction 全回滚；失败收敛可另行 best-effort | error；无 `finish` / `[DONE]` |
 | assistant / 会话收尾持久化失败 | 当前 run 最终标记 `failed` | error SSE；无 `[DONE]` |
 
 ### 5. Good / Base / Bad Cases
@@ -253,22 +218,23 @@ panel **不做字段级脱敏**——错误日志均为用户自己调用产生�
 
 ### 6. Tests Required
 
-- `best-effort.test.ts` 覆盖快速 resolve/reject、5 秒 timeout、timer cleanup/`unref()` 和底层 late reject；`run-lifecycle.test.ts` 额外覆盖 pending `getDb()` 时 start/finalize/tool 写入的有界收敛与脱敏日志。
+- `run-lifecycle.test.ts` 覆盖 strict start 确认/通用失败，以及 tool/失败收敛写入的有界、脱敏行为。
 - Agent loop 测试断言每轮 `streamChat` 接收同一 `runId`。
 - 会话 action 测试覆盖 fresh/expired/null/terminal 真值表，并断言列表与轮询共用同一活动谓词。
-- route 接线复核须覆盖 send/retry/edit/continue 的消息 `runId` 规则、heartbeat pending 时单飞、abort/cancel 后不再调度，以及 `[DONE]` 晚于有界 finalize 尝试的时序。
+- coordinator 测试覆盖 heartbeat 单飞、first-terminal-cause、Abort-ignoring iterator、事务失败与 committed-success-only finish。
+- route 接线复核覆盖 send/retry/edit/continue 身份、现有 SSE 字段、cancel signal，以及 `finish` 紧邻 `[DONE]`。
 - bootstrap 回归须断言启动流程不再全量更新 `conversations.generating`。
 
 ### 7. Wrong vs Correct
 
 ```typescript
-// Wrong:一个 run 结束便覆盖整个会话,并在终态持久化前宣告完成。
+// Wrong:assistant、run 与成功信号分开提交。
 await db.update(conversations).set({ generating: false });
 safeEnqueue(doneFrame);
 await finalizeRun({ runId, status, tokenUsage });
 
-// Correct:只终结当前 run；查询从剩余有效租约派生活动状态。
-clearHeartbeat();
-await finalizeRun({ runId, status, tokenUsage });
+// Correct:当前 run 与 assistant 在一个事务终结，提交后才允许成功信号。
+const committed = await persistChatCompletion(input);
+safeEnqueue(finishFrame(committed));
 safeEnqueue(doneFrame);
 ```

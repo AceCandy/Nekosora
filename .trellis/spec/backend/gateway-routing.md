@@ -144,27 +144,86 @@ WebChat 发消息、图像工作室生成(session 鉴权)。前端传 `modelId` 
 - `orderRoutes(routes)`:priority 升序分组,组内 `weightedShuffle`(按 weight 加权无放回抽取)。
 - `filterByCircuitBreaker(routes)`:跳过熔断 open 态 provider;全熔断则**降级返回全集**(避免雪崩 503)。熔断 key 是 `provider.id`。
 - 核心算法 `orderRoutes`/`weightedShuffle`/`filterByCircuitBreaker`/`pickWeightedKey`/`parseKeyBundle` 原样保留,对 route 来源透明。
-- 下游 `streamChat` 拿到 `routes[]` 后逐路由故障转移 × 路由内逐 key 重试,对 `source` 透明。
+- `gateway-execution` engine 拿到 `routes[]` 后逐路由故障转移 × 路由内逐 key 重试,对 operation 与 `source` 透明。
+
+## Scenario: Unified Gateway Execution Engine
+
+### 1. Scope / Trigger
+
+修改 Chat stream/generate、Image、TTS、STT 的上游执行或增加新模态时适用。route resolution 仍由本文件前述 resolver 拥有；engine 只消费有序 route chain。
+
+### 2. Signatures
+
+- `executeGateway<TEvent, TResult>(options): AsyncGenerator<TEvent, GatewayExecutionOutcome<TResult>, void>`
+- `GatewayOperation = "chat.stream" | "chat.generate" | "image.generate" | "audio.speech" | "audio.transcription"`
+- `selectAdapter(route): GatewayAttemptAdapter | null`
+- Media protocol registry：Image 支持 `openai | openai-compatible | openai-images`；TTS 支持 `openai | openai-compatible | openai-audio-tts`；STT 支持 `openai | openai-compatible | openai-audio-stt`。
+
+### 3. Contracts
+
+- Engine 独占 route/key 遍历、尝试上限、retry/failover、breaker、Abort、commit 与 attempt/final telemetry 顺序；调用方和 adapter 不得重建循环。
+- AI SDK/provider 内建 retry 必须关闭 (`maxRetries: 0`)。
+- Adapter 只构造协议请求并翻译事件/结果。它可在 engine 安全域内接收 raw `ResolvedRoute` 和 API key，但不得写 telemetry 或 breaker。
+- Engine 在持有 key/header/base URL 时分类并脱敏 raw error；安全域外只允许 `SafeGatewayError`、无凭据 `GatewayRouteSnapshot` 与 masked key。
+- `selectAdapter(route) === null` 产生 rejected attempt，不更新 breaker，并在未 commit 时继续下一 route。
+- 可转移错误先 `recordFailure(providerId)`；确定性请求/配置错误不更新 breaker。成功调用 `recordSuccess(providerId)`。
+- Abort 不 retry、不 failover、不记 provider failure；所有 operation 统一收敛为 interrupted outcome。
+- Chat Agent 多轮仍在 engine 外编排，但共享一个 telemetry session，attempt 全局递增且 execution 只 finalize 一次。
+
+### 4. Validation & Error Matrix
+
+| Condition | Engine action | Breaker / outcome |
+|---|---|---|
+| Key auth/transient failure before commit | Next weighted key, then next route | Failoverable error records failure |
+| Unsupported protocol | Record rejected, continue route | No breaker failure |
+| Deterministic request error | Stop | No breaker failure; failed |
+| Abort | Stop immediately | No breaker failure; interrupted |
+| Success | Stop | Record success; success |
+| Failure after committed event | Stop, retain emitted events | Record failure only when failoverable |
+
+### 5. Good / Base / Bad Cases
+
+- Good: Image route A fails before response visibility and route B succeeds with the same OpenAI-compatible response contract.
+- Base: one route/one key succeeds and produces one attempt plus one final execution.
+- Bad: TTS/STT selects `routes[0]` or forces OpenAI protocol regardless of the route.
+- Bad: an adapter catches an upstream error, logs it, and starts its own fallback loop.
+
+### 6. Tests Required
+
+- Engine contract matrix covers key/route fallback, rejected protocols, deterministic failures, Abort, breaker and telemetry ordering.
+- Every media adapter covers first-key and first-route failure followed by success, all protocols, all-incompatible routes, and redaction.
+- Chat tests cover stream/non-stream parity plus text/reasoning/tool-call commit.
+- Route tests preserve `/v1/*` OpenAI SDK wire response and error envelope.
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong: a modality silently truncates the ordered route chain.
+return invoke(routes[0], routes[0].provider.keys[0]);
+
+// Correct: the modality supplies one-attempt translation to the shared engine.
+return executeGateway({ resolveRoutes, selectAdapter, telemetry, breaker });
+```
 
 ## Scenario: 流式响应提交后的故障转移边界
 
 ### 1. Scope / Trigger
 
-修改 `streamChat` 的 key 重试、路由故障转移或 `StreamEvent` 产出时，必须保持本节契约。目标是只在客户端尚未收到不可撤回事件时执行完整请求重试，防止同一条流拼接多个上游的内容。
+修改 engine 的 key 重试、路由故障转移或 Chat `StreamEvent` adapter 时，必须保持本节契约。目标是只在客户端尚未收到不可撤回事件时执行完整请求重试，防止同一条流拼接多个上游的内容。
 
 ### 2. Signatures
 
-- `streamChat(opts: StreamChatOptions): AsyncGenerator<StreamEvent, void, unknown>`
+- `executeGateway<StreamEvent, ChatResult>(options): AsyncGenerator<StreamEvent, GatewayExecutionOutcome<ChatResult>, void>`
 - 不可撤回事件：`text-delta`、`reasoning-delta`、`tool-call`
 - `isRetryableForKey(err: unknown): boolean`
 - `isFailoverableError(err: unknown): boolean`
 
 ### 3. Contracts
 
-- `streamChat` 为每次请求维护单向的响应提交状态；不可撤回事件必须在向调用方 `yield` 前置为已提交。
+- engine 为每次请求维护单向的响应提交状态；不可撤回事件必须在向调用方 `yield` 前置为已提交。
 - 响应未提交时，继续按既有规则尝试同 Provider 的后续 key 和下一条 route。
 - 响应已提交后，当前尝试发生任何非 Abort 错误都不得再调用其他 key 或 route；向调用方保留已输出事件并追加现有脱敏 `generation_failed` error 事件。
-- 已提交失败仍调用 `logAttemptFailure`。错误可转移时仍先 `recordFailure(providerId)`，再停止路由循环；禁止故障转移不能跳过失败审计或 breaker 更新。
+- 已提交失败仍记录 failed attempt。错误可转移时仍先 `recordFailure(providerId)`，再停止路由循环；禁止故障转移不能跳过失败审计或 breaker 更新。
 - Abort 继续直接收敛为 interrupted，不写普通失败事件、不重试、不转移。
 - `finish` 是成功终态；`tool-result` 由 Agent loop 在已完成的 `streamChat` 步骤之外产生，不参与单次上游尝试的提交判定。
 - 不使用 TTFT 的 `firstTokenAt` 代替提交状态，因为 tool-call 也不可撤回但不是文本 token。
@@ -215,7 +274,7 @@ if (responseCommitted || !failoverable || i === routes.length - 1) break;
 
 ### 1. Scope / Trigger
 
-修改 `circuit-breaker.ts` 状态转换，或修改 `streamChat` / `generateChat` 的路由失败处理时，必须保持本节契约。目标是防止 half-open 并发探测冲击刚恢复的 provider，并确保终端路由失败也能更新健康状态。
+修改 `circuit-breaker.ts` 状态转换，或修改 gateway engine 的路由失败处理时，必须保持本节契约。目标是防止 half-open 并发探测冲击刚恢复的 provider，并确保终端路由失败也能更新健康状态。
 
 ### 2. Signatures
 
@@ -230,7 +289,7 @@ if (responseCommitted || !failoverable || i === routes.length - 1) break;
 - `open`：冷却期内拒绝；到期后的第一个调用转 `half-open` 并放行。
 - `half-open`：表示唯一探测名额已占用；结果回报前其他调用必须拒绝。
 - 探测成功调用 `recordSuccess` 回到 `closed`；探测失败调用 `recordFailure` 立即重新 `open` 并刷新冷却时间。
-- `streamChat` / `generateChat` 必须先判断错误是否可转移；若可转移，先 `recordFailure`，再判断是否存在下一条路由。
+- Gateway engine 必须先判断错误是否可转移；若可转移，先 `recordFailure`，再判断是否存在下一条路由。
 - `model_not_found`、`invalid_request`、context length 等确定性请求错误不计入 provider 失败。
 
 ### 4. Validation & Error Matrix
@@ -282,8 +341,9 @@ if (i === routes.length - 1 || !failoverable) break;
 ## 相关
 - `src/lib/routing.ts`(`resolveRoutes`/`resolveRoutesById`/`resolveModelRoutes`/`orderRoutes`/`filterByCircuitBreaker`)。
 - `src/lib/repositories/route-repository.ts`(数据访问抽象,测试注入点)。
-- `src/lib/stream.ts`(故障转移循环 + byId/byName 分流)。
-- `src/lib/providers/multimodal/image-gen.ts`(图像 byId 分流)。
+- `src/lib/gateway-execution/`(统一执行状态机、policy、telemetry 与 media registry)。
+- `src/lib/stream.ts`(Chat 协议 adapter + byId/byName 分流 + Agent loop)。
+- `src/lib/providers/multimodal/`(Image/TTS/STT 协议 adapter)。
 - `src/lib/circuit-breaker.ts`(熔断,按 `provider.id`)。
 - `src/lib/routing.test.ts`(网关 owner-only + byId 可见性 + 子 key 绑定单测)。
 - `src/lib/providers/multimodal/image-gen.test.ts`(图像 byId 可见性 + 网关 owner-only 回归防护)。

@@ -7,19 +7,14 @@
  *   3. 上下文准备(prepareChatContext:RAG/记忆/压缩/system 合并/trace)→ IRRequest
  *   4. 流式执行 + SSE 编码 + 收尾副作用(落库/artifact/标题/记忆)
  *
- * 段 A(上下文准备)已抽到 @/lib/chat/orchestrator;段 B/C(流式 + 收尾)留在本文件,
- * 因它们共享 ReadableStream 的 controller / 累积文本等闭包变量,强拆会扯断耦合。
+ * 上下文准备由 orchestrator 负责；流式状态机与核心收尾事务由 completion coordinator 负责。
+ * route 只保留鉴权、请求准备和取消安全的 SSE 编码。
  */
-import { and, eq, isNull } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
-import { withBestEffortTimeout } from "@/lib/best-effort";
+import { z } from "zod";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { getSession } from "@/lib/session";
-import { streamChat, streamChatWithTools } from "@/lib/stream";
-import { getChatUA } from "@/lib/system-settings/ua";
-import { resolveMcpServers } from "@/lib/mcp/registry";
-import { extractArtifacts } from "@/lib/artifacts/extract";
-import { getQueue } from "@/lib/infra/queue";
 import { writeFallbackTitle } from "@/lib/conversation-title/service";
 import { dispatchConversationTitleJob } from "@/lib/conversation-title/dispatch";
 import { prepareChatContext } from "@/lib/chat/orchestrator";
@@ -29,18 +24,16 @@ import {
 } from "@/lib/chat/message-reference";
 import {
   createRunId,
-  finalizeRun,
-  heartbeatRun,
-  irUsageToTokenUsage,
-  recordToolCallResult,
-  recordToolCallStart,
-  resolveRunTerminalStatus,
-  startRun,
 } from "@/lib/chat/run-lifecycle";
+import {
+  executeChatCompletion,
+  type ChatCompletionEvent,
+  type ChatCompletionOutcomeKind,
+} from "@/lib/chat/completion-coordinator";
+import type { ChatTerminalStatus } from "@/lib/chat/sse-contract";
 import { redactErrorMessage } from "@/lib/redaction";
-import type { IRRequest, IRUsage } from "@/lib/providers/types";
+import type { IRRequest } from "@/lib/providers/types";
 import type { ReasoningLevel } from "@/db/types";
-import type { MessageRunMetadata } from "@/features/chat/model/types";
 import { toMessageCreatedAtIso } from "@/features/chat/model/messageTime";
 import {
   assertVisionModel,
@@ -52,10 +45,22 @@ import {
   type ResolvedChatImage,
 } from "@/lib/chat/message-attachments";
 
+const chatComposerSnapshotSchema = z.object({
+  outputModeId: z.string().min(1).nullable().optional(),
+  reasoning: z.enum(["off", "minimal", "low", "medium", "high", "xhigh", "max"]).optional(),
+});
+
+const TERMINAL_STATUS_BY_OUTCOME = {
+  cancelled_before_start: "interrupted",
+  start_failed: "failed",
+  committed_success: "success",
+  committed_failed: "failed",
+  committed_interrupted: "interrupted",
+  persistence_failed: "failed",
+} satisfies Record<ChatCompletionOutcomeKind, ChatTerminalStatus>;
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const RUN_HEARTBEAT_INTERVAL_MS = 30_000;
 
 export async function POST(req: NextRequest) {
   const requestStartedAt = performance.now();
@@ -93,6 +98,9 @@ export async function POST(req: NextRequest) {
     webSearch?: boolean;
     // P2-10a:挂载的知识库 ID(检索其下文件 chunks)。
     knowledgeBaseIds?: string[];
+    /** WebChat 点击发送时的 Composer 快照；缺省兼容旧客户端并回退会话行。 */
+    outputModeId?: unknown;
+    reasoning?: unknown;
   };
   try {
     body = await req.json();
@@ -106,6 +114,10 @@ export async function POST(req: NextRequest) {
     body.messages.length === 0
   ) {
     return NextResponse.json({ error: "缺少 conversationId/model/messages" }, { status: 400 });
+  }
+  const composerSnapshot = chatComposerSnapshotSchema.safeParse(body);
+  if (!composerSnapshot.success) {
+    return NextResponse.json({ error: "输入区状态非法" }, { status: 400 });
   }
 
   const db = await getDb();
@@ -367,7 +379,11 @@ export async function POST(req: NextRequest) {
   const prepared = await prepareChatContext({
     userId: user.id,
     conversationId: body.conversationId,
-    conv: { outputModeId: conv.outputModeId },
+    conv: {
+      outputModeId: composerSnapshot.data.outputModeId === undefined
+        ? conv.outputModeId
+        : composerSnapshot.data.outputModeId,
+    },
     userContent,
     model: body.model,
     modelId: body.modelId,
@@ -388,23 +404,22 @@ export async function POST(req: NextRequest) {
   const { irRequest, trace, searchBundle, ragStatus, compaction } = prepared;
 
   const composerState = (conv.composerState as { reasoningByModelId?: Record<string, ReasoningLevel> } | null) ?? {};
-  if (body.modelId && composerState.reasoningByModelId?.[body.modelId]) {
-    irRequest.reasoning = composerState.reasoningByModelId[body.modelId];
+  const reasoning = composerSnapshot.data.reasoning
+    ?? (body.modelId ? composerState.reasoningByModelId?.[body.modelId] : undefined);
+  if (reasoning !== undefined) {
+    irRequest.reasoning = reasoning;
   }
 
   const ctx = { userId: user.id, keyKind: null as null, source: "chat" as const };
 
+  if (!userMessageInternalId) {
+    return NextResponse.json({ error: "用户父消息已失效" }, { status: 409 });
+  }
+
   // 流式返回:text/event-stream,每条 text-delta 作为一行
   const encoder = new TextEncoder();
-  // 流开始前落 runs(running);DB 失败不阻断后续流式生成。
-  const runStarted = await startRun({
-    runId,
-    conversationId: body.conversationId,
-    userId: user.id,
-    platformModelName: body.model,
-  });
   // 提前生成 assistant 消息 publicId:在流首帧回传给前端,使生成期间即可显示操作按钮;
-  // finally 落库时复用同一标识。
+  // completion transaction 落库时复用同一标识。
   const assistantPublicId = isContinue ? body.continueFromPublicId! : crypto.randomUUID();
   const assistantCreatedAt = new Date();
   const assistantCreatedAtIso = isContinue
@@ -414,18 +429,7 @@ export async function POST(req: NextRequest) {
   // 触发 Socket closed unexpectedly → uncaughtException 反复冲击 dev server。req.signal 在部分场景
   // 不可靠,由 ReadableStream.cancel() 兜底,二者都触发同一个 AbortController。
   const abortCtl = new AbortController();
-  let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
-  let heartbeatInFlight: Promise<void> | null = null;
-  let heartbeatStopped = false;
-  const stopHeartbeat = () => {
-    heartbeatStopped = true;
-    if (heartbeatTimer) {
-      clearInterval(heartbeatTimer);
-      heartbeatTimer = null;
-    }
-  };
   const onRequestAbort = () => {
-    stopHeartbeat();
     abortCtl.abort();
   };
   if (req.signal.aborted) {
@@ -435,20 +439,6 @@ export async function POST(req: NextRequest) {
   }
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      if (runStarted && !heartbeatStopped && !abortCtl.signal.aborted) {
-        heartbeatTimer = setInterval(() => {
-          if (heartbeatStopped || abortCtl.signal.aborted || heartbeatInFlight) {
-            return;
-          }
-          const pending = heartbeatRun(runId);
-          heartbeatInFlight = pending;
-          const clearInFlight = () => {
-            if (heartbeatInFlight === pending) heartbeatInFlight = null;
-          };
-          void pending.then(clearInFlight, clearInFlight);
-        }, RUN_HEARTBEAT_INTERVAL_MS);
-        heartbeatTimer.unref();
-      }
       // 客户端断开后 controller 处于已关闭态:统一经 safeEnqueue 写入,避免向已关闭流 enqueue 抛错。
       const safeEnqueue = (chunk: Uint8Array) => {
         if (abortCtl.signal.aborted) return;
@@ -458,314 +448,111 @@ export async function POST(req: NextRequest) {
           /* controller 已随客户端断开关闭,丢弃 */
         }
       };
-      let assistantText = "";
-      let assistantReasoning = "";
-      let finished = false; // 正常收到 finish 事件才判 success,否则 interrupted/failed
-      let sawStreamError = false;
-      let persistenceFailed = false;
-      let completionPersisted = false;
-      let finalUsage: IRUsage | undefined;
-      let durationMs: number | null = null;
-      let completedAt: Date | null = null;
-      // 回传本轮 user 消息的 publicId,供前端回填后支持编辑重发。
-      // 续写模式下 user 沿用原消息,前端无需回填,跳过该帧。
-      if (!isContinue) {
-        safeEnqueue(
-          encoder.encode(
+      const emitContextEvents = () => {
+        if (!isContinue) {
+          safeEnqueue(encoder.encode(
             `data: ${JSON.stringify({ type: "user_message", publicId: userPublicId, createdAt: userCreatedAt })}\n\n`,
-          ),
-        );
-      }
-      // 回传本轮 assistant 占位消息的 publicId,供前端回填后无需刷新即可显示操作按钮。
-      safeEnqueue(
-        encoder.encode(
+          ));
+        }
+        safeEnqueue(encoder.encode(
           `data: ${JSON.stringify({ type: "assistant_message", publicId: assistantPublicId, createdAt: assistantCreatedAtIso })}\n\n`,
-        ),
-      );
-      // 如有联网搜索结果,发 search_result 事件供 UI 展示引用
-      if (searchBundle?.hit) {
-        safeEnqueue(
-          encoder.encode(
+        ));
+        if (searchBundle?.hit) {
+          safeEnqueue(encoder.encode(
             `data: ${JSON.stringify({ type: "search_result", results: searchBundle.results })}\n\n`,
-          ),
-        );
-      }
-      // 如有 RAG 检索结果,先发一个 rag_search 事件供 UI 显示
-      if (ragStatus) {
-        safeEnqueue(encoder.encode(`data: ${JSON.stringify({ type: "rag_search", status: ragStatus })}\n\n`));
-      }
-      // 如触发了压缩,发 compact 事件
-      if (compaction?.compacted) {
-        safeEnqueue(
-          encoder.encode(
+          ));
+        }
+        if (ragStatus) {
+          safeEnqueue(encoder.encode(
+            `data: ${JSON.stringify({ type: "rag_search", status: ragStatus })}\n\n`,
+          ));
+        }
+        if (compaction?.compacted) {
+          safeEnqueue(encoder.encode(
             `data: ${JSON.stringify({ type: "compact", strategy: compaction.strategy, level: compaction.fallbackLevel })}\n\n`,
-          ),
-        );
-      }
+          ));
+        }
+      };
+      const emit = (event: ChatCompletionEvent) => {
+        if (event.type === "started") {
+          emitContextEvents();
+        } else if (event.type === "text-delta") {
+          safeEnqueue(encoder.encode(
+            `data: ${JSON.stringify({ type: "delta", text: event.text })}\n\n`,
+          ));
+        } else if (event.type === "reasoning-delta") {
+          safeEnqueue(encoder.encode(
+            `data: ${JSON.stringify({ type: "reasoning", text: event.text })}\n\n`,
+          ));
+        } else if (event.type === "tool-call") {
+          safeEnqueue(encoder.encode(
+            `data: ${JSON.stringify({ type: "tool_call", toolName: event.toolName, args: event.args })}\n\n`,
+          ));
+        } else if (event.type === "tool-result") {
+          safeEnqueue(encoder.encode(
+            `data: ${JSON.stringify({ type: "tool_result", toolName: event.toolName, isError: event.isError })}\n\n`,
+          ));
+        } else if (event.type === "error") {
+          safeEnqueue(encoder.encode(
+            `data: ${JSON.stringify({ type: "error", error: event.error, code: event.code })}\n\n`,
+          ));
+        } else if (event.type === "finish") {
+          safeEnqueue(encoder.encode(
+            `data: ${JSON.stringify({ type: "finish", metadata: event.metadata })}\n\n`,
+          ));
+        }
+      };
+
       try {
-        // P1-A:解析 MCP server。有可用工具则走 agent loop,否则普通 streamChat。
-        const mcpServers = await resolveMcpServers(ctx).catch(() => []);
-        const hasTools = mcpServers.some((sv) => sv.tools.length > 0);
-        const chatUA = await getChatUA();
-        // 同一 agent 多轮共享 runId(streamChatWithTools 透传给每轮 streamChat)。
-        const gen = hasTools
-          ? streamChatWithTools({
-              ctx,
-              request: irRequest,
-              mcpServers,
-              runId,
-              cacheKey: body.conversationId,
-              modelId: body.modelId,
-              abortSignal: abortCtl.signal,
-              userAgent: chatUA,
-            })
-          : streamChat({
-              ctx,
-              request: irRequest,
-              runId,
-              cacheKey: body.conversationId,
-              modelId: body.modelId,
-              abortSignal: abortCtl.signal,
-              userAgent: chatUA,
-            });
-        for await (const ev of gen) {
-          if (ev.type === "text-delta") {
-            assistantText += ev.text;
-            safeEnqueue(encoder.encode(`data: ${JSON.stringify({ type: "delta", text: ev.text })}\n\n`));
-          } else if (ev.type === "reasoning-delta") {
-            assistantReasoning += ev.text;
-            safeEnqueue(encoder.encode(`data: ${JSON.stringify({ type: "reasoning", text: ev.text })}\n\n`));
-          } else if (ev.type === "finish") {
-            finished = true;
-            finalUsage = ev.usage;
-          } else if (ev.type === "tool-call") {
-            // 审计落库 best-effort(内部吞错);SSE 载荷保持兼容(仅 toolName/args)。
-            await recordToolCallStart({
-              runId,
-              toolCallId: ev.toolCallId,
-              toolName: ev.toolName,
-              args: ev.args,
-            });
-            safeEnqueue(encoder.encode(`data: ${JSON.stringify({ type: "tool_call", toolName: ev.toolName, args: ev.args })}\n\n`));
-          } else if (ev.type === "tool-result") {
-            await recordToolCallResult({
-              runId,
-              toolCallId: ev.toolCallId,
-              result: ev.result,
-              isError: ev.isError,
-            });
-            safeEnqueue(encoder.encode(`data: ${JSON.stringify({ type: "tool_result", toolName: ev.toolName, isError: ev.isError })}\n\n`));
-          } else if (ev.type === "error") {
-            sawStreamError = true;
-            safeEnqueue(encoder.encode(`data: ${JSON.stringify({ type: "error", error: ev.error, code: ev.code })}\n\n`));
-          }
-        }
-      } catch (err) {
-        // 客户端断开引发的中止不发 error 帧:客户端已不接收,且向已关闭流 enqueue 会抛。
-        if (!abortCtl.signal.aborted) {
-          sawStreamError = true;
-          safeEnqueue(
-            encoder.encode(`data: ${JSON.stringify({ type: "error", error: redactErrorMessage(err, [], "内部错误") })}\n\n`),
-          );
-        }
-      } finally {
-        stopHeartbeat();
-        try {
-          const persisted = await withConversationMessageWrite(
-            db,
-            s,
-            body.conversationId,
-            user.id,
-            async (tx) => {
-              if (!userMessageInternalId) throw new Error("用户父消息已失效");
-              const activeUserMessage = await findConversationMessage(
-                tx,
-                s,
-                body.conversationId,
-                { id: userMessageInternalId },
-              );
-              const activeUserContent =
-                typeof activeUserMessage?.content === "string"
-                  ? activeUserMessage.content
-                  : String(activeUserMessage?.content ?? "");
-              if (activeUserMessage?.role !== "user" || activeUserContent !== userContent) {
-                throw new Error("用户父消息已失效或内容已变更");
-              }
-
-              if (sourceIdInternal) {
-                const activeSource = await findConversationMessage(
-                  tx,
-                  s,
-                  body.conversationId,
-                  { id: sourceIdInternal },
-                );
-                if (!activeSource) throw new Error("源消息已失效");
-              }
-
-              if (isContinue && continueAssistantInternalId) {
-                // 原内容参与条件写，避免两个并发续写互相覆盖。
-                const [updated] = await tx
-                  .update(s.messages)
-                  .set({
-                    content: continuePrefixText + assistantText,
-                    reasoning: assistantReasoning || null,
-                    status: finished ? "success" : "interrupted",
-                    processTrace: trace,
-                    runId,
-                  })
-                  .where(
-                    and(
-                      eq(s.messages.id, continueAssistantInternalId),
-                      eq(s.messages.conversationId, body.conversationId),
-                      eq(s.messages.role, "assistant"),
-                      isNull(s.messages.deletedAt),
-                      eq(s.messages.content, continuePrefixText),
-                    ),
-                  )
-                  .returning({ id: s.messages.id });
-                if (!updated) throw new Error("续写消息已失效或内容已变更");
-                return;
-              }
-
-              // 持久化 assistant 消息;parentId 指向本轮 user 消息;附 process_trace + runId
-              await tx.insert(s.messages).values({
-                conversationId: body.conversationId,
+        const outcome = await executeChatCompletion({
+          ctx,
+          request: irRequest,
+          modelId: body.modelId,
+          runId,
+          conversationId: body.conversationId,
+          userId: user.id,
+          userMessageInternalId,
+          userContent,
+          sourceIdInternal,
+          assistant: isContinue
+            ? {
+                kind: "continue",
+                internalId: continueAssistantInternalId!,
                 publicId: assistantPublicId,
-                parentId: userMessageInternalId,
-                runId,
-                role: "assistant",
-                content: assistantText,
-                reasoning: assistantReasoning || null,
-                status: finished ? "success" : "interrupted",
-                processTrace: trace,
-                createdAt: assistantCreatedAt,
-              });
-            },
-          );
-          if (persisted === null) throw new Error("会话已失效或无权访问");
-
-          // P1-B:抽取 artifact(代码块/Mermaid/SVG 等)并持久化。
-          if (assistantText && !isContinue) {
-            try {
-              const { artifacts: parsed } = extractArtifacts(assistantText);
-              if (parsed.length > 0) {
-                const assistantMsgRow = await findConversationMessage(
-                  db,
-                  s,
-                  body.conversationId,
-                  { publicId: assistantPublicId },
-                );
-                if (assistantMsgRow) {
-                  await db.insert(s.artifacts).values(
-                    parsed.map((a) => ({
-                      messageId: assistantMsgRow.id,
-                      conversationId: body.conversationId,
-                      userId: user.id,
-                      kind: a.kind,
-                      title: a.title,
-                      language: a.language,
-                      content: a.content,
-                    })),
-                  );
-                }
+                prefixText: continuePrefixText,
               }
-            } catch {
-              /* artifact 抽取失败不阻断主流程 */
-            }
-          }
-
-          // 更新会话时间；生成活动状态由 fresh running runs 动态派生。
-          await db
-            .update(s.conversations)
-            .set({ updatedAt: new Date() })
-            .where(eq(s.conversations.id, body.conversationId));
-
-          // 异步提取记忆(入队 pg-boss,由 worker 消费,抗重启)。
-          if (assistantText && !isContinue) {
-            const recentMessages = [...body.messages, { role: "assistant", content: assistantText }]
-              .map((m) => ({ role: m.role, content: typeof m.content === "string" ? m.content : String(m.content ?? "") }));
-            getQueue()
-              .then((q) =>
-                q.send("memory-extract", {
-                  userId: user.id,
-                  conversationId: body.conversationId,
-                  recentMessages,
-                }),
-              )
-              .catch((error) =>
-                console.error(
-                  "[chat] memory-extract enqueue failed:",
-                  redactErrorMessage(error),
-                ),
-              );
-          }
-
-          completedAt = new Date();
-          durationMs = Math.max(0, Math.round(performance.now() - requestStartedAt));
-          completionPersisted = true;
-        } catch (err) {
-          persistenceFailed = true;
-          // 收尾失败仍尽力更新时间；活动 run 会由终态或租约过期收敛。
-          try {
-            await withBestEffortTimeout(() =>
-              db
-                .update(s.conversations)
-                .set({ updatedAt: new Date() })
-                .where(eq(s.conversations.id, body.conversationId)),
-            );
-          } catch {
-            /* DB 不可用时无法继续收敛 */
-          }
-          if (!abortCtl.signal.aborted) {
-            safeEnqueue(
-              encoder.encode(
-                `data: ${JSON.stringify({ type: "error", error: redactErrorMessage(err, [], "收尾持久化失败") })}\n\n`,
-              ),
-            );
-          }
-        } finally {
-          // 无论消息落库是否成功,都必须把 runs 从 running 收敛到终态。
-          stopHeartbeat();
-          const tokenUsage = irUsageToTokenUsage(finalUsage);
-          await finalizeRun({
-            runId,
-            status: resolveRunTerminalStatus({
-              finished,
-              aborted: abortCtl.signal.aborted,
-              sawError: sawStreamError,
-              persistenceFailed,
-            }),
-            tokenUsage,
-            durationMs,
-            completedAt,
-          });
-          // DONE 是可靠完成信号：必要消息持久化与 run 终结处理均已完成。
-          if (completionPersisted && completedAt && durationMs !== null) {
-            const metadata: MessageRunMetadata = {
-              model: body.model,
-              durationMs,
-              completedAt: completedAt.toISOString(),
-            };
-            if (tokenUsage) metadata.tokenUsage = tokenUsage;
-            safeEnqueue(
-              encoder.encode(
-                `data: ${JSON.stringify({ type: "finish", metadata })}\n\n`,
-              ),
-            );
-            safeEnqueue(encoder.encode("data: [DONE]\n\n"));
-          }
-          req.signal.removeEventListener("abort", onRequestAbort);
-          try {
-            controller.close();
-          } catch {
-            /* 客户端断开已取消流,忽略重复关闭 */
-          }
+            : {
+                kind: "insert",
+                publicId: assistantPublicId,
+                createdAt: assistantCreatedAt,
+              },
+          processTrace: trace,
+          memoryMessages: body.messages.map((message) => ({
+            role: message.role,
+            content: message.content,
+          })),
+          requestStartedAt,
+          signal: abortCtl.signal,
+          emit,
+        });
+        safeEnqueue(encoder.encode(
+          `data: ${JSON.stringify({
+            type: "terminal",
+            status: TERMINAL_STATUS_BY_OUTCOME[outcome.kind],
+          })}\n\n`,
+        ));
+        safeEnqueue(encoder.encode("data: [DONE]\n\n"));
+      } finally {
+        req.signal.removeEventListener("abort", onRequestAbort);
+        try {
+          controller.close();
+        } catch {
+          /* 客户端断开已取消流,忽略重复关闭 */
         }
       }
     },
     // 客户端断开时触发:中止上游生成(req.signal 在部分场景不可靠,cancel 兜底)。
     cancel() {
-      stopHeartbeat();
       abortCtl.abort();
     },
   });

@@ -13,6 +13,7 @@
 import { eq, and, inArray } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { DEFAULT_MIN_SIMILARITY, type Vector } from "@/lib/infra/vector";
+import { redactErrorMessage } from "@/lib/redaction";
 import { embedText } from "./embedding";
 import { estimateTokens } from "@/lib/tokens";
 
@@ -85,8 +86,8 @@ export async function retrieve(
       doRetrieve(query, fileIds, opts.userId, topK, minSim, tokenBudget),
       timeoutPromise,
     ]);
-  } catch (err) {
-    console.error("[rag] retrieve error:", err);
+  } catch (error) {
+    console.error("[rag] retrieve error:", redactErrorMessage(error, [], "检索失败"));
     return { chunks: [], status: "rag_error", candidateCount: 0, maxScore: 0, cached: false };
   }
 }

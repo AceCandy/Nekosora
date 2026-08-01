@@ -17,10 +17,13 @@ src/
     share/                  公开分享页
   lib/
     infra/                  降级基建:db/cache/queue/crypto/vector/env
+    jobs/                   Web/worker 共享的 typed queue catalog(payload/policy/retry message)
+    worker/                 后台任务装配与通用 runtime/recovery 生命周期
     providers/              统一 IR + provider 适配(openai/openai-compatible/anthropic/gemini)
     rag/                    RAG 流水线:embedding/chunk/extract/retrieve/context/process
     compact/                上下文压缩:coverage(CoveragePathHash)/service(4级回退)
     memory/                 长期记忆(user_memories)
+    conversation-title/     会话标题 durable outbox、dispatch 与 fenced processor
     routing.ts              四表模型路由器(负载均衡/故障转移)
     stream.ts               唯一流式核心 streamChat()
     keys.ts                 主/子密钥签发与校验
@@ -35,12 +38,15 @@ src/
     types.ts                dialect 中立领域类型
     seed.ts                 首管理员创建
   instrumentation.ts        进程启动钩子(日志)
-  worker.ts                 pg-boss 消费进程(文件处理流水线,仅 PG 模式)
+  worker.ts                 薄 pg-boss 入口(环境校验 + 动态加载 + runtime 组装)
 ```
 
 ## Module Organization
 
 - **分层**:`app/`(路由/页面/端点)→ `lib/`(业务逻辑)→ `lib/infra/`(基建)。lib 不 import app;infra 不 import 业务。
+- **任务目录**:`lib/jobs/catalog.ts` 是 queue name、payload、有限 policy 与安全 retry message 的唯一事实源;它不得 import Node driver、worker runtime 或领域 handler。
+- **Worker 所有权**:`lib/worker/definitions.ts` 是领域 handler/recovery 唯一装配表;`lib/worker/runtime.ts` 独占注册顺序、恢复 timer、回滚、signal shutdown 与 drain。领域目录只导出处理函数和单轮 recovery,不得重新增加 `start*Recovery` wrapper。
+- **Worker 入口**:`src/worker.ts` 只做环境校验、变量路径动态加载和 runtime 组装,不得包含 queue name/payload、领域分支、timer 或 cleanup tree。
 - **server actions**:每个页面组(如 `admin/`)下放 `actions.ts`,用 `"use server"` 标注,内部 import lib。
 - **降级模块**(db/cache/queue)用动态 import 加载驱动,避免 bundler 把未用 dialect 打进 Edge 编译(见 `util/types` 教训)。
 - **唯一流式入口**:所有 LLM 调用(WebChat + 网关)都经 `streamChat()`,禁止直接调 AI SDK 的 streamText。

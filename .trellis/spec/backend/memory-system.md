@@ -26,7 +26,7 @@
 
 - 流后异步，10 分钟全局频率保护（`memextract:${userId}` cache）。
 - 把最近 6 轮对话作为 messages 传 `mem0.add(messages, {userId, metadata:{scope:"project", source:"ai"}})`（`infer=true`，mem0 LLM 全权抽取 + 去重 + 合并）。
-- 失败静默（不阻断主对话）。
+- 失败不阻断主对话；领域边界只记录 `client_init` / `memory_add` 有限阶段，禁止记录原始异常、消息、ID 或基础设施信息。
 - 抽取后 `invalidateMemoryCache(userId)` 失效 getMemories 的 60s 缓存。
 
 ---
@@ -72,6 +72,7 @@
 记忆层全面委托 `mem0ai/oss`（OSS 自托管，非 Platform 云版）。为可跟随官方升级，接入须守以下约束：
 
 - **只用 SDK 公开稳定接口**：仅 `Memory` class + 标准 `MemoryConfig`（vectorStore/embedder/llm 三段式）+ 标准 Options（`AddMemoryOptions`/`SearchMemoryOptions`/`GetAllMemoryOptions`）。禁止 monkey-patch、改 SDK 内部、或绕开 SDK 直接读写 `mem0_memories` 表。
+- **禁用未使用的 mem0 history**：构造 `Memory` 时设置 `disableHistory:true`；聊天历史由业务表持久化，项目不调用 `memory.history()`，不得为此引入 `better-sqlite3` 本地历史库。
 - **表结构交 mem0 自管**：`mem0_memories` 由 mem0 首次 `getMemory()` 自建并维护，业务不定义其 schema、不写迁移。`user_memories` 自建表已于 M-5 drop。
 - **已用方法**：add/search/update/delete/getAll/deleteAll；`Memory` 另有 get/history/reset，业务暂未用（非缺失）。
 - **自定义 metadata 字段**（存 metadata JSON，非 SDK 原生）：`scope`/`source`/`expirationDate`/`priority`；`disclosure` 已废弃（M-4）。search filter 按 `user_id`（原生）+ `scope`（自定义塞 metadata 再 filter）。
@@ -104,7 +105,7 @@
 |---|---|
 | 配置 ID 可路由 | 使用该 ID |
 | 旧模型名存在但无启用路由/Provider | 继续尝试标题模型回退 |
-| 所有候选失效 | `getMemory` 抛错，`extractMemories` 静默跳过，不阻断 Chat |
+| 所有候选失效 | `getMemory` 抛错，Worker 异步重试，不阻断 Chat |
 | `json_object` 请求 | 统一核心使用结构化 JSON 输出 |
 | Worker 中模型设置变化 | 指纹不同则重建 Mem0 client |
 

@@ -206,3 +206,230 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 70: 统一 Gateway execution engine
+
+**Date**: 2026-07-30
+**Task**: 统一 Gateway execution engine
+**Branch**: `dev_0729`
+
+### Summary
+
+统一 Chat、Image、TTS、STT 的 route/key 执行状态机；以 gateway_executions/gateway_attempts 破坏性替换旧日志表并迁移查询、指标与规范。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `beaeb6f` | (see git log) |
+| `b636b62` | (see git log) |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 71: Chat completion transaction boundary
+
+**Date**: 2026-07-30
+**Task**: Chat completion transaction boundary
+**Branch**: `dev_0729`
+
+### Summary
+
+Implemented strict run start, atomic assistant/run/memory completion persistence, first-terminal-cause coordination, durable memory recovery, Agent usage aggregation, route cutover, PostgreSQL rollback tests, and updated backend contracts.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `39d78db` | (see git log) |
+| `99af4e1` | (see git log) |
+| `fbcb214` | (see git log) |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 72: RAG 文件处理状态机
+
+**Date**: 2026-07-30
+**Task**: RAG 文件处理状态机
+**Branch**: `dev_0729`
+
+### Summary
+
+统一 fileId-only coordinator、typed state 与 fenced repository；补锁后 freshness、embedding 降级、原子 chunk replacement 和真实 PostgreSQL 并发验证。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `883a423` | (see git log) |
+| `7bda3e0` | (see git log) |
+| `843372c` | (see git log) |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 73: Worker 与 Queue 生命周期统一
+
+**Date**: 2026-07-30
+**Task**: Worker 与 Queue 生命周期统一
+**Branch**: `dev_0729`
+
+### Summary
+
+统一 typed job catalog、可替换 pg-boss generation、真实 handler drain、generic recovery/runtime 与安全日志；完成真实 PostgreSQL gate、规格同步并归档 Phase 3。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `36285d7` | (see git log) |
+| `916939a` | (see git log) |
+| `f62c1a5` | (see git log) |
+| `d970ddb` | (see git log) |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 74: Model Catalog 同步契约强化
+
+**Date**: 2026-07-30
+**Task**: Model Catalog 同步契约强化
+**Branch**: `dev_0729`
+
+### Summary
+
+统一 model catalog 同步 planner 与 migration-only 写入路径，完成权威降级、原子 reasoning bundle、迁移验证和运行时消费链复核，并将架构路线图推进到 4/5。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `fa4aebb` | (see git log) |
+| `1526147` | (see git log) |
+| `e8ed9b7` | (see git log) |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 75: Chat Composer 状态协调
+
+**Date**: 2026-07-31
+**Task**: Chat Composer 状态协调
+**Branch**: `dev_0729`
+
+### Summary
+
+统一 Composer 七类选择状态与 latest-only 持久化，原子保存完整快照，补齐请求优先级、会话 scope 隔离、失败重试、规格和测试；认证后浏览器回归仍待最终集成阶段验证。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c81e94a` | (see git log) |
+| `e122c7b` | (see git log) |
+| `470212a` | (see git log) |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 76: 完成架构深化路线图最终集成
+
+**Date**: 2026-07-31
+**Task**: 完成架构深化路线图最终集成
+**Branch**: `dev_0729`
+
+### Summary
+
+完成五个架构子任务的最终集成复核，统一运行时错误 URL 脱敏边界，补齐测试与日志规范，通过全量及隔离 PostgreSQL 门禁，并归档父路线图。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0f32aa3` | (see git log) |
+| `c85f3de` | (see git log) |
+| `d09fd0e` | (see git log) |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 77: 修复 Chat SSE 失败与中断终态
+
+**Date**: 2026-07-31
+**Task**: 修复 Chat SSE 失败与中断终态
+**Branch**: `dev_0729`
+
+### Summary
+
+统一内部 Chat SSE 成功、失败与中断终态协议，强化客户端解析和四条发送路径的消息状态收敛，并同步规格与任务验证记录。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c83d2da` | (see git log) |
+| `b00b707` | (see git log) |
+| `bf5c860` | (see git log) |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 78: 修复 Chat execution telemetry 终态收敛
+
+**Date**: 2026-07-31
+**Task**: 修复 Chat execution telemetry 终态收敛
+**Branch**: `dev_0729`
+
+### Summary
+
+修复 coordinator 提前关闭 async iterator 导致的 gateway execution telemetry running 残留；补充 finish/error settlement、Abort 竞速与 active attempt 收尾、最终 usage 回调清理路径和跨层回归测试。更新 Chat/logging/cross-layer 规格，完成全量测试、lint、typecheck、build，并归档任务。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8dad396` | (see git log) |
+| `ce1d061` | (see git log) |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 79: Memory extraction diagnostics
+
+**Date**: 2026-08-01
+**Task**: Memory extraction diagnostics
+**Branch**: `dev_0729`
+
+### Summary
+
+Added privacy-safe memory extraction stage logs, diagnosed mem0 SQLite native binding failure, and disabled unused mem0 history while preserving PostgreSQL-backed memory operations.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3e8aede` | (see git log) |
+
+### Status
+
+[OK] **Completed**

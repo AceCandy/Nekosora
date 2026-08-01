@@ -41,6 +41,7 @@ import {
   getConversationTitleStateAction,
   getGeneratingStatuses,
   listConversations,
+  saveConversationComposerState,
 } from "./conversations";
 
 const schema = {
@@ -52,6 +53,11 @@ const schema = {
     generating: "conversations.generating",
     updatedAt: "conversations.updatedAt",
     userId: "conversations.userId",
+    modelName: "conversations.modelName",
+    outputModeId: "conversations.outputModeId",
+    renderStyleId: "conversations.renderStyleId",
+    webSearch: "conversations.webSearch",
+    composerState: "conversations.composerState",
   },
   runs: {
     conversationId: "runs.conversationId",
@@ -134,5 +140,82 @@ describe("会话标题状态 action", () => {
 
     expect(mocks.requireSession).toHaveBeenCalledOnce();
     expect(mocks.getConversationTitleState).toHaveBeenCalledWith("user-1", "conversation-1");
+  });
+});
+
+function composerActionDb(updatedRows: Record<string, unknown>[]) {
+  const select = vi.fn();
+  const returning = vi.fn().mockResolvedValue(updatedRows);
+  const updateWhere = vi.fn(() => ({ returning }));
+  const updateSet = vi.fn(() => ({ where: updateWhere }));
+  const update = vi.fn(() => ({ set: updateSet }));
+  return { db: { select, update }, select, update, updateSet, updateWhere, returning };
+}
+
+describe("Composer 完整快照 action", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.requireSession.mockResolvedValue({ id: "user-1" });
+    mocks.getSchema.mockReturnValue(schema);
+  });
+
+  it("校验属主后用一次 UPDATE 原子替换完整快照且不预读 JSON", async () => {
+    const { db, select, update, updateSet } = composerActionDb([{ id: "conversation-1" }]);
+    mocks.getDb.mockResolvedValue(db);
+
+    await saveConversationComposerState("conversation-1", {
+      modelName: "provider/model-a",
+      outputModeId: null,
+      renderStyleId: "style-a",
+      webSearch: true,
+      cardIds: ["card-a"],
+      kbIds: ["kb-a"],
+      reasoningByModelId: { "model-a": "high", "model-b": "off" },
+    });
+
+    expect(select).not.toHaveBeenCalled();
+    expect(update).toHaveBeenCalledOnce();
+    expect(updateSet).toHaveBeenCalledWith({
+      modelName: "provider/model-a",
+      outputModeId: null,
+      renderStyleId: "style-a",
+      webSearch: true,
+      composerState: {
+        cardIds: ["card-a"],
+        kbIds: ["kb-a"],
+        reasoningByModelId: { "model-a": "high", "model-b": "off" },
+      },
+    });
+  });
+
+  it("拒绝非法快照且不查询数据库", async () => {
+    await expect(saveConversationComposerState("conversation-1", {
+      modelName: "",
+      outputModeId: null,
+      renderStyleId: null,
+      webSearch: false,
+      cardIds: [],
+      kbIds: [],
+      reasoningByModelId: { "model-a": "invalid" },
+    } as never)).rejects.toThrow("会话输入区状态无效");
+
+    expect(mocks.getDb).not.toHaveBeenCalled();
+  });
+
+  it("非属主不能写入", async () => {
+    const { db, update } = composerActionDb([]);
+    mocks.getDb.mockResolvedValue(db);
+
+    await expect(saveConversationComposerState("conversation-1", {
+      modelName: "provider/model-a",
+      outputModeId: null,
+      renderStyleId: null,
+      webSearch: false,
+      cardIds: [],
+      kbIds: [],
+      reasoningByModelId: {},
+    })).rejects.toThrow("无权操作");
+
+    expect(update).toHaveBeenCalledOnce();
   });
 });

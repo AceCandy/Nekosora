@@ -1,0 +1,32 @@
+{
+  "id": "chat-sse-terminal-protocol",
+  "name": "chat-sse-terminal-protocol",
+  "title": "Chat SSE 显式终态协议",
+  "description": "为内部 /api/chat 增加显式 SSE terminal，严格区分成功、失败、中断与异常 EOF，并让前端消息状态与持久化 outcome 一致。",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P1",
+  "creator": "AceCandy",
+  "assignee": "AceCandy",
+  "createdAt": "2026-07-31",
+  "completedAt": "2026-07-31",
+  "branch": "dev_0729",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "src/app/api/chat/route.ts",
+    "src/lib/chat/sse-contract.ts",
+    "src/features/chat/model/sse.ts",
+    "src/features/chat/store/chatStreamStore.ts",
+    "src/lib/chat/completion-coordinator.ts"
+  ],
+  "notes": "内部 WebChat terminal/DONE 协议、严格 parser gate 与四条 Store 状态收敛已完成；全量质量门通过，不涉及数据库或公开 /v1/*。",
+  "meta": {}
+}

@@ -26,11 +26,11 @@ describe("run metadata baseline", () => {
         breakpoints: boolean;
       }>;
     };
-    expect(journal.entries).toEqual([expect.objectContaining({
+    expect(journal.entries).toEqual(expect.arrayContaining([expect.objectContaining({
       idx: 0,
       tag: "0000_baseline",
       breakpoints: true,
-    })]);
+    })]));
 
     const currentSnapshot = JSON.parse(
       readFileSync(join(migrationDir, "meta/0000_snapshot.json"), "utf8"),

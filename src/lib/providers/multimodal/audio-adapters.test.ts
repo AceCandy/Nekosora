@@ -19,8 +19,20 @@ vi.mock("@/lib/routing", () => ({
     mocks.resolveRoutesByCapability(...args),
   RoutingError: class RoutingError extends Error {},
 }));
+vi.mock("@/lib/gateway-execution", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/gateway-execution")>();
+  return {
+    ...actual,
+    gatewayTelemetry: {
+      startExecution: vi.fn(async () => undefined),
+      recordAttempt: vi.fn(async () => undefined),
+      finalizeExecution: vi.fn(async () => undefined),
+    },
+  };
+});
 
 import { generateSpeech, transcribe } from "ai";
+import { createOpenAI } from "@ai-sdk/openai";
 import { transcribeViaRoute } from "@/lib/providers/multimodal/audio-stt";
 import { synthesizeViaRoute } from "@/lib/providers/multimodal/audio-tts";
 import type { CallContext, ResolvedRoute } from "@/lib/providers/types";
@@ -45,9 +57,22 @@ const route: ResolvedRoute = {
   routeId: "route-a",
 };
 
+function makeRoute(overrides: Partial<ResolvedRoute> = {}): ResolvedRoute {
+  return {
+    ...route,
+    ...overrides,
+    provider: {
+      ...route.provider,
+      ...overrides.provider,
+    },
+  };
+}
+
 describe("multimodal audio adapter redaction", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(generateSpeech).mockReset();
+    vi.mocked(transcribe).mockReset();
     mocks.resolveRoutesByCapability.mockResolvedValue([route]);
   });
 
@@ -105,5 +130,133 @@ describe("multimodal audio adapter redaction", () => {
     expect([...speech.audioBuffer]).toEqual([1, 2, 3]);
     expect(speech.mime).toBe("audio/mpeg");
     expect(transcription.text).toBe("hello");
+  });
+
+  it("TTS 首 key 可转移失败后使用同一 provider 的下一 key", async () => {
+    mocks.resolveRoutesByCapability.mockResolvedValue([
+      makeRoute({
+        provider: {
+          ...route.provider,
+          apiKey: "AUDIO_KEY_A",
+          keys: [
+            { key: "AUDIO_KEY_A", weight: 1 },
+            { key: "AUDIO_KEY_B", weight: 1 },
+          ],
+        },
+      }),
+    ]);
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    vi.mocked(generateSpeech)
+      .mockRejectedValueOnce(Object.assign(new Error("temporary upstream failure"), {
+        statusCode: 503,
+      }))
+      .mockResolvedValueOnce({ audio: { uint8Array: new Uint8Array([9]) } } as never);
+
+    const result = await synthesizeViaRoute(ctx, "audio-model", { text: "hello" });
+
+    expect([...result.audioBuffer]).toEqual([9]);
+    expect(generateSpeech).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(createOpenAI).mock.calls.map(([config]) => config?.apiKey)).toEqual([
+      "AUDIO_KEY_A",
+      "AUDIO_KEY_B",
+    ]);
+  });
+
+  it("STT 首 key 可转移失败后使用同一 provider 的下一 key", async () => {
+    mocks.resolveRoutesByCapability.mockResolvedValue([
+      makeRoute({
+        provider: {
+          ...route.provider,
+          apiKey: "AUDIO_KEY_A",
+          keys: [
+            { key: "AUDIO_KEY_A", weight: 1 },
+            { key: "AUDIO_KEY_B", weight: 1 },
+          ],
+        },
+      }),
+    ]);
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    vi.mocked(transcribe)
+      .mockRejectedValueOnce(Object.assign(new Error("temporary upstream failure"), {
+        statusCode: 503,
+      }))
+      .mockResolvedValueOnce({ text: "fallback text" } as never);
+
+    const result = await transcribeViaRoute(ctx, "audio-model", {
+      audio: Buffer.from("audio"),
+      mime: "audio/wav",
+    });
+
+    expect(result.text).toBe("fallback text");
+    expect(transcribe).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(createOpenAI).mock.calls.map(([config]) => config?.apiKey)).toEqual([
+      "AUDIO_KEY_A",
+      "AUDIO_KEY_B",
+    ]);
+  });
+
+  it.each([
+    ["TTS", generateSpeech, () => synthesizeViaRoute(ctx, "audio-model", { text: "hello" })],
+    ["STT", transcribe, () => transcribeViaRoute(ctx, "audio-model", {
+      audio: Buffer.from("audio"),
+      mime: "audio/wav",
+    })],
+  ] as const)("%s 首 route 可转移失败后使用下一 route", async (_name, operation, invoke) => {
+    const fallbackRoute = makeRoute({
+      routeId: "route-b",
+      upstreamModelName: "audio-backup",
+      priority: 1,
+      provider: {
+        ...route.provider,
+        id: "provider-b",
+        name: "Provider B",
+        apiKey: "AUDIO_BACKUP_SECRET",
+        keys: [{ key: "AUDIO_BACKUP_SECRET", weight: 1 }],
+      },
+    });
+    mocks.resolveRoutesByCapability.mockResolvedValue([route, fallbackRoute]);
+    vi.mocked(operation)
+      .mockRejectedValueOnce(Object.assign(new Error("temporary upstream failure"), {
+        statusCode: 503,
+      }))
+      .mockResolvedValueOnce(
+        operation === generateSpeech
+          ? { audio: { uint8Array: new Uint8Array([7]) } }
+          : { text: "backup text" },
+      );
+
+    const result = await invoke();
+
+    expect(result.providerName).toBe("Provider B");
+    expect(result.routeId).toBe("route-b");
+    expect(operation).toHaveBeenCalledTimes(2);
+  });
+
+  it("TTS 不兼容的 route 不调用上游并继续使用兼容 route", async () => {
+    const incompatibleRoute = makeRoute({
+      protocol: "anthropic",
+      provider: { ...route.provider, protocol: "anthropic" },
+    });
+    const fallbackRoute = makeRoute({
+      routeId: "route-b",
+      protocol: "openai-audio-tts",
+      priority: 1,
+      provider: {
+        ...route.provider,
+        id: "provider-b",
+        name: "Provider B",
+        protocol: "openai-audio-tts",
+      },
+    });
+    mocks.resolveRoutesByCapability.mockResolvedValue([incompatibleRoute, fallbackRoute]);
+    vi.mocked(generateSpeech).mockResolvedValue({
+      audio: { uint8Array: new Uint8Array([5]) },
+    } as never);
+
+    const result = await synthesizeViaRoute(ctx, "audio-model", { text: "hello" });
+
+    expect(result.providerName).toBe("Provider B");
+    expect(result.routeId).toBe("route-b");
+    expect(generateSpeech).toHaveBeenCalledTimes(1);
   });
 });

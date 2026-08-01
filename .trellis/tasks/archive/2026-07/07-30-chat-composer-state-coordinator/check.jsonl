@@ -1,0 +1,4 @@
+{"file":".trellis/spec/frontend/state-management.md","reason":"复核 coordinator 是否保持 local/server/URL state 边界与新会话静默 adopt 契约。"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"复核 failure UX、可访问性、移动端、浏览器回归与测试质量。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"复核 reducer -> hook -> Server Action -> PostgreSQL -> SSR 的完整数据流。"}
+{"file":".trellis/tasks/07-30-chat-composer-state-coordinator/research/evidence.md","reason":"按具体行号核对旧竞态是否全部删除且范围没有扩张。"}

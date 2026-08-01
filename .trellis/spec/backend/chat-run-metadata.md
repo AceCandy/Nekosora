@@ -2,99 +2,95 @@
 
 ## 1. Scope / Trigger
 
-Apply this contract when changing authenticated chat run completion, `runs` usage/timing columns, the WebChat `finish` SSE event, historical message projections, or assistant metadata UI. The goal is to expose one privacy-safe run projection without duplicating facts onto messages or public shares.
+Apply this contract when changing authenticated `/api/chat` generation, `runs`, assistant completion persistence, WebChat terminal SSE, Agent-loop usage, memory extraction intent production, or historical run metadata projection.
 
 ## 2. Signatures
 
-- Database: `messages.run_id -> runs.run_id`; `runs.duration_ms integer NULL`; `runs.completed_at timestamptz NULL`.
-- Runtime finalization: `finalizeRun({ runId, status, tokenUsage?, durationMs?, completedAt? })`.
-- Shared DTO:
-  ```typescript
-  interface MessageRunMetadata {
-    model?: string;
-    tokenUsage?: TokenUsage;
-    durationMs?: number;
-    completedAt?: string;
-  }
-  ```
-- SSE: `data: {"type":"finish","metadata":MessageRunMetadata}` immediately before `data: [DONE]`.
-- Client parser: `SSEHandlers.onFinish?: (metadata: MessageRunMetadata) => void`.
-- Historical loader: `loadRunMetadataByRunIds(db, schema, conversationId, runIds)` returns a run-ID map.
+- `startRunStrict(input): Promise<void>` confirms a `running` run before any model call.
+- `executeChatCompletion(input): Promise<ChatCompletionOutcome>` owns streaming, first-terminal-cause, heartbeat, tool audit, completion commit, and the unique domain finish.
+- `persistChatCompletion(input): Promise<PersistChatCompletionResult>` commits assistant, conversation time, optional memory intent, and terminal run in one PostgreSQL transaction.
+- Terminal run predicate: `run_id + conversation_id + user_id + status='running'`, with `RETURNING` exactly one row.
+- Internal WebChat tail: success emits `finish(metadata) -> terminal(success) -> [DONE]`; failed/interrupted emit `terminal(status) -> [DONE]` after any existing error frame. `ChatTerminalStatus` is owned by `src/lib/chat/sse-contract.ts`.
+- `memory_extraction_jobs`: one row per `run_id`, with run/conversation/user cascade FKs and a minimal JSONB message snapshot.
 
 ## 3. Contracts
 
-- `runs` is the only run-metadata fact source. Do not copy model or usage into `messages`, and do not reconstruct message metadata from `usage_logs`.
-- Model means `runs.platformModelName`, not provider, routed binding, upstream model, key, or failover details.
-- `durationMs` is the non-negative wall-clock interval from `/api/chat` request entry through required assistant persistence. `completedAt` and `durationMs` are computed once after that persistence, then the same values enter `finalizeRun` and the SSE DTO.
-- Final usage comes from the normalized upstream finish usage. Missing token subfields stay missing; numeric zero is valid data. Cache/reasoning tokens are not re-added into a synthetic total.
-- Required assistant persistence is the success gate. The route awaits the bounded run-finalize attempt, sends one `finish` frame, then sends `[DONE]`. A required persistence failure sends an error and suppresses both success signals.
-- `finalizeRun` updates only `runId + status='running'` and writes terminal status, usage, duration, and completion time in one update. Its existing best-effort timeout remains non-fatal to an already persisted assistant.
-- Live send, regenerate, edit-resend, and continue all consume `onFinish`. New generations clear stale metadata; continue overwrites the same assistant with the latest run metadata; version switching replaces the entire projection.
-- Historical main-branch and sibling queries batch run IDs and require both `runs.conversationId = authorizedConversationId` and `runId IN (...)`. Dates cross the Client Component boundary as ISO strings.
-- Nullable legacy fields degrade independently. Do not render placeholders for unknown values. Use the active UI locale for token number formatting; time remains on the shared `formatDateTimeLocal` contract.
-- Public share actions, snapshots, and `ReadonlyChatMessage` must not add `MessageRunMetadata`.
-- Server-side `ProcessTrace` construction and `messages.processTrace` persistence remain independent diagnostics. Ordinary WebChat SSE and `ChatMessage` do not carry trace.
-- Schema changes append a PostgreSQL migration plus Drizzle journal and snapshot; published migration artifacts are immutable.
+- `runs` is the only run-metadata fact source. Do not copy model or usage onto messages and do not reconstruct Chat metadata from gateway execution facts.
+- A run must be durably confirmed before model generation. A strict-start rejection or timeout does not call `streamChat` or `streamChatWithTools` and does not start heartbeat.
+- The coordinator owns one first-terminal-cause latch: finish first is `success`; upstream error/throw first is `failed`; Abort first or natural EOF is `interrupted`. Later events cannot replace the first cause.
+- Plain and Agent generation share one `runId`. Agent final finish usage is the sum of all step usage; its finish reason remains the final step reason.
+- Stop heartbeat before the short completion transaction. Never keep a database transaction open across model generation.
+- Lock order is conversation `FOR UPDATE`, active message/CAS validation, assistant write, conversation time, optional memory intent, then terminal run update.
+- Continue updates require the original assistant content in the SQL predicate. Parent and source references are re-read inside the locked transaction.
+- Compute `completedAt` and `durationMs` once before the completion call. The committed result, historical projection, and live finish metadata reuse those values.
+- Only a committed `success` can emit domain finish. The route adapter maps the returned `ChatCompletionOutcomeKind` exhaustively to `terminal(success|failed|interrupted)`, then sends `[DONE]` as a transport-completion marker. Failed/interrupted outcomes never emit finish, but an open transport still receives terminal + DONE.
+- The WebChat parser accepts success only when finish precedes terminal(success), and accepts any outcome only when terminal precedes DONE. DONE without terminal, success without finish, contradictory/duplicate terminal, or EOF before DONE is a protocol error.
+- Abort during commit closes transport intent but does not cancel the database transaction or downgrade a finish already latched as success. The committed database outcome remains authoritative.
+- `iterator.next()` races Abort. A provider that ignores its AbortSignal cannot indefinitely block coordinator convergence; iterator return is requested without awaiting an unresponsive provider.
+- After consuming a provider `finish` or `error`, the coordinator advances the stream iterator once so the plain stream or Agent loop can run its own telemetry/finally cleanup before completion persistence. The Abort path keeps non-blocking iterator return semantics.
+- A stream owns the nested gateway execution lifecycle: its `finally` requests nested engine closure on consumer `return()` without blocking the consumer, and runs any deferred final-usage callback from that same cleanup path. Final usage must not depend on code after the generator `finally` block.
+- Memory intent creation is part of the completion transaction. Immediate queue dispatch and artifact persistence are post-commit optimizations and cannot change the core outcome.
+- Public share DTOs never expose `MessageRunMetadata`. Historical loaders remain conversation-scoped and serialize dates as ISO strings.
 
 ## 4. Validation & Error Matrix
 
-| Condition | Required result |
-| --- | --- |
-| Upstream omits cache/reasoning usage | Omit that field; never display `0` |
-| Upstream reports a real numeric `0` | Preserve and display `0` |
-| Legacy run has null duration/completion | Preserve available model/usage; omit null fields |
-| Required assistant persistence fails | Error SSE; no `finish`; no `[DONE]`; failed run finalization |
-| Best-effort run finalization fails after assistant persistence | Live finish may still succeed; refresh may lack audit metadata |
-| Requested run belongs to another conversation | Exclude it through the conversation-scoped query |
-| Assistant is interrupted | No successful finish metadata; UI keeps the continuation action |
-| Public share is read anonymously | Return only the established public message projection |
+| Condition | Database result | SSE result |
+| --- | --- | --- |
+| Strict run start fails | No confirmed run; no model call | Generic error, terminal(failed), DONE if transport is open |
+| Upstream finish then Abort | Commit success if repository succeeds | No later write when transport is cancelled |
+| Abort then late finish | Commit interrupted partial assistant | Cancelled transport receives no later write |
+| Upstream error then late finish | Commit failed partial assistant | One error, terminal(failed), DONE |
+| Natural EOF | Commit interrupted partial assistant | Generic incomplete error, terminal(interrupted), DONE |
+| Parent/source/continue CAS misses | Entire completion transaction rolls back | Persistence error, terminal(failed), DONE |
+| Memory intent insert fails | Entire completion transaction rolls back | Persistence error, terminal(failed), DONE |
+| Terminal run update returns zero rows | Entire completion transaction rolls back | Persistence error, terminal(failed), DONE |
+| Completion commit succeeds | Assistant, conversation time, intent, and run are visible together | One finish, terminal(success), DONE |
 
 ## 5. Good / Base / Bad Cases
 
-- Good: one completed assistant receives the same ISO completion time and duration live, after refresh, and after version switching.
-- Good: a continuation clears old metadata while streaming and replaces it with the continuation run on finish.
-- Base: an old run with only model and aggregate prompt/completion usage renders only those known fields.
-- Base: a model that reports cache or reasoning token `0` renders the explicit zero.
-- Bad: using browser elapsed time or a single `usage_logs.latencyMs` as the whole-run duration.
-- Bad: selecting a complete run row for the client or omitting the conversation predicate because run IDs are globally unique.
-- Bad: sending metadata as soon as the provider emits finish, before assistant persistence has succeeded.
-- Bad: adding run metadata to the share DTO for display convenience.
+- Good: a successful assistant, run terminal metadata, conversation time, and memory intent become visible in the same commit.
+- Good: two concurrent continues serialize on the conversation row; only one original-content CAS and run terminal update succeeds.
+- Good: an Agent tool chain exposes one outer finish whose usage includes every model step.
+- Good: an ordinary provider failure preserves its error frame, then sends terminal(failed) and DONE without emitting finish.
+- Base: an interrupted generation stores partial assistant text with message status `interrupted` and run status `interrupted`.
+- Bad: provider finish directly causes route `[DONE]` before the completion transaction commits.
+- Bad: treating `[DONE]` or bare EOF as success without a validated terminal.
+- Bad: assistant persistence and `finalizeRun` are separate success writes.
+- Bad: queue acceptance is treated as memory business completion or deletes the durable intent.
 
 ## 6. Tests Required
 
-- Schema/migration tests assert nullable integer/timestamptz columns, appended journal ordering, and snapshot `prevId` continuity.
-- Run-lifecycle tests assert one update writes status, normalized usage, duration, and completion time under the `status='running'` predicate.
-- `/api/chat` tests assert required persistence -> finalize attempt -> `finish` -> `[DONE]`, value identity between finalize/SSE, persistence-failure suppression, and absence of trace SSE.
-- SSE parser tests assert typed `finish` dispatch and reliable `[DONE]` termination.
-- Store tests cover send, regenerate, edit-resend, continue, and version replacement, including stale metadata clearing.
-- Branch tests assert batched metadata projection, ISO dates, nullable degradation, real zero preservation, and conversation scoping for both visible branches and siblings.
-- Component tests assert field order, missing-vs-zero behavior, long-model truncation/title, and accessible coarse-pointer expansion state.
-- Browser checks cover fine-pointer hover/focus without geometry movement, 320/390px coarse-pointer expansion with a 44px target and zero horizontal overflow, plus light/dark themes.
-- Existing public-share tests must continue to prove that readonly messages contain no run metadata.
+- Run lifecycle tests: strict start waits for insert confirmation, rejects generically, and never exposes database details.
+- Repository unit tests: insert/continue fields, reference validation, fixed write order, intent failure, run zero-row, and ownership fencing.
+- Isolated PostgreSQL tests: concurrent continue has one winner; memory insert failure and terminal-run conflict roll back assistant, conversation time, intent, and run changes.
+- Coordinator tests: finish-before-Abort, Abort-before-finish, error-before-late-finish, natural EOF, duplicate terminal events, commit failure, an Abort-ignoring iterator, and one-step iterator settlement after finish/error.
+- Agent-loop tests: one outer finish, one shared run ID, aggregate usage, and one aggregate telemetry finalization.
+- Stream telemetry tests: natural final-usage callback and consumer Abort/`return()` finalization of the nested execution.
+- Route tests: identity/context wire fields, delta/reasoning/tool/error mapping, all six outcome-to-terminal mappings, finish-before-terminal-before-DONE, no finish on failure, and reader-cancel signal propagation.
+- Client parser/store tests: strict terminal/DONE gate, contradictory/duplicate terminal, chunked final frame, EOF rejection, four generation actions mapping only terminal success to message success, and one visible error append.
+- Schema/migration tests: memory intent primary key, unique run, three cascade FKs, dispatch index, SQL, journal, and snapshot continuity.
+- Existing history, version switching, client SSE parser, store, and public-share tests must remain green.
 
 ## 7. Wrong vs Correct
 
 ```typescript
-// Wrong: provider finish occurs before required persistence is known to be successful.
-enqueue({ type: "finish", metadata: buildMetadata() });
+// Wrong: independent writes allow a visible assistant without matching run/intention facts.
 await persistAssistant();
+await finalizeRun({ runId, status: "success" });
+queue.send("memory-extract", fullPayload);
+enqueue(doneFrame);
 
-// Correct: persist first, compute once, finalize the run, then signal success.
-await persistAssistant();
-const completedAt = new Date();
-const durationMs = Math.max(0, Math.round(performance.now() - requestStartedAt));
-await finalizeRun({ runId, status, tokenUsage, durationMs, completedAt });
-enqueue({ type: "finish", metadata: { model, tokenUsage, durationMs, completedAt: completedAt.toISOString() } });
-enqueue("[DONE]");
+// Correct: coordinator finish comes only from committed success;
+// the route serializes the returned outcome as the separate wire terminal.
+const outcome = await executeChatCompletion(input);
+safeEnqueue(terminalFrame(TERMINAL_STATUS_BY_OUTCOME[outcome.kind]));
+safeEnqueue(doneFrame);
 ```
 
 ```typescript
-// Wrong: a globally unique run ID is treated as authorization.
-where(inArray(runs.runId, runIds));
+// Wrong: Abort can overwrite a finish that was already observed.
+const status = signal.aborted ? "interrupted" : finished ? "success" : "failed";
 
-// Correct: project only runs from the already-authorized conversation.
-where(and(
-  eq(runs.conversationId, conversationId),
-  inArray(runs.runId, runIds),
-));
+// Correct: latch the first terminal cause and never recompute it from mutable booleans.
+latch(event.type === "finish" ? "success" : "failed");
 ```

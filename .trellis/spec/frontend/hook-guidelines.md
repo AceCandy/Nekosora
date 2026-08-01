@@ -12,11 +12,12 @@ hook 归属特性的 `hooks/` 目录（如 `features/chat/hooks/`），用于把
 
 ## Custom Hook Patterns
 
-hook 在本项目分三类（以 `features/chat/hooks/` 为标杆）：
+hook 在本项目分四类（以 `features/chat/hooks/` 为标杆）：
 
 | 类型 | 职责 | 例子 |
 |------|------|------|
 | 运行时适配层 | 把全局 store 切片适配成组件友好的接口，承担 hydrate / 副作用编排 | `useChatRuntime` |
+| 局部状态协调器 | 订阅特性内 state machine，并串行编排持久化副作用 | `useComposerCoordinator` |
 | 交互控制器 | 管理某一项具体的交互行为（滚动跟随、聚焦等） | `useChatScrollController` |
 | 资源收集器 | 收集并转换用户输入（附件、文件等）供发送时上传 | `useChatAttachments` |
 
@@ -32,6 +33,33 @@ export function useChatRuntime({ conversationId, initialMessages }) {
   // 用 useShallow 订阅 store 切片
 }
 ```
+
+**局部状态协调器的关键模式**：machine 是同步状态宿主，writer 是唯一持久化入口，hook 只暴露只读 snapshot 与领域命令。稳定实例用 lazy `useState` 创建，视图用 `useSyncExternalStore` 订阅；不要把可变 class 实例放进 render 期间重建。
+
+```ts
+const [machine] = useState(() => new ComposerStateMachine(initialState));
+const [writer] = useState(() => new LatestSnapshotWriter({
+  scopeId: conversationId,
+  initialSnapshot: initialState,
+  write: persistSnapshot,
+  equals: composerSelectionsEqual,
+}));
+const state = useSyncExternalStore(machine.subscribe, machine.getSnapshot, machine.getSnapshot);
+
+function dispatch(transition: ComposerTransition) {
+  const previous = machine.getSnapshot();
+  const next = machine.dispatch(transition);
+  if (next !== previous) writer.update(next);
+  return next;
+}
+```
+
+Coordinator 必须遵守以下生命周期契约：
+
+- `persistSnapshot` prop 变化时只通过 `writer.setWrite` 更新回调，不重建或并行创建 writer。
+- effect setup 调用 `resume()`，cleanup 调用 `dispose()`；两者必须可逆，以兼容 React Strict Mode 的 setup-cleanup-setup 重放。
+- 新会话创建成功时以首次发送所用的同一 snapshot 调用 `adoptConversation(newId, persistedSnapshot)`；组件不得把创建后的当前 closure 误当成数据库已持久化基线。
+- 组件 handler 只调用 `dispatch`、`getSnapshot`、`adoptConversation` 或 `retry`，不得绕过 coordinator 直接调用字段级 Server Action。
 
 **交互控制器的关键模式**：用 `useRef` 缓存最新值，供高频触发的 effect / handler 读取，避免闭包陈旧。`useChatScrollController` 用 `isAtBottomRef` 在滚动 effect 里读，而不是依赖 state。
 
@@ -81,6 +109,7 @@ function smoothScrollToBottom(el: HTMLElement) {
 
 - 命名 `useXxx`，文件 `useXxx.ts`，camelCase。
 - 运行时适配层命名为 `use<Domain>Runtime`（`useChatRuntime`）。
+- 局部状态协调器命名为 `use<Domain>Coordinator`（`useComposerCoordinator`）。
 - 控制器命名为 `use<Behavior>Controller`（`useChatScrollController`）。
 - hook 对外只暴露组件真正需要的最小接口；内部 helper 留在文件内不导出。
 
@@ -93,3 +122,5 @@ function smoothScrollToBottom(el: HTMLElement) {
 - **闭包陈旧值** → 高频 handler（滚动、resize）读 state 会拿到旧值，改读 ref。
 - **只按顶层 `react` 类型/导出使用新 hook** → Next 15 客户端实际加载 `next/dist/compiled/react`，两者导出可能不同；例如顶层 React 19.2 有 `useEffectEvent`，Next 内置运行时却没有，类型检查通过但浏览器报 `is not a function`。共享 hook 应使用当前 Next 运行时已支持的稳定 API；稳定事件回调采用 `useRef` 保存最新函数，并可用 `node -e "console.log(typeof require('next/dist/compiled/react').<api>)"` 核验运行时导出。
 - **把应该进 store 的状态留在 hook 本地** → 切路由丢失。跨路由要存活的必须进 zustand。
+- **把局部 coordinator 强行放进全局 store** → 生命周期与 conversation scope 脱钩。只服务当前组件树、需要同步 snapshot/顺序副作用的状态保留在特性内 machine；真正跨路由存活的运行时才进 zustand。
+- **Strict Mode cleanup 后永久停用 writer** → 开发环境 effect 重放后不再持久化。writer 必须提供可逆的 `resume()` / `dispose()`，并用 generation fencing 忽略旧请求回调。

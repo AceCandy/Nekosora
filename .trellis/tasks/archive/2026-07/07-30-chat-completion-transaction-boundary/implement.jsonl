@@ -1,0 +1,9 @@
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"实现 PostgreSQL/Drizzle completion transaction、durable outbox、migration journal/snapshot 与 worker failure propagation 时必须遵守。"}
+{"file":".trellis/spec/backend/chat-run-metadata.md","reason":"定义 runs 唯一 metadata 事实源、历史投影和 finish/[DONE] 成功顺序；本任务会将其 best-effort finalize 契约升级为严格事务。"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"定义 runId、租约 heartbeat、tool audit、Agent 多轮和取消终态；实现需有意识替换旧 start/finalize best-effort 成功语义。"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"约束 AbortSignal 传播、取消后零 controller 写和跨 SSE/DB/console 的错误脱敏。"}
+{"file":".trellis/spec/backend/gateway-routing.md","reason":"约束 Gateway execution engine 继续独占 provider retry/failover/commit，Chat coordinator 不得重建上游执行循环。"}
+{"file":".trellis/tasks/07-30-chat-completion-transaction-boundary/research/evidence.md","reason":"汇总当前 route/run/memory/SSE/Agent usage 证据、设计决策与已知风险。"}
+{"file":".trellis/tasks/archive/2026-07/07-26-magi-project-evolution-round-12/research/concurrency-strategy.md","reason":"提供 conversation 短事务锁、continue/edit 条件写和避免跨模型长事务的并发依据。"}
+{"file":".trellis/tasks/archive/2026-07/07-26-magi-project-evolution-round-22/research/conversation-title-outbox.md","reason":"提供 durable intent、claim、fencing、failure preservation 与 recovery 的既有研究。"}
+{"file":".trellis/tasks/archive/2026-07/07-29-gateway-execution-engine/research/evidence.md","reason":"固定已完成 gateway execution 边界，防止实现阶段把 retry/failover 重新塞进 Chat coordinator。"}

@@ -28,6 +28,7 @@ import type {
   ConversationShareMode,
   ConversationShareRenderStyleSnapshot,
   MessageVersionSelections,
+  MemoryExtractionMessage,
 } from "@/db/types";
 
 // ===========================================================================
@@ -442,6 +443,30 @@ export const runs = pgTable(
     index("runs_active_conversation_idx")
       .on(t.conversationId, t.leaseExpiresAt)
       .where(sql`${t.status} = 'running'`),
+  ],
+);
+
+/** Chat 完成事务写入的记忆提取 durable intent；业务完成前保留。 */
+export const memoryExtractionJobs = pgTable(
+  "memory_extraction_jobs",
+  {
+    id: text("id").primaryKey(),
+    runId: text("run_id")
+      .notNull()
+      .unique()
+      .references(() => runs.runId, { onDelete: "cascade" }),
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    messages: jsonb("messages").$type<MemoryExtractionMessage[]>().notNull(),
+    dispatchAfter: timestamp("dispatch_after", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("memory_extraction_jobs_dispatch_idx").on(t.dispatchAfter, t.createdAt),
   ],
 );
 
@@ -876,10 +901,13 @@ export const userSettings = pgTable(
   (t) => [uniqueIndex("user_settings_unique_idx").on(t.userId, t.key)],
 );
 
-export const usageLogs = pgTable(
-  "usage_logs",
+/** 一次用户可见或后台逻辑网关执行的最终事实。 */
+export const gatewayExecutions = pgTable(
+  "gateway_executions",
   {
     id: text("id").primaryKey().default(sql`gen_random_uuid()`),
+    requestId: text("request_id").notNull(),
+    operation: text("operation").notNull(),
     source: text("source").notNull(), // "chat" | "gateway"
     userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
     apiKeyId: text("api_key_id").references(() => apiKeys.id, {
@@ -887,83 +915,81 @@ export const usageLogs = pgTable(
     }),
     keyKind: text("key_kind"), // "master" | "sub" | null(chat)
     model: text("model").notNull(),
+    modelId: text("model_id"),
     providerRef: text("provider_ref"),
+    providerName: text("provider_name"),
+    routeId: text("route_id"),
+    routeName: text("route_name"),
+    upstreamModel: text("upstream_model"),
+    upstreamKeyMasked: text("upstream_key_masked"),
+    requestPath: text("request_path"),
+    stream: boolean("stream").notNull().default(false),
+    status: text("status").notNull().default("running"),
+    httpStatus: integer("http_status"),
+    errorCode: text("error_code"),
+    errorMessage: text("error_message"),
+    errorPhase: text("error_phase"),
+    errorType: text("error_type"),
     promptTokens: integer("prompt_tokens").notNull().default(0),
     completionTokens: integer("completion_tokens").notNull().default(0),
     cacheReadTokens: integer("cache_read_tokens").notNull().default(0),
     cacheWriteTokens: integer("cache_write_tokens").notNull().default(0),
     reasoningTokens: integer("reasoning_tokens").notNull().default(0),
     latencyMs: integer("latency_ms"),
-    status: text("status").notNull().default("success"),
-    // —— 网关日志重构:成功计费补充字段(均 nullable,兼容历史行) ——
-    firstTokenLatencyMs: integer("first_token_latency_ms"), // 首 token 延迟(TTFT)
-    providerName: text("provider_name"), // 可读服务商名快照(替代裸 providerRef 展示)
-    routeId: text("route_id"), // 命中路由 id 溯源
-    routeName: text("route_name"), // 组合展示名(providerName · upstreamModel)
-    upstreamModel: text("upstream_model"), // 真实上游模型名(区别于对外 model)
-    // 命中上游 key 的脱敏快照(前3后3,中间 *;运行时从明文算,绝不存明文)。
-    upstreamKeyMasked: text("upstream_key_masked"),
-    /** 副任务类型(null=主回复/网关请求;title/memory/compact=后台副任务,用于区分双日志)。 */
+    firstTokenLatencyMs: integer("first_token_latency_ms"),
     taskKind: text("task_kind"),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    index("usage_logs_user_idx").on(t.userId),
-    index("usage_logs_created_idx").on(t.createdAt),
-    index("usage_logs_model_idx").on(t.model),
+    index("gateway_executions_user_idx").on(t.userId),
+    index("gateway_executions_created_idx").on(t.createdAt),
+    index("gateway_executions_model_idx").on(t.model),
+    index("gateway_executions_request_idx").on(t.requestId),
+    index("gateway_executions_status_idx").on(t.status),
   ],
 );
 
-// 网关调用日志重构:失败 / 中断请求独立存表(物理双表)。
-// 成功计费走 usage_logs;此处只收 failed / interrupted,补全错误码 / HTTP 状态 / 阶段等。
-export const opsErrorLogs = pgTable(
-  "ops_error_logs",
+/** 一次真实上游调用或因协议不兼容而拒绝的 route attempt。 */
+export const gatewayAttempts = pgTable(
+  "gateway_attempts",
   {
     id: text("id").primaryKey().default(sql`gen_random_uuid()`),
-    requestId: text("request_id").notNull(), // runId,串联一次生成
-    source: text("source").notNull(), // "chat" | "gateway"
-    userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
-    apiKeyId: text("api_key_id").references(() => apiKeys.id, {
-      onDelete: "set null",
-    }),
-    keyKind: text("key_kind"), // "master" | "sub" | null(chat)
-    model: text("model").notNull(), // 对外模型名
-    upstreamModel: text("upstream_model"), // 真实上游模型名
-    providerName: text("provider_name"), // 可读服务商名快照
-    providerRef: text("provider_ref"), // 裸 <source>:<providerId>,保留溯源
-    // 命中上游 key 的脱敏快照(前3后3,中间 *;运行时从明文算,绝不存明文)。
-    upstreamKeyMasked: text("upstream_key_masked"),
+    executionId: text("execution_id")
+      .notNull()
+      .references(() => gatewayExecutions.id, { onDelete: "cascade" }),
+    attempt: integer("attempt").notNull(),
+    status: text("status").notNull().default("running"),
+    providerRef: text("provider_ref"),
+    providerName: text("provider_name"),
+    providerProtocol: text("provider_protocol"),
     routeId: text("route_id"),
     routeName: text("route_name"),
-    requestPath: text("request_path"), // 如 /v1/chat/completions
-    stream: boolean("stream").notNull().default(false), // 是否流式
-    httpStatus: integer("http_status"), // HTTP 状态码(区别于枚举 status)
-    errorCode: text("error_code").notNull(), // 错误码(generation_failed/routing_error/...)
-    errorMessage: text("error_message"), // 错误信息(脱敏后)
-    // errorPhase 本期 Phase 2 暂不计算,留 null;Phase 3 由 error-classify 填充。
-    errorPhase: text("error_phase"), // 生命周期阶段(routing/upstream/network/internal/auth/request)
-    errorType: text("error_type"), // 具体类型
-    promptTokens: integer("prompt_tokens").notNull().default(0), // 失败前已计 token(可能 0)
+    upstreamModel: text("upstream_model"),
+    upstreamKeyMasked: text("upstream_key_masked"),
+    httpStatus: integer("http_status"),
+    errorCode: text("error_code"),
+    errorMessage: text("error_message"),
+    errorPhase: text("error_phase"),
+    errorType: text("error_type"),
+    promptTokens: integer("prompt_tokens").notNull().default(0),
     completionTokens: integer("completion_tokens").notNull().default(0),
-    latencyMs: integer("latency_ms"), // 端到端耗时
-    firstTokenLatencyMs: integer("first_token_latency_ms"), // 失败前是否产出首 token
-    /** 副任务类型(null=主回复/网关请求;title/memory/compact=后台副任务)。 */
-    taskKind: text("task_kind"),
-    /**
-     * 尝试序号(1..N)。方案 X:每次 key 尝试失败各记一条 ops_error_logs,带递增 attempt。
-     * null=非尝试记录(中断,由 finally 记)。成功走 usage_logs,不涉及此字段。
-     * 前端按 requestId 聚合、按 attempt 升序展示完整重试链。
-     */
-    attempt: integer("attempt"),
+    cacheReadTokens: integer("cache_read_tokens").notNull().default(0),
+    cacheWriteTokens: integer("cache_write_tokens").notNull().default(0),
+    reasoningTokens: integer("reasoning_tokens").notNull().default(0),
+    latencyMs: integer("latency_ms"),
+    firstTokenLatencyMs: integer("first_token_latency_ms"),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    index("ops_error_logs_user_idx").on(t.userId),
-    index("ops_error_logs_created_idx").on(t.createdAt),
-    index("ops_error_logs_error_code_idx").on(t.errorCode),
-    index("ops_error_logs_http_status_idx").on(t.httpStatus),
-    index("ops_error_logs_provider_ref_idx").on(t.providerRef),
-    index("ops_error_logs_source_idx").on(t.source),
+    uniqueIndex("gateway_attempts_execution_attempt_unique_idx").on(t.executionId, t.attempt),
+    index("gateway_attempts_execution_idx").on(t.executionId),
+    index("gateway_attempts_created_idx").on(t.createdAt),
+    index("gateway_attempts_provider_ref_idx").on(t.providerRef),
+    index("gateway_attempts_status_idx").on(t.status),
   ],
 );
 

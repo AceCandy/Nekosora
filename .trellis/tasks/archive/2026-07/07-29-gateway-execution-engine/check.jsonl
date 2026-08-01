@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "后端质量检查入口"}
+{"file": ".trellis/spec/backend/gateway-routing.md", "reason": "复核 route/key、commit 与 breaker 不变量"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "复核 execution/attempt/metrics 数据流"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "复核 wire error、Abort 与脱敏"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "复核 migration、journal 与 snapshot"}
+{"file": ".trellis/spec/backend/model-message-boundary.md", "reason": "复核两条 Chat 生成路径消息转换"}
+{"file": ".trellis/tasks/07-29-gateway-execution-engine/research/evidence.md", "reason": "按已知风险和测试缺口做独立检查"}

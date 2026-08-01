@@ -2,12 +2,12 @@
  * WebChat run 生命周期 —— runs / tool_calls 的写入入口。
  *
  * 职责:
- *   1. 流开始前创建 runs(status=running)
+ *   1. 流开始前严格创建 runs(status=running)
  *   2. tool-call / tool-result 写入 tool_calls
  *   3. 终态收敛:success / failed / interrupted + tokenUsage
  *
  * 约束:
- *   - 所有 DB 写入 best-effort:失败只 console.error,不抛、不阻断模型流
+ *   - strict start 失败必须抛错并阻断模型流；tool audit 与失败收敛为 best-effort
  *   - 经 getDb/getSchema 访问,禁止静态引入 pg 驱动
  *   - 不写完整模型请求/回复;工具入参/出参经 toSafeJsonb 规范化
  */
@@ -172,28 +172,38 @@ export interface StartRunParams {
   upstreamId?: string | null;
 }
 
-/** 流开始前插入带租约的 runs(status=running)。失败返回 false,不抛。 */
-export async function startRun(params: StartRunParams): Promise<boolean> {
-  return executeBestEffort(
-    "startRun",
-    async () => {
-      const db = await getDb();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const s = getSchema() as any;
-      await db.insert(s.runs).values({
-        runId: params.runId,
-        conversationId: params.conversationId,
-        userId: params.userId,
-        platformModelName: params.platformModelName ?? null,
-        routedBindingCode: params.routedBindingCode ?? null,
-        upstreamId: params.upstreamId ?? null,
-        status: "running",
-        leaseExpiresAt: RUN_LEASE_EXPIRES_AT,
-      });
-      return true;
-    },
-    false,
-  );
+/** 严格启动失败；不携带底层数据库错误，避免跨边界泄露连接信息。 */
+export class RunStartError extends Error {
+  constructor() {
+    super("生成任务启动失败");
+    this.name = "RunStartError";
+  }
+}
+
+async function insertRunningRun(params: StartRunParams): Promise<void> {
+  const db = await getDb();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const s = getSchema() as any;
+  await db.insert(s.runs).values({
+    runId: params.runId,
+    conversationId: params.conversationId,
+    userId: params.userId,
+    platformModelName: params.platformModelName ?? null,
+    routedBindingCode: params.routedBindingCode ?? null,
+    upstreamId: params.upstreamId ?? null,
+    status: "running",
+    leaseExpiresAt: RUN_LEASE_EXPIRES_AT,
+  });
+}
+
+/** 流开始前严格确认 running run；失败时禁止继续调用模型。 */
+export async function startRunStrict(params: StartRunParams): Promise<void> {
+  try {
+    await withBestEffortTimeout(() => insertRunningRun(params));
+  } catch (error) {
+    logRunDbFailure("startRunStrict", error);
+    throw new RunStartError();
+  }
 }
 
 /** 延长当前 running run 的租约。失败不抛。 */
@@ -320,21 +330,4 @@ export async function recordToolCallResult(
     },
     undefined,
   );
-}
-
-/**
- * 根据流式结果推导 run 终态。
- * 收尾持久化失败优先 failed;其余 finish 优先 success。
- */
-export function resolveRunTerminalStatus(opts: {
-  finished: boolean;
-  aborted: boolean;
-  sawError: boolean;
-  persistenceFailed?: boolean;
-}): RunTerminalStatus {
-  if (opts.persistenceFailed) return "failed";
-  if (opts.finished) return "success";
-  if (opts.aborted) return "interrupted";
-  if (opts.sawError) return "failed";
-  return "interrupted";
 }

@@ -1,0 +1,9 @@
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"复核事务原子性、outbox/recovery、migration 产物、动态 import 与 worker failure propagation。"}
+{"file":".trellis/spec/backend/chat-run-metadata.md","reason":"复核 runs 唯一事实源、历史 metadata、成功 signal 顺序及失败抑制矩阵。"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"复核 run/tool 归属、heartbeat、Agent 聚合、终态和需同步的新严格契约。"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"复核 cancel 后零写、SSE error envelope 与敏感信息不跨安全边界。"}
+{"file":".trellis/spec/backend/gateway-routing.md","reason":"复核 coordinator 与 gateway execution 的所有权分离以及 Agent 单 execution 语义。"}
+{"file":".trellis/tasks/07-30-chat-completion-transaction-boundary/research/evidence.md","reason":"按现状证据与风险清单检查是否遗漏 route、memory、SSE 或 usage 回归。"}
+{"file":".trellis/tasks/archive/2026-07/07-26-magi-project-evolution-round-12/research/concurrency-strategy.md","reason":"独立复核 conversation 锁顺序、CAS 和并发失败无半提交。"}
+{"file":".trellis/tasks/archive/2026-07/07-26-magi-project-evolution-round-22/research/conversation-title-outbox.md","reason":"独立复核 durable job 的 claim/fencing/删除/失败保留与 recovery 行为。"}
+{"file":".trellis/tasks/archive/2026-07/07-29-gateway-execution-engine/research/evidence.md","reason":"复核本任务没有复制 gateway engine 已完成的 route/key 状态机。"}

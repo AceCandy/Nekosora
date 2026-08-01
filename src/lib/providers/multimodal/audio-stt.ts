@@ -8,8 +8,9 @@ import { transcribe as transcribe } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import type { CallContext } from "@/lib/providers/types";
 import { resolveRoutesByCapability, RoutingError } from "@/lib/routing";
-import { redactErrorMessage } from "@/lib/redaction";
-import { maskKey } from "@/lib/usage";
+import { recordFailure, recordSuccess } from "@/lib/circuit-breaker";
+import { executeAtomicGateway, gatewayTelemetry, type GatewayAttemptAdapter } from "@/lib/gateway-execution";
+import { selectMediaAdapter } from "@/lib/gateway-execution/media-registry";
 
 export interface TranscribeOptions {
   /** 音频字节(必填)。 */
@@ -41,12 +42,10 @@ export async function transcribeViaRoute(
   modelName: string,
   opts: TranscribeOptions,
 ): Promise<TranscribeResult> {
-  const routes = await resolveRoutesByCapability(ctx, modelName, "audioTranscription");
-  const route = routes[0];
-  try {
+  const adapter: GatewayAttemptAdapter<never, string> = async function* ({ route, apiKey, abortSignal }) {
     const provider = createOpenAI({
       baseURL: route.provider.baseUrl,
-      apiKey: route.provider.apiKey,
+      apiKey,
       name: route.provider.id,
       headers: route.provider.headers,
     });
@@ -62,26 +61,36 @@ export async function transcribeViaRoute(
           ...(opts.prompt ? { prompt: opts.prompt } : {}),
         },
       },
+      abortSignal,
     });
-
-    return {
-      text: result.text,
-      providerRef: `${route.source}:${route.provider.id}`,
-      providerName: route.provider.name,
-      routeId: route.routeId,
-      routeName: `${route.provider.name} · ${route.upstreamModelName}`,
-      upstreamModel: route.upstreamModelName,
-      upstreamKeyMasked: maskKey(route.provider.apiKey),
-    };
-  } catch (error) {
-    throw new Error(
-      redactErrorMessage(
-        error,
-        [route.provider.apiKey, ...Object.values(route.provider.headers ?? {})],
-        "语音转写失败",
-      ),
-    );
+    return { value: result.text };
+  };
+  const outcome = await executeAtomicGateway({
+    ctx,
+    requestId: `stt_${crypto.randomUUID()}`,
+    operation: "audio.transcription",
+    model: modelName,
+    requestPath: "/v1/audio/transcriptions",
+    resolveRoutes: () => resolveRoutesByCapability(ctx, modelName, "audioTranscription"),
+    selectAdapter: (route) => selectMediaAdapter("audio.transcription", route.protocol, adapter),
+    telemetry: gatewayTelemetry,
+    breaker: { recordSuccess, recordFailure },
+  });
+  if (outcome.status !== "success" || outcome.result === undefined || !outcome.route) {
+    if (outcome.error?.phase === "routing" || outcome.error?.phase === "request") {
+      throw new RoutingError(outcome.error.code, outcome.error.message);
+    }
+    throw new Error(outcome.error?.message ?? "语音转写失败");
   }
+  return {
+    text: outcome.result,
+    providerRef: `${outcome.route.source}:${outcome.route.provider.id}`,
+    providerName: outcome.route.provider.name,
+    routeId: outcome.route.routeId,
+    routeName: `${outcome.route.provider.name} · ${outcome.route.upstreamModelName}`,
+    upstreamModel: outcome.route.upstreamModelName,
+    upstreamKeyMasked: outcome.upstreamKeyMasked ?? null,
+  };
 }
 
 export { RoutingError };

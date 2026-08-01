@@ -8,6 +8,7 @@ import {
 } from "@/features/chat/actions/conversations";
 import { retryFromMessage, editMessage, getMessageSiblings, selectMessageVersion, softDeleteMessage, continueMessage } from "@/features/chat/actions/branch";
 import { consumeChatSSE, handleStreamError } from "@/features/chat/model/sse";
+import type { ChatTerminalStatus } from "@/lib/chat/sse-contract";
 import type {
   ChatMessage,
   ChatMessageAttachment,
@@ -42,7 +43,12 @@ export interface SendOptions {
   instructionCardIds?: string[];
   webSearch?: boolean;
   knowledgeBaseIds?: string[];
-  createOptions?: { outputModeId?: string | null; renderStyleId?: string | null; reasoning?: ReasoningLevel };
+  createOptions?: {
+    outputModeId?: string | null;
+    renderStyleId?: string | null;
+    reasoning?: ReasoningLevel;
+    reasoningByModelId?: Record<string, ReasoningLevel>;
+  };
 }
 
 interface ChatStreamState {
@@ -288,12 +294,6 @@ function flushDeltasNow() {
   flushDeltas(true);
 }
 
-/** 读取某会话最后一条消息的索引(无消息返回 -1)。 */
-function lastMessageIdx(key: string): number {
-  const rt = useChatStreamStore.getState().runtimes[key];
-  return rt ? rt.messages.length - 1 : -1;
-}
-
 /**
  * 把文本追加到某会话指定消息的 content 末尾(错误/停止标记专用)。
  * 调用前应先 flushDeltasNow() 落库缓冲正文,保证"正文在前、标记在后",
@@ -321,6 +321,29 @@ function setRunMetadataAt(
     if (!runtime || idx < 0 || idx >= runtime.messages.length) return state;
     const messages = [...runtime.messages];
     messages[idx] = { ...messages[idx], runMetadata };
+    return {
+      runtimes: {
+        ...state.runtimes,
+        [key]: { ...runtime, messages },
+      },
+    };
+  });
+}
+
+/** 将 wire 终态投影为消息完整性状态；failed 与 interrupted 均允许继续生成。 */
+function setCompletionStatusAt(
+  key: string,
+  idx: number,
+  terminalStatus: ChatTerminalStatus,
+): void {
+  useChatStreamStore.setState((state) => {
+    const runtime = state.runtimes[key];
+    if (!runtime || idx < 0 || idx >= runtime.messages.length) return state;
+    const messages = [...runtime.messages];
+    messages[idx] = {
+      ...messages[idx],
+      status: terminalStatus === "success" ? "success" : "interrupted",
+    };
     return {
       runtimes: {
         ...state.runtimes,
@@ -379,6 +402,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
     let assistantIdx = -1;
     let requestMessagesAppended = false;
     let preflightRolledBack = false;
+    let streamErrorReceived = false;
 
     // 正文/思考增量走合批(enqueueDelta),每帧最多落库一次;其余为低频直接 set。
     const setSearchResultsAt = (k: string, idx: number, results: ChatMessage["searchResults"]) =>
@@ -419,9 +443,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
           webSearch: opts.webSearch,
           cardIds: opts.instructionCardIds,
           kbIds: opts.knowledgeBaseIds,
-          reasoningByModelId: opts.createOptions?.reasoning
-            ? { [opts.modelId]: opts.createOptions.reasoning }
-            : undefined,
+          reasoningByModelId: opts.createOptions?.reasoningByModelId,
         };
         resolvedConvId = await createConversation(opts.model, createOpts);
         newConvId = resolvedConvId;
@@ -484,6 +506,12 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
           ...(opts.instructionCardIds && opts.instructionCardIds.length > 0 ? { instructionCardIds: opts.instructionCardIds } : {}),
           ...(opts.webSearch ? { webSearch: true } : {}),
           ...(opts.knowledgeBaseIds && opts.knowledgeBaseIds.length > 0 ? { knowledgeBaseIds: opts.knowledgeBaseIds } : {}),
+          ...(opts.createOptions?.outputModeId !== undefined
+            ? { outputModeId: opts.createOptions.outputModeId }
+            : {}),
+          ...(opts.createOptions?.reasoning !== undefined
+            ? { reasoning: opts.createOptions.reasoning }
+            : {}),
         }),
         signal: controller.signal,
       });
@@ -507,13 +535,14 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
       hooks?.onRequestAccepted?.();
       if (newConvId) startConversationTitlePoll(newConvId);
 
-      await consumeChatSSE(res.body, {
+      const terminalStatus = await consumeChatSSE(res.body, {
         onDelta: (t) => enqueueDelta(activeKey, assistantIdx, "content", t),
         onReasoning: (t) => enqueueDelta(activeKey, assistantIdx, "reasoning", t),
         onToolCall: (name, args) => addToolCallAt(activeKey, assistantIdx, { toolName: name, args, status: "calling" }),
         onToolResult: (name, isError) => finishToolCallAt(activeKey, assistantIdx, name, isError),
         onSearchResult: (results) => setSearchResultsAt(activeKey, assistantIdx, results),
         onError: (err) => {
+          streamErrorReceived = true;
           // 先 flush 缓冲正文再追加错误,保证"正文在前、错误在后";改覆盖为追加,避免丢已生成正文。
           flushDeltasNow();
           appendContentAt(activeKey, assistantIdx, `\n\n[错误] ${err}`);
@@ -555,13 +584,16 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
           hooks?.onTitleUpdated?.();
         },
       });
+      flushDeltasNow();
+      setCompletionStatusAt(activeKey, assistantIdx, terminalStatus);
     } catch (err) {
       // 先 flush 缓冲的限速正文,再追加错误/停止标记,否则标记会落在 finally flushDeltasNow 的残留正文之前,夹在正文中间。
       flushDeltasNow();
       const { content } = handleStreamError(err, "网络错误");
       if (!content.includes("[错误]")) console.error("send failed:", err);
       if (requestMessagesAppended && !preflightRolledBack) {
-        appendContentAt(activeKey, assistantIdx, content);
+        if (!streamErrorReceived) appendContentAt(activeKey, assistantIdx, content);
+        setCompletionStatusAt(activeKey, assistantIdx, "interrupted");
       } else if (!preflightRolledBack) {
         hooks?.onRequestRejected?.(err instanceof Error ? err.message : "图片上传失败");
       }
@@ -580,11 +612,13 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
     set((s) => patchRuntime(s, key, (r) => ({ ...r, abortController: controller })));
     const originalMessages = rt.messages;
     let preflightRolledBack = false;
+    let streamErrorReceived = false;
+    let assistantIdx = -1;
 
     try {
       let generatedAssistantPublicId: string | null = null;
       const result = await retryFromMessage(key, assistantPublicId);
-      const assistantIdx = (() => {
+      assistantIdx = (() => {
         let idx = -1;
         set((s) => patchRuntime(s, key, (r) => {
           idx = r.messages.findIndex((x) => x.publicId === assistantPublicId);
@@ -623,9 +657,14 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
         throw new Error("请求失败");
       }
 
-      await consumeChatSSE(res.body, {
+      const terminalStatus = await consumeChatSSE(res.body, {
         onDelta: (t) => enqueueDelta(key, assistantIdx, "content", t),
         onReasoning: (t) => enqueueDelta(key, assistantIdx, "reasoning", t),
+        onError: (error) => {
+          streamErrorReceived = true;
+          flushDeltasNow();
+          appendContentAt(key, assistantIdx, `\n\n[错误] ${error}`);
+        },
         onFinish: (metadata) => setRunMetadataAt(key, assistantIdx, metadata),
         // 回填后端真实 publicId,覆盖 retryFromMessage 生成的占位 UUID;
         // 否则生成结束后 refreshVersionInfo 拿占位 id 查不到兄弟,版本切换器无法显示。
@@ -643,6 +682,8 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
           }));
         },
       });
+      flushDeltasNow();
+      setCompletionStatusAt(key, assistantIdx, terminalStatus);
       if (generatedAssistantPublicId) {
         try {
           await selectMessageVersion(generatedAssistantPublicId);
@@ -654,7 +695,10 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
       flushDeltasNow();
       const { content } = handleStreamError(err, "网络错误");
       if (!content.includes("[错误]")) console.error("regenerate failed:", err);
-      if (!preflightRolledBack) appendContentAt(key, lastMessageIdx(key), content);
+      if (!preflightRolledBack) {
+        if (!streamErrorReceived) appendContentAt(key, assistantIdx, content);
+        setCompletionStatusAt(key, assistantIdx, "interrupted");
+      }
     } finally {
       flushDeltasNow();
       set((s) => patchRuntime(s, key, (r) => ({ ...r, streaming: false, abortController: null })));
@@ -672,6 +716,8 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
     set((s) => patchRuntime(s, key, (r) => ({ ...r, streaming: true })));
     const controller = new AbortController();
     set((s) => patchRuntime(s, key, (r) => ({ ...r, abortController: controller })));
+    let streamErrorReceived = false;
+    let assistantIdx = -1;
 
     try {
       const result = await editMessage(
@@ -692,7 +738,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
         };
         return { ...r, messages: [...r.messages.slice(0, idx), replaced] };
       }));
-      const assistantIdx = (() => {
+      assistantIdx = (() => {
         let idx = -1;
         set((s) => patchRuntime(s, key, (r) => {
           idx = r.messages.length;
@@ -726,9 +772,14 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
       });
       if (!res.ok || !res.body) throw new Error("请求失败");
 
-      await consumeChatSSE(res.body, {
+      const terminalStatus = await consumeChatSSE(res.body, {
         onDelta: (t) => enqueueDelta(key, assistantIdx, "content", t),
         onReasoning: (t) => enqueueDelta(key, assistantIdx, "reasoning", t),
+        onError: (error) => {
+          streamErrorReceived = true;
+          flushDeltasNow();
+          appendContentAt(key, assistantIdx, `\n\n[错误] ${error}`);
+        },
         onFinish: (metadata) => setRunMetadataAt(key, assistantIdx, metadata),
         onAssistantMessage: (publicId, createdAt) => {
           set((s) => patchRuntime(s, key, (r) => {
@@ -743,11 +794,14 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
           }));
         },
       });
+      flushDeltasNow();
+      setCompletionStatusAt(key, assistantIdx, terminalStatus);
     } catch (err) {
       flushDeltasNow();
       const { content } = handleStreamError(err, "网络错误");
       if (!content.includes("[错误]")) console.error("editAndResend failed:", err);
-      appendContentAt(key, lastMessageIdx(key), content);
+      if (!streamErrorReceived) appendContentAt(key, assistantIdx, content);
+      setCompletionStatusAt(key, assistantIdx, "interrupted");
     } finally {
       flushDeltasNow();
       set((s) => patchRuntime(s, key, (r) => ({ ...r, streaming: false, abortController: null })));
@@ -783,6 +837,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
     })));
     const controller = new AbortController();
     set((s) => patchRuntime(s, key, (r) => ({ ...r, abortController: controller })));
+    let streamErrorReceived = false;
 
     try {
       const result = await continueMessage(key, assistantPublicId);
@@ -801,10 +856,15 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
       if (!res.ok || !res.body) throw new Error("请求失败");
 
       // 续写:delta 追加到既有 assistant 消息内容末尾(不清空原内容)
-      await consumeChatSSE(res.body, {
+      const terminalStatus = await consumeChatSSE(res.body, {
         // 续写增量同样走合批:流式期间该 idx 消息 publicId 稳定(switchVersion 被 streaming 阻止),可省 publicId 校验。
         onDelta: (t) => enqueueDelta(key, assistantIdx, "content", t),
         onReasoning: (t) => enqueueDelta(key, assistantIdx, "reasoning", t),
+        onError: (error) => {
+          streamErrorReceived = true;
+          flushDeltasNow();
+          appendContentAt(key, assistantIdx, `\n\n[错误] ${error}`);
+        },
         onFinish: (metadata) => setRunMetadataAt(key, assistantIdx, metadata),
         onAssistantMessage: (publicId, createdAt) => {
           set((s) => patchRuntime(s, key, (r) => {
@@ -819,18 +879,14 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
           }));
         },
       });
-      // 续写完整结束:把该 assistant 从 interrupted 转为 success,避免对已补全内容再次续写
-      set((s) => patchRuntime(s, key, (r) => ({
-        ...r,
-        messages: r.messages.map((m) =>
-          m.publicId === assistantPublicId ? { ...m, status: "success" as const } : m,
-        ),
-      })));
+      flushDeltasNow();
+      setCompletionStatusAt(key, assistantIdx, terminalStatus);
     } catch (err) {
       flushDeltasNow();
       const { content } = handleStreamError(err, "网络错误");
       if (!content.includes("[错误]")) console.error("continueGeneration failed:", err);
-      appendContentAt(key, assistantIdx, content);
+      if (!streamErrorReceived) appendContentAt(key, assistantIdx, content);
+      setCompletionStatusAt(key, assistantIdx, "interrupted");
     } finally {
       flushDeltasNow();
       set((s) => patchRuntime(s, key, (r) => ({ ...r, streaming: false, abortController: null })));

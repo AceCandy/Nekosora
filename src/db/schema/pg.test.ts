@@ -4,9 +4,29 @@ import {
   conversationShares,
   conversationShareUnlockAttempts,
   conversations,
+  gatewayAttempts,
+  gatewayExecutions,
   messageFileObjects,
+  memoryExtractionJobs,
   runs,
 } from "./pg";
+
+describe("gateway observability schema", () => {
+  it("声明 execution final fact 与唯一 attempt 序号", () => {
+    expect(gatewayExecutions.requestId.name).toBe("request_id");
+    expect(gatewayExecutions.operation.notNull).toBe(true);
+    expect(gatewayExecutions.status.default).toBe("running");
+
+    const attemptConfig = getTableConfig(gatewayAttempts);
+    const uniqueAttempt = attemptConfig.indexes.find(
+      (candidate) => candidate.config.name === "gateway_attempts_execution_attempt_unique_idx",
+    );
+    expect(uniqueAttempt?.config.unique).toBe(true);
+    expect(uniqueAttempt?.config.columns.map((column) => "name" in column ? column.name : null))
+      .toEqual(["execution_id", "attempt"]);
+    expect(attemptConfig.foreignKeys[0]?.reference().foreignTable).toBe(gatewayExecutions);
+  });
+});
 
 describe("runs schema", () => {
   it("声明租约列与 running conversation 部分索引", () => {
@@ -27,6 +47,25 @@ describe("runs schema", () => {
     expect(runs.completedAt.name).toBe("completed_at");
     expect(runs.completedAt.notNull).toBe(false);
     expect(runs.completedAt.getSQLType()).toBe("timestamp with time zone");
+  });
+});
+
+describe("memory extraction jobs schema", () => {
+  it("声明 run 唯一 durable intent、级联外键与恢复索引", () => {
+    expect(memoryExtractionJobs.runId.isUnique).toBe(true);
+    expect(memoryExtractionJobs.messages.notNull).toBe(true);
+
+    const config = getTableConfig(memoryExtractionJobs);
+    const foreignTables = config.foreignKeys.map((foreignKey) =>
+      foreignKey.reference().foreignTable[Symbol.for("drizzle:Name")]
+    );
+    expect(foreignTables).toEqual(expect.arrayContaining(["runs", "conversations", "user"]));
+
+    const dispatchIndex = config.indexes.find(
+      (candidate) => candidate.config.name === "memory_extraction_jobs_dispatch_idx",
+    );
+    expect(dispatchIndex?.config.columns.map((column) => "name" in column ? column.name : null))
+      .toEqual(["dispatch_after", "created_at"]);
   });
 });
 

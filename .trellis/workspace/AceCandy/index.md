@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 69
-- **Last Active**: 2026-07-28
+- **Total Sessions**: 79
+- **Last Active**: 2026-08-01
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~208 | Active |
+| `journal-2.md` | ~435 | Active |
 | `journal-1.md` | ~1981 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,16 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 79 | 2026-08-01 | Memory extraction diagnostics | `3e8aede` | `dev_0729` |
+| 78 | 2026-07-31 | 修复 Chat execution telemetry 终态收敛 | `8dad396`, `ce1d061` | `dev_0729` |
+| 77 | 2026-07-31 | 修复 Chat SSE 失败与中断终态 | `c83d2da`, `b00b707`, `bf5c860` | `dev_0729` |
+| 76 | 2026-07-31 | 完成架构深化路线图最终集成 | `0f32aa3`, `c85f3de`, `d09fd0e` | `dev_0729` |
+| 75 | 2026-07-31 | Chat Composer 状态协调 | `c81e94a`, `e122c7b`, `470212a` | `dev_0729` |
+| 74 | 2026-07-30 | Model Catalog 同步契约强化 | `fa4aebb`, `1526147`, `e8ed9b7` | `dev_0729` |
+| 73 | 2026-07-30 | Worker 与 Queue 生命周期统一 | `36285d7`, `916939a`, `f62c1a5`, `d970ddb` | `dev_0729` |
+| 72 | 2026-07-30 | RAG 文件处理状态机 | `883a423`, `7bda3e0`, `843372c` | `dev_0729` |
+| 71 | 2026-07-30 | Chat completion transaction boundary | `39d78db`, `99af4e1`, `fbcb214` | `dev_0729` |
+| 70 | 2026-07-30 | 统一 Gateway execution engine | `beaeb6f`, `b636b62` | `dev_0729` |
 | 69 | 2026-07-28 | 持久化聊天图片附件 | `efba233`, `0be0299` | `main` |
 | 68 | 2026-07-28 | 修复图片消息 ModelMessage 校验错误 | `eb1c302`, `0f3f502` | `main` |
 | 67 | 2026-07-28 | 聊天消息本地时间分隔 | `9a60204`, `885b6e3` | `main` |

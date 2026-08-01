@@ -26,12 +26,21 @@ vi.mock("@/lib/mcp/registry", () => ({
 }));
 
 const logUsage = vi.fn(async () => undefined);
+const telemetry = vi.hoisted(() => ({
+  startExecution: vi.fn(async () => undefined),
+  recordAttempt: vi.fn(async () => undefined),
+  finalizeExecution: vi.fn(async () => undefined),
+}));
 vi.mock("@/lib/usage", async () => {
   const actual = await vi.importActual<typeof import("@/lib/usage")>("@/lib/usage");
   return {
     ...actual,
     logUsage: (...args: unknown[]) => logUsage(...args),
   };
+});
+vi.mock("@/lib/gateway-execution", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/gateway-execution")>();
+  return { ...actual, gatewayTelemetry: telemetry };
 });
 
 import { streamText } from "ai";
@@ -140,6 +149,9 @@ describe("streamChatWithTools agent loop finish signal", () => {
     callMcpTool.mockReset();
     toIRTools.mockClear();
     logUsage.mockClear();
+    telemetry.startExecution.mockClear();
+    telemetry.recordAttempt.mockClear();
+    telemetry.finalizeExecution.mockClear();
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
   });
@@ -169,7 +181,7 @@ describe("streamChatWithTools agent loop finish signal", () => {
     });
   });
 
-  it("工具链:中间 finish 不外发,最终文本轮发一次 finish 且 usage 取终轮", async () => {
+  it("工具链:中间 finish 不外发,最终文本轮发一次 finish 且 usage 跨轮聚合", async () => {
     vi.mocked(streamText)
       .mockReturnValueOnce(mockStreamResult(
         [
@@ -205,7 +217,7 @@ describe("streamChatWithTools agent loop finish signal", () => {
     expect(finishes).toHaveLength(1);
     expect(finishes[0]).toMatchObject({
       finishReason: "stop",
-      usage: { inputTokens: 20, outputTokens: 6, totalTokens: 26 },
+      usage: { inputTokens: 30, outputTokens: 10, totalTokens: 40 },
     });
     expect(events.find((e) => e.type === "tool-result")).toMatchObject({
       type: "tool-result",
@@ -291,17 +303,10 @@ describe("streamChatWithTools agent loop finish signal", () => {
       type: "error",
       error: "upstream boom",
     });
-    const usageLogs = logUsage.mock.calls.map((call) => call[0] as {
-      status?: string;
-      skipMetrics?: boolean;
-      attempt?: number;
-    });
-    expect(usageLogs.filter((entry) => entry.attempt === 1)).toEqual([
-      expect.objectContaining({ status: "failed", skipMetrics: true }),
-    ]);
-    expect(usageLogs.filter((entry) => entry.attempt == null)).toEqual([
-      expect.objectContaining({ status: "failed" }),
-    ]);
+    expect(telemetry.recordAttempt).toHaveBeenCalledWith(expect.objectContaining({ status: "failed" }));
+    expect(telemetry.finalizeExecution).toHaveBeenCalledWith(expect.objectContaining({
+      outcome: expect.objectContaining({ status: "failed" }),
+    }));
   });
 
   it("工具执行失败仍继续到最终文本,并透传 tool-result isError", async () => {
@@ -358,33 +363,17 @@ describe("streamChatWithTools agent loop finish signal", () => {
       runId: "run_shared",
     }));
 
-    const successLogs = logUsage.mock.calls
-      .map((c) => c[0] as {
-        status?: string;
-        runId?: string;
-        usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
-        providerName?: string;
-        routeId?: string;
-        routeName?: string;
-        upstreamModel?: string;
-        firstTokenLatencyMs?: number;
-      })
-      .filter((p) => p.status === "success");
-
-    expect(successLogs).toHaveLength(1);
-    expect(successLogs.every((p) => p.runId === "run_shared")).toBe(true);
-    expect(successLogs[0].usage).toMatchObject({
-      inputTokens: 6,
-      outputTokens: 10,
-      totalTokens: 16,
-    });
-    expect(successLogs[0]).toMatchObject({
-      providerName: "Provider A",
-      routeId: "route-a",
-      routeName: "Provider A · upstream-model",
-      upstreamModel: "upstream-model",
-    });
-    expect(successLogs[0].firstTokenLatencyMs).toEqual(expect.any(Number));
+    expect(telemetry.startExecution).toHaveBeenCalledTimes(1);
+    expect(telemetry.finalizeExecution).toHaveBeenCalledTimes(1);
+    expect(telemetry.finalizeExecution).toHaveBeenCalledWith(expect.objectContaining({
+      initial: expect.objectContaining({ requestId: "run_shared" }),
+      outcome: expect.objectContaining({
+        status: "success",
+        usage: expect.objectContaining({ inputTokens: 6, outputTokens: 10, totalTokens: 16 }),
+        route: expect.objectContaining({ routeId: "route-a", upstreamModelName: "upstream-model" }),
+      }),
+      firstTokenLatencyMs: expect.any(Number),
+    }));
   });
 
   it("maxSteps=0 时写入唯一 interrupted fallback", async () => {
@@ -396,25 +385,10 @@ describe("streamChatWithTools agent loop finish signal", () => {
     }));
 
     expect(streamText).not.toHaveBeenCalled();
-    expect(logUsage).toHaveBeenCalledTimes(1);
-    expect(logUsage).toHaveBeenCalledWith(expect.objectContaining({
-      ctx: baseOpts.ctx,
-      runId: "run_zero_steps",
-      model: "test-model",
-      status: "interrupted",
-      errorCode: "interrupted",
-      stream: true,
-      taskKind: "memory",
-      usage: {
-        inputTokens: 0,
-        outputTokens: 0,
-        totalTokens: 0,
-        reasoningTokens: 0,
-        cachedInputTokens: 0,
-      },
-      providerRef: undefined,
-      routeId: undefined,
-      firstTokenLatencyMs: undefined,
+    expect(telemetry.startExecution).toHaveBeenCalledTimes(1);
+    expect(telemetry.finalizeExecution).toHaveBeenCalledWith(expect.objectContaining({
+      initial: expect.objectContaining({ requestId: "run_zero_steps", taskKind: "memory" }),
+      outcome: expect.objectContaining({ status: "interrupted" }),
     }));
   });
 
@@ -432,17 +406,11 @@ describe("streamChatWithTools agent loop finish signal", () => {
       request: { ...baseOpts.request, messages: brokenMessages },
     }))).rejects.toThrow("messages unavailable");
 
-    expect(logUsage).toHaveBeenCalledTimes(1);
-    expect(logUsage).toHaveBeenCalledWith(expect.objectContaining({
-      runId: "run_pre_step_failure",
-      model: "test-model",
-      status: "failed",
-      errorCode: "generation_failed",
-      errorMessage: "messages unavailable",
-      stream: true,
-      usage: expect.objectContaining({
-        inputTokens: 0,
-        outputTokens: 0,
+    expect(telemetry.finalizeExecution).toHaveBeenCalledWith(expect.objectContaining({
+      initial: expect.objectContaining({ requestId: "run_pre_step_failure" }),
+      outcome: expect.objectContaining({
+        status: "failed",
+        error: expect.objectContaining({ message: "messages unavailable" }),
       }),
     }));
   });
@@ -467,11 +435,10 @@ describe("streamChatWithTools agent loop finish signal", () => {
     expect(events.filter((e) => e.type === "tool-call")).toHaveLength(2);
     expect(events.filter((e) => e.type === "tool-result")).toHaveLength(2);
     expect(events.some((e) => e.type === "finish")).toBe(false);
-    const terminalLogs = logUsage.mock.calls
-      .map((c) => c[0] as { status?: string; errorCode?: string })
-      .filter((p) => p.status === "interrupted");
-    expect(terminalLogs).toHaveLength(1);
-    expect(terminalLogs[0].errorCode).toBe("interrupted");
+    expect(telemetry.finalizeExecution).toHaveBeenCalledTimes(1);
+    expect(telemetry.finalizeExecution).toHaveBeenCalledWith(expect.objectContaining({
+      outcome: expect.objectContaining({ status: "interrupted" }),
+    }));
   });
 
   it("MCP 工具初始化失败时写入唯一 failed fallback", async () => {
@@ -489,12 +456,12 @@ describe("streamChatWithTools agent loop finish signal", () => {
       }] as never,
     }))).rejects.toThrow("tool conversion failed");
 
-    expect(logUsage).toHaveBeenCalledTimes(1);
-    expect(logUsage).toHaveBeenCalledWith(expect.objectContaining({
-      runId: "run_tool_init_failure",
-      status: "failed",
-      errorCode: "generation_failed",
-      errorMessage: "tool conversion failed",
+    expect(telemetry.finalizeExecution).toHaveBeenCalledWith(expect.objectContaining({
+      initial: expect.objectContaining({ requestId: "run_tool_init_failure" }),
+      outcome: expect.objectContaining({
+        status: "failed",
+        error: expect.objectContaining({ message: "tool conversion failed" }),
+      }),
     }));
   });
 });

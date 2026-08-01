@@ -19,91 +19,9 @@
 - 模式:函数内 `const { drizzle } = await import("drizzle-orm/node-postgres"); const { default: pg } = await import("pg");`。queue 用变量路径 `const m = "pg-boss"; await import(m)` 进一步阻断静态分析。
 - `pnpm build` 的 Edge instrumentation 编译是这条约束的验证 gate。
 
-## Scenario: pg-boss Producer Lifecycle And Readiness
+## Queue And Worker Lifecycle
 
-### 1. Scope / Trigger
-
-Apply this contract when changing `src/lib/infra/queue.ts`, Web/worker queue producers, queue workers, or `/healthz/ready`. Web and worker processes have separate in-memory adapters, so no producer may rely on another process having started pg-boss or created a named queue.
-
-### 2. Signatures
-
-- `getQueue(): Promise<QueueAdapter>`
-- `QueueAdapter.start(): Promise<void>` / `stop(): Promise<void>`
-- `QueueAdapter.send<T>(name, data, opts?): Promise<string>`
-- `QueueAdapter.work<T>(name, handler): Promise<void>`
-- `JobHandler<T> = (data: T) => Promise<void>`
-- `queueAvailable(): Promise<boolean>`
-- `GET /healthz/ready -> { status, checks, ts }`
-
-### 3. Contracts
-
-- Keep the variable-path `import("pg-boss")`; a top-level/static import breaks the Edge instrumentation build.
-- Adapter construction, start, stop, and same-name queue creation use in-flight promises. Concurrent callers await the same operation; a rejected operation removes only its own promise so a later call can retry.
-- A start/send/work arriving during stop waits for stop to finish, performs a fresh start, and only then continues.
-- Send/work operations remain concurrent, but stop waits for operations that already entered start/create/send/work before closing pg-boss.
-- `send()` and `work()` always await pg-boss start and idempotent `createQueue(name)`. Queue creation is lazy per name; do not maintain a second queue-name registry.
-- `send()` succeeds only with a non-empty job id. A `null`/empty id rejects so producer fallback or logging runs.
-- A worker handler resolves only after the job succeeded or reached an explicit business no-op. Recoverable service, provider, or persistence failure must reject so pg-boss can apply its finite retry policy; catching and returning silently acknowledges the job as completed.
-- Retried handlers must be idempotent or use conditional writes. `conversation-title` re-reads the current title and only updates `新会话` or the job's fallback, so a retry cannot overwrite a manual title.
-- Queue-facing errors must not include raw provider, connection, header, or credential details. Use a stable generic error for retry signaling and leave detailed failure recording to the owning, redaction-aware service boundary.
-- `queueAvailable()` awaits real pg-boss startup. Readiness requires both DB and queue checks; storage and Redis remain informational/degradable.
-- Queue readiness means that this process can initialize the queue backend. It does not prove that the independent worker is alive or consuming jobs.
-
-### 4. Validation & Error Matrix
-
-| Condition | Adapter result | Readiness / producer result |
-| --- | --- | --- |
-| Concurrent cold calls | One adapter/start/create per name | All callers await the same result |
-| Build/start/create rejects | Failed promise is cleared | Later call can retry |
-| `send()` returns a non-empty id | Resolve id | Producer treats dispatch as successful |
-| `send()` returns `null` or empty string | Reject | Upload fallback or chat async error path |
-| Worker handler succeeds or confirms an idempotent no-op | Resolve callback | pg-boss completes the job |
-| Worker handler rejects | Reject callback with the same error | pg-boss retries or fails the job according to its finite policy |
-| Worker service catches a recoverable failure and returns | False success | Job is permanently acknowledged; forbidden |
-| DB and queue startup succeed | Queue `{ available: true }` | HTTP 200 `ready` |
-| Queue false/error/timeout | Preserve queue diagnostic | HTTP 503 `unready` |
-| Worker is offline but queue backend is writable | Jobs remain durable in pg-boss | Readiness does not infer worker liveness |
-
-### 5. Good / Base / Bad Cases
-
-- Good: a Web producer can cold-start pg-boss, create `memory-extract`, and send before any worker process has registered `work()`.
-- Good: title generation returns a generic rejection on model failure; pg-boss retries, while a missing conversation or manual rename resolves as an idempotent no-op.
-- Base: a started worker calls `work()` for each handler and reuses the same adapter/start promises.
-- Base: a batch callback awaits jobs in order; the first rejection aborts that callback instead of continuing and acknowledging later work.
-- Bad: `getQueue()` returns `available: true` without starting, then `send()` assumes the worker already created the queue.
-- Bad: a service catches a model or database failure and returns `null` when `null` also means a valid no-op; the worker cannot distinguish failure and pg-boss records success.
-- Bad: readiness returns 200 based only on DB while queue startup errored or timed out.
-
-### 6. Tests Required
-
-- Queue unit tests: concurrent construction/start/create, operation ordering, build/start/create retry, null/empty job id, work registration, overlapping stop/start, and stop during an active create/send.
-- Execute the callback passed to pg-boss in a unit test. A rejecting business handler must reject that callback with the same error and stop the remaining jobs in the batch.
-- Worker service tests must separate explicit no-op from retryable failure. For `conversation-title`, cover missing/renamed conversations, thrown generation, error/empty responses, sanitized-empty output, compatibility best-effort behavior, and the worker handler rejection path.
-- Readiness route tests: healthy DB+queue, queue false, reject, timeout, and DB failure; assert HTTP status and `checks.queue` shape.
-- Upload regression: acquisition/send failures still call `processFile` fallback exactly once and return the existing success response.
-- Run `pnpm build` to protect the variable dynamic-import boundary.
-
-### 7. Wrong vs Correct
-
-```typescript
-// Wrong: a process-local flag says nothing about pg-boss startup or queue existence.
-const queue = await getQueue();
-if (queue.available) await queue.send(name, payload);
-
-// Correct: the adapter owns start + createQueue before resolving send.
-const queue = await getQueue();
-const jobId = await queue.send(name, payload);
-
-// Wrong: retryable failure is converted into a successful callback.
-try {
-  await generateConversationTitle(data);
-} catch {
-  return;
-}
-
-// Correct: only explicit no-op resolves; generation failure rejects generically.
-await generateConversationTitle(data);
-```
+The typed pg-boss catalog, replaceable generation, real-handler drain, generic recovery scheduler, and worker shutdown contract lives in [Queue And Worker Lifecycle](./queue-lifecycle.md). Database-specific title and memory durable-intent contracts remain below.
 
 ## Scenario: Conversation Title Durable Outbox
 
@@ -116,19 +34,21 @@ Apply this contract when changing conversation fallback titles, `conversation-ti
 - `writeFallbackTitle(userId, conversationId, firstUserMessage, chatModel?, chatModelId?): Promise<ConversationTitleJob | null>`
 - `ConversationTitleJob`: `id`, `userId`, `conversationId`, `firstUserMessage`, `fallbackTitle`, optional `chatModel` / `chatModelId`
 - `dispatchConversationTitleJob(jobId): Promise<boolean>`
+- `processConversationTitleJob(jobId): Promise<JobOutcome>`
 - `recoverConversationTitleJobs(): Promise<void>`
-- `startConversationTitleRecovery(): () => Promise<void>`
+- Queue payload: `{ id: string }`
 - `conversation_title_jobs`: one row per `conversation_id`, with random `id` as the fencing token and `dispatch_after` as the database-clock claim boundary
 
 ### 3. Contracts
 
 - Update the fallback and upsert the complete outbox payload in one transaction. A failed update creates no job; a failed upsert rolls back the fallback.
 - Claim only with one conditional `UPDATE ... WHERE id = ? AND dispatch_after <= now() RETURNING ...`, then move `dispatch_after` 15 minutes forward. Queue send success or failure never deletes the row.
+- Dispatch sends only `{ id }`; the worker reloads the complete outbox row at execution time before applying the existing preflight/final fencing.
 - Delivery is durable at-least-once. The worker checks the current job id before model generation and checks it again in the final short transaction.
 - The final transaction locks the owned conversation before reading the current outbox row, updates only the default/current fallback title, and deletes only the matching job id. This lock order matches the producer transaction.
 - Success and explicit business no-op delete the matching job. Generation or persistence failure preserves it and rejects the queue callback.
-- Recovery runs immediately and every 60 seconds, single-flight, in stable database-time order, at most 25 rows per scan. It processes rows sequentially, isolates per-row send failures, and its stop function waits for the active scan.
-- Outbox payloads and logs must not contain credentials, provider headers, connection strings, or complete request objects.
+- The domain recovery function performs one stable, database-time-ordered scan of at most 25 rows and isolates per-row send failures. Generic worker runtime owns immediate/60-second/unref/single-flight scheduling and stop-drain.
+- pg-boss payloads and logs must not contain the first user message, model context, entity IDs, credentials, provider headers, connection strings, or complete request objects.
 
 ### 4. Validation & Error Matrix
 
@@ -155,9 +75,10 @@ Apply this contract when changing conversation fallback titles, `conversation-ti
 
 - Migration tests assert SQL, journal, snapshot, primary key, conversation uniqueness, both cascade FKs, and `(dispatch_after, created_at)` index.
 - Service tests assert fallback/outbox rollback, payload replacement, preflight and final fencing, user rename no-op, atomic success cleanup, and failure preservation.
-- Dispatcher tests assert one winner for concurrent claims, not-due no-op, send failure preservation/reclaim, stable limit 25 scanning, per-item isolation, scheduler single-flight, and stop waiting.
+- Dispatcher tests assert `{ id }` payload, one winner for concurrent claims, not-due no-op, send failure preservation/reclaim, stable limit 25 scanning, and per-item isolation.
+- Processor tests assert missing/stale/manual-rename paths return `noop`, a committed title returns `completed`, and generation/persistence failure rejects while preserving durable intent.
 - Route tests assert complete model context enters `writeFallbackTitle` and immediate dispatch uses the returned job id.
-- Worker tests assert both recovery schedulers start after handler registration, stop in reverse order before queue stop, and all cleanup continues after an individual stop failure.
+- Runtime tests assert all handlers register before any recovery scheduler, schedulers stop in reverse order before queue stop, and cleanup continues after an individual stop failure.
 
 ### 7. Wrong vs Correct
 
@@ -281,7 +202,7 @@ Correct:
 - `runs.lease_expires_at`: nullable `timestamptz`，数据库默认值 `now() + interval '2 minutes'`。
 - `runs_active_conversation_idx`: `(conversation_id, lease_expires_at) WHERE status = 'running'`。
 - 活动谓词：`EXISTS (... status = 'running' AND lease_expires_at > now())`。
-- `startRun(...) -> Promise<boolean>`；`heartbeatRun(runId) -> Promise<void>`；`finalizeRun(...) -> Promise<void>`。
+- `startRunStrict(...) -> Promise<void>`；`heartbeatRun(runId) -> Promise<void>`；`persistChatCompletion(...) -> committed result`。
 
 #### 3. Contracts
 
@@ -290,8 +211,9 @@ Correct:
 - 新 runtime 显式写入两分钟租约；数据库列默认值同时覆盖滚动升级期间仍由旧 runtime 插入、未携带该列的新 running row。
 - 迁移只回填 `status='running' AND lease_expires_at IS NULL` 的行，不全表更新 legacy `conversations.generating`。
 - 心跳仅按 `runId + status='running'` 更新当前 run；finalize 也只更新当前 running run。任何请求都不得清理同会话其他 run。
-- start/finalize/tool/用量等阻塞主流程的 best-effort 写入使用固定 5 秒应用层等待预算，且必须包住 `getDb()` 本身。该超时不是 PostgreSQL `statement_timeout/query_timeout`，不取消已提交的查询，晚写入允许完成。
-- heartbeat 不使用应用层超时伪装底层完成；route 以原始 Promise 单飞调度，并在 abort/cancel/finally 停止后续 tick。在 Drizzle node-postgres 未提供 AbortSignal 通道时，不得声称已取消进行中的 update。
+- strict start 使用固定 5 秒等待预算，但失败/超时禁止模型调用；该应用层超时不取消底层 PostgreSQL 查询，迟到 running row 由租约过期收敛。
+- heartbeat 不使用应用层超时伪装底层完成；completion coordinator 以原始 Promise 单飞调度，并在 abort/terminal/commit 前停止后续 tick。
+- assistant、conversation 时间、可选 memory intent 与 terminal run 必须在 conversation-first 短事务中提交。run 条件更新零行必须抛错并回滚，而不是退化为 best-effort success。
 - 会话列表与轻量轮询必须复用同一个相关 `EXISTS` 表达式，避免活动定义漂移。
 - 普通 `CREATE INDEX` 可能等待大表锁；执行真实生产迁移前必须评估锁窗口。若改用 `CONCURRENTLY`，须独立设计 Drizzle 事务外迁移流程，不得直接塞入现有事务型 migrator。
 
@@ -321,8 +243,8 @@ Correct:
 - schema 测试断言 nullable `timestamptz`、数据库默认表达式与部分索引谓词。
 - 迁移测试断言 add column、set default、仅回填 running NULL、创建部分索引，且不更新 `conversations.generating`。
 - 查询测试断言 conversation 关联、running、`lease_expires_at > now()` 三个条件，并覆盖并发/fresh/expired/null/terminal 真值表。
-- lifecycle 测试断言 start/heartbeat 使用数据库时间，heartbeat/finalize 只匹配 running row，所有 DB 失败仍遵循 best-effort，且 pending `getDb()` 在 5 秒后释放 start/finalize/tool 调用方。
-- route 测试使用未完成 heartbeat Promise 验证多个 tick 仍只有一次 update，完成后才恢复；abort/cancel 后推进时钟不得产生新 update。
+- lifecycle 测试断言 strict start/heartbeat 使用数据库时间，strict start 失败阻断生成，heartbeat 只匹配 running row。
+- coordinator 测试使用未完成 heartbeat Promise 验证单飞，并断言 abort/terminal 后没有新 tick。
 - 迁移元数据测试断言 SQL、journal 与 snapshot 链同步；发布前另行记录是否在真实 PostgreSQL 验证以及索引锁风险。
 
 #### 7. Wrong vs Correct
@@ -338,6 +260,67 @@ SELECT EXISTS (
     AND runs.status = 'running'
     AND runs.lease_expires_at > now()
 );
+```
+
+## Scenario: Chat Memory Durable Intent
+
+### 1. Scope / Trigger
+
+Apply this contract when changing Chat completion persistence, memory extraction queue payloads, `memory_extraction_jobs`, memory worker handling, or memory recovery scheduling.
+
+### 2. Signatures
+
+- `createMemoryExtractionJob({ runId, userId, conversationId, recentMessages }) -> MemoryExtractionJob | null`.
+- `dispatchMemoryExtractionJob(jobId) -> Promise<boolean>`.
+- `processMemoryExtractionJob(jobId) -> Promise<JobOutcome>`.
+- Database: unique `run_id`, run/conversation/user cascade FKs, JSONB `messages`, and `(dispatch_after, created_at)` recovery index.
+
+### 3. Contracts
+
+- Produce the intent inside `persistChatCompletion`; never enqueue a full memory payload directly from the route.
+- Normalize to the last six user/assistant messages, at most 500 characters each. Fewer than two normalized messages is an explicit no-op.
+- Queue payload contains only `{ id }`. Queue acceptance never deletes the durable row.
+- Claim with one conditional database-time update that moves `dispatch_after` 15 minutes forward. The domain recovery function scans at most 25 due rows in stable order; generic worker runtime owns immediate/60-second/unref/single-flight scheduling and stop-drain.
+- Worker reads by intent ID. Missing row returns `noop`; provider/add failure rejects generically and preserves the row; success returns `completed`, while input/rate-limit no-op returns `noop`; both resolved outcomes delete only that ID.
+- Delivery is at-least-once. Do not claim cross-system exactly-once; mem0 inference/deduplication only reduces replay effects.
+- Web and worker queue payload changes require coordinated deployment. Rollback preserves the table and pending rows.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required result |
+| --- | --- |
+| Completion transaction rolls back | No memory intent exists |
+| Queue send fails after claim | Row remains; recover after claim window |
+| Worker receives stale/missing ID | Resolve no-op |
+| Message snapshot has fewer than two entries | Do not create a row |
+| Memory provider/add fails | Reject worker; preserve row |
+| Extraction succeeds or is an explicit business no-op | Delete matching row |
+
+### 5. Good / Base / Bad Cases
+
+- Good: Web commits and exits before queue send; recovery later dispatches the same intent ID.
+- Base: immediate dispatch succeeds, worker extracts, then deletes the intent.
+- Bad: route sends user/conversation/full messages directly to pg-boss after commit.
+- Bad: `extractMemories` catches provider failure and returns success, causing pg-boss to acknowledge permanently.
+
+### 6. Tests Required
+
+- Schema/migration assertions for unique run, all cascade FKs, dispatch index, SQL, journal, and snapshot.
+- Snapshot tests for role filtering, last-six selection, truncation, and fewer-than-two no-op.
+- Dispatcher tests for claim winner, not-due no-op, send failure preservation, limit 25, stable order, and per-item isolation.
+- Worker tests for missing-ID `noop`, completed/noop deletion, provider failure preservation, payload `{ id }`, and runtime-owned recovery ordering/stop-drain.
+- Completion repository and isolated PostgreSQL tests must prove an intent failure rolls back assistant, conversation time, and run terminal.
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong: commit-to-queue crash window and oversized queue payload.
+await persistAssistant();
+await queue.send("memory-extract", { userId, conversationId, recentMessages });
+
+// Correct: durable intent shares the core completion transaction; queue carries only its ID.
+const committed = await persistChatCompletion({ ...input, memoryJob });
+void dispatchMemoryExtractionJob(memoryJob.id);
 ```
 
 ## Timestamps(时区)
@@ -366,6 +349,8 @@ SELECT EXISTS (
 
 ## Common Mistakes
 
+- **不要用等待行锁前捕获的数据库时间判断租约 freshness** —— PostgreSQL `now()` 固定在事务开始，`statement_timestamp()` 固定在语句开始；条件 UPDATE 等锁期间租约可能已经过期。需要先按 id/token/status `SELECT ... FOR UPDATE`，拿锁后再用新语句的 `statement_timestamp()` 校验并续租，最后提交前再次校验。真实 PostgreSQL 测试必须覆盖“等待跨过 expiry”而不只覆盖 token 被替换。
+- **Drizzle pgvector 双重序列化** —— `vector(...)` 列的 `mapToDriverValue` 已对 `number[]` 执行 `JSON.stringify`;insert/update 必须传原始数组。业务层先 `JSON.stringify(vector)` 会产生带额外引号的非法 vector。至少用一次真实 PostgreSQL insert 回归，mock 只能检查入参形状。
 - **不要静态 import pg / pg-boss 顶层驱动** —— Turbopack 会打进 Edge instrumentation(`util/types` 解析失败)。用动态 `await import`。
 - **不要在 instrumentation.ts 静态 import 业务模块** —— 触发 Edge 编译。用变量路径 `const p = "@/lib/infra/db/bootstrap"; await import(p)`。
 - **删除 dialect 限制 guard 时,判断是删条件还是删整个 guard** —— `if (cond && !isPg)` 这类 guard 的存在意义是「sqlite 模式禁用某能力」;sqlite 删除后整个 guard 无意义,应**整体删除**,而非改成 `if (cond)`(那会变成「所有模式禁用」,造成功能回归)。本次 `registry.ts` stdio guard 照字面删 `!isPg` 导致 stdio MCP 全禁,trellis-check 独立复核捕获。

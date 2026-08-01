@@ -1,0 +1,5 @@
+{"file":".trellis/spec/frontend/state-management.md","reason":"Composer local state、SSR props、new conversation history.replaceState 与 keyed multi-instance 规则。"}
+{"file":".trellis/spec/frontend/hook-guidelines.md","reason":"Coordinator hook 的生命周期、ref、异步 cleanup 与稳定边界约定。"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"Chat 组件边界、交互、语义字号、错误与移动端行为约定。"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Server Action DTO、zod 边界校验与显式类型约定。"}
+{"file":".trellis/tasks/07-30-chat-composer-state-coordinator/research/evidence.md","reason":"当前 selection owners、闭包竞态、JSON 丢失更新、create/adopt 和测试基础证据。"}

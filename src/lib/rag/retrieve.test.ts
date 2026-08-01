@@ -63,4 +63,18 @@ describe("retrieve 文件属主隔离", () => {
       }
     },
   );
+
+  it("检索降级日志不暴露原始错误或基础设施 URL", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mocks.getDb.mockRejectedValueOnce(
+      new Error("postgresql://user:password@db/private?token=secret"),
+    );
+
+    await expect(retrieve("query", [], {
+      userId: "user-1",
+      timeoutMs: 50,
+    })).resolves.toMatchObject({ status: "rag_error" });
+
+    expect(errorSpy).toHaveBeenCalledWith("[rag] retrieve error:", "[REDACTED]");
+  });
 });

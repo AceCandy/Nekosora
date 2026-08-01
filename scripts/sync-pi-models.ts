@@ -1,48 +1,79 @@
 #!/usr/bin/env node
-/**
- * 同步 / 导入 pi 模型配置到 model_catalog(运行入口 + IO)。
- * 纯逻辑见 src/lib/sync-pi-models.ts。
- *
- * 数据源: https://pi.dev/api/models
- *   - PI_MODELS_URL  覆盖 API 地址
- *   - PI_MODELS_FILE 改读本地 JSON 快照(离线/测试)
- *
- * 两种模式:
- *   1) 默认:只对照「已有 catalog 行」做更新(ctx/max/capabilities)
- *   2) --import-missing:把 pi 里我们还没有的型号去重后全量导入
- *
- * 用法(脚本会自动加载 .env.local / .env):
- *   pnpm tsx scripts/sync-pi-models.ts                              # dry-run 已有行差异
- *   pnpm tsx scripts/sync-pi-models.ts --import-missing             # dry-run 缺失导入清单
- *   pnpm tsx scripts/sync-pi-models.ts --import-missing --apply     # 执行全量导入缺失型号
- *   pnpm tsx scripts/sync-pi-models.ts --write --apply              # 更新已有匹配行
- *   pnpm tsx scripts/sync-pi-models.ts --import-missing --write --apply  # 导入+更新
- */
-import { eq, sql } from "drizzle-orm";
-import { mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
-import { randomUUID } from "node:crypto";
-import { join, dirname } from "node:path";
+/** Audit pi model data and optionally write a versioned PostgreSQL migration. */
+import { createHash, randomUUID } from "node:crypto";
+import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { getDb, getSchema, closeDb } from "@/lib/infra/db";
+import { eq } from "drizzle-orm";
+import { closeDb, getDb, getSchema } from "@/lib/infra/db";
 import {
-  parsePiModelsApi,
-  planCatalogSync,
-  planMissingImports,
-  match,
-  translate,
-  passesInvariants,
-  buildUpsert,
-  buildImportUpsert,
+  buildCatalogSyncSql,
+  CatalogSyncInputError,
   nextDataMigrationSnapshot,
   nextSyncMigrationSlot,
+  planCatalogSync,
+  type CatalogOperation,
   type CatalogRow,
   type DrizzleSnapshot,
   type JournalEntry,
-  type PiCatalog,
-  type ImportCandidate,
+  type SyncPlan,
 } from "@/lib/sync-pi-models";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+const DEFAULT_PI_MODELS_URL = "https://pi.dev/api/models";
+
+export interface SyncCliOptions {
+  write: boolean;
+}
+
+export interface SyncEnvironment {
+  DATABASE_URL?: string;
+  PI_MODELS_FILE?: string;
+  PI_MODELS_URL?: string;
+}
+
+export type SyncSource =
+  | { kind: "live" }
+  | { kind: "file"; path: string };
+
+export class SyncCliError extends Error {
+  constructor(
+    public readonly stage: string,
+    public readonly reason: string,
+  ) {
+    super("model catalog sync failed");
+    this.name = "SyncCliError";
+  }
+}
+
+export function parseSyncArgs(args: string[]): SyncCliOptions {
+  const forwardedArgs = args[0] === "--" ? args.slice(1) : args;
+  if (forwardedArgs.some((argument) => argument !== "--write")) {
+    throw new SyncCliError("arguments", "unsupported_argument");
+  }
+  if (forwardedArgs.filter((argument) => argument === "--write").length > 1) {
+    throw new SyncCliError("arguments", "duplicate_argument");
+  }
+  return { write: forwardedArgs.includes("--write") };
+}
+
+export function resolveSyncSource(
+  options: SyncCliOptions,
+  env: SyncEnvironment,
+): SyncSource {
+  const snapshotPath = env.PI_MODELS_FILE?.trim();
+  if (options.write && !snapshotPath) {
+    throw new SyncCliError("arguments", "write_requires_snapshot");
+  }
+  return snapshotPath ? { kind: "file", path: snapshotPath } : { kind: "live" };
+}
+
+export function renderSyncFailure(error: unknown): string {
+  const failure = error instanceof SyncCliError
+    ? error
+    : new SyncCliError("internal", "unexpected_failure");
+  return `model catalog sync failed: stage=${failure.stage} reason=${failure.reason}`;
+}
 
 function loadEnvFiles(): void {
   for (const name of [".env.local", ".env"]) {
@@ -52,14 +83,14 @@ function loadEnvFiles(): void {
     for (const line of text.split("\n")) {
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith("#")) continue;
-      const eqIdx = trimmed.indexOf("=");
-      if (eqIdx <= 0) continue;
-      const key = trimmed.slice(0, eqIdx).trim();
+      const separator = trimmed.indexOf("=");
+      if (separator <= 0) continue;
+      const key = trimmed.slice(0, separator).trim();
       if (!key || process.env[key] !== undefined) continue;
-      let value = trimmed.slice(eqIdx + 1).trim();
+      let value = trimmed.slice(separator + 1).trim();
       if (
-        (value.startsWith('"') && value.endsWith('"')) ||
-        (value.startsWith("'") && value.endsWith("'"))
+        (value.startsWith('"') && value.endsWith('"'))
+        || (value.startsWith("'") && value.endsWith("'"))
       ) {
         value = value.slice(1, -1);
       }
@@ -68,224 +99,242 @@ function loadEnvFiles(): void {
   }
 }
 
-loadEnvFiles();
+interface LoadedSource {
+  payload: unknown;
+  digest?: string;
+}
 
-const WRITE = process.argv.includes("--write");
-const APPLY = process.argv.includes("--apply");
-const IMPORT_MISSING = process.argv.includes("--import-missing");
-const PI_API = process.env.PI_MODELS_URL ?? "https://pi.dev/api/models";
-const PI_FILE = process.env.PI_MODELS_FILE;
-
-async function loadPiCatalog(root: string): Promise<PiCatalog> {
-  if (PI_FILE) {
-    console.error(`pi 数据: 本地文件 ${PI_FILE}`);
-    return parsePiModelsApi(JSON.parse(readFileSync(PI_FILE, "utf8")) as unknown);
+async function loadSource(source: SyncSource, env: SyncEnvironment): Promise<LoadedSource> {
+  if (source.kind === "file") {
+    let text: string;
+    try {
+      text = readFileSync(source.path, "utf8");
+    } catch {
+      throw new SyncCliError("source", "snapshot_read_failed");
+    }
+    try {
+      return {
+        payload: JSON.parse(text) as unknown,
+        digest: createHash("sha256").update(text).digest("hex"),
+      };
+    } catch {
+      throw new SyncCliError("source", "snapshot_invalid");
+    }
   }
 
-  const cacheDir = join(root, "scripts", ".cache");
-  const cachePath = join(cacheDir, "pi-models.json");
-  console.error(`pi 数据: GET ${PI_API}`);
-
+  let response: Response;
   try {
-    const res = await fetch(PI_API, { headers: { accept: "application/json" } });
-    if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
-    const raw = (await res.json()) as unknown;
-    mkdirSync(cacheDir, { recursive: true });
-    writeFileSync(cachePath, JSON.stringify(raw));
-    console.error(`已缓存 → ${cachePath}`);
-    return parsePiModelsApi(raw);
-  } catch (err) {
-    if (existsSync(cachePath)) {
-      console.error(`拉取失败(${err instanceof Error ? err.message : err}),回退缓存 ${cachePath}`);
-      return parsePiModelsApi(JSON.parse(readFileSync(cachePath, "utf8")) as unknown);
-    }
-    throw err;
+    response = await fetch(env.PI_MODELS_URL ?? DEFAULT_PI_MODELS_URL, {
+      headers: { accept: "application/json" },
+    });
+  } catch {
+    throw new SyncCliError("source", "fetch_failed");
+  }
+  if (!response.ok) throw new SyncCliError("source", "fetch_failed");
+  try {
+    return { payload: await response.json() as unknown };
+  } catch {
+    throw new SyncCliError("source", "payload_invalid");
   }
 }
 
-function buildMatchedUpserts(rows: CatalogRow[], PI: PiCatalog): string[] {
-  const stmts: string[] = [];
-  for (const row of rows) {
-    if (row.canonicalModelId.startsWith("__generic_")) continue;
-    const m = match(row.canonicalModelId, row.aliases ?? [], PI);
-    if (!m) continue;
-    const next = translate(row.capabilities ?? {}, m.pi);
-    if (!passesInvariants(next)) {
-      next.thinkingLevelMap = row.capabilities?.thinkingLevelMap;
-    }
-    stmts.push(
-      buildUpsert(
-        row.canonicalModelId,
-        row.name,
-        next,
-        m.pi.contextWindow ?? null,
-        m.pi.maxTokens ?? null,
-      ),
+function renderOperation(operation: CatalogOperation): string {
+  if (operation.target === "column") {
+    return `${operation.column}=set:${operation.value}`;
+  }
+  return operation.action === "delete"
+    ? `capability.${operation.key}=delete`
+    : `capability.${operation.key}=set`;
+}
+
+function auditIdentifier(value: string): string {
+  return /^[A-Za-z0-9][A-Za-z0-9._:@~/-]{0,199}$/.test(value) && !value.includes("://")
+    ? value
+    : "redacted-model";
+}
+
+export function renderSyncPlan(plan: SyncPlan): string {
+  const lines: string[] = [];
+  for (const id of plan.unmatched.generic) lines.push(`unmatched generic ${auditIdentifier(id)}`);
+  for (const id of plan.unmatched.catalog) lines.push(`unmatched catalog ${auditIdentifier(id)}`);
+  for (const rejection of plan.rejections) {
+    const subject = rejection.canonicalModelId
+      ? auditIdentifier(rejection.canonicalModelId)
+      : "external-model";
+    lines.push(`rejected ${subject} ${rejection.scope}:${rejection.code}`);
+  }
+  for (const reference of plan.references) {
+    lines.push(
+      `reference ${auditIdentifier(reference.canonicalModelId)} ${reference.match.kind} `
+      + reference.operations.map(renderOperation).join(","),
     );
   }
-  return stmts;
-}
-
-function buildImportUpserts(imports: ImportCandidate[], baseSort: number): string[] {
-  return imports.map((item, i) =>
-    buildImportUpsert(
-      item.canonicalModelId,
-      item.name,
-      item.aliases,
-      item.capabilities,
-      item.contextWindow,
-      item.maxOutputTokens,
-      baseSort + i,
-    ),
+  for (const change of plan.changes) {
+    lines.push(
+      `accepted ${auditIdentifier(change.canonicalModelId)} `
+      + change.operations.map(renderOperation).join(","),
+    );
+  }
+  lines.push(
+    `summary matched=${plan.matched} unchanged=${plan.unchanged} `
+    + `accepted=${plan.changes.length} references=${plan.references.length} `
+    + `rejected=${plan.rejections.length}`,
   );
+  return lines.join("\n");
 }
 
-function writeMigration(tag: string, idx: number, stmts: string[], kind: string): string {
-  const migDir = join(ROOT, "drizzle", "pg");
-  const jp = join(migDir, "meta", "_journal.json");
-  const journal = JSON.parse(readFileSync(jp, "utf8")) as { entries: JournalEntry[] };
-  const sqlPath = join(migDir, `${tag}.sql`);
-  const sql =
-    `-- ${kind}(由 scripts/sync-pi-models.ts 生成,幂等 upsert)\n` +
-    `-- 数据源: https://pi.dev/api/models\n\n` +
-    stmts.join("\n--> statement-breakpoint\n") +
-    "\n";
-  writeFileSync(sqlPath, sql);
-
-  if (!journal.entries.some((e) => e.tag === tag)) {
-    journal.entries.push({
-      idx,
-      version: "7",
-      when: Date.now(),
-      tag,
-      breakpoints: true,
-    });
-    writeFileSync(jp, `${JSON.stringify(journal, null, 2)}\n`);
+function writeMigration(statements: string[], digest: string): { tag: string; count: number } {
+  const migrationDir = join(ROOT, "drizzle", "pg");
+  const journalPath = join(migrationDir, "meta", "_journal.json");
+  let journal: { entries: JournalEntry[] };
+  try {
+    journal = JSON.parse(readFileSync(journalPath, "utf8")) as { entries: JournalEntry[] };
+  } catch {
+    throw new SyncCliError("migration", "journal_invalid");
   }
 
-  const prevIdx = String(Math.max(0, idx - 1)).padStart(4, "0");
-  const nextIdx = String(idx).padStart(4, "0");
-  const prevSnap = join(migDir, "meta", `${prevIdx}_snapshot.json`);
-  const nextSnap = join(migDir, "meta", `${nextIdx}_snapshot.json`);
-  if (existsSync(prevSnap) && !existsSync(nextSnap)) {
-    const previous = JSON.parse(readFileSync(prevSnap, "utf8")) as DrizzleSnapshot;
-    const next = nextDataMigrationSnapshot(previous, randomUUID());
-    writeFileSync(nextSnap, `${JSON.stringify(next, null, 2)}\n`);
+  const { idx, tag } = nextSyncMigrationSlot(journal.entries, "model_catalog_sync");
+  const previousIndex = String(idx - 1).padStart(4, "0");
+  const nextIndex = String(idx).padStart(4, "0");
+  const previousSnapshotPath = join(migrationDir, "meta", `${previousIndex}_snapshot.json`);
+  const nextSnapshotPath = join(migrationDir, "meta", `${nextIndex}_snapshot.json`);
+  const sqlPath = join(migrationDir, `${tag}.sql`);
+  if (!existsSync(previousSnapshotPath)) {
+    throw new SyncCliError("migration", "previous_snapshot_missing");
   }
-  return sqlPath;
+  if (existsSync(sqlPath) || existsSync(nextSnapshotPath)) {
+    throw new SyncCliError("migration", "target_exists");
+  }
+
+  let previousSnapshot: DrizzleSnapshot;
+  try {
+    previousSnapshot = JSON.parse(readFileSync(previousSnapshotPath, "utf8")) as DrizzleSnapshot;
+  } catch {
+    throw new SyncCliError("migration", "previous_snapshot_invalid");
+  }
+  const nextSnapshot = nextDataMigrationSnapshot(previousSnapshot, randomUUID());
+  const lastWhen = journal.entries.at(-1)?.when ?? 0;
+  journal.entries.push({
+    idx,
+    version: "7",
+    when: Math.max(Date.now(), lastWhen + 1),
+    tag,
+    breakpoints: true,
+  });
+  const sql = [
+    "-- Model catalog sync generated from a reviewed local snapshot.",
+    `-- source-sha256: ${digest}`,
+    "",
+    statements.join("\n--> statement-breakpoint\n"),
+    "",
+  ].join("\n");
+
+  const temporarySuffix = `${process.pid}-${randomUUID()}.tmp`;
+  const temporarySqlPath = `${sqlPath}.${temporarySuffix}`;
+  const temporaryJournalPath = `${journalPath}.${temporarySuffix}`;
+  const temporarySnapshotPath = `${nextSnapshotPath}.${temporarySuffix}`;
+  let sqlCommitted = false;
+  let snapshotCommitted = false;
+  const cleanup = (path: string): void => {
+    try {
+      if (existsSync(path)) unlinkSync(path);
+    } catch {
+      // Preserve the stable write_failed contract; the caller will inspect the worktree.
+    }
+  };
+
+  try {
+    writeFileSync(temporarySqlPath, sql);
+    writeFileSync(temporaryJournalPath, `${JSON.stringify(journal, null, 2)}\n`);
+    writeFileSync(temporarySnapshotPath, `${JSON.stringify(nextSnapshot, null, 2)}\n`);
+    renameSync(temporarySqlPath, sqlPath);
+    sqlCommitted = true;
+    renameSync(temporarySnapshotPath, nextSnapshotPath);
+    snapshotCommitted = true;
+    renameSync(temporaryJournalPath, journalPath);
+  } catch {
+    cleanup(temporarySqlPath);
+    cleanup(temporaryJournalPath);
+    cleanup(temporarySnapshotPath);
+    if (sqlCommitted) cleanup(sqlPath);
+    if (snapshotCommitted) cleanup(nextSnapshotPath);
+    throw new SyncCliError("migration", "write_failed");
+  }
+  return { tag, count: statements.length };
+}
+
+async function readCatalogRows(): Promise<CatalogRow[]> {
+  let db: Awaited<ReturnType<typeof getDb>>;
+  try {
+    db = await getDb();
+    const table = getSchema().modelCatalog;
+    return await db.select({
+      canonicalModelId: table.canonicalModelId,
+      name: table.name,
+      aliases: table.aliases,
+      capabilities: table.capabilities,
+      contextWindow: table.contextWindow,
+      maxOutputTokens: table.maxOutputTokens,
+    }).from(table).where(eq(table.modelType, "chat")) as CatalogRow[];
+  } catch {
+    throw new SyncCliError("database", "catalog_read_failed");
+  }
+}
+
+async function executeSync(options: SyncCliOptions, env: SyncEnvironment): Promise<void> {
+  let primaryError: unknown;
+  try {
+    const source = resolveSyncSource(options, env);
+    const loaded = await loadSource(source, env);
+    if (!env.DATABASE_URL) throw new SyncCliError("configuration", "database_url_missing");
+    const rows = await readCatalogRows();
+    let plan: SyncPlan;
+    try {
+      plan = planCatalogSync(rows, loaded.payload);
+    } catch (error) {
+      if (error instanceof CatalogSyncInputError) {
+        throw new SyncCliError("decode", error.code);
+      }
+      throw error;
+    }
+    console.log(renderSyncPlan(plan));
+
+    if (options.write) {
+      const statements = buildCatalogSyncSql(plan);
+      if (statements.length === 0) {
+        console.log("migration skipped: no accepted changes");
+      } else if (!loaded.digest) {
+        throw new SyncCliError("migration", "source_digest_missing");
+      } else {
+        const result = writeMigration(statements, loaded.digest);
+        console.log(`migration written: tag=${result.tag} statements=${result.count}`);
+      }
+    }
+  } catch (error) {
+    primaryError = error;
+  }
+
+  try {
+    await closeDb();
+  } catch {
+    primaryError ??= new SyncCliError("database", "close_failed");
+  }
+  if (primaryError) throw primaryError;
 }
 
 async function main(): Promise<void> {
-  if (!process.env.DATABASE_URL) {
-    throw new Error(
-      "未配置 DATABASE_URL。请在项目根目录提供 .env.local(含 DATABASE_URL),或先 export DATABASE_URL=...",
-    );
-  }
-  const PI = await loadPiCatalog(ROOT);
-
-  const db = await getDb();
-  const tbl = getSchema().modelCatalog;
-  const rows = (await db.select({
-    canonicalModelId: tbl.canonicalModelId,
-    name: tbl.name,
-    aliases: tbl.aliases,
-    capabilities: tbl.capabilities,
-    contextWindow: tbl.contextWindow,
-    maxOutputTokens: tbl.maxOutputTokens,
-  }).from(tbl).where(eq(tbl.modelType, "chat"))) as CatalogRow[];
-
-  const stmts: string[] = [];
-  let migrationKind = "";
-
-  // ---- 模式 A: 导入 pi 中缺失的型号 ----
-  if (IMPORT_MISSING) {
-    const { imports, groupCount, skippedExisting } = planMissingImports(rows, PI);
-    console.log("## 缺失导入 (--import-missing)\n");
-    for (const item of imports.slice(0, 50)) {
-      console.log(
-        `+ ${item.canonicalModelId}  (${item.via})  ctx=${item.contextWindow ?? "-"} max=${item.maxOutputTokens ?? "-"}  aliases=${item.aliases.length}`,
-      );
-    }
-    if (imports.length > 50) {
-      console.log(`... 另有 ${imports.length - 50} 条未展开`);
-    }
-    console.log(
-      `\n导入候选 ${imports.length}(pi 去重组 ${groupCount},已存在跳过 ${skippedExisting})`,
-    );
-
-    if (WRITE || APPLY) {
-      const [maxRow] = await db
-        .select({ maxSort: sql<number>`coalesce(max(${tbl.sortOrder}), 0)` })
-        .from(tbl);
-      const baseSort = Math.max(2000, Number(maxRow?.maxSort ?? 0) + 1);
-      stmts.push(...buildImportUpserts(imports, baseSort));
-      migrationKind = "全量导入 pi 缺失模型到 model_catalog";
-    }
-  } else {
-    // ---- 模式 B: 仅同步已有 catalog 行 ----
-    const plan = planCatalogSync(rows, PI);
-    const lines: string[] = [];
-    for (const id of plan.unmatched) lines.push(`• ${id} — 未匹配,跳过`);
-    for (const ch of plan.changes) {
-      const seg = [`• ${ch.canonicalModelId} (${ch.via})`];
-      if (ch.gateFallback) seg.push("    ⚠ 闸门拦截:刷后无可显档,已回退 thinkingLevelMap");
-      if (ch.capChanges.length) seg.push(`    cap  ${ch.capChanges.join("; ")}`);
-      if (ch.ctxChange) seg.push(`    ctx  ${ch.ctxChange}`);
-      if (ch.maxChange) seg.push(`    max  ${ch.maxChange}`);
-      lines.push(seg.join("\n"));
-    }
-    console.log(lines.join("\n"));
-    console.log(
-      `\n合计:匹配 ${plan.matched}(其中已一致 ${plan.unchanged},需改 ${plan.changes.length}),未匹配 ${plan.unmatched.length}`,
-    );
-    console.log(
-      `\n提示:若要导入 pi 中「我们还没有」的型号,请加 --import-missing\n` +
-        `  例: pnpm tsx scripts/sync-pi-models.ts --import-missing\n` +
-        `      pnpm tsx scripts/sync-pi-models.ts --import-missing --apply`,
-    );
-
-    if (WRITE || APPLY) {
-      stmts.push(...buildMatchedUpserts(rows, PI));
-      migrationKind = "同步 pi 配置到已有 model_catalog 行";
-    }
-  }
-
-  // 同时指定时:在 import 之外再追加已有行更新
-  if (IMPORT_MISSING && (WRITE || APPLY) && process.argv.includes("--also-update")) {
-    stmts.push(...buildMatchedUpserts(rows, PI));
-    migrationKind += " + 更新已有行";
-  }
-
-  if (!WRITE && !APPLY) {
-    await closeDb();
-    return;
-  }
-
-  if (stmts.length === 0) {
-    console.log("\n无 SQL 需要落盘/执行。");
-    await closeDb();
-    return;
-  }
-
-  if (WRITE) {
-    const jp = join(ROOT, "drizzle", "pg", "meta", "_journal.json");
-    const journal = JSON.parse(readFileSync(jp, "utf8")) as { entries: JournalEntry[] };
-    const tagBase = IMPORT_MISSING ? "import_pi_models" : "sync_pi_models";
-    const { idx, tag } = nextSyncMigrationSlot(journal.entries, tagBase);
-    const sqlPath = writeMigration(tag, idx, stmts, migrationKind);
-    console.log(`\n已写入 ${stmts.length} 条 SQL → ${sqlPath}`);
-  }
-
-  if (APPLY) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    for (const stmt of stmts) await (db as any).execute(stmt);
-    console.log(`--apply:已对当前 DB 执行 ${stmts.length} 条 SQL`);
-  }
-
-  await closeDb();
+  const options = parseSyncArgs(process.argv.slice(2));
+  loadEnvFiles();
+  await executeSync(options, {
+    DATABASE_URL: process.env.DATABASE_URL,
+    PI_MODELS_FILE: process.env.PI_MODELS_FILE,
+    PI_MODELS_URL: process.env.PI_MODELS_URL,
+  });
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  void main().catch((error: unknown) => {
+    console.error(renderSyncFailure(error));
+    process.exitCode = 1;
+  });
+}

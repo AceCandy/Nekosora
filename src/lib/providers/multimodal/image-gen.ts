@@ -13,10 +13,15 @@
  */
 import { generateImage as generateImage } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
-import type { CallContext, ResolvedRoute } from "@/lib/providers/types";
+import type { CallContext } from "@/lib/providers/types";
 import { resolveRoutes, resolveRoutesById, RoutingError } from "@/lib/routing";
-import { redactErrorMessage } from "@/lib/redaction";
-import { maskKey } from "@/lib/usage";
+import { recordFailure, recordSuccess } from "@/lib/circuit-breaker";
+import {
+  executeAtomicGateway,
+  gatewayTelemetry,
+  type GatewayAttemptAdapter,
+} from "@/lib/gateway-execution";
+import { selectMediaAdapter } from "@/lib/gateway-execution/media-registry";
 
 export interface ImageGenOptions {
   prompt: string;
@@ -62,72 +67,72 @@ export async function generateImageViaRoute(
   opts: ImageGenOptions,
   modelId?: string,
 ): Promise<ImageGenResult> {
-  const routes = modelId
-    ? await resolveRoutesById(ctx, modelId)
-    : await resolveRoutes(ctx, modelName);
-  // 校验模型具备图像生成能力。
-  const caps = routes[0]?.capabilities;
-  if (!caps || !caps.imageGeneration) {
-    throw new RoutingError("capability_not_supported", `模型 ${modelName} 不支持能力 imageGeneration`);
-  }
-  const route = routes[0];
-  const { baseURL, apiKey, headers } = buildOpenAICompatConfig(route);
-
-  let result: Awaited<ReturnType<typeof generateImage>>;
-  try {
-    // 图像生成用 @ai-sdk/openai 的 image 模型(指向任意 OpenAI 兼容 baseURL)。
-    const provider = createOpenAI({ baseURL, apiKey, name: route.provider.id, headers });
-    const model = provider.image(route.upstreamModelName);
-    result = await generateImage({
-      model,
+  const adapter: GatewayAttemptAdapter<never, GeneratedImage[]> = async function* ({ route, apiKey, abortSignal }) {
+    const provider = createOpenAI({
+      baseURL: route.provider.baseUrl,
+      apiKey,
+      name: route.provider.id,
+      headers: route.provider.headers,
+    });
+    const result = await generateImage({
+      model: provider.image(route.upstreamModelName),
       prompt: opts.prompt,
       n: opts.n ?? 1,
-      // AI SDK v5 size 透传(providerOptions)。
       providerOptions: opts.size ? { openai: { size: opts.size } } : undefined,
+      abortSignal,
     });
-  } catch (error) {
-    throw new Error(
-      redactErrorMessage(
-        error,
-        [apiKey, ...Object.values(headers ?? {})],
-        "图像生成失败",
-      ),
-    );
+    return {
+      value: result.images.flatMap((image) => {
+        if (image.base64) return [{ base64: image.base64 }];
+        if (image.uint8Array) {
+          return [{ base64: Buffer.from(image.uint8Array).toString("base64") }];
+        }
+        return [];
+      }),
+    };
+  };
+  const outcome = await executeAtomicGateway({
+    ctx,
+    requestId: `img_${crypto.randomUUID()}`,
+    operation: "image.generate",
+    model: modelName,
+    modelId,
+    requestPath: "/v1/images/generations",
+    resolveRoutes: async () => {
+      const routes = modelId
+        ? await resolveRoutesById(ctx, modelId)
+        : await resolveRoutes(ctx, modelName);
+      if (!routes[0]?.capabilities?.imageGeneration) {
+        throw new RoutingError(
+          "capability_not_supported",
+          `模型 ${modelName} 不支持能力 imageGeneration`,
+        );
+      }
+      return routes;
+    },
+    selectAdapter: (route) => selectMediaAdapter("image.generate", route.protocol, adapter),
+    telemetry: gatewayTelemetry,
+    breaker: { recordSuccess, recordFailure },
+  });
+  if (outcome.status !== "success" || !outcome.result || !outcome.route) {
+    throwExecutionError(outcome.error?.code, outcome.error?.message, outcome.error?.phase);
   }
-
-  const images: GeneratedImage[] = [];
-  for (const img of result.images) {
-    // AI SDK v5 的 GeneratedFile 含 base64(string)与 uint8Array。
-    // base64 优先;为空时用 uint8Array 转 base64 兜底。
-    if (img.base64) {
-      images.push({ base64: img.base64 });
-    } else if (img.uint8Array) {
-      images.push({ base64: Buffer.from(img.uint8Array).toString("base64") });
-    }
-  }
-
   return {
-    images,
-    providerRef: `${route.source}:${route.provider.id}`,
-    providerName: route.provider.name,
-    routeId: route.routeId,
-    routeName: `${route.provider.name} · ${route.upstreamModelName}`,
-    upstreamModel: route.upstreamModelName,
-    upstreamKeyMasked: maskKey(route.provider.apiKey),
+    images: outcome.result,
+    providerRef: `${outcome.route.source}:${outcome.route.provider.id}`,
+    providerName: outcome.route.provider.name,
+    routeId: outcome.route.routeId,
+    routeName: `${outcome.route.provider.name} · ${outcome.route.upstreamModelName}`,
+    upstreamModel: outcome.route.upstreamModelName,
+    upstreamKeyMasked: outcome.upstreamKeyMasked ?? null,
   };
 }
 
-/** 从 ResolvedRoute 提取 OpenAI 兼容配置。 */
-function buildOpenAICompatConfig(route: ResolvedRoute): {
-  baseURL: string;
-  apiKey: string;
-  headers?: Record<string, string>;
-} {
-  return {
-    baseURL: route.provider.baseUrl,
-    apiKey: route.provider.apiKey,
-    headers: route.provider.headers,
-  };
+function throwExecutionError(code?: string, message?: string, phase?: string): never {
+  if (phase === "routing" || phase === "request") {
+    throw new RoutingError(code ?? "routing_error", message ?? "图像生成路由失败");
+  }
+  throw new Error(message ?? "图像生成失败");
 }
 
 export { RoutingError };

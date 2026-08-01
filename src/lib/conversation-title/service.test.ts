@@ -156,6 +156,7 @@ import {
   generateConversationTitle,
   getConversationTitleState,
   maybeGenerateTitle,
+  processConversationTitleJob,
   writeFallbackTitle,
 } from "./service";
 
@@ -246,6 +247,42 @@ describe("conversation title service", () => {
       taskKind: "title",
       request: expect.objectContaining({ model: "configured-model" }),
     }));
+  });
+
+  it("id-only processor 从 outbox 水合任务并返回 completed", async () => {
+    await expect(processConversationTitleJob("job-1")).resolves.toBe("completed");
+
+    expect(mockData.conversations[0].title).toBe("最终标题");
+    expect(mockData.titleJobs).toEqual([]);
+  });
+
+  it("id-only processor 遇到缺失任务时明确 no-op", async () => {
+    mockData.titleJobs = [];
+
+    await expect(processConversationTitleJob("missing")).resolves.toBe("noop");
+
+    expect(generateChat).not.toHaveBeenCalled();
+  });
+
+  it("id-only processor 遇到人工改名时 no-op 并清理旧任务", async () => {
+    mockData.conversations[0].title = "用户标题";
+
+    await expect(processConversationTitleJob("job-1")).resolves.toBe("noop");
+
+    expect(generateChat).not.toHaveBeenCalled();
+    expect(mockData.conversations[0].title).toBe("用户标题");
+    expect(mockData.titleJobs).toEqual([]);
+  });
+
+  it("id-only processor 生成失败时拒绝并保留 durable row", async () => {
+    mockData.conversations[0].title = "问题";
+    vi.mocked(generateChat).mockRejectedValueOnce(new Error("provider-secret"));
+
+    await expect(processConversationTitleJob("job-1")).rejects.toMatchObject({
+      message: "会话标题生成失败",
+    });
+
+    expect(mockData.titleJobs).toEqual([expect.objectContaining({ id: "job-1" })]);
   });
 
   it("outbox 写入失败时回滚 fallback", async () => {

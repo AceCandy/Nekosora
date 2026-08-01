@@ -17,7 +17,9 @@ vi.mock("@/lib/rag/embedding", () => ({
 }));
 
 import { closeDb } from "@/lib/infra/db";
-import { processFile } from "@/lib/rag/process";
+import { processFile } from "@/lib/rag/processing-coordinator";
+import { replaceFileChunksAndComplete } from "@/lib/rag/processing-repository";
+import { FileProcessingLeaseLostError } from "@/lib/rag/processing-state";
 import { recoverStaleFileProcessing } from "@/lib/rag/recovery";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
@@ -61,7 +63,7 @@ describePg("processFile PostgreSQL lease", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
-    mocks.extractText.mockResolvedValue({ supported: false, reason: "unsupported" });
+    mocks.extractText.mockResolvedValue({ supported: false, reason: "unsupported_type" });
   });
 
   afterAll(async () => {
@@ -79,8 +81,13 @@ describePg("processFile PostgreSQL lease", () => {
       ) VALUES ($1, $2, $3, $4, $5, $6, 'extracting', 'expired-owner', now() - interval '1 minute', 'running')`,
       [fileId, userId, "stale.txt", "text/plain", `${userId}/stale.txt`, 12],
     );
+    await pool.query(
+      `INSERT INTO "file_chunks" ("file_id", "chunk_index", "content", "token_count")
+       VALUES ($1, 0, 'stale chunk', 2)`,
+      [fileId],
+    );
 
-    await processFile(fileId, `${userId}/stale.txt`, "text/plain");
+    await processFile(fileId);
 
     const result = await pool.query<{
       processing_status: string;
@@ -98,6 +105,11 @@ describePg("processFile PostgreSQL lease", () => {
       processing_lease_id: null,
       processing_lease_expires_at: null,
     });
+    const chunks = await pool.query(
+      'SELECT "id" FROM "file_chunks" WHERE "file_id" = $1',
+      [fileId],
+    );
+    expect(chunks.rows).toEqual([]);
   });
 
   it("不抢占仍持有有效租约的活动文件", async () => {
@@ -110,7 +122,7 @@ describePg("processFile PostgreSQL lease", () => {
       [fileId, userId, "fresh.txt", "text/plain", `${userId}/fresh.txt`, 12],
     );
 
-    await processFile(fileId, `${userId}/fresh.txt`, "text/plain");
+    await processFile(fileId);
 
     const result = await pool.query<{ processing_status: string; processing_lease_id: string }>(
       'SELECT "processing_status", "processing_lease_id" FROM "file_objects" WHERE "id" = $1',
@@ -135,10 +147,10 @@ describePg("processFile PostgreSQL lease", () => {
     const extraction = deferred<{ supported: false; reason: string }>();
     mocks.extractText.mockReturnValue(extraction.promise);
 
-    const first = processFile(fileId, `${userId}/concurrent.txt`, "text/plain");
-    const second = processFile(fileId, `${userId}/concurrent.txt`, "text/plain");
+    const first = processFile(fileId);
+    const second = processFile(fileId);
     await vi.waitFor(() => expect(mocks.extractText).toHaveBeenCalledOnce());
-    extraction.resolve({ supported: false, reason: "unsupported" });
+    extraction.resolve({ supported: false, reason: "unsupported_type" });
     await Promise.all([first, second]);
 
     expect(mocks.extractText).toHaveBeenCalledOnce();
@@ -171,7 +183,7 @@ describePg("processFile PostgreSQL lease", () => {
       );
 
       let settled = false;
-      processing = processFile(fileId, `${userId}/locked.txt`, "text/plain").finally(() => {
+      processing = processFile(fileId).finally(() => {
         settled = true;
       });
       await vi.waitFor(async () => {
@@ -222,7 +234,7 @@ describePg("processFile PostgreSQL lease", () => {
     );
     const extraction = deferred<{ supported: false; reason: string }>();
     mocks.extractText.mockReturnValue(extraction.promise);
-    const processing = processFile(fileId, `${userId}/fenced.txt`, "text/plain");
+    const processing = processFile(fileId);
     await vi.waitFor(() => expect(mocks.extractText).toHaveBeenCalledOnce());
 
     const lateWrite = await pool.query(
@@ -236,7 +248,7 @@ describePg("processFile PostgreSQL lease", () => {
     );
     expect(lateWrite.rowCount).toBe(0);
 
-    extraction.resolve({ supported: false, reason: "unsupported" });
+    extraction.resolve({ supported: false, reason: "unsupported_type" });
     await processing;
     const result = await pool.query<{ processing_status: string; rag_reason: string }>(
       'SELECT "processing_status", "rag_reason" FROM "file_objects" WHERE "id" = $1',
@@ -244,8 +256,179 @@ describePg("processFile PostgreSQL lease", () => {
     );
     expect(result.rows[0]).toEqual({
       processing_status: "done",
-      rag_reason: "unsupported",
+      rag_reason: "unsupported_type",
     });
+  });
+
+  it("chunk 事务等待父行锁跨过租约到期后拒绝旧 owner", async () => {
+    const fileId = randomUUID();
+    const token = randomUUID();
+    await pool.query(
+      `INSERT INTO "file_objects" (
+        "id", "user_id", "filename", "mime", "storage_path", "size",
+        "processing_status", "processing_lease_id", "processing_lease_expires_at", "extract_status"
+      ) VALUES ($1, $2, $3, $4, $5, $6, 'embedding', $7, now() + interval '1 second', 'done')`,
+      [fileId, userId, "lock-expiry.txt", "text/plain", `${userId}/lock-expiry.txt`, 12, token],
+    );
+    await pool.query(
+      `INSERT INTO "file_chunks" ("file_id", "chunk_index", "content", "token_count")
+       VALUES ($1, 0, 'old chunk', 2)`,
+      [fileId],
+    );
+    const locker = await pool.connect();
+    let replacement: Promise<void> | undefined;
+
+    try {
+      await locker.query("BEGIN");
+      await locker.query('SELECT "id" FROM "file_objects" WHERE "id" = $1 FOR UPDATE', [fileId]);
+
+      replacement = replaceFileChunksAndComplete(
+        { fileId, token },
+        {
+          chunks: [{
+            chunkIndex: 0,
+            pageNum: null,
+            charOffset: 0,
+            content: "new chunk",
+            tokenCount: 2,
+            embedding: null,
+          }],
+          ragReady: false,
+          ragReason: "embedding_unavailable",
+        },
+      );
+      await vi.waitFor(async () => {
+        const blocked = await pool.query<{ blocked: boolean }>(
+          `SELECT EXISTS (
+             SELECT 1 FROM pg_stat_activity
+             WHERE datname = current_database()
+               AND state = 'active'
+               AND wait_event_type = 'Lock'
+               AND query LIKE '%file_objects%'
+           ) AS "blocked"`,
+        );
+        expect(blocked.rows[0]?.blocked).toBe(true);
+      }, { timeout: 2_000, interval: 20 });
+      await new Promise((resolve) => setTimeout(resolve, 1_100));
+
+      await locker.query("COMMIT");
+      await expect(replacement).rejects.toBeInstanceOf(FileProcessingLeaseLostError);
+
+      const file = await pool.query<{
+        processing_status: string;
+        processing_lease_id: string;
+      }>(
+        `SELECT "processing_status", "processing_lease_id"
+         FROM "file_objects" WHERE "id" = $1`,
+        [fileId],
+      );
+      const chunks = await pool.query<{ content: string }>(
+        `SELECT "content" FROM "file_chunks"
+         WHERE "file_id" = $1 ORDER BY "chunk_index"`,
+        [fileId],
+      );
+      expect(file.rows[0]).toEqual({
+        processing_status: "embedding",
+        processing_lease_id: token,
+      });
+      expect(chunks.rows).toEqual([{ content: "old chunk" }]);
+    } finally {
+      await locker.query("ROLLBACK").catch(() => undefined);
+      locker.release();
+      await replacement?.catch(() => undefined);
+      await pool.query('DELETE FROM "file_objects" WHERE "id" = $1', [fileId]);
+    }
+  });
+
+  it("新 owner 完成后旧 owner 的晚 embedding 结果不能覆盖任何事实", async () => {
+    const fileId = randomUUID();
+    await pool.query(
+      `INSERT INTO "file_objects" (
+        "id", "user_id", "filename", "mime", "storage_path", "size", "processing_status"
+      ) VALUES ($1, $2, $3, $4, $5, $6, 'pending')`,
+      [fileId, userId, "late-owner.txt", "text/plain", `${userId}/late-owner.txt`, 12],
+    );
+    await pool.query(
+      `INSERT INTO "file_chunks" ("file_id", "chunk_index", "content", "token_count")
+       VALUES ($1, 0, 'old persisted chunk', 3)`,
+      [fileId],
+    );
+    const ownerAEmbedding = deferred<number[][]>();
+    mocks.extractText
+      .mockResolvedValueOnce({
+        supported: true,
+        text: "owner-a chunk",
+        chars: 13,
+        pages: 1,
+      })
+      .mockResolvedValueOnce({
+        supported: true,
+        text: "owner-b canonical chunk",
+        chars: 23,
+        pages: 1,
+      });
+    mocks.chunkText.mockImplementation((text: string) => [
+      { index: 0, content: text, tokenCount: 3, charOffset: 0 },
+    ]);
+    mocks.isEmbeddingAvailable.mockResolvedValue(true);
+    mocks.embedTexts
+      .mockReturnValueOnce(ownerAEmbedding.promise)
+      .mockResolvedValueOnce([Array.from({ length: 1024 }, () => 0.9)]);
+
+    const ownerA = processFile(fileId);
+    await vi.waitFor(() => expect(mocks.embedTexts).toHaveBeenCalledOnce());
+    const ownerARow = await pool.query<{ processing_lease_id: string }>(
+      `UPDATE "file_objects"
+       SET "processing_lease_expires_at" = now() - interval '1 second'
+       WHERE "id" = $1
+       RETURNING "processing_lease_id"`,
+      [fileId],
+    );
+    expect(ownerARow.rows[0]?.processing_lease_id).toBeTruthy();
+
+    await processFile(fileId);
+    const afterOwnerB = await pool.query<{
+      processing_status: string;
+      processing_lease_id: string | null;
+      extract_chars: number;
+      embed_status: string;
+      rag_reason: string | null;
+    }>(
+      `SELECT "processing_status", "processing_lease_id", "extract_chars",
+              "embed_status", "rag_reason"
+       FROM "file_objects" WHERE "id" = $1`,
+      [fileId],
+    );
+    expect(afterOwnerB.rows[0]).toEqual({
+      processing_status: "done",
+      processing_lease_id: null,
+      extract_chars: 23,
+      embed_status: "done",
+      rag_reason: null,
+    });
+
+    ownerAEmbedding.resolve([Array.from({ length: 1024 }, () => 0.1)]);
+    await ownerA;
+
+    const finalFile = await pool.query<{
+      processing_status: string;
+      processing_lease_id: string | null;
+      extract_chars: number;
+      embed_status: string;
+      rag_reason: string | null;
+    }>(
+      `SELECT "processing_status", "processing_lease_id", "extract_chars",
+              "embed_status", "rag_reason"
+       FROM "file_objects" WHERE "id" = $1`,
+      [fileId],
+    );
+    const finalChunks = await pool.query<{ content: string }>(
+      `SELECT "content" FROM "file_chunks"
+       WHERE "file_id" = $1 ORDER BY "chunk_index"`,
+      [fileId],
+    );
+    expect(finalFile.rows).toEqual(afterOwnerB.rows);
+    expect(finalChunks.rows).toEqual([{ content: "owner-b canonical chunk" }]);
   });
 
   it("新 chunk 插入失败时保留旧 chunk 并回滚半成品", async () => {
@@ -293,7 +476,7 @@ describePg("processFile PostgreSQL lease", () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
     try {
-      await processFile(fileId, `${userId}/atomic.txt`, "text/plain");
+      await expect(processFile(fileId)).rejects.toThrow("文件处理失败，可重试");
 
       const file = await pool.query<{ processing_status: string }>(
         'SELECT "processing_status" FROM "file_objects" WHERE "id" = $1',
@@ -361,7 +544,7 @@ describePg("processFile PostgreSQL lease", () => {
     mocks.isEmbeddingAvailable.mockResolvedValue(false);
 
     try {
-      await processFile(fileId, `${userId}/freshness.txt`, "text/plain");
+      await processFile(fileId);
 
       const file = await pool.query<{
         processing_status: string;
@@ -441,7 +624,7 @@ describePg("processFile PostgreSQL lease", () => {
     const extraction = deferred<{ supported: false; reason: string }>();
     mocks.extractText.mockReturnValue(extraction.promise);
 
-    const direct = processFile(fileId, `${userId}/concurrent-pending.txt`, "text/plain");
+    const direct = processFile(fileId);
     const recovery = recoverStaleFileProcessing();
     await vi.waitFor(() => expect(mocks.extractText).toHaveBeenCalledOnce());
     extraction.resolve({ supported: false, reason: "unsupported" });
@@ -519,7 +702,7 @@ describePg("processFile PostgreSQL lease", () => {
     }
   });
 
-  it("单轮扫描最多恢复 25 个混合候选且排除 error 和 done", async () => {
+  it("稳定排序分两轮恢复 26 个混合候选且排除 error 和 done", async () => {
     const fileIds = Array.from({ length: 26 }, () => randomUUID()).sort();
     for (const [index, fileId] of fileIds.entries()) {
       const status = index % 2 === 0 ? "pending" : "extracting";
@@ -567,6 +750,16 @@ describePg("processFile PostgreSQL lease", () => {
     expect(remaining.rows).toEqual([
       { id: fileIds[25], processing_status: "extracting" },
     ]);
+
+    await recoverStaleFileProcessing();
+
+    const secondRound = await pool.query<{ id: string; processing_status: string }>(
+      `SELECT "id", "processing_status" FROM "file_objects"
+       WHERE "id" = ANY($1::text[]) AND "processing_status" <> 'done'`,
+      [fileIds],
+    );
+    expect(secondRound.rows).toEqual([]);
+    expect(mocks.extractText).toHaveBeenCalledTimes(26);
     const excluded = await pool.query<{ processing_status: string }>(
       `SELECT "processing_status" FROM "file_objects"
        WHERE "id" = ANY($1::text[]) ORDER BY "processing_status"`,

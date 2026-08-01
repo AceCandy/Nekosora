@@ -104,7 +104,12 @@ export function useChatRuntime({
         instructionCardIds?: string[],
         webSearch?: boolean,
         knowledgeBaseIds?: string[],
-        createOptions?: { outputModeId?: string | null; renderStyleId?: string | null; reasoning?: ReasoningLevel },
+        createOptions?: {
+          outputModeId?: string | null;
+          renderStyleId?: string | null;
+          reasoning?: ReasoningLevel;
+          reasoningByModelId?: Record<string, ReasoningLevel>;
+        },
         lifecycle?: { onAccepted?: () => void; onRejected?: (message: string) => void },
       ) => {
         const opts: SendOptions = { model: modelName, modelId, instructionCardIds, webSearch, knowledgeBaseIds, createOptions };
