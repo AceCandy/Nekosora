@@ -67,7 +67,13 @@ describe("mem0 model resolution", () => {
   it("旧模型名无可用路由时继续回退到标题模型", async () => {
     await getMemory({ refreshModel: true });
 
-    expect(mocks.memoryConfig).toMatchObject({ disableHistory: true });
+    expect(mocks.memoryConfig).toMatchObject({
+      disableHistory: true,
+      vectorStore: { config: { embeddingModelDims: 1024 } },
+    });
+    expect(
+      (mocks.memoryConfig as { embedder: { config: object } }).embedder.config,
+    ).not.toHaveProperty("embeddingDims");
     expect(mocks.resolveRoutesById).toHaveBeenCalledTimes(2);
     expect(mocks.createNekosoraLLM).toHaveBeenCalledWith({
       modelId: "title-id",

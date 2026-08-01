@@ -58,6 +58,7 @@
 ## Gotcha
 
 - **mem0 工厂（M-2）**：`src/lib/memory/mem0.ts` 的 `getMemory()` 惰性初始化（动态 import `mem0ai/oss` 避 Edge 打包，仿 `getDb`）。配置：vectorStore=pgvector（复用 `DATABASE_URL`，collectionName=`mem0_memories`，1024 维）、embedder=openai（bge-m3 经 `rag.embedding_*` 上游）、llm=langchain（`createNekosoraLLM` 复用统一模型执行核心）。Embedding Provider 只负责向量化，不提供 Mem0 LLM 连接。
+- **Embedding 维度边界**：`mem0ai@3.1.0` 的 pgvector 用 `embeddingModelDims` 建立 `vector(1024)`；不要给 OpenAI-compatible embedder 设置 `embeddingDims`，因为 mem0 会把它翻译成请求字段 `dimensions`，部分固定维度上游会直接返回 400。
 - **AI 抽取默认 project**：mem0 全权抽取不产 scope；AI 抽取统一标 `scope=project`（metadata）。preference/profile 靠用户手动添加。自研三分类 LLM 抽取（prompt/disclosure/confidence/去重）已废弃。
 - **手动 add infer=false**：`addMemory` 传 `infer=false`，直接存原文，不经 mem0 LLM 抽取改写。
 - **M-4：project 过期已重建,诊断/disclosure 废弃**：project 记忆 add 时设 `expirationDate=+7d`（`AddMemoryOptions` 软过滤 + `metadata.expirationDate` 供硬删）；`purgeExpiredProjectMemories` 在 `getMemories` 入口懒硬删（`getAll({showExpired:true})` + filter + delete）。诊断废弃：mem0 `MemoryItem` 不暴露 embedding/lastAccessedAt,重复/陈旧检测不可行（`getMemoryDiagnostics` 已删）。disclosure 废弃：mem0 全权抽取不产 disclosure。M-5 已移除诊断/disclosure UI。

@@ -77,7 +77,7 @@ async function initialize(model: ModelReference): Promise<Memory> {
     },
     embedder: {
       provider: "openai",
-      config: { apiKey: emb.apiKey, baseURL: emb.baseUrl, model: emb.model, embeddingDims: 1024 },
+      config: { apiKey: emb.apiKey, baseURL: emb.baseUrl, model: emb.model },
     },
     llm: { provider: "langchain", config: { model: createNekosoraLLM(model) } },
   });
