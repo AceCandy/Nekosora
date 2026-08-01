@@ -50,7 +50,7 @@ export default function ConfirmDialog({
   };
 
   return (
-    <Modal open={open} onClose={onClose} title={title}>
+    <Modal open={open} onClose={onClose} title={title} ariaLabel={title}>
       <div className="space-y-4">
         <div className="text-ui-body text-neutral-600 dark:text-neutral-300">{message}</div>
         <div className="flex justify-end gap-2">

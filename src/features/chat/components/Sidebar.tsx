@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { searchMessages } from "@/features/chat/actions/conversations";
+import ConfirmDialog from "@/shared/ui/ConfirmDialog";
 import Modal from "@/shared/ui/Modal";
 import { Plus, Settings2, LogOut, Menu, X, Search, Pin, Archive, Trash2, ImageIcon, Loader2, PanelLeftClose, PanelLeftOpen, ChevronDown } from "lucide-react";
 import { clsx } from "clsx";
@@ -144,13 +145,16 @@ export default function Sidebar({
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set(["earlier", "archived"]));
   const tSidebar = useTranslations("chat");
   const tNav = useTranslations("nav");
+  const tCommon = useTranslations("common");
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const displayName = userName.trim() || userEmail;
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const conversationSwitchStartedRef = useRef(false);
   // 当前展开的会话操作菜单容器(触发按钮 + 面板),用于点击外部收起。
   const sessionMenuRef = useRef<HTMLDivElement>(null);
 
@@ -265,13 +269,14 @@ export default function Sidebar({
     });
   };
 
-  const runAction = (fn: (id: string) => Promise<void>, id: string, confirm?: boolean) => {
+  const runAction = (fn: (id: string) => Promise<void>, id: string) => {
     if (isPending) return;
-    if (confirm && !window.confirm(deleteConfirmText)) return;
+    if (fn === deleteAction) conversationSwitchStartedRef.current = false;
     setMenuOpenId(null);
     startTransition(async () => {
       try {
         await fn(id);
+        if (fn === deleteAction && !conversationSwitchStartedRef.current && window.location.pathname === `/chat/${id}`) router.replace("/chat");
       } catch (err) {
         console.error("conversation action failed:", err);
       }
@@ -359,6 +364,7 @@ export default function Sidebar({
     const isActive = c.id === activeConvId;
     const justCompleted = !isActive && completedIds.has(c.id);
     const handleClick = () => {
+      if (!isActive) conversationSwitchStartedRef.current = true;
       setIsOpen(false);
       if (justCompleted) clearCompleted(c.id);
     };
@@ -421,7 +427,11 @@ export default function Sidebar({
             </button>
             <button
               type="button"
-              onClick={() => runAction(deleteAction, c.id, true)}
+              onClick={() => {
+                if (isPending) return;
+                setMenuOpenId(null);
+                setDeleteTargetId(c.id);
+              }}
               className="touch-target w-full text-left rounded px-2 py-1.5 text-ui-caption text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 flex items-center gap-1.5 cursor-pointer"
             >
               <Trash2 className="w-3 h-3" aria-hidden="true" />
@@ -602,6 +612,18 @@ export default function Sidebar({
         </div>
       </aside>
 
+      <ConfirmDialog
+        open={deleteTargetId !== null}
+        onClose={() => setDeleteTargetId(null)}
+        title={actionDeleteText}
+        message={deleteConfirmText}
+        confirmLabel={actionDeleteText}
+        cancelLabel={tCommon("cancel")}
+        onConfirm={() => {
+          if (deleteTargetId) runAction(deleteAction, deleteTargetId);
+        }}
+      />
+
       <Modal open={searchOpen} onClose={() => setSearchOpen(false)} title={searchText} dialogClassName="m-auto w-[min(720px,92vw)] rounded-xl border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/40 dark:border-deep-space dark:bg-twilight-obsidian dark:text-nebula-silver">
         <div className="space-y-4">
           <div className="relative">
@@ -609,7 +631,7 @@ export default function Sidebar({
             <input autoFocus type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={searchText} aria-label={searchText} className="w-full rounded-lg border border-morning-mist bg-white py-3 pl-10 pr-3 text-ui-body text-space-ink outline-none focus:border-sora-blue dark:border-deep-space dark:bg-space-ink dark:text-nebula-silver" />
           </div>
           <div className="scroll-fade-y max-h-[min(55vh,460px)] overflow-y-auto">
-            {!query.trim() ? <p className="py-8 text-center text-ui-body text-neutral-400">{searchText}</p> : searching ? <p className="flex items-center justify-center gap-2 py-8 text-ui-body text-neutral-400"><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />{tSidebar("searching")}</p> : searchResults.length === 0 ? <p className="py-8 text-center text-ui-body text-neutral-400">{tSidebar("noSearchResults")}</p> : <div className="space-y-1">{searchResults.map((r) => <Link key={`${r.conversationId}-${r.messagePublicId}-${r.createdAt}`} href={`/chat/${r.conversationId}`} onClick={() => setSearchOpen(false)} className="block rounded-lg px-3 py-3 hover:bg-neutral-100 dark:hover:bg-neutral-900"><div className="truncate text-ui-body font-medium">{r.conversationTitle}</div><div className="mt-1 line-clamp-2 text-ui-caption text-neutral-500 dark:text-neutral-400">{highlightSnippet(r.snippet, query.trim())}</div></Link>)}</div>}
+            {!query.trim() ? <p className="py-8 text-center text-ui-body text-neutral-400">{searchText}</p> : searching ? <p className="flex items-center justify-center gap-2 py-8 text-ui-body text-neutral-400"><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />{tSidebar("searching")}</p> : searchResults.length === 0 ? <p className="py-8 text-center text-ui-body text-neutral-400">{tSidebar("noSearchResults")}</p> : <div className="space-y-1">{searchResults.map((r) => <Link key={`${r.conversationId}-${r.messagePublicId}-${r.createdAt}`} href={`/chat/${r.conversationId}`} onClick={() => { if (r.conversationId !== activeConvId) conversationSwitchStartedRef.current = true; setSearchOpen(false); }} className="block rounded-lg px-3 py-3 hover:bg-neutral-100 dark:hover:bg-neutral-900"><div className="truncate text-ui-body font-medium">{r.conversationTitle}</div><div className="mt-1 line-clamp-2 text-ui-caption text-neutral-500 dark:text-neutral-400">{highlightSnippet(r.snippet, query.trim())}</div></Link>)}</div>}
           </div>
         </div>
       </Modal>
