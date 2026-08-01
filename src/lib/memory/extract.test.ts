@@ -15,18 +15,22 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 const mockData = vi.hoisted(() => ({
   addCalls: [] as unknown[],
   addImpl: null as null | (() => Promise<unknown>),
+  getMemoryImpl: null as null | (() => Promise<unknown>),
   cacheStore: new Map<string, unknown>(),
 }));
 
 // mock @/lib/memory/mem0:getMemory 返回受控 memory 实例(add 记录调用)
 vi.mock("@/lib/memory/mem0", () => ({
-  getMemory: vi.fn(async () => ({
-    add: vi.fn(async (messages: unknown, config: unknown) => {
-      mockData.addCalls.push({ messages, config });
-      if (mockData.addImpl) return mockData.addImpl();
-      return { results: [] };
-    }),
-  })),
+  getMemory: vi.fn(async () => {
+    if (mockData.getMemoryImpl) return mockData.getMemoryImpl();
+    return {
+      add: vi.fn(async (messages: unknown, config: unknown) => {
+        mockData.addCalls.push({ messages, config });
+        if (mockData.addImpl) return mockData.addImpl();
+        return { results: [] };
+      }),
+    };
+  }),
   resetMemoryClient: vi.fn(),
 }));
 
@@ -55,7 +59,9 @@ import { extractMemories, normalizeMemoryMessages } from "./extract";
 beforeEach(() => {
   mockData.addCalls = [];
   mockData.addImpl = null;
+  mockData.getMemoryImpl = null;
   mockData.cacheStore.clear();
+  vi.restoreAllMocks();
 });
 
 const TURNS = [
@@ -99,14 +105,40 @@ describe("extractMemories", () => {
     expect(mockData.addCalls).toHaveLength(1);
   });
 
-  it("mem0.add 失败时传播不含上游详情的通用错误", async () => {
-    mockData.addImpl = async () => {
-      throw new Error("mem0 down");
+  it("客户端初始化失败时记录有限阶段且传播通用错误", async () => {
+    mockData.getMemoryImpl = async () => {
+      throw new Error("user-text payload-id postgresql://secret");
     };
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+
     await expect(extractMemories("u1", "conv1", TURNS)).rejects.toMatchObject({
       name: "MemoryExtractionError",
       message: "记忆提取失败",
     });
+    expect(log).toHaveBeenCalledWith(
+      "[memory-extraction] client_init: retryable_failure",
+    );
+    expect(log.mock.calls.flat().join(" ")).not.toMatch(
+      /user-text|payload-id|postgresql:\/\//,
+    );
+  });
+
+  it("mem0.add 失败时记录有限阶段且传播通用错误", async () => {
+    mockData.addImpl = async () => {
+      throw new Error("user-text payload-id https://provider.example/private");
+    };
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(extractMemories("u1", "conv1", TURNS)).rejects.toMatchObject({
+      name: "MemoryExtractionError",
+      message: "记忆提取失败",
+    });
+    expect(log).toHaveBeenCalledWith(
+      "[memory-extraction] memory_add: retryable_failure",
+    );
+    expect(log.mock.calls.flat().join(" ")).not.toMatch(
+      /user-text|payload-id|provider\.example/,
+    );
   });
 
   it("持久化前只保留最后 6 条并规范 role/content 长度", () => {

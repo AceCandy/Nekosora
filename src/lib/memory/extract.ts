@@ -56,8 +56,15 @@ export async function extractMemories(
   const turns = normalizeMemoryMessages(recentMessages);
   if (turns.length < 2) return "noop";
 
+  let memory: Awaited<ReturnType<typeof getMemory>>;
   try {
-    const memory = await getMemory({ refreshModel: true });
+    memory = await getMemory({ refreshModel: true });
+  } catch {
+    console.error("[memory-extraction] client_init: retryable_failure");
+    throw new MemoryExtractionError();
+  }
+
+  try {
     const expirationDate = toProjectExpirationDate(); // project 记忆 7 天过期(mem0 软过滤 + 懒硬删)
     await memory.add(turns, {
       userId,
@@ -65,6 +72,7 @@ export async function extractMemories(
       metadata: { scope: "project", source: "ai", expirationDate },
     });
   } catch {
+    console.error("[memory-extraction] memory_add: retryable_failure");
     throw new MemoryExtractionError();
   }
 

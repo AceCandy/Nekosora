@@ -70,6 +70,7 @@ async function initialize(model: ModelReference): Promise<Memory> {
   const emb = await getEmbeddingConfig();
   if (!emb) throw new Error("mem0 初始化失败:未配置 embedding provider/model(rag.embedding_*)");
   const memory = new Memory({
+    disableHistory: true,
     vectorStore: {
       provider: "pgvector",
       config: { connectionString: process.env.DATABASE_URL, collectionName: "mem0_memories", embeddingModelDims: 1024 },
