@@ -86,13 +86,55 @@ function escapeHtml(str: string): string {
   return str.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
 
+function escapeHtmlAttribute(str: string): string {
+  return escapeHtml(str).replaceAll('"', "&quot;");
+}
+
+/** 阻止 GFM 裸链接把紧跟在右括号后的中文正文误识别为 URL。 */
+export function separateBareUrlTrailingText(input: string): string {
+  let inCodeBlock = false;
+  return input
+    .split("\n")
+    .map((line) => {
+      if (line.trim().startsWith("```")) {
+        inCodeBlock = !inCodeBlock;
+        return line;
+      }
+      if (inCodeBlock) return line;
+      return line
+        .split(/(`[^`]*`|\[[^\]]+\]\([^)]+\)|<[^>]*>)/g)
+        .map((part, index) => index % 2 === 0
+          ? part.replace(/(https?:\/\/[^\s<>()]+)\)(?=[\u3400-\u9fff])/g, "$1)<!-- -->")
+          : part)
+        .join("");
+    })
+    .join("\n");
+}
+
 /** 行内 Markdown:加粗/斜体/行内代码/链接。 */
 function inlineMarkdown(str: string): string {
-  return str
+  const protectedFragments: string[] = [];
+  const protect = (html: string) => {
+    const index = protectedFragments.push(html) - 1;
+    return `\u0000FRAGMENT${index}\u0000`;
+  };
+  const withProtectedFragments = str
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(/\*(.+?)\*/g, "<em>$1</em>")
-    .replace(/`(.+?)`/g, "<code>$1</code>")
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+    .replace(/`(.+?)`/g, (_, code: string) => protect(`<code>${code}</code>`))
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label: string, href: string) =>
+      protect(`<a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`));
+
+  return withProtectedFragments
+    .replace(/https?:\/\/[^\s<]+/g, (value) => {
+      let href = value.replace(/[.,;:!?]+$/, "");
+      while (href.endsWith(")") && href.split(")").length > href.split("(").length) {
+        href = href.slice(0, -1);
+      }
+      const trailing = value.slice(href.length);
+      return `<a href="${escapeHtmlAttribute(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(href)}</a>${trailing}`;
+    })
+    .replace(/\u0000FRAGMENT(\d+)\u0000/g, (_, index: string) => protectedFragments[Number(index)]);
 }
 
 /** 判断一行是否为 HTML 块(整行是单个标签开闭)。 */

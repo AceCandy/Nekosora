@@ -33,7 +33,7 @@ import {
   MarkdownHTMLSpan,
 } from "./streamdown-html";
 import { MarkdownImage } from "./MarkdownImage";
-import { parseMarkdown, splitStructuredSegments } from "./customRenderer";
+import { parseMarkdown, separateBareUrlTrailingText, splitStructuredSegments } from "./customRenderer";
 import { resolvePreviewableKind, type PreviewableKind } from "@/lib/artifacts/previewable";
 import { resolveStructuredKind } from "@/lib/artifacts/structured";
 import { copyToClipboard } from "@/shared/lib/clipboard";
@@ -529,12 +529,13 @@ function MarkdownImpl({ content, isStreaming, renderer = "streamdown", className
   // custom 渲染器:仅在流式结束后启用(流式中 streamdown 更稳)。原样渲染 AI 的 HTML/class。
   const useCustom = renderer === "custom" && !isStreaming;
   const isPaper = renderStyleClass === "paper";
+  const normalizedContent = separateBareUrlTrailingText(content);
 
   if (useCustom) {
     // 按结构化代码块分段:结构化段用受控组件内联渲染,代码块用 Streamdown
     // 渲染(Shiki 高亮 + 块状,与默认渲染器一致),其余段用 parseMarkdown,
     // 使「输出样式」(如纸面杂志)也能展示 chart/metric/table 且代码块保留高亮。
-    const segments = splitStructuredSegments(content);
+    const segments = splitStructuredSegments(normalizedContent);
     return (
       <div className={clsx("nekusora-md", className)}>
         <MarkdownRenderContext.Provider value={{ onPreview, isStreaming, isPaper }}>
@@ -582,7 +583,7 @@ function MarkdownImpl({ content, isStreaming, renderer = "streamdown", className
       plugins={{ code: codeHighlighter }}
       shikiTheme={["github-light", "github-dark"]}
     >
-      {content}
+      {normalizedContent}
     </Streamdown>
   );
 

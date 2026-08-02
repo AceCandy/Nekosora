@@ -885,7 +885,7 @@ const BUILTIN_PAPER_CSS = `
 .rs-paper .nekusora-md pre code { padding: 0; background: transparent; color: inherit; }
 
 /* 链接 */
-.rs-paper .nekusora-md a {
+.rs-paper .nekusora-md :is(a, [data-streamdown="link"]) {
   color: var(--pp-strong);
   font-weight: 700;
   text-decoration: underline;

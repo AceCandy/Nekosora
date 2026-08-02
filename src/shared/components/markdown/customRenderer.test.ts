@@ -1,7 +1,43 @@
 import { describe, expect, it } from "vitest";
-import { parseMarkdown, splitStructuredSegments } from "./customRenderer";
+import { parseMarkdown, separateBareUrlTrailingText, splitStructuredSegments } from "./customRenderer";
 
 describe("parseMarkdown", () => {
+  it("只把裸 URL 渲染为链接，不吞掉右括号后的中文正文", () => {
+    const input = separateBareUrlTrailingText("（https://openai.com/research/index/release)公开的最新产品为：");
+
+    expect(parseMarkdown(input)).toBe(
+      '<p>（<a href="https://openai.com/research/index/release" target="_blank" rel="noopener noreferrer">https://openai.com/research/index/release</a>)<!-- -->公开的最新产品为：</p>\n',
+    );
+  });
+
+  it("不改写代码块和行内代码中的 URL 边界", () => {
+    const input = "`https://example.com/path)正文`\n\n```txt\nhttps://example.com/path)正文\n```";
+
+    expect(separateBareUrlTrailingText(input)).toBe(input);
+    expect(parseMarkdown(input)).toContain("<p><code>https://example.com/path)正文</code></p>");
+  });
+
+  it("保留显式链接和 URL 内成对括号", () => {
+    const input = "[说明](https://example.com/docs)中文 与 https://example.com/wiki/Function_(math)";
+
+    expect(separateBareUrlTrailingText(input)).toBe(input);
+    expect(parseMarkdown(input)).toContain(
+      '<a href="https://example.com/docs" target="_blank" rel="noopener noreferrer">说明</a>中文 与 <a href="https://example.com/wiki/Function_(math)" target="_blank" rel="noopener noreferrer">https://example.com/wiki/Function_(math)</a>',
+    );
+  });
+
+  it("不改写 HTML 标签属性中的 URL", () => {
+    const input = '<a href="https://example.com/path)中文">说明</a>';
+
+    expect(separateBareUrlTrailingText(input)).toBe(input);
+  });
+
+  it("转义裸 URL 生成的链接属性", () => {
+    expect(parseMarkdown('https://example.com/?q="value"')).toContain(
+      '<a href="https://example.com/?q=&quot;value&quot;" target="_blank" rel="noopener noreferrer">https://example.com/?q="value"</a>',
+    );
+  });
+
   it("HTML 容器块内的裸文字不被打散为 <p>", () => {
     const input = [
       '<div style="display:flex;">',
