@@ -109,6 +109,7 @@ interface ModelsManagerProps {
 export interface ModelCatalogOption {
   id: string;
   name: string;
+  canonicalModelId: string;
   modelType: string;
   capabilities: ModelCapabilities;
 }

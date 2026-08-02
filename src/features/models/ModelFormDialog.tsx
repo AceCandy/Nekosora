@@ -7,6 +7,8 @@ import Popover from "@/shared/ui/Popover";
 import { Button } from "@/shared/ui/Button";
 import type { ModelCatalogOption } from "@/features/models/ModelsManager";
 import CatalogDetailCard from "@/features/models/CatalogDetailCard";
+import { rankCatalogOptions } from "@/features/models/model-catalog-options";
+import Combobox from "@/shared/ui/Combobox";
 import { Eye } from "lucide-react";
 
 export interface ModelInitial {
@@ -53,6 +55,7 @@ export default function ModelFormDialog({
   const ini = initial;
 
   const [formKey, setFormKey] = useState(0);
+  const [externalModelName, setExternalModelName] = useState(ini?.name ?? "");
   // catalog 选择需受控:预览按钮据此定位当前模板详情。提交仍读 formData。
   const [catalogId, setCatalogId] = useState(ini?.catalogId ?? "");
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -64,6 +67,7 @@ export default function ModelFormDialog({
   const handleClose = () => {
     onClose();
     setFormKey((k) => k + 1);
+    setExternalModelName(ini?.name ?? "");
     setFormError(null);
   };
 
@@ -98,7 +102,8 @@ export default function ModelFormDialog({
             <input
               name="name"
               required
-              defaultValue={ini?.name ?? ""}
+              value={externalModelName}
+              onChange={(event) => setExternalModelName(event.target.value)}
               className={inputCls}
               placeholder="gpt-4o"
             />
@@ -122,26 +127,38 @@ export default function ModelFormDialog({
             />
           </label>
 
-          <label className="block">
+          <div className="block">
             <span className={labelCls}>{t("catalogLabel")}</span>
             <div className="flex items-start gap-2">
-              <select
-                name="catalogId"
+              <input type="hidden" name="catalogId" value={catalogId} />
+              <Combobox
                 value={catalogId}
-                onChange={(e) => setCatalogId(e.target.value)}
-                className={`${inputCls} flex-1 min-w-0`}
-              >
-                <option value="">{t("catalogAutoMatch")}</option>
-                {catalog.map((entry) => (
-                  <option key={entry.id} value={entry.id}>{entry.name}</option>
-                ))}
-              </select>
+                displayLabel={previewCatalog?.name}
+                onChange={(id) => setCatalogId(id)}
+                loadOptions={async (query) => [
+                  ...(query ? [] : [{ id: "", label: t("catalogAutoMatch") }]),
+                  ...rankCatalogOptions(catalog, externalModelName, query).map((entry) => ({
+                    id: entry.id,
+                    label: entry.name,
+                    sub: entry.canonicalModelId,
+                  })),
+                ]}
+                placeholder={t("catalogAutoMatch")}
+                searchPlaceholder={t("catalogSearchPlaceholder")}
+                emptyText={t("catalogNoMatch")}
+                widthClass="mt-1 flex-1 min-w-0"
+                triggerClassName="px-3.5 py-2 text-ui-body"
+                panelClassName="w-72 max-w-[calc(100vw-2rem)]"
+                portal={false}
+                ariaLabel={t("catalogLabel")}
+              />
               <Popover
                 open={previewOpen}
                 onClose={() => setPreviewOpen(false)}
                 side="bottom"
                 align="right"
                 panelClassName="p-3"
+                portal={false}
                 trigger={
                   <button
                     type="button"
@@ -163,7 +180,7 @@ export default function ModelFormDialog({
                 {formError === "duplicate" ? t("modelAlreadyExists") : t("catalogMatchFailedHint")}
               </p>
             )}
-          </label>
+          </div>
 
           {isAdmin && (!isEdit || !visibilityManagedInList) && (
             <label className="block">

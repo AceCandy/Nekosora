@@ -749,6 +749,8 @@
     "colDisplayName": "Display name",
     "catalogLabel": "Model template",
     "catalogAutoMatch": "Auto-match (select one if no match)",
+    "catalogSearchPlaceholder": "Search model templates…",
+    "catalogNoMatch": "No matching model templates",
     "catalogPreview": "Preview",
     "catalogMatchFailedHint": "No matching model template. Pick one from the dropdown before creating.",
     "modelAlreadyExists": "This model already exists. Do not create it again.",

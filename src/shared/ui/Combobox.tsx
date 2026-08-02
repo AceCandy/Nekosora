@@ -35,6 +35,10 @@ interface ComboboxProps {
   /** 有值时在右侧显示清除(×)按钮:hover 时替代 ▼ 显现,点击清空回到空值。 */
   allowClear?: boolean;
   widthClass?: string;
+  triggerClassName?: string;
+  panelClassName?: string;
+  portal?: boolean;
+  ariaLabel?: string;
 }
 
 export function Combobox({
@@ -48,6 +52,10 @@ export function Combobox({
   disabled,
   allowClear = false,
   widthClass = "w-44",
+  triggerClassName,
+  panelClassName = "w-56",
+  portal = true,
+  ariaLabel,
 }: ComboboxProps) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -99,6 +107,7 @@ export function Combobox({
         open={open}
         onClose={() => setOpen(false)}
         side="bottom"
+        portal={portal}
         trigger={
           <button
             type="button"
@@ -109,7 +118,9 @@ export function Combobox({
               "border-neutral-200 dark:border-neutral-800 text-neutral-700 dark:text-neutral-300",
               "hover:border-neutral-300 dark:hover:border-neutral-700 transition-colors",
               disabled && "opacity-50 cursor-not-allowed",
+              triggerClassName,
             )}
+            aria-label={ariaLabel}
           >
             <span className={clsx("truncate", !label && "text-neutral-400")}>{label || placeholder}</span>
             <ChevronDown
@@ -120,7 +131,7 @@ export function Combobox({
             />
           </button>
         }
-        panelClassName="w-56"
+        panelClassName={panelClassName}
       >
         <div className="p-1.5 space-y-1">
           <div className="relative">
@@ -130,6 +141,7 @@ export function Combobox({
               value={q}
               onChange={(e) => onQueryChange(e.target.value)}
               placeholder={searchPlaceholder}
+              aria-label={searchPlaceholder}
               className="w-full pl-6 pr-2 py-1 text-ui-caption rounded border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#12141a] text-neutral-700 dark:text-neutral-300 focus:outline-none focus:ring-1 focus:ring-sora-blue/40"
             />
           </div>

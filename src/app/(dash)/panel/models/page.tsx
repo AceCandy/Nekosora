@@ -127,6 +127,7 @@ export default async function MyModelsPage({ searchParams }: { searchParams?: Pr
           catalog={catalog.map((entry: Record<string, unknown>) => ({
             id: entry.id as string,
             name: entry.name as string,
+            canonicalModelId: entry.canonicalModelId as string,
             modelType: entry.modelType as string,
             capabilities: (entry.capabilities as ModelCapabilities) ?? {},
           }))}
