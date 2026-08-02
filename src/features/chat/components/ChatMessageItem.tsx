@@ -273,6 +273,7 @@ function ChatMessageItemContent({
         : t("webSearchBackendProvider");
     return `${backend.name} (${typeLabel})`;
   }).join(locale === "zh-CN" ? "、" : ", ");
+  const firstWebSearchToolIndex = toolCalls?.findIndex((call) => call.toolName === "web_search") ?? -1;
   const hasReasoning = Boolean(reasoning);
   const visibleRunMetadata = runMetadata && status !== "interrupted" && hasRunMetadata(runMetadata)
     ? runMetadata
@@ -751,7 +752,7 @@ function ChatMessageItemContent({
                     <details
                       open={tc.status === "calling"}
                       className="rounded-md border border-morning-mist dark:border-deep-space/80 bg-neutral-50/40 dark:bg-[#0d0f14]/15 overflow-hidden">
-                      <summary className="cursor-pointer hover:text-neutral-600 dark:hover:text-neutral-300 px-3 py-1.5 text-ui-caption font-mono select-none flex items-center gap-1.5 text-neutral-500 dark:text-neutral-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue">
+                      <summary className="cursor-pointer hover:text-neutral-600 dark:hover:text-neutral-300 px-3 py-1.5 text-ui-caption font-mono select-none flex min-w-0 items-center gap-1.5 text-neutral-500 dark:text-neutral-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue">
                         {tc.status === "calling" ? (
                           <Loader2 className="w-3 h-3 animate-spin text-sora-blue" aria-hidden="true" />
                         ) : tc.status === "error" ? (
@@ -760,7 +761,15 @@ function ChatMessageItemContent({
                           <CheckCircle2 className="w-3 h-3 text-green-500" aria-hidden="true" />
                         )}
                         <Wrench className="w-3 h-3 opacity-60" aria-hidden="true" />
-                        <span>{tc.toolName}</span>
+                        <span className="shrink-0">{tc.toolName}</span>
+                        {tc.toolName === "web_search" && ti === firstWebSearchToolIndex && searchMethod && (
+                          <span
+                            className="min-w-0 truncate font-sans text-neutral-400/80 dark:text-neutral-500/80"
+                            title={`${t("webSearchMethod")}: ${searchMethod}`}
+                          >
+                            · {searchMethod}
+                          </span>
+                        )}
                       </summary>
                       {tc.args !== undefined && (
                         <div className="px-3 pb-1.5 pt-1 text-ui-caption text-neutral-500 dark:text-neutral-400 border-t border-morning-mist dark:border-deep-space/60 font-mono break-all">
@@ -789,6 +798,33 @@ function ChatMessageItemContent({
               </span>
             ) : null}
           </div>)
+        )}
+
+        {role === "assistant" && searchResults && searchResults.length > 0 && (
+          <details className="text-ui-caption border border-morning-mist dark:border-deep-space/80 rounded-md bg-neutral-50/30 dark:bg-[#0d0f14]/10 overflow-hidden">
+            <summary className="cursor-pointer hover:text-neutral-600 dark:hover:text-neutral-300 px-3 py-1.5 select-none flex min-w-0 items-center gap-1.5 text-neutral-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue">
+              <ExternalLink className="w-3 h-3" aria-hidden="true" />
+              <span className="shrink-0">{t("webSources")} ({searchResults.length})</span>
+            </summary>
+            <div className="px-3 pb-2 pt-0.5 space-y-1.5 border-t border-morning-mist dark:border-deep-space/60 mt-1">
+              {searchResults.map((r, i) => (
+                <a
+                  key={i}
+                  href={r.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block group/source rounded px-1 py-0.5 hover:bg-neutral-100 dark:hover:bg-neutral-900/50 transition-colors"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <span className="text-sora-blue font-mono shrink-0">[{i + 1}]</span>
+                    <span className="text-neutral-700 dark:text-neutral-300 font-medium truncate">{r.title}</span>
+                    <ExternalLink className="w-2.5 h-2.5 text-neutral-400 opacity-0 group-hover/source:opacity-100 shrink-0" aria-hidden="true" />
+                  </span>
+                  <span className="text-ui-caption text-neutral-400 dark:text-neutral-500 block truncate ml-5">{r.url}</span>
+                </a>
+              ))}
+            </div>
+          </details>
         )}
 
         {role === "assistant" && publicId && !(isStreaming && isLast) && (
@@ -1014,40 +1050,6 @@ function ChatMessageItemContent({
             )}
           </div>
         )}
-
-
-        {role === "assistant" && searchResults && searchResults.length > 0 && (
-          <details className="text-ui-caption border border-morning-mist dark:border-deep-space/80 rounded-md bg-neutral-50/30 dark:bg-[#0d0f14]/10 overflow-hidden">
-            <summary className="cursor-pointer hover:text-neutral-600 dark:hover:text-neutral-300 px-3 py-1.5 select-none flex min-w-0 items-center gap-1.5 text-neutral-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue">
-              <ExternalLink className="w-3 h-3" aria-hidden="true" />
-              <span className="shrink-0">{t("webSources")} ({searchResults.length})</span>
-              {searchMethod && (
-                <span className="min-w-0 truncate" title={searchMethod}>
-                  · {t("webSearchMethod")}: {searchMethod}
-                </span>
-              )}
-            </summary>
-            <div className="px-3 pb-2 pt-0.5 space-y-1.5 border-t border-morning-mist dark:border-deep-space/60 mt-1">
-              {searchResults.map((r, i) => (
-                <a
-                  key={i}
-                  href={r.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block group/source rounded px-1 py-0.5 hover:bg-neutral-100 dark:hover:bg-neutral-900/50 transition-colors"
-                >
-                  <span className="flex items-center gap-1.5">
-                    <span className="text-sora-blue font-mono shrink-0">[{i + 1}]</span>
-                    <span className="text-neutral-700 dark:text-neutral-300 font-medium truncate">{r.title}</span>
-                    <ExternalLink className="w-2.5 h-2.5 text-neutral-400 opacity-0 group-hover/source:opacity-100 shrink-0" aria-hidden="true" />
-                  </span>
-                  <span className="text-ui-caption text-neutral-400 dark:text-neutral-500 block truncate ml-5">{r.url}</span>
-                </a>
-              ))}
-            </div>
-          </details>
-        )}
-
       </div>
       {role === "user" && menuOpen && canShowMenu && (
         <div

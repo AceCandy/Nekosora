@@ -172,6 +172,46 @@ describe("MessageRunMetadataDisplay", () => {
   });
 });
 
+describe("ChatMessageItem web search metadata", () => {
+  it("在 web_search 标题展示实际后端,并把引用来源放在操作按钮前", () => {
+    const html = renderToStaticMarkup(
+      <ChatMessageItem
+        message={{
+          role: "assistant",
+          content: "Answer",
+          publicId: "assistant-search-1",
+          status: "success",
+          toolCalls: [
+            {
+              toolName: "web_search",
+              status: "done",
+              args: { query: "latest" },
+            },
+            {
+              toolName: "web_search",
+              status: "done",
+              args: { query: "follow-up" },
+            },
+          ],
+          searchBackends: [{ type: "provider", id: "tavily", name: "Tavily" }],
+          searchResults: [{ title: "Source", url: "https://example.com" }],
+        }}
+        isLast
+        isStreaming={false}
+        model="model-a"
+        onRegenerate={() => undefined}
+        onOpenArtifact={() => undefined}
+      />,
+    );
+
+    expect(html).toContain("web_search");
+    expect(html).toContain("Tavily (webSearchBackendProvider)");
+    expect(html).not.toContain("webSearchMethod</span>");
+    expect(html.match(/title="webSearchMethod:/g)).toHaveLength(1);
+    expect(html.indexOf("webSources")).toBeLessThan(html.indexOf('aria-label="copy"'));
+  });
+});
+
 describe("ChatMessageItem 用户图片", () => {
   it("图片位于文字之前且仅图片消息不渲染空文本气泡", () => {
     const withText = renderToStaticMarkup(
