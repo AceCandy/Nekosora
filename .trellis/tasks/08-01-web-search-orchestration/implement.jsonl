@@ -1,0 +1,20 @@
+{"file":".trellis/spec/backend/index.md","reason":"后端分层与相关规范索引"}
+{"file":".trellis/spec/backend/web-search.md","reason":"现有联网搜索配置、Provider 与缓存契约；本任务需有意升级首个 enabled 语义"}
+{"file":".trellis/spec/backend/auth-guidelines.md","reason":"Server Action 实时鉴权与用户属主边界"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"PostgreSQL、Drizzle 迁移、JSONB 与动态 import 约束"}
+{"file":".trellis/spec/backend/chat-run-metadata.md","reason":"assistant completion、run、SSE 终态与 processTrace 持久化契约"}
+{"file":".trellis/spec/backend/mcp-integration.md","reason":"复用 Agent loop、工具命名、取消与资源生命周期"}
+{"file":".trellis/spec/backend/model-message-boundary.md","reason":"IR、AI SDK ModelMessage 与工具边界"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"外部 Provider、SSE 与 API 稳定错误契约"}
+{"file":".trellis/spec/backend/dependency-security.md","reason":"引入 @ai-sdk/xai 时的依赖与 lockfile 审查"}
+{"file":".trellis/spec/frontend/index.md","reason":"前端 Server/Client 边界与质量门槛"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"联网开关会话状态、SSE 状态和版本恢复"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Server DTO 与 Zod 外部边界校验"}
+{"file":".trellis/spec/frontend/list-drag-sort.md","reason":"用户级搜索后端拖拽排序应复用现有模式"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"设置页和消息引用 UI 的组件边界"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"搜索从配置、执行、SSE、数据库到 UI 的完整数据往返"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"优先复用 Agent loop、crypto、routing 和 trace"}
+{"file":".trellis/tasks/08-01-web-search-orchestration/research/current-architecture.md","reason":"当前搜索链路、缺口、影响文件与测试落点"}
+{"file":".trellis/tasks/08-01-web-search-orchestration/research/reference-projects.md","reason":"Kivio、AQBot、DEEIX、LiveAgent 可借鉴与不采用部分"}
+{"file":".trellis/tasks/08-01-web-search-orchestration/research/hosted-search.md","reason":"锁定 AI SDK Hosted Search 与 xAI 版本事实"}
+{"file":".trellis/tasks/08-01-web-search-orchestration/research/security-and-persistence.md","reason":"密钥迁移、SSRF、内容安全与 trace 持久化结论"}

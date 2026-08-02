@@ -33,7 +33,7 @@ import {
 import type { ChatTerminalStatus } from "@/lib/chat/sse-contract";
 import { redactErrorMessage } from "@/lib/redaction";
 import type { IRRequest } from "@/lib/providers/types";
-import type { ReasoningLevel } from "@/db/types";
+import type { ReasoningLevel, WebSearchTraceCall } from "@/db/types";
 import { toMessageCreatedAtIso } from "@/features/chat/model/messageTime";
 import {
   assertVisionModel,
@@ -48,6 +48,7 @@ import {
 const chatComposerSnapshotSchema = z.object({
   outputModeId: z.string().min(1).nullable().optional(),
   reasoning: z.enum(["off", "minimal", "low", "medium", "high", "xhigh", "max"]).optional(),
+  webSearch: z.boolean().optional(),
 });
 
 const TERMINAL_STATUS_BY_OUTCOME = {
@@ -133,6 +134,7 @@ export async function POST(req: NextRequest) {
   if (!conv || conv.userId !== user.id) {
     return NextResponse.json({ error: "会话不存在或无权访问" }, { status: 403 });
   }
+  const effectiveWebSearch = body.webSearch ?? conv.webSearch ?? false;
 
   // 取最后一条 user 消息保存
   const lastUserMsg = [...body.messages].reverse().find((m) => m.role === "user");
@@ -212,6 +214,7 @@ export async function POST(req: NextRequest) {
   let continueParentUserPublicId: string | null = null;
   let continueAssistantCreatedAt: string | undefined;
   let continueParentUserCreatedAt: string | undefined;
+  let continueWebSearchCalls: WebSearchTraceCall[] = [];
   if (body.continueFromPublicId) {
     const contMsg = await findConversationMessage(db, s, body.conversationId, {
       publicId: body.continueFromPublicId,
@@ -227,6 +230,15 @@ export async function POST(req: NextRequest) {
     continueAssistantCreatedAt = toMessageCreatedAtIso(contMsg.createdAt);
     continuePrefixText =
       typeof contMsg.content === "string" ? contMsg.content : String(contMsg.content ?? "");
+    const priorWebSearch = contMsg.processTrace && typeof contMsg.processTrace === "object"
+      ? (contMsg.processTrace as { webSearch?: unknown }).webSearch
+      : undefined;
+    const priorCalls = priorWebSearch && typeof priorWebSearch === "object"
+      ? (priorWebSearch as { calls?: unknown }).calls
+      : undefined;
+    if (Array.isArray(priorCalls)) {
+      continueWebSearchCalls = priorCalls as WebSearchTraceCall[];
+    }
     if (contMsg.parentId) {
       const parentUser = await findConversationMessage(db, s, body.conversationId, {
         id: contMsg.parentId as string,
@@ -392,7 +404,6 @@ export async function POST(req: NextRequest) {
     messageAttachments,
     visionValidated,
     knowledgeBaseIds: body.knowledgeBaseIds,
-    webSearch: body.webSearch,
     templateId: body.templateId,
     templateVars: body.templateVars,
     instructionCardIds: body.instructionCardIds,
@@ -401,7 +412,12 @@ export async function POST(req: NextRequest) {
   });
   // vision 校验失败时提前返回 400(保留原行为)
   if ("error" in prepared) return prepared.error;
-  const { irRequest, trace, searchBundle, ragStatus, compaction } = prepared;
+  const { irRequest, trace, modelSupportsTools, ragStatus, compaction } = prepared;
+  if (continueWebSearchCalls.length > 0) {
+    trace.webSearch = {
+      calls: [...continueWebSearchCalls, ...(trace.webSearch?.calls ?? [])],
+    };
+  }
 
   const composerState = (conv.composerState as { reasoningByModelId?: Record<string, ReasoningLevel> } | null) ?? {};
   const reasoning = composerSnapshot.data.reasoning
@@ -457,11 +473,6 @@ export async function POST(req: NextRequest) {
         safeEnqueue(encoder.encode(
           `data: ${JSON.stringify({ type: "assistant_message", publicId: assistantPublicId, createdAt: assistantCreatedAtIso })}\n\n`,
         ));
-        if (searchBundle?.hit) {
-          safeEnqueue(encoder.encode(
-            `data: ${JSON.stringify({ type: "search_result", results: searchBundle.results })}\n\n`,
-          ));
-        }
         if (ragStatus) {
           safeEnqueue(encoder.encode(
             `data: ${JSON.stringify({ type: "rag_search", status: ragStatus })}\n\n`,
@@ -486,11 +497,34 @@ export async function POST(req: NextRequest) {
           ));
         } else if (event.type === "tool-call") {
           safeEnqueue(encoder.encode(
-            `data: ${JSON.stringify({ type: "tool_call", toolName: event.toolName, args: event.args })}\n\n`,
+            `data: ${JSON.stringify({ type: "tool_call", toolCallId: event.toolCallId, toolName: event.toolName, args: event.args })}\n\n`,
           ));
         } else if (event.type === "tool-result") {
           safeEnqueue(encoder.encode(
-            `data: ${JSON.stringify({ type: "tool_result", toolName: event.toolName, isError: event.isError })}\n\n`,
+            `data: ${JSON.stringify({ type: "tool_result", toolCallId: event.toolCallId, toolName: event.toolName, isError: event.isError })}\n\n`,
+          ));
+        } else if (event.type === "search_started") {
+          safeEnqueue(encoder.encode(
+            `data: ${JSON.stringify({ type: event.type, toolCallId: event.toolCallId, query: event.query })}\n\n`,
+          ));
+        } else if (event.type === "search_completed") {
+          safeEnqueue(encoder.encode(
+            `data: ${JSON.stringify({
+              type: event.type,
+              toolCallId: event.toolCallId,
+              backend: event.backend,
+              durationMs: event.durationMs,
+              citations: event.citations,
+            })}\n\n`,
+          ));
+        } else if (event.type === "search_failed") {
+          safeEnqueue(encoder.encode(
+            `data: ${JSON.stringify({
+              type: event.type,
+              toolCallId: event.toolCallId,
+              reason: event.reason,
+              status: event.status,
+            })}\n\n`,
           ));
         } else if (event.type === "error") {
           safeEnqueue(encoder.encode(
@@ -533,6 +567,7 @@ export async function POST(req: NextRequest) {
           })),
           requestStartedAt,
           signal: abortCtl.signal,
+          webSearchEnabled: effectiveWebSearch && modelSupportsTools,
           emit,
         });
         safeEnqueue(encoder.encode(

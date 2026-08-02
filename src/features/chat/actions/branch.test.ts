@@ -68,6 +68,7 @@ const schema = {
   },
   toolCalls: {
     runId: "toolCalls.runId",
+    toolCallId: "toolCalls.toolCallId",
     toolName: "toolCalls.toolName",
     status: "toolCalls.status",
     inputJson: "toolCalls.inputJson",
@@ -682,6 +683,7 @@ describe("getVisibleBranch 历史 toolCalls 回填", () => {
     const toolRows = [
       {
         runId: "run_a",
+        toolCallId: "tc-search",
         toolName: "search",
         status: "success",
         inputJson: { q: "nekosora" },
@@ -689,6 +691,7 @@ describe("getVisibleBranch 历史 toolCalls 回填", () => {
       },
       {
         runId: "run_a",
+        toolCallId: "tc-read",
         toolName: "read_file",
         status: "running",
         inputJson: { path: "/a" },
@@ -696,6 +699,7 @@ describe("getVisibleBranch 历史 toolCalls 回填", () => {
       },
       {
         runId: "run_a",
+        toolCallId: "tc-write",
         toolName: "write_file",
         status: "failed",
         inputJson: { path: "/b" },
@@ -703,6 +707,7 @@ describe("getVisibleBranch 历史 toolCalls 回填", () => {
       },
       {
         runId: "run_a",
+        toolCallId: "tc-pending",
         toolName: "pending_tool",
         status: "pending",
         inputJson: null,
@@ -725,20 +730,58 @@ describe("getVisibleBranch 历史 toolCalls 回填", () => {
     expect(result.messages).toHaveLength(2);
     const asst = result.messages.find((m) => m.id === "asst-1");
     expect(asst?.toolCalls).toEqual([
-      { toolName: "search", status: "done", args: { q: "nekosora" } },
-      { toolName: "read_file", status: "calling", args: { path: "/a" } },
-      { toolName: "write_file", status: "error", args: { path: "/b" } },
-      { toolName: "pending_tool", status: "calling" },
+      { toolCallId: "tc-search", toolName: "search", status: "done", args: { q: "nekosora" } },
+      { toolCallId: "tc-read", toolName: "read_file", status: "calling", args: { path: "/a" } },
+      { toolCallId: "tc-write", toolName: "write_file", status: "error", args: { path: "/b" } },
+      { toolCallId: "tc-pending", toolName: "pending_tool", status: "calling" },
     ]);
     // 不暴露 output/error 字段
     for (const tc of asst?.toolCalls as Record<string, unknown>[]) {
       expect(tc).not.toHaveProperty("outputJson");
       expect(tc).not.toHaveProperty("errorJson");
-      expect(tc).not.toHaveProperty("toolCallId");
+      expect(tc).toHaveProperty("toolCallId");
     }
     // 查询必须 join runs 并用 conversationId 限定
     expect(mocks.eq).toHaveBeenCalledWith(schema.runs.conversationId, "conversation-1");
     expect(mocks.inArray).toHaveBeenCalledWith(schema.toolCalls.runId, ["run_a"]);
+  });
+
+  it("仅从成功搜索 trace 恢复引用并按 URL 去重", async () => {
+    const messages = baseMsgs.map((message) => message.id === "asst-1"
+      ? {
+          ...message,
+          processTrace: {
+            webSearch: {
+              calls: [
+                {
+                  status: "success",
+                  citations: [
+                    { title: "First", url: "https://example.com", snippet: "one" },
+                    { title: "Updated", url: "https://example.com" },
+                  ],
+                },
+                {
+                  status: "failed",
+                  citations: [{ title: "Ignored", url: "https://ignored.example" }],
+                },
+              ],
+            },
+          },
+        }
+      : message);
+    mocks.getDb.mockResolvedValue({
+      select: selectQueue([
+        [{ id: "conversation-1", userId: "user-1" }],
+        messages,
+        [],
+        [],
+        [],
+      ]),
+    });
+
+    const result = await getVisibleBranch("conversation-1");
+    expect(result.messages.find((message) => message.id === "asst-1")?.searchResults)
+      .toEqual([{ title: "Updated", url: "https://example.com" }]);
   });
 
   it("跨会话隔离:tool_calls 查询带 runs.conversationId,不串入外会话数据", async () => {
@@ -1060,6 +1103,14 @@ describe("getMessageSiblings 版本切换 toolCalls 回填", () => {
         branchReason: null,
         runId: "run_v1",
         createdAt: "2026-07-25T00:00:01.000Z",
+        processTrace: {
+          webSearch: {
+            calls: [{
+              status: "success",
+              citations: [{ title: "V1 source", url: "https://v1.example" }],
+            }],
+          },
+        },
       },
       {
         id: "asst-v2",
@@ -1072,6 +1123,14 @@ describe("getMessageSiblings 版本切换 toolCalls 回填", () => {
         branchReason: "retry",
         runId: "run_v2",
         createdAt: "2026-07-25T00:00:02.000Z",
+        processTrace: {
+          webSearch: {
+            calls: [{
+              status: "success",
+              citations: [{ title: "V2 source", url: "https://v2.example" }],
+            }],
+          },
+        },
       },
       // 同 parent 下的 user 消息不应进入 siblings
       {
@@ -1154,6 +1213,7 @@ describe("getMessageSiblings 版本切换 toolCalls 回填", () => {
         completedAt: "2026-07-25T00:00:01.900Z",
       },
       toolCalls: [{ toolName: "search", status: "done", args: { q: "v1" } }],
+      searchResults: [{ title: "V1 source", url: "https://v1.example" }],
     });
     expect(result.siblings[1]).toEqual({
       publicId: "pub-v2",
@@ -1166,6 +1226,7 @@ describe("getMessageSiblings 版本切换 toolCalls 回填", () => {
         { toolName: "read_file", status: "error", args: { path: "/v2" } },
         { toolName: "search", status: "calling", args: { q: "v2" } },
       ],
+      searchResults: [{ title: "V2 source", url: "https://v2.example" }],
     });
     // 消息 + 会话 + 兄弟 + run metadata + tool_calls + feedback
     expect(select).toHaveBeenCalledTimes(6);

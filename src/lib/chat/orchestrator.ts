@@ -2,13 +2,13 @@
  * Chat 上下文准备 —— WebChat 流式生成前的「段 A」。
  *
  * 把原始 messages + 各种会话级开关，加工成最终发给 streamChat 的 IRRequest，
- * 并产出 process_trace 与流式首帧需要的元数据(RAG 状态 / 联网结果 / 压缩信息)。
+ * 并产出 process_trace 与流式首帧需要的元数据(RAG 状态 / 压缩信息)。
  *
  * 设计:纯输入→输出,与流式执行(段 B/C,在 route.ts 的 ReadableStream 内)无耦合,
  * 是 route.ts 唯一干净的拆分边界。失败兜底策略与原内联实现逐行对齐。
  *
  * 执行模型:三阶段 —— ① fileIds 合并(前置,vision/RAG 强依赖)
- *   ② 无依赖耗时步 Promise.all 并行(联网搜索/记忆/压缩/output mode/模板/指令卡 + fileIds 链)
+ *   ② 无依赖耗时步 Promise.all 并行(记忆/压缩/output mode/模板/指令卡 + fileIds 链)
  *   ③ assemble 后置(等齐全部)。并行后各步兜底行为与 trace 产出与原串行实现等价。
  */
 import { eq, and, or, inArray, isNull } from "drizzle-orm";
@@ -18,8 +18,6 @@ import type { ProcessTrace } from "@/db/types";
 import { getFileIdsByKnowledgeBases } from "@/lib/knowledge-base/service";
 import { buildMultimodalUserMessage } from "@/lib/multimodal/assemble";
 import { buildMessagesWithFileContext } from "@/lib/rag/context";
-import { searchWeb, renderSearchContext } from "@/lib/web-search/service";
-import type { SearchBundle } from "@/lib/web-search/types";
 import { getMemories } from "@/lib/memory/service";
 import { recallMemories } from "@/lib/memory/recall";
 import { maybeCompact, type CompactionResult } from "@/lib/compact/service";
@@ -69,7 +67,7 @@ export interface PrepareContextInput {
   conversationId: string;
   /** 会话行(仅取 outputModeId)。 */
   conv: { outputModeId: string | null };
-  /** 本轮用户原文(取最后一条 user 消息,用于 RAG query / 搜索 / 召回)。 */
+  /** 本轮用户原文(取最后一条 user 消息,用于 RAG query / 召回)。 */
   userContent: string;
   /** 目标模型名(来自请求体 body.model)。 */
   model: string;
@@ -87,8 +85,6 @@ export interface PrepareContextInput {
   visionValidated?: boolean;
   /** 挂载的知识库 ID。 */
   knowledgeBaseIds?: string[];
-  /** 联网搜索开关。 */
-  webSearch?: boolean;
   /** Prompt 模板 ID + 变量。 */
   templateId?: string;
   templateVars?: Record<string, string>;
@@ -103,7 +99,7 @@ export interface PrepareContextInput {
 export interface PrepareContextResult {
   irRequest: IRRequest;
   trace: ProcessTrace;
-  searchBundle: SearchBundle | null;
+  modelSupportsTools: boolean;
   ragStatus: string | null;
   compaction: CompactionResult | null;
   /** 压缩前的 DB 消息总数(沿当前分支),供 trace 的 originalMessageCount。 */
@@ -111,7 +107,7 @@ export interface PrepareContextResult {
 }
 
 /**
- * 准备上下文。各阶段均有兜底(搜索/召回/压缩/output mode 降级),仅 vision 校验失败返回 error。
+ * 准备上下文。各阶段均有兜底(召回/压缩/output mode 降级),仅 vision 校验失败返回 error。
  * 无依赖耗时步并行,降首字延迟;兜底行为与 trace 产出与原串行实现等价。
  */
 export async function prepareChatContext(
@@ -120,7 +116,7 @@ export async function prepareChatContext(
   const {
     userId, conversationId, conv, userContent, model, modelId, messages, branchLeafPublicId,
     fileIds: bodyFileIds, messageAttachments = [], visionValidated = false,
-    knowledgeBaseIds, webSearch: webSearchOn,
+    knowledgeBaseIds,
     templateId, templateVars, instructionCardIds,
     db, schema: s,
   } = input;
@@ -135,10 +131,10 @@ export async function prepareChatContext(
   }
 
   // ===== 阶段 2:无依赖耗时步并行 =====
-  // 各分支保留原兜底:降级项自带 catch(resolve 降级值);冒泡项(searchWeb/getTemplate/getCardsByIds)
+  // 各分支保留原兜底:降级项自带 catch(resolve 降级值);冒泡项(getTemplate/getCardsByIds)
   // 失败 → Promise.all reject → 与原串行版"中途抛错"语义一致。
   const [
-    fileChain, searchBundle, memoryResult, compactionResult,
+    fileChain, memoryResult, compactionResult,
     outputModePrompt, templateResult, cardSystemPrompt,
   ] = await Promise.all([
     // 分支 A:fileIds 依赖链(vision 分离 → 能力校验 → multimodal → file_mode → RAG),内部有序
@@ -227,10 +223,7 @@ export async function prepareChatContext(
       return { ok: true, effectiveMessages, ragStatus };
     })(),
 
-    // 分支 B:联网搜索(失败冒泡,保留原行为)
-    webSearchOn ? searchWeb(userId, userContent) : Promise.resolve(null),
-
-    // 分支 C:长期记忆(preference/profile 恒定注入 + project 召回)
+    // 分支 B:长期记忆(preference/profile 恒定注入 + project 召回)
     (async () => {
       const allMemories = await getMemories(userId).catch(() => []);
       let recalledMemories: typeof allMemories = [];
@@ -242,7 +235,7 @@ export async function prepareChatContext(
       return { allMemories, recalledMemories };
     })(),
 
-    // 分支 D:已有消息查询 → 上下文压缩(顺序依赖)
+    // 分支 C:已有消息查询 → 上下文压缩(顺序依赖)
     (async () => {
       const existingMsgs = await db
         .select()
@@ -269,7 +262,7 @@ export async function prepareChatContext(
       return { compactionMsgs, compaction };
     })(),
 
-    // 分支 E:会话级 output mode system prompt
+    // 分支 D:会话级 output mode system prompt
     (async (): Promise<string | null> => {
       if (!conv.outputModeId) return null;
       const mode = await getOutputMode(conv.outputModeId).catch(() => null);
@@ -277,7 +270,7 @@ export async function prepareChatContext(
       return null;
     })(),
 
-    // 分支 F:Prompt 模板(systemPrompt + userMessage)
+    // 分支 E:Prompt 模板(systemPrompt + userMessage)
     // userMessage 应用延后到阶段 3(在 vision/RAG 之后),保持原顺序:template 覆盖 vision 的 multimodal。
     (async (): Promise<{ systemPrompt: string | null; userMessage: string | null }> => {
       if (!templateId) return { systemPrompt: null, userMessage: null };
@@ -288,7 +281,7 @@ export async function prepareChatContext(
       return { systemPrompt: rendered.systemPrompt ?? null, userMessage: rendered.userMessage ?? null };
     })(),
 
-    // 分支 G:指令卡
+    // 分支 F:指令卡
     (async (): Promise<string | null> => {
       if (!instructionCardIds || instructionCardIds.length === 0) return null;
       const cards = await getCardsByIds(userId, instructionCardIds);
@@ -318,19 +311,15 @@ export async function prepareChatContext(
     };
   }
 
-  // 合并 system 来源(output_mode + template + card + web_search)
-  let searchContext: string | null = null;
-  if (searchBundle?.hit) {
-    searchContext = renderSearchContext(searchBundle.results);
-  }
-  const extraSystemParts = [outputModePrompt, templateResult.systemPrompt, cardSystemPrompt, searchContext].filter(
+  // 合并 system 来源(output_mode + template + card)
+  const extraSystemParts = [outputModePrompt, templateResult.systemPrompt, cardSystemPrompt].filter(
     (p): p is string => p !== null,
   );
   const mergedSystemPrompt =
     extraSystemParts.length > 0 ? extraSystemParts.join("\n\n") : null;
 
   // 输入预算 = 上下文窗口 − 输出预留;不把 maxOutput 当输入预算
-  const { inputBudget, maxOutputTokens } = await resolveInputTokenBudget({
+  const { inputBudget, maxOutputTokens, modelSupportsTools } = await resolveModelGenerationSettings({
     db,
     schema: s,
     userId,
@@ -361,7 +350,7 @@ export async function prepareChatContext(
   return {
     irRequest,
     trace,
-    searchBundle,
+    modelSupportsTools,
     ragStatus,
     compaction: compactionResult.compaction,
     originalMessageCount: compactionResult.compactionMsgs.length,
@@ -410,7 +399,7 @@ export function replaceMessageText(
  * 从 model_catalog 读取 contextWindow / maxOutputTokens,计算输入预算。
  * 查询失败或字段缺失时回退兼容默认值;始终为输出预留空间。
  */
-async function resolveInputTokenBudget(args: {
+export async function resolveModelGenerationSettings(args: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -418,18 +407,21 @@ async function resolveInputTokenBudget(args: {
   userId: string;
   model: string;
   modelId?: string;
-}): Promise<{ inputBudget: number; maxOutputTokens: number }> {
+}): Promise<{ inputBudget: number; maxOutputTokens: number; modelSupportsTools: boolean }> {
   const { db, schema: s, userId, model, modelId } = args;
   let contextWindow = DEFAULT_CONTEXT_WINDOW;
   let maxOutputTokens = DEFAULT_MAX_OUTPUT_TOKENS;
+  let modelSupportsTools = false;
 
   try {
     const visibility = or(eq(s.models.visibility, "public"), eq(s.models.ownerUserId, userId));
     const [row] = modelId
       ? await db
           .select({
+            modelId: s.models.id,
             contextWindow: s.modelCatalog.contextWindow,
             maxOutputTokens: s.modelCatalog.maxOutputTokens,
+            capabilities: s.modelCatalog.capabilities,
           })
           .from(s.models)
           .innerJoin(s.modelCatalog, eq(s.models.catalogId, s.modelCatalog.id))
@@ -437,8 +429,10 @@ async function resolveInputTokenBudget(args: {
           .limit(1)
       : await db
           .select({
+            modelId: s.models.id,
             contextWindow: s.modelCatalog.contextWindow,
             maxOutputTokens: s.modelCatalog.maxOutputTokens,
+            capabilities: s.modelCatalog.capabilities,
           })
           .from(s.models)
           .innerJoin(s.modelCatalog, eq(s.models.catalogId, s.modelCatalog.id))
@@ -451,9 +445,23 @@ async function resolveInputTokenBudget(args: {
     if (typeof row?.maxOutputTokens === "number" && row.maxOutputTokens > 0) {
       maxOutputTokens = row.maxOutputTokens;
     }
+    if (row?.capabilities?.tools === true) {
+      const [route] = await db
+        .select({ id: s.routes.id })
+        .from(s.routes)
+        .innerJoin(s.providers, eq(s.routes.providerId, s.providers.id))
+        .where(and(
+          eq(s.routes.modelId, row.modelId),
+          eq(s.routes.supportsTools, true),
+          eq(s.routes.enabled, true),
+          eq(s.providers.enabled, true),
+        ))
+        .limit(1);
+      modelSupportsTools = Boolean(route);
+    }
   } catch {
     /* catalog 查询失败:使用兼容默认值 */
   }
 
-  return calculateTokenBudgets(contextWindow, maxOutputTokens);
+  return { ...calculateTokenBudgets(contextWindow, maxOutputTokens), modelSupportsTools };
 }

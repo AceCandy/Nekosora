@@ -220,6 +220,7 @@ describe("createRoute", () => {
     const formData = new FormData();
     formData.set("providerId", "provider-a");
     formData.set("upstreamModelName", "upstream-a");
+    formData.set("supportsTools", "on");
 
     await expect(createRoute(modelId, formData)).resolves.toBeUndefined();
     expect(mockData.routes).toContainEqual(expect.objectContaining({
@@ -227,6 +228,7 @@ describe("createRoute", () => {
       modelId,
       providerId: "provider-a",
       upstreamModelName: "upstream-a",
+      supportsTools: true,
     }));
   });
 
@@ -260,6 +262,7 @@ describe("updateRoute", () => {
     formData.set("upstreamModelName", "upstream-a");
     formData.set("priority", "2");
     formData.set("weight", "3");
+    formData.set("supportsTools", "on");
 
     await expect(updateRoute("route-a", formData)).resolves.toBeUndefined();
     expect(mockData.routes[0]).toEqual(expect.objectContaining({
@@ -267,6 +270,7 @@ describe("updateRoute", () => {
       upstreamModelName: "upstream-a",
       priority: 2,
       weight: 3,
+      supportsTools: true,
     }));
   });
 

@@ -107,10 +107,10 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-function mockContinuationDb() {
+function mockContinuationDb(webSearch = false, processTrace?: unknown) {
   mocks.getDb.mockResolvedValue({
     select: selectQueue([
-      [{ id: "conversation-1", userId: "user-1", outputModeId: null }],
+      [{ id: "conversation-1", userId: "user-1", outputModeId: null, webSearch }],
       [{
         id: "assistant-1",
         publicId: "assistant-public-1",
@@ -120,6 +120,7 @@ function mockContinuationDb() {
         content: "prefix",
         createdAt: new Date("2026-07-20T08:00:00.000Z"),
         deletedAt: null,
+        processTrace,
       }],
       [{
         id: "user-message-1",
@@ -146,7 +147,7 @@ beforeEach(() => {
       stream: true,
     },
     trace: { mode: "test" },
-    searchBundle: null,
+    modelSupportsTools: true,
     ragStatus: null,
     compaction: null,
   });
@@ -282,6 +283,31 @@ describe("POST /api/chat coordinator adapter", () => {
     }));
   });
 
+  it.each([
+    [undefined, true],
+    [false, false],
+  ] as const)("联网请求值 %s 按显式值优先、缺省回退会话", async (requestValue, expected) => {
+    mockContinuationDb(true);
+    const body: Record<string, unknown> = {
+      conversationId: "conversation-1",
+      model: "model-1",
+      modelId: "model-1",
+      messages: [
+        { role: "user", content: "question" },
+        { role: "assistant", content: "prefix" },
+      ],
+      continueFromPublicId: "assistant-public-1",
+    };
+    if (requestValue !== undefined) body.webSearch = requestValue;
+
+    const response = await POST(request(body) as never);
+    await response.text();
+
+    expect(mocks.executeChatCompletion).toHaveBeenCalledWith(expect.objectContaining({
+      webSearchEnabled: expected,
+    }));
+  });
+
   it("拒绝非法 Composer 请求快照", async () => {
     const response = await POST(request({
       conversationId: "conversation-1",
@@ -324,12 +350,34 @@ describe("POST /api/chat coordinator adapter", () => {
     }));
   });
 
+  it("续写把原 assistant 的搜索 trace 带入新一轮持久化", async () => {
+    const previousCall = {
+      toolCallId: "search-old",
+      query: "old query",
+      mode: "provider",
+      backend: { type: "provider", id: "provider-1", name: "Tavily" },
+      status: "success",
+      citations: [{ title: "Old", url: "https://old.example" }],
+    };
+    mockContinuationDb(false, { webSearch: { calls: [previousCall] } });
+
+    const response = await POST(request() as never);
+    await response.text();
+
+    expect(mocks.executeChatCompletion).toHaveBeenCalledWith(expect.objectContaining({
+      processTrace: {
+        mode: "test",
+        webSearch: { calls: [previousCall] },
+      },
+    }));
+  });
+
   it("保持全部 domain event 的 SSE wire 并让 terminal(success) 与 DONE 紧跟 finish", async () => {
     mockContinuationDb();
     mocks.prepareChatContext.mockResolvedValue({
       irRequest: { model: "model-1", messages: [{ role: "user", content: "question" }] },
       trace: { mode: "test" },
-      searchBundle: { hit: true, results: [{ title: "source" }] },
+      modelSupportsTools: true,
       ragStatus: "hit",
       compaction: { compacted: true, strategy: "summary", fallbackLevel: 1 },
     });
@@ -338,6 +386,14 @@ describe("POST /api/chat coordinator adapter", () => {
       await emit({ type: "text-delta", text: "answer" });
       await emit({ type: "reasoning-delta", text: "thought" });
       await emit({ type: "tool-call", toolCallId: "tc-1", toolName: "search", args: { q: 1 } });
+      await emit({ type: "search_started", toolCallId: "tc-1", query: "latest" });
+      await emit({
+        type: "search_completed",
+        toolCallId: "tc-1",
+        backend: { type: "provider", id: "provider-1", name: "Provider" },
+        durationMs: 12,
+        citations: [{ title: "source", url: "https://example.com", snippet: "fact" }],
+      });
       await emit({ type: "tool-result", toolCallId: "tc-1", toolName: "search", result: {}, isError: false });
       await emit({
         type: "finish",
@@ -355,16 +411,19 @@ describe("POST /api/chat coordinator adapter", () => {
 
     expect(types).toEqual([
       "assistant_message",
-      "search_result",
       "rag_search",
       "compact",
       "delta",
       "reasoning",
       "tool_call",
+      "search_started",
+      "search_completed",
       "tool_result",
       "finish",
       "terminal",
     ]);
+    expect(payload).toContain('"type":"tool_call","toolCallId":"tc-1"');
+    expect(payload).toContain('"type":"tool_result","toolCallId":"tc-1"');
     const finishIndex = payload.indexOf('"type":"finish"');
     const terminalIndex = payload.indexOf('"type":"terminal","status":"success"');
     const doneIndex = payload.indexOf("data: [DONE]");

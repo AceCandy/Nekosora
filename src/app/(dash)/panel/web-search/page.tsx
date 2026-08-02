@@ -1,74 +1,167 @@
 import { getTranslations } from "next-intl/server";
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { requireSession } from "@/lib/session";
-import { loadConfig, saveWebSearchConfig } from "@/lib/web-search/registry";
-import type { WebSearchConfig, WebSearchProviderConfig } from "@/lib/web-search/types";
+import {
+  createDefaultWebSearchConfig,
+  listWebSearchModelCandidates,
+  loadConfig,
+  saveWebSearchConfig,
+  toWebSearchConfigDto,
+} from "@/lib/web-search/registry";
+import { searchBackendKey, type SearchBackend, type WebSearchProviderConfig } from "@/lib/web-search/types";
 import WebSearchManager, { type WebSearchProviderInput } from "@/features/web-search/WebSearchManager";
 import { Globe } from "lucide-react";
 import { PageHeader } from "@/shared/components/PageHeader";
 
-/** 空配置(每次返回新对象,避免污染缓存引用)。 */
-function emptyConfig(): WebSearchConfig {
-  return { version: 1, providers: [] };
+const providerInputSchema = z.object({
+  type: z.enum(["tavily", "bocha", "zhipu", "searxng"]),
+  name: z.string().trim().min(1).max(100),
+  apiKey: z.string().trim().min(1).max(10_000).optional(),
+  model: z.string().trim().min(1).max(200).optional(),
+  baseUrl: z.string().trim().min(1).max(2_048).optional(),
+}).strict();
+const backendListSchema = z.array(z.discriminatedUnion("type", [
+  z.object({ type: z.literal("current-model") }).strict(),
+  z.object({ type: z.literal("model"), modelId: z.string().min(1) }).strict(),
+  z.object({ type: z.literal("provider"), providerId: z.string().min(1) }).strict(),
+]));
+const idSchema = z.string().min(1);
+
+async function loadCurrentUserConfig() {
+  const user = await requireSession();
+  return { userId: user.id, config: (await loadConfig(user.id)) ?? createDefaultWebSearchConfig() };
 }
 
 export default async function WebSearchPage() {
-  const user = await requireSession();
-  const userId = user.id;
+  const { userId, config } = await loadCurrentUserConfig();
+  const modelCandidates = await listWebSearchModelCandidates(userId);
   const t = await getTranslations("panel.webSearch");
   const tn = await getTranslations("nav");
-  const config = (await loadConfig(userId)) ?? emptyConfig();
 
-  // 新增 provider(默认 enabled,取首个 enabled 生效)。
-  async function createProvider(input: WebSearchProviderInput & { enabled: boolean }) {
+  async function createProvider(input: WebSearchProviderInput) {
     "use server";
-    const cfg = (await loadConfig(userId)) ?? emptyConfig();
-    const provider: WebSearchProviderConfig = { id: crypto.randomUUID(), ...input };
-    cfg.providers.push(provider);
-    await saveWebSearchConfig(userId, cfg);
-    revalidatePath("/panel", "layout");
+    const parsed = providerInputSchema.safeParse(input);
+    if (!parsed.success) throw new Error("搜索源配置无效");
+    const { userId, config: current } = await loadCurrentUserConfig();
+    const provider: WebSearchProviderConfig = {
+      id: crypto.randomUUID(),
+      ...parsed.data,
+      enabled: true,
+    };
+    current.providers.push(provider);
+    current.backends.push({ type: "provider", providerId: provider.id });
+    await saveWebSearchConfig(userId, current);
+    revalidatePath("/panel/web-search");
   }
 
-  // 更新 provider 字段(保留 id/enabled)。
   async function updateProvider(id: string, input: WebSearchProviderInput) {
     "use server";
-    const cfg = (await loadConfig(userId)) ?? emptyConfig();
-    const idx = cfg.providers.findIndex((p) => p.id === id);
-    if (idx < 0) return;
-    cfg.providers[idx] = { ...cfg.providers[idx], ...input };
-    await saveWebSearchConfig(userId, cfg);
-    revalidatePath("/panel", "layout");
+    const parsedId = idSchema.safeParse(id);
+    const parsed = providerInputSchema.safeParse(input);
+    if (!parsedId.success || !parsed.success) throw new Error("搜索源配置无效");
+    const { userId, config: current } = await loadCurrentUserConfig();
+    const index = current.providers.findIndex((provider) => provider.id === parsedId.data);
+    if (index < 0) throw new Error("搜索源不存在");
+    const existing = current.providers[index];
+    const next = parsed.data;
+    current.providers[index] = {
+      ...existing,
+      ...next,
+      apiKey: next.type === "searxng" ? undefined : next.apiKey || existing.apiKey,
+      model: next.type === "zhipu" ? next.model : undefined,
+      baseUrl: next.type === "searxng" ? next.baseUrl : undefined,
+    };
+    await saveWebSearchConfig(userId, current);
+    revalidatePath("/panel/web-search");
   }
 
-  // 启停 provider。
   async function toggleProvider(id: string, enabled: boolean) {
     "use server";
-    const cfg = (await loadConfig(userId)) ?? emptyConfig();
-    const p = cfg.providers.find((x) => x.id === id);
-    if (!p) return;
-    p.enabled = enabled;
-    await saveWebSearchConfig(userId, cfg);
-    revalidatePath("/panel", "layout");
+    const parsedId = idSchema.safeParse(id);
+    if (!parsedId.success || typeof enabled !== "boolean") throw new Error("搜索源配置无效");
+    const { userId, config: current } = await loadCurrentUserConfig();
+    const provider = current.providers.find((item) => item.id === parsedId.data);
+    if (!provider) throw new Error("搜索源不存在");
+    provider.enabled = enabled;
+    await saveWebSearchConfig(userId, current);
+    revalidatePath("/panel/web-search");
   }
 
-  // 删除 provider。
   async function deleteProvider(id: string) {
     "use server";
-    const cfg = (await loadConfig(userId)) ?? emptyConfig();
-    cfg.providers = cfg.providers.filter((p) => p.id !== id);
-    await saveWebSearchConfig(userId, cfg);
-    revalidatePath("/panel", "layout");
+    const parsedId = idSchema.safeParse(id);
+    if (!parsedId.success) throw new Error("搜索源配置无效");
+    const { userId, config: current } = await loadCurrentUserConfig();
+    if (!current.providers.some((provider) => provider.id === parsedId.data)) {
+      throw new Error("搜索源不存在");
+    }
+    current.providers = current.providers.filter((provider) => provider.id !== parsedId.data);
+    current.backends = current.backends.filter(
+      (backend) => backend.type !== "provider" || backend.providerId !== parsedId.data,
+    );
+    await saveWebSearchConfig(userId, current);
+    revalidatePath("/panel/web-search");
+  }
+
+  async function reorderBackends(backends: SearchBackend[]) {
+    "use server";
+    const parsed = backendListSchema.safeParse(backends);
+    if (!parsed.success) throw new Error("搜索顺序无效");
+    const { userId, config: current } = await loadCurrentUserConfig();
+    const allowed = new Set(current.backends.map(searchBackendKey));
+    const submitted = new Set(parsed.data.map(searchBackendKey));
+    if (
+      parsed.data.length !== submitted.size
+      || allowed.size !== submitted.size
+      || [...allowed].some((key) => !submitted.has(key))
+    ) throw new Error("搜索顺序无效");
+    current.backends = parsed.data;
+    await saveWebSearchConfig(userId, current);
+    revalidatePath("/panel/web-search");
+  }
+
+  async function addModelBackend(modelId: string) {
+    "use server";
+    const parsedId = idSchema.safeParse(modelId);
+    if (!parsedId.success) throw new Error("搜索模型无效");
+    const { userId, config: current } = await loadCurrentUserConfig();
+    const candidates = await listWebSearchModelCandidates(userId);
+    if (!candidates.some((model) => model.id === parsedId.data)) {
+      throw new Error("搜索模型不可用");
+    }
+    if (!current.backends.some(
+      (backend) => backend.type === "model" && backend.modelId === parsedId.data,
+    )) current.backends.push({ type: "model", modelId: parsedId.data });
+    await saveWebSearchConfig(userId, current);
+    revalidatePath("/panel/web-search");
+  }
+
+  async function removeModelBackend(modelId: string) {
+    "use server";
+    const parsedId = idSchema.safeParse(modelId);
+    if (!parsedId.success) throw new Error("搜索模型无效");
+    const { userId, config: current } = await loadCurrentUserConfig();
+    current.backends = current.backends.filter(
+      (backend) => backend.type !== "model" || backend.modelId !== parsedId.data,
+    );
+    await saveWebSearchConfig(userId, current);
+    revalidatePath("/panel/web-search");
   }
 
   return (
     <div className="space-y-6">
       <PageHeader icon={Globe} title={tn("webSearch")} desc={t("desc")} />
       <WebSearchManager
-        providers={config.providers}
+        config={toWebSearchConfigDto(config)}
+        modelCandidates={modelCandidates}
         createAction={createProvider}
         updateAction={updateProvider}
         toggleAction={toggleProvider}
         deleteAction={deleteProvider}
+        reorderAction={reorderBackends}
+        addModelAction={addModelBackend}
+        removeModelAction={removeModelBackend}
       />
     </div>
   );

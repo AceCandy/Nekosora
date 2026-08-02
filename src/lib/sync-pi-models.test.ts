@@ -612,6 +612,64 @@ describe("deterministic plan", () => {
   });
 });
 
+describe("web search capabilities", () => {
+  it("只按官方 provider、API 语义和精确型号标记原生搜索", () => {
+    const models = [
+      ["gpt-5.5", "openai", "openai-responses", "openai"],
+      ["claude-opus-5", "anthropic", "anthropic-messages", "anthropic"],
+      ["gemini-3.6-flash", "google", "google-generative-ai", "google"],
+      ["grok-4.5", "xai", "openai-responses", "xai"],
+    ] as const;
+    const rows = models.map(([modelId, provider]) => row({
+      canonicalModelId: modelId,
+      aliases: [`${provider}/${modelId}`],
+    }));
+    const payload = Object.fromEntries(models.map(([modelId, provider, api]) => [
+      provider,
+      { [modelId]: { id: modelId, api } },
+    ]));
+
+    const plan = planCatalogSync(rows, payload);
+
+    expect(plan.changes).toHaveLength(4);
+    for (const [modelId, , , format] of models) {
+      expect(plan.changes.find((change) => change.canonicalModelId === modelId)?.operations)
+        .toContainEqual({
+          target: "capability",
+          action: "set",
+          key: "webSearchFormat",
+          value: format,
+        });
+    }
+  });
+
+  it("不标记 API 不匹配或未列入白名单的型号", () => {
+    const plan = planCatalogSync([
+      row({
+        canonicalModelId: "grok-4.3",
+        aliases: ["xai/grok-4.3"],
+        capabilities: { webSearchFormat: "xai" },
+      }),
+      row({
+        canonicalModelId: "gpt-5.5",
+        aliases: ["openai/gpt-5.5"],
+        capabilities: { webSearchFormat: "openai" },
+      }),
+    ], {
+      xai: { "grok-4.3": { id: "grok-4.3", api: "openai-completions" } },
+      openai: { "gpt-5.5": { id: "gpt-5.5", api: "openai-completions" } },
+    });
+
+    for (const change of plan.changes) {
+      expect(change.operations).toContainEqual({
+        target: "capability",
+        action: "delete",
+        key: "webSearchFormat",
+      });
+    }
+  });
+});
+
 describe("passesInvariants", () => {
   it("reasoning=false → 通过(不变量3)", () => {
     expect(passesInvariants(cap({ reasoning: false }))).toBe(true);

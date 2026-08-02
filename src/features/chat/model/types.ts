@@ -35,10 +35,10 @@ export interface ChatMessage {
   publicId?: string;
   /** 生成状态:interrupted 表示被中途停止(可继续生成);success 表示完整结束。缺省视作完整。 */
   status?: "success" | "interrupted";
-  /** 工具调用过程(MCP):按发生顺序记录每次调用及结果。 */
+  /** 工具调用过程:按发生顺序记录每次调用及结果。 */
   toolCalls?: ToolCallRecord[];
   /** 联网搜索引用来源。 */
-  searchResults?: { title: string; url: string; snippet: string }[];
+  searchResults?: { title: string; url: string; snippet?: string }[];
   /** 版本信息:当前消息的同级兄弟数(>1 时显示切换器)。 */
   versionInfo?: { current: number; total: number };
   /** 当前用户对该 assistant 回复的质量反馈(无记录时缺省)。 */
@@ -50,6 +50,8 @@ export interface ChatMessage {
 
 /** 单次工具调用记录:调用时 status="calling",结果返回后更新。 */
 export interface ToolCallRecord {
+  /** 新记录使用稳定调用 ID；旧历史记录可能缺失。 */
+  toolCallId?: string;
   toolName: string;
   args?: unknown;
   status: "calling" | "done" | "error";

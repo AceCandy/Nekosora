@@ -1,27 +1,36 @@
-/**
- * Searxng 自建搜索适配器 -- https://docs.searxng.org/dev/search_api.html
- *
- * 自托管实例,GET ${baseUrl}/search?q=...&format=json,无需 api key。
- * 响应:results 数组,每项含 title/url/content。
- */
-import type { SearchProvider, SearchResult, SearchOptions } from "./types";
+import { z } from "zod";
+import { requestPublicJson } from "./public-http";
+import type { SearchProvider } from "./types";
+import { SearchProviderError } from "./types";
+
+const responseSchema = z.object({
+  results: z.array(z.object({
+    title: z.string().optional(),
+    url: z.string().optional(),
+    content: z.string().optional(),
+  })).optional(),
+});
 
 export function createSearxngProvider(baseUrl: string): SearchProvider {
   const root = baseUrl.replace(/\/+$/, "");
   return {
     name: "searxng",
-    async search(query, opts: SearchOptions = {}): Promise<SearchResult[]> {
-      const url = `${root}/search?q=${encodeURIComponent(query)}&format=json`;
-      const res = await fetch(url, {
+    async search(query, opts = {}) {
+      const url = new URL(`${root}/search`);
+      url.searchParams.set("q", query);
+      url.searchParams.set("format", "json");
+      const response = await requestPublicJson(url, {
         headers: { Accept: "application/json" },
-        signal: AbortSignal.timeout(8000),
+        signal: opts.signal,
       });
-      if (!res.ok) throw new Error(`searxng HTTP ${res.status}`);
-      const data = (await res.json()) as { results?: { title?: string; url?: string; content?: string }[] };
-      return (data.results ?? []).slice(0, opts.maxResults ?? 5).map((r) => ({
-        title: r.title ?? "(无标题)",
-        url: r.url ?? "",
-        snippet: (r.content ?? "").slice(0, 300),
+      if (response.status < 200 || response.status >= 300) {
+        throw new SearchProviderError(`searxng HTTP ${response.status}`, response.status);
+      }
+      const data = responseSchema.parse(response.body);
+      return (data.results ?? []).slice(0, opts.maxResults ?? 5).map((item) => ({
+        title: item.title ?? "(无标题)",
+        url: item.url ?? "",
+        snippet: item.content ?? "",
       }));
     },
   };

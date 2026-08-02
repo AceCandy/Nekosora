@@ -11,7 +11,7 @@
  * 用量记录在 streamChat 层(持有 ctx),不塞进 streamText 的 onFinish 闭包。
  * 借鉴 DEEIX:run_id 标识一次生成;用量含 cache 拆分。
  */
-import { streamText, generateText, Output, type ModelMessage } from "ai";
+import { streamText, generateText, jsonSchema, Output, type ModelMessage, type ToolSet } from "ai";
 import { resolveRoutes, resolveRoutesById } from "@/lib/routing";
 import { buildLanguageModelWithKey } from "@/lib/providers/registry";
 import { getChatUA } from "@/lib/system-settings/ua";
@@ -24,6 +24,7 @@ import type {
   CallContext,
   IRRequest,
   IRMessage,
+  IRToolDef,
   StreamEvent,
   IRUsage,
   ResolvedRoute,
@@ -141,7 +142,10 @@ export async function* streamChat(
       resolveRoutes: () => opts.modelId
         ? resolveRoutesById(ctx, opts.modelId)
         : resolveRoutes(ctx, request.model),
-      selectAdapter: () => adapter,
+      selectAdapter: (route) => request.tools?.length
+        && (!route.supportsTools || route.capabilities?.tools !== true)
+        ? null
+        : adapter,
       telemetry: opts.telemetry ?? gatewayTelemetry,
       breaker: { recordSuccess, recordFailure },
     });
@@ -209,9 +213,53 @@ export async function* streamChat(
   }
 }
 
-/** 在 AI SDK 边界把 OpenAI 图片 part 转为 ModelMessage 文件 part。 */
+/** 在 AI SDK 边界把 OpenAI 图片与工具消息 IR 转为 ModelMessage。 */
 export function toModelMessages(messages: IRMessage[]): ModelMessage[] {
-  return messages.map((message) => {
+  const toolNamesByCallId = new Map<string, string>();
+  for (const message of messages) {
+    for (const toolCall of message.tool_calls ?? []) {
+      toolNamesByCallId.set(toolCall.id, toolCall.function.name);
+    }
+  }
+
+  return messages.map((message): ModelMessage => {
+    if (message.role === "assistant" && message.tool_calls?.length) {
+      if (typeof message.content !== "string") {
+        throw new Error("消息无效:助手工具调用内容必须是文本");
+      }
+      return {
+        role: "assistant",
+        content: [
+          ...(message.content ? [{ type: "text" as const, text: message.content }] : []),
+          ...message.tool_calls.map((toolCall) => ({
+            type: "tool-call" as const,
+            toolCallId: toolCall.id,
+            toolName: toolCall.function.name,
+            input: JSON.parse(toolCall.function.arguments),
+          })),
+        ],
+      };
+    }
+
+    if (message.role === "tool") {
+      const toolCallId = message.tool_call_id;
+      if (!toolCallId) throw new Error("消息无效:工具结果缺少调用 ID");
+      const toolName = message.name ?? toolNamesByCallId.get(toolCallId);
+      if (!toolName) throw new Error("消息无效:工具结果缺少工具名称");
+      if (typeof message.content !== "string") {
+        throw new Error("消息无效:工具结果必须是文本");
+      }
+      return {
+        role: "tool",
+        content: [{
+          type: "tool-result",
+          toolCallId,
+          toolName,
+          output: { type: "text", value: message.content },
+        }],
+      };
+    }
+
     if (message.role !== "user" || typeof message.content === "string") {
       return message as ModelMessage;
     }
@@ -234,6 +282,29 @@ export function toModelMessages(messages: IRMessage[]): ModelMessage[] {
       }),
     };
   });
+}
+
+/** 在 AI SDK 边界把 OpenAI function tools 数组转换为按名称索引的 ToolSet。 */
+function toModelTools(tools?: IRToolDef[]): ToolSet | undefined {
+  if (!tools?.length) return undefined;
+
+  return Object.fromEntries(
+    tools.map(({ function: definition }) => [
+      definition.name,
+      {
+        type: "function" as const,
+        description: definition.description,
+        inputSchema: jsonSchema(
+          (definition.parameters ?? {
+            type: "object",
+            properties: {},
+            additionalProperties: false,
+          }) as Parameters<typeof jsonSchema>[0],
+        ),
+        outputSchema: jsonSchema({}),
+      },
+    ]),
+  );
 }
 
 /**
@@ -308,15 +379,15 @@ async function* streamWithRoute(
     maxOutputTokens: request.max_tokens,
     topP: request.top_p,
     // 推理级别 + 缓存控制合并到 providerOptions(off/不支持则不传,等价普通对话)。
-    // AI SDK SharedV4ProviderOptions 类型摩擦,沿用本文件 messages/tools 的 as never 处理。
+    // AI SDK SharedV4ProviderOptions 类型摩擦,此处沿用 providerOptions 的 as never 处理。
     providerOptions: {
       ...(route.protocol === "openai-compatible"
         ? undefined
         : buildReasoningProviderOptions(route.protocol, route.capabilities, reasoning)),
       ...cacheProviderOptions,
     } as never,
-    // P1-A:工具(MCP)透传给上游模型。tools 格式已是 OpenAI function-calling 兼容。
-    tools: request.tools as unknown as Parameters<typeof streamText>[0]["tools"],
+    // IR 使用 OpenAI function tools 数组；AI SDK 7 要求按工具名索引的 ToolSet。
+    tools: toModelTools(request.tools),
     // 客户端断开时中止上游 fetch,避免继续写已关闭 socket → uncaughtException。
     abortSignal,
   });
@@ -433,6 +504,11 @@ export interface StreamChatWithToolsOptions extends StreamChatOptions {
   maxSteps?: number;
   /** 已解析的 MCP server(含工具清单 + 连接)。 */
   mcpServers?: import("@/lib/mcp/registry").ResolvedMcpServer[];
+  /** WebChat 内置的唯一逻辑搜索工具；网关请求不传。 */
+  webSearchTool?: {
+    definition: IRToolDef;
+    execute(toolCallId: string, args: unknown): Promise<{ result: unknown; isError: boolean }>;
+  };
 }
 
 /**
@@ -473,6 +549,13 @@ export async function* streamChatWithTools(
   try {
     // 工具转换/registry 初始化也属于 Agent run；失败必须由 finally 写唯一终态。
     let tools = opts.request.tools;
+    if (opts.webSearchTool) {
+      const name = opts.webSearchTool.definition.function.name;
+      if (tools?.some((tool) => tool.function.name === name)) {
+        throw new Error(`内置工具名称冲突:${name}`);
+      }
+      tools = [...(tools ?? []), opts.webSearchTool.definition];
+    }
     if (mcpServers.length > 0) {
       const { toIRTools } = await import("@/lib/mcp/registry");
       tools = [...(tools ?? []), ...toIRTools(mcpServers)];
@@ -551,12 +634,19 @@ export async function* streamChatWithTools(
     // 本轮 finish 已消费为循环控制信号,不向外 yield。
       const toolMessages: IRMessage[] = [];
       for (const tc of pendingToolCalls) {
-        const { result, isError } = await callMcpTool(
-          mcpServers, tc.toolCallId, tc.toolName, tc.args,
-        ).catch((e) => ({
-          result: redactErrorMessage(e, [], "tool_error"),
-          isError: true,
-        }));
+        let execution: { result: unknown; isError: boolean };
+        try {
+          execution = opts.webSearchTool?.definition.function.name === tc.toolName
+            ? await opts.webSearchTool.execute(tc.toolCallId, tc.args)
+            : await callMcpTool(mcpServers, tc.toolCallId, tc.toolName, tc.args);
+        } catch (error) {
+          if (opts.abortSignal?.aborted) throw error;
+          execution = {
+            result: redactErrorMessage(error, [], "tool_error"),
+            isError: true,
+          };
+        }
+        const { result, isError } = execution;
         yield {
           type: "tool-result",
           toolCallId: tc.toolCallId,

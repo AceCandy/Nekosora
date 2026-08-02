@@ -10,6 +10,7 @@ export interface RouteInitial {
   upstreamModelName?: string;
   priority?: number;
   weight?: number;
+  supportsTools?: boolean;
 }
 
 interface RouteFormDialogProps {
@@ -170,6 +171,16 @@ export default function RouteFormDialog({
         <p className="text-ui-caption text-neutral-400">
           {t("priorityWeightExplanation")}
         </p>
+
+        <label className="flex items-center gap-2 text-ui-body font-medium">
+          <input
+            name="supportsTools"
+            type="checkbox"
+            defaultChecked={initial?.supportsTools ?? false}
+            className="h-4 w-4 accent-sora-blue"
+          />
+          {t("supportsToolsLabel")}
+        </label>
 
         <div className="flex justify-end gap-2 pt-2">
           <button

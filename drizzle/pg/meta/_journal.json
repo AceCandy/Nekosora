@@ -29,6 +29,20 @@
       "when": 1785405310209,
       "tag": "0003_model_catalog_sync",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1785587605170,
+      "tag": "0004_model_catalog_web_search",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785605347333,
+      "tag": "0005_stale_rick_jones",
+      "breakpoints": true
     }
   ]
 }

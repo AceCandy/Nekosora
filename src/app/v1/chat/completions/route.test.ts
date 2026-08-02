@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   verifyKey: vi.fn(),
   streamChat: vi.fn(),
   getGatewayUA: vi.fn(),
+  loadWebSearchConfig: vi.fn(),
 }));
 
 vi.mock("@/lib/keys", () => ({
@@ -14,10 +15,11 @@ vi.mock("@/lib/keys", () => ({
 }));
 vi.mock("@/lib/stream", () => ({ streamChat: mocks.streamChat }));
 vi.mock("@/lib/system-settings/ua", () => ({ getGatewayUA: mocks.getGatewayUA }));
+vi.mock("@/lib/web-search/registry", () => ({ loadConfig: mocks.loadWebSearchConfig }));
 
 import { POST } from "./route";
 
-function request() {
+function request(extraBody: Record<string, unknown> = {}) {
   return new NextRequest("http://localhost/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -28,6 +30,7 @@ function request() {
       model: "test-model",
       messages: [{ role: "user", content: "hello" }],
       stream: true,
+      ...extraBody,
     }),
   });
 }
@@ -113,6 +116,22 @@ describe("POST /v1/chat/completions 流式取消", () => {
     expect(body).toContain('"content":"hello"');
     expect(body).toContain('"finish_reason":"stop"');
     expect(body).toContain("data: [DONE]\n\n");
+  });
+
+  it("忽略 WebChat 联网配置且不注入逻辑搜索工具", async () => {
+    mocks.streamChat.mockReturnValue((async function* () {
+      yield { type: "finish", finishReason: "stop", usage: {} };
+    })());
+
+    const response = await POST(request({ webSearch: true }));
+    await response.text();
+
+    expect(mocks.loadWebSearchConfig).not.toHaveBeenCalled();
+    expect(mocks.streamChat).toHaveBeenCalledWith(expect.objectContaining({
+      request: expect.not.objectContaining({
+        tools: expect.anything(),
+      }),
+    }));
   });
 
   it("普通异常时保留 SSE server_error 帧", async () => {

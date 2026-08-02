@@ -38,6 +38,7 @@ interface MockRoute {
   upstreamModelName: string;
   priority: number;
   weight: number;
+  supportsTools: boolean;
   enabled: boolean;
 }
 interface MockProvider {
@@ -107,9 +108,9 @@ function makeDefaultData(): MockData {
     models: [pubModel, privModel],
     routes: [
       { id: "R_PUB", modelId: "M_PUB", providerId: "PA", upstreamModelName: "gpt-4o",
-        priority: 0, weight: 1, enabled: true },
+        priority: 0, weight: 1, supportsTools: true, enabled: true },
       { id: "R_PRIV", modelId: "M_PRIV", providerId: "PB", upstreamModelName: "gpt-4o-mini",
-        priority: 0, weight: 1, enabled: true },
+        priority: 0, weight: 1, supportsTools: false, enabled: true },
     ],
     providers: [providerA, providerB],
     bindings: new Map(),
@@ -267,7 +268,8 @@ describe("routing", () => {
       // 给 pub 模型加一条低优先级路由。
       data.routes.push({
         id: "R_PUB2", modelId: "M_PUB", providerId: "PB",
-        upstreamModelName: "gpt-4o-fallback", priority: 1, weight: 1, enabled: true,
+        upstreamModelName: "gpt-4o-fallback", priority: 1, weight: 1,
+        supportsTools: false, enabled: true,
       });
       const ctx: CallContext = { userId: "U_A", keyKind: null, source: "gateway" };
       const routes = await resolveRoutes(ctx, "gpt-pub");
@@ -281,6 +283,17 @@ describe("routing", () => {
       const routes = await resolveRoutes(ctx, "gpt-pub");
       expect(routes[0].provider.apiKey).toBe("sk-test-fake");
       expect(routes[0].provider.keys).toHaveLength(1);
+    });
+
+    it("保留每条路由实际配置的工具能力", async () => {
+      const ctx: CallContext = { userId: "U_A", keyKind: null, source: "chat" };
+
+      await expect(resolveRoutesById(ctx, "M_PUB")).resolves.toEqual([
+        expect.objectContaining({ routeId: "R_PUB", supportsTools: true }),
+      ]);
+      await expect(resolveRoutesById(ctx, "M_PRIV")).resolves.toEqual([
+        expect.objectContaining({ routeId: "R_PRIV", supportsTools: false }),
+      ]);
     });
   });
 });

@@ -14,11 +14,13 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogle } from "@ai-sdk/google";
-import type { LanguageModel } from "ai";
+import { createXai } from "@ai-sdk/xai";
+import type { LanguageModel, ToolSet } from "ai";
 import type { ResolvedRoute } from "./types";
 import type { ProviderProtocol } from "@/db/types";
 import type { ReasoningLevel } from "@/db/types";
 import { applyReasoningToCompatibleBody } from "@/lib/reasoning";
+import { isHostedSearchRouteCompatible } from "@/lib/web-search/types";
 
 /** 从 ResolvedRoute 构造 AI SDK LanguageModel(V4,兼容 ai@7)。 */
 export function buildLanguageModel(route: ResolvedRoute): LanguageModel {
@@ -108,4 +110,60 @@ export function buildLanguageModelWithKey(
     default:
       throw new Error(`不支持的 provider 协议:${protocol}`);
   }
+}
+
+export interface HostedSearchRuntime {
+  model: LanguageModel;
+  tools: ToolSet;
+}
+
+/** 按目录声明构造搜索专用模型；协议不匹配时跳过该路由。 */
+export function buildHostedSearchRuntime(
+  route: ResolvedRoute,
+  apiKey: string,
+  userAgent?: string,
+): HostedSearchRuntime | null {
+  const format = route.capabilities?.webSearchFormat;
+  const { provider, upstreamModelName } = route;
+  const fetchOpts = userAgent ? { fetch: withUAFetch(userAgent) } : {};
+  const common = {
+    baseURL: provider.baseUrl,
+    apiKey,
+    headers: provider.headers ?? {},
+    ...fetchOpts,
+  };
+
+  if (!route.supportsTools || !format || !isHostedSearchRouteCompatible(format, route.protocol)) {
+    return null;
+  }
+
+  if (format === "openai") {
+    const instance = createOpenAI({ ...common, name: provider.id });
+    return {
+      model: instance.responses(upstreamModelName),
+      tools: { web_search: instance.tools.webSearch({ searchContextSize: "medium" }) },
+    };
+  }
+  if (format === "anthropic") {
+    const instance = createAnthropic(common);
+    return {
+      model: instance.messages(upstreamModelName),
+      tools: { web_search: instance.tools.webSearch_20250305({ maxUses: 3 }) },
+    };
+  }
+  if (format === "google") {
+    const instance = createGoogle(common);
+    return {
+      model: instance(upstreamModelName),
+      tools: { google_search: instance.tools.googleSearch({ searchTypes: { webSearch: {} } }) },
+    };
+  }
+  if (format === "xai") {
+    const instance = createXai(common);
+    return {
+      model: instance.responses(upstreamModelName),
+      tools: { web_search: instance.tools.webSearch() },
+    };
+  }
+  return null;
 }

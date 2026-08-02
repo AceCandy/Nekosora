@@ -350,15 +350,96 @@ describe("model catalog capability sync migration", () => {
     };
     const previous = JSON.parse(readFileSync(previousSnapshotPath, "utf8")) as Record<string, unknown>;
     const snapshot = JSON.parse(readFileSync(snapshotPath, "utf8")) as Record<string, unknown>;
-    expect(journal.entries.at(-1)).toMatchObject({
+    const entryIndex = journal.entries.findIndex((entry) => entry.idx === 3);
+    expect(journal.entries[entryIndex]).toMatchObject({
       idx: 3,
       tag: "0003_model_catalog_sync",
       breakpoints: true,
     });
-    expect(journal.entries.at(-1)?.when).toBeGreaterThan(journal.entries.at(-2)?.when ?? 0);
+    expect(journal.entries[entryIndex]?.when).toBeGreaterThan(
+      journal.entries[entryIndex - 1]?.when ?? 0,
+    );
     expect(snapshot.prevId).toBe(previous.id);
     const { id: _previousId, prevId: _previousPrevId, ...previousSchema } = previous;
     const { id: _snapshotId, prevId: _snapshotPrevId, ...snapshotSchema } = snapshot;
     expect(snapshotSchema).toEqual(previousSchema);
+  });
+});
+
+describe("model catalog web search migration", () => {
+  const migrationPath = "drizzle/pg/0004_model_catalog_web_search.sql";
+  const journalPath = "drizzle/pg/meta/_journal.json";
+  const previousSnapshotPath = "drizzle/pg/meta/0003_snapshot.json";
+  const snapshotPath = "drizzle/pg/meta/0004_snapshot.json";
+
+  it("只为已核验模型写入明确的原生搜索格式", () => {
+    const migration = readFileSync(migrationPath, "utf8");
+    expect(migration.split("--> statement-breakpoint")).toHaveLength(4);
+    expect(migration).not.toContain("INSERT INTO");
+    expect(migration).toContain('{"webSearchFormat":"openai"}');
+    expect(migration).toContain('{"webSearchFormat":"anthropic"}');
+    expect(migration).toContain('{"webSearchFormat":"google"}');
+    expect(migration).toContain('{"webSearchFormat":"xai"}');
+    expect(migration).toContain("'grok-4.5'");
+    expect(migration).not.toContain("'grok-4.3'");
+  });
+
+  it("追加 journal 并保持 schema snapshot 不变", () => {
+    const journal = JSON.parse(readFileSync(journalPath, "utf8")) as {
+      entries: Array<{ idx: number; tag: string; when: number; breakpoints: boolean }>;
+    };
+    const previous = JSON.parse(readFileSync(previousSnapshotPath, "utf8")) as Record<string, unknown>;
+    const snapshot = JSON.parse(readFileSync(snapshotPath, "utf8")) as Record<string, unknown>;
+    const entryIndex = journal.entries.findIndex((entry) => entry.idx === 4);
+    expect(journal.entries[entryIndex]).toMatchObject({
+      idx: 4,
+      tag: "0004_model_catalog_web_search",
+      breakpoints: true,
+    });
+    expect(journal.entries[entryIndex]?.when).toBeGreaterThan(
+      journal.entries[entryIndex - 1]?.when ?? 0,
+    );
+    expect(snapshot.prevId).toBe(previous.id);
+    const { id: _previousId, prevId: _previousPrevId, ...previousSchema } = previous;
+    const { id: _snapshotId, prevId: _snapshotPrevId, ...snapshotSchema } = snapshot;
+    expect(snapshotSchema).toEqual(previousSchema);
+  });
+});
+
+describe("route tool capability migration", () => {
+  const migrationPath = "drizzle/pg/0005_stale_rick_jones.sql";
+  const journalPath = "drizzle/pg/meta/_journal.json";
+  const previousSnapshotPath = "drizzle/pg/meta/0004_snapshot.json";
+  const snapshotPath = "drizzle/pg/meta/0005_snapshot.json";
+
+  it("旧路由默认不声明工具调用能力", () => {
+    expect(readFileSync(migrationPath, "utf8")).toContain(
+      'ALTER TABLE "routes" ADD COLUMN "supports_tools" boolean DEFAULT false NOT NULL',
+    );
+  });
+
+  it("同步 journal 与 schema snapshot", () => {
+    const journal = JSON.parse(readFileSync(journalPath, "utf8")) as {
+      entries: Array<{ idx: number; tag: string; when: number; breakpoints: boolean }>;
+    };
+    const previous = JSON.parse(readFileSync(previousSnapshotPath, "utf8")) as {
+      id: string;
+    };
+    const snapshot = JSON.parse(readFileSync(snapshotPath, "utf8")) as {
+      prevId: string;
+      tables: Record<string, { columns: Record<string, unknown> }>;
+    };
+
+    expect(journal.entries.at(-1)).toMatchObject({
+      idx: 5,
+      tag: "0005_stale_rick_jones",
+      breakpoints: true,
+    });
+    expect(snapshot.prevId).toBe(previous.id);
+    expect(snapshot.tables["public.routes"]?.columns.supports_tools).toMatchObject({
+      type: "boolean",
+      notNull: true,
+      default: false,
+    });
   });
 });

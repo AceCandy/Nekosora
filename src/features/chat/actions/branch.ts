@@ -13,8 +13,10 @@ import {
 import type { MessageVersionSelections } from "@/db/types";
 import { resolveVisibleBranch } from "@/features/chat/lib/visible-branch";
 import type {
+  ChatMessage,
   ChatMessageAttachment,
   MessageRunMetadata,
+  ToolCallRecord,
 } from "@/features/chat/model/types";
 import { toMessageCreatedAtIso } from "@/features/chat/model/messageTime";
 import {
@@ -28,15 +30,40 @@ import {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const S = () => getSchema() as any;
 
-/** UI 侧 ToolCallRecord 的 status 子集。 */
-type ToolCallUiStatus = "calling" | "done" | "error";
-type ToolCallRecord = { toolName: string; args?: unknown; status: ToolCallUiStatus };
-
 /** DB tool_calls.status → UI ToolCallRecord.status。 */
-function mapDbToolCallStatus(status: string): ToolCallUiStatus {
+function mapDbToolCallStatus(status: string): ToolCallRecord["status"] {
   if (status === "pending" || status === "running") return "calling";
   if (status === "failed") return "error";
   return "done";
+}
+
+/** 从消息 trace 投影已成功搜索的公开引用；忽略运行中或失败调用。 */
+function projectSearchResults(
+  processTrace: unknown,
+): ChatMessage["searchResults"] {
+  if (!processTrace || typeof processTrace !== "object") return undefined;
+  const webSearch = (processTrace as { webSearch?: unknown }).webSearch;
+  if (!webSearch || typeof webSearch !== "object") return undefined;
+  const calls = (webSearch as { calls?: unknown }).calls;
+  if (!Array.isArray(calls)) return undefined;
+
+  const byUrl = new Map<string, NonNullable<ChatMessage["searchResults"]>[number]>();
+  for (const call of calls) {
+    if (!call || typeof call !== "object") continue;
+    const record = call as { status?: unknown; citations?: unknown };
+    if (record.status !== "success" || !Array.isArray(record.citations)) continue;
+    for (const citation of record.citations) {
+      if (!citation || typeof citation !== "object") continue;
+      const item = citation as { title?: unknown; url?: unknown; snippet?: unknown };
+      if (typeof item.title !== "string" || typeof item.url !== "string") continue;
+      byUrl.set(item.url, {
+        title: item.title,
+        url: item.url,
+        ...(typeof item.snippet === "string" ? { snippet: item.snippet } : {}),
+      });
+    }
+  }
+  return byUrl.size > 0 ? Array.from(byUrl.values()) : undefined;
 }
 
 /** 按 runId 批量加载当前会话的可公开运行元数据。 */
@@ -102,6 +129,7 @@ async function loadToolCallsByRunIds(
   const toolRows = (await db
     .select({
       runId: s.toolCalls.runId,
+      toolCallId: s.toolCalls.toolCallId,
       toolName: s.toolCalls.toolName,
       status: s.toolCalls.status,
       inputJson: s.toolCalls.inputJson,
@@ -112,6 +140,7 @@ async function loadToolCallsByRunIds(
     .where(and(eq(s.runs.conversationId, conversationId), inArray(s.toolCalls.runId, runIds)))
     .orderBy(s.toolCalls.createdAt)) as Array<{
     runId: string;
+    toolCallId: string;
     toolName: string;
     status: string;
     inputJson: unknown;
@@ -123,6 +152,7 @@ async function loadToolCallsByRunIds(
       toolName: row.toolName,
       status: mapDbToolCallStatus(row.status),
     };
+    if (row.toolCallId) rec.toolCallId = row.toolCallId;
     // 仅恢复 inputJson 为 args;不向 UI 暴露 outputJson/errorJson
     if (row.inputJson !== undefined && row.inputJson !== null) {
       rec.args = row.inputJson;
@@ -186,6 +216,7 @@ export async function getMessageSiblings(messagePublicId: string): Promise<{
     branchReason: string | null;
     runMetadata?: MessageRunMetadata;
     toolCalls?: ToolCallRecord[];
+    searchResults?: ChatMessage["searchResults"];
     feedback?: MessageFeedback;
   }[];
 }> {
@@ -223,6 +254,7 @@ export async function getMessageSiblings(messagePublicId: string): Promise<{
     role: string;
     branchReason: string | null;
     runId: string | null;
+    processTrace?: unknown;
     createdAt?: Date | string;
   }[];
   const assistantSiblings = all.filter((m) => m.role === "assistant");
@@ -264,6 +296,7 @@ export async function getMessageSiblings(messagePublicId: string): Promise<{
       branchReason: string | null;
       runMetadata?: MessageRunMetadata;
       toolCalls?: ToolCallRecord[];
+      searchResults?: ChatMessage["searchResults"];
       feedback?: MessageFeedback;
     } = {
       publicId: m.publicId,
@@ -279,6 +312,7 @@ export async function getMessageSiblings(messagePublicId: string): Promise<{
       const toolCalls = toolCallsByRunId.get(m.runId);
       if (toolCalls && toolCalls.length > 0) base.toolCalls = toolCalls;
     }
+    base.searchResults = projectSearchResults(m.processTrace);
     const feedback = typeof m.id === "string" ? feedbackByMessageId.get(m.id) : undefined;
     if (feedback) base.feedback = feedback;
     return base;
@@ -604,6 +638,10 @@ export async function getVisibleBranch(conversationId: string): Promise<{
       if (runMetadata) next = { ...next, runMetadata };
       const toolCalls = toolCallsByRunId.get(m.runId);
       if (toolCalls && toolCalls.length > 0) next = { ...next, toolCalls };
+    }
+    if (m.role === "assistant") {
+      const searchResults = projectSearchResults(m.processTrace);
+      if (searchResults) next = { ...next, searchResults };
     }
     const feedback = feedbackByMessageId.get(m.id as string);
     if (feedback) next = { ...next, feedback };

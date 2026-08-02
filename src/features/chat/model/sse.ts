@@ -11,6 +11,9 @@
  *   data: {"type":"reasoning","text":"..."}
  *   data: {"type":"tool_call","toolName":"...","args":{...}}
  *   data: {"type":"tool_result","toolName":"...","isError":false}
+ *   data: {"type":"search_started","toolCallId":"...","query":"..."}
+ *   data: {"type":"search_completed","toolCallId":"...","citations":[...]}
+ *   data: {"type":"search_failed","toolCallId":"...","reason":"..."}
  *   data: {"type":"search_result","results":[{"title":"...","url":"...","snippet":"..."}]}
  *   data: {"type":"error","error":"..."}
  *   data: {"type":"finish","metadata":{...}}
@@ -33,6 +36,9 @@ export interface SSEEvent {
     | "reasoning"
     | "tool_call"
     | "tool_result"
+    | "search_started"
+    | "search_completed"
+    | "search_failed"
     | "search_result"
     | "error"
     | "finish"
@@ -40,9 +46,13 @@ export interface SSEEvent {
     | "title_updated";
   text?: string;
   toolName?: string;
+  toolCallId?: string;
   args?: unknown;
   isError?: boolean;
   results?: { title: string; url: string; snippet: string }[];
+  query?: string;
+  citations?: { title: string; url: string; snippet?: string }[];
+  reason?: string;
   error?: string;
   metadata?: MessageRunMetadata;
   status?: unknown;
@@ -59,8 +69,14 @@ export interface SSEEvent {
 export interface SSEHandlers {
   onDelta: (text: string) => void;
   onReasoning?: (text: string) => void;
-  onToolCall?: (toolName: string, args: unknown) => void;
-  onToolResult?: (toolName: string, isError: boolean) => void;
+  onToolCall?: (toolName: string, args: unknown, toolCallId?: string) => void;
+  onToolResult?: (toolName: string, isError: boolean, toolCallId?: string) => void;
+  onSearchStarted?: (toolCallId: string, query: string) => void;
+  onSearchCompleted?: (
+    toolCallId: string,
+    citations: { title: string; url: string; snippet?: string }[],
+  ) => void;
+  onSearchFailed?: (toolCallId: string, reason: string) => void;
   onSearchResult?: (results: { title: string; url: string; snippet: string }[]) => void;
   onError?: (error: string) => void;
   onFinish?: (metadata: MessageRunMetadata) => void;
@@ -127,9 +143,15 @@ export async function consumeChatSSE(
     } else if (ev.type === "reasoning" && ev.text !== undefined) {
       handlers.onReasoning?.(ev.text);
     } else if (ev.type === "tool_call" && ev.toolName !== undefined) {
-      handlers.onToolCall?.(ev.toolName, ev.args);
+      handlers.onToolCall?.(ev.toolName, ev.args, ev.toolCallId);
     } else if (ev.type === "tool_result" && ev.toolName !== undefined) {
-      handlers.onToolResult?.(ev.toolName, ev.isError ?? false);
+      handlers.onToolResult?.(ev.toolName, ev.isError ?? false, ev.toolCallId);
+    } else if (ev.type === "search_started" && ev.toolCallId !== undefined && ev.query !== undefined) {
+      handlers.onSearchStarted?.(ev.toolCallId, ev.query);
+    } else if (ev.type === "search_completed" && ev.toolCallId !== undefined && ev.citations !== undefined) {
+      handlers.onSearchCompleted?.(ev.toolCallId, ev.citations);
+    } else if (ev.type === "search_failed" && ev.toolCallId !== undefined && ev.reason !== undefined) {
+      handlers.onSearchFailed?.(ev.toolCallId, ev.reason);
     } else if (ev.type === "search_result" && ev.results !== undefined) {
       handlers.onSearchResult?.(ev.results);
     } else if (ev.type === "error" && ev.error !== undefined) {

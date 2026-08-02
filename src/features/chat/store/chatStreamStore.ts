@@ -7,7 +7,11 @@ import {
   type CreateConversationOptions,
 } from "@/features/chat/actions/conversations";
 import { retryFromMessage, editMessage, getMessageSiblings, selectMessageVersion, softDeleteMessage, continueMessage } from "@/features/chat/actions/branch";
-import { consumeChatSSE, handleStreamError } from "@/features/chat/model/sse";
+import {
+  consumeChatSSE,
+  handleStreamError,
+  type SSEHandlers,
+} from "@/features/chat/model/sse";
 import type { ChatTerminalStatus } from "@/lib/chat/sse-contract";
 import type {
   ChatMessage,
@@ -353,12 +357,105 @@ function setCompletionStatusAt(
   });
 }
 
+/** 将搜索来源并入目标 assistant；同一 URL 只展示一次。 */
+function mergeSearchResultsAt(
+  key: string,
+  idx: number,
+  results: NonNullable<ChatMessage["searchResults"]>,
+): void {
+  useChatStreamStore.setState((state) => {
+    const runtime = state.runtimes[key];
+    if (!runtime || idx < 0 || idx >= runtime.messages.length) return state;
+    const messages = [...runtime.messages];
+    const message = messages[idx];
+    const byUrl = new Map((message.searchResults ?? []).map((result) => [result.url, result]));
+    for (const result of results) byUrl.set(result.url, result);
+    messages[idx] = { ...message, searchResults: Array.from(byUrl.values()) };
+    return {
+      runtimes: {
+        ...state.runtimes,
+        [key]: { ...runtime, messages },
+      },
+    };
+  });
+}
+
+function addToolCallAt(key: string, idx: number, record: ToolCallRecord): void {
+  useChatStreamStore.setState((state) => {
+    const runtime = state.runtimes[key];
+    if (!runtime || idx < 0 || idx >= runtime.messages.length) return state;
+    const messages = [...runtime.messages];
+    messages[idx] = {
+      ...messages[idx],
+      toolCalls: [...(messages[idx].toolCalls ?? []), record],
+    };
+    return {
+      runtimes: {
+        ...state.runtimes,
+        [key]: { ...runtime, messages },
+      },
+    };
+  });
+}
+
+/** 新事件按 toolCallId 精确关联；旧事件缺 ID 时回退到最后一个同名调用。 */
+function finishToolCallAt(
+  key: string,
+  idx: number,
+  toolName: string,
+  isError: boolean,
+  toolCallId?: string,
+): void {
+  useChatStreamStore.setState((state) => {
+    const runtime = state.runtimes[key];
+    if (!runtime || idx < 0 || idx >= runtime.messages.length) return state;
+    const messages = [...runtime.messages];
+    const calls = [...(messages[idx].toolCalls ?? [])];
+    for (let i = calls.length - 1; i >= 0; i--) {
+      const matches = toolCallId
+        ? calls[i].toolCallId === toolCallId
+        : calls[i].toolName === toolName && calls[i].status === "calling";
+      if (matches) {
+        calls[i] = { ...calls[i], status: isError ? "error" : "done" };
+        break;
+      }
+    }
+    messages[idx] = { ...messages[idx], toolCalls: calls };
+    return {
+      runtimes: {
+        ...state.runtimes,
+        [key]: { ...runtime, messages },
+      },
+    };
+  });
+}
+
+/** 四种生成动作共享同一套工具与搜索事件投影。 */
+function toolAndSearchHandlers(key: string, assistantIdx: number): Partial<SSEHandlers> {
+  return {
+    onToolCall: (toolName, args, toolCallId) =>
+      addToolCallAt(key, assistantIdx, { toolCallId, toolName, args, status: "calling" }),
+    onToolResult: (toolName, isError, toolCallId) =>
+      finishToolCallAt(key, assistantIdx, toolName, isError, toolCallId),
+    onSearchCompleted: (_toolCallId, citations) =>
+      mergeSearchResultsAt(key, assistantIdx, citations),
+    onSearchFailed: (toolCallId) =>
+      finishToolCallAt(key, assistantIdx, "web_search", true, toolCallId),
+    // 兼容同版本部署期间的旧搜索结果帧。
+    onSearchResult: (results) => mergeSearchResultsAt(key, assistantIdx, results),
+  };
+}
+
 export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
   runtimes: {},
   activeConversationId: null,
   optimisticConversation: null,
 
   hydrate: (key, messages) => {
+    // 进入新对话 runtime 时清掉旧活动会话；已有会话仍可在后台继续流式。
+    if (key === NEW_CONVERSATION_KEY && get().activeConversationId !== null) {
+      set({ activeConversationId: null });
+    }
     if (get().runtimes[key]) return;
     set((s) => patchRuntime(s, key, () => ({ messages, streaming: false, abortController: null })));
     // 真实会话 SSR hydrate 时清掉同 id 的乐观项(SSR 已带真实数据,避免侧栏重复)
@@ -404,36 +501,6 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
     let requestMessagesAppended = false;
     let preflightRolledBack = false;
     let streamErrorReceived = false;
-
-    // 正文/思考增量走合批(enqueueDelta),每帧最多落库一次;其余为低频直接 set。
-    const setSearchResultsAt = (k: string, idx: number, results: ChatMessage["searchResults"]) =>
-      set((s) => patchRuntime(s, k, (r) => {
-        if (idx < 0 || idx >= r.messages.length) return r;
-        const copy = [...r.messages];
-        copy[idx] = { ...copy[idx], searchResults: results };
-        return { ...r, messages: copy };
-      }));
-    const addToolCallAt = (k: string, idx: number, rec: ToolCallRecord) =>
-      set((s) => patchRuntime(s, k, (r) => {
-        if (idx < 0 || idx >= r.messages.length) return r;
-        const copy = [...r.messages];
-        copy[idx] = { ...copy[idx], toolCalls: [...(copy[idx].toolCalls ?? []), rec] };
-        return { ...r, messages: copy };
-      }));
-    const finishToolCallAt = (k: string, idx: number, toolName: string, isError: boolean) =>
-      set((s) => patchRuntime(s, k, (r) => {
-        if (idx < 0 || idx >= r.messages.length) return r;
-        const copy = [...r.messages];
-        const calls = [...(copy[idx].toolCalls ?? [])];
-        for (let i = calls.length - 1; i >= 0; i--) {
-          if (calls[i].toolName === toolName && calls[i].status === "calling") {
-            calls[i] = { ...calls[i], status: isError ? "error" : "done" };
-            break;
-          }
-        }
-        copy[idx] = { ...copy[idx], toolCalls: calls };
-        return { ...r, messages: copy };
-      }));
 
     try {
       let resolvedConvId = convId;
@@ -505,7 +572,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
           fileIds,
           parentPublicId,
           ...(opts.instructionCardIds && opts.instructionCardIds.length > 0 ? { instructionCardIds: opts.instructionCardIds } : {}),
-          ...(opts.webSearch ? { webSearch: true } : {}),
+          webSearch: opts.webSearch ?? false,
           ...(opts.knowledgeBaseIds && opts.knowledgeBaseIds.length > 0 ? { knowledgeBaseIds: opts.knowledgeBaseIds } : {}),
           ...(opts.createOptions?.outputModeId !== undefined
             ? { outputModeId: opts.createOptions.outputModeId }
@@ -536,11 +603,9 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
       if (newConvId) startConversationTitlePoll(newConvId);
 
       const terminalStatus = await consumeChatSSE(res.body, {
+        ...toolAndSearchHandlers(activeKey, assistantIdx),
         onDelta: (t) => enqueueDelta(activeKey, assistantIdx, "content", t),
         onReasoning: (t) => enqueueDelta(activeKey, assistantIdx, "reasoning", t),
-        onToolCall: (name, args) => addToolCallAt(activeKey, assistantIdx, { toolName: name, args, status: "calling" }),
-        onToolResult: (name, isError) => finishToolCallAt(activeKey, assistantIdx, name, isError),
-        onSearchResult: (results) => setSearchResultsAt(activeKey, assistantIdx, results),
         onError: (err) => {
           streamErrorReceived = true;
           // 先 flush 缓冲正文再追加错误,保证"正文在前、错误在后";改覆盖为追加,避免丢已生成正文。
@@ -658,6 +723,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
       }
 
       const terminalStatus = await consumeChatSSE(res.body, {
+        ...toolAndSearchHandlers(key, assistantIdx),
         onDelta: (t) => enqueueDelta(key, assistantIdx, "content", t),
         onReasoning: (t) => enqueueDelta(key, assistantIdx, "reasoning", t),
         onError: (error) => {
@@ -773,6 +839,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
       if (!res.ok || !res.body) throw new Error("请求失败");
 
       const terminalStatus = await consumeChatSSE(res.body, {
+        ...toolAndSearchHandlers(key, assistantIdx),
         onDelta: (t) => enqueueDelta(key, assistantIdx, "content", t),
         onReasoning: (t) => enqueueDelta(key, assistantIdx, "reasoning", t),
         onError: (error) => {
@@ -857,6 +924,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
 
       // 续写:delta 追加到既有 assistant 消息内容末尾(不清空原内容)
       const terminalStatus = await consumeChatSSE(res.body, {
+        ...toolAndSearchHandlers(key, assistantIdx),
         // 续写增量同样走合批:流式期间该 idx 消息 publicId 稳定(switchVersion 被 streaming 阻止),可省 publicId 校验。
         onDelta: (t) => enqueueDelta(key, assistantIdx, "content", t),
         onReasoning: (t) => enqueueDelta(key, assistantIdx, "reasoning", t),
@@ -917,7 +985,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
           artifacts: undefined,
           // P1-B: 用目标版本自身的 toolCalls 覆盖,无则清掉旧版本残留。
           toolCalls: target.toolCalls,
-          searchResults: undefined,
+          searchResults: target.searchResults,
           // P2-A: 必须用目标版本 feedback 覆盖;无反馈时显式清空,不能残留旧版本。
           feedback: target.feedback,
           versionInfo: { current: nextIdx + 1, total: siblings.length },

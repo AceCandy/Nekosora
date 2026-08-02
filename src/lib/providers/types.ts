@@ -43,6 +43,8 @@ export interface ResolvedRoute {
   /** 命中的模型 id(用量记录用)。 */
   modelId?: string;
   capabilities?: ModelCapabilities;
+  /** 当前上游路由是否已验证支持工具调用。 */
+  supportsTools?: boolean;
 }
 
 /**

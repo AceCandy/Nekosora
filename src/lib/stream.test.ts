@@ -242,6 +242,50 @@ describe("separateSystem", () => {
     expect(separateSystem(request).messages).toEqual(request.messages);
   });
 
+  it("将 OpenAI 工具消息转换为 AI SDK ModelMessage", () => {
+    const request: IRRequest = {
+      model: "gpt-4",
+      messages: [
+        { role: "user", content: "查询最新信息" },
+        {
+          role: "assistant",
+          content: "",
+          tool_calls: [{
+            id: "search-1",
+            type: "function",
+            function: { name: "web_search", arguments: JSON.stringify({ query: "latest" }) },
+          }],
+        },
+        { role: "tool", tool_call_id: "search-1", content: JSON.stringify({ sources: [] }) },
+      ],
+    };
+
+    const { messages } = separateSystem(request);
+
+    expect(messages).toEqual([
+      { role: "user", content: "查询最新信息" },
+      {
+        role: "assistant",
+        content: [{
+          type: "tool-call",
+          toolCallId: "search-1",
+          toolName: "web_search",
+          input: { query: "latest" },
+        }],
+      },
+      {
+        role: "tool",
+        content: [{
+          type: "tool-result",
+          toolCallId: "search-1",
+          toolName: "web_search",
+          output: { type: "text", value: JSON.stringify({ sources: [] }) },
+        }],
+      },
+    ]);
+    expect(messages.every((message) => modelMessageSchema.safeParse(message).success)).toBe(true);
+  });
+
   it("对话消息为空时抛错(从源头杜绝上游 400)", () => {
     const request: IRRequest = {
       model: "gpt-4",

@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   extractArtifacts: vi.fn(),
   getDb: vi.fn(),
   getSchema: vi.fn(),
+  searchWeb: vi.fn(),
 }));
 
 vi.mock("@/lib/chat/run-lifecycle", () => ({
@@ -44,6 +45,7 @@ vi.mock("@/lib/memory/dispatch", () => ({
 }));
 vi.mock("@/lib/artifacts/extract", () => ({ extractArtifacts: mocks.extractArtifacts }));
 vi.mock("@/lib/infra/db", () => ({ getDb: mocks.getDb, getSchema: mocks.getSchema }));
+vi.mock("@/lib/web-search/service", () => ({ searchWeb: mocks.searchWeb }));
 
 import { executeChatCompletion } from "@/lib/chat/completion-coordinator";
 
@@ -118,6 +120,7 @@ beforeEach(() => {
   mocks.createMemoryExtractionJob.mockReturnValue(memoryJob);
   mocks.dispatchMemoryExtractionJob.mockResolvedValue(true);
   mocks.extractArtifacts.mockReturnValue({ text: "", artifacts: [] });
+  mocks.searchWeb.mockReset();
   mocks.persistChatCompletion.mockImplementation(async (input) => ({
     assistantMessageId: "assistant-internal-1",
     status: input.terminalStatus,
@@ -128,6 +131,75 @@ beforeEach(() => {
 });
 
 describe("executeChatCompletion", () => {
+  it("联网开启时只注入逻辑搜索工具并持久化搜索追踪", async () => {
+    mocks.searchWeb.mockResolvedValue({
+      hit: true,
+      results: [{ title: "Source", url: "https://example.com/", snippet: "fact" }],
+      groundedSummary: "grounded fact",
+      backend: { type: "model", id: "grok-id", name: "Grok 4.5" },
+      attempts: [{
+        backend: { type: "model", id: "grok-id", name: "Grok 4.5" },
+        outcome: "success",
+        durationMs: 12,
+      }],
+    });
+    mocks.streamChatWithTools.mockImplementation((options) => (async function* () {
+      yield { type: "tool-call", toolCallId: "search-1", toolName: "web_search", args: { query: "latest" } };
+      const execution = await options.webSearchTool.execute("search-1", { query: "latest" });
+      yield {
+        type: "tool-result",
+        toolCallId: "search-1",
+        toolName: "web_search",
+        ...execution,
+      };
+      yield { type: "finish", finishReason: "stop", usage: { totalTokens: 9 } };
+    })());
+    const emitted: unknown[] = [];
+    const processTrace = { mode: "test" };
+
+    const outcome = await executeChatCompletion({
+      ...baseInput,
+      processTrace,
+      webSearchEnabled: true,
+      signal: new AbortController().signal,
+      emit: (event) => { emitted.push(event); },
+    });
+
+    expect(outcome.kind).toBe("committed_success");
+    expect(mocks.streamChat).not.toHaveBeenCalled();
+    expect(mocks.streamChatWithTools).toHaveBeenCalledWith(expect.objectContaining({
+      webSearchTool: expect.objectContaining({
+        definition: expect.objectContaining({ function: expect.objectContaining({ name: "web_search" }) }),
+      }),
+    }));
+    expect(mocks.searchWeb).toHaveBeenCalledWith("user-1", "latest", expect.objectContaining({
+      runId: "run-1",
+      toolCallId: "search-1",
+      currentModelId: "model-id-1",
+    }));
+    expect(emitted.map((event) => (event as { type: string }).type)).toEqual([
+      "started",
+      "tool-call",
+      "search_started",
+      "search_completed",
+      "tool-result",
+      "finish",
+    ]);
+    expect(mocks.persistChatCompletion).toHaveBeenCalledWith(expect.objectContaining({
+      processTrace: expect.objectContaining({
+        webSearch: {
+          calls: [expect.objectContaining({
+            toolCallId: "search-1",
+            query: "latest",
+            mode: "model",
+            status: "success",
+            backend: { type: "model", id: "grok-id", name: "Grok 4.5" },
+          })],
+        },
+      }),
+    }));
+  });
+
   it("仅在 success 事务提交后产生唯一 finish", async () => {
     mocks.streamChat.mockReturnValue(events(
       { type: "text-delta", text: "answer" },

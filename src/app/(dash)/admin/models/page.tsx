@@ -56,6 +56,7 @@ export default async function ModelsPage({ searchParams }: { searchParams?: Prom
     upstreamModelName: (r.route as Record<string, unknown>).upstreamModelName as string,
     priority: (r.route as Record<string, unknown>).priority as number,
     weight: (r.route as Record<string, unknown>).weight as number,
+    supportsTools: (r.route as Record<string, unknown>).supportsTools === true,
     enabled: (r.route as Record<string, unknown>).enabled as boolean,
   }));
 

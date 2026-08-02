@@ -10,7 +10,7 @@
  *   3. 显示 ⇒ 可调,只显示真实拥有的强度档
  */
 import { getSupportedReasoningLevels } from "@/lib/reasoning";
-import type { ModelCapabilities, ThinkingFormat } from "@/db/types";
+import type { ModelCapabilities, ThinkingFormat, WebSearchFormat } from "@/db/types";
 
 /** pi 模型条目的最小结构(pi.dev/api/models 子集)。 */
 export interface PiModel {
@@ -110,6 +110,44 @@ const LEGAL_THINKING_FORMATS = new Set<string>([
   "anthropic",
   "google",
 ]);
+
+const WEB_SEARCH_MODEL_IDS: Record<WebSearchFormat, ReadonlySet<string>> = {
+  openai: new Set([
+    "gpt-5.5", "gpt-5.5-pro", "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra",
+  ]),
+  anthropic: new Set(["claude-opus-5", "claude-sonnet-5"]),
+  google: new Set([
+    "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite",
+    "gemini-3-flash-preview", "gemini-3.1-pro-preview",
+    "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.6-flash",
+  ]),
+  xai: new Set(["grok-4.5"]),
+};
+
+function webSearchFormatFor(matchResult: MatchResult): WebSearchFormat | undefined {
+  const { provider, pi } = matchResult;
+  if (
+    provider === "openai"
+    && pi.api === "openai-responses"
+    && WEB_SEARCH_MODEL_IDS.openai.has(pi.id)
+  ) return "openai";
+  if (
+    provider === "anthropic"
+    && pi.api === "anthropic-messages"
+    && WEB_SEARCH_MODEL_IDS.anthropic.has(pi.id)
+  ) return "anthropic";
+  if (
+    provider === "google"
+    && pi.api === "google-generative-ai"
+    && WEB_SEARCH_MODEL_IDS.google.has(pi.id)
+  ) return "google";
+  if (
+    provider === "xai"
+    && pi.api === "openai-responses"
+    && WEB_SEARCH_MODEL_IDS.xai.has(pi.id)
+  ) return "xai";
+  return undefined;
+}
 // bare 匹配时排除聚合 provider 与区域变体,优先官方主 provider。
 export const AGGREGATOR = new Set([
   "opencode", "opencode-go", "openrouter", "azure-openai-responses",
@@ -648,6 +686,10 @@ function proposeCapabilities(
     modelKey: matchResult.modelKey,
     scope: "reasoning" as const,
   };
+
+  const webSearchFormat = webSearchFormatFor(matchResult);
+  if (webSearchFormat) next.webSearchFormat = webSearchFormat;
+  else delete next.webSearchFormat;
 
   if (!decodeIssues.some((issue) => issue.scope === "vision") && pi.input !== undefined) {
     if (pi.input.includes("image")) next.vision = true;

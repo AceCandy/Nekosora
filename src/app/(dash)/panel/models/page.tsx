@@ -66,6 +66,7 @@ export default async function MyModelsPage({ searchParams }: { searchParams?: Pr
         upstreamModelName: route.upstreamModelName as string,
         priority: route.priority as number,
         weight: route.weight as number,
+        supportsTools: route.supportsTools === true,
         enabled: route.enabled as boolean,
       };
     }),

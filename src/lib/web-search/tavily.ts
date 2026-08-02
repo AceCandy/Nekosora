@@ -1,30 +1,32 @@
-/**
- * Tavily 搜索适配器 —— https://docs.tavily.com/api-reference/search
- *
- * 请求:POST https://api.tavily.com/search,body 含 api_key/query/max_results。
- * 响应:results 数组,每项含 title/url/content。
- */
-import type { SearchProvider, SearchResult, SearchOptions } from "./types";
+import { z } from "zod";
+import type { SearchProvider } from "./types";
+import { SearchProviderError } from "./types";
 
 const TAVILY_ENDPOINT = "https://api.tavily.com/search";
+const responseSchema = z.object({
+  results: z.array(z.object({
+    title: z.string().optional(),
+    url: z.string().optional(),
+    content: z.string().optional(),
+  })).optional(),
+});
 
 export function createTavilyProvider(apiKey: string): SearchProvider {
   return {
     name: "tavily",
-    async search(query, opts: SearchOptions = {}): Promise<SearchResult[]> {
-      const maxResults = opts.maxResults ?? 5;
+    async search(query, opts = {}) {
       const res = await fetch(TAVILY_ENDPOINT, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ api_key: apiKey, query, max_results: maxResults }),
-        signal: AbortSignal.timeout(8000),
+        body: JSON.stringify({ api_key: apiKey, query, max_results: opts.maxResults ?? 5 }),
+        signal: opts.signal,
       });
-      if (!res.ok) throw new Error(`tavily HTTP ${res.status}`);
-      const data = (await res.json()) as { results?: { title?: string; url?: string; content?: string }[] };
-      return (data.results ?? []).map((r) => ({
-        title: r.title ?? "(无标题)",
-        url: r.url ?? "",
-        snippet: (r.content ?? "").slice(0, 300),
+      if (!res.ok) throw new SearchProviderError(`tavily HTTP ${res.status}`, res.status);
+      const data = responseSchema.parse(await res.json());
+      return (data.results ?? []).map((item) => ({
+        title: item.title ?? "(无标题)",
+        url: item.url ?? "",
+        snippet: item.content ?? "",
       }));
     },
   };

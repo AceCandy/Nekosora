@@ -3,6 +3,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 vi.mock("ai", () => ({
   generateText: vi.fn(),
   streamText: vi.fn(),
+  jsonSchema: vi.fn((schema: unknown) => ({ jsonSchema: schema })),
   Output: { json: vi.fn(() => ({ kind: "json-output" })) },
 }));
 
@@ -64,7 +65,7 @@ function makeSingleRouteRepository(): RouteRepository {
       ownerUserId: "user-a",
       visibility: "public",
       enabled: true,
-      capabilities: {},
+      capabilities: { tools: true },
     }) : null,
     findEnabledModelByNameForOwner: async () => ({
       id: "model-a",
@@ -72,7 +73,7 @@ function makeSingleRouteRepository(): RouteRepository {
       ownerUserId: "user-a",
       visibility: "private",
       enabled: true,
-      capabilities: {},
+      capabilities: { tools: true },
     }),
     findEnabledRoutes: async () => [{
       route: {
@@ -82,6 +83,7 @@ function makeSingleRouteRepository(): RouteRepository {
         upstreamModelName: "upstream-model",
         priority: 0,
         weight: 1,
+        supportsTools: true,
         enabled: true,
       },
       provider: {
@@ -181,6 +183,85 @@ describe("streamChatWithTools agent loop finish signal", () => {
     });
   });
 
+  it("将 IR 工具数组转换为 AI SDK ToolSet", async () => {
+    vi.mocked(streamText).mockReturnValue(mockStreamResult([], "stop"));
+
+    await collect(streamChatWithTools({
+      ...baseOpts,
+      request: {
+        ...baseOpts.request,
+        tools: [{
+          type: "function",
+          function: {
+            name: "web_search",
+            description: "Search the web",
+            parameters: {
+              type: "object",
+              properties: { query: { type: "string" } },
+              required: ["query"],
+            },
+          },
+        }],
+      },
+    }));
+
+    const request = vi.mocked(streamText).mock.calls[0]?.[0] as {
+      tools?: Record<string, {
+        description?: string;
+        inputSchema?: { jsonSchema?: unknown };
+        execute?: unknown;
+      }>;
+    };
+    expect(Array.isArray(request.tools)).toBe(false);
+    expect(Object.keys(request.tools ?? {})).toEqual(["web_search"]);
+    expect(request.tools).not.toHaveProperty("0");
+    expect(request.tools?.web_search).toMatchObject({
+      description: "Search the web",
+      inputSchema: {
+        jsonSchema: {
+          type: "object",
+          properties: { query: { type: "string" } },
+          required: ["query"],
+        },
+      },
+    });
+    expect(request.tools?.web_search).not.toHaveProperty("execute");
+  });
+
+  it("带工具的请求跳过未验证工具能力的路由", async () => {
+    const repository = makeSingleRouteRepository();
+    const originalFindEnabledRoutes = repository.findEnabledRoutes;
+    repository.findEnabledRoutes = async (modelId) => {
+      const [supported] = await originalFindEnabledRoutes(modelId);
+      return [
+        {
+          ...supported,
+          route: {
+            ...supported.route,
+            id: "route-unsupported",
+            priority: -1,
+            supportsTools: false,
+          },
+        },
+        supported,
+      ];
+    };
+    setRouteRepository(repository);
+    vi.mocked(streamText).mockReturnValue(mockStreamResult(
+      [{ type: "text-delta", text: "supported" }],
+      "stop",
+    ));
+
+    const events = await collect(streamChatWithTools(baseOpts));
+
+    expect(vi.mocked(streamText)).toHaveBeenCalledTimes(1);
+    expect(events.map((event) => event.type)).toEqual(["text-delta", "finish"]);
+    expect(telemetry.recordAttempt).toHaveBeenCalledWith(expect.objectContaining({
+      route: expect.objectContaining({ routeId: "route-unsupported" }),
+      status: "rejected",
+    }));
+  });
+
   it("工具链:中间 finish 不外发,最终文本轮发一次 finish 且 usage 跨轮聚合", async () => {
     vi.mocked(streamText)
       .mockReturnValueOnce(mockStreamResult(
@@ -270,22 +351,39 @@ describe("streamChatWithTools agent loop finish signal", () => {
       { role: "user", content: "hello" },
       {
         role: "assistant",
-        content: "",
-        tool_calls: [
+        content: [
           {
-            id: "tc1",
-            type: "function",
-            function: { name: "demo__echo", arguments: JSON.stringify({ q: "1" }) },
+            type: "tool-call",
+            toolCallId: "tc1",
+            toolName: "demo__echo",
+            input: { q: "1" },
           },
           {
-            id: "tc2",
-            type: "function",
-            function: { name: "demo__echo", arguments: JSON.stringify({ q: "2" }) },
+            type: "tool-call",
+            toolCallId: "tc2",
+            toolName: "demo__echo",
+            input: { q: "2" },
           },
         ],
       },
-      { role: "tool", tool_call_id: "tc1", content: "first" },
-      { role: "tool", tool_call_id: "tc2", content: JSON.stringify({ value: "second" }) },
+      {
+        role: "tool",
+        content: [{
+          type: "tool-result",
+          toolCallId: "tc1",
+          toolName: "demo__echo",
+          output: { type: "text", value: "first" },
+        }],
+      },
+      {
+        role: "tool",
+        content: [{
+          type: "tool-result",
+          toolCallId: "tc2",
+          toolName: "demo__echo",
+          output: { type: "text", value: JSON.stringify({ value: "second" }) },
+        }],
+      },
     ]);
   });
 

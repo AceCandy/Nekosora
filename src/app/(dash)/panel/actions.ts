@@ -783,6 +783,7 @@ export async function createMyRoute(modelId: string, formData: FormData) {
     upstreamModelName: String(formData.get("upstreamModelName") ?? ""),
     priority: Number(formData.get("priority") ?? 0),
     weight: Number(formData.get("weight") ?? 1),
+    supportsTools: formData.get("supportsTools") === "on",
     enabled: true,
   });
   revalidatePath("/panel", "layout");
@@ -848,6 +849,7 @@ export async function updateMyRoute(id: string, formData: FormData) {
       upstreamModelName: String(formData.get("upstreamModelName") ?? ""),
       priority: Number(formData.get("priority") ?? 0),
       weight: Number(formData.get("weight") ?? 1),
+      supportsTools: formData.get("supportsTools") === "on",
     })
     .where(and(eq(S().routes.id, id), eq(S().routes.ownerUserId, user.id)));
   revalidatePath("/panel", "layout");

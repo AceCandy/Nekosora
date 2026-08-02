@@ -269,6 +269,7 @@ export const routes = pgTable(
     upstreamModelName: text("upstream_model_name").notNull(),
     priority: integer("priority").notNull().default(0),
     weight: integer("weight").notNull().default(1),
+    supportsTools: boolean("supports_tools").notNull().default(false),
     enabled: boolean("enabled").notNull().default(true),
     headersJson: jsonb("headers_json").$type<Record<string, string>>(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

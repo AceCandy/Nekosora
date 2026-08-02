@@ -1,0 +1,18 @@
+{"file":".trellis/spec/backend/index.md","reason":"复核后端范围与规范覆盖"}
+{"file":".trellis/spec/backend/web-search.md","reason":"检查新实现是否完整替换旧首个 enabled 契约"}
+{"file":".trellis/spec/backend/auth-guidelines.md","reason":"检查用户属主、Action 鉴权和密钥边界"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"检查迁移、journal/snapshot、JSONB 与数据库约束"}
+{"file":".trellis/spec/backend/chat-run-metadata.md","reason":"检查 run、assistant commit、SSE 终态和历史投影"}
+{"file":".trellis/spec/backend/mcp-integration.md","reason":"检查单工具、providerExecuted、取消和 Agent loop 原子性"}
+{"file":".trellis/spec/backend/model-message-boundary.md","reason":"检查 Hosted Search translator 未破坏 IR 边界"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"检查失败分类、降级与敏感信息"}
+{"file":".trellis/spec/backend/dependency-security.md","reason":"检查 xAI SDK 与 lockfile 风险"}
+{"file":".trellis/spec/frontend/index.md","reason":"复核前端边界与质量门槛"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"检查 SSE、刷新和版本切换状态收敛"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"检查 DTO 和 Zod 边界无重复类型"}
+{"file":".trellis/spec/frontend/list-drag-sort.md","reason":"检查全局排序交互与持久化"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"前端可访问性、测试和无关 diff 审查"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"复核完整数据流、授权和 round-trip"}
+{"file":".trellis/tasks/08-01-web-search-orchestration/research/current-architecture.md","reason":"按已知缺口核对是否遗漏关键链路"}
+{"file":".trellis/tasks/08-01-web-search-orchestration/research/hosted-search.md","reason":"核对 provider 请求与 citation 归一化"}
+{"file":".trellis/tasks/08-01-web-search-orchestration/research/security-and-persistence.md","reason":"重点复核密钥、SSRF、取消和持久化"}

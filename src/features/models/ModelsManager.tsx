@@ -61,6 +61,7 @@ export interface RouteItem {
   upstreamModelName: string;
   priority: number;
   weight: number;
+  supportsTools: boolean;
   enabled: boolean;
 }
 
@@ -399,6 +400,7 @@ export default function ModelsManager({
             upstreamModelName: routeEditing.upstreamModelName,
             priority: routeEditing.priority,
             weight: routeEditing.weight,
+            supportsTools: routeEditing.supportsTools,
           }}
         />
       )}
@@ -841,6 +843,9 @@ function RouteListPanel({
                   <td className="p-2.5 font-mono text-ui-caption text-neutral-500 dark:text-neutral-400">
                     <span className="inline-flex items-center gap-1.5">
                       {r.upstreamModelName}
+                      {r.supportsTools && (
+                        <Badge>{t("supportsToolsBadge")}</Badge>
+                      )}
                       {syncMap[r.id] === "synced" && (
                         <Badge variant="success">{t("syncSynced")}</Badge>
                       )}

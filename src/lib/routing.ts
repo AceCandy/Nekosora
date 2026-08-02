@@ -152,6 +152,7 @@ async function resolveModelRoutes(
       routeId: row.route.id as string,
       modelId: model.id,
       capabilities: model.capabilities,
+      supportsTools: row.route.supportsTools === true,
     }),
   );
 

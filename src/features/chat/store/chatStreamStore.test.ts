@@ -63,7 +63,32 @@ describe("chatStreamStore Composer 请求快照", () => {
     vi.unstubAllGlobals();
   });
 
-  it("旧调用不发送新增字段，使 route 可以回退数据库", async () => {
+  it("进入新对话 runtime 时清除旧活动态且保留后台会话", () => {
+    useChatStreamStore.setState({
+      runtimes: {
+        "conversation-old": {
+          messages: [{ role: "assistant", content: "still running" }],
+          streaming: true,
+          abortController: null,
+        },
+      },
+      activeConversationId: "conversation-old",
+      optimisticConversation: {
+        id: "conversation-old",
+        title: "Old conversation",
+        createdAt: 1,
+      },
+    });
+
+    useChatStreamStore.getState().hydrate(NEW_CONVERSATION_KEY, []);
+
+    const state = useChatStreamStore.getState();
+    expect(state.activeConversationId).toBeNull();
+    expect(state.runtimes["conversation-old"].streaming).toBe(true);
+    expect(state.optimisticConversation?.id).toBe("conversation-old");
+  });
+
+  it("旧调用仍显式发送联网关闭，避免会话 true 覆盖本轮选择", async () => {
     await useChatStreamStore.getState().send("conversation-existing", "hello", sendOptions);
 
     const fetchMock = vi.mocked(fetch);
@@ -71,6 +96,7 @@ describe("chatStreamStore Composer 请求快照", () => {
     const body = JSON.parse(request.body as string) as Record<string, unknown>;
     expect(body).not.toHaveProperty("outputModeId");
     expect(body).not.toHaveProperty("reasoning");
+    expect(body.webSearch).toBe(false);
   });
 
   it("通过本地发送条件后立即通知 Composer 清空输入", async () => {
@@ -264,6 +290,7 @@ describe("chatStreamStore finish metadata", () => {
             createdAt: "2026-07-28T03:00:00.000Z",
             status: "interrupted",
             runMetadata: { model: "Old Model", durationMs: 500 },
+            searchResults: [{ title: "Old", url: "https://old.example", snippet: "old" }],
           }],
           streaming: false,
           abortController: null,
@@ -280,6 +307,10 @@ describe("chatStreamStore finish metadata", () => {
             .runMetadata,
         ).toBeUndefined();
         handlers.onAssistantMessage?.("assistant-1", "2026-07-27T03:00:00.000Z");
+        handlers.onSearchCompleted?.(
+          "search-new",
+          [{ title: "New", url: "https://new.example", snippet: "new" }],
+        );
         handlers.onFinish?.(finishMetadata);
         return "success" as const;
       },
@@ -299,6 +330,10 @@ describe("chatStreamStore finish metadata", () => {
       createdAt: "2026-07-27T03:00:00.000Z",
       status: "success",
       runMetadata: finishMetadata,
+      searchResults: [
+        { title: "Old", url: "https://old.example", snippet: "old" },
+        { title: "New", url: "https://new.example", snippet: "new" },
+      ],
     });
   });
 });
@@ -366,6 +401,11 @@ describe("chatStreamStore terminal 状态收敛", () => {
       if (result instanceof Error) throw result;
       return result;
     });
+    await invokeAction(action);
+    return useChatStreamStore.getState().runtimes[key].messages.at(-1);
+  }
+
+  async function invokeAction(action: StreamAction) {
     if (action === "send") {
       await useChatStreamStore.getState().send(key, "next", sendOptions);
     } else if (action === "regenerate") {
@@ -392,7 +432,6 @@ describe("chatStreamStore terminal 状态收敛", () => {
         "model-id-a",
       );
     }
-    return useChatStreamStore.getState().runtimes[key].messages.at(-1);
   }
 
   it.each(cases)("%s 收到 terminal(%s) 后写入对应消息完整性状态", async (action, status) => {
@@ -410,6 +449,29 @@ describe("chatStreamStore terminal 状态收敛", () => {
 
     expect(message?.status).toBe("interrupted");
     expect(message?.content.match(/\[错误\]/g)).toHaveLength(1);
+  });
+
+  it.each(actions)("%s 按 toolCallId 收敛同名搜索并保存引用", async (action) => {
+    mocks.consumeChatSSE.mockImplementationOnce(async (
+      _body: ReadableStream<Uint8Array>,
+      handlers: SSEHandlers,
+    ) => {
+      handlers.onToolCall?.("web_search", { query: "first" }, "tc-1");
+      handlers.onToolCall?.("web_search", { query: "second" }, "tc-2");
+      handlers.onSearchFailed?.("tc-1", "failed");
+      handlers.onSearchCompleted?.("tc-2", [{ title: "Source", url: "https://example.com" }]);
+      handlers.onToolResult?.("web_search", false, "tc-2");
+      return "success" as const;
+    });
+
+    await invokeAction(action);
+
+    const message = useChatStreamStore.getState().runtimes[key].messages.at(-1);
+    expect(message?.toolCalls).toEqual([
+      { toolCallId: "tc-1", toolName: "web_search", args: { query: "first" }, status: "error" },
+      { toolCallId: "tc-2", toolName: "web_search", args: { query: "second" }, status: "done" },
+    ]);
+    expect(message?.searchResults).toEqual([{ title: "Source", url: "https://example.com" }]);
   });
 });
 
@@ -674,6 +736,7 @@ describe("chatStreamStore switchVersion toolCalls", () => {
   const targetToolCalls: ToolCallRecord[] = [
     { toolName: "web-search", status: "done", args: { q: "v2" } },
   ];
+  const targetSearchResults = [{ title: "v2", url: "https://v2.example", snippet: "source" }];
 
   function seedAssistant(extra?: Partial<ChatMessage>) {
     useChatStreamStore.setState({
@@ -724,6 +787,7 @@ describe("chatStreamStore switchVersion toolCalls", () => {
             completedAt: "2026-07-25T00:00:02.000Z",
           },
           toolCalls: targetToolCalls,
+          searchResults: targetSearchResults,
         },
       ],
     });
@@ -742,7 +806,7 @@ describe("chatStreamStore switchVersion toolCalls", () => {
       completedAt: "2026-07-25T00:00:02.000Z",
     });
     expect(msg.toolCalls).toEqual(targetToolCalls);
-    expect(msg.searchResults).toBeUndefined();
+    expect(msg.searchResults).toEqual(targetSearchResults);
     expect(msg.versionInfo).toEqual({ current: 2, total: 2 });
   });
 

@@ -133,7 +133,11 @@ vi.mock("@/lib/infra/db", () => {
     update: (table?: { __table?: string }) => ({
       set: (patch: Record<string, unknown>) => ({
         where: (condition: Condition) => {
-          const rows = table?.__table === "providers" ? mockData.providers : mockData.models;
+          const rows = table?.__table === "providers"
+            ? mockData.providers
+            : table?.__table === "routes"
+              ? mockData.routes
+              : mockData.models;
           const apply = () => {
             let count = 0;
             for (const row of rows) {
@@ -169,7 +173,7 @@ vi.mock("@/lib/infra/db", () => {
   return { getDb: async () => db, getSchema: () => schema, isPg: false };
 });
 
-import { attachMyProviderModelRoute, createMyModel, reorderMyModels, updateMyModel, checkMyProviderHealth, testMyProviderModel, testMyKeyDirect, getBindableModels } from "./actions";
+import { attachMyProviderModelRoute, createMyModel, createMyRoute, reorderMyModels, updateMyModel, updateMyRoute, checkMyProviderHealth, testMyProviderModel, testMyKeyDirect, getBindableModels } from "./actions";
 import { probeProviderKey } from "@/lib/providers/probe";
 import { parseKeyBundle, pickWeightedKey } from "@/lib/providers/keys";
 
@@ -218,6 +222,32 @@ describe("attachMyProviderModelRoute", () => {
     await expect(attachMyProviderModelRoute("private-a", "provider-b", "upstream-a"))
       .rejects.toThrow("服务商不存在");
     expect(mockData.routes).toHaveLength(0);
+  });
+});
+
+describe("个人路由工具能力", () => {
+  beforeEach(() => {
+    mockData.providers = [{ id: "provider-a", ownerUserId: "admin-a" }];
+  });
+
+  it("创建和更新时保存显式工具能力", async () => {
+    const createData = new FormData();
+    createData.set("providerId", "provider-a");
+    createData.set("upstreamModelName", "upstream-a");
+    createData.set("supportsTools", "on");
+
+    await createMyRoute("private-a", createData);
+    expect(mockData.routes[0]).toEqual(expect.objectContaining({ supportsTools: true }));
+
+    const updateData = new FormData();
+    updateData.set("providerId", "provider-a");
+    updateData.set("upstreamModelName", "upstream-b");
+    await updateMyRoute(mockData.routes[0].id as string, updateData);
+
+    expect(mockData.routes[0]).toEqual(expect.objectContaining({
+      upstreamModelName: "upstream-b",
+      supportsTools: false,
+    }));
   });
 });
 

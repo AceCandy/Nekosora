@@ -59,6 +59,41 @@ describe("consumeChatSSE", () => {
     });
   });
 
+  it("透传工具调用 ID 与搜索生命周期", async () => {
+    const onToolCall = vi.fn();
+    const onToolResult = vi.fn();
+    const onSearchStarted = vi.fn();
+    const onSearchCompleted = vi.fn();
+    const onSearchFailed = vi.fn();
+    const body = streamFrom(
+      'data: {"type":"tool_call","toolCallId":"tc-1","toolName":"web_search","args":{"query":"latest"}}\n\n' +
+      'data: {"type":"search_started","toolCallId":"tc-1","query":"latest"}\n\n' +
+      'data: {"type":"search_completed","toolCallId":"tc-1","citations":[{"title":"Source","url":"https://example.com"}]}\n\n' +
+      'data: {"type":"tool_result","toolCallId":"tc-1","toolName":"web_search","isError":false}\n\n' +
+      'data: {"type":"search_failed","toolCallId":"tc-2","reason":"unavailable"}\n\n' +
+      'data: {"type":"terminal","status":"interrupted"}\n\n' +
+      "data: [DONE]\n\n",
+    );
+
+    await consumeChatSSE(body, {
+      onDelta: vi.fn(),
+      onToolCall,
+      onToolResult,
+      onSearchStarted,
+      onSearchCompleted,
+      onSearchFailed,
+    });
+
+    expect(onToolCall).toHaveBeenCalledWith("web_search", { query: "latest" }, "tc-1");
+    expect(onSearchStarted).toHaveBeenCalledWith("tc-1", "latest");
+    expect(onSearchCompleted).toHaveBeenCalledWith("tc-1", [{
+      title: "Source",
+      url: "https://example.com",
+    }]);
+    expect(onToolResult).toHaveBeenCalledWith("web_search", false, "tc-1");
+    expect(onSearchFailed).toHaveBeenCalledWith("tc-2", "unavailable");
+  });
+
   it("收到可靠 DONE 后立即结束，不等待网络 EOF", async () => {
     const onDelta = vi.fn();
     let controllerRef: ReadableStreamDefaultController<Uint8Array> | null = null;

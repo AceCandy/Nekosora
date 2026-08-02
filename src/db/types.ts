@@ -25,6 +25,9 @@ export type ThinkingFormat =
   | "string-thinking"
   | "ant-ling";
 
+/** 模型官方原生联网搜索协议；缺省表示未验证支持。 */
+export type WebSearchFormat = "openai" | "anthropic" | "google" | "xai";
+
 export interface ModelCapabilities {
   tools?: boolean;
   vision?: boolean;
@@ -42,6 +45,8 @@ export interface ModelCapabilities {
   audioTranscription?: boolean;
   /** P1-D:文字转语音(TTS 兼容)。 */
   audioSynthesis?: boolean;
+  /** 原生联网搜索请求语义；只能由模型目录显式声明。 */
+  webSearchFormat?: WebSearchFormat;
 }
 
 export type ModelType = "chat" | "image" | "embedding" | "rerank" | "audio";
@@ -92,6 +97,33 @@ export interface ProcessTraceBlock {
   sourceCount?: number;
 }
 
+export interface WebSearchTraceCitation {
+  title: string;
+  url: string;
+  snippet?: string;
+}
+
+export interface WebSearchTraceBackend {
+  type: "current-model" | "model" | "provider";
+  id?: string;
+  name: string;
+}
+
+export interface WebSearchTraceCall {
+  toolCallId: string;
+  query: string;
+  mode: WebSearchTraceBackend["type"] | null;
+  backend: WebSearchTraceBackend | null;
+  status: "running" | "success" | "failed" | "unavailable" | "cancelled";
+  durationMs?: number;
+  citations?: WebSearchTraceCitation[];
+  attempts?: Array<{
+    backend: WebSearchTraceBackend;
+    outcome: string;
+    durationMs: number;
+  }>;
+}
+
 export interface ProcessTrace {
   mode?: string;
   promptFingerprint?: string;
@@ -100,6 +132,7 @@ export interface ProcessTrace {
   fullMessageCount?: number;
   sentMessageCount?: number;
   blocks?: ProcessTraceBlock[];
+  webSearch?: { calls: WebSearchTraceCall[] };
 }
 
 /** 分享创建时冻结的单条消息正文。 */

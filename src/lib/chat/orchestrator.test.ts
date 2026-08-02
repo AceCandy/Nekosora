@@ -25,6 +25,7 @@ import {
   calculateTokenBudgets,
   prepareChatContext,
   replaceMessageText,
+  resolveModelGenerationSettings,
   selectCurrentBranchMessages,
 } from "@/lib/chat/orchestrator";
 
@@ -53,6 +54,75 @@ describe("calculateTokenBudgets", () => {
       inputBudget: 15_616,
       maxOutputTokens: 16_384,
     });
+  });
+});
+
+describe("resolveModelGenerationSettings", () => {
+  const schema = {
+    models: {
+      id: "models.id",
+      name: "models.name",
+      catalogId: "models.catalogId",
+      enabled: "models.enabled",
+      visibility: "models.visibility",
+      ownerUserId: "models.ownerUserId",
+    },
+    modelCatalog: {
+      id: "catalog.id",
+      contextWindow: "catalog.contextWindow",
+      maxOutputTokens: "catalog.maxOutputTokens",
+      capabilities: "catalog.capabilities",
+    },
+    routes: {
+      id: "routes.id",
+      modelId: "routes.modelId",
+      providerId: "routes.providerId",
+      supportsTools: "routes.supportsTools",
+      enabled: "routes.enabled",
+    },
+    providers: {
+      id: "providers.id",
+      enabled: "providers.enabled",
+    },
+  };
+
+  function mockSettingsDb(toolRoutes: unknown[]) {
+    const responses = [[{
+      modelId: "model-a",
+      contextWindow: 32_000,
+      maxOutputTokens: 4_000,
+      capabilities: { tools: true },
+    }], toolRoutes];
+    return {
+      select: vi.fn(() => {
+        const rows = responses.shift() ?? [];
+        const query = {
+          from: vi.fn(() => query),
+          innerJoin: vi.fn(() => query),
+          where: vi.fn(() => query),
+          limit: vi.fn(() => Promise.resolve(rows)),
+        };
+        return query;
+      }),
+    };
+  }
+
+  it("模型目录与实际路由都支持时才启用工具", async () => {
+    await expect(resolveModelGenerationSettings({
+      db: mockSettingsDb([{ id: "route-a" }]),
+      schema,
+      userId: "user-a",
+      model: "model-a",
+      modelId: "model-a",
+    })).resolves.toMatchObject({ modelSupportsTools: true });
+
+    await expect(resolveModelGenerationSettings({
+      db: mockSettingsDb([]),
+      schema,
+      userId: "user-a",
+      model: "model-a",
+      modelId: "model-a",
+    })).resolves.toMatchObject({ modelSupportsTools: false });
   });
 });
 

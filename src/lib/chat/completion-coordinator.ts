@@ -1,4 +1,5 @@
 import type { ProcessTrace } from "@/db/types";
+import type { WebSearchTraceCall } from "@/db/types";
 import type { MessageRunMetadata } from "@/features/chat/model/types";
 import { extractArtifacts } from "@/lib/artifacts/extract";
 import type { AssistantWrite } from "@/lib/chat/completion-repository";
@@ -21,6 +22,9 @@ import type { CallContext, IRRequest, IRUsage, StreamEvent } from "@/lib/provide
 import { redactErrorMessage } from "@/lib/redaction";
 import { streamChat, streamChatWithTools } from "@/lib/stream";
 import { getChatUA } from "@/lib/system-settings/ua";
+import { searchWeb } from "@/lib/web-search/service";
+import type { IRToolDef } from "@/lib/providers/types";
+import { z } from "zod";
 
 const RUN_HEARTBEAT_INTERVAL_MS = 30_000;
 const STREAM_ABORTED = Symbol("stream-aborted");
@@ -29,6 +33,15 @@ export type ChatCompletionEvent =
   | { type: "started" }
   | Extract<StreamEvent, { type: "text-delta" | "reasoning-delta" | "tool-call" | "tool-result" }>
   | Extract<StreamEvent, { type: "error" }>
+  | { type: "search_started"; toolCallId: string; query: string }
+  | {
+      type: "search_completed";
+      toolCallId: string;
+      backend: NonNullable<WebSearchTraceCall["backend"]>;
+      durationMs: number;
+      citations: NonNullable<WebSearchTraceCall["citations"]>;
+    }
+  | { type: "search_failed"; toolCallId: string; reason: string; status: WebSearchTraceCall["status"] }
   | { type: "finish"; metadata: MessageRunMetadata };
 
 export type ChatCompletionOutcomeKind =
@@ -60,6 +73,7 @@ export interface ExecuteChatCompletionInput {
   memoryMessages: readonly { role: string; content: unknown }[];
   requestStartedAt: number;
   signal: AbortSignal;
+  webSearchEnabled?: boolean;
   emit: (event: ChatCompletionEvent) => Promise<void> | void;
 }
 
@@ -100,7 +114,8 @@ export async function executeChatCompletion(
       await input.emit({ type: "started" });
       const mcpServers = await resolveMcpServers(input.ctx).catch(() => []);
       const userAgent = await getChatUA();
-      const hasTools = mcpServers.some((server) => server.tools.length > 0);
+      const webSearchTool = input.webSearchEnabled ? createWebSearchTool(input) : undefined;
+      const hasTools = Boolean(webSearchTool) || mcpServers.some((server) => server.tools.length > 0);
       const stream = hasTools
         ? streamChatWithTools({
             ctx: input.ctx,
@@ -111,6 +126,7 @@ export async function executeChatCompletion(
             modelId: input.modelId,
             abortSignal: input.signal,
             userAgent,
+            webSearchTool,
           })
         : streamChat({
             ctx: input.ctx,
@@ -267,6 +283,110 @@ export async function executeChatCompletion(
     kind: settledStatus === "failed" ? "committed_failed" : "committed_interrupted",
     assistantText,
     assistantReasoning,
+  };
+}
+
+const webSearchArgsSchema = z.object({
+  query: z.string().trim().min(1).max(500),
+});
+
+const webSearchToolDefinition: IRToolDef = {
+  type: "function",
+  function: {
+    name: "web_search",
+    description: "搜索互联网以核实需要最新或外部信息的问题，并返回带来源的结果。",
+    parameters: {
+      type: "object",
+      properties: { query: { type: "string", minLength: 1, maxLength: 500 } },
+      required: ["query"],
+      additionalProperties: false,
+    },
+  },
+};
+
+function createWebSearchTool(input: ExecuteChatCompletionInput) {
+  return {
+    definition: webSearchToolDefinition,
+    async execute(toolCallId: string, args: unknown): Promise<{ result: unknown; isError: boolean }> {
+      const parsed = webSearchArgsSchema.safeParse(args);
+      if (!parsed.success) {
+        await input.emit({ type: "search_failed", toolCallId, reason: "搜索查询无效", status: "failed" });
+        return { result: { error: "invalid_search_query" }, isError: true };
+      }
+
+      const startedAt = Date.now();
+      const call: WebSearchTraceCall = {
+        toolCallId,
+        query: parsed.data.query,
+        mode: null,
+        backend: null,
+        status: "running",
+      };
+      const calls = input.processTrace.webSearch?.calls ?? [];
+      calls.push(call);
+      input.processTrace.webSearch = { calls };
+      await input.emit({ type: "search_started", toolCallId, query: parsed.data.query });
+
+      try {
+        const bundle = await searchWeb(input.userId, parsed.data.query, {
+          ctx: input.ctx,
+          runId: input.runId,
+          toolCallId,
+          currentModelId: input.modelId,
+          currentModelName: input.request.model,
+          signal: input.signal,
+        });
+        const durationMs = Date.now() - startedAt;
+        if (bundle.hit && bundle.backend && bundle.groundedSummary) {
+          Object.assign(call, {
+            mode: bundle.backend.type,
+            backend: bundle.backend,
+            status: "success" as const,
+            durationMs,
+            citations: bundle.results,
+            attempts: bundle.attempts,
+          });
+          await input.emit({
+            type: "search_completed",
+            toolCallId,
+            backend: bundle.backend,
+            durationMs,
+            citations: bundle.results,
+          });
+          return {
+            result: {
+              query: parsed.data.query,
+              groundedSummary: bundle.groundedSummary,
+              citations: bundle.results,
+              backend: bundle.backend,
+              attempts: bundle.attempts ?? [],
+            },
+            isError: false,
+          };
+        }
+
+        const reason = bundle.reason ?? "搜索失败";
+        Object.assign(call, {
+          mode: bundle.attempts?.at(-1)?.backend.type ?? null,
+          backend: null,
+          status: "failed" as const,
+          durationMs,
+          attempts: bundle.attempts,
+        });
+        await input.emit({ type: "search_failed", toolCallId, reason, status: "failed" });
+        return {
+          result: { error: "web_search_failed", query: parsed.data.query, reason, attempts: bundle.attempts ?? [] },
+          isError: true,
+        };
+      } catch (error) {
+        const status = input.signal.aborted ? "cancelled" : "failed";
+        Object.assign(call, { status, durationMs: Date.now() - startedAt });
+        if (!input.signal.aborted) {
+          await input.emit({ type: "search_failed", toolCallId, reason: "搜索执行失败", status });
+        }
+        throw error;
+      }
+    },
   };
 }
 

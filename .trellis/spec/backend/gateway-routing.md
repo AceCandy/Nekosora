@@ -146,6 +146,76 @@ WebChat 发消息、图像工作室生成(session 鉴权)。前端传 `modelId` 
 - 核心算法 `orderRoutes`/`weightedShuffle`/`filterByCircuitBreaker`/`pickWeightedKey`/`parseKeyBundle` 原样保留,对 route 来源透明。
 - `gateway-execution` engine 拿到 `routes[]` 后逐路由故障转移 × 路由内逐 key 重试,对 operation 与 `source` 透明。
 
+## Scenario: Route-Level Tool Capability
+
+### 1. Scope / Trigger
+
+Apply this contract when changing function tools, MCP tools, WebChat logical search,
+Hosted Search, route forms, or route resolution. A catalog model may support tools
+while a concrete OpenAI-compatible/2API route does not preserve tool-call events.
+
+### 2. Signatures
+
+- Database: `routes.supports_tools boolean NOT NULL DEFAULT false`.
+- Runtime: `ResolvedRoute.supportsTools?: boolean`.
+- Effective capability: `model_catalog.capabilities.tools === true && route.supportsTools === true`.
+
+### 3. Contracts
+
+- `model_catalog.capabilities.tools` is the model-level upper bound; it never proves that
+  a concrete route supports tools.
+- Every route must explicitly opt in with `supports_tools=true`. Missing and migrated
+  legacy values are conservative `false`; do not infer support from model/provider names,
+  base URLs, or `openai-compatible` protocol alone.
+- WebChat exposes its logical `web_search` only when the visible model has at least one
+  enabled Provider route whose model and route capabilities both allow tools.
+- A request carrying tools rejects a route whose effective capability is false before the
+  upstream request, then lets the shared gateway engine try the next route.
+- Hosted Search runtime construction and search-model candidate listing apply the same
+  route opt-in. This prevents a 2API route from receiving provider-executed search tools.
+- Route create/update actions own the persisted flag. Quick-attach and initial-model routes
+  keep the database default until a user verifies and enables tool support.
+
+### 4. Validation & Error Matrix
+
+| Catalog tools | Route supports tools | Result |
+| --- | --- | --- |
+| false/missing | either | Do not expose or send tools |
+| true | false/missing | Reject this route for tool-bearing requests; try the next route |
+| true | true | Send the normalized ToolSet to this route |
+| true | no enabled capable route | WebChat does not inject logical search |
+| Hosted Search format compatible | route false | Exclude candidate/runtime |
+
+### 5. Good / Base / Bad Cases
+
+- Good: a model has a 2API primary route with `supports_tools=false` and a verified native
+  backup with `true`; a tool request skips the primary and uses the backup.
+- Base: an old route migrates to `false` and continues serving ordinary text generation.
+- Bad: copying `model_catalog.capabilities.tools` onto every resolved route causes a
+  JSON-looking tool call to arrive as assistant text.
+
+### 6. Tests Required
+
+- Migration tests assert the non-null `false` default plus journal/snapshot continuity.
+- Route action tests assert checked and unchecked form values persist `true` and `false`.
+- Routing tests assert `ResolvedRoute.supportsTools` preserves each row's value.
+- Stream tests place an unsupported route before a supported route and assert only the
+  supported route reaches `streamText`.
+- Web Search candidate and Hosted Search runtime tests assert route opt-in is mandatory.
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong: model semantics are treated as proof for every upstream route.
+tools: route.capabilities?.tools ? toModelTools(request.tools) : undefined;
+
+// Correct: model support is an upper bound and the concrete route must opt in.
+selectAdapter: (route) => request.tools?.length
+  && !(route.capabilities?.tools === true && route.supportsTools === true)
+  ? null
+  : adapter;
+```
+
 ## Scenario: Unified Gateway Execution Engine
 
 ### 1. Scope / Trigger
