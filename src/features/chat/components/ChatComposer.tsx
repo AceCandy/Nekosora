@@ -216,13 +216,17 @@ export default function ChatComposer({
 
   const handleSend = () => {
     // 滚动锚定由 message-scroller 的 scrollAnchor(user 消息)自动处理,无需手动 pin。
+    const submittedInput = input;
     setSendError(null);
-    sendWithCurrentSnapshot(input, {
+    sendWithCurrentSnapshot(submittedInput, {
       onAccepted: () => {
         setInput("");
         setSendError(null);
       },
-      onRejected: setSendError,
+      onRejected: (message) => {
+        setInput((current) => current || submittedInput);
+        setSendError(message);
+      },
     });
   };
 

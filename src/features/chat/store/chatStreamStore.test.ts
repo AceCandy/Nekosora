@@ -73,6 +73,39 @@ describe("chatStreamStore Composer 请求快照", () => {
     expect(body).not.toHaveProperty("reasoning");
   });
 
+  it("通过本地发送条件后立即通知 Composer 清空输入", async () => {
+    let resolveRequest!: (response: Response) => void;
+    const request = new Promise<Response>((resolve) => {
+      resolveRequest = resolve;
+    });
+    const onRequestAccepted = vi.fn();
+    vi.stubGlobal("fetch", vi.fn(() => request));
+
+    const sending = useChatStreamStore.getState().send(
+      "conversation-existing",
+      "hello",
+      sendOptions,
+      { onRequestAccepted },
+    );
+
+    expect(onRequestAccepted).toHaveBeenCalledOnce();
+    resolveRequest(new Response("data: done\n\n"));
+    await sending;
+  });
+
+  it("未通过本地发送条件时不通知 Composer 清空输入", async () => {
+    const onRequestAccepted = vi.fn();
+
+    await useChatStreamStore.getState().send(
+      "conversation-existing",
+      "",
+      sendOptions,
+      { onRequestAccepted },
+    );
+
+    expect(onRequestAccepted).not.toHaveBeenCalled();
+  });
+
   it("新 Composer 显式发送 null/off 并用完整 reasoning map 创建会话", async () => {
     await useChatStreamStore.getState().send(
       NEW_CONVERSATION_KEY,

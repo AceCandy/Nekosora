@@ -393,6 +393,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
 
     const controller = new AbortController();
     set((s) => patchRuntime(s, key, (r) => ({ ...r, abortController: controller })));
+    hooks?.onRequestAccepted?.();
 
     // 从已迁移后的运行时中读取真实会话 id(若存在)
     const convId = key === NEW_CONVERSATION_KEY ? null : key;
@@ -532,7 +533,6 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
         throw new Error(message);
       }
       hooks?.onAttachmentsConsumed?.(fileIds);
-      hooks?.onRequestAccepted?.();
       if (newConvId) startConversationTitlePoll(newConvId);
 
       const terminalStatus = await consumeChatSSE(res.body, {
