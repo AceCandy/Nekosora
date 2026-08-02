@@ -20,7 +20,7 @@ import type {
   MessageRunMetadata,
   ToolCallRecord,
 } from "@/features/chat/model/types";
-import type { ReasoningLevel } from "@/db/types";
+import type { ReasoningLevel, WebSearchTraceBackend } from "@/db/types";
 
 /** 新会话(尚无会话 id)在 store 内使用的隔离键。 */
 export const NEW_CONVERSATION_KEY = "__new__";
@@ -362,6 +362,7 @@ function mergeSearchResultsAt(
   key: string,
   idx: number,
   results: NonNullable<ChatMessage["searchResults"]>,
+  backend?: WebSearchTraceBackend,
 ): void {
   useChatStreamStore.setState((state) => {
     const runtime = state.runtimes[key];
@@ -370,7 +371,16 @@ function mergeSearchResultsAt(
     const message = messages[idx];
     const byUrl = new Map((message.searchResults ?? []).map((result) => [result.url, result]));
     for (const result of results) byUrl.set(result.url, result);
-    messages[idx] = { ...message, searchResults: Array.from(byUrl.values()) };
+    const next: ChatMessage = { ...message, searchResults: Array.from(byUrl.values()) };
+    if (backend) {
+      const backendKey = (value: WebSearchTraceBackend) => `${value.type}:${value.id ?? value.name}`;
+      const byBackend = new Map(
+        (message.searchBackends ?? []).map((value) => [backendKey(value), value]),
+      );
+      byBackend.set(backendKey(backend), backend);
+      next.searchBackends = Array.from(byBackend.values());
+    }
+    messages[idx] = next;
     return {
       runtimes: {
         ...state.runtimes,
@@ -437,8 +447,8 @@ function toolAndSearchHandlers(key: string, assistantIdx: number): Partial<SSEHa
       addToolCallAt(key, assistantIdx, { toolCallId, toolName, args, status: "calling" }),
     onToolResult: (toolName, isError, toolCallId) =>
       finishToolCallAt(key, assistantIdx, toolName, isError, toolCallId),
-    onSearchCompleted: (_toolCallId, citations) =>
-      mergeSearchResultsAt(key, assistantIdx, citations),
+    onSearchCompleted: (_toolCallId, citations, backend) =>
+      mergeSearchResultsAt(key, assistantIdx, citations, backend),
     onSearchFailed: (toolCallId) =>
       finishToolCallAt(key, assistantIdx, "web_search", true, toolCallId),
     // 兼容同版本部署期间的旧搜索结果帧。
@@ -986,6 +996,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
           // P1-B: 用目标版本自身的 toolCalls 覆盖,无则清掉旧版本残留。
           toolCalls: target.toolCalls,
           searchResults: target.searchResults,
+          searchBackends: target.searchBackends,
           // P2-A: 必须用目标版本 feedback 覆盖;无反馈时显式清空,不能残留旧版本。
           feedback: target.feedback,
           versionInfo: { current: nextIdx + 1, total: siblings.length },

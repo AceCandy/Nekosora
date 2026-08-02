@@ -17,6 +17,7 @@ WebChat wiring in `src/lib/chat/completion-coordinator.ts` and `/api/chat`.
 - `listWebSearchModelCandidates(userId)` returns visible, enabled models with a compatible enabled route and explicit `model_catalog.capabilities.webSearchFormat`.
 - Main-model tool: `web_search({ query: string })`; it is the only search tool exposed to the outer model.
 - Search SSE: `search_started`, `search_completed`, `search_failed`, all keyed by `toolCallId`.
+- Chat projection: `ChatMessage.searchBackends?: WebSearchTraceBackend[]`, deduplicated by backend type/id.
 - Backfill command: `pnpm backfill:web-search-keys` is dry-run; add `--apply` for a transactional write.
 
 Required environment:
@@ -38,6 +39,9 @@ Required environment:
 - Hosted search is a nested request that receives no MCP tools and no logical `web_search`.
   It must return a non-empty grounded summary and at least one validated citation. The outer
   main model remains the only final-answer generator.
+- Hosted search prompts include the current UTC date and instruct the nested model to prefer
+  recent sources and verify publication/update dates for time-sensitive questions. This is a
+  ranking instruction, not a provider-specific freshness filter.
 - External Provider results are validated, bounded, HTTP(S)-only, deduplicated, and treated as
   untrusted tool content. Cancellation and the shared deadline must reach the underlying request.
 - SearXNG validation runs at save and request time. DNS resolution, fixed-address connection,
@@ -49,6 +53,9 @@ Required environment:
 - `ProcessTrace.webSearch.calls` is persisted with the assistant. Successful citations are projected
   for initial history and siblings; version switching replaces tool calls and citations with the
   target version. Tool events use `toolCallId`; missing IDs remain a legacy compatibility path.
+- `search_completed.backend` is the authoritative search provenance. Live SSE state and history
+  projection must preserve the deduplicated backend identities alongside citations so the UI can
+  show which model or external provider actually returned the sources.
 - Continue generation appends content to the same assistant, so it must seed the new trace with that
   assistant's existing `webSearch.calls` before new calls are appended. Replacing the array with only
   the continuation run would make live citations disappear after refresh.
@@ -99,8 +106,9 @@ Required environment:
 - Public HTTP tests: IPv4/IPv6 private ranges, metadata, DNS rebinding, redirect hops, and valid public hosts.
 - Hosted search tests: all four runtime translators, route mismatch, no citation failure, route/key failover,
   outer `runId` and `toolCallId` linkage.
-- Chat tests: one logical tool, no pre-search, web toggle precedence, SSE event ordering and IDs, all four
-  generation actions, additive continue trace/citations, history refresh, sibling projection, and version replacement.
+- Chat tests: one logical tool, no pre-search, web toggle precedence, SSE event ordering and IDs, backend
+  provenance propagation, all four generation actions, additive continue trace/citations, history refresh,
+  sibling projection, and version replacement.
 - Release gate: `pnpm check`, `pnpm test`, `pnpm build`, migration continuity, and `git diff --check`.
 
 ## 7. Wrong vs Correct

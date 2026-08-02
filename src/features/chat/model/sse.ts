@@ -12,7 +12,7 @@
  *   data: {"type":"tool_call","toolName":"...","args":{...}}
  *   data: {"type":"tool_result","toolName":"...","isError":false}
  *   data: {"type":"search_started","toolCallId":"...","query":"..."}
- *   data: {"type":"search_completed","toolCallId":"...","citations":[...]}
+ *   data: {"type":"search_completed","toolCallId":"...","backend":{...},"citations":[...]}
  *   data: {"type":"search_failed","toolCallId":"...","reason":"..."}
  *   data: {"type":"search_result","results":[{"title":"...","url":"...","snippet":"..."}]}
  *   data: {"type":"error","error":"..."}
@@ -22,6 +22,7 @@
  *   data: [DONE]
  */
 import type { MessageRunMetadata } from "@/features/chat/model/types";
+import type { WebSearchTraceBackend } from "@/db/types";
 import {
   isChatTerminalStatus,
   type ChatTerminalEvent,
@@ -52,6 +53,7 @@ export interface SSEEvent {
   results?: { title: string; url: string; snippet: string }[];
   query?: string;
   citations?: { title: string; url: string; snippet?: string }[];
+  backend?: WebSearchTraceBackend;
   reason?: string;
   error?: string;
   metadata?: MessageRunMetadata;
@@ -75,6 +77,7 @@ export interface SSEHandlers {
   onSearchCompleted?: (
     toolCallId: string,
     citations: { title: string; url: string; snippet?: string }[],
+    backend?: WebSearchTraceBackend,
   ) => void;
   onSearchFailed?: (toolCallId: string, reason: string) => void;
   onSearchResult?: (results: { title: string; url: string; snippet: string }[]) => void;
@@ -149,7 +152,8 @@ export async function consumeChatSSE(
     } else if (ev.type === "search_started" && ev.toolCallId !== undefined && ev.query !== undefined) {
       handlers.onSearchStarted?.(ev.toolCallId, ev.query);
     } else if (ev.type === "search_completed" && ev.toolCallId !== undefined && ev.citations !== undefined) {
-      handlers.onSearchCompleted?.(ev.toolCallId, ev.citations);
+      if (ev.backend) handlers.onSearchCompleted?.(ev.toolCallId, ev.citations, ev.backend);
+      else handlers.onSearchCompleted?.(ev.toolCallId, ev.citations);
     } else if (ev.type === "search_failed" && ev.toolCallId !== undefined && ev.reason !== undefined) {
       handlers.onSearchFailed?.(ev.toolCallId, ev.reason);
     } else if (ev.type === "search_result" && ev.results !== undefined) {

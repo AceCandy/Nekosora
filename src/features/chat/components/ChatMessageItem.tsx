@@ -249,6 +249,7 @@ function ChatMessageItemContent({
   domId,
 }: ChatMessageItemProps) {
   const t = useTranslations("chat");
+  const locale = useLocale();
   const metadataPanelId = `run-metadata-${useId()}`;
   const {
     role,
@@ -258,11 +259,20 @@ function ChatMessageItemContent({
     status,
     toolCalls,
     searchResults,
+    searchBackends,
     versionInfo,
     feedback,
     runMetadata,
     attachments = [],
   } = message;
+  const searchMethod = searchBackends?.map((backend) => {
+    const typeLabel = backend.type === "current-model"
+      ? t("webSearchBackendCurrentModel")
+      : backend.type === "model"
+        ? t("webSearchBackendModel")
+        : t("webSearchBackendProvider");
+    return `${backend.name} (${typeLabel})`;
+  }).join(locale === "zh-CN" ? "、" : ", ");
   const hasReasoning = Boolean(reasoning);
   const visibleRunMetadata = runMetadata && status !== "interrupted" && hasRunMetadata(runMetadata)
     ? runMetadata
@@ -1008,9 +1018,14 @@ function ChatMessageItemContent({
 
         {role === "assistant" && searchResults && searchResults.length > 0 && (
           <details className="text-ui-caption border border-morning-mist dark:border-deep-space/80 rounded-md bg-neutral-50/30 dark:bg-[#0d0f14]/10 overflow-hidden">
-            <summary className="cursor-pointer hover:text-neutral-600 dark:hover:text-neutral-300 px-3 py-1.5 select-none flex items-center gap-1.5 text-neutral-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue">
+            <summary className="cursor-pointer hover:text-neutral-600 dark:hover:text-neutral-300 px-3 py-1.5 select-none flex min-w-0 items-center gap-1.5 text-neutral-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue">
               <ExternalLink className="w-3 h-3" aria-hidden="true" />
-              <span>{t("webSources")} ({searchResults.length})</span>
+              <span className="shrink-0">{t("webSources")} ({searchResults.length})</span>
+              {searchMethod && (
+                <span className="min-w-0 truncate" title={searchMethod}>
+                  · {t("webSearchMethod")}: {searchMethod}
+                </span>
+              )}
             </summary>
             <div className="px-3 pb-2 pt-0.5 space-y-1.5 border-t border-morning-mist dark:border-deep-space/60 mt-1">
               {searchResults.map((r, i) => (

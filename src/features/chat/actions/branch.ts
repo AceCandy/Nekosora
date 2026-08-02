@@ -10,7 +10,7 @@ import {
   normalizeMessageFeedback,
   type MessageFeedback,
 } from "@/features/chat/model/feedback";
-import type { MessageVersionSelections } from "@/db/types";
+import type { MessageVersionSelections, WebSearchTraceBackend } from "@/db/types";
 import { resolveVisibleBranch } from "@/features/chat/lib/visible-branch";
 import type {
   ChatMessage,
@@ -37,21 +37,26 @@ function mapDbToolCallStatus(status: string): ToolCallRecord["status"] {
   return "done";
 }
 
-/** 从消息 trace 投影已成功搜索的公开引用；忽略运行中或失败调用。 */
-function projectSearchResults(
+/** 从消息 trace 投影成功搜索的引用与实际后端；忽略运行中或失败调用。 */
+function projectSearchTrace(
   processTrace: unknown,
-): ChatMessage["searchResults"] {
-  if (!processTrace || typeof processTrace !== "object") return undefined;
+): Pick<ChatMessage, "searchResults" | "searchBackends"> {
+  if (!processTrace || typeof processTrace !== "object") return {};
   const webSearch = (processTrace as { webSearch?: unknown }).webSearch;
-  if (!webSearch || typeof webSearch !== "object") return undefined;
+  if (!webSearch || typeof webSearch !== "object") return {};
   const calls = (webSearch as { calls?: unknown }).calls;
-  if (!Array.isArray(calls)) return undefined;
+  if (!Array.isArray(calls)) return {};
 
   const byUrl = new Map<string, NonNullable<ChatMessage["searchResults"]>[number]>();
+  const byBackend = new Map<string, WebSearchTraceBackend>();
   for (const call of calls) {
     if (!call || typeof call !== "object") continue;
-    const record = call as { status?: unknown; citations?: unknown };
-    if (record.status !== "success" || !Array.isArray(record.citations)) continue;
+    const record = call as { status?: unknown; citations?: unknown; backend?: unknown };
+    if (record.status !== "success") continue;
+    if (isSearchTraceBackend(record.backend)) {
+      byBackend.set(`${record.backend.type}:${record.backend.id ?? record.backend.name}`, record.backend);
+    }
+    if (!Array.isArray(record.citations)) continue;
     for (const citation of record.citations) {
       if (!citation || typeof citation !== "object") continue;
       const item = citation as { title?: unknown; url?: unknown; snippet?: unknown };
@@ -63,7 +68,20 @@ function projectSearchResults(
       });
     }
   }
-  return byUrl.size > 0 ? Array.from(byUrl.values()) : undefined;
+  return {
+    ...(byUrl.size > 0 ? { searchResults: Array.from(byUrl.values()) } : {}),
+    ...(byBackend.size > 0 ? { searchBackends: Array.from(byBackend.values()) } : {}),
+  };
+}
+
+function isSearchTraceBackend(value: unknown): value is WebSearchTraceBackend {
+  if (!value || typeof value !== "object") return false;
+  const backend = value as { type?: unknown; id?: unknown; name?: unknown };
+  return (
+    (backend.type === "current-model" || backend.type === "model" || backend.type === "provider")
+    && typeof backend.name === "string"
+    && (backend.id === undefined || typeof backend.id === "string")
+  );
 }
 
 /** 按 runId 批量加载当前会话的可公开运行元数据。 */
@@ -217,6 +235,7 @@ export async function getMessageSiblings(messagePublicId: string): Promise<{
     runMetadata?: MessageRunMetadata;
     toolCalls?: ToolCallRecord[];
     searchResults?: ChatMessage["searchResults"];
+    searchBackends?: ChatMessage["searchBackends"];
     feedback?: MessageFeedback;
   }[];
 }> {
@@ -297,6 +316,7 @@ export async function getMessageSiblings(messagePublicId: string): Promise<{
       runMetadata?: MessageRunMetadata;
       toolCalls?: ToolCallRecord[];
       searchResults?: ChatMessage["searchResults"];
+      searchBackends?: ChatMessage["searchBackends"];
       feedback?: MessageFeedback;
     } = {
       publicId: m.publicId,
@@ -312,7 +332,9 @@ export async function getMessageSiblings(messagePublicId: string): Promise<{
       const toolCalls = toolCallsByRunId.get(m.runId);
       if (toolCalls && toolCalls.length > 0) base.toolCalls = toolCalls;
     }
-    base.searchResults = projectSearchResults(m.processTrace);
+    const searchTrace = projectSearchTrace(m.processTrace);
+    if (searchTrace.searchResults) base.searchResults = searchTrace.searchResults;
+    if (searchTrace.searchBackends) base.searchBackends = searchTrace.searchBackends;
     const feedback = typeof m.id === "string" ? feedbackByMessageId.get(m.id) : undefined;
     if (feedback) base.feedback = feedback;
     return base;
@@ -640,8 +662,10 @@ export async function getVisibleBranch(conversationId: string): Promise<{
       if (toolCalls && toolCalls.length > 0) next = { ...next, toolCalls };
     }
     if (m.role === "assistant") {
-      const searchResults = projectSearchResults(m.processTrace);
-      if (searchResults) next = { ...next, searchResults };
+      const searchTrace = projectSearchTrace(m.processTrace);
+      if (searchTrace.searchResults || searchTrace.searchBackends) {
+        next = { ...next, ...searchTrace };
+      }
     }
     const feedback = feedbackByMessageId.get(m.id as string);
     if (feedback) next = { ...next, feedback };

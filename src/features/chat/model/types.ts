@@ -4,7 +4,7 @@
  * 从 ChatComposer.tsx 抽离,避免 hooks 之间互相 import 组件文件。
  */
 import type { Artifact } from "@/features/artifacts/ArtifactPanel";
-import type { ModelCapabilities, TokenUsage } from "@/db/types";
+import type { ModelCapabilities, TokenUsage, WebSearchTraceBackend } from "@/db/types";
 import type { MessageFeedback } from "@/features/chat/model/feedback";
 
 export type { FeedbackReason, FeedbackRating, MessageFeedback } from "@/features/chat/model/feedback";
@@ -39,6 +39,8 @@ export interface ChatMessage {
   toolCalls?: ToolCallRecord[];
   /** 联网搜索引用来源。 */
   searchResults?: { title: string; url: string; snippet?: string }[];
+  /** 实际完成搜索的后端，按搜索调用去重。 */
+  searchBackends?: WebSearchTraceBackend[];
   /** 版本信息:当前消息的同级兄弟数(>1 时显示切换器)。 */
   versionInfo?: { current: number; total: number };
   /** 当前用户对该 assistant 回复的质量反馈(无记录时缺省)。 */

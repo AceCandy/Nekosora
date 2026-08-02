@@ -755,6 +755,7 @@ describe("getVisibleBranch 历史 toolCalls 回填", () => {
               calls: [
                 {
                   status: "success",
+                  backend: { type: "provider", id: "tavily", name: "Tavily" },
                   citations: [
                     { title: "First", url: "https://example.com", snippet: "one" },
                     { title: "Updated", url: "https://example.com" },
@@ -782,6 +783,8 @@ describe("getVisibleBranch 历史 toolCalls 回填", () => {
     const result = await getVisibleBranch("conversation-1");
     expect(result.messages.find((message) => message.id === "asst-1")?.searchResults)
       .toEqual([{ title: "Updated", url: "https://example.com" }]);
+    expect(result.messages.find((message) => message.id === "asst-1")?.searchBackends)
+      .toEqual([{ type: "provider", id: "tavily", name: "Tavily" }]);
   });
 
   it("跨会话隔离:tool_calls 查询带 runs.conversationId,不串入外会话数据", async () => {

@@ -459,7 +459,11 @@ describe("chatStreamStore terminal 状态收敛", () => {
       handlers.onToolCall?.("web_search", { query: "first" }, "tc-1");
       handlers.onToolCall?.("web_search", { query: "second" }, "tc-2");
       handlers.onSearchFailed?.("tc-1", "failed");
-      handlers.onSearchCompleted?.("tc-2", [{ title: "Source", url: "https://example.com" }]);
+      handlers.onSearchCompleted?.(
+        "tc-2",
+        [{ title: "Source", url: "https://example.com" }],
+        { type: "provider", id: "tavily", name: "Tavily" },
+      );
       handlers.onToolResult?.("web_search", false, "tc-2");
       return "success" as const;
     });
@@ -472,6 +476,9 @@ describe("chatStreamStore terminal 状态收敛", () => {
       { toolCallId: "tc-2", toolName: "web_search", args: { query: "second" }, status: "done" },
     ]);
     expect(message?.searchResults).toEqual([{ title: "Source", url: "https://example.com" }]);
+    expect(message?.searchBackends).toEqual([
+      { type: "provider", id: "tavily", name: "Tavily" },
+    ]);
   });
 });
 
