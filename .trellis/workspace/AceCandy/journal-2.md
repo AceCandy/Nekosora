@@ -433,3 +433,24 @@ Added privacy-safe memory extraction stage logs, diagnosed mem0 SQLite native bi
 ### Status
 
 [OK] **Completed**
+
+
+## Session 80: 修复 Markdown URL 链接边界
+
+**Date**: 2026-08-02
+**Task**: 修复 Markdown URL 链接边界
+**Branch**: `main`
+
+### Summary
+
+修复裸 URL 后中文被误识别为链接的问题，并为纸面杂志皮肤补齐流式与静态链接下划线。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `fd9801a` | (see git log) |
+
+### Status
+
+[OK] **Completed**
