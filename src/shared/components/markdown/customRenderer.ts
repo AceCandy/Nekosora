@@ -137,8 +137,7 @@ export function parseMarkdown(input: string): string {
   let paragraph: string[] = [];
   let inCode = false;
   let codeBuffer: string[] = [];
-  let inUl = false;
-  let inOl = false;
+  const lists: Array<{ type: "ul" | "ol"; indent: number; itemOpen: boolean }> = [];
   let inBlockquote = false;
   let blockquoteBuffer: string[] = [];
   /** HTML 容器块嵌套深度:>0 表示位于原生 HTML 块内,行原样透传不解析。 */
@@ -151,15 +150,36 @@ export function parseMarkdown(input: string): string {
     }
   }
 
+  function closeList() {
+    const list = lists.pop();
+    if (!list) return;
+    if (list.itemOpen) html += "</li>\n";
+    html += `</${list.type}>\n`;
+  }
+
   function closeLists() {
-    if (inUl) {
-      html += "</ul>\n";
-      inUl = false;
+    while (lists.length) closeList();
+  }
+
+  function appendListItem(type: "ul" | "ol", indent: number, content: string) {
+    while (lists.length && indent < lists[lists.length - 1].indent) closeList();
+
+    let current = lists[lists.length - 1];
+    if (!current || indent > current.indent) {
+      if (current && !html.endsWith("\n")) html += "\n";
+      html += `<${type}>\n`;
+      current = { type, indent, itemOpen: false };
+      lists.push(current);
+    } else if (current.type !== type) {
+      closeList();
+      html += `<${type}>\n`;
+      current = { type, indent, itemOpen: false };
+      lists.push(current);
     }
-    if (inOl) {
-      html += "</ol>\n";
-      inOl = false;
-    }
+
+    if (current.itemOpen) html += "</li>\n";
+    html += `<li>${inlineMarkdown(content)}`;
+    current.itemOpen = true;
   }
 
   function flushBlockquote() {
@@ -251,7 +271,6 @@ export function parseMarkdown(input: string): string {
 
     if (!trimmed) {
       flushParagraph();
-      closeLists();
       flushBlockquote();
       continue;
     }
@@ -294,27 +313,12 @@ export function parseMarkdown(input: string): string {
       continue;
     }
 
-    if (/^[-*]\s+/.test(trimmed)) {
+    const listItem = line.match(/^([ \t]*)([-*]|\d+\.)\s+(.+)$/);
+    if (listItem) {
       flushParagraph();
       flushBlockquote();
-      if (!inUl) {
-        closeLists();
-        html += "<ul>\n";
-        inUl = true;
-      }
-      html += `<li>${inlineMarkdown(trimmed.replace(/^[-*]\s+/, ""))}</li>\n`;
-      continue;
-    }
-
-    if (/^\d+\.\s+/.test(trimmed)) {
-      flushParagraph();
-      flushBlockquote();
-      if (!inOl) {
-        closeLists();
-        html += "<ol>\n";
-        inOl = true;
-      }
-      html += `<li>${inlineMarkdown(trimmed.replace(/^\d+\.\s+/, ""))}</li>\n`;
+      const indent = listItem[1].replaceAll("\t", "    ").length;
+      appendListItem(listItem[2].endsWith(".") ? "ol" : "ul", indent, listItem[3]);
       continue;
     }
 
@@ -326,7 +330,12 @@ export function parseMarkdown(input: string): string {
       continue;
     }
 
-    paragraph.push(trimmed);
+    if (lists.length && /^[ \t]+/.test(line)) {
+      html += ` ${inlineMarkdown(trimmed)}`;
+    } else {
+      closeLists();
+      paragraph.push(trimmed);
+    }
   }
 
   flushParagraph();

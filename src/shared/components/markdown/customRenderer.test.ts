@@ -93,6 +93,68 @@ describe("parseMarkdown", () => {
     expect(out).toContain("<table>");
     expect(out).toContain("<hr />");
   });
+
+  it("保留嵌套列表层级", () => {
+    const input = [
+      "- 父项",
+      "",
+      "  - 子项一",
+      "",
+      "  - 子项二",
+      "",
+      "- 另一父项",
+    ].join("\n");
+
+    expect(parseMarkdown(input)).toBe([
+      "<ul>",
+      "<li>父项",
+      "<ul>",
+      "<li>子项一</li>",
+      "<li>子项二</li>",
+      "</ul>",
+      "</li>",
+      "<li>另一父项</li>",
+      "</ul>",
+      "",
+    ].join("\n"));
+  });
+
+  it("支持有序与无序列表混合嵌套", () => {
+    const input = [
+      "1. 父项",
+      "   - 子项",
+      "2. 另一父项",
+    ].join("\n");
+
+    expect(parseMarkdown(input)).toContain("<li>父项\n<ul>\n<li>子项</li>\n</ul>\n</li>");
+  });
+
+  it("多级列表退级时逐层闭合", () => {
+    const input = [
+      "- 父项",
+      "  1. 子项",
+      "    - 孙项",
+      "  2. 另一子项",
+      "- 另一父项",
+    ].join("\n");
+
+    expect(parseMarkdown(input)).toBe([
+      "<ul>",
+      "<li>父项",
+      "<ol>",
+      "<li>子项",
+      "<ul>",
+      "<li>孙项</li>",
+      "</ul>",
+      "</li>",
+      "<li>另一子项</li>",
+      "</ol>",
+      "</li>",
+      "<li>另一父项</li>",
+      "</ul>",
+      "",
+    ].join("\n"));
+  });
 });
 
 describe("splitStructuredSegments", () => {
