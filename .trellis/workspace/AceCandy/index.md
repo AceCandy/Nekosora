@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 80
+- **Total Sessions**: 81
 - **Last Active**: 2026-08-02
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~456 | Active |
+| `journal-2.md` | ~479 | Active |
 | `journal-1.md` | ~1981 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 81 | 2026-08-02 | 归档并提交联网搜索与聊天修复 | `5bd3e6f`, `36510ec`, `832e3c8` | `main` |
 | 80 | 2026-08-02 | 修复 Markdown URL 链接边界 | `fd9801a` | `main` |
 | 79 | 2026-08-01 | Memory extraction diagnostics | `3e8aede` | `dev_0729` |
 | 78 | 2026-07-31 | 修复 Chat execution telemetry 终态收敛 | `8dad396`, `ce1d061` | `dev_0729` |

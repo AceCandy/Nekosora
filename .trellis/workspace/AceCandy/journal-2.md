@@ -454,3 +454,26 @@ Added privacy-safe memory extraction stage logs, diagnosed mem0 SQLite native bi
 ### Status
 
 [OK] **Completed**
+
+
+## Session 81: 归档并提交联网搜索与聊天修复
+
+**Date**: 2026-08-02
+**Task**: 归档并提交联网搜索与聊天修复
+**Branch**: `main`
+
+### Summary
+
+完成 Trellis 0.6.12 更新、统一联网搜索编排、记忆日期缓存与新对话切换修复；通过 lint、typecheck、全量测试、Drizzle 一致性检查和生产构建；归档 08-01 与 08-02 任务。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5bd3e6f` | (see git log) |
+| `36510ec` | (see git log) |
+| `832e3c8` | (see git log) |
+
+### Status
+
+[OK] **Completed**
