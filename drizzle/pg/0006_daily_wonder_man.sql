@@ -1,0 +1,1 @@
+ALTER TABLE "routes" ALTER COLUMN "supports_tools" SET DEFAULT true;

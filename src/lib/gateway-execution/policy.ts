@@ -3,6 +3,41 @@ import { redactSensitiveText } from "@/lib/redaction";
 import type { ResolvedRoute } from "@/lib/providers/types";
 import type { SafeGatewayError } from "./types";
 
+const TOOL_REFERENCE = /\b(?:tools?|tool[_ -]?choice|function[_ -]?calls?)\b/i;
+const TOOL_UNSUPPORTED = /(?:unsupported|not\s+supported|does\s+not\s+support|doesn't\s+support|not\s+allowed|unrecognized|unknown\s+(?:field|parameter))/i;
+
+function stringifyErrorPart(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value === undefined || value === null) return "";
+  try {
+    return JSON.stringify(value).slice(0, 4096);
+  } catch {
+    return "";
+  }
+}
+
+/** 仅识别明确的工具参数兼容性拒绝，不把普通 4xx 或工具执行错误当成路由能力。 */
+export function isToolUnsupportedError(error: unknown): boolean {
+  const nested = (error as { lastError?: unknown } | null)?.lastError;
+  const source = (nested ?? error) as {
+    statusCode?: unknown;
+    message?: unknown;
+    responseBody?: unknown;
+    data?: unknown;
+  };
+  const statusCode = source?.statusCode;
+  if (statusCode !== 400 && statusCode !== 422) return false;
+
+  const rawMessage = error instanceof Error ? error.message : stringifyErrorPart(error);
+  const haystack = [
+    rawMessage,
+    stringifyErrorPart(source?.message),
+    stringifyErrorPart(source?.responseBody),
+    stringifyErrorPart(source?.data),
+  ].join(" ").slice(0, 12_000);
+  return TOOL_REFERENCE.test(haystack) && TOOL_UNSUPPORTED.test(haystack);
+}
+
 export function isAbortError(error: unknown): boolean {
   if (error instanceof Error && error.name === "AbortError") return true;
   const message = error instanceof Error ? error.message : String(error);

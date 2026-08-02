@@ -156,7 +156,9 @@ while a concrete OpenAI-compatible/2API route does not preserve tool-call events
 
 ### 2. Signatures
 
-- Database: `routes.supports_tools boolean NOT NULL DEFAULT false`.
+- Database: `routes.supports_tools boolean NOT NULL DEFAULT true` for new rows. Migration
+  `0005_stale_rick_jones.sql` keeps the historical column default/rows at `false`, while
+  `0006_daily_wonder_man.sql` changes only the future default; it does not backfill rows.
 - Runtime: `ResolvedRoute.supportsTools?: boolean`.
 - Effective capability: `model_catalog.capabilities.tools === true && route.supportsTools === true`.
 
@@ -164,17 +166,27 @@ while a concrete OpenAI-compatible/2API route does not preserve tool-call events
 
 - `model_catalog.capabilities.tools` is the model-level upper bound; it never proves that
   a concrete route supports tools.
-- Every route must explicitly opt in with `supports_tools=true`. Missing and migrated
-  legacy values are conservative `false`; do not infer support from model/provider names,
-  base URLs, or `openai-compatible` protocol alone.
+- New routes default to `supports_tools=true`; an administrator can explicitly save
+  `false`, and historical `false` rows remain unchanged. Do not infer support from
+  model/provider names, base URLs, or `openai-compatible` protocol alone.
 - WebChat exposes its logical `web_search` only when the visible model has at least one
   enabled Provider route whose model and route capabilities both allow tools.
 - A request carrying tools rejects a route whose effective capability is false before the
   upstream request, then lets the shared gateway engine try the next route.
+- If an opted-in route returns HTTP 400/422 with both a tools-related field
+  (`tools`, `tool_choice`, or function calls) and explicit unsupported/forbidden wording,
+  the engine records a failed attempt with `tools_not_supported`, conditionally updates
+  only that `routeId` from `true` to `false`, skips the route's remaining keys, and tries
+  the next route. The update is best effort and never updates the provider breaker.
+- When no tool-capable route succeeds and no text, reasoning, or tool-call event was
+  committed, `streamChat` retries the request once without `tools`; the retry is never
+  repeated and never happens after a committed event. A tool execution error is a tool
+  result error, not evidence that the route lacks tool support. Routes are never
+  automatically changed from `false` back to `true`.
 - Hosted Search runtime construction and search-model candidate listing apply the same
   route opt-in. This prevents a 2API route from receiving provider-executed search tools.
 - Route create/update actions own the persisted flag. Quick-attach and initial-model routes
-  keep the database default until a user verifies and enables tool support.
+  inherit the database default, while an explicit checkbox still persists `false`.
 
 ### 4. Validation & Error Matrix
 
@@ -186,6 +198,14 @@ while a concrete OpenAI-compatible/2API route does not preserve tool-call events
 | true | no enabled capable route | WebChat does not inject logical search |
 | Hosted Search format compatible | route false | Exclude candidate/runtime |
 
+| Upstream result | Required action |
+| --- | --- |
+| 400/422 + tools field + explicit unsupported/forbidden wording | Mark this route `false` conditionally; skip its remaining keys; continue routes |
+| Same error after a visible event | Stop; do not retry or switch routes |
+| Ordinary 400, timeout, rate limit, auth, moderation, 5xx | Existing error/failover policy; never mark tool support |
+| Tool definition accepted, tool execution fails | Return `tool-result.isError`; never mark tool support |
+| Persistence update fails | Keep current request outcome; do not surface the learning failure |
+
 ### 5. Good / Base / Bad Cases
 
 - Good: a model has a 2API primary route with `supports_tools=false` and a verified native
@@ -196,11 +216,17 @@ while a concrete OpenAI-compatible/2API route does not preserve tool-call events
 
 ### 6. Tests Required
 
-- Migration tests assert the non-null `false` default plus journal/snapshot continuity.
+- Migration tests assert the historical `false` default, the new `true` default, no update
+  statement, and journal/snapshot continuity.
 - Route action tests assert checked and unchecked form values persist `true` and `false`.
 - Routing tests assert `ResolvedRoute.supportsTools` preserves each row's value.
 - Stream tests place an unsupported route before a supported route and assert only the
   supported route reaches `streamText`.
+- Policy tests cover direct and nested AI SDK errors plus ordinary 400/tool execution errors.
+- Engine tests assert route-specific conditional re-marking, key skipping, route failover,
+  breaker isolation, and persistence failure isolation.
+- Agent/stream tests assert one no-tools fallback, no leaked first error, no retry after
+  committed output, and no re-marking for tool execution failures.
 - Web Search candidate and Hosted Search runtime tests assert route opt-in is mandatory.
 
 ### 7. Wrong vs Correct
@@ -209,11 +235,16 @@ while a concrete OpenAI-compatible/2API route does not preserve tool-call events
 // Wrong: model semantics are treated as proof for every upstream route.
 tools: route.capabilities?.tools ? toModelTools(request.tools) : undefined;
 
-// Correct: model support is an upper bound and the concrete route must opt in.
+// Correct: model support is an upper bound and the concrete route must be enabled.
 selectAdapter: (route) => request.tools?.length
   && !(route.capabilities?.tools === true && route.supportsTools === true)
   ? null
   : adapter;
+
+// Correct: only learn from an explicit upstream tools rejection, and only true -> false.
+await db.update(routes)
+  .set({ supportsTools: false })
+  .where(and(eq(routes.id, route.routeId), eq(routes.supportsTools, true)));
 ```
 
 ## Scenario: Unified Gateway Execution Engine

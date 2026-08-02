@@ -8,6 +8,9 @@ vi.mock("ai", () => ({
 }));
 
 const callMcpTool = vi.fn();
+const { markRouteToolsUnsupportedMock } = vi.hoisted(() => ({
+  markRouteToolsUnsupportedMock: vi.fn(async () => undefined),
+}));
 const toIRTools = vi.fn(
   (servers: Array<{ name: string; tools: Array<{ name: string; description?: string }> }>) =>
     servers.flatMap((server) =>
@@ -25,6 +28,10 @@ vi.mock("@/lib/mcp/registry", () => ({
   toIRTools: (...args: unknown[]) => toIRTools(...args as Parameters<typeof toIRTools>),
   callMcpTool: (...args: unknown[]) => callMcpTool(...args),
 }));
+vi.mock("@/lib/repositories/route-repository", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/repositories/route-repository")>();
+  return { ...actual, markRouteToolsUnsupported: markRouteToolsUnsupportedMock };
+});
 
 const logUsage = vi.fn(async () => undefined);
 const telemetry = vi.hoisted(() => ({
@@ -49,6 +56,7 @@ import { streamChatWithTools } from "@/lib/stream";
 import {
   resetRouteRepository,
   setRouteRepository,
+  markRouteToolsUnsupported,
   type RouteRepository,
 } from "@/lib/repositories/route-repository";
 import { encrypt } from "@/lib/infra/crypto";
@@ -149,6 +157,7 @@ describe("streamChatWithTools agent loop finish signal", () => {
     setRouteRepository(makeSingleRouteRepository());
     vi.mocked(streamText).mockReset();
     callMcpTool.mockReset();
+    vi.mocked(markRouteToolsUnsupported).mockReset();
     toIRTools.mockClear();
     logUsage.mockClear();
     telemetry.startExecution.mockClear();
@@ -405,6 +414,46 @@ describe("streamChatWithTools agent loop finish signal", () => {
     expect(telemetry.finalizeExecution).toHaveBeenCalledWith(expect.objectContaining({
       outcome: expect.objectContaining({ status: "failed" }),
     }));
+  });
+
+  it("工具能力拒绝后只重试一次无工具请求且不暴露首轮错误", async () => {
+    const unsupported = Object.assign(new Error("tools are not supported"), { statusCode: 400 });
+    vi.mocked(streamText)
+      .mockReturnValueOnce(mockStreamResult([{ type: "error", error: unsupported }], "error"))
+      .mockReturnValueOnce(mockStreamResult(
+        [{ type: "text-delta", text: "fallback" }],
+        "stop",
+        { inputTokens: 2, outputTokens: 1, totalTokens: 3 },
+      ));
+
+    const events = await collect(streamChatWithTools(baseOpts));
+    const firstRequest = vi.mocked(streamText).mock.calls[0]?.[0] as { tools?: unknown };
+    const secondRequest = vi.mocked(streamText).mock.calls[1]?.[0] as { tools?: unknown };
+
+    expect(vi.mocked(streamText)).toHaveBeenCalledTimes(2);
+    expect(firstRequest.tools).toBeDefined();
+    expect(secondRequest.tools).toBeUndefined();
+    expect(events.map((event) => event.type)).toEqual(["text-delta", "finish"]);
+    expect(events.find((event) => event.type === "text-delta")).toMatchObject({ text: "fallback" });
+    expect(markRouteToolsUnsupported).toHaveBeenCalledOnce();
+    expect(telemetry.startExecution).toHaveBeenCalledTimes(1);
+    expect(telemetry.finalizeExecution).toHaveBeenCalledTimes(1);
+    expect(telemetry.finalizeExecution).toHaveBeenCalledWith(expect.objectContaining({
+      outcome: expect.objectContaining({ status: "success" }),
+    }));
+  });
+
+  it("无工具重试再次失败时不继续重试", async () => {
+    const unsupported = Object.assign(new Error("tools are not supported"), { statusCode: 400 });
+    vi.mocked(streamText)
+      .mockReturnValueOnce(mockStreamResult([{ type: "error", error: unsupported }], "error"))
+      .mockReturnValueOnce(mockStreamResult([{ type: "error", error: unsupported }], "error"));
+
+    const events = await collect(streamChatWithTools(baseOpts));
+
+    expect(vi.mocked(streamText)).toHaveBeenCalledTimes(2);
+    expect(events.at(-1)).toMatchObject({ type: "error", error: "tools are not supported" });
+    expect(markRouteToolsUnsupported).toHaveBeenCalledOnce();
   });
 
   it("工具执行失败仍继续到最终文本,并透传 tool-result isError", async () => {

@@ -127,6 +127,20 @@ export class DrizzleRouteRepository implements RouteRepository {
   }
 }
 
+/** 将仍标记为支持工具的具体路由降级为不支持；并发人工修改时不覆盖已关闭状态。 */
+export async function markRouteToolsUnsupported(routeId: string): Promise<void> {
+  const db = await getDb();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const s = getSchema() as any;
+  await db
+    .update(s.routes)
+    .set({ supportsTools: false })
+    .where(and(
+      eq(s.routes.id, routeId),
+      eq(s.routes.supportsTools, true),
+    ));
+}
+
 /** 当前生效的 Repository 实例(默认 Drizzle;测试可覆盖)。 */
 let currentRepo: RouteRepository = new DrizzleRouteRepository();
 

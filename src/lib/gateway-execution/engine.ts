@@ -208,7 +208,11 @@ export async function* executeGateway<TEvent, TResult>(
             return outcome;
           }
 
-          const safeError = classifyGatewayError(error, providerSecrets(route, apiKey));
+          const toolUnsupported = options.isToolUnsupported?.(error) === true;
+          const classifiedError = classifyGatewayError(error, providerSecrets(route, apiKey));
+          const safeError: SafeGatewayError = toolUnsupported
+            ? { ...classifiedError, code: "tools_not_supported", phase: "routing" }
+            : classifiedError;
           const attemptTelemetry: AttemptTelemetry = {
             executionId,
             attempt,
@@ -224,8 +228,12 @@ export async function* executeGateway<TEvent, TResult>(
           await safeTelemetry(() => options.telemetry.recordAttempt(attemptTelemetry));
           activeAttempt = undefined;
 
-          const failoverable = isFailoverableError(error);
-          if (failoverable) options.breaker.recordFailure(route.provider.id);
+          if (toolUnsupported) {
+            await safeOperation(() => options.onToolUnsupported?.(route));
+          }
+
+          const failoverable = toolUnsupported || isFailoverableError(error);
+          if (failoverable && !toolUnsupported) options.breaker.recordFailure(route.provider.id);
           stopExecution = committed || !failoverable;
           outcome = failedOutcome(
             executionId,
@@ -235,7 +243,7 @@ export async function* executeGateway<TEvent, TResult>(
             maskKey(apiKey) ?? undefined,
           );
           const hasMoreKeys = keyIndex < keys.length - 1;
-          if (!committed && hasMoreKeys && isRetryableForKey(error)) continue;
+          if (!committed && !toolUnsupported && hasMoreKeys && isRetryableForKey(error)) continue;
           break;
         }
       }
@@ -290,6 +298,14 @@ async function safeTelemetry(operation: () => Promise<void>): Promise<void> {
     await operation();
   } catch {
     /* 观测失败不得改变网关执行结果。 */
+  }
+}
+
+async function safeOperation(operation: () => Promise<void> | undefined): Promise<void> {
+  try {
+    await operation();
+  } catch {
+    /* 能力学习失败不得改变当前请求结果。 */
   }
 }
 

@@ -408,9 +408,11 @@ describe("model catalog web search migration", () => {
 
 describe("route tool capability migration", () => {
   const migrationPath = "drizzle/pg/0005_stale_rick_jones.sql";
+  const defaultMigrationPath = "drizzle/pg/0006_daily_wonder_man.sql";
   const journalPath = "drizzle/pg/meta/_journal.json";
   const previousSnapshotPath = "drizzle/pg/meta/0004_snapshot.json";
   const snapshotPath = "drizzle/pg/meta/0005_snapshot.json";
+  const defaultSnapshotPath = "drizzle/pg/meta/0006_snapshot.json";
 
   it("旧路由默认不声明工具调用能力", () => {
     expect(readFileSync(migrationPath, "utf8")).toContain(
@@ -430,7 +432,7 @@ describe("route tool capability migration", () => {
       tables: Record<string, { columns: Record<string, unknown> }>;
     };
 
-    expect(journal.entries.at(-1)).toMatchObject({
+    expect(journal.entries.find((entry) => entry.idx === 5)).toMatchObject({
       idx: 5,
       tag: "0005_stale_rick_jones",
       breakpoints: true,
@@ -441,5 +443,30 @@ describe("route tool capability migration", () => {
       notNull: true,
       default: false,
     });
+  });
+
+  it("仅把新路由默认改为支持工具，不回填既有关闭路由", () => {
+    const migration = readFileSync(defaultMigrationPath, "utf8");
+    expect(migration.trim()).toBe(
+      'ALTER TABLE "routes" ALTER COLUMN "supports_tools" SET DEFAULT true;',
+    );
+    expect(migration).not.toMatch(/UPDATE\s+"routes"/i);
+
+    const journal = JSON.parse(readFileSync(journalPath, "utf8")) as {
+      entries: Array<{ idx: number; tag: string; when: number; breakpoints: boolean }>;
+    };
+    const previous = JSON.parse(readFileSync(snapshotPath, "utf8")) as { id: string };
+    const snapshot = JSON.parse(readFileSync(defaultSnapshotPath, "utf8")) as {
+      prevId: string;
+      tables: Record<string, { columns: Record<string, { default?: unknown }> }>;
+    };
+
+    expect(journal.entries.at(-1)).toMatchObject({
+      idx: 6,
+      tag: "0006_daily_wonder_man",
+      breakpoints: true,
+    });
+    expect(snapshot.prevId).toBe(previous.id);
+    expect(snapshot.tables["public.routes"]?.columns.supports_tools?.default).toBe(true);
   });
 });

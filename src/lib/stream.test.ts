@@ -5,6 +5,7 @@ import {
   isFailoverableError,
   isKeyAuthError,
   isRetryableForKey,
+  isToolUnsupportedError,
   separateSystem,
   classifyStreamError,
 } from "@/lib/stream";
@@ -120,6 +121,41 @@ describe("isRetryableForKey", () => {
     // 不命中 429;isFailoverableError 对 "bad request" 返回 true(只有 model_not_found/
     // invalid_request/context length 才 false)。故 400 泛化错误会换 key。
     expect(isRetryableForKey(makeApiError(400, "Bad Request"))).toBe(true);
+  });
+});
+
+describe("isToolUnsupportedError", () => {
+  function makeApiError(statusCode: number, message: string, extra: Record<string, unknown> = {}): Error {
+    const err = Object.assign(new Error(message), { statusCode }, extra);
+    return err;
+  }
+
+  it("识别明确拒绝 tools/tool_choice 的 400/422", () => {
+    expect(isToolUnsupportedError(makeApiError(400, "tools are not supported"))).toBe(true);
+    expect(isToolUnsupportedError(makeApiError(422, "tool_choice is not allowed"))).toBe(true);
+    expect(isToolUnsupportedError(makeApiError(400, "function calls are unsupported"))).toBe(true);
+  });
+
+  it("读取 responseBody/data 中的工具兼容性错误", () => {
+    expect(isToolUnsupportedError(makeApiError(422, "invalid request", {
+      responseBody: JSON.stringify({ error: { message: "tools are not supported" } }),
+    }))).toBe(true);
+    expect(isToolUnsupportedError(makeApiError(400, "invalid request", {
+      data: { message: "tool_choice is not allowed" },
+    }))).toBe(true);
+  });
+
+  it("识别 RetryError 的 lastError，但不误判普通错误", () => {
+    const retryError = new Error("request failed");
+    (retryError as Record<string, unknown>).lastError = {
+      statusCode: 422,
+      responseBody: { error: { message: "function calls are unsupported" } },
+    };
+    expect(isToolUnsupportedError(retryError)).toBe(true);
+    expect(isToolUnsupportedError(makeApiError(400, "Bad Request"))).toBe(false);
+    expect(isToolUnsupportedError(makeApiError(400, "tool execution failed"))).toBe(false);
+    expect(isToolUnsupportedError(makeApiError(500, "tools are not supported"))).toBe(false);
+    expect(isToolUnsupportedError(makeApiError(400, "unsupported request format"))).toBe(false);
   });
 });
 

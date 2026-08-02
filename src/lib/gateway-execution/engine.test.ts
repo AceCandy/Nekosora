@@ -36,6 +36,10 @@ function harness(
   routes: ResolvedRoute[],
   selectAdapter: (route: ResolvedRoute) => GatewayAttemptAdapter<Event, Result> | null,
   abortSignal?: AbortSignal,
+  options: {
+    isToolUnsupported?: (error: unknown) => boolean;
+    onToolUnsupported?: (route: ResolvedRoute) => Promise<void>;
+  } = {},
 ) {
   const attempts: AttemptTelemetry[] = [];
   const finalized: unknown[] = [];
@@ -56,6 +60,8 @@ function harness(
     abortSignal,
     resolveRoutes: async () => routes,
     selectAdapter,
+    isToolUnsupported: options.isToolUnsupported,
+    onToolUnsupported: options.onToolUnsupported,
     telemetry,
     breaker,
   });
@@ -111,6 +117,61 @@ describe("gateway execution engine", () => {
     expect(calls).toEqual(["a", "b"]);
     expect(outcome.route?.routeId).toBe("b");
     expect(outcome.status).toBe("success");
+  });
+
+  it("工具能力拒绝复标具体路由、跳过剩余 key、继续下一路由且不污染 breaker", async () => {
+    const calls: string[] = [];
+    const onToolUnsupported = vi.fn(async () => undefined);
+    const adapter: GatewayAttemptAdapter<Event, Result> = async function* ({ route: current }) {
+      calls.push(current.routeId);
+      if (current.routeId === "a") {
+        throw Object.assign(new Error("tools are not supported"), { statusCode: 400 });
+      }
+      return { value: { text: "backup" } };
+    };
+    const h = harness(
+      [route("a", ["key-a", "key-b"]), route("b")],
+      () => adapter,
+      undefined,
+      { isToolUnsupported: () => true, onToolUnsupported },
+    );
+
+    const { outcome } = await consume(h.generator);
+
+    expect(calls).toEqual(["a", "b"]);
+    expect(onToolUnsupported).toHaveBeenCalledOnce();
+    expect(onToolUnsupported).toHaveBeenCalledWith(expect.objectContaining({ routeId: "a" }));
+    expect(h.attempts[0]).toMatchObject({
+      status: "failed",
+      error: { code: "tools_not_supported", phase: "routing", httpStatus: 400 },
+    });
+    expect(outcome).toMatchObject({ status: "success", route: { routeId: "b" } });
+    expect(h.breaker.recordFailure).not.toHaveBeenCalled();
+    expect(h.breaker.recordSuccess).toHaveBeenCalledOnce();
+  });
+
+  it("复标持久化失败不改变工具拒绝后的故障转移结果", async () => {
+    const onToolUnsupported = vi.fn(async () => {
+      throw new Error("database unavailable");
+    });
+    const adapter: GatewayAttemptAdapter<Event, Result> = async function* ({ route: current }) {
+      if (current.routeId === "a") {
+        throw Object.assign(new Error("tool_choice is not allowed"), { statusCode: 422 });
+      }
+      return { value: { text: "backup" } };
+    };
+    const h = harness(
+      [route("a"), route("b")],
+      () => adapter,
+      undefined,
+      { isToolUnsupported: () => true, onToolUnsupported },
+    );
+
+    const { outcome } = await consume(h.generator);
+
+    expect(onToolUnsupported).toHaveBeenCalledOnce();
+    expect(outcome).toMatchObject({ status: "success", route: { routeId: "b" } });
+    expect(h.breaker.recordFailure).not.toHaveBeenCalled();
   });
 
   it("事件 commit 后失败不再换 key 或 route", async () => {

@@ -5,6 +5,7 @@ export {
   classifyStreamError,
   isAbortError,
   isFailoverableError,
+  isToolUnsupportedError,
   isKeyAuthError,
   isRetryableForKey,
 } from "./policy";

@@ -13,6 +13,7 @@
  */
 import { streamText, generateText, jsonSchema, Output, type ModelMessage, type ToolSet } from "ai";
 import { resolveRoutes, resolveRoutesById } from "@/lib/routing";
+import { markRouteToolsUnsupported } from "@/lib/repositories/route-repository";
 import { buildLanguageModelWithKey } from "@/lib/providers/registry";
 import { getChatUA } from "@/lib/system-settings/ua";
 import { recordSuccess, recordFailure } from "@/lib/circuit-breaker";
@@ -33,6 +34,7 @@ import {
   executeAtomicGateway,
   executeGateway,
   gatewayTelemetry,
+  isToolUnsupportedError,
   type GatewayAttemptAdapter,
   type GatewayExecutionOutcome,
   type GatewayTelemetryPort,
@@ -44,6 +46,7 @@ export {
   isAbortError,
   isFailoverableError,
   isKeyAuthError,
+  isToolUnsupportedError,
   isRetryableForKey,
 } from "@/lib/gateway-execution";
 
@@ -99,63 +102,90 @@ export async function* streamChat(
     /* metrics 不可用时降级为 no-op */
   }
 
-  const adapter: GatewayAttemptAdapter<StreamEvent, void> = async function* ({
-    route,
-    apiKey,
-    abortSignal,
-  }) {
-    const timing: { firstTokenAt?: number } = {};
-    let usage: IRUsage = {};
-    for await (const event of streamWithRoute(
-      route,
-      request,
-      apiKey,
-      timing,
-      opts.cacheKey,
-      abortSignal,
-      opts.userAgent,
-    )) {
-      if (event.type === "finish") usage = event.usage;
-      yield {
-        value: event,
-        commitsResponse:
-          event.type === "text-delta"
-          || event.type === "reasoning-delta"
-          || event.type === "tool-call",
-      };
-    }
-    return { value: undefined, usage, firstTokenAt: timing.firstTokenAt };
-  };
-
   let execution: AsyncIterator<StreamEvent, GatewayExecutionOutcome<void>, void> | undefined;
   let outcome: GatewayExecutionOutcome<void> | undefined;
-  try {
-    execution = executeGateway({
+  let executionRequest = request;
+  let toolsFallbackAttempted = false;
+
+  const createExecution = (currentRequest: IRRequest) => {
+    const adapter: GatewayAttemptAdapter<StreamEvent, void> = async function* ({
+      route,
+      apiKey,
+      abortSignal,
+    }) {
+      const timing: { firstTokenAt?: number } = {};
+      let usage: IRUsage = {};
+      for await (const event of streamWithRoute(
+        route,
+        currentRequest,
+        apiKey,
+        timing,
+        opts.cacheKey,
+        abortSignal,
+        opts.userAgent,
+      )) {
+        if (event.type === "finish") usage = event.usage;
+        yield {
+          value: event,
+          commitsResponse:
+            event.type === "text-delta"
+            || event.type === "reasoning-delta"
+            || event.type === "tool-call",
+        };
+      }
+      return { value: undefined, usage, firstTokenAt: timing.firstTokenAt };
+    };
+
+    return executeGateway({
       ctx,
       requestId: runId,
       operation: "chat.stream",
-      model: request.model,
+      model: currentRequest.model,
       modelId: opts.modelId,
       requestPath: ctx.source === "gateway" ? "/v1/chat/completions" : undefined,
       taskKind: opts.taskKind,
       abortSignal: opts.abortSignal,
       resolveRoutes: () => opts.modelId
         ? resolveRoutesById(ctx, opts.modelId)
-        : resolveRoutes(ctx, request.model),
-      selectAdapter: (route) => request.tools?.length
+        : resolveRoutes(ctx, currentRequest.model),
+      selectAdapter: (route) => currentRequest.tools?.length
         && (!route.supportsTools || route.capabilities?.tools !== true)
         ? null
         : adapter,
+      isToolUnsupported: currentRequest.tools?.length ? isToolUnsupportedError : undefined,
+      onToolUnsupported: currentRequest.tools?.length
+        ? (route) => markRouteToolsUnsupported(route.routeId)
+        : undefined,
       telemetry: opts.telemetry ?? gatewayTelemetry,
       breaker: { recordSuccess, recordFailure },
     });
+  };
+
+  try {
     while (true) {
-      const next = await execution.next();
-      if (next.done) {
-        outcome = next.value;
-        break;
+      const currentRequest = executionRequest;
+      execution = createExecution(currentRequest);
+      while (true) {
+        const next = await execution.next();
+        if (next.done) {
+          const currentOutcome = next.value;
+          const shouldFallbackWithoutTools = !toolsFallbackAttempted
+            && currentRequest.tools?.length
+            && currentOutcome.status === "failed"
+            && !currentOutcome.committed
+            && (currentOutcome.error?.code === "tools_not_supported"
+              || currentOutcome.error?.code === "protocol_not_supported");
+          if (shouldFallbackWithoutTools) {
+            toolsFallbackAttempted = true;
+            executionRequest = { ...currentRequest, tools: undefined };
+            break;
+          }
+          outcome = currentOutcome;
+          break;
+        }
+        yield next.value;
       }
-      yield next.value;
+      if (outcome) break;
     }
 
     if (outcome.status === "failed") {

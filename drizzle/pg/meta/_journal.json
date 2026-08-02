@@ -43,6 +43,13 @@
       "when": 1785605347333,
       "tag": "0005_stale_rick_jones",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785672276514,
+      "tag": "0006_daily_wonder_man",
+      "breakpoints": true
     }
   ]
 }

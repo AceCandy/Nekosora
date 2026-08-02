@@ -125,6 +125,10 @@ export interface ExecuteGatewayOptions<TEvent, TResult> {
   maxKeyAttempts?: number;
   resolveRoutes(): Promise<ResolvedRoute[]>;
   selectAdapter(route: ResolvedRoute): GatewayAttemptAdapter<TEvent, TResult> | null;
+  /** 识别当前 operation 的路由级工具兼容性拒绝。 */
+  isToolUnsupported?(error: unknown): boolean;
+  /** 记录具体路由的工具能力降级；失败不得改变当前请求结果。 */
+  onToolUnsupported?(route: ResolvedRoute): Promise<void>;
   telemetry: GatewayTelemetryPort;
   breaker: GatewayBreakerPort;
 }

@@ -176,7 +176,7 @@ export default function RouteFormDialog({
           <input
             name="supportsTools"
             type="checkbox"
-            defaultChecked={initial?.supportsTools ?? false}
+            defaultChecked={initial?.supportsTools ?? true}
             className="h-4 w-4 accent-sora-blue"
           />
           {t("supportsToolsLabel")}
