@@ -7,8 +7,14 @@ import { listEnabledRenderStyles } from "@/lib/render-styles/service";
 import ChatComposer, { type ModelOption } from "@/features/chat/components/ChatComposer";
 import { createShare, listConversationShares, revokeShare, type CreateShareInput } from "@/features/chat/actions/share";
 import type { ModelCapabilities } from "@/db/types";
+import { newConversationKey } from "@/features/chat/model/newConversationNavigation";
 
-export default async function ChatPage() {
+export default async function ChatPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const composerKey = newConversationKey(await searchParams);
   void getTranslations("chat");
   const [visibleModels, cards, kbs, outputModes, renderStyles] = await Promise.all([
     getVisibleModels(),
@@ -60,7 +66,7 @@ export default async function ChatPage() {
 
   return (
     <div className="flex-1 flex flex-col min-w-0 h-full">
-      <ChatComposer models={models} cards={cards} knowledgeBases={knowledgeBases} outputModes={modes} renderStyles={styles} createShareAction={handleCreateShare} listSharesAction={handleListShares} revokeShareAction={handleRevokeShare} />
+      <ChatComposer key={composerKey} models={models} cards={cards} knowledgeBases={knowledgeBases} outputModes={modes} renderStyles={styles} createShareAction={handleCreateShare} listSharesAction={handleListShares} revokeShareAction={handleRevokeShare} />
     </div>
   );
 }

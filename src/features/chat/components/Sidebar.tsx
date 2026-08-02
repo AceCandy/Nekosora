@@ -13,6 +13,7 @@ import { clsx } from "clsx";
 import { useShallow } from "zustand/react/shallow";
 import { useChatStreamStore } from "@/features/chat/store/chatStreamStore";
 import { useClickOutside } from "@/shared/lib/useClickOutside";
+import { newConversationHref } from "@/features/chat/model/newConversationNavigation";
 
 interface ConversationItem {
   id: string;
@@ -155,6 +156,7 @@ export default function Sidebar({
   const displayName = userName.trim() || userEmail;
   const userMenuRef = useRef<HTMLDivElement>(null);
   const conversationSwitchStartedRef = useRef(false);
+  const newConversationSequenceRef = useRef(0);
   // 当前展开的会话操作菜单容器(触发按钮 + 面板),用于点击外部收起。
   const sessionMenuRef = useRef<HTMLDivElement>(null);
 
@@ -180,6 +182,11 @@ export default function Sidebar({
   // 后台会话完成蓝点:轮询各会话 generating 状态,记录上一轮「生成中」的集合;
   // 当某会话从「生成中」变为「已完成」且不是当前会话,标记蓝点;点击该会话项清除。
   const router = useRouter();
+  const handleNewConversation = () => {
+    setIsOpen(false);
+    newConversationSequenceRef.current += 1;
+    router.push(newConversationHref(`${Date.now()}-${newConversationSequenceRef.current}`));
+  };
   const prevGeneratingRef = useRef<Set<string> | null>(null);
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
   // 仅当存在后台生成中会话时才轮询(检测其完成 → 蓝点);无任何生成会话时完全静默,
@@ -530,9 +537,9 @@ export default function Sidebar({
         </div>
 
         <nav className={clsx("min-h-0 flex-1 flex-col items-center gap-1.5 pt-3", collapsed ? "hidden md:flex" : "hidden")} aria-label="快捷导航">
-          <Link href="/chat" className="touch-target inline-flex h-9 w-9 items-center justify-center rounded-full bg-neutral-100 text-neutral-800 hover:bg-neutral-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800" aria-label={newConversationText} title={newConversationText}>
+          <button type="button" onClick={handleNewConversation} className="touch-target inline-flex h-9 w-9 items-center justify-center rounded-full bg-neutral-100 text-neutral-800 hover:bg-neutral-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800" aria-label={newConversationText} title={newConversationText}>
             <Plus className="h-[18px] w-[18px]" aria-hidden="true" />
-          </Link>
+          </button>
           <button type="button" onClick={() => setSearchOpen(true)} className="touch-target inline-flex h-9 w-9 items-center justify-center rounded-md text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:text-neutral-300 dark:hover:bg-neutral-900" aria-label={searchText} title={searchText}>
             <Search className="h-[18px] w-[18px]" aria-hidden="true" />
           </button>
@@ -543,14 +550,14 @@ export default function Sidebar({
 
         <div className={clsx("flex min-h-0 flex-1 flex-col", collapsed && "md:hidden")}>
           {/* New Conversation Button */}
-          <Link
-            href="/chat"
-            onClick={() => setIsOpen(false)}
+          <button
+            type="button"
+            onClick={handleNewConversation}
             className="touch-target mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-morning-mist dark:border-deep-space hover:bg-neutral-50 dark:hover:bg-neutral-900 px-3 py-2 text-ui-body font-semibold text-neutral-700 dark:text-neutral-200 transition-[background-color,color,border-color,box-shadow] duration-150 ease-out shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
           >
             <Plus className="w-4 h-4 text-sora-blue" aria-hidden="true" />
             <span>{newConversationText}</span>
-          </Link>
+          </button>
 
         {/* 图像工作区入口 */}
         <Link

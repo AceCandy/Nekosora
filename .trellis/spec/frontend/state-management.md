@@ -130,6 +130,8 @@ store 的 `migrate(临时key → 真实id)` 先于回写执行，活动 id 一�
 
 > **Gotcha**：`usePathname()` **不会**跟随 `window.history.replaceState`（Next 路由状态与原生 history API 不同步）。凡用 `usePathname` 解析当前会话做高亮的 UI（如 `Sidebar`），在乐观建会期间不会立即更新，要等下一次真实路由导航。若需即时跟随，改用由 store 维护的 `activeConversationId` 驱动，而非 `usePathname`。
 
+> **Gotcha（返回新对话）**：新会话建会后，地址虽经 `history.replaceState` 变成 `/chat/{id}`，Next 内部仍可能停在 `/chat`，而 `ChatComposer.activeConvId` 已切到真实 ID。此时再次导航到普通 `/chat` 会收到 200 RSC，但 React 会复用同一个 Composer，页面仍停在旧会话。Sidebar 的“新对话”必须导航到带唯一 `?new=<resetKey>` 的 URL，`chat/page.tsx` 再把该参数作为 `ChatComposer key` 强制重挂；只在 `hydrate(NEW_CONVERSATION_KEY)` 清 `activeConversationId` 不足以触发切换。重挂时仍只清活动指针，不得删除旧会话 runtime 或 `optimisticConversation`，后台流和尚未进入 SSR 列表的乐观项必须继续保留。测试至少覆盖 reset URL/key 映射，以及旧 runtime 仍为 `streaming` 且乐观项未丢失。
+
 参考：`docs/cankao/DEEIX-Chat` 的 `use-chat-message-submit.ts` 用同款 `window.history.replaceState` 模式。
 
 ---

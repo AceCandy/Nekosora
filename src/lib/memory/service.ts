@@ -28,6 +28,13 @@ export interface UserMemory {
   createdAt?: Date | null;
 }
 
+/** 将 mem0 或缓存返回的日期值收敛为有效 Date。 */
+export function toMemoryDate(value: unknown): Date | null {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(String(value));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 /** scope -> 默认 priority(design §1:preference=0/profile=1/project=2)。 */
 export function defaultPriorityForScope(scope: MemoryScope): number {
   return scope === "profile" ? 1 : scope === "project" ? 2 : 0;
@@ -66,7 +73,7 @@ export async function purgeExpiredProjectMemories(userId: string): Promise<void>
 /** 读取用户全部记忆(带 60s 缓存)。入口触发 project 过期懒硬删。 */
 export async function getMemories(userId: string): Promise<UserMemory[]> {
   await purgeExpiredProjectMemories(userId).catch(() => {});
-  return cacheWrap(
+  const memories = await cacheWrap(
     `memories:${userId}`,
     async () => {
       try {
@@ -79,6 +86,8 @@ export async function getMemories(userId: string): Promise<UserMemory[]> {
     },
     60_000,
   );
+  // Keyv 会把 Date 序列化为字符串，缓存出口需恢复领域类型。
+  return memories.map((memory) => ({ ...memory, createdAt: toMemoryDate(memory.createdAt) }));
 }
 
 /** 添加一条记忆(手动来源,infer=false 直接存原文;project 设 7 天过期)。 */
@@ -164,6 +173,6 @@ export function toUserMemory(item: any): UserMemory {
     source: (meta.source as MemorySource) ?? "manual",
     disclosure: (meta.disclosure as string | null) ?? null,
     priority: typeof meta.priority === "number" ? meta.priority : undefined,
-    createdAt: item.createdAt ? new Date(item.createdAt) : null,
+    createdAt: toMemoryDate(item.createdAt),
   };
 }

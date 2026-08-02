@@ -50,8 +50,48 @@
 
 ## Scenario: 缓存（`src/lib/memory/service.ts`）
 
-- `getMemories` 60s 缓存（`memories:${userId}`）。
-- `invalidateMemoryCache(userId)` 在 `addMemory` / `updateMemory` / `deleteMemory` / `clearMemories` / `extractMemories` 后调用（`cacheDel`）。
+### 1. Scope / Trigger
+
+- 修改 `UserMemory`、`getMemories` 或 Keyv/cache-manager 缓存边界时适用。
+
+### 2. Signatures
+
+- `getMemories(userId): Promise<UserMemory[]>`，缓存键 `memories:${userId}`，TTL 60s。
+- `toMemoryDate(value: unknown): Date | null`。
+- `invalidateMemoryCache(userId)` 在 `addMemory` / `updateMemory` / `deleteMemory` / `clearMemories` / `extractMemories` 后调用。
+
+### 3. Contracts
+
+- Keyv 会把 `Date` 序列化为字符串；`getMemories` 必须在 `cacheWrap` 出口恢复 `createdAt`，保证首次读取与缓存命中都符合 `UserMemory.createdAt: Date | null`。
+- 空值或无效日期统一收敛为 `null`，不得把无效 `Date` 传给排序或渲染层。
+
+### 4. Validation & Error Matrix
+
+| 输入 | 输出 |
+|---|---|
+| 有效 `Date` | 原 `Date` |
+| ISO 日期字符串 | 等值 `Date` |
+| 空值或无效字符串 | `null` |
+
+### 5. Good / Base / Bad Cases
+
+- Good：缓存命中返回字符串日期，service 出口恢复为 `Date`。
+- Base：mem0 首次读取已返回 `Date`，保持原对象。
+- Bad：页面直接对缓存值调用 `.getTime()`，导致 `getTime is not a function`。
+
+### 6. Tests Required
+
+- 单测必须覆盖有效 `Date`、ISO 字符串、无效值，以及实际 Keyv 首次读取与缓存命中两次调用。
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong：把缓存反序列化后的字符串当成 Date。
+memories.sort((a, b) => b.createdAt!.getTime() - a.createdAt!.getTime());
+
+// Correct：在 service 缓存出口恢复领域类型，调用方只消费 UserMemory。
+return memories.map((memory) => ({ ...memory, createdAt: toMemoryDate(memory.createdAt) }));
+```
 
 ---
 

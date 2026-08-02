@@ -1,17 +1,22 @@
 /**
- * service.ts 纯函数单测 —— scope 过滤、prompt 构造、priority 映射。
+ * service.ts 单测 —— 日期缓存边界、scope 过滤、prompt 构造、priority 映射。
  *
- * 不依赖 DB/cache,测试 buildPreferencePrompt / buildProfilePrompt / buildProjectPrompt
- * / defaultPriorityForScope 的纯逻辑。
+ * 不依赖 DB；缓存测试使用进程内 Keyv，mem0 通过 mock 隔离。
  */
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
+import { getMemory } from "./mem0";
 import {
   buildPreferencePrompt,
   buildProfilePrompt,
   buildProjectPrompt,
   defaultPriorityForScope,
+  getMemories,
+  invalidateMemoryCache,
+  toMemoryDate,
   type UserMemory,
 } from "./service";
+
+vi.mock("./mem0", () => ({ getMemory: vi.fn() }));
 
 function mem(overrides: Partial<UserMemory>): UserMemory {
   return {
@@ -24,6 +29,38 @@ function mem(overrides: Partial<UserMemory>): UserMemory {
     lastAccessedAt: overrides.lastAccessedAt ?? null,
   };
 }
+
+afterEach(() => {
+  vi.clearAllMocks();
+});
+
+describe("memory date normalization", () => {
+  it("兼容 Date、缓存字符串与无效值", () => {
+    const date = new Date("2026-01-01T00:00:00.000Z");
+    expect(toMemoryDate(date)).toBe(date);
+    expect(toMemoryDate("2026-01-02T00:00:00.000Z")?.toISOString()).toBe("2026-01-02T00:00:00.000Z");
+    expect(toMemoryDate("invalid")).toBeNull();
+    expect(toMemoryDate(null)).toBeNull();
+  });
+
+  it("Keyv 缓存命中后仍返回 Date", async () => {
+    const getAll = vi.fn().mockImplementation((options: { showExpired?: boolean }) => ({
+      results: options.showExpired
+        ? []
+        : [{ id: "m-cache", memory: "cached", metadata: {}, createdAt: "2026-01-03T00:00:00.000Z" }],
+    }));
+    vi.mocked(getMemory).mockResolvedValue({ getAll } as never);
+
+    await invalidateMemoryCache("cache-date-user");
+    const first = await getMemories("cache-date-user");
+    const cached = await getMemories("cache-date-user");
+
+    expect(first[0].createdAt).toBeInstanceOf(Date);
+    expect(cached[0].createdAt).toBeInstanceOf(Date);
+    expect(cached[0].createdAt?.toISOString()).toBe("2026-01-03T00:00:00.000Z");
+    await invalidateMemoryCache("cache-date-user");
+  });
+});
 
 describe("defaultPriorityForScope", () => {
   it("preference → 0, profile → 1, project → 2", () => {
