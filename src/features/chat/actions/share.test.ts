@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   getShareUnlockRetryAfter: vi.fn(),
   recordShareUnlockFailure: vi.fn(),
   clearShareUnlockClientFailures: vi.fn(),
+  loadRunMetadataByRunIds: vi.fn(),
 }));
 
 vi.mock("next/headers", () => ({
@@ -36,6 +37,9 @@ vi.mock("@/features/chat/lib/share-rate-limit", () => ({
   recordShareUnlockFailure: mocks.recordShareUnlockFailure,
   clearShareUnlockClientFailures: mocks.clearShareUnlockClientFailures,
 }));
+vi.mock("@/lib/chat/run-metadata", () => ({
+  loadRunMetadataByRunIds: mocks.loadRunMetadataByRunIds,
+}));
 
 import { createShare, getShare, listConversationShares, revokeShare, unlockShare } from "./share";
 
@@ -50,7 +54,7 @@ const schema = {
   },
   messages: {
     publicId: "messages.publicId", conversationId: "messages.conversationId", deletedAt: "messages.deletedAt",
-    role: "messages.role", content: "messages.content", createdAt: "messages.createdAt",
+    role: "messages.role", content: "messages.content", createdAt: "messages.createdAt", runId: "messages.runId",
   },
   renderStyles: { id: "styles.id", enabled: "styles.enabled" },
 };
@@ -92,6 +96,7 @@ describe("conversation share actions", () => {
     mocks.createShareUnlockToken.mockReturnValue({ token: "signed-token", expiresAt: new Date("2026-07-28T00:00:00Z") });
     mocks.fingerprintShareClient.mockReturnValue("fingerprint");
     mocks.getShareUnlockRetryAfter.mockResolvedValue(null);
+    mocks.loadRunMetadataByRunIds.mockResolvedValue(new Map());
   });
 
   it("快照由服务端可见分支和启用样式生成", async () => {
@@ -99,11 +104,19 @@ describe("conversation share actions", () => {
       [{ id: "conversation-1", userId: "user-1", title: "Title", modelName: "model", renderStyleId: "style-1", messageVersionSelections: null }],
       [
         { id: "u1", publicId: "u1-public", parentId: null, role: "user", content: "Question", createdAt: new Date("2026-01-01T00:00:00Z") },
-        { id: "a1", publicId: "a1-public", parentId: "u1", role: "assistant", content: "Answer", createdAt: new Date("2026-01-01T00:01:00Z") },
+        { id: "a1", publicId: "a1-public", parentId: "u1", runId: "run-1", role: "assistant", content: "Answer", createdAt: new Date("2026-01-01T00:01:00Z") },
       ],
       [{ id: "style-1", name: "Paper", cssClass: "paper", css: ".rs-paper{}", renderer: "custom" }],
     ]);
     mocks.getDb.mockResolvedValue(db);
+    mocks.loadRunMetadataByRunIds.mockResolvedValue(new Map([[
+      "run-1",
+      {
+        model: "actual-model",
+        tokenUsage: { promptTokens: 120, completionTokens: 40, reasoningTokens: 12 },
+        durationMs: 1500,
+      },
+    ]]));
 
     const result = await createShare({ conversationId: "conversation-1", mode: "snapshot", expiration: { kind: "days", days: 7 } });
 
@@ -124,6 +137,9 @@ describe("conversation share actions", () => {
           role: "assistant",
           content: "Answer",
           createdAt: "2026-01-01T00:01:00.000Z",
+          model: "actual-model",
+          tokenUsage: { promptTokens: 120, completionTokens: 40 },
+          durationMs: 1500,
         },
       ],
       renderStyleSnapshot: expect.objectContaining({ sourceId: "style-1", cssClass: "paper", renderer: "custom" }),
@@ -174,16 +190,24 @@ describe("conversation share actions", () => {
         role: "assistant",
         content: "Frozen",
         createdAt: "2026-01-01T00:01:00.000Z",
+        model: "actual-model",
+        tokenUsage: { promptTokens: 120, completionTokens: 40 },
+        durationMs: 1500,
       }],
     }] ]);
     mocks.getDb.mockResolvedValue(db);
 
     await expect(getShare("share-1")).resolves.toEqual({
-      status: "ready", title: "Title", model: "model", renderStyle: null,
+      status: "ready", title: "Title", renderStyle: null,
       messages: [{
         role: "assistant",
         content: "Frozen",
         createdAt: "2026-01-01T00:01:00.000Z",
+        runMetadata: {
+          model: "actual-model",
+          tokenUsage: { promptTokens: 120, completionTokens: 40 },
+          durationMs: 1500,
+        },
       }],
     });
     expect(db.select).toHaveBeenCalledTimes(1);
@@ -211,7 +235,6 @@ describe("conversation share actions", () => {
     await expect(getShare("share-old-snapshot")).resolves.toEqual({
       status: "ready",
       title: "Old snapshot",
-      model: "model",
       renderStyle: null,
       messages: [{ role: "assistant", content: "Still readable" }],
     });
@@ -224,19 +247,32 @@ describe("conversation share actions", () => {
       [{ id: "conversation-1", title: "Current", modelName: "new-model", renderStyleId: "style-2", messageVersionSelections: { u1: "a-old-public" } }],
       [
         { id: "u1", publicId: "u1-public", parentId: null, role: "user", content: "Q", createdAt: new Date("2026-01-01T00:00:00Z") },
-        { id: "a-old", publicId: "a-old-public", parentId: "u1", role: "assistant", content: "Chosen", createdAt: new Date("2026-01-01T00:01:00Z") },
+        { id: "a-old", publicId: "a-old-public", parentId: "u1", runId: "run-live", role: "assistant", content: "Chosen", createdAt: new Date("2026-01-01T00:01:00Z") },
         { id: "a-new", publicId: "a-new-public", parentId: "u1", role: "assistant", content: "Latest", createdAt: new Date("2026-01-01T00:02:00Z") },
       ],
       [{ id: "style-2", name: "Compact", cssClass: "compact", css: ".rs-compact{}", renderer: "streamdown" }],
     ]);
     mocks.getDb.mockResolvedValue(db);
+    mocks.loadRunMetadataByRunIds.mockResolvedValue(new Map([[
+      "run-live",
+      { model: "actual-model", tokenUsage: { promptTokens: 12, completionTokens: 4 }, durationMs: 500 },
+    ]]));
 
     const result = await getShare("share-live");
     expect(result).toEqual(expect.objectContaining({
-      status: "ready", title: "Current", model: "new-model",
+      status: "ready", title: "Current",
       messages: [
         { role: "user", content: "Q", createdAt: "2026-01-01T00:00:00.000Z" },
-        { role: "assistant", content: "Chosen", createdAt: "2026-01-01T00:01:00.000Z" },
+        {
+          role: "assistant",
+          content: "Chosen",
+          createdAt: "2026-01-01T00:01:00.000Z",
+          runMetadata: {
+            model: "actual-model",
+            tokenUsage: { promptTokens: 12, completionTokens: 4 },
+            durationMs: 500,
+          },
+        },
       ],
       renderStyle: expect.objectContaining({ sourceId: "style-2", cssClass: "compact" }),
     }));
@@ -254,7 +290,6 @@ describe("conversation share actions", () => {
     await expect(getShare("share-live")).resolves.toEqual({
       status: "ready",
       title: "Current",
-      model: "model",
       messages: [{ role: "user", content: "Q", createdAt: "2026-01-01T00:00:00.000Z" }],
       renderStyle: null,
     });

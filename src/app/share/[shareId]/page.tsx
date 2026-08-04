@@ -28,7 +28,7 @@ export default async function SharePage({ params }: { params: Promise<{ shareId:
       {share.renderStyle?.css && <style dangerouslySetInnerHTML={{ __html: share.renderStyle.css }} />}
       <div className="mx-auto max-w-[75ch]">
         <header className="mb-10 border-b border-morning-mist pb-5 dark:border-deep-space">
-          <div className="flex items-start justify-between gap-4"><div className="min-w-0"><h1 className="text-ui-subheading font-semibold text-space-ink dark:text-nebula-silver">{share.title}</h1>{share.model && <p className="mt-1 text-ui-caption font-mono text-neutral-500 dark:text-neutral-400">{share.model}</p>}</div><Link href="/" className="shrink-0 text-ui-caption font-medium text-sora-blue hover:underline">Nekusora</Link></div>
+          <div className="flex items-start justify-between gap-4"><div className="min-w-0"><h1 className="text-ui-subheading font-semibold text-space-ink dark:text-nebula-silver">{share.title}</h1></div><Link href="/" className="shrink-0 text-ui-caption font-medium text-sora-blue hover:underline">Nekusora</Link></div>
           <p className="mt-3 text-ui-caption text-neutral-500 dark:text-neutral-400">{t("readonly")}</p>
         </header>
         <section className="space-y-8" aria-label={t("conversation")}>
@@ -44,6 +44,7 @@ export default async function SharePage({ params }: { params: Promise<{ shareId:
                 content={message.content}
                 renderStyleClass={share.renderStyle?.cssClass}
                 renderer={share.renderStyle?.renderer}
+                runMetadata={message.runMetadata}
               />
             </div>
           ))}

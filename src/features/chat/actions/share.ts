@@ -11,6 +11,7 @@ import type {
 } from "@/db/types";
 import { resolveVisibleBranch } from "@/features/chat/lib/visible-branch";
 import { toMessageCreatedAtIso } from "@/features/chat/model/messageTime";
+import type { MessageRunMetadata } from "@/features/chat/model/types";
 import {
   createShareUnlockToken,
   fingerprintShareClient,
@@ -25,6 +26,7 @@ import {
   recordShareUnlockFailure,
 } from "@/features/chat/lib/share-rate-limit";
 import { getDb, getSchema } from "@/lib/infra/db";
+import { loadRunMetadataByRunIds } from "@/lib/chat/run-metadata";
 import { requireSession } from "@/lib/session";
 
 const expirationSchema = z.discriminatedUnion("kind", [
@@ -59,14 +61,20 @@ export interface ConversationShareListItem {
   hasPassword: boolean;
 }
 
+interface PublicShareMessage {
+  role: string;
+  content: string;
+  createdAt?: string;
+  runMetadata?: MessageRunMetadata;
+}
+
 export type PublicShareState =
   | { status: "unavailable" }
   | { status: "locked" }
   | {
       status: "ready";
       title: string;
-      model: string | null;
-      messages: { role: string; content: string; createdAt?: string }[];
+      messages: PublicShareMessage[];
       renderStyle: ConversationShareRenderStyleSnapshot | null;
     };
 
@@ -101,7 +109,10 @@ function toListItem(share: Record<string, unknown>, now: Date): ConversationShar
   };
 }
 
-function snapshotMessages(messages: Record<string, unknown>[]): ConversationShareMessageSnapshot[] {
+function snapshotMessages(
+  messages: Record<string, unknown>[],
+  runMetadataByRunId: Map<string, MessageRunMetadata>,
+): ConversationShareMessageSnapshot[] {
   return messages.map((message) => {
     const snapshot: ConversationShareMessageSnapshot = {
       publicId: message.publicId as string,
@@ -110,20 +121,40 @@ function snapshotMessages(messages: Record<string, unknown>[]): ConversationShar
     };
     const createdAt = toMessageCreatedAtIso(message.createdAt);
     if (createdAt) snapshot.createdAt = createdAt;
+    const runMetadata = typeof message.runId === "string"
+      ? runMetadataByRunId.get(message.runId)
+      : undefined;
+    if (runMetadata?.model) snapshot.model = runMetadata.model;
+    if (runMetadata?.tokenUsage) {
+      const tokenUsage = {
+        promptTokens: runMetadata.tokenUsage.promptTokens,
+        cacheReadTokens: runMetadata.tokenUsage.cacheReadTokens,
+        completionTokens: runMetadata.tokenUsage.completionTokens,
+      };
+      if (Object.values(tokenUsage).some((value) => typeof value === "number")) {
+        snapshot.tokenUsage = tokenUsage;
+      }
+    }
+    if (typeof runMetadata?.durationMs === "number") snapshot.durationMs = runMetadata.durationMs;
     return snapshot;
   });
 }
 
 function normalizeMessages(
   messages: ConversationShareMessageSnapshot[],
-): { role: string; content: string; createdAt?: string }[] {
+): PublicShareMessage[] {
   return messages.map((message) => {
-    const normalized: { role: string; content: string; createdAt?: string } = {
+    const normalized: PublicShareMessage = {
       role: message.role,
       content: typeof message.content === "string" ? message.content : String(message.content ?? ""),
     };
     const createdAt = toMessageCreatedAtIso(message.createdAt);
     if (createdAt) normalized.createdAt = createdAt;
+    const runMetadata: MessageRunMetadata = {};
+    if (message.model) runMetadata.model = message.model;
+    if (message.tokenUsage) runMetadata.tokenUsage = message.tokenUsage;
+    if (typeof message.durationMs === "number") runMetadata.durationMs = message.durationMs;
+    if (Object.keys(runMetadata).length > 0) normalized.runMetadata = runMetadata;
     return normalized;
   });
 }
@@ -135,6 +166,20 @@ async function loadVisibleMessages(db: DrizzleBoundary, s: DrizzleBoundary, conv
     .where(and(eq(s.messages.conversationId, conversationId), isNull(s.messages.deletedAt)))
     .orderBy(s.messages.createdAt);
   return resolveVisibleBranch(allMessages as Record<string, unknown>[], selections).messages;
+}
+
+async function loadVisibleMessageSnapshots(
+  db: DrizzleBoundary,
+  s: DrizzleBoundary,
+  conversationId: string,
+  selections: MessageVersionSelections | null,
+): Promise<ConversationShareMessageSnapshot[]> {
+  const messages = await loadVisibleMessages(db, s, conversationId, selections);
+  const runIds = Array.from(new Set(messages
+    .map((message) => message.runId)
+    .filter((runId): runId is string => typeof runId === "string" && runId.length > 0)));
+  const runMetadataByRunId = await loadRunMetadataByRunIds(db, s, conversationId, runIds);
+  return snapshotMessages(messages, runMetadataByRunId);
 }
 
 async function loadRenderStyleSnapshot(
@@ -175,13 +220,13 @@ export async function createShare(input: CreateShareInput): Promise<Conversation
     .where(eq(s.conversations.id, parsed.data.conversationId)).limit(1);
   if (!conversation || conversation.userId !== user.id) throw new Error("无权操作");
 
-  const visibleMessages = await loadVisibleMessages(
+  const messageSnapshots = await loadVisibleMessageSnapshots(
     db,
     s,
     conversation.id,
     conversation.messageVersionSelections as MessageVersionSelections | null,
   );
-  if (visibleMessages.length === 0) throw new Error("当前会话没有可分享内容");
+  if (messageSnapshots.length === 0) throw new Error("当前会话没有可分享内容");
 
   const selectedStyleId = parsed.data.mode === "snapshot"
     ? (parsed.data.renderStyleId === undefined ? conversation.renderStyleId : parsed.data.renderStyleId)
@@ -189,7 +234,6 @@ export async function createShare(input: CreateShareInput): Promise<Conversation
   const renderStyleSnapshot = parsed.data.mode === "snapshot"
     ? await loadRenderStyleSnapshot(db, s, selectedStyleId)
     : null;
-  const messageSnapshots = snapshotMessages(visibleMessages);
   const expiresAt = toExpiration(parsed.data.expiration, now);
   const passwordVerifier = parsed.data.password
     ? await hashSharePassword(parsed.data.password)
@@ -283,7 +327,6 @@ export async function getShare(shareId: string): Promise<PublicShareState> {
   }
 
   let title = share.titleSnapshot ?? "分享的对话";
-  let model = share.modelSnapshot ?? null;
   let renderStyle = (share.renderStyleSnapshot ?? null) as ConversationShareRenderStyleSnapshot | null;
   let messages: ConversationShareMessageSnapshot[];
 
@@ -292,13 +335,12 @@ export async function getShare(shareId: string): Promise<PublicShareState> {
       .where(eq(s.conversations.id, share.conversationId)).limit(1);
     if (!conversation) return { status: "unavailable" };
     title = conversation.title;
-    model = conversation.modelName;
-    messages = snapshotMessages(await loadVisibleMessages(
+    messages = await loadVisibleMessageSnapshots(
       db,
       s,
       conversation.id,
       conversation.messageVersionSelections as MessageVersionSelections | null,
-    ));
+    );
     renderStyle = await loadRenderStyleSnapshot(db, s, conversation.renderStyleId, false);
   } else if (share.mode === "snapshot") {
     messages = (share.messageSnapshotsJson ?? []) as ConversationShareMessageSnapshot[];
@@ -312,7 +354,7 @@ export async function getShare(shareId: string): Promise<PublicShareState> {
       .where(eq(s.conversationShares.shareId, shareId));
   } catch { /* best effort */ }
 
-  return { status: "ready", title, model, messages: normalizeMessages(messages), renderStyle };
+  return { status: "ready", title, messages: normalizeMessages(messages), renderStyle };
 }
 
 function clientSource(requestHeaders: Headers): string {

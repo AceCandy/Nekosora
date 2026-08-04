@@ -4,19 +4,14 @@ import React, { useEffect, useId, useLayoutEffect, useRef, useState } from "reac
 import { useLocale, useTranslations } from "next-intl";
 import {
   AlertCircle,
-  ArrowDownToLine,
-  ArrowUpFromLine,
-  Bot,
   Check,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronUp,
-  Clock3,
   Copy,
   CornerDownRight,
-  Database,
   ExternalLink,
   Info,
   Loader2,
@@ -45,10 +40,11 @@ import { FEEDBACK_REASONS, type FeedbackReason } from "@/features/chat/model/fee
 import { setMessageFeedback } from "@/features/chat/actions/feedback";
 
 import { copyToClipboard } from "@/shared/lib/clipboard";
-import { formatDateTimeLocal, formatDuration } from "@/shared/lib/format";
+import { formatDateTimeLocal } from "@/shared/lib/format";
 import { ASSISTANT_MESSAGE_CLASS, USER_MESSAGE_BUBBLE_CLASS } from "@/features/chat/components/messagePresentation";
 import { useClickOutside } from "@/shared/lib/useClickOutside";
 import { MessageImageAttachments } from "@/features/chat/components/MessageImageAttachments";
+import { RunMetadataFields } from "@/features/chat/components/RunMetadataFields";
 
 /** 用户消息超过此行数才折叠(长消息默认收起,避免撑高会话)。 */
 const USER_MESSAGE_COLLAPSE_LINES = 6;
@@ -62,86 +58,6 @@ const FEEDBACK_REASON_I18N: Record<FeedbackReason, string> = {
   unsafe: "feedbackReasonUnsafe",
   other: "feedbackReasonOther",
 };
-
-interface RunMetadataFieldsProps {
-  metadata: MessageRunMetadata;
-  className?: string;
-}
-
-/** 以固定顺序投影真实可用字段；未知值隐藏，数值 0 保留。 */
-function RunMetadataFields({ metadata, className }: RunMetadataFieldsProps) {
-  const t = useTranslations("chat");
-  const locale = useLocale();
-  const model = metadata.model?.trim();
-  const tokenItems = [
-    {
-      key: "input",
-      label: t("inputTokens"),
-      value: metadata.tokenUsage?.promptTokens,
-      Icon: ArrowDownToLine,
-    },
-    {
-      key: "cache",
-      label: t("cacheReadTokens"),
-      value: metadata.tokenUsage?.cacheReadTokens,
-      Icon: Database,
-    },
-    {
-      key: "output",
-      label: t("outputTokens"),
-      value: metadata.tokenUsage?.completionTokens,
-      Icon: ArrowUpFromLine,
-    },
-  ];
-
-  return (
-    <dl
-      className={clsx(
-        "flex min-w-0 max-w-full flex-wrap items-center gap-x-2 gap-y-0.5 text-ui-micro text-space-ink/50 dark:text-nebula-silver/50",
-        className,
-      )}
-    >
-      {model && (
-        <div className="inline-flex min-w-0 max-w-full items-center gap-1">
-          <dt className="inline-flex shrink-0 items-center gap-1">
-            <Bot className="size-2.5" aria-hidden="true" />
-            <span>{t("responseModel")}</span>
-          </dt>
-          <dd
-            className="min-w-0 max-w-[min(18rem,60vw)] truncate text-space-ink/55 dark:text-nebula-silver/55"
-            title={model}
-          >
-            {model}
-          </dd>
-        </div>
-      )}
-      {tokenItems.map(({ key, label, value, Icon }) => (
-        typeof value === "number" ? (
-          <div key={key} className="inline-flex items-center gap-1">
-            <dt className="inline-flex items-center gap-1">
-              <Icon className="size-2.5" aria-hidden="true" />
-              <span>{label}</span>
-            </dt>
-            <dd className="font-mono tabular-nums text-space-ink/55 dark:text-nebula-silver/55">
-              {value.toLocaleString(locale)}
-            </dd>
-          </div>
-        ) : null
-      ))}
-      {typeof metadata.durationMs === "number" && (
-        <div className="inline-flex items-center gap-1">
-          <dt className="inline-flex items-center gap-1">
-            <Clock3 className="size-2.5" aria-hidden="true" />
-            <span>{t("responseDuration")}</span>
-          </dt>
-          <dd className="font-mono tabular-nums text-space-ink/55 dark:text-nebula-silver/55">
-            {formatDuration(metadata.durationMs)}
-          </dd>
-        </div>
-      )}
-    </dl>
-  );
-}
 
 interface MessageRunMetadataDisplayProps {
   metadata: MessageRunMetadata;

@@ -142,6 +142,12 @@ export interface ConversationShareMessageSnapshot {
   content: unknown;
   /** 消息绝对创建时间；旧分享快照可能缺失。 */
   createdAt?: string;
+  /** assistant 回复实际使用的模型；旧分享快照可能缺失。 */
+  model?: string;
+  /** assistant 回复的 token 用量；旧分享快照可能缺失。 */
+  tokenUsage?: TokenUsage;
+  /** assistant 回复从请求到完成的总耗时；旧分享快照可能缺失。 */
+  durationMs?: number;
 }
 
 /** 新版对话分享模式；null 仅用于识别历史分享。 */
