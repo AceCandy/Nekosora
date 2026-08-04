@@ -1,0 +1,2 @@
+{"file":".trellis/spec/backend/web-search.md","reason":"复核 provider、Hosted Search、缓存、trace 和测试要求。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"复核新增字段在所有边界与旧数据上的一致性。"}
