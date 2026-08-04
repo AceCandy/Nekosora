@@ -12,12 +12,60 @@
 - **迁移单份**:`drizzle/pg/`,启动时 `bootstrapDatabase()` 自动 `migrate({ migrationsFolder: "drizzle/pg" })`。
 - 已移除 SQLite / better-sqlite3 / sqlite-vec 双 dialect 回退(2026-07 收敛)。不再有 `isPg` / `dbDialect` / `DB_DIALECT` / `SQLITE_PATH`。
 
-## Dynamic Import(关键约束)
+## Scenario: Next Instrumentation Runtime Isolation
 
-- **`getDb` / `bootstrap` / `queue` 必须用动态 import 加载 pg / pg-boss 驱动**,不能用静态 `import`。
-- 原因:Next 15 把 `instrumentation.ts` 同时编译成 Node 与 Edge 版本。静态 import 会让 Turbopack 在 Edge 编译时把 `pg` → `util/types` 拉入,Edge runtime 不存在 → 编译失败。
-- 模式:函数内 `const { drizzle } = await import("drizzle-orm/node-postgres"); const { default: pg } = await import("pg");`。queue 用变量路径 `const m = "pg-boss"; await import(m)` 进一步阻断静态分析。
-- `pnpm build` 的 Edge instrumentation 编译是这条约束的验证 gate。
+### 1. Scope / Trigger
+
+- Applies when changing `instrumentation.ts`, Node startup initialization, or imports that reach `pg`, Drizzle migrator, or `process.on`.
+
+### 2. Signatures
+
+- `register(): Promise<void>` is the framework entrypoint.
+- `registerNodeInstrumentation(): Promise<void>` owns process guards, environment validation, and database bootstrap.
+- `pnpm dev` and `pnpm build` use the default Next 15 Webpack path.
+
+### 3. Contracts
+
+- `instrumentation.ts` must contain only the runtime check and the literal `import("./instrumentation.node")` call.
+- Node-only dependencies live in `instrumentation.node.ts`; initialization order is guards, environment validation, then database bootstrap.
+- Do not use a variable alias path such as `await import(nodePath)` in the framework entrypoint. Webpack cannot resolve it and emits `Critical dependency`, followed by a runtime `MODULE_NOT_FOUND`.
+- Do not import bootstrap dependencies directly from the shared entrypoint. Edge compilation otherwise follows `bootstrap -> pg` and fails on Node built-ins such as `fs`.
+- `getDb`, bootstrap internals, and queue initialization continue to load `pg`, the Drizzle PostgreSQL driver, and `pg-boss` dynamically inside Node-only code.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required result |
+| --- | --- |
+| `NEXT_RUNTIME=nodejs` | Install guards, validate env, then complete database bootstrap |
+| `NEXT_RUNTIME=edge` | Do not load or execute Node initialization |
+| Variable-path import in `instrumentation.ts` | Invalid: Webpack warning and runtime module resolution failure |
+| Node dependency reachable from the shared entrypoint | Invalid: Edge compilation may fail on `fs`, `pg-native`, or other Node modules |
+| Bootstrap failure | Reject `register()` and block startup |
+
+### 5. Good / Base / Bad Cases
+
+- Good: `instrumentation.ts` conditionally imports `./instrumentation.node`, and `/healthz` returns 200 after a cold development start.
+- Base: Edge registration returns without importing Node modules.
+- Bad: hiding `@/lib/infra/db/bootstrap` in a string variable; it suppresses static resolution but leaves the emitted bundle unable to load the alias.
+
+### 6. Tests Required
+
+- `src/instrumentation.test.ts` asserts Node initialization order, Edge isolation, and bootstrap suppression after validation failure.
+- Cold-start `pnpm dev` and request `/healthz`; startup must have no instrumentation `Critical dependency`, `MODULE_NOT_FOUND`, `fs`, or `pg-native` error.
+- `pnpm build` is the production Edge/Node bundling gate; the instrumentation compile stage must not report those errors.
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong: Webpack cannot resolve the runtime alias expression.
+const nodePath = "@/lib/infra/db/bootstrap";
+await import(nodePath);
+
+// Correct: keep the shared entrypoint minimal and use Next's Node-only module pattern.
+if (process.env.NEXT_RUNTIME === "nodejs") {
+  await import("./instrumentation.node");
+}
+```
 
 ## Queue And Worker Lifecycle
 

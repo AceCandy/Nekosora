@@ -1,8 +1,8 @@
 /**
  * 进程级错误兜底 —— 捕获上游 fetch(undici)在网络抖动或连接被关时泄漏的未捕获 rejection。
  *
- * 独立成模块并通过 instrumentation.ts 的「变量路径 dynamic import」加载,让 Edge 编译
- * 预扫描不会把 process.on 拉进 Edge runtime 图(Edge 不支持 process.on,会编译失败)。
+ * 独立成模块,由 instrumentation.ts 在确认 Node runtime 后动态加载,
+ * 避免 Edge runtime 执行 process.on。
  *
  * 背景:AI SDK v5 streamText/generateText 在底层 undici socket 中途关闭时,部分内部派生
  * promise(usage/finishReason 等)的 rejection 不在所有路径上被 SDK 自身 catch,冒泡成

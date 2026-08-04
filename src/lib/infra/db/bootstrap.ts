@@ -577,8 +577,7 @@ async function ensureFirstAdmin(
     return;
   }
 
-  const seedAdminPath = "@/lib/infra/seed-admin";
-  const { resolveSeedAdminCredentials } = await import(seedAdminPath);
+  const { resolveSeedAdminCredentials } = await import("@/lib/infra/seed-admin");
   const { email, password, name } = resolveSeedAdminCredentials(process.env);
 
   console.log(`[bootstrap] 无用户,创建首个管理员 ${email} ...`);
