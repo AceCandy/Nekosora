@@ -168,6 +168,8 @@ AI 回复正文由 `shared/components/markdown/Markdown.tsx` 渲染,两条互斥
 - HTML 容器块(`htmlBlockDepth > 0`)内的所有行原样透传,**不参与 markdown 解析**——裸文字不得被包成 `<p>`,否则会被输出样式(如纸面杂志 `.rs-paper .nekusora-md p { color }`)改写颜色与边距。
 - 块深度由 `countHtmlDelta` 统计;void 标签(`br`/`hr`/`img`/...)与显式自闭合、同行开闭(`<div>x</div>`)不计入深度。
 - 代码块(` ``` `)优先级高于 HTML 块判定。
+- `separateBareUrlTrailingText` 同时服务 streamdown/custom:裸 URL 紧跟中文时须切断链接;外层半角/全角右括号必须留在 `<a>` 外,URL 内部成对 ASCII 括号必须保留在链接内。
+- Streamdown 链接安全确认保持启用,但 `renderModal` 必须用 `createPortal(..., document.body)` 脱离 Markdown 段落;禁止把含块元素的确认层作为链接的内联兄弟节点,否则会形成 `<p><div>` 非法嵌套并触发 hydration 错误。
 - 改 `parseMarkdown` 必须跑 `src/shared/components/markdown/customRenderer.test.ts`;该测试守住「HTML 块内文字不被打散」与「普通 markdown 回归」。
 
 **内联 style 过滤**:`streamdown-html.tsx` 对放行标签调 `sanitizeHTMLStyle`;当前为原样透传(不做属性白名单/危险值拦截/中性色映射),安全兜底依赖 streamdown 内部 rehype-harden。`custom` 路径完全不过滤。

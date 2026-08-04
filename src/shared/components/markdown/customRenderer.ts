@@ -90,7 +90,7 @@ function escapeHtmlAttribute(str: string): string {
   return escapeHtml(str).replaceAll('"', "&quot;");
 }
 
-/** 阻止 GFM 裸链接把紧跟在右括号后的中文正文误识别为 URL。 */
+/** 阻止 GFM 裸链接把紧跟的中文正文误识别为 URL。 */
 export function separateBareUrlTrailingText(input: string): string {
   let inCodeBlock = false;
   return input
@@ -104,7 +104,20 @@ export function separateBareUrlTrailingText(input: string): string {
       return line
         .split(/(`[^`]*`|\[[^\]]+\]\([^)]+\)|<[^>]*>)/g)
         .map((part, index) => index % 2 === 0
-          ? part.replace(/(https?:\/\/[^\s<>()]+)\)(?=[\u3400-\u9fff])/g, "$1)<!-- -->")
+          ? part
+            .replace(/(https?:\/\/[^\s<）]+)）/g, "$1<!-- -->）")
+            .replace(
+              /(https?:\/\/[^\s<\u3400-\u9fff]+)(?=[\u3400-\u9fff])/g,
+              (_, value: string) => {
+                let href = value;
+                let trailing = "";
+                while (href.endsWith(")") && href.split(")").length > href.split("(").length) {
+                  href = href.slice(0, -1);
+                  trailing = `)${trailing}`;
+                }
+                return `${href}<!-- -->${trailing}`;
+              },
+            )
           : part)
         .join("");
     })

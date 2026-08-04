@@ -39,6 +39,14 @@
     "info": "提示",
     "language": "语言"
   },
+  "markdown": {
+    "linkSafety": {
+      "title": "打开外部链接",
+      "message": "即将访问以下外部地址，请确认后继续。",
+      "continue": "继续访问",
+      "cancel": "取消"
+    }
+  },
   "nav": {
     "chat": "聊天",
     "panel": "控制面板",

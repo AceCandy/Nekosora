@@ -33,9 +33,18 @@ describe("parseMarkdown", () => {
   it("只把裸 URL 渲染为链接，不吞掉右括号后的中文正文", () => {
     const input = separateBareUrlTrailingText("（https://openai.com/research/index/release)公开的最新产品为：");
 
+    expect(input).toBe("（https://openai.com/research/index/release<!-- -->)公开的最新产品为：");
     expect(parseMarkdown(input)).toBe(
-      '<p>（<a href="https://openai.com/research/index/release" target="_blank" rel="noopener noreferrer">https://openai.com/research/index/release</a>)<!-- -->公开的最新产品为：</p>\n',
+      '<p>（<a href="https://openai.com/research/index/release" target="_blank" rel="noopener noreferrer">https://openai.com/research/index/release</a><!-- -->)公开的最新产品为：</p>\n',
     );
+  });
+
+  it.each([
+    ["https://openai.com/research/index/release公开的最新产品为：", "https://openai.com/research/index/release<!-- -->公开的最新产品为："],
+    ["https://openai.com/research/index/release）公开的最新产品为：", "https://openai.com/research/index/release<!-- -->）公开的最新产品为："],
+    ["https://openai.com/research/index/release）", "https://openai.com/research/index/release<!-- -->）"],
+  ])("分离裸 URL 后的正文和外层括号：%s", (input, expected) => {
+    expect(separateBareUrlTrailingText(input)).toBe(expected);
   });
 
   it("不改写代码块和行内代码中的 URL 边界", () => {
@@ -46,11 +55,14 @@ describe("parseMarkdown", () => {
   });
 
   it("保留显式链接和 URL 内成对括号", () => {
-    const input = "[说明](https://example.com/docs)中文 与 https://example.com/wiki/Function_(math)";
+    const input = "[说明](https://example.com/docs)中文 与 https://example.com/wiki/Function_(math)正文";
+    const normalized = separateBareUrlTrailingText(input);
 
-    expect(separateBareUrlTrailingText(input)).toBe(input);
-    expect(parseMarkdown(input)).toContain(
-      '<a href="https://example.com/docs" target="_blank" rel="noopener noreferrer">说明</a>中文 与 <a href="https://example.com/wiki/Function_(math)" target="_blank" rel="noopener noreferrer">https://example.com/wiki/Function_(math)</a>',
+    expect(normalized).toBe(
+      "[说明](https://example.com/docs)中文 与 https://example.com/wiki/Function_(math)<!-- -->正文",
+    );
+    expect(parseMarkdown(normalized)).toContain(
+      '<a href="https://example.com/docs" target="_blank" rel="noopener noreferrer">说明</a>中文 与 <a href="https://example.com/wiki/Function_(math)" target="_blank" rel="noopener noreferrer">https://example.com/wiki/Function_(math)</a><!-- -->正文',
     );
   });
 

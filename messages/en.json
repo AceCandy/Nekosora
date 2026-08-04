@@ -39,6 +39,14 @@
     "info": "Info",
     "language": "Language"
   },
+  "markdown": {
+    "linkSafety": {
+      "title": "Open external link",
+      "message": "You are about to visit the following external address.",
+      "continue": "Continue",
+      "cancel": "Cancel"
+    }
+  },
   "nav": {
     "chat": "Chat",
     "panel": "Dashboard",

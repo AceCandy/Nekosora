@@ -18,9 +18,17 @@ import {
 import { clsx } from "clsx";
 import { Check, Copy, Eye, Code, ChevronDown, ChevronUp, Maximize, ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { Streamdown, CodeBlock, type AllowedTags } from "streamdown";
+import { createPortal } from "react-dom";
+import {
+  Streamdown,
+  CodeBlock,
+  type AllowedTags,
+  type LinkSafetyConfig,
+  type LinkSafetyModalProps,
+} from "streamdown";
 import { code as codeHighlighter } from "@streamdown/code";
 import Modal from "@/shared/ui/Modal";
+import ConfirmDialog from "@/shared/ui/ConfirmDialog";
 import {
   MarkdownHTMLDiv,
   MarkdownHTMLSection,
@@ -79,6 +87,43 @@ interface MarkdownRenderContextValue {
   isPaper?: boolean;
 }
 const MarkdownRenderContext = createContext<MarkdownRenderContextValue | null>(null);
+
+/** 将 Streamdown 的链接确认层移出 Markdown 段落，避免块元素嵌入 <p>。 */
+export function MarkdownLinkSafetyModal({
+  isOpen,
+  onClose,
+  onConfirm,
+  url,
+}: LinkSafetyModalProps) {
+  const t = useTranslations("markdown.linkSafety");
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
+    <ConfirmDialog
+      open={isOpen}
+      onClose={onClose}
+      onConfirm={onConfirm}
+      title={t("title")}
+      message={(
+        <div className="space-y-3">
+          <p>{t("message")}</p>
+          <p className="break-all rounded-md bg-nebula-silver px-3 py-2 font-mono text-ui-caption text-space-ink dark:bg-deep-space dark:text-nebula-silver">
+            {url}
+          </p>
+        </div>
+      )}
+      confirmLabel={t("continue")}
+      cancelLabel={t("cancel")}
+      danger={false}
+    />,
+    document.body,
+  );
+}
+
+const STREAMDOWN_LINK_SAFETY: LinkSafetyConfig = {
+  enabled: true,
+  renderModal: (props) => <MarkdownLinkSafetyModal {...props} />,
+};
 
 /**
  * 放行 HTML 块标签及其 style 属性的白名单。
@@ -549,6 +594,7 @@ function MarkdownImpl({ content, isStreaming, renderer = "streamdown", className
                 key={i}
                 mode="static"
                 controls={MARKDOWN_CONTROLS}
+                linkSafety={STREAMDOWN_LINK_SAFETY}
                 allowedTags={ALLOWED_HTML_TAGS}
                 components={STREAMDOWN_COMPONENTS}
                 shikiTheme={["github-light", "github-dark"]}
@@ -580,6 +626,7 @@ function MarkdownImpl({ content, isStreaming, renderer = "streamdown", className
       allowedTags={ALLOWED_HTML_TAGS}
       components={STREAMDOWN_COMPONENTS}
       controls={MARKDOWN_CONTROLS}
+      linkSafety={STREAMDOWN_LINK_SAFETY}
       plugins={{ code: codeHighlighter }}
       shikiTheme={["github-light", "github-dark"]}
     >
