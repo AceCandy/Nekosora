@@ -60,12 +60,23 @@ function projectSearchTrace(
     if (!Array.isArray(record.citations)) continue;
     for (const citation of record.citations) {
       if (!citation || typeof citation !== "object") continue;
-      const item = citation as { title?: unknown; url?: unknown; snippet?: unknown };
+      const item = citation as {
+        title?: unknown;
+        url?: unknown;
+        snippet?: unknown;
+        publishedAt?: unknown;
+      };
       if (typeof item.title !== "string" || typeof item.url !== "string") continue;
+      const existing = byUrl.get(item.url);
       byUrl.set(item.url, {
         title: item.title,
         url: item.url,
         ...(typeof item.snippet === "string" ? { snippet: item.snippet } : {}),
+        ...(typeof item.publishedAt === "string"
+          ? { publishedAt: item.publishedAt }
+          : existing?.publishedAt
+            ? { publishedAt: existing.publishedAt }
+            : {}),
       });
     }
   }

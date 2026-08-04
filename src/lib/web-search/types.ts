@@ -1,12 +1,20 @@
 /** 联网搜索公共类型。 */
 
 import type { CallContext } from "@/lib/providers/types";
-import type { ProviderProtocol, WebSearchFormat } from "@/db/types";
+import type {
+  ProviderProtocol,
+  WebSearchFormat,
+  WebSearchTraceTimeRange,
+} from "@/db/types";
+
+export type SearchTimeRange = WebSearchTraceTimeRange;
+export type SearchFreshness = Extract<SearchTimeRange["preset"], "week" | "month">;
 
 export interface SearchResult {
   title: string;
   url: string;
   snippet: string;
+  publishedAt?: string;
 }
 
 export class SearchProviderError extends Error {
@@ -21,12 +29,14 @@ export class SearchProviderError extends Error {
 
 export interface SearchProvider {
   name: string;
+  supportsTimeRange?: (timeRange: SearchTimeRange) => boolean;
   search(query: string, opts?: SearchOptions): Promise<SearchResult[]>;
 }
 
 export interface SearchOptions {
   maxResults?: number;
   signal?: AbortSignal;
+  timeRange?: SearchTimeRange;
 }
 
 export interface SearchBundle {
@@ -36,12 +46,16 @@ export interface SearchBundle {
   backend?: SearchBackendIdentity;
   groundedSummary?: string;
   attempts?: SearchAttempt[];
+  requestedTimeRange?: SearchTimeRange;
+  effectiveTimeRange?: SearchTimeRange;
+  freshnessFallback?: boolean;
 }
 
 export interface SearchAttempt {
   backend: SearchBackendIdentity;
   outcome: string;
   durationMs: number;
+  timeRange?: SearchTimeRange;
 }
 
 export interface SearchToolResult {
@@ -50,6 +64,9 @@ export interface SearchToolResult {
   citations: SearchResult[];
   backend: SearchBackendIdentity;
   attempts: SearchAttempt[];
+  requestedTimeRange?: SearchTimeRange;
+  effectiveTimeRange?: SearchTimeRange;
+  freshnessFallback?: boolean;
 }
 
 export interface SearchWebExecutionOptions {
@@ -59,6 +76,22 @@ export interface SearchWebExecutionOptions {
   currentModelId?: string;
   currentModelName: string;
   signal: AbortSignal;
+  timeRange?: SearchTimeRange;
+}
+
+export function createFreshnessTimeRange(
+  freshness: SearchFreshness,
+  now = new Date(),
+): SearchTimeRange {
+  const days = freshness === "week" ? 7 : 30;
+  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const start = new Date(end);
+  start.setUTCDate(start.getUTCDate() - days + 1);
+  return {
+    preset: freshness,
+    startDate: start.toISOString().slice(0, 10),
+    endDate: end.toISOString().slice(0, 10),
+  };
 }
 
 export type WebSearchProviderType = "tavily" | "bocha" | "zhipu" | "searxng";

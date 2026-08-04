@@ -13,9 +13,10 @@ WebChat wiring in `src/lib/chat/completion-coordinator.ts` and `/api/chat`.
 - Route capability: `routes.supports_tools`; logical and Hosted Search require both catalog
   tool support and an explicitly verified route.
 - `WebSearchConfig`: `{ version: 2; providers; backends }`; array order is global user priority.
-- `searchWeb(userId, query, options): Promise<SearchBundle>` executes the ordered backend list.
+- `SearchTimeRange`: `{ preset: "week" | "month" | "custom"; startDate: "YYYY-MM-DD"; endDate: "YYYY-MM-DD" }`.
+- `searchWeb(userId, query, options): Promise<SearchBundle>` executes the ordered backend list; `options.timeRange` is optional.
 - `listWebSearchModelCandidates(userId)` returns visible, enabled models with a compatible enabled route and explicit `model_catalog.capabilities.webSearchFormat`.
-- Main-model tool: `web_search({ query: string })`; it is the only search tool exposed to the outer model.
+- Main-model tool: `web_search({ query, freshness?, dateAfter?, dateBefore? })`; `freshness` is `week | month`, while explicit dates must be a complete inclusive pair and are mutually exclusive with freshness.
 - Search SSE: `search_started`, `search_completed`, `search_failed`, all keyed by `toolCallId`.
 - Chat projection: `ChatMessage.searchBackends?: WebSearchTraceBackend[]`, deduplicated by backend type/id.
 - Backfill command: `pnpm backfill:web-search-keys` is dry-run; add `--apply` for a transactional write.
@@ -42,8 +43,23 @@ Required environment:
 - Hosted search prompts include the current UTC date and instruct the nested model to prefer
   recent sources and verify publication/update dates for time-sensitive questions. This is a
   ranking instruction, not a provider-specific freshness filter.
+- The outer model expresses time intent through structured tool arguments: use `week` for latest/current
+  news, `month` for recent information, explicit dates for a user-supplied range, and omit all time
+  fields for ordinary queries. The server never guesses freshness from localized query keywords.
+- Time-constrained execution is capability-gated. Tavily supports week/month/custom ranges; Google
+  Hosted Search receives an exact `timeRangeFilter`; SearXNG participates only in month searches.
+  Bocha, Zhipu, and OpenAI/Anthropic/xAI Hosted Search must be treated as unsupported until their
+  implemented, version-specific contract provides a hard time filter. Never silently run an
+  unrestricted search for a constrained request.
+- A week request runs all eligible backends in user order. Only when that pass produces no result or
+  has no eligible backend may it run one month pass in the same order. Month and custom requests never
+  fall back to unrestricted search. Attempts and tool results record requested/effective
+  ranges and whether this week-to-month fallback occurred.
 - External Provider results are validated, bounded, HTTP(S)-only, deduplicated, and treated as
   untrusted tool content. Cancellation and the shared deadline must reach the underlying request.
+- `SearchResult.publishedAt` is optional and contains only an upstream-provided, parseable date normalized
+  to ISO. Do not infer dates from snippets. Search context, SSE, process trace, continuation, and history
+  projection must preserve it when present.
 - SearXNG validation runs at save and request time. DNS resolution, fixed-address connection,
   and every redirect hop must remain public; loopback, private, link-local, metadata, single-label,
   credential-bearing, and rebinding targets are rejected.
@@ -59,6 +75,8 @@ Required environment:
 - Continue generation appends content to the same assistant, so it must seed the new trace with that
   assistant's existing `webSearch.calls` before new calls are appended. Replacing the array with only
   the continuation run would make live citations disappear after refresh.
+- External search cache keys include the normalized time range in addition to user, backend, and query;
+  unrestricted, week, month, and custom searches must never share cached results.
 - `/v1/chat/completions` and `/v1/responses` never read user search settings or inject search tools.
 - V1 config reads remain compatible during migration, but all writes are V2 ciphertext. The backfill
   prints aggregate counts only and never logs user IDs, plaintext, ciphertext, queries, or summaries.
@@ -73,6 +91,10 @@ Required environment:
 | Backend is missing, disabled, invisible, or route-incompatible | Skip it and try the next ordered backend |
 | Result has no grounded summary or no valid citation | Treat as failed and fall through |
 | Query is invalid | Return a structured tool error; do not call a backend |
+| Only one explicit date is supplied, dates are invalid/reversed, or freshness and dates are combined | Return a structured tool error before any network request |
+| Backend cannot enforce the requested range | Record an `unsupported` attempt and continue without calling it |
+| Week pass has no result or eligible backend | Run exactly one month pass; report the effective range and fallback |
+| Month/custom pass has no result | Fail the constrained search; never retry without a range |
 | All backends fail | Return `web_search_failed`; do not claim fresh information |
 | Outer signal aborts | Stop the chain and underlying request; persist interrupted/cancelled state |
 | SearXNG target or redirect is non-public | Reject before connecting to that address |
@@ -88,6 +110,8 @@ Required environment:
   to GLM, and GLM writes the final answer.
 - Good: two same-name tool calls use different `toolCallId` values and settle independently in live
   state and restored history.
+- Good: a latest-news call searches week-capable backends first, then records a month fallback when the
+  week pass is empty; a Tavily `published_date` survives into the final model's tool context.
 - Base: current-model hosted search succeeds and the assistant restores the same sources after refresh.
 - Good: an interrupted assistant with sources is continued; old and new search calls remain on the same
   message, and refresh restores the same merged citation set shown during streaming.
@@ -95,6 +119,8 @@ Required environment:
 - Bad: assume an `openai-compatible`/2API route supports function tools because its catalog model does.
 - Bad: overwrite an existing assistant's search trace with only the latest continuation run.
 - Bad: pre-search every message when the toggle is on or inject search results into the system prompt.
+- Bad: append "latest" to the query and claim freshness, or pass a constrained request to a backend that
+  cannot enforce it.
 - Bad: send plaintext/ciphertext keys to the browser or accept an unvalidated SearXNG internal URL.
 
 ## 6. Tests Required
@@ -103,6 +129,9 @@ Required environment:
 - Candidate tests: catalog capability, model/catalog/route/provider enabled predicates, visibility,
   protocol compatibility, route tool opt-in, and duplicate-route collapse.
 - Provider tests: response schema, URL filtering/deduplication, retry classes, AbortSignal, user cache isolation.
+- Freshness tests: tool argument validation, UTC week/month boundaries, week-to-month single fallback,
+  unsupported zero-network behavior, range-specific cache keys, Tavily/SearXNG/Google parameter mapping,
+  and `publishedAt` normalization/preservation.
 - Public HTTP tests: IPv4/IPv6 private ranges, metadata, DNS rebinding, redirect hops, and valid public hosts.
 - Hosted search tests: all four runtime translators, route mismatch, no citation failure, route/key failover,
   outer `runId` and `toolCallId` linkage.
@@ -142,6 +171,21 @@ Correct:
 ```ts
 const format = modelCatalog.capabilities.webSearchFormat;
 const eligible = format && isHostedSearchRouteCompatible(format, route.protocol);
+```
+
+Wrong:
+
+```ts
+await provider.search(`${query} latest`, { maxResults: 5 });
+```
+
+Correct:
+
+```ts
+await provider.search(query, {
+  maxResults: 5,
+  timeRange: { preset: "week", startDate, endDate },
+});
 ```
 
 Wrong:

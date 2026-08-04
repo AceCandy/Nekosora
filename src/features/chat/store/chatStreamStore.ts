@@ -370,7 +370,9 @@ function mergeSearchResultsAt(
     const messages = [...runtime.messages];
     const message = messages[idx];
     const byUrl = new Map((message.searchResults ?? []).map((result) => [result.url, result]));
-    for (const result of results) byUrl.set(result.url, result);
+    for (const result of results) {
+      byUrl.set(result.url, { ...byUrl.get(result.url), ...result });
+    }
     const next: ChatMessage = { ...message, searchResults: Array.from(byUrl.values()) };
     if (backend) {
       const backendKey = (value: WebSearchTraceBackend) => `${value.type}:${value.id ?? value.name}`;

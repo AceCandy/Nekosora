@@ -23,6 +23,10 @@ import { redactErrorMessage } from "@/lib/redaction";
 import { streamChat, streamChatWithTools } from "@/lib/stream";
 import { getChatUA } from "@/lib/system-settings/ua";
 import { searchWeb } from "@/lib/web-search/service";
+import {
+  createFreshnessTimeRange,
+  type SearchTimeRange,
+} from "@/lib/web-search/types";
 import type { IRToolDef } from "@/lib/providers/types";
 import { z } from "zod";
 
@@ -286,9 +290,37 @@ export async function executeChatCompletion(
   };
 }
 
+const searchDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => {
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+});
+
 const webSearchArgsSchema = z.object({
   query: z.string().trim().min(1).max(500),
+  freshness: z.enum(["week", "month"]).optional(),
+  dateAfter: searchDateSchema.optional(),
+  dateBefore: searchDateSchema.optional(),
+}).superRefine((value, ctx) => {
+  const hasDateAfter = value.dateAfter !== undefined;
+  const hasDateBefore = value.dateBefore !== undefined;
+  if (hasDateAfter !== hasDateBefore) {
+    ctx.addIssue({ code: "custom", message: "dateAfter 和 dateBefore 必须同时提供" });
+  }
+  if (value.freshness && hasDateAfter) {
+    ctx.addIssue({ code: "custom", message: "freshness 不能与明确日期范围同时使用" });
+  }
+  if (value.dateAfter && value.dateBefore && value.dateAfter > value.dateBefore) {
+    ctx.addIssue({ code: "custom", message: "dateAfter 不能晚于 dateBefore" });
+  }
 });
+
+function toSearchTimeRange(args: z.infer<typeof webSearchArgsSchema>): SearchTimeRange | undefined {
+  if (args.freshness) return createFreshnessTimeRange(args.freshness);
+  if (args.dateAfter && args.dateBefore) {
+    return { preset: "custom", startDate: args.dateAfter, endDate: args.dateBefore };
+  }
+  return undefined;
+}
 
 const webSearchToolDefinition: IRToolDef = {
   type: "function",
@@ -297,7 +329,22 @@ const webSearchToolDefinition: IRToolDef = {
     description: "搜索互联网以核实需要最新或外部信息的问题，并返回带来源的结果。",
     parameters: {
       type: "object",
-      properties: { query: { type: "string", minLength: 1, maxLength: 500 } },
+      properties: {
+        query: { type: "string", minLength: 1, maxLength: 500 },
+        freshness: {
+          type: "string",
+          enum: ["week", "month"],
+          description: "最新或最新新闻使用 week；近期信息使用 month；普通查询省略。",
+        },
+        dateAfter: {
+          type: "string",
+          description: "明确日期范围的开始日期（YYYY-MM-DD），必须与 dateBefore 同时提供。",
+        },
+        dateBefore: {
+          type: "string",
+          description: "明确日期范围的结束日期（YYYY-MM-DD），必须与 dateAfter 同时提供。",
+        },
+      },
       required: ["query"],
       additionalProperties: false,
     },
@@ -315,9 +362,11 @@ function createWebSearchTool(input: ExecuteChatCompletionInput) {
       }
 
       const startedAt = Date.now();
+      const requestedTimeRange = toSearchTimeRange(parsed.data);
       const call: WebSearchTraceCall = {
         toolCallId,
         query: parsed.data.query,
+        ...(requestedTimeRange ? { requestedTimeRange } : {}),
         mode: null,
         backend: null,
         status: "running",
@@ -335,6 +384,7 @@ function createWebSearchTool(input: ExecuteChatCompletionInput) {
           currentModelId: input.modelId,
           currentModelName: input.request.model,
           signal: input.signal,
+          timeRange: requestedTimeRange,
         });
         const durationMs = Date.now() - startedAt;
         if (bundle.hit && bundle.backend && bundle.groundedSummary) {
@@ -345,6 +395,8 @@ function createWebSearchTool(input: ExecuteChatCompletionInput) {
             durationMs,
             citations: bundle.results,
             attempts: bundle.attempts,
+            effectiveTimeRange: bundle.effectiveTimeRange,
+            freshnessFallback: bundle.freshnessFallback,
           });
           await input.emit({
             type: "search_completed",
@@ -360,6 +412,9 @@ function createWebSearchTool(input: ExecuteChatCompletionInput) {
               citations: bundle.results,
               backend: bundle.backend,
               attempts: bundle.attempts ?? [],
+              requestedTimeRange: bundle.requestedTimeRange,
+              effectiveTimeRange: bundle.effectiveTimeRange,
+              freshnessFallback: bundle.freshnessFallback ?? false,
             },
             isError: false,
           };
@@ -372,10 +427,20 @@ function createWebSearchTool(input: ExecuteChatCompletionInput) {
           status: "failed" as const,
           durationMs,
           attempts: bundle.attempts,
+          effectiveTimeRange: bundle.effectiveTimeRange,
+          freshnessFallback: bundle.freshnessFallback,
         });
         await input.emit({ type: "search_failed", toolCallId, reason, status: "failed" });
         return {
-          result: { error: "web_search_failed", query: parsed.data.query, reason, attempts: bundle.attempts ?? [] },
+          result: {
+            error: "web_search_failed",
+            query: parsed.data.query,
+            reason,
+            attempts: bundle.attempts ?? [],
+            requestedTimeRange: bundle.requestedTimeRange,
+            effectiveTimeRange: bundle.effectiveTimeRange,
+            freshnessFallback: bundle.freshnessFallback ?? false,
+          },
           isError: true,
         };
       } catch (error) {

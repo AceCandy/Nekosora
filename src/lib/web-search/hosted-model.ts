@@ -9,13 +9,17 @@ import { buildHostedSearchRuntime } from "@/lib/providers/registry";
 import type { CallContext, IRUsage } from "@/lib/providers/types";
 import { resolveRoutesById } from "@/lib/routing";
 import { getChatUA } from "@/lib/system-settings/ua";
-import type { SearchResult } from "./types";
+import type { SearchResult, SearchTimeRange } from "./types";
 
 export interface HostedModelSearchResult {
   summary: string;
   citations: SearchResult[];
   modelId?: string;
   modelName: string;
+}
+
+export interface HostedModelSearchUnsupported {
+  unsupported: true;
 }
 
 interface ExecuteHostedModelSearchInput {
@@ -26,6 +30,7 @@ interface ExecuteHostedModelSearchInput {
   runId: string;
   toolCallId: string;
   signal: AbortSignal;
+  timeRange?: SearchTimeRange;
 }
 
 /** 为代搜模型提供明确的当前日期与时效性约束；日期注入便于模型判断“最新”。 */
@@ -42,14 +47,15 @@ export function buildHostedSearchPrompt(query: string, now = new Date()): string
 /** 搜索模型只返回有来源的摘要，不继承主会话工具。 */
 export async function executeHostedModelSearch(
   input: ExecuteHostedModelSearchInput,
-): Promise<HostedModelSearchResult | null> {
+): Promise<HostedModelSearchResult | HostedModelSearchUnsupported | null> {
   const userAgent = await getChatUA();
+  let supportedRouteSeen = false;
   const adapter: GatewayAttemptAdapter<never, HostedModelSearchResult> = async function* ({
     route,
     apiKey,
     abortSignal,
   }) {
-    const runtime = buildHostedSearchRuntime(route, apiKey, userAgent);
+    const runtime = buildHostedSearchRuntime(route, apiKey, userAgent, input.timeRange);
     if (!runtime) throw new Error("当前路由不支持原生搜索协议");
     const result = await generateText({
       model: runtime.model,
@@ -86,10 +92,26 @@ export async function executeHostedModelSearch(
     taskKind: `web_search:${input.toolCallId}`,
     abortSignal: input.signal,
     resolveRoutes: () => resolveRoutesById(input.ctx, input.modelId),
-    selectAdapter: (route) => buildHostedSearchRuntime(route, route.provider.apiKey) ? adapter : null,
+    selectAdapter: (route) => {
+      const runtime = buildHostedSearchRuntime(
+        route,
+        route.provider.apiKey,
+        undefined,
+        input.timeRange,
+      );
+      if (runtime) supportedRouteSeen = true;
+      return runtime ? adapter : null;
+    },
     telemetry: gatewayTelemetry,
     breaker: { recordSuccess, recordFailure },
   });
+  if (
+    input.timeRange
+    && !supportedRouteSeen
+    && outcome.error?.code === "protocol_not_supported"
+  ) {
+    return { unsupported: true };
+  }
   const value = outcome.status === "success" ? outcome.result : undefined;
   return value?.summary && value.citations.length > 0 ? value : null;
 }
@@ -114,6 +136,16 @@ export function normalizeHostedSources(sources: unknown[]): SearchResult[] {
     const title = "title" in source && typeof source.title === "string"
       ? source.title.trim().slice(0, 200)
       : "";
-    return [{ title: title || normalized, url: normalized, snippet: "" }];
+    const publishedTimestamp = "publishedAt" in source && typeof source.publishedAt === "string"
+      ? Date.parse(source.publishedAt)
+      : Number.NaN;
+    return [{
+      title: title || normalized,
+      url: normalized,
+      snippet: "",
+      ...(!Number.isNaN(publishedTimestamp)
+        ? { publishedAt: new Date(publishedTimestamp).toISOString() }
+        : {}),
+    }];
   }).slice(0, 10);
 }

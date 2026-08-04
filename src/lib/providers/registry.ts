@@ -20,7 +20,10 @@ import type { ResolvedRoute } from "./types";
 import type { ProviderProtocol } from "@/db/types";
 import type { ReasoningLevel } from "@/db/types";
 import { applyReasoningToCompatibleBody } from "@/lib/reasoning";
-import { isHostedSearchRouteCompatible } from "@/lib/web-search/types";
+import {
+  isHostedSearchRouteCompatible,
+  type SearchTimeRange,
+} from "@/lib/web-search/types";
 
 /** 从 ResolvedRoute 构造 AI SDK LanguageModel(V4,兼容 ai@7)。 */
 export function buildLanguageModel(route: ResolvedRoute): LanguageModel {
@@ -122,6 +125,7 @@ export function buildHostedSearchRuntime(
   route: ResolvedRoute,
   apiKey: string,
   userAgent?: string,
+  timeRange?: SearchTimeRange,
 ): HostedSearchRuntime | null {
   const format = route.capabilities?.webSearchFormat;
   const { provider, upstreamModelName } = route;
@@ -136,6 +140,7 @@ export function buildHostedSearchRuntime(
   if (!route.supportsTools || !format || !isHostedSearchRouteCompatible(format, route.protocol)) {
     return null;
   }
+  if (timeRange && format !== "google") return null;
 
   if (format === "openai") {
     const instance = createOpenAI({ ...common, name: provider.id });
@@ -153,9 +158,20 @@ export function buildHostedSearchRuntime(
   }
   if (format === "google") {
     const instance = createGoogle(common);
+    const timeRangeFilter = timeRange
+      ? {
+          startTime: `${timeRange.startDate}T00:00:00.000Z`,
+          endTime: `${timeRange.endDate}T23:59:59.999Z`,
+        }
+      : undefined;
     return {
       model: instance(upstreamModelName),
-      tools: { google_search: instance.tools.googleSearch({ searchTypes: { webSearch: {} } }) },
+      tools: {
+        google_search: instance.tools.googleSearch({
+          searchTypes: { webSearch: {} },
+          ...(timeRangeFilter ? { timeRangeFilter } : {}),
+        }),
+      },
     };
   }
   if (format === "xai") {

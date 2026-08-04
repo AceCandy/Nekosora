@@ -101,6 +101,13 @@ export interface WebSearchTraceCitation {
   title: string;
   url: string;
   snippet?: string;
+  publishedAt?: string;
+}
+
+export interface WebSearchTraceTimeRange {
+  preset: "week" | "month" | "custom";
+  startDate: string;
+  endDate: string;
 }
 
 export interface WebSearchTraceBackend {
@@ -112,6 +119,9 @@ export interface WebSearchTraceBackend {
 export interface WebSearchTraceCall {
   toolCallId: string;
   query: string;
+  requestedTimeRange?: WebSearchTraceTimeRange;
+  effectiveTimeRange?: WebSearchTraceTimeRange;
+  freshnessFallback?: boolean;
   mode: WebSearchTraceBackend["type"] | null;
   backend: WebSearchTraceBackend | null;
   status: "running" | "success" | "failed" | "unavailable" | "cancelled";
@@ -121,6 +131,7 @@ export interface WebSearchTraceCall {
     backend: WebSearchTraceBackend;
     outcome: string;
     durationMs: number;
+    timeRange?: WebSearchTraceTimeRange;
   }>;
 }
 

@@ -461,7 +461,11 @@ describe("chatStreamStore terminal 状态收敛", () => {
       handlers.onSearchFailed?.("tc-1", "failed");
       handlers.onSearchCompleted?.(
         "tc-2",
-        [{ title: "Source", url: "https://example.com" }],
+        [{
+          title: "Source",
+          url: "https://example.com",
+          publishedAt: "2026-08-03T00:00:00.000Z",
+        }],
         { type: "provider", id: "tavily", name: "Tavily" },
       );
       handlers.onToolResult?.("web_search", false, "tc-2");
@@ -475,7 +479,11 @@ describe("chatStreamStore terminal 状态收敛", () => {
       { toolCallId: "tc-1", toolName: "web_search", args: { query: "first" }, status: "error" },
       { toolCallId: "tc-2", toolName: "web_search", args: { query: "second" }, status: "done" },
     ]);
-    expect(message?.searchResults).toEqual([{ title: "Source", url: "https://example.com" }]);
+    expect(message?.searchResults).toEqual([{
+      title: "Source",
+      url: "https://example.com",
+      publishedAt: "2026-08-03T00:00:00.000Z",
+    }]);
     expect(message?.searchBackends).toEqual([
       { type: "provider", id: "tavily", name: "Tavily" },
     ]);

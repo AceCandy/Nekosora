@@ -757,7 +757,12 @@ describe("getVisibleBranch 历史 toolCalls 回填", () => {
                   status: "success",
                   backend: { type: "provider", id: "tavily", name: "Tavily" },
                   citations: [
-                    { title: "First", url: "https://example.com", snippet: "one" },
+                    {
+                      title: "First",
+                      url: "https://example.com",
+                      snippet: "one",
+                      publishedAt: "2026-08-03T00:00:00.000Z",
+                    },
                     { title: "Updated", url: "https://example.com" },
                   ],
                 },
@@ -782,7 +787,11 @@ describe("getVisibleBranch 历史 toolCalls 回填", () => {
 
     const result = await getVisibleBranch("conversation-1");
     expect(result.messages.find((message) => message.id === "asst-1")?.searchResults)
-      .toEqual([{ title: "Updated", url: "https://example.com" }]);
+      .toEqual([{
+        title: "Updated",
+        url: "https://example.com",
+        publishedAt: "2026-08-03T00:00:00.000Z",
+      }]);
     expect(result.messages.find((message) => message.id === "asst-1")?.searchBackends)
       .toEqual([{ type: "provider", id: "tavily", name: "Tavily" }]);
   });

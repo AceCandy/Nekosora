@@ -68,7 +68,7 @@ describe("consumeChatSSE", () => {
     const body = streamFrom(
       'data: {"type":"tool_call","toolCallId":"tc-1","toolName":"web_search","args":{"query":"latest"}}\n\n' +
       'data: {"type":"search_started","toolCallId":"tc-1","query":"latest"}\n\n' +
-      'data: {"type":"search_completed","toolCallId":"tc-1","backend":{"type":"provider","id":"tavily","name":"Tavily"},"citations":[{"title":"Source","url":"https://example.com"}]}\n\n' +
+      'data: {"type":"search_completed","toolCallId":"tc-1","backend":{"type":"provider","id":"tavily","name":"Tavily"},"citations":[{"title":"Source","url":"https://example.com","publishedAt":"2026-08-03T00:00:00.000Z"}]}\n\n' +
       'data: {"type":"tool_result","toolCallId":"tc-1","toolName":"web_search","isError":false}\n\n' +
       'data: {"type":"search_failed","toolCallId":"tc-2","reason":"unavailable"}\n\n' +
       'data: {"type":"terminal","status":"interrupted"}\n\n' +
@@ -88,7 +88,11 @@ describe("consumeChatSSE", () => {
     expect(onSearchStarted).toHaveBeenCalledWith("tc-1", "latest");
     expect(onSearchCompleted).toHaveBeenCalledWith(
       "tc-1",
-      [{ title: "Source", url: "https://example.com" }],
+      [{
+        title: "Source",
+        url: "https://example.com",
+        publishedAt: "2026-08-03T00:00:00.000Z",
+      }],
       { type: "provider", id: "tavily", name: "Tavily" },
     );
     expect(onToolResult).toHaveBeenCalledWith("web_search", false, "tc-1");

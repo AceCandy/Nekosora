@@ -22,7 +22,7 @@
  *   data: [DONE]
  */
 import type { MessageRunMetadata } from "@/features/chat/model/types";
-import type { WebSearchTraceBackend } from "@/db/types";
+import type { WebSearchTraceBackend, WebSearchTraceCitation } from "@/db/types";
 import {
   isChatTerminalStatus,
   type ChatTerminalEvent,
@@ -50,9 +50,9 @@ export interface SSEEvent {
   toolCallId?: string;
   args?: unknown;
   isError?: boolean;
-  results?: { title: string; url: string; snippet: string }[];
+  results?: WebSearchTraceCitation[];
   query?: string;
-  citations?: { title: string; url: string; snippet?: string }[];
+  citations?: WebSearchTraceCitation[];
   backend?: WebSearchTraceBackend;
   reason?: string;
   error?: string;
@@ -76,11 +76,11 @@ export interface SSEHandlers {
   onSearchStarted?: (toolCallId: string, query: string) => void;
   onSearchCompleted?: (
     toolCallId: string,
-    citations: { title: string; url: string; snippet?: string }[],
+    citations: WebSearchTraceCitation[],
     backend?: WebSearchTraceBackend,
   ) => void;
   onSearchFailed?: (toolCallId: string, reason: string) => void;
-  onSearchResult?: (results: { title: string; url: string; snippet: string }[]) => void;
+  onSearchResult?: (results: WebSearchTraceCitation[]) => void;
   onError?: (error: string) => void;
   onFinish?: (metadata: MessageRunMetadata) => void;
   /** 会话标题自动生成完成后触发(用于刷新侧栏会话列表)。 */

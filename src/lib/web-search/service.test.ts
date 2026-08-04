@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ResolvedExternalSearchBackend } from "./types";
+import type { ResolvedExternalSearchBackend, SearchTimeRange } from "./types";
 
 const mocks = vi.hoisted(() => ({
   resolveExternalSearchBackends: vi.fn(),
@@ -25,12 +25,34 @@ vi.mock("@/lib/infra/cache", () => ({
 
 import { searchWeb } from "./service";
 
-function backend(id: string, search: ResolvedExternalSearchBackend["provider"]["search"]): ResolvedExternalSearchBackend {
+function backend(
+  id: string,
+  search: ResolvedExternalSearchBackend["provider"]["search"],
+  supportsTimeRange?: (timeRange: SearchTimeRange) => boolean,
+): ResolvedExternalSearchBackend {
   return {
     backend: { type: "provider", providerId: id },
     identity: { type: "provider", id, name: id },
     cacheKey: id,
-    provider: { name: id, search },
+    provider: { name: id, search, supportsTimeRange },
+  };
+}
+
+const weekRange: SearchTimeRange = {
+  preset: "week",
+  startDate: "2026-07-29",
+  endDate: "2026-08-04",
+};
+
+function searchOptions(timeRange?: SearchTimeRange) {
+  return {
+    ctx: { userId: "user", keyKind: null, source: "chat" as const },
+    runId: "run",
+    toolCallId: "tool-call",
+    currentModelId: "current-model-id",
+    currentModelName: "Current Model",
+    signal: new AbortController().signal,
+    timeRange,
   };
 }
 
@@ -74,7 +96,12 @@ describe("有序外接搜索", () => {
 
   it("过滤非法 URL、凭据和重复结果", async () => {
     mocks.resolveExternalSearchBackends.mockResolvedValue([backend("provider", vi.fn().mockResolvedValue([
-      { title: " A ", url: "https://example.com/a#fragment", snippet: " text " },
+      {
+        title: " A ",
+        url: "https://example.com/a#fragment",
+        snippet: " text ",
+        publishedAt: "2026-08-03",
+      },
       { title: "duplicate", url: "https://example.com/a", snippet: "duplicate" },
       { title: "bad", url: "javascript:alert(1)", snippet: "bad" },
       { title: "secret", url: "https://user:pass@example.com", snippet: "bad" },
@@ -86,7 +113,150 @@ describe("有序外接搜索", () => {
     });
 
     const result = await searchWeb("user", "query");
-    expect(result.results).toEqual([{ title: "A", url: "https://example.com/a", snippet: "text" }]);
+    expect(result.results).toEqual([{
+      title: "A",
+      url: "https://example.com/a",
+      snippet: "text",
+      publishedAt: "2026-08-03T00:00:00.000Z",
+    }]);
+  });
+
+  it("最近 7 天无结果后只回退一次到最近 30 天", async () => {
+    const search = vi.fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        { title: "Recent", url: "https://example.com/recent", snippet: "text" },
+      ]);
+    mocks.resolveExternalSearchBackends.mockResolvedValue([
+      backend("provider", search, () => true),
+    ]);
+    mocks.loadConfig.mockResolvedValue({
+      version: 2,
+      providers: [],
+      backends: [{ type: "provider", providerId: "provider" }],
+    });
+
+    const result = await searchWeb("user", "latest", searchOptions(weekRange));
+
+    expect(search).toHaveBeenCalledTimes(2);
+    expect(search.mock.calls.map(([, options]) => options?.timeRange?.preset)).toEqual([
+      "week",
+      "month",
+    ]);
+    expect(result).toMatchObject({
+      hit: true,
+      requestedTimeRange: weekRange,
+      effectiveTimeRange: {
+        preset: "month",
+        startDate: "2026-07-06",
+        endDate: "2026-08-04",
+      },
+      freshnessFallback: true,
+      attempts: [{ outcome: "empty" }, { outcome: "success" }],
+    });
+  });
+
+  it("不支持 7 天的后端不发请求，只在 30 天回退轮调用", async () => {
+    const search = vi.fn().mockResolvedValue([
+      { title: "Monthly", url: "https://example.com/monthly", snippet: "text" },
+    ]);
+    mocks.resolveExternalSearchBackends.mockResolvedValue([
+      backend("provider", search, (timeRange) => timeRange.preset === "month"),
+    ]);
+    mocks.loadConfig.mockResolvedValue({
+      version: 2,
+      providers: [],
+      backends: [{ type: "provider", providerId: "provider" }],
+    });
+
+    const result = await searchWeb("user", "latest", searchOptions(weekRange));
+
+    expect(search).toHaveBeenCalledOnce();
+    expect(search).toHaveBeenCalledWith("latest", expect.objectContaining({
+      timeRange: expect.objectContaining({ preset: "month" }),
+    }));
+    expect(result.attempts).toMatchObject([
+      { outcome: "unsupported", timeRange: { preset: "week" } },
+      { outcome: "success", timeRange: { preset: "month" } },
+    ]);
+  });
+
+  it("最近 30 天无结果时不再执行无限制搜索", async () => {
+    const search = vi.fn().mockResolvedValue([]);
+    mocks.resolveExternalSearchBackends.mockResolvedValue([
+      backend("provider", search, () => true),
+    ]);
+    mocks.loadConfig.mockResolvedValue({
+      version: 2,
+      providers: [],
+      backends: [{ type: "provider", providerId: "provider" }],
+    });
+    const monthRange: SearchTimeRange = {
+      preset: "month",
+      startDate: "2026-07-06",
+      endDate: "2026-08-04",
+    };
+
+    const result = await searchWeb("user", "recent", searchOptions(monthRange));
+
+    expect(search).toHaveBeenCalledOnce();
+    expect(search).toHaveBeenCalledWith("recent", expect.objectContaining({ timeRange: monthRange }));
+    expect(result).toMatchObject({
+      hit: false,
+      requestedTimeRange: monthRange,
+      effectiveTimeRange: monthRange,
+      attempts: [{ outcome: "empty" }],
+    });
+  });
+
+  it("最近 7 天回退后仍无结果时记录实际范围", async () => {
+    const search = vi.fn().mockResolvedValue([]);
+    mocks.resolveExternalSearchBackends.mockResolvedValue([
+      backend("provider", search, () => true),
+    ]);
+    mocks.loadConfig.mockResolvedValue({
+      version: 2,
+      providers: [],
+      backends: [{ type: "provider", providerId: "provider" }],
+    });
+
+    const result = await searchWeb("user", "latest", searchOptions(weekRange));
+
+    expect(result).toMatchObject({
+      hit: false,
+      requestedTimeRange: weekRange,
+      effectiveTimeRange: {
+        preset: "month",
+        startDate: "2026-07-06",
+        endDate: "2026-08-04",
+      },
+      freshnessFallback: true,
+    });
+  });
+
+  it("不同时间范围使用不同缓存键", async () => {
+    const search = vi.fn().mockResolvedValue([
+      { title: "Result", url: "https://example.com/result", snippet: "text" },
+    ]);
+    mocks.resolveExternalSearchBackends.mockResolvedValue([
+      backend("provider", search, () => true),
+    ]);
+    mocks.loadConfig.mockResolvedValue({
+      version: 2,
+      providers: [],
+      backends: [{ type: "provider", providerId: "provider" }],
+    });
+    const monthRange: SearchTimeRange = {
+      preset: "month",
+      startDate: "2026-07-06",
+      endDate: "2026-08-04",
+    };
+
+    await searchWeb("user", "same query", searchOptions(weekRange));
+    await searchWeb("user", "same query", searchOptions(monthRange));
+
+    expect(mocks.cacheGet).toHaveBeenCalledTimes(2);
+    expect(mocks.cacheGet.mock.calls[0][0]).not.toBe(mocks.cacheGet.mock.calls[1][0]);
   });
 
   it("调用方取消会传到底层并终止搜索", async () => {

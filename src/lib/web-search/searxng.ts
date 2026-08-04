@@ -15,10 +15,12 @@ export function createSearxngProvider(baseUrl: string): SearchProvider {
   const root = baseUrl.replace(/\/+$/, "");
   return {
     name: "searxng",
+    supportsTimeRange: (timeRange) => timeRange.preset === "month",
     async search(query, opts = {}) {
       const url = new URL(`${root}/search`);
       url.searchParams.set("q", query);
       url.searchParams.set("format", "json");
+      if (opts.timeRange?.preset === "month") url.searchParams.set("time_range", "month");
       const response = await requestPublicJson(url, {
         headers: { Accept: "application/json" },
         signal: opts.signal,

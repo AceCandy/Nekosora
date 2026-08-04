@@ -132,11 +132,24 @@ beforeEach(() => {
 
 describe("executeChatCompletion", () => {
   it("联网开启时只注入逻辑搜索工具并持久化搜索追踪", async () => {
+    const requestedTimeRange = {
+      preset: "week" as const,
+      startDate: "2026-07-24",
+      endDate: "2026-07-30",
+    };
     mocks.searchWeb.mockResolvedValue({
       hit: true,
-      results: [{ title: "Source", url: "https://example.com/", snippet: "fact" }],
+      results: [{
+        title: "Source",
+        url: "https://example.com/",
+        snippet: "fact",
+        publishedAt: "2026-07-29T00:00:00.000Z",
+      }],
       groundedSummary: "grounded fact",
       backend: { type: "model", id: "grok-id", name: "Grok 4.5" },
+      requestedTimeRange,
+      effectiveTimeRange: requestedTimeRange,
+      freshnessFallback: false,
       attempts: [{
         backend: { type: "model", id: "grok-id", name: "Grok 4.5" },
         outcome: "success",
@@ -144,8 +157,9 @@ describe("executeChatCompletion", () => {
       }],
     });
     mocks.streamChatWithTools.mockImplementation((options) => (async function* () {
-      yield { type: "tool-call", toolCallId: "search-1", toolName: "web_search", args: { query: "latest" } };
-      const execution = await options.webSearchTool.execute("search-1", { query: "latest" });
+      const args = { query: "latest", freshness: "week" };
+      yield { type: "tool-call", toolCallId: "search-1", toolName: "web_search", args };
+      const execution = await options.webSearchTool.execute("search-1", args);
       yield {
         type: "tool-result",
         toolCallId: "search-1",
@@ -176,6 +190,7 @@ describe("executeChatCompletion", () => {
       runId: "run-1",
       toolCallId: "search-1",
       currentModelId: "model-id-1",
+      timeRange: expect.objectContaining({ preset: "week" }),
     }));
     expect(emitted.map((event) => (event as { type: string }).type)).toEqual([
       "started",
@@ -194,9 +209,96 @@ describe("executeChatCompletion", () => {
             mode: "model",
             status: "success",
             backend: { type: "model", id: "grok-id", name: "Grok 4.5" },
+            requestedTimeRange: expect.objectContaining({ preset: "week" }),
+            effectiveTimeRange: requestedTimeRange,
+            freshnessFallback: false,
           })],
         },
       }),
+    }));
+  });
+
+  it("搜索回退后失败时在工具结果和追踪中保留实际范围", async () => {
+    const requestedTimeRange = {
+      preset: "week" as const,
+      startDate: "2026-07-24",
+      endDate: "2026-07-30",
+    };
+    const effectiveTimeRange = {
+      preset: "month" as const,
+      startDate: "2026-07-01",
+      endDate: "2026-07-30",
+    };
+    mocks.searchWeb.mockResolvedValue({
+      hit: false,
+      results: [],
+      reason: "无搜索结果",
+      requestedTimeRange,
+      effectiveTimeRange,
+      freshnessFallback: true,
+      attempts: [],
+    });
+    mocks.streamChatWithTools.mockImplementation((options) => (async function* () {
+      const args = { query: "latest", freshness: "week" };
+      yield { type: "tool-call", toolCallId: "search-1", toolName: "web_search", args };
+      const execution = await options.webSearchTool.execute("search-1", args);
+      yield { type: "tool-result", toolCallId: "search-1", toolName: "web_search", ...execution };
+      yield { type: "finish", finishReason: "stop", usage: { totalTokens: 1 } };
+    })());
+    const emitted: unknown[] = [];
+    const processTrace = { mode: "test" };
+
+    await executeChatCompletion({
+      ...baseInput,
+      processTrace,
+      webSearchEnabled: true,
+      signal: new AbortController().signal,
+      emit: (event) => { emitted.push(event); },
+    });
+
+    expect(emitted).toContainEqual(expect.objectContaining({
+      type: "tool-result",
+      result: expect.objectContaining({
+        requestedTimeRange,
+        effectiveTimeRange,
+        freshnessFallback: true,
+      }),
+    }));
+    expect(mocks.persistChatCompletion).toHaveBeenCalledWith(expect.objectContaining({
+      processTrace: expect.objectContaining({
+        webSearch: {
+          calls: [expect.objectContaining({
+            requestedTimeRange: expect.objectContaining({ preset: "week" }),
+            effectiveTimeRange,
+            freshnessFallback: true,
+          })],
+        },
+      }),
+    }));
+  });
+
+  it("非法或不完整的日期范围在搜索请求前失败", async () => {
+    mocks.streamChatWithTools.mockImplementation((options) => (async function* () {
+      const args = { query: "news", dateAfter: "2026-08-01" };
+      yield { type: "tool-call", toolCallId: "search-1", toolName: "web_search", args };
+      const execution = await options.webSearchTool.execute("search-1", args);
+      yield { type: "tool-result", toolCallId: "search-1", toolName: "web_search", ...execution };
+      yield { type: "finish", finishReason: "stop", usage: { totalTokens: 1 } };
+    })());
+    const emitted: unknown[] = [];
+
+    await executeChatCompletion({
+      ...baseInput,
+      processTrace: { mode: "test" },
+      webSearchEnabled: true,
+      signal: new AbortController().signal,
+      emit: (event) => { emitted.push(event); },
+    });
+
+    expect(mocks.searchWeb).not.toHaveBeenCalled();
+    expect(emitted).toContainEqual(expect.objectContaining({
+      type: "search_failed",
+      reason: "搜索查询无效",
     }));
   });
 
