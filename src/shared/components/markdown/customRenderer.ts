@@ -111,6 +111,30 @@ export function separateBareUrlTrailingText(input: string): string {
     .join("\n");
 }
 
+/** 避免章节分隔线被 CommonMark 解释为上一段的 Setext 二级标题。 */
+export function normalizeThematicBreakSpacing(input: string): string {
+  const lines = input.split("\n");
+  const normalized: string[] = [];
+  let inCodeBlock = false;
+
+  lines.forEach((line, index) => {
+    const previousLine = lines[index - 1]?.trim() ?? "";
+    if (line.trim().startsWith("```")) {
+      inCodeBlock = !inCodeBlock;
+    }
+    if (
+      !inCodeBlock
+      && line.trim() === "---"
+      && /[。！？.!?][”’"'）)]?$/.test(previousLine)
+    ) {
+      normalized.push("");
+    }
+    normalized.push(line);
+  });
+
+  return normalized.join("\n");
+}
+
 /** 行内 Markdown:加粗/斜体/行内代码/链接。 */
 function inlineMarkdown(str: string): string {
   const protectedFragments: string[] = [];

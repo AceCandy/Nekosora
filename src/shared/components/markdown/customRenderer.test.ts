@@ -1,7 +1,35 @@
 import { describe, expect, it } from "vitest";
-import { parseMarkdown, separateBareUrlTrailingText, splitStructuredSegments } from "./customRenderer";
+import { normalizeThematicBreakSpacing, parseMarkdown, separateBareUrlTrailingText, splitStructuredSegments } from "./customRenderer";
 
 describe("parseMarkdown", () => {
+  it("给章节标题前的分隔线补空行，避免上一段被解析为 Setext 标题", () => {
+    const input = "#### 辅助 On\n正文内容。\n---\n### 【TES 亚军阵容】";
+
+    expect(normalizeThematicBreakSpacing(input)).toBe(
+      "#### 辅助 On\n正文内容。\n\n---\n### 【TES 亚军阵容】",
+    );
+  });
+
+  it("给普通后续段落前的分隔线补空行", () => {
+    const input = "#### 辅助 Meiko\n老将的遗憾吧。\n---\n整个系列赛都很精彩。";
+
+    expect(normalizeThematicBreakSpacing(input)).toBe(
+      "#### 辅助 Meiko\n老将的遗憾吧。\n\n---\n整个系列赛都很精彩。",
+    );
+  });
+
+  it("保留明确使用的 Setext 二级标题", () => {
+    const input = "标题\n---\n### 子标题";
+
+    expect(normalizeThematicBreakSpacing(input)).toBe(input);
+  });
+
+  it("不改写代码块内的分隔线文本", () => {
+    const input = "```md\n正文内容\n---\n### 标题\n```";
+
+    expect(normalizeThematicBreakSpacing(input)).toBe(input);
+  });
+
   it("只把裸 URL 渲染为链接，不吞掉右括号后的中文正文", () => {
     const input = separateBareUrlTrailingText("（https://openai.com/research/index/release)公开的最新产品为：");
 

@@ -33,7 +33,7 @@ import {
   MarkdownHTMLSpan,
 } from "./streamdown-html";
 import { MarkdownImage } from "./MarkdownImage";
-import { parseMarkdown, separateBareUrlTrailingText, splitStructuredSegments } from "./customRenderer";
+import { normalizeThematicBreakSpacing, parseMarkdown, separateBareUrlTrailingText, splitStructuredSegments } from "./customRenderer";
 import { resolvePreviewableKind, type PreviewableKind } from "@/lib/artifacts/previewable";
 import { resolveStructuredKind } from "@/lib/artifacts/structured";
 import { copyToClipboard } from "@/shared/lib/clipboard";
@@ -529,7 +529,7 @@ function MarkdownImpl({ content, isStreaming, renderer = "streamdown", className
   // custom 渲染器:仅在流式结束后启用(流式中 streamdown 更稳)。原样渲染 AI 的 HTML/class。
   const useCustom = renderer === "custom" && !isStreaming;
   const isPaper = renderStyleClass === "paper";
-  const normalizedContent = separateBareUrlTrailingText(content);
+  const normalizedContent = normalizeThematicBreakSpacing(separateBareUrlTrailingText(content));
 
   if (useCustom) {
     // 按结构化代码块分段:结构化段用受控组件内联渲染,代码块用 Streamdown
