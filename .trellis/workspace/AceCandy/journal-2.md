@@ -477,3 +477,24 @@ Added privacy-safe memory extraction stage logs, diagnosed mem0 SQLite native bi
 ### Status
 
 [OK] **Completed**
+
+
+## Session 82: 联网搜索结构化时效控制
+
+**Date**: 2026-08-04
+**Task**: 联网搜索结构化时效控制
+**Branch**: `main`
+
+### Summary
+
+为 web_search 增加 week、month 和明确日期范围，按后端能力执行有界回退，保留发布日期、实际范围与 trace，并补齐 provider、服务、工具及历史投影测试。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e23249a` | (see git log) |
+
+### Status
+
+[OK] **Completed**
