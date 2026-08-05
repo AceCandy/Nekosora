@@ -1,6 +1,6 @@
 # Frontend Development Guidelines
 
-> Nekusora 前端开发规范。Next.js 15 App Router + React 19 + TailwindCSS v4 + zustand。
+> Nekusora 前端开发规范。Next.js 16 App Router + React 19 + TailwindCSS v4 + zustand。
 
 ---
 

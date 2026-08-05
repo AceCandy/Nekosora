@@ -122,7 +122,7 @@ pnpm sync:pi-models
 ```bash
 PI_MODELS_FILE=/path/to/pi-models.json pnpm sync:pi-models
 PI_MODELS_FILE=/path/to/pi-models.json pnpm sync:pi-models -- --write
-pnpm exec vitest run src/lib/reasoning.test.ts src/lib/sync-pi-models.test.ts src/lib/sync-pi-models-cli.test.ts src/lib/model-catalog.test.ts
+pnpm --filter @nekusora/web exec vitest run src/lib/reasoning.test.ts src/lib/sync-pi-models.test.ts src/lib/sync-pi-models-cli.test.ts src/lib/model-catalog.test.ts
 ```
 
 人工审查新生成的 `drizzle/pg/*.sql`、source digest、`meta/_journal.json` 和新 snapshot 一致后应用:
@@ -215,41 +215,43 @@ PostgreSQL 数据由外部 PG 管理(docker compose 的 pgdata 卷持久化)。
 ## 📁 项目结构
 
 ```
-src/
-  app/
-    (auth)/login/          登录
-    chat/                  WebChat(会话列表 + 对话区 + 流式)
-    share/[shareId]/       只读会话分享
-    admin/                 管理后台(providers/models/users/usage/templates/operations)
-    panel/                 用户面板(keys/providers/models/memory/templates)
-    api/
-      chat/route.ts        WebChat 流式端点(session 鉴权)
-      auth/[...all]/       Better Auth
-      files/ upload/       文件上传
-    v1/                    OpenAI 兼容网关(sk 鉴权)
-      chat/completions/    对话
-      images/generations/  图像
-      audio/speech/        TTS
-      audio/transcriptions/ STT
-      mcp/                 MCP 桥接
-      models/
-    metrics/               Prometheus
-    healthz/               健康检查
-  lib/
-    providers/             统一 IR + provider 适配(openai/anthropic/gemini)
-    routing.ts             四表路由器 + 加权负载均衡 + 故障转移
-    stream.ts              唯一流式核心 streamChat()
-    keys.ts                主/子密钥签发与校验
-    tokens.ts              CJK token 估算 + 上下文裁剪
-    multimodal/            多模态输入处理
-    rag/                   检索增强(pgvector)
-    memory/                长期记忆
-    mcp/                   MCP 适配
-    templates/             Prompt 模板
-    artifacts/             Artifacts 渲染
-    infra/                 db/cache/queue/crypto/vector/storage 降级基建
-  db/
-    schema/pg.ts            Drizzle schema
+apps/web/
+  src/
+    app/
+      (auth)/login/        登录
+      chat/                WebChat(会话列表 + 对话区 + 流式)
+      share/[shareId]/     只读会话分享
+      admin/               管理后台(providers/models/users/usage/templates/operations)
+      panel/               用户面板(keys/providers/models/memory/templates)
+      api/
+        chat/route.ts      WebChat 流式端点(session 鉴权)
+        auth/[...all]/     Better Auth
+        files/ upload/     文件上传
+      v1/                  OpenAI 兼容网关(sk 鉴权)
+        chat/completions/  对话
+        images/generations/ 图像
+        audio/speech/      TTS
+        audio/transcriptions/ STT
+        mcp/               MCP 桥接
+        models/
+      metrics/             Prometheus
+      healthz/             健康检查
+    lib/
+      providers/           统一 IR + provider 适配(openai/anthropic/gemini)
+      routing.ts           四表路由器 + 加权负载均衡 + 故障转移
+      stream.ts            唯一流式核心 streamChat()
+      keys.ts              主/子密钥签发与校验
+      tokens.ts            CJK token 估算 + 上下文裁剪
+      multimodal/          多模态输入处理
+      rag/                 检索增强(pgvector)
+      memory/              长期记忆
+      mcp/                 MCP 适配
+      templates/           Prompt 模板
+      artifacts/           Artifacts 渲染
+      infra/               db/cache/queue/crypto/vector/storage 降级基建
+    db/
+      schema/pg.ts          Drizzle schema
+drizzle/pg/                 PostgreSQL 迁移(仓库级唯一副本)
 ```
 
 ---

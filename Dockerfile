@@ -1,5 +1,4 @@
-# Nekusora Dockerfile —— 多阶段构建。
-# 默认 PostgreSQL 模式(生产推荐)。
+# Nekusora Web Dockerfile —— 多阶段构建。
 # docker build -t nekusora . && docker run -p 3000:3000 -e DATABASE_URL=... nekusora
 
 # ---- 构建阶段 ----
@@ -8,10 +7,11 @@ RUN corepack enable
 WORKDIR /app
 
 # 安装依赖(利用 docker 层缓存)
-COPY package.json pnpm-lock.yaml* ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/web/package.json ./apps/web/
 # postinstall 依赖此脚本(同步 pdfjs cmaps/fonts 到 public),需在 install 前复制进镜像
-COPY scripts/sync-pdfjs-assets.cjs ./scripts/
-RUN pnpm install --frozen-lockfile || pnpm install
+COPY apps/web/scripts/sync-pdfjs-assets.cjs ./apps/web/scripts/
+RUN pnpm install --frozen-lockfile
 
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -27,19 +27,18 @@ ENV PORT=3000
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
-# 复制构建产物 + 必需文件
-COPY --from=builder /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-COPY --from=builder /app/drizzle ./drizzle
-COPY --from=builder /app/package.json ./
-COPY --from=builder /app/node_modules ./node_modules
+# standalone 保留 monorepo 目录结构。
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone /app
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static /app/apps/web/.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web/public /app/apps/web/public
+COPY --from=builder --chown=nextjs:nodejs /app/drizzle /app/drizzle
 
 # 上传目录
 RUN mkdir -p /app/uploads && chown -R nextjs:nodejs /app/uploads
 VOLUME ["/app/uploads"]
 
 USER nextjs
+WORKDIR /app/apps/web
 EXPOSE 3000
 
 # standalone 模式由 next build 产出;如未启用 standalone,则用 next start

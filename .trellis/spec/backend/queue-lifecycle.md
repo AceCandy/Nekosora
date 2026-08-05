@@ -23,7 +23,7 @@ Apply this contract when changing `src/lib/infra/queue.ts`, Web/worker queue pro
 
 ### 3. Contracts
 
-- Keep the variable-path `import("pg-boss")`; a top-level/static import breaks the Edge instrumentation build.
+- Load `pg-boss` with the literal dynamic import `import("pg-boss")` and keep it in Next `serverExternalPackages`; variable-path imports are not statically analyzable, while a top-level static import reaches Edge instrumentation.
 - `src/lib/jobs/catalog.ts` is the only queue-name, payload, retry-message, and policy source. The three current definitions use `retryLimit=2`, `retryDelay=0`, `retryBackoff=false`, and `expireInSeconds=900`; `createQueue` and `send` receive mutable copies because pg-boss mutates option objects.
 - The adapter is process-local singleton API, but each pg-boss instance is a replaceable generation. Constructor/start/stop failure and normal stop poison and discard that generation; a later call constructs a new instance.
 - Start, stop, and same-name queue creation are single-flight within one generation. A start/send/work arriving during stop waits for the old generation to close, starts a new generation, and never registers work against the old identity.

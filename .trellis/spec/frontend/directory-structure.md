@@ -1,6 +1,6 @@
 # Directory Structure
 
-> Nekusora 前端代码组织约定。Next.js 15 App Router + React 19。
+> Nekusora 前端代码组织约定。Next.js 16 App Router + React 19。
 
 ---
 

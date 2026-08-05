@@ -22,7 +22,7 @@
 
 - `register(): Promise<void>` is the framework entrypoint.
 - `registerNodeInstrumentation(): Promise<void>` owns process guards, environment validation, and database bootstrap.
-- `pnpm dev` and `pnpm build` use the default Next 15 Webpack path.
+- `pnpm dev` and `pnpm build` use the default Next 16 Turbopack path; `pnpm build:webpack` is the explicit comparison fallback.
 
 ### 3. Contracts
 
@@ -30,7 +30,7 @@
 - Node-only dependencies live in `instrumentation.node.ts`; initialization order is guards, environment validation, then database bootstrap.
 - Do not use a variable alias path such as `await import(nodePath)` in the framework entrypoint. Webpack cannot resolve it and emits `Critical dependency`, followed by a runtime `MODULE_NOT_FOUND`.
 - Do not import bootstrap dependencies directly from the shared entrypoint. Edge compilation otherwise follows `bootstrap -> pg` and fails on Node built-ins such as `fs`.
-- `getDb`, bootstrap internals, and queue initialization continue to load `pg`, the Drizzle PostgreSQL driver, and `pg-boss` dynamically inside Node-only code.
+- `getDb`, bootstrap internals, and queue initialization load `pg`, the Drizzle PostgreSQL driver, and `pg-boss` with literal dynamic imports inside Node-only code. `pg` and `pg-boss` remain externalized server packages.
 
 ### 4. Validation & Error Matrix
 
@@ -403,8 +403,8 @@ void dispatchMemoryExtractionJob(memoryJob.id);
 
 - **不要用等待行锁前捕获的数据库时间判断租约 freshness** —— PostgreSQL `now()` 固定在事务开始，`statement_timestamp()` 固定在语句开始；条件 UPDATE 等锁期间租约可能已经过期。需要先按 id/token/status `SELECT ... FOR UPDATE`，拿锁后再用新语句的 `statement_timestamp()` 校验并续租，最后提交前再次校验。真实 PostgreSQL 测试必须覆盖“等待跨过 expiry”而不只覆盖 token 被替换。
 - **Drizzle pgvector 双重序列化** —— `vector(...)` 列的 `mapToDriverValue` 已对 `number[]` 执行 `JSON.stringify`;insert/update 必须传原始数组。业务层先 `JSON.stringify(vector)` 会产生带额外引号的非法 vector。至少用一次真实 PostgreSQL insert 回归，mock 只能检查入参形状。
-- **不要静态 import pg / pg-boss 顶层驱动** —— Turbopack 会打进 Edge instrumentation(`util/types` 解析失败)。用动态 `await import`。
-- **不要在 instrumentation.ts 静态 import 业务模块** —— 触发 Edge 编译。用变量路径 `const p = "@/lib/infra/db/bootstrap"; await import(p)`。
+- **不要静态 import pg / pg-boss 顶层驱动** —— Turbopack 会打进 Edge instrumentation。使用字面量动态 `await import("pg-boss")`,并在 Next 配置中 externalize。
+- **不要在 instrumentation.ts 静态 import 业务模块** —— 触发 Edge 编译。只在 Node runtime 分支使用字面量相对导入 `await import("./instrumentation.node")`。
 - **删除 dialect 限制 guard 时,判断是删条件还是删整个 guard** —— `if (cond && !isPg)` 这类 guard 的存在意义是「sqlite 模式禁用某能力」;sqlite 删除后整个 guard 无意义,应**整体删除**,而非改成 `if (cond)`(那会变成「所有模式禁用」,造成功能回归)。本次 `registry.ts` stdio guard 照字面删 `!isPg` 导致 stdio MCP 全禁,trellis-check 独立复核捕获。
 - **密钥明文入库** —— provider key 必须经 `crypto.encrypt()`(AES-GCM);sk 只存 `hashSecret()` 的 sha256。
 - **幂等数据补种** —— 存量行派生到新表用 `INSERT ... SELECT ... WHERE NOT EXISTS`(按业务键判重),不要用 `ON CONFLICT`(新表无唯一约束时不可用)。

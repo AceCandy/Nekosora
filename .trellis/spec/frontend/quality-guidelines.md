@@ -8,7 +8,7 @@
 
 质量门槛由三条命令保证：
 
-- `pnpm lint`（next lint / eslint，含 react-hooks 规则）
+- `pnpm lint`（ESLint 9 CLI 检查 `apps/web/src`，含 react-hooks 规则）
 - `pnpm typecheck`（tsc --noEmit）
 - `pnpm test`（vitest，纯逻辑单测）
 
