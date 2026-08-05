@@ -1,5 +1,5 @@
 # dependencies
-/node_modules
+node_modules/
 /.pnp
 .pnp.*
 .yarn/*
@@ -81,3 +81,4 @@ src/lib/impeccable/__runtime.js
 src/lib/impeccable/[0-9a-f]*/
 # impeccable-live-ignore-end
 scripts/.cache/
+/apps/web/scripts/.cache/
