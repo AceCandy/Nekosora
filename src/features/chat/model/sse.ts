@@ -22,7 +22,11 @@
  *   data: [DONE]
  */
 import type { MessageRunMetadata } from "@/features/chat/model/types";
-import type { WebSearchTraceBackend, WebSearchTraceCitation } from "@/db/types";
+import type {
+  WebSearchTraceAttempt,
+  WebSearchTraceBackend,
+  WebSearchTraceCitation,
+} from "@/db/types";
 import {
   isChatTerminalStatus,
   type ChatTerminalEvent,
@@ -54,6 +58,7 @@ export interface SSEEvent {
   query?: string;
   citations?: WebSearchTraceCitation[];
   backend?: WebSearchTraceBackend;
+  attempts?: WebSearchTraceAttempt[];
   reason?: string;
   error?: string;
   metadata?: MessageRunMetadata;
@@ -78,8 +83,13 @@ export interface SSEHandlers {
     toolCallId: string,
     citations: WebSearchTraceCitation[],
     backend?: WebSearchTraceBackend,
+    attempts?: WebSearchTraceAttempt[],
   ) => void;
-  onSearchFailed?: (toolCallId: string, reason: string) => void;
+  onSearchFailed?: (
+    toolCallId: string,
+    reason: string,
+    attempts?: WebSearchTraceAttempt[],
+  ) => void;
   onSearchResult?: (results: WebSearchTraceCitation[]) => void;
   onError?: (error: string) => void;
   onFinish?: (metadata: MessageRunMetadata) => void;
@@ -152,10 +162,9 @@ export async function consumeChatSSE(
     } else if (ev.type === "search_started" && ev.toolCallId !== undefined && ev.query !== undefined) {
       handlers.onSearchStarted?.(ev.toolCallId, ev.query);
     } else if (ev.type === "search_completed" && ev.toolCallId !== undefined && ev.citations !== undefined) {
-      if (ev.backend) handlers.onSearchCompleted?.(ev.toolCallId, ev.citations, ev.backend);
-      else handlers.onSearchCompleted?.(ev.toolCallId, ev.citations);
+      handlers.onSearchCompleted?.(ev.toolCallId, ev.citations, ev.backend, ev.attempts);
     } else if (ev.type === "search_failed" && ev.toolCallId !== undefined && ev.reason !== undefined) {
-      handlers.onSearchFailed?.(ev.toolCallId, ev.reason);
+      handlers.onSearchFailed?.(ev.toolCallId, ev.reason, ev.attempts);
     } else if (ev.type === "search_result" && ev.results !== undefined) {
       handlers.onSearchResult?.(ev.results);
     } else if (ev.type === "error" && ev.error !== undefined) {

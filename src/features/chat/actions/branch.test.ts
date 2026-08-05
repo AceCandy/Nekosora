@@ -72,6 +72,7 @@ const schema = {
     toolName: "toolCalls.toolName",
     status: "toolCalls.status",
     inputJson: "toolCalls.inputJson",
+    errorJson: "toolCalls.errorJson",
     createdAt: "toolCalls.createdAt",
   },
   messageFeedback: {
@@ -754,8 +755,15 @@ describe("getVisibleBranch 历史 toolCalls 回填", () => {
             webSearch: {
               calls: [
                 {
+                  toolCallId: "tc-success",
+                  query: "latest",
                   status: "success",
                   backend: { type: "provider", id: "tavily", name: "Tavily" },
+                  attempts: [{
+                    backend: { type: "provider", id: "tavily", name: "Tavily" },
+                    outcome: "success",
+                    durationMs: 12,
+                  }],
                   citations: [
                     {
                       title: "First",
@@ -767,8 +775,33 @@ describe("getVisibleBranch 历史 toolCalls 回填", () => {
                   ],
                 },
                 {
+                  toolCallId: "tc-failed",
+                  query: "retry",
                   status: "failed",
+                  reason: "provider failed at https://internal.example?api_key=secret",
+                  attempts: [
+                    {
+                      backend: { type: "provider", id: "tavily", name: "Tavily" },
+                      outcome: "failed",
+                      durationMs: 9,
+                    },
+                    {
+                      backend: { type: "current-model", name: "Current model" },
+                      outcome: "unsupported",
+                      durationMs: 1,
+                    },
+                  ],
                   citations: [{ title: "Ignored", url: "https://ignored.example" }],
+                },
+                {
+                  toolCallId: "tc-unsafe-db",
+                  query: "unsafe",
+                  status: "failed",
+                  attempts: [{
+                    backend: { type: "provider", id: "unsafe", name: "Unsafe" },
+                    outcome: "provider-secret-error",
+                    durationMs: 1,
+                  }],
                 },
               ],
             },
@@ -780,6 +813,38 @@ describe("getVisibleBranch 历史 toolCalls 回填", () => {
         [{ id: "conversation-1", userId: "user-1" }],
         messages,
         [],
+        [
+          {
+            runId: "run_a",
+            toolCallId: "tc-success",
+            toolName: "web_search",
+            status: "success",
+            inputJson: { query: "latest" },
+            errorJson: null,
+            createdAt: "2026-08-03T00:00:00.000Z",
+          },
+          {
+            runId: "run_a",
+            toolCallId: "tc-failed",
+            toolName: "web_search",
+            status: "failed",
+            inputJson: { query: "retry" },
+            errorJson: { error: "web_search_failed", reason: "搜索暂不可用" },
+            createdAt: "2026-08-03T00:00:01.000Z",
+          },
+          {
+            runId: "run_a",
+            toolCallId: "tc-unsafe-db",
+            toolName: "web_search",
+            status: "failed",
+            inputJson: { query: "unsafe" },
+            errorJson: {
+              error: "web_search_failed",
+              reason: "provider failed at https://internal.example?api_key=secret",
+            },
+            createdAt: "2026-08-03T00:00:02.000Z",
+          },
+        ],
         [],
         [],
       ]),
@@ -794,6 +859,43 @@ describe("getVisibleBranch 历史 toolCalls 回填", () => {
       }]);
     expect(result.messages.find((message) => message.id === "asst-1")?.searchBackends)
       .toEqual([{ type: "provider", id: "tavily", name: "Tavily" }]);
+    expect(result.messages.find((message) => message.id === "asst-1")?.toolCalls)
+      .toEqual([
+        {
+          toolCallId: "tc-success",
+          toolName: "web_search",
+          status: "done",
+          args: { query: "latest" },
+          searchBackend: { type: "provider", id: "tavily", name: "Tavily" },
+          searchAttempts: [{
+            backend: { type: "provider", id: "tavily", name: "Tavily" },
+            outcome: "success",
+          }],
+        },
+        {
+          toolCallId: "tc-failed",
+          toolName: "web_search",
+          status: "error",
+          args: { query: "retry" },
+          statusDetail: "搜索暂不可用",
+          searchAttempts: [
+            {
+              backend: { type: "provider", id: "tavily", name: "Tavily" },
+              outcome: "failed",
+            },
+            {
+              backend: { type: "current-model", name: "Current model" },
+              outcome: "unsupported",
+            },
+          ],
+        },
+        {
+          toolCallId: "tc-unsafe-db",
+          toolName: "web_search",
+          status: "error",
+          args: { query: "unsafe" },
+        },
+      ]);
   });
 
   it("跨会话隔离:tool_calls 查询带 runs.conversationId,不串入外会话数据", async () => {

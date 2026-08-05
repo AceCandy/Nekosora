@@ -458,7 +458,18 @@ describe("chatStreamStore terminal 状态收敛", () => {
     ) => {
       handlers.onToolCall?.("web_search", { query: "first" }, "tc-1");
       handlers.onToolCall?.("web_search", { query: "second" }, "tc-2");
-      handlers.onSearchFailed?.("tc-1", "failed");
+      handlers.onSearchFailed?.("tc-1", "failed", [
+        {
+          backend: { type: "provider", id: "tavily", name: "Tavily" },
+          outcome: "failed",
+          durationMs: 9,
+        },
+        {
+          backend: { type: "current-model", name: "Current model" },
+          outcome: "unsupported",
+          durationMs: 1,
+        },
+      ]);
       handlers.onSearchCompleted?.(
         "tc-2",
         [{
@@ -467,6 +478,11 @@ describe("chatStreamStore terminal 状态收敛", () => {
           publishedAt: "2026-08-03T00:00:00.000Z",
         }],
         { type: "provider", id: "tavily", name: "Tavily" },
+        [{
+          backend: { type: "provider", id: "tavily", name: "Tavily" },
+          outcome: "success",
+          durationMs: 12,
+        }],
       );
       handlers.onToolResult?.("web_search", false, "tc-2");
       return "success" as const;
@@ -476,8 +492,34 @@ describe("chatStreamStore terminal 状态收敛", () => {
 
     const message = useChatStreamStore.getState().runtimes[key].messages.at(-1);
     expect(message?.toolCalls).toEqual([
-      { toolCallId: "tc-1", toolName: "web_search", args: { query: "first" }, status: "error" },
-      { toolCallId: "tc-2", toolName: "web_search", args: { query: "second" }, status: "done" },
+      {
+        toolCallId: "tc-1",
+        toolName: "web_search",
+        args: { query: "first" },
+        status: "error",
+        statusDetail: "failed",
+        searchAttempts: [
+          {
+            backend: { type: "provider", id: "tavily", name: "Tavily" },
+            outcome: "failed",
+          },
+          {
+            backend: { type: "current-model", name: "Current model" },
+            outcome: "unsupported",
+          },
+        ],
+      },
+      {
+        toolCallId: "tc-2",
+        toolName: "web_search",
+        args: { query: "second" },
+        status: "done",
+        searchBackend: { type: "provider", id: "tavily", name: "Tavily" },
+        searchAttempts: [{
+          backend: { type: "provider", id: "tavily", name: "Tavily" },
+          outcome: "success",
+        }],
+      },
     ]);
     expect(message?.searchResults).toEqual([{
       title: "Source",

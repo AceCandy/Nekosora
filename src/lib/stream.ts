@@ -568,6 +568,8 @@ export async function* streamChatWithTools(
   let terminalError: unknown;
   let delegatedToPlainStream = false;
   let shouldLogAgentUsage = false;
+  let hasExecutedTools = false;
+  let summaryAttemptStart = 0;
   const collectFinalUsage = (result: StreamChatFinalUsage) => {
     aggregateUsage = addUsage(aggregateUsage, result.params.usage);
     finalUsages.push(result);
@@ -608,6 +610,7 @@ export async function* streamChatWithTools(
     // 仅缓存本轮 finish;是否向外 yield 取决于是否已到 agent loop 终点。
     let stepFinish: Extract<StreamEvent, { type: "finish" }> | null = null;
     let sawError = false;
+    let stepTextSeen = false;
 
       for await (const ev of streamChat({
         ctx: opts.ctx,
@@ -636,6 +639,7 @@ export async function* streamChatWithTools(
         sawError = true;
         yield ev;
       } else {
+        if (ev.type === "text-delta" && ev.text.length > 0) stepTextSeen = true;
         yield ev; // text-delta / reasoning-delta / usage 透传
       }
     }
@@ -651,6 +655,10 @@ export async function* streamChatWithTools(
         || !stepFinish
         || stepFinish.finishReason !== "tool-calls"
       ) {
+        if (pendingToolCalls.length === 0 && stepFinish && hasExecutedTools && !stepTextSeen) {
+          summaryAttemptStart = 1;
+          break;
+        }
         terminalStatus = stepFinish
           ? "success"
           : finalUsages.at(-1)?.params.status ?? "interrupted";
@@ -690,6 +698,7 @@ export async function* streamChatWithTools(
           content: typeof result === "string" ? result : JSON.stringify(result),
         });
       }
+      hasExecutedTools = true;
       messages = [
         ...messages,
         {
@@ -704,6 +713,75 @@ export async function* streamChatWithTools(
         ...toolMessages,
       ];
     }
+
+    if (maxSteps > 0) {
+      let finalFinish: Extract<StreamEvent, { type: "finish" }> | null = null;
+      let sawFinalError = false;
+      let finalTextSeen = false;
+      for (
+        let summaryAttempt = summaryAttemptStart;
+        summaryAttempt < 2;
+        summaryAttempt += 1
+      ) {
+        const summaryMessages = summaryAttempt === 0
+          ? messages
+          : [
+              ...messages,
+              {
+                role: "user" as const,
+                content: "请基于以上搜索结果直接给出最终回答，不要再次调用工具。",
+              },
+            ];
+        finalFinish = null;
+        sawFinalError = false;
+        finalTextSeen = false;
+        for await (const ev of streamChat({
+          ctx: opts.ctx,
+          runId: agentRunId,
+          request: { ...opts.request, messages: summaryMessages, tools: undefined },
+          modelId: opts.modelId,
+          cacheKey: opts.cacheKey,
+          taskKind: opts.taskKind,
+          abortSignal: opts.abortSignal,
+          userAgent: opts.userAgent,
+          suppressFinalUsageLog: true,
+          onFinalUsage: collectFinalUsage,
+          telemetry: telemetrySession.port,
+        })) {
+          if (ev.type === "finish") {
+            finalFinish = ev;
+          } else if (ev.type === "error") {
+            sawFinalError = true;
+            yield ev;
+          } else {
+            if (ev.type === "text-delta" && ev.text.length > 0) finalTextSeen = true;
+            yield ev;
+          }
+        }
+        if (finalTextSeen || sawFinalError || opts.abortSignal?.aborted) break;
+      }
+
+      if (opts.abortSignal?.aborted) {
+        terminalStatus = "interrupted";
+        return;
+      }
+      if (sawFinalError) {
+        terminalStatus = "failed";
+        return;
+      }
+      terminalStatus = finalFinish && finalTextSeen ? "success" : "interrupted";
+      if (finalFinish) {
+        if (finalTextSeen) {
+          yield { ...finalFinish, usage: aggregateUsage };
+        } else {
+          yield {
+            type: "error",
+            error: "最终回答为空",
+          };
+        }
+      }
+      return;
+    }
   } catch (err) {
     if (delegatedToPlainStream) throw err;
     terminalError = err;
@@ -715,7 +793,7 @@ export async function* streamChatWithTools(
       await telemetrySession.finalize(terminalStatus, terminalError, aggregateUsage, firstTokenAt);
     }
   }
-  // maxSteps 耗尽且仍停在 tool-calls:finally 记 interrupted,不发最终 finish。
+  // maxSteps=0 不执行模型请求，由 finally 记录 interrupted。
 }
 
 function createAgentTelemetrySession(

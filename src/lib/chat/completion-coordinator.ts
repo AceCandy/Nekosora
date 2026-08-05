@@ -44,8 +44,15 @@ export type ChatCompletionEvent =
       backend: NonNullable<WebSearchTraceCall["backend"]>;
       durationMs: number;
       citations: NonNullable<WebSearchTraceCall["citations"]>;
+      attempts?: NonNullable<WebSearchTraceCall["attempts"]>;
     }
-  | { type: "search_failed"; toolCallId: string; reason: string; status: WebSearchTraceCall["status"] }
+  | {
+      type: "search_failed";
+      toolCallId: string;
+      reason: string;
+      status: WebSearchTraceCall["status"];
+      attempts?: NonNullable<WebSearchTraceCall["attempts"]>;
+    }
   | { type: "finish"; metadata: MessageRunMetadata };
 
 export type ChatCompletionOutcomeKind =
@@ -247,7 +254,11 @@ export async function executeChatCompletion(
       completedAt,
       memoryJob,
     });
-  } catch {
+  } catch (error) {
+    console.error(
+      "[chat-completion] persist completion failed:",
+      redactErrorMessage(error).slice(0, 200),
+    );
     await finalizeRun({
       runId: input.runId,
       status: "failed",
@@ -326,7 +337,7 @@ const webSearchToolDefinition: IRToolDef = {
   type: "function",
   function: {
     name: "web_search",
-    description: "搜索互联网以核实需要最新或外部信息的问题，并返回带来源的结果。",
+    description: "搜索互联网以核实需要最新或外部信息的问题，并返回带来源的结果。时间范围只能二选一：使用 freshness，或同时使用 dateAfter/dateBefore；不要同时传 freshness 与 dateAfter/dateBefore。",
     parameters: {
       type: "object",
       properties: {
@@ -334,15 +345,15 @@ const webSearchToolDefinition: IRToolDef = {
         freshness: {
           type: "string",
           enum: ["week", "month"],
-          description: "最新或最新新闻使用 week；近期信息使用 month；普通查询省略。",
+          description: "相对时间范围：最新或最新新闻使用 week；近期信息使用 month；普通查询省略。不能与 dateAfter/dateBefore 同时使用。",
         },
         dateAfter: {
           type: "string",
-          description: "明确日期范围的开始日期（YYYY-MM-DD），必须与 dateBefore 同时提供。",
+          description: "明确日期范围的开始日期（YYYY-MM-DD），必须与 dateBefore 同时提供；使用明确日期范围时不要传 freshness。",
         },
         dateBefore: {
           type: "string",
-          description: "明确日期范围的结束日期（YYYY-MM-DD），必须与 dateAfter 同时提供。",
+          description: "明确日期范围的结束日期（YYYY-MM-DD），必须与 dateAfter 同时提供；使用明确日期范围时不要传 freshness。",
         },
       },
       required: ["query"],
@@ -357,8 +368,18 @@ function createWebSearchTool(input: ExecuteChatCompletionInput) {
     async execute(toolCallId: string, args: unknown): Promise<{ result: unknown; isError: boolean }> {
       const parsed = webSearchArgsSchema.safeParse(args);
       if (!parsed.success) {
-        await input.emit({ type: "search_failed", toolCallId, reason: "搜索查询无效", status: "failed" });
-        return { result: { error: "invalid_search_query" }, isError: true };
+        const raw = args && typeof args === "object"
+          ? args as Record<string, unknown>
+          : {};
+        const message = raw.freshness !== undefined
+          && (raw.dateAfter !== undefined || raw.dateBefore !== undefined)
+          ? "freshness 不能与 dateAfter/dateBefore 同时使用"
+          : "请检查 query、freshness 或日期范围组合";
+        await input.emit({ type: "search_failed", toolCallId, reason: message, status: "failed" });
+        return {
+          result: { error: "invalid_search_query", message },
+          isError: true,
+        };
       }
 
       const startedAt = Date.now();
@@ -404,6 +425,7 @@ function createWebSearchTool(input: ExecuteChatCompletionInput) {
             backend: bundle.backend,
             durationMs,
             citations: bundle.results,
+            attempts: bundle.attempts,
           });
           return {
             result: {
@@ -425,12 +447,19 @@ function createWebSearchTool(input: ExecuteChatCompletionInput) {
           mode: bundle.attempts?.at(-1)?.backend.type ?? null,
           backend: null,
           status: "failed" as const,
+          reason,
           durationMs,
           attempts: bundle.attempts,
           effectiveTimeRange: bundle.effectiveTimeRange,
           freshnessFallback: bundle.freshnessFallback,
         });
-        await input.emit({ type: "search_failed", toolCallId, reason, status: "failed" });
+        await input.emit({
+          type: "search_failed",
+          toolCallId,
+          reason,
+          status: "failed",
+          attempts: bundle.attempts,
+        });
         return {
           result: {
             error: "web_search_failed",
@@ -445,7 +474,11 @@ function createWebSearchTool(input: ExecuteChatCompletionInput) {
         };
       } catch (error) {
         const status = input.signal.aborted ? "cancelled" : "failed";
-        Object.assign(call, { status, durationMs: Date.now() - startedAt });
+        Object.assign(call, {
+          status,
+          reason: input.signal.aborted ? "搜索已取消" : "搜索执行失败",
+          durationMs: Date.now() - startedAt,
+        });
         if (!input.signal.aborted) {
           await input.emit({ type: "search_failed", toolCallId, reason: "搜索执行失败", status });
         }

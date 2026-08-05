@@ -4,6 +4,7 @@ import type { CallContext } from "@/lib/providers/types";
 import type {
   ProviderProtocol,
   WebSearchFormat,
+  WebSearchTraceAttempt,
   WebSearchTraceTimeRange,
 } from "@/db/types";
 
@@ -51,12 +52,7 @@ export interface SearchBundle {
   freshnessFallback?: boolean;
 }
 
-export interface SearchAttempt {
-  backend: SearchBackendIdentity;
-  outcome: string;
-  durationMs: number;
-  timeRange?: SearchTimeRange;
-}
+export type SearchAttempt = WebSearchTraceAttempt;
 
 export interface SearchToolResult {
   query: string;

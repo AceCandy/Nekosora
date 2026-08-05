@@ -1,0 +1,6 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/backend/web-search.md", "reason": "核对搜索事件、trace 与引用兼容"}
+{"file": ".trellis/spec/backend/chat-run-metadata.md", "reason": "核对唯一终态、finish、usage 和持久化"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端测试与质量门禁"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "核对 SSE/store 与刷新恢复一致性"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "核对 toolCallId 全链路未丢失"}

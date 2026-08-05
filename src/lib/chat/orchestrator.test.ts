@@ -224,4 +224,91 @@ describe("prepareChatContext 降级日志", () => {
       "POST [REDACTED] failed",
     );
   });
+
+  it("联网搜索启用时动态注入当前日期上下文", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-03T16:30:00.000Z"));
+    const createFrom = () => ({
+      where: vi.fn(() => ({
+        orderBy: vi.fn().mockResolvedValue([]),
+        limit: vi.fn().mockResolvedValue([]),
+      })),
+      innerJoin: vi.fn(() => ({
+        where: vi.fn(() => ({
+          limit: vi.fn().mockResolvedValue([{
+            modelId: "model-a",
+            contextWindow: 32_000,
+            maxOutputTokens: 4_000,
+            capabilities: { tools: false },
+          }]),
+        })),
+      })),
+    });
+    const db = {
+      select: vi.fn(() => ({ from: vi.fn(createFrom) })),
+    };
+    const schema = {
+      messages: {
+        conversationId: "messages.conversationId",
+        deletedAt: "messages.deletedAt",
+        createdAt: "messages.createdAt",
+      },
+      models: {
+        catalogId: "models.catalogId",
+        id: "models.id",
+        name: "models.name",
+        enabled: "models.enabled",
+        visibility: "models.visibility",
+        ownerUserId: "models.ownerUserId",
+      },
+      modelCatalog: {
+        id: "catalog.id",
+        contextWindow: "catalog.contextWindow",
+        maxOutputTokens: "catalog.maxOutputTokens",
+        capabilities: "catalog.capabilities",
+      },
+    };
+
+    const result = await prepareChatContext({
+      userId: "user-1",
+      conversationId: "conversation-1",
+      conv: { outputModeId: null },
+      userContent: "今天的 AI 新闻",
+      model: "model-a",
+      messages: [{ role: "user", content: "今天的 AI 新闻" }],
+      branchLeafPublicId: "message-1",
+      webSearchEnabled: true,
+      db,
+      schema,
+    });
+
+    expect("error" in result).toBe(false);
+    expect(mocks.assembleContext).toHaveBeenCalledWith(expect.objectContaining({
+      templateSystemPrompt: expect.stringContaining("当前日期：2026-08-04"),
+    }));
+    expect(mocks.assembleContext).toHaveBeenCalledWith(expect.objectContaining({
+      templateSystemPrompt: expect.stringContaining("当前时区：Asia/Shanghai"),
+    }));
+    expect(mocks.assembleContext).toHaveBeenCalledWith(expect.objectContaining({
+      templateSystemPrompt: expect.stringContaining("freshness 与 dateAfter/dateBefore 不能同时使用"),
+    }));
+
+    vi.setSystemTime(new Date("2026-08-04T16:30:00.000Z"));
+    await prepareChatContext({
+      userId: "user-1",
+      conversationId: "conversation-1",
+      conv: { outputModeId: null },
+      userContent: "今天的 AI 新闻",
+      model: "model-a",
+      messages: [{ role: "user", content: "今天的 AI 新闻" }],
+      branchLeafPublicId: "message-1",
+      webSearchEnabled: true,
+      db,
+      schema,
+    });
+
+    expect(mocks.assembleContext).toHaveBeenLastCalledWith(expect.objectContaining({
+      templateSystemPrompt: expect.stringContaining("当前日期：2026-08-05"),
+    }));
+  });
 });

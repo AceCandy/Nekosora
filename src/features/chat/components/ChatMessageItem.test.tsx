@@ -173,7 +173,7 @@ describe("MessageRunMetadataDisplay", () => {
 });
 
 describe("ChatMessageItem web search metadata", () => {
-  it("在 web_search 标题展示实际后端,并把引用来源放在操作按钮前", () => {
+  it("每条 web_search 只展示自己的后端或失败原因", () => {
     const html = renderToStaticMarkup(
       <ChatMessageItem
         message={{
@@ -183,17 +183,52 @@ describe("ChatMessageItem web search metadata", () => {
           status: "success",
           toolCalls: [
             {
+              toolCallId: "search-failed",
               toolName: "web_search",
-              status: "done",
+              status: "error",
               args: { query: "latest" },
+              statusDetail: "模型搜索不支持指定时间范围",
+              searchAttempts: [
+                {
+                  backend: { type: "provider", id: "tavily", name: "Tavily" },
+                  outcome: "failed",
+                },
+                {
+                  backend: { type: "current-model", name: "Current model" },
+                  outcome: "unsupported",
+                },
+              ],
             },
             {
+              toolCallId: "search-tavily",
               toolName: "web_search",
               status: "done",
               args: { query: "follow-up" },
+              searchBackend: { type: "provider", id: "tavily", name: "Tavily" },
+              searchAttempts: [{
+                backend: { type: "provider", id: "tavily", name: "Tavily" },
+                outcome: "success",
+              }],
+            },
+            {
+              toolCallId: "search-model",
+              toolName: "web_search",
+              status: "done",
+              args: { query: "verify" },
+              searchBackend: { type: "model", id: "grok", name: "Grok" },
+            },
+            {
+              toolCallId: "search-invalid",
+              toolName: "web_search",
+              status: "error",
+              args: { query: "" },
+              statusDetail: "搜索查询无效",
             },
           ],
-          searchBackends: [{ type: "provider", id: "tavily", name: "Tavily" }],
+          searchBackends: [
+            { type: "provider", id: "tavily", name: "Tavily" },
+            { type: "model", id: "grok", name: "Grok" },
+          ],
           searchResults: [{ title: "Source", url: "https://example.com" }],
         }}
         isLast
@@ -205,8 +240,16 @@ describe("ChatMessageItem web search metadata", () => {
     );
 
     expect(html).toContain("web_search");
-    expect(html).toContain("Tavily (webSearchBackendProvider)");
-    expect(html).not.toContain("webSearchMethod</span>");
+    expect(html).toContain("Tavily (webSearchAttemptFailed) → Current model (webSearchAttemptUnsupported)");
+    expect(html).toContain("Tavily (webSearchAttemptSuccess)");
+    expect(html).toContain("Grok (webSearchBackendModel)");
+    expect(html).toContain("搜索查询无效");
+    expect(html.indexOf("Tavily (webSearchAttemptFailed)")).toBeLessThan(
+      html.indexOf("Tavily (webSearchAttemptSuccess)"),
+    );
+    expect(html.indexOf("Tavily (webSearchAttemptSuccess)")).toBeLessThan(html.indexOf("Grok"));
+    expect(html.indexOf("Grok")).toBeLessThan(html.indexOf("搜索查询无效"));
+    expect(html.match(/title="webSearchAttemptPath:/g)).toHaveLength(2);
     expect(html.match(/title="webSearchMethod:/g)).toHaveLength(1);
     expect(html.indexOf("webSources")).toBeLessThan(html.indexOf('aria-label="copy"'));
   });

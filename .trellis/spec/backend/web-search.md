@@ -17,8 +17,11 @@ WebChat wiring in `src/lib/chat/completion-coordinator.ts` and `/api/chat`.
 - `searchWeb(userId, query, options): Promise<SearchBundle>` executes the ordered backend list; `options.timeRange` is optional.
 - `listWebSearchModelCandidates(userId)` returns visible, enabled models with a compatible enabled route and explicit `model_catalog.capabilities.webSearchFormat`.
 - Main-model tool: `web_search({ query, freshness?, dateAfter?, dateBefore? })`; `freshness` is `week | month`, while explicit dates must be a complete inclusive pair and are mutually exclusive with freshness.
+- The tool schema description must explicitly tell the main model that `freshness` and `dateAfter/dateBefore` are mutually exclusive, because many models otherwise try both after deriving exact dates from a relative request.
 - Search SSE: `search_started`, `search_completed`, `search_failed`, all keyed by `toolCallId`.
 - Chat projection: `ChatMessage.searchBackends?: WebSearchTraceBackend[]`, deduplicated by backend type/id.
+- Per-call UI projection: `ToolCallRecord.searchBackend?: WebSearchTraceBackend` and `statusDetail?: string`, joined by `toolCallId` rather than tool name or array position.
+- Per-call search fallback projection: `ToolCallRecord.searchAttempts?: Array<{ backend; outcome }>` preserves the ordered, display-safe backend attempts; the UI must prefer this chain over the final aggregate reason.
 - Backfill command: `pnpm backfill:web-search-keys` is dry-run; add `--apply` for a transactional write.
 
 Required environment:
@@ -46,6 +49,10 @@ Required environment:
 - The outer model expresses time intent through structured tool arguments: use `week` for latest/current
   news, `month` for recent information, explicit dates for a user-supplied range, and omit all time
   fields for ordinary queries. The server never guesses freshness from localized query keywords.
+- When the effective WebChat search toggle is on, `prepareChatContext` injects the current
+  `Asia/Shanghai` calendar date at request time so the outer model can resolve relative expressions
+  before choosing tool arguments. The date must never be hard-coded. Ordinary chats with search off
+  keep the stable system prompt so this dynamic slot does not invalidate their prompt cache.
 - Time-constrained execution is capability-gated. Tavily supports week/month/custom ranges; Google
   Hosted Search receives an exact `timeRangeFilter`; SearXNG participates only in month searches.
   Bocha, Zhipu, and OpenAI/Anthropic/xAI Hosted Search must be treated as unsupported until their
@@ -72,6 +79,15 @@ Required environment:
 - `search_completed.backend` is the authoritative search provenance. Live SSE state and history
   projection must preserve the deduplicated backend identities alongside citations so the UI can
   show which model or external provider actually returned the sources.
+- Each `web_search` row owns its provenance or failure detail. Live state applies `search_completed`
+  and `search_failed` by `toolCallId`; history merges `ProcessTrace.webSearch.calls` into the matching
+  `tool_calls.tool_call_id`. Ordered backend attempts are retained as safe summaries so a later model
+  failure cannot hide an earlier Tavily/provider failure. Message-level `searchBackends` remains a
+  compatibility aggregate and must never be assigned to the first or any other individual call.
+- Historical failure details are display-safe data, not arbitrary persisted errors. Project only the
+  fixed messages emitted by current search validation/execution; omit unknown `reason` or
+  `errorJson.message/reason` text. Never expose raw provider errors, URLs, credentials, validation
+  objects, or full `errorJson` to the client.
 - Continue generation appends content to the same assistant, so it must seed the new trace with that
   assistant's existing `webSearch.calls` before new calls are appended. Replacing the array with only
   the continuation run would make live citations disappear after refresh.
@@ -86,12 +102,14 @@ Required environment:
 | Condition | Result |
 | --- | --- |
 | Web toggle is off | No logical search tool, search request, or search lifecycle event |
+| Web toggle is on | Inject the request-time `Asia/Shanghai` date; never reuse a date captured at process startup |
 | Catalog supports tools but no enabled route opts in | Do not inject logical search |
 | Main model does not call the tool | Generate normally without a search request |
 | Backend is missing, disabled, invisible, or route-incompatible | Skip it and try the next ordered backend |
 | Result has no grounded summary or no valid citation | Treat as failed and fall through |
-| Query is invalid | Return a structured tool error; do not call a backend |
-| Only one explicit date is supplied, dates are invalid/reversed, or freshness and dates are combined | Return a structured tool error before any network request |
+| Query is invalid | Return `invalid_search_query` plus `请检查 query、freshness 或日期范围组合`; do not call a backend |
+| Freshness and explicit dates are combined | Return `invalid_search_query` plus `freshness 不能与 dateAfter/dateBefore 同时使用`; do not call a backend |
+| Only one explicit date is supplied or dates are invalid/reversed | Return `invalid_search_query` plus the generic corrective hint before any network request |
 | Backend cannot enforce the requested range | Record an `unsupported` attempt and continue without calling it |
 | Week pass has no result or eligible backend | Run exactly one month pass; report the effective range and fallback |
 | Month/custom pass has no result | Fail the constrained search; never retry without a range |
@@ -110,6 +128,8 @@ Required environment:
   to GLM, and GLM writes the final answer.
 - Good: two same-name tool calls use different `toolCallId` values and settle independently in live
   state and restored history.
+- Good: one failed search displays only its safe reason while a later successful search displays only
+  its own backend; refresh preserves both associations.
 - Good: a latest-news call searches week-capable backends first, then records a month fallback when the
   week pass is empty; a Tavily `published_date` survives into the final model's tool context.
 - Base: current-model hosted search succeeds and the assistant restores the same sources after refresh.
@@ -121,6 +141,8 @@ Required environment:
 - Bad: pre-search every message when the toggle is on or inject search results into the system prompt.
 - Bad: append "latest" to the query and claim freshness, or pass a constrained request to a backend that
   cannot enforce it.
+- Bad: display the message-level backend aggregate on the first search row, merge calls by tool name,
+  or render arbitrary persisted search error text.
 - Bad: send plaintext/ciphertext keys to the browser or accept an unvalidated SearXNG internal URL.
 
 ## 6. Tests Required
@@ -132,12 +154,15 @@ Required environment:
 - Freshness tests: tool argument validation, UTC week/month boundaries, week-to-month single fallback,
   unsupported zero-network behavior, range-specific cache keys, Tavily/SearXNG/Google parameter mapping,
   and `publishedAt` normalization/preservation.
+- Context tests: search-enabled requests receive the request-time `Asia/Shanghai` date; the value is
+  generated per request rather than stored as a fixed prompt constant.
 - Public HTTP tests: IPv4/IPv6 private ranges, metadata, DNS rebinding, redirect hops, and valid public hosts.
 - Hosted search tests: all four runtime translators, route mismatch, no citation failure, route/key failover,
   outer `runId` and `toolCallId` linkage.
 - Chat tests: one logical tool, no pre-search, web toggle precedence, SSE event ordering and IDs, backend
-  provenance propagation, all four generation actions, additive continue trace/citations, history refresh,
-  sibling projection, and version replacement.
+  provenance propagation, per-call success/failure details keyed by `toolCallId`, unsafe historical reason
+  rejection, all four generation actions, additive continue trace/citations, history refresh, sibling
+  projection, and version replacement.
 - Release gate: `pnpm check`, `pnpm test`, `pnpm build`, migration continuity, and `git diff --check`.
 
 ## 7. Wrong vs Correct
@@ -200,4 +225,19 @@ Correct:
 trace.webSearch = {
   calls: [...existingAssistantCalls, ...(continuationTrace.webSearch?.calls ?? [])],
 };
+```
+
+Wrong:
+
+```ts
+const backend = message.searchBackends?.join(", ");
+toolCalls[0].statusDetail = persistedError.reason;
+```
+
+Correct:
+
+```ts
+const call = toolCalls.find((item) => item.toolCallId === event.toolCallId);
+call.searchBackend = event.backend;
+call.statusDetail = toSafeSearchStatusDetail(persistedError.reason);
 ```

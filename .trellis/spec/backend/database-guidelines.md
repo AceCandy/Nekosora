@@ -196,6 +196,8 @@ if (job) void dispatchConversationTitleJob(job.id);
 - 条件 UPDATE 未命中或无明确 `rowCount` → 视为并发变化，回滚并阻断启动。
 - advisory lock 获取/释放失败 → 阻断启动；无法确认解锁时销毁连接。
 - 全表存在无 Drizzle 记录 → 补基线记录后 migrate 继续。
+- 全表存在无 Drizzle 记录但 `runs.lease_expires_at/duration_ms/completed_at` 或
+  `tool_calls.status/input_json/output_json/error_json` 任一缺失 → 拒绝收养并报告缺失列。
 - 部分表存在无记录 → throw partial-schema 错误,需重置或 `BOOTSTRAP_SKIP_MIGRATE=1`。
 
 #### 5. Good / Base / Bad Cases
@@ -206,12 +208,14 @@ if (job) void dispatchConversationTitleJob(job.id);
 - Base: 已核实的同 hash 旧时间记录只修正账本时间，不重跑该 SQL。
 - Bad: 只提交 `0000_*.sql`,忽略 `meta/**`。
 - Bad: 把 partial schema 标记为已迁移。
+- Bad: 只按表名判断 schema 完整，忽略关键列缺失后补写基线迁移记录。
 - Bad: 为整理编号、文件名或时间线而改写已发布 journal 的 `when/tag/idx`。
 - Bad: 因为产品未上线就假定测试库可丢弃，压缩 journal 后让已有完整账本变成未知记录。
 - Bad: 在 Pool 上先拿 advisory lock，再调用可能切换连接的 migrator。
 
 #### 6. Tests Required
-- PG 迁移单测:complete-existing-schema adoption + partial-schema rejection(见 `src/lib/infra/db/bootstrap.test.ts`)。
+- PG 迁移单测:complete-existing-schema adoption + partial-table/critical-column rejection
+  (见 `src/lib/infra/db/bootstrap.test.ts`)。
 - 协调单测:安全重定时、连续前缀/空账本、journal 与 ledger 重复、断层、未知记录、baseline 白名单、UPDATE `rowCount`。
 - squash 账本单测:两个已知旧 baseline hash、完整旧链成功、`id`/时间顺序不同、任一 hash 不匹配、仅旧 baseline、UPDATE/DELETE `rowCount` 异常。
 - 连接生命周期单测:锁获取失败、migrate 失败、unlock 返回 false/抛错，断言 unlock 与 `release(destroy)`。

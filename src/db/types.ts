@@ -116,6 +116,23 @@ export interface WebSearchTraceBackend {
   name: string;
 }
 
+export type WebSearchTraceAttemptOutcome =
+  | "success"
+  | "empty"
+  | "unavailable"
+  | "unsupported"
+  | "timeout"
+  | "failed";
+
+export interface WebSearchTraceAttempt {
+  backend: WebSearchTraceBackend;
+  outcome: WebSearchTraceAttemptOutcome;
+  durationMs: number;
+  timeRange?: WebSearchTraceTimeRange;
+}
+
+export type WebSearchAttemptSummary = Pick<WebSearchTraceAttempt, "backend" | "outcome">;
+
 export interface WebSearchTraceCall {
   toolCallId: string;
   query: string;
@@ -125,14 +142,10 @@ export interface WebSearchTraceCall {
   mode: WebSearchTraceBackend["type"] | null;
   backend: WebSearchTraceBackend | null;
   status: "running" | "success" | "failed" | "unavailable" | "cancelled";
+  reason?: string;
   durationMs?: number;
   citations?: WebSearchTraceCitation[];
-  attempts?: Array<{
-    backend: WebSearchTraceBackend;
-    outcome: string;
-    durationMs: number;
-    timeRange?: WebSearchTraceTimeRange;
-  }>;
+  attempts?: WebSearchTraceAttempt[];
 }
 
 export interface ProcessTrace {

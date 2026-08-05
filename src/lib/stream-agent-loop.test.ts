@@ -562,16 +562,26 @@ describe("streamChatWithTools agent loop finish signal", () => {
     }));
   });
 
-  it("maxSteps 耗尽且仍 tool-calls 时不发最终 finish", async () => {
-    vi.mocked(streamText).mockImplementation(() => mockStreamResult(
-      [{
-        type: "tool-call",
-        toolCallId: "tc-loop",
-        toolName: "demo__echo",
-        input: {},
-      }],
-      "tool-calls",
-    ));
+  it("maxSteps 耗尽后追加一次禁用工具的最终总结", async () => {
+    let modelCall = 0;
+    vi.mocked(streamText).mockImplementation(() => {
+      modelCall += 1;
+      if (modelCall <= 2) {
+        return mockStreamResult(
+          [{
+            type: "tool-call",
+            toolCallId: `tc-loop-${modelCall}`,
+            toolName: "demo__echo",
+            input: { step: modelCall },
+          }],
+          "tool-calls",
+        );
+      }
+      return mockStreamResult(
+        [{ type: "text-delta", text: "final summary" }],
+        "stop",
+      );
+    });
     callMcpTool.mockResolvedValue({ result: "loop", isError: false });
 
     const events = await collect(streamChatWithTools({
@@ -581,8 +591,133 @@ describe("streamChatWithTools agent loop finish signal", () => {
 
     expect(events.filter((e) => e.type === "tool-call")).toHaveLength(2);
     expect(events.filter((e) => e.type === "tool-result")).toHaveLength(2);
-    expect(events.some((e) => e.type === "finish")).toBe(false);
+    expect(events.filter((e) => e.type === "finish")).toEqual([
+      expect.objectContaining({
+        type: "finish",
+        finishReason: "stop",
+        usage: expect.objectContaining({
+          inputTokens: 9,
+          outputTokens: 15,
+          totalTokens: 24,
+        }),
+      }),
+    ]);
+    expect(events).toContainEqual({ type: "text-delta", text: "final summary" });
+    expect(streamText).toHaveBeenCalledTimes(3);
+    const finalRequest = vi.mocked(streamText).mock.calls[2]?.[0] as {
+      tools?: unknown;
+      messages?: Array<{ role?: string }>;
+    };
+    expect(finalRequest.tools).toBeUndefined();
+    expect(finalRequest.messages?.map((message) => message.role)).toEqual([
+      "user",
+      "assistant",
+      "tool",
+      "assistant",
+      "tool",
+    ]);
     expect(telemetry.finalizeExecution).toHaveBeenCalledTimes(1);
+    expect(telemetry.finalizeExecution).toHaveBeenCalledWith(expect.objectContaining({
+      outcome: expect.objectContaining({
+        status: "success",
+        usage: expect.objectContaining({ inputTokens: 9, outputTokens: 15, totalTokens: 24 }),
+      }),
+    }));
+  });
+
+  it("最终总结失败时不伪造 finish 或重复执行工具", async () => {
+    vi.mocked(streamText)
+      .mockReturnValueOnce(mockStreamResult(
+        [{
+          type: "tool-call",
+          toolCallId: "tc-loop",
+          toolName: "demo__echo",
+          input: {},
+        }],
+        "tool-calls",
+      ))
+      .mockReturnValueOnce({
+        stream: (async function* () {
+          yield { type: "error", error: new Error("summary failed") };
+        })(),
+      } as never);
+    callMcpTool.mockResolvedValue({ result: "loop", isError: false });
+
+    const events = await collect(streamChatWithTools({
+      ...baseOpts,
+      maxSteps: 1,
+    }));
+
+    expect(streamText).toHaveBeenCalledTimes(2);
+    expect(callMcpTool).toHaveBeenCalledTimes(1);
+    expect(events.some((event) => event.type === "finish")).toBe(false);
+    expect(events.at(-1)).toMatchObject({ type: "error", error: "summary failed" });
+    expect(telemetry.finalizeExecution).toHaveBeenCalledWith(expect.objectContaining({
+      outcome: expect.objectContaining({ status: "failed" }),
+    }));
+  });
+
+  it("工具后的正常轮只有 finish 没有正文时重试一次且不重复执行工具", async () => {
+    vi.mocked(streamText)
+      .mockReturnValueOnce(mockStreamResult(
+        [{
+          type: "tool-call",
+          toolCallId: "tc-empty-summary",
+          toolName: "demo__echo",
+          input: {},
+        }],
+        "tool-calls",
+      ))
+      .mockReturnValueOnce(mockStreamResult([], "stop"))
+      .mockReturnValueOnce(mockStreamResult(
+        [{ type: "text-delta", text: "重试后的最终回答" }],
+        "stop",
+      ));
+    callMcpTool.mockResolvedValue({ result: "搜索结果", isError: false });
+
+    const events = await collect(streamChatWithTools({
+      ...baseOpts,
+      maxSteps: 2,
+    }));
+
+    expect(callMcpTool).toHaveBeenCalledTimes(1);
+    expect(streamText).toHaveBeenCalledTimes(3);
+    expect(events).toContainEqual({ type: "text-delta", text: "重试后的最终回答" });
+    expect(events.filter((event) => event.type === "finish")).toHaveLength(1);
+  });
+
+  it("最终总结收到 finish 时若已取消仍按 interrupted 收敛", async () => {
+    const controller = new AbortController();
+    vi.mocked(streamText)
+      .mockReturnValueOnce(mockStreamResult(
+        [{
+          type: "tool-call",
+          toolCallId: "tc-loop",
+          toolName: "demo__echo",
+          input: {},
+        }],
+        "tool-calls",
+      ))
+      .mockReturnValueOnce({
+        stream: (async function* () {})(),
+        usage: Promise.resolve({ inputTokens: 3, outputTokens: 5, totalTokens: 8 }),
+        finishReason: {
+          then(resolve: (reason: string) => void) {
+            controller.abort();
+            resolve("stop");
+          },
+        },
+      } as never);
+    callMcpTool.mockResolvedValue({ result: "loop", isError: false });
+
+    const events = await collect(streamChatWithTools({
+      ...baseOpts,
+      maxSteps: 1,
+      abortSignal: controller.signal,
+    }));
+
+    expect(controller.signal.aborted).toBe(true);
+    expect(events.some((event) => event.type === "finish")).toBe(false);
     expect(telemetry.finalizeExecution).toHaveBeenCalledWith(expect.objectContaining({
       outcome: expect.objectContaining({ status: "interrupted" }),
     }));

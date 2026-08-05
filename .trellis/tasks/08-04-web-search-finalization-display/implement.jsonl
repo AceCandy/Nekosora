@@ -1,0 +1,7 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/backend/web-search.md", "reason": "联网搜索工具、SSE、trace 与历史恢复契约"}
+{"file": ".trellis/spec/backend/chat-run-metadata.md", "reason": "Agent 终态、唯一 finish、usage 与持久化契约"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "聊天 SSE/store 终态与逐消息状态契约"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "聊天组件和流式 UI 约定"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "ToolCallRecord 跨层类型边界"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "toolCallId 从 SSE 到历史投影的跨层数据流"}

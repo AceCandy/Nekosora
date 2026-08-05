@@ -7,6 +7,7 @@ import type { Artifact } from "@/features/artifacts/ArtifactPanel";
 import type {
   ModelCapabilities,
   TokenUsage,
+  WebSearchAttemptSummary,
   WebSearchTraceBackend,
   WebSearchTraceCitation,
 } from "@/db/types";
@@ -62,6 +63,12 @@ export interface ToolCallRecord {
   toolName: string;
   args?: unknown;
   status: "calling" | "done" | "error";
+  /** web_search 实际成功返回结果的后端。 */
+  searchBackend?: WebSearchTraceBackend;
+  /** web_search 按实际执行顺序记录的后端尝试摘要。 */
+  searchAttempts?: WebSearchAttemptSummary[];
+  /** web_search 未成功时的安全状态说明。 */
+  statusDetail?: string;
 }
 
 /** 附件上传项的状态机。 */

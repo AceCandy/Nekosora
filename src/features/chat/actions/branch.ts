@@ -11,7 +11,12 @@ import {
   normalizeMessageFeedback,
   type MessageFeedback,
 } from "@/features/chat/model/feedback";
-import type { MessageVersionSelections, WebSearchTraceBackend } from "@/db/types";
+import type {
+  MessageVersionSelections,
+  WebSearchAttemptSummary,
+  WebSearchTraceAttemptOutcome,
+  WebSearchTraceBackend,
+} from "@/db/types";
 import { resolveVisibleBranch } from "@/features/chat/lib/visible-branch";
 import type {
   ChatMessage,
@@ -38,21 +43,90 @@ function mapDbToolCallStatus(status: string): ToolCallRecord["status"] {
   return "done";
 }
 
-/** 从消息 trace 投影成功搜索的引用与实际后端；忽略运行中或失败调用。 */
+type SearchToolCallDetails = Pick<
+  ToolCallRecord,
+  "searchBackend" | "searchAttempts" | "statusDetail"
+>;
+
+const SAFE_SEARCH_ATTEMPT_OUTCOMES = new Set<WebSearchTraceAttemptOutcome>([
+  "success",
+  "empty",
+  "unavailable",
+  "unsupported",
+  "timeout",
+  "failed",
+]);
+
+const SAFE_SEARCH_STATUS_DETAILS = new Set([
+  "freshness 不能与 dateAfter/dateBefore 同时使用",
+  "请检查 query、freshness 或日期范围组合",
+  "未配置搜索后端",
+  "搜索失败",
+  "搜索后端不可用",
+  "搜索后端不支持指定时间范围",
+  "无搜索结果",
+  "模型搜索不可用",
+  "模型搜索不支持指定时间范围",
+  "模型搜索未返回有效引用",
+  "搜索超时",
+  "搜索后端失败",
+  "搜索暂不可用",
+  "搜索已取消",
+  "搜索执行失败",
+]);
+
+interface SearchTraceProjection {
+  message: Pick<ChatMessage, "searchResults" | "searchBackends">;
+  toolCallDetails: Map<string, SearchToolCallDetails>;
+}
+
+function toSafeSearchStatusDetail(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const detail = value.trim();
+  return SAFE_SEARCH_STATUS_DETAILS.has(detail) ? detail : undefined;
+}
+
+/** 从消息 trace 投影搜索引用、聚合后端及逐工具调用详情。 */
 function projectSearchTrace(
   processTrace: unknown,
-): Pick<ChatMessage, "searchResults" | "searchBackends"> {
-  if (!processTrace || typeof processTrace !== "object") return {};
+): SearchTraceProjection {
+  const toolCallDetails = new Map<string, SearchToolCallDetails>();
+  if (!processTrace || typeof processTrace !== "object") {
+    return { message: {}, toolCallDetails };
+  }
   const webSearch = (processTrace as { webSearch?: unknown }).webSearch;
-  if (!webSearch || typeof webSearch !== "object") return {};
+  if (!webSearch || typeof webSearch !== "object") {
+    return { message: {}, toolCallDetails };
+  }
   const calls = (webSearch as { calls?: unknown }).calls;
-  if (!Array.isArray(calls)) return {};
+  if (!Array.isArray(calls)) return { message: {}, toolCallDetails };
 
   const byUrl = new Map<string, NonNullable<ChatMessage["searchResults"]>[number]>();
   const byBackend = new Map<string, WebSearchTraceBackend>();
   for (const call of calls) {
     if (!call || typeof call !== "object") continue;
-    const record = call as { status?: unknown; citations?: unknown; backend?: unknown };
+    const record = call as {
+      toolCallId?: unknown;
+      status?: unknown;
+      citations?: unknown;
+      backend?: unknown;
+      reason?: unknown;
+      attempts?: unknown;
+    };
+    if (typeof record.toolCallId === "string") {
+      const details: SearchToolCallDetails = {};
+      if (record.status === "success" && isSearchTraceBackend(record.backend)) {
+        details.searchBackend = record.backend;
+      } else {
+        const statusDetail = toSafeSearchStatusDetail(record.reason);
+        if (statusDetail) details.statusDetail = statusDetail;
+      }
+      const searchAttempts = toSafeSearchAttempts(record.attempts);
+      if (searchAttempts) details.searchAttempts = searchAttempts;
+      if (details.searchBackend || details.searchAttempts || details.statusDetail) {
+        toolCallDetails.set(record.toolCallId, details);
+      }
+    }
     if (record.status !== "success") continue;
     if (isSearchTraceBackend(record.backend)) {
       byBackend.set(`${record.backend.type}:${record.backend.id ?? record.backend.name}`, record.backend);
@@ -81,9 +155,23 @@ function projectSearchTrace(
     }
   }
   return {
-    ...(byUrl.size > 0 ? { searchResults: Array.from(byUrl.values()) } : {}),
-    ...(byBackend.size > 0 ? { searchBackends: Array.from(byBackend.values()) } : {}),
+    message: {
+      ...(byUrl.size > 0 ? { searchResults: Array.from(byUrl.values()) } : {}),
+      ...(byBackend.size > 0 ? { searchBackends: Array.from(byBackend.values()) } : {}),
+    },
+    toolCallDetails,
   };
+}
+
+function mergeSearchToolCallDetails(
+  toolCalls: ToolCallRecord[],
+  detailsById: Map<string, SearchToolCallDetails>,
+): ToolCallRecord[] {
+  if (detailsById.size === 0) return toolCalls;
+  return toolCalls.map((call) => {
+    const details = call.toolCallId ? detailsById.get(call.toolCallId) : undefined;
+    return details ? { ...call, ...details } : call;
+  });
 }
 
 function isSearchTraceBackend(value: unknown): value is WebSearchTraceBackend {
@@ -94,6 +182,24 @@ function isSearchTraceBackend(value: unknown): value is WebSearchTraceBackend {
     && typeof backend.name === "string"
     && (backend.id === undefined || typeof backend.id === "string")
   );
+}
+
+function toSafeSearchAttempts(value: unknown): WebSearchAttemptSummary[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const attempts = value.flatMap((item): WebSearchAttemptSummary[] => {
+    if (!item || typeof item !== "object") return [];
+    const attempt = item as { backend?: unknown; outcome?: unknown };
+    if (
+      !isSearchTraceBackend(attempt.backend)
+      || typeof attempt.outcome !== "string"
+      || !SAFE_SEARCH_ATTEMPT_OUTCOMES.has(attempt.outcome as WebSearchTraceAttemptOutcome)
+    ) return [];
+    return [{
+      backend: attempt.backend,
+      outcome: attempt.outcome as WebSearchTraceAttemptOutcome,
+    }];
+  });
+  return attempts.length > 0 ? attempts : undefined;
 }
 
 /**
@@ -118,6 +224,7 @@ async function loadToolCallsByRunIds(
       toolName: s.toolCalls.toolName,
       status: s.toolCalls.status,
       inputJson: s.toolCalls.inputJson,
+      errorJson: s.toolCalls.errorJson,
       createdAt: s.toolCalls.createdAt,
     })
     .from(s.toolCalls)
@@ -129,6 +236,7 @@ async function loadToolCallsByRunIds(
     toolName: string;
     status: string;
     inputJson: unknown;
+    errorJson: unknown;
     createdAt: string | Date;
   }>;
 
@@ -141,6 +249,20 @@ async function loadToolCallsByRunIds(
     // 仅恢复 inputJson 为 args;不向 UI 暴露 outputJson/errorJson
     if (row.inputJson !== undefined && row.inputJson !== null) {
       rec.args = row.inputJson;
+    }
+    if (
+      row.toolName === "web_search"
+      && row.status === "failed"
+      && row.errorJson
+      && typeof row.errorJson === "object"
+    ) {
+      const error = row.errorJson as { message?: unknown; reason?: unknown };
+      const detail = toSafeSearchStatusDetail(typeof error.message === "string"
+        ? error.message
+        : typeof error.reason === "string"
+          ? error.reason
+          : undefined);
+      if (detail) rec.statusDetail = detail;
     }
     const list = toolCallsByRunId.get(row.runId);
     if (list) list.push(rec);
@@ -274,6 +396,7 @@ export async function getMessageSiblings(messagePublicId: string): Promise<{
   );
 
   const siblings = assistantSiblings.map((m) => {
+    const searchTrace = projectSearchTrace(m.processTrace);
     const base: {
       publicId: string;
       content: string;
@@ -297,11 +420,12 @@ export async function getMessageSiblings(messagePublicId: string): Promise<{
       const runMetadata = runMetadataByRunId.get(m.runId);
       if (runMetadata) base.runMetadata = runMetadata;
       const toolCalls = toolCallsByRunId.get(m.runId);
-      if (toolCalls && toolCalls.length > 0) base.toolCalls = toolCalls;
+      if (toolCalls && toolCalls.length > 0) {
+        base.toolCalls = mergeSearchToolCallDetails(toolCalls, searchTrace.toolCallDetails);
+      }
     }
-    const searchTrace = projectSearchTrace(m.processTrace);
-    if (searchTrace.searchResults) base.searchResults = searchTrace.searchResults;
-    if (searchTrace.searchBackends) base.searchBackends = searchTrace.searchBackends;
+    if (searchTrace.message.searchResults) base.searchResults = searchTrace.message.searchResults;
+    if (searchTrace.message.searchBackends) base.searchBackends = searchTrace.message.searchBackends;
     const feedback = typeof m.id === "string" ? feedbackByMessageId.get(m.id) : undefined;
     if (feedback) base.feedback = feedback;
     return base;
@@ -622,16 +746,26 @@ export async function getVisibleBranch(conversationId: string): Promise<{
 
   const messages = mainMessages.map((m) => {
     let next = m;
+    const searchTrace = m.role === "assistant"
+      ? projectSearchTrace(m.processTrace)
+      : null;
     if (m.role === "assistant" && typeof m.runId === "string") {
       const runMetadata = runMetadataByRunId.get(m.runId);
       if (runMetadata) next = { ...next, runMetadata };
       const toolCalls = toolCallsByRunId.get(m.runId);
-      if (toolCalls && toolCalls.length > 0) next = { ...next, toolCalls };
+      if (toolCalls && toolCalls.length > 0) {
+        next = {
+          ...next,
+          toolCalls: mergeSearchToolCallDetails(
+            toolCalls,
+            searchTrace?.toolCallDetails ?? new Map(),
+          ),
+        };
+      }
     }
-    if (m.role === "assistant") {
-      const searchTrace = projectSearchTrace(m.processTrace);
-      if (searchTrace.searchResults || searchTrace.searchBackends) {
-        next = { ...next, ...searchTrace };
+    if (searchTrace) {
+      if (searchTrace.message.searchResults || searchTrace.message.searchBackends) {
+        next = { ...next, ...searchTrace.message };
       }
     }
     const feedback = feedbackByMessageId.get(m.id as string);

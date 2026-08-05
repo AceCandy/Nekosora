@@ -404,6 +404,7 @@ export async function POST(req: NextRequest) {
     messageAttachments,
     visionValidated,
     knowledgeBaseIds: body.knowledgeBaseIds,
+    webSearchEnabled: effectiveWebSearch,
     templateId: body.templateId,
     templateVars: body.templateVars,
     instructionCardIds: body.instructionCardIds,
@@ -515,6 +516,7 @@ export async function POST(req: NextRequest) {
               backend: event.backend,
               durationMs: event.durationMs,
               citations: event.citations,
+              attempts: event.attempts,
             })}\n\n`,
           ));
         } else if (event.type === "search_failed") {
@@ -524,6 +526,7 @@ export async function POST(req: NextRequest) {
               toolCallId: event.toolCallId,
               reason: event.reason,
               status: event.status,
+              attempts: event.attempts,
             })}\n\n`,
           ));
         } else if (event.type === "error") {

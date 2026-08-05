@@ -170,6 +170,16 @@ const PG_BASELINE_TABLES = [
   "verification",
 ] as const;
 
+const PG_BASELINE_REQUIRED_COLUMNS = [
+  "runs.lease_expires_at",
+  "runs.duration_ms",
+  "runs.completed_at",
+  "tool_calls.status",
+  "tool_calls.input_json",
+  "tool_calls.output_json",
+  "tool_calls.error_json",
+] as const;
+
 /**
  * 兼容旧流程:如果 PG schema 已经由 push/手工/旧启动流程完整建好,但还没有
  * Drizzle migrator 记录,直接补基线记录,避免重新执行 0000 SQL 撞 duplicate_object。
@@ -213,6 +223,24 @@ async function adoptExistingPgBaselineIfNeeded(db: unknown): Promise<void> {
     throw new Error(
       `[bootstrap] PG 已存在部分基线对象但没有 Drizzle 迁移记录,不能安全自动迁移。` +
         `已存在对象数=${existingObjectCount},缺失示例=${missing || "无"}。` +
+        `如果这是一次性开发库,请清空 PG 数据卷/数据库后重启;` +
+        `如果表结构由外部维护且确认完整,设置 BOOTSTRAP_SKIP_MIGRATE=1。`,
+    );
+  }
+
+  const existingColumns = await pgNameSet(
+    db,
+    `select table_name || '.' || column_name as name
+     from information_schema.columns
+     where table_schema = 'public'
+       and table_name in ('runs', 'tool_calls')`,
+  );
+  const missingColumns = PG_BASELINE_REQUIRED_COLUMNS.filter(
+    (name) => !existingColumns.has(name),
+  );
+  if (missingColumns.length > 0) {
+    throw new Error(
+      `[bootstrap] PG 基线表存在但关键列不完整,不能安全自动收养。缺失列=${missingColumns.join(", ")}。` +
         `如果这是一次性开发库,请清空 PG 数据卷/数据库后重启;` +
         `如果表结构由外部维护且确认完整,设置 BOOTSTRAP_SKIP_MIGRATE=1。`,
     );

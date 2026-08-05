@@ -183,7 +183,22 @@ describe("executeChatCompletion", () => {
     expect(mocks.streamChat).not.toHaveBeenCalled();
     expect(mocks.streamChatWithTools).toHaveBeenCalledWith(expect.objectContaining({
       webSearchTool: expect.objectContaining({
-        definition: expect.objectContaining({ function: expect.objectContaining({ name: "web_search" }) }),
+        definition: expect.objectContaining({
+          function: expect.objectContaining({
+            name: "web_search",
+            description: expect.stringContaining("不要同时传 freshness 与 dateAfter/dateBefore"),
+            parameters: expect.objectContaining({
+              properties: expect.objectContaining({
+                freshness: expect.objectContaining({
+                  description: expect.stringContaining("不能与 dateAfter/dateBefore 同时使用"),
+                }),
+                dateAfter: expect.objectContaining({
+                  description: expect.stringContaining("不要传 freshness"),
+                }),
+              }),
+            }),
+          }),
+        }),
       }),
     }));
     expect(mocks.searchWeb).toHaveBeenCalledWith("user-1", "latest", expect.objectContaining({
@@ -200,6 +215,14 @@ describe("executeChatCompletion", () => {
       "tool-result",
       "finish",
     ]);
+    expect(emitted).toContainEqual(expect.objectContaining({
+      type: "search_completed",
+      attempts: [{
+        backend: { type: "model", id: "grok-id", name: "Grok 4.5" },
+        outcome: "success",
+        durationMs: 12,
+      }],
+    }));
     expect(mocks.persistChatCompletion).toHaveBeenCalledWith(expect.objectContaining({
       processTrace: expect.objectContaining({
         webSearch: {
@@ -236,7 +259,18 @@ describe("executeChatCompletion", () => {
       requestedTimeRange,
       effectiveTimeRange,
       freshnessFallback: true,
-      attempts: [],
+      attempts: [
+        {
+          backend: { type: "provider", id: "tavily", name: "Tavily" },
+          outcome: "failed",
+          durationMs: 10,
+        },
+        {
+          backend: { type: "current-model", name: "Current model" },
+          outcome: "unsupported",
+          durationMs: 1,
+        },
+      ],
     });
     mocks.streamChatWithTools.mockImplementation((options) => (async function* () {
       const args = { query: "latest", freshness: "week" };
@@ -257,6 +291,14 @@ describe("executeChatCompletion", () => {
     });
 
     expect(emitted).toContainEqual(expect.objectContaining({
+      type: "search_failed",
+      reason: "无搜索结果",
+      attempts: [
+        expect.objectContaining({ backend: expect.objectContaining({ name: "Tavily" }), outcome: "failed" }),
+        expect.objectContaining({ backend: expect.objectContaining({ name: "Current model" }), outcome: "unsupported" }),
+      ],
+    }));
+    expect(emitted).toContainEqual(expect.objectContaining({
       type: "tool-result",
       result: expect.objectContaining({
         requestedTimeRange,
@@ -267,19 +309,25 @@ describe("executeChatCompletion", () => {
     expect(mocks.persistChatCompletion).toHaveBeenCalledWith(expect.objectContaining({
       processTrace: expect.objectContaining({
         webSearch: {
-          calls: [expect.objectContaining({
-            requestedTimeRange: expect.objectContaining({ preset: "week" }),
-            effectiveTimeRange,
-            freshnessFallback: true,
-          })],
+              calls: [expect.objectContaining({
+                requestedTimeRange: expect.objectContaining({ preset: "week" }),
+                effectiveTimeRange,
+                freshnessFallback: true,
+                reason: "无搜索结果",
+              })],
         },
       }),
     }));
   });
 
-  it("非法或不完整的日期范围在搜索请求前失败", async () => {
+  it("互斥的时间条件在搜索请求前失败并返回可纠正提示", async () => {
     mocks.streamChatWithTools.mockImplementation((options) => (async function* () {
-      const args = { query: "news", dateAfter: "2026-08-01" };
+      const args = {
+        query: "news",
+        freshness: "month",
+        dateAfter: "2026-08-01",
+        dateBefore: "2026-08-04",
+      };
       yield { type: "tool-call", toolCallId: "search-1", toolName: "web_search", args };
       const execution = await options.webSearchTool.execute("search-1", args);
       yield { type: "tool-result", toolCallId: "search-1", toolName: "web_search", ...execution };
@@ -298,7 +346,14 @@ describe("executeChatCompletion", () => {
     expect(mocks.searchWeb).not.toHaveBeenCalled();
     expect(emitted).toContainEqual(expect.objectContaining({
       type: "search_failed",
-      reason: "搜索查询无效",
+      reason: "freshness 不能与 dateAfter/dateBefore 同时使用",
+    }));
+    expect(emitted).toContainEqual(expect.objectContaining({
+      type: "tool-result",
+      result: {
+        error: "invalid_search_query",
+        message: "freshness 不能与 dateAfter/dateBefore 同时使用",
+      },
     }));
   });
 

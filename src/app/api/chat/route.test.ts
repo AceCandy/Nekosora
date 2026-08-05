@@ -393,6 +393,29 @@ describe("POST /api/chat coordinator adapter", () => {
         backend: { type: "provider", id: "provider-1", name: "Provider" },
         durationMs: 12,
         citations: [{ title: "source", url: "https://example.com", snippet: "fact" }],
+        attempts: [{
+          backend: { type: "provider", id: "provider-1", name: "Provider" },
+          outcome: "success",
+          durationMs: 12,
+        }],
+      });
+      await emit({
+        type: "search_failed",
+        toolCallId: "tc-2",
+        reason: "模型搜索不支持指定时间范围",
+        status: "failed",
+        attempts: [
+          {
+            backend: { type: "provider", id: "tavily", name: "Tavily" },
+            outcome: "failed",
+            durationMs: 9,
+          },
+          {
+            backend: { type: "current-model", name: "Current model" },
+            outcome: "unsupported",
+            durationMs: 1,
+          },
+        ],
       });
       await emit({ type: "tool-result", toolCallId: "tc-1", toolName: "search", result: {}, isError: false });
       await emit({
@@ -418,12 +441,18 @@ describe("POST /api/chat coordinator adapter", () => {
       "tool_call",
       "search_started",
       "search_completed",
+      "search_failed",
       "tool_result",
       "finish",
       "terminal",
     ]);
     expect(payload).toContain('"type":"tool_call","toolCallId":"tc-1"');
     expect(payload).toContain('"type":"tool_result","toolCallId":"tc-1"');
+    expect(payload).toContain(
+      '"type":"search_failed","toolCallId":"tc-2","reason":"模型搜索不支持指定时间范围","status":"failed","attempts":[',
+    );
+    expect(payload).toContain('"name":"Tavily"');
+    expect(payload).toContain('"outcome":"unsupported"');
     const finishIndex = payload.indexOf('"type":"finish"');
     const terminalIndex = payload.indexOf('"type":"terminal","status":"success"');
     const doneIndex = payload.indexOf("data: [DONE]");

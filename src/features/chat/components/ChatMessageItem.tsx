@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { useLocale, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import {
   AlertCircle,
   Check,
@@ -45,6 +45,7 @@ import { ASSISTANT_MESSAGE_CLASS, USER_MESSAGE_BUBBLE_CLASS } from "@/features/c
 import { useClickOutside } from "@/shared/lib/useClickOutside";
 import { MessageImageAttachments } from "@/features/chat/components/MessageImageAttachments";
 import { RunMetadataFields } from "@/features/chat/components/RunMetadataFields";
+import type { WebSearchTraceAttemptOutcome } from "@/db/types";
 
 /** 用户消息超过此行数才折叠(长消息默认收起,避免撑高会话)。 */
 const USER_MESSAGE_COLLAPSE_LINES = 6;
@@ -57,6 +58,15 @@ const FEEDBACK_REASON_I18N: Record<FeedbackReason, string> = {
   outdated: "feedbackReasonOutdated",
   unsafe: "feedbackReasonUnsafe",
   other: "feedbackReasonOther",
+};
+
+const SEARCH_ATTEMPT_OUTCOME_I18N: Record<WebSearchTraceAttemptOutcome, string> = {
+  success: "webSearchAttemptSuccess",
+  empty: "webSearchAttemptEmpty",
+  unavailable: "webSearchAttemptUnavailable",
+  unsupported: "webSearchAttemptUnsupported",
+  timeout: "webSearchAttemptTimeout",
+  failed: "webSearchAttemptFailed",
 };
 
 interface MessageRunMetadataDisplayProps {
@@ -165,7 +175,6 @@ function ChatMessageItemContent({
   domId,
 }: ChatMessageItemProps) {
   const t = useTranslations("chat");
-  const locale = useLocale();
   const metadataPanelId = `run-metadata-${useId()}`;
   const {
     role,
@@ -175,21 +184,11 @@ function ChatMessageItemContent({
     status,
     toolCalls,
     searchResults,
-    searchBackends,
     versionInfo,
     feedback,
     runMetadata,
     attachments = [],
   } = message;
-  const searchMethod = searchBackends?.map((backend) => {
-    const typeLabel = backend.type === "current-model"
-      ? t("webSearchBackendCurrentModel")
-      : backend.type === "model"
-        ? t("webSearchBackendModel")
-        : t("webSearchBackendProvider");
-    return `${backend.name} (${typeLabel})`;
-  }).join(locale === "zh-CN" ? "、" : ", ");
-  const firstWebSearchToolIndex = toolCalls?.findIndex((call) => call.toolName === "web_search") ?? -1;
   const hasReasoning = Boolean(reasoning);
   const visibleRunMetadata = runMetadata && status !== "interrupted" && hasRunMetadata(runMetadata)
     ? runMetadata
@@ -653,48 +652,71 @@ function ChatMessageItemContent({
             )}
             {toolCalls && toolCalls.length > 0 && (
               <div className="mb-2 space-y-1">
-                {toolCalls.map((tc, ti) => (
-                  <ErrorBoundary
-                    key={ti}
-                    name="tool-call"
-                    rawContent={
-                      typeof tc.args === "string"
-                        ? tc.args
-                        : tc.args !== undefined
-                          ? JSON.stringify(tc.args)
-                          : undefined
-                    }
-                  >
-                    <details
-                      open={tc.status === "calling"}
-                      className="rounded-md border border-morning-mist dark:border-deep-space/80 bg-neutral-50/40 dark:bg-[#0d0f14]/15 overflow-hidden">
-                      <summary className="cursor-pointer hover:text-neutral-600 dark:hover:text-neutral-300 px-3 py-1.5 text-ui-caption font-mono select-none flex min-w-0 items-center gap-1.5 text-neutral-500 dark:text-neutral-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue">
-                        {tc.status === "calling" ? (
-                          <Loader2 className="w-3 h-3 animate-spin text-sora-blue" aria-hidden="true" />
-                        ) : tc.status === "error" ? (
-                          <AlertCircle className="w-3 h-3 text-red-500" aria-hidden="true" />
-                        ) : (
-                          <CheckCircle2 className="w-3 h-3 text-green-500" aria-hidden="true" />
+                {toolCalls.map((tc, ti) => {
+                  const searchMethod = tc.searchBackend
+                    ? `${tc.searchBackend.name} (${
+                        tc.searchBackend.type === "current-model"
+                          ? t("webSearchBackendCurrentModel")
+                          : tc.searchBackend.type === "model"
+                            ? t("webSearchBackendModel")
+                            : t("webSearchBackendProvider")
+                      })`
+                    : undefined;
+                  const searchAttemptPath = tc.searchAttempts?.length
+                    ? tc.searchAttempts
+                        .map((attempt) => `${attempt.backend.name} (${t(
+                          SEARCH_ATTEMPT_OUTCOME_I18N[attempt.outcome],
+                        )})`)
+                        .join(" → ")
+                    : undefined;
+                  const searchDetail = searchAttemptPath ?? searchMethod ?? tc.statusDetail;
+                  return (
+                    <ErrorBoundary
+                      key={ti}
+                      name="tool-call"
+                      rawContent={
+                        typeof tc.args === "string"
+                          ? tc.args
+                          : tc.args !== undefined
+                            ? JSON.stringify(tc.args)
+                            : undefined
+                      }
+                    >
+                      <details
+                        open={tc.status === "calling"}
+                        className="rounded-md border border-morning-mist dark:border-deep-space/80 bg-neutral-50/40 dark:bg-[#0d0f14]/15 overflow-hidden">
+                        <summary className="cursor-pointer hover:text-neutral-600 dark:hover:text-neutral-300 px-3 py-1.5 text-ui-caption font-mono select-none flex min-w-0 items-center gap-1.5 text-neutral-500 dark:text-neutral-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue">
+                          {tc.status === "calling" ? (
+                            <Loader2 className="w-3 h-3 animate-spin text-sora-blue" aria-hidden="true" />
+                          ) : tc.status === "error" ? (
+                            <AlertCircle className="w-3 h-3 text-red-500" aria-hidden="true" />
+                          ) : (
+                            <CheckCircle2 className="w-3 h-3 text-green-500" aria-hidden="true" />
+                          )}
+                          <Wrench className="w-3 h-3 opacity-60" aria-hidden="true" />
+                          <span className="shrink-0">{tc.toolName}</span>
+                          {tc.toolName === "web_search" && searchDetail && (
+                            <span
+                              className="min-w-0 truncate font-sans text-neutral-400/80 dark:text-neutral-500/80"
+                              title={searchAttemptPath
+                                ? `${t("webSearchAttemptPath")}: ${searchAttemptPath}`
+                                : searchMethod
+                                  ? `${t("webSearchMethod")}: ${searchMethod}`
+                                  : tc.statusDetail}
+                            >
+                              · {searchDetail}
+                            </span>
+                          )}
+                        </summary>
+                        {tc.args !== undefined && (
+                          <div className="px-3 pb-1.5 pt-1 text-ui-caption text-neutral-500 dark:text-neutral-400 border-t border-morning-mist dark:border-deep-space/60 font-mono break-all">
+                            {typeof tc.args === "string" ? tc.args : JSON.stringify(tc.args)}
+                          </div>
                         )}
-                        <Wrench className="w-3 h-3 opacity-60" aria-hidden="true" />
-                        <span className="shrink-0">{tc.toolName}</span>
-                        {tc.toolName === "web_search" && ti === firstWebSearchToolIndex && searchMethod && (
-                          <span
-                            className="min-w-0 truncate font-sans text-neutral-400/80 dark:text-neutral-500/80"
-                            title={`${t("webSearchMethod")}: ${searchMethod}`}
-                          >
-                            · {searchMethod}
-                          </span>
-                        )}
-                      </summary>
-                      {tc.args !== undefined && (
-                        <div className="px-3 pb-1.5 pt-1 text-ui-caption text-neutral-500 dark:text-neutral-400 border-t border-morning-mist dark:border-deep-space/60 font-mono break-all">
-                          {typeof tc.args === "string" ? tc.args : JSON.stringify(tc.args)}
-                        </div>
-                      )}
-                    </details>
-                  </ErrorBoundary>
-                ))}
+                      </details>
+                    </ErrorBoundary>
+                  );
+                })}
               </div>
             )}
             {content ? (

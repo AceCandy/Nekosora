@@ -85,6 +85,8 @@ export interface PrepareContextInput {
   visionValidated?: boolean;
   /** 挂载的知识库 ID。 */
   knowledgeBaseIds?: string[];
+  /** 本轮是否启用联网搜索；仅启用时注入动态日期上下文，避免普通聊天破坏 prompt cache。 */
+  webSearchEnabled?: boolean;
   /** Prompt 模板 ID + 变量。 */
   templateId?: string;
   templateVars?: Record<string, string>;
@@ -116,7 +118,7 @@ export async function prepareChatContext(
   const {
     userId, conversationId, conv, userContent, model, modelId, messages, branchLeafPublicId,
     fileIds: bodyFileIds, messageAttachments = [], visionValidated = false,
-    knowledgeBaseIds,
+    knowledgeBaseIds, webSearchEnabled = false,
     templateId, templateVars, instructionCardIds,
     db, schema: s,
   } = input;
@@ -312,7 +314,13 @@ export async function prepareChatContext(
   }
 
   // 合并 system 来源(output_mode + template + card)
-  const extraSystemParts = [outputModePrompt, templateResult.systemPrompt, cardSystemPrompt].filter(
+  const currentDatePrompt = webSearchEnabled ? buildCurrentDatePrompt() : null;
+  const extraSystemParts = [
+    currentDatePrompt,
+    outputModePrompt,
+    templateResult.systemPrompt,
+    cardSystemPrompt,
+  ].filter(
     (p): p is string => p !== null,
   );
   const mergedSystemPrompt =
@@ -464,4 +472,23 @@ export async function resolveModelGenerationSettings(args: {
   }
 
   return { ...calculateTokenBudgets(contextWindow, maxOutputTokens), modelSupportsTools };
+}
+
+const CHAT_TIME_ZONE = "Asia/Shanghai";
+
+function buildCurrentDatePrompt(now = new Date()): string {
+  const currentDate = new Intl.DateTimeFormat("en-CA", {
+    timeZone: CHAT_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+  return [
+    "[当前日期上下文]",
+    `当前日期：${currentDate}`,
+    `当前时区：${CHAT_TIME_ZONE}`,
+    "用户提到“今天、最近、本周、本月、最新、截至目前”等相对时间时，以此日期为准。",
+    "调用 web_search 时，优先使用 freshness；只有用户明确给出起止日期时才使用 dateAfter/dateBefore。",
+    "freshness 与 dateAfter/dateBefore 不能同时使用。",
+  ].join("\n");
 }

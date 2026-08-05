@@ -55,6 +55,16 @@ const PG_BASELINE_TABLES = [
   "verification",
 ];
 
+const PG_BASELINE_REQUIRED_COLUMNS = [
+  "runs.lease_expires_at",
+  "runs.duration_ms",
+  "runs.completed_at",
+  "tool_calls.status",
+  "tool_calls.input_json",
+  "tool_calls.output_json",
+  "tool_calls.error_json",
+];
+
 const TEST_MIGRATION_HASHES = ["a".repeat(64), "b".repeat(64), "c".repeat(64)];
 const LEGACY_BASELINE_HASH = "0f852461b32b9e206d15e4229ea861c7143efe9b220e341d3bcb0dcee8f6511c";
 const PRE_SQUASH_MIGRATION_HASHES = [
@@ -633,6 +643,9 @@ describe("runMigrations", () => {
       if (text.includes("from pg_tables")) {
         return { rows: PG_BASELINE_TABLES.map((name) => ({ name })) };
       }
+      if (text.includes("from information_schema.columns")) {
+        return { rows: PG_BASELINE_REQUIRED_COLUMNS.map((name) => ({ name })) };
+      }
       return { rows: [] };
     });
 
@@ -642,6 +655,38 @@ describe("runMigrations", () => {
 
     expect(executedSql.some((text) => text.includes('insert into drizzle.__drizzle_migrations'))).toBe(true);
     expect(migrate).toHaveBeenCalledWith(db, { migrationsFolder: "drizzle/pg" });
+  });
+
+  it("PG 基线表齐全但关键列缺失时拒绝自动收养", async () => {
+    const migrate = vi.fn(async () => undefined);
+    vi.doMock("drizzle-orm/node-postgres/migrator", () => ({ migrate }));
+
+    const { db } = pooledMigrationDb((text) => {
+      if (text.includes("from drizzle.__drizzle_migrations")) {
+        return { rows: [] };
+      }
+      if (text.includes("from pg_type")) {
+        return { rows: PG_BASELINE_TYPES.map((name) => ({ name })) };
+      }
+      if (text.includes("from pg_tables")) {
+        return { rows: PG_BASELINE_TABLES.map((name) => ({ name })) };
+      }
+      if (text.includes("from information_schema.columns")) {
+        return {
+          rows: PG_BASELINE_REQUIRED_COLUMNS
+            .filter((name) => name !== "tool_calls.output_json")
+            .map((name) => ({ name })),
+        };
+      }
+      return { rows: [] };
+    });
+
+    const { runMigrations } = await import("@/lib/infra/db/bootstrap");
+
+    await expect(runMigrations(db)).rejects.toThrow(
+      "PG 基线表存在但关键列不完整",
+    );
+    expect(migrate).not.toHaveBeenCalled();
   });
 
   it("PG 只有 enum 残留时继续执行幂等基线迁移", async () => {

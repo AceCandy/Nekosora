@@ -417,6 +417,7 @@ function finishToolCallAt(
   toolName: string,
   isError: boolean,
   toolCallId?: string,
+  details?: Pick<ToolCallRecord, "searchBackend" | "searchAttempts" | "statusDetail">,
 ): void {
   useChatStreamStore.setState((state) => {
     const runtime = state.runtimes[key];
@@ -428,7 +429,11 @@ function finishToolCallAt(
         ? calls[i].toolCallId === toolCallId
         : calls[i].toolName === toolName && calls[i].status === "calling";
       if (matches) {
-        calls[i] = { ...calls[i], status: isError ? "error" : "done" };
+        calls[i] = {
+          ...calls[i],
+          status: isError ? "error" : "done",
+          ...details,
+        };
         break;
       }
     }
@@ -449,10 +454,39 @@ function toolAndSearchHandlers(key: string, assistantIdx: number): Partial<SSEHa
       addToolCallAt(key, assistantIdx, { toolCallId, toolName, args, status: "calling" }),
     onToolResult: (toolName, isError, toolCallId) =>
       finishToolCallAt(key, assistantIdx, toolName, isError, toolCallId),
-    onSearchCompleted: (_toolCallId, citations, backend) =>
-      mergeSearchResultsAt(key, assistantIdx, citations, backend),
-    onSearchFailed: (toolCallId) =>
-      finishToolCallAt(key, assistantIdx, "web_search", true, toolCallId),
+    onSearchCompleted: (toolCallId, citations, backend, attempts) => {
+      mergeSearchResultsAt(key, assistantIdx, citations, backend);
+      finishToolCallAt(
+        key,
+        assistantIdx,
+        "web_search",
+        false,
+        toolCallId,
+        {
+          ...(backend ? { searchBackend: backend } : {}),
+          ...(attempts?.length
+            ? { searchAttempts: attempts.map(({ backend: attemptedBackend, outcome }) => ({
+                backend: attemptedBackend,
+                outcome,
+              })) }
+            : {}),
+        },
+      );
+    },
+    onSearchFailed: (toolCallId, reason, attempts) =>
+      finishToolCallAt(
+        key,
+        assistantIdx,
+        "web_search",
+        true,
+        toolCallId,
+        {
+          statusDetail: reason,
+          ...(attempts?.length
+            ? { searchAttempts: attempts.map(({ backend, outcome }) => ({ backend, outcome })) }
+            : {}),
+        },
+      ),
     // 兼容同版本部署期间的旧搜索结果帧。
     onSearchResult: (results) => mergeSearchResultsAt(key, assistantIdx, results),
   };

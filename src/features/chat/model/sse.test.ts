@@ -68,9 +68,9 @@ describe("consumeChatSSE", () => {
     const body = streamFrom(
       'data: {"type":"tool_call","toolCallId":"tc-1","toolName":"web_search","args":{"query":"latest"}}\n\n' +
       'data: {"type":"search_started","toolCallId":"tc-1","query":"latest"}\n\n' +
-      'data: {"type":"search_completed","toolCallId":"tc-1","backend":{"type":"provider","id":"tavily","name":"Tavily"},"citations":[{"title":"Source","url":"https://example.com","publishedAt":"2026-08-03T00:00:00.000Z"}]}\n\n' +
+      'data: {"type":"search_completed","toolCallId":"tc-1","backend":{"type":"provider","id":"tavily","name":"Tavily"},"citations":[{"title":"Source","url":"https://example.com","publishedAt":"2026-08-03T00:00:00.000Z"}],"attempts":[{"backend":{"type":"provider","id":"tavily","name":"Tavily"},"outcome":"success","durationMs":12}]}\n\n' +
       'data: {"type":"tool_result","toolCallId":"tc-1","toolName":"web_search","isError":false}\n\n' +
-      'data: {"type":"search_failed","toolCallId":"tc-2","reason":"unavailable"}\n\n' +
+      'data: {"type":"search_failed","toolCallId":"tc-2","reason":"unavailable","attempts":[{"backend":{"type":"provider","id":"tavily","name":"Tavily"},"outcome":"failed","durationMs":9},{"backend":{"type":"current-model","name":"Current model"},"outcome":"unsupported","durationMs":1}]}\n\n' +
       'data: {"type":"terminal","status":"interrupted"}\n\n' +
       "data: [DONE]\n\n",
     );
@@ -94,9 +94,25 @@ describe("consumeChatSSE", () => {
         publishedAt: "2026-08-03T00:00:00.000Z",
       }],
       { type: "provider", id: "tavily", name: "Tavily" },
+      [{
+        backend: { type: "provider", id: "tavily", name: "Tavily" },
+        outcome: "success",
+        durationMs: 12,
+      }],
     );
     expect(onToolResult).toHaveBeenCalledWith("web_search", false, "tc-1");
-    expect(onSearchFailed).toHaveBeenCalledWith("tc-2", "unavailable");
+    expect(onSearchFailed).toHaveBeenCalledWith("tc-2", "unavailable", [
+      {
+        backend: { type: "provider", id: "tavily", name: "Tavily" },
+        outcome: "failed",
+        durationMs: 9,
+      },
+      {
+        backend: { type: "current-model", name: "Current model" },
+        outcome: "unsupported",
+        durationMs: 1,
+      },
+    ]);
   });
 
   it("收到可靠 DONE 后立即结束，不等待网络 EOF", async () => {
