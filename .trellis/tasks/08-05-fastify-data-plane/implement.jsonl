@@ -1,0 +1,6 @@
+{"file":".trellis/spec/backend/gateway-routing.md","reason":"Preserve all gateway routing and execution contracts."}
+{"file":".trellis/spec/backend/auth-guidelines.md","reason":"Preserve session/API-key authorization boundaries."}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Preserve localized API errors."}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"Preserve usage, metrics and redaction."}
+{"file":".trellis/spec/backend/file-storage.md","reason":"Preserve upload/file storage contracts."}
+{"file":".trellis/tasks/08-05-gateway-runtime-separation/research/runtime-boundaries.md","reason":"Use mapped Next/Fastify boundaries and official API findings."}

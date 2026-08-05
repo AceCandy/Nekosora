@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/directory-structure.md","reason":"Preserve current layer ownership while moving the Web app."}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"Preserve instrumentation, migration and PostgreSQL build boundaries."}
+{"file":".trellis/spec/backend/dependency-security.md","reason":"Review Next/tooling upgrades and lockfile changes."}
+{"file":".trellis/spec/frontend/index.md","reason":"Preserve frontend App Router and quality conventions."}
+{"file":".trellis/tasks/08-05-gateway-runtime-separation/research/runtime-boundaries.md","reason":"Use researched Next/Turbopack and runtime constraints."}

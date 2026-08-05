@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/queue-lifecycle.md","reason":"Primary queue/worker lifecycle contract."}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"Preserve process-local pools and shutdown behavior."}
+{"file":".trellis/spec/backend/file-storage.md","reason":"Preserve shared local/S3 processing behavior."}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"Keep worker logs payload- and credential-safe."}

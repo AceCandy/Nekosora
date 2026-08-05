@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"Check Next instrumentation and production build gates."}
+{"file":".trellis/spec/backend/dependency-security.md","reason":"Check versions, overrides and lockfile security."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Run required frontend checks after the move."}
+{"file":".trellis/tasks/08-05-gateway-runtime-separation/research/runtime-boundaries.md","reason":"Verify the workspace result against runtime research."}

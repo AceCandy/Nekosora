@@ -1,0 +1,31 @@
+{
+  "id": "gateway-runtime-separation",
+  "name": "gateway-runtime-separation",
+  "title": "网关运行时分离与 Next 16 升级",
+  "description": "",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "AceCandy",
+  "assignee": "AceCandy",
+  "createdAt": "2026-08-05",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "08-05-runtime-cutover",
+    "08-05-worker-queue-boundary",
+    "08-05-fastify-data-plane",
+    "08-05-workspace-next16"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

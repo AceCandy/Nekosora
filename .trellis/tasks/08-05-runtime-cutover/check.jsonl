@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/dependency-security.md","reason":"Audit image and lockfile integrity."}
+{"file":".trellis/spec/backend/auth-guidelines.md","reason":"Check public-origin behavior through ingress."}
+{"file":".trellis/spec/backend/file-storage.md","reason":"Check volume and storage semantics."}
+{"file":".trellis/spec/backend/queue-lifecycle.md","reason":"Check process health and queue readiness semantics."}
+{"file":".trellis/tasks/08-05-gateway-runtime-separation/research/runtime-boundaries.md","reason":"Check deployment against the planned routing boundary."}

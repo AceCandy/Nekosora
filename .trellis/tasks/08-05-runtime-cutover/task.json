@@ -1,0 +1,28 @@
+{
+  "id": "runtime-cutover",
+  "name": "runtime-cutover",
+  "title": "生产编排与无损切流",
+  "description": "",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "AceCandy",
+  "assignee": "AceCandy",
+  "createdAt": "2026-08-05",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": "08-05-gateway-runtime-separation",
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "depends_on": "08-05-workspace-next16,08-05-fastify-data-plane,08-05-worker-queue-boundary"
+  }
+}

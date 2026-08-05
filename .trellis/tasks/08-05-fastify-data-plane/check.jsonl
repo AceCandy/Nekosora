@@ -1,0 +1,6 @@
+{"file":".trellis/spec/backend/gateway-routing.md","reason":"Check route/failover/tool behavior parity."}
+{"file":".trellis/spec/backend/auth-guidelines.md","reason":"Check auth and trust boundaries."}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Check status/body/localization parity."}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"Check telemetry and sensitive-data handling."}
+{"file":".trellis/spec/backend/file-storage.md","reason":"Check upload/range/private-read behavior."}
+{"file":".trellis/tasks/08-05-gateway-runtime-separation/research/runtime-boundaries.md","reason":"Check against researched HTTP/runtime risks."}

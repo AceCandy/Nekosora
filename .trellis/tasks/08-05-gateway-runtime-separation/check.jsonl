@@ -1,0 +1,6 @@
+{"file":".trellis/spec/backend/index.md","reason":"Check all affected backend contracts."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Check Web workspace and client compatibility."}
+{"file":".trellis/spec/backend/gateway-routing.md","reason":"Verify routing/failover parity."}
+{"file":".trellis/spec/backend/queue-lifecycle.md","reason":"Verify queue/worker lifecycle parity."}
+{"file":".trellis/spec/backend/dependency-security.md","reason":"Audit new pinned dependencies and lockfile changes."}
+{"file":".trellis/tasks/08-05-gateway-runtime-separation/research/runtime-boundaries.md","reason":"Verify implementation against researched boundaries."}

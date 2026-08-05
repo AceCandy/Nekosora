@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/dependency-security.md","reason":"Review production images and dependency installation."}
+{"file":".trellis/spec/backend/auth-guidelines.md","reason":"Preserve host/origin/cookie behavior through ingress."}
+{"file":".trellis/spec/backend/file-storage.md","reason":"Preserve shared-volume and object-storage behavior."}
+{"file":".trellis/spec/backend/queue-lifecycle.md","reason":"Configure correct Gateway/Worker readiness semantics."}
+{"file":".trellis/tasks/08-05-gateway-runtime-separation/research/runtime-boundaries.md","reason":"Use the researched production routing boundary."}

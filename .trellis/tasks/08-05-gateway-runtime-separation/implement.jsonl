@@ -1,0 +1,8 @@
+{"file":".trellis/spec/backend/index.md","reason":"Backend guideline index for the cross-runtime architecture."}
+{"file":".trellis/spec/backend/gateway-routing.md","reason":"Preserve gateway routing, failover and capability contracts."}
+{"file":".trellis/spec/backend/queue-lifecycle.md","reason":"Preserve pg-boss producer/worker lifecycle and drain contracts."}
+{"file":".trellis/spec/backend/auth-guidelines.md","reason":"Preserve Better Auth and resource authorization boundaries."}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Preserve public error and localization contracts."}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"Preserve usage, TTFT and redaction behavior."}
+{"file":".trellis/spec/backend/file-storage.md","reason":"Preserve local/S3 file authorization and range behavior."}
+{"file":".trellis/tasks/08-05-gateway-runtime-separation/research/runtime-boundaries.md","reason":"Local and third-party runtime-boundary evidence."}
