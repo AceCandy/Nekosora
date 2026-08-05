@@ -498,3 +498,26 @@ Added privacy-safe memory extraction stage logs, diagnosed mem0 SQLite native bi
 ### Status
 
 [OK] **Completed**
+
+
+## Session 83: pnpm workspace 与 Next 16 迁移
+
+**Date**: 2026-08-05
+**Task**: pnpm workspace 与 Next 16 迁移
+**Branch**: `main`
+
+### Summary
+
+完成 pnpm workspace 建立、Web 应用迁入 apps/web、Next.js 16.3.0 升级、Turbopack/Webpack 与 standalone 验证，并规划后续 Fastify Gateway、Worker 隔离和生产切流任务。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a654df4` | (see git log) |
+| `321f47b` | (see git log) |
+| `02f54f3` | (see git log) |
+
+### Status
+
+[OK] **Completed**
