@@ -5,13 +5,15 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./catalog": "./src/catalog.ts"
+    "./catalog": "./src/catalog.ts",
+    "./types": "./src/types.ts"
   },
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@nekusora/contracts": "workspace:*",
     "pg-boss": "^11.0.0"
   },
   "devDependencies": {

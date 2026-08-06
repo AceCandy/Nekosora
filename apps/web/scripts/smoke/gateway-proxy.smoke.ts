@@ -196,7 +196,7 @@ try {
   await writeFile(
     join(fixture, "next.config.mjs"),
     `export default {
-  serverExternalPackages: ["pg", "pg-boss"],
+  serverExternalPackages: ["pg"],
   webpack(config) {
     config.resolve.alias["@/db"] = ${JSON.stringify(join(repoRoot, "packages/db/src"))};
     config.resolve.alias["@"] = ${JSON.stringify(join(repoRoot, "packages/core/src"))};

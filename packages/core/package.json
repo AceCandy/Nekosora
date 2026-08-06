@@ -23,10 +23,13 @@
     "./http/v1/models": "./src/http/v1/models.ts",
     "./http/v1/transcription-limits": "./src/http/v1/transcription-limits.ts",
     "./process-guards": "./src/lib/infra/process-guards.ts",
+    "./queue": "./src/lib/infra/queue.ts",
     "./storage": "./src/storage/index.ts",
     "./storage/driver": "./src/storage/driver.ts",
     "./storage/local": "./src/storage/local.ts",
-    "./storage/s3": "./src/storage/s3.ts"
+    "./storage/s3": "./src/storage/s3.ts",
+    "./worker/definitions": "./src/lib/worker/definitions.ts",
+    "./worker/runtime": "./src/lib/worker/runtime.ts"
   },
   "scripts": {
     "test": "vitest run",
@@ -45,7 +48,6 @@
     "@nekusora/contracts": "workspace:*",
     "@nekusora/db": "workspace:*",
     "@nekusora/observability": "workspace:*",
-    "@nekusora/queue": "workspace:*",
     "ai": "^7.0.31",
     "better-auth": "^1.6.23",
     "cache-manager": "^6.0.0",

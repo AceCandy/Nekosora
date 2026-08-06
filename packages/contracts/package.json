@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     "./chat": "./src/chat.ts",
+    "./queue": "./src/queue.ts",
     "./structured": "./src/structured.ts",
     "./routes": "./src/routes.ts"
   },

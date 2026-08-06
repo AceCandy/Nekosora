@@ -48,10 +48,14 @@ export interface WorkerRuntimeController {
   shutdown(): Promise<void>;
 }
 
-interface CreateWorkerRuntimeOptions {
+export type WorkerRuntimeState = "starting" | "ready" | "stopping" | "stopped";
+
+export interface CreateWorkerRuntimeOptions {
   readonly queue: Pick<QueueAdapter, "start" | "work" | "stop">;
   readonly definitions: readonly WorkerDefinition[];
   readonly process: WorkerProcess;
+  readonly onStateChange?: (state: WorkerRuntimeState) => void;
+  readonly closeResources?: () => Promise<void>;
   readonly logger?: WorkerLogger;
   readonly timers?: WorkerTimers;
   readonly schedulerFactory?: (
@@ -141,6 +145,12 @@ export function createWorkerRuntime(
   let cleanupPromise: Promise<boolean> | null = null;
   let shutdownPromise: Promise<void> | null = null;
 
+  function setState(nextState: typeof state): void {
+    state = nextState;
+    const publicState = nextState === "running" ? "ready" : nextState;
+    if (publicState !== "idle") options.onStateChange?.(publicState);
+  }
+
   function cleanup(): Promise<boolean> {
     if (cleanupPromise) return cleanupPromise;
     cleanupPromise = (async () => {
@@ -160,6 +170,12 @@ export function createWorkerRuntime(
         failed = true;
         logger.error("[worker] queue stop failed");
       }
+      try {
+        await options.closeResources?.();
+      } catch {
+        failed = true;
+        logger.error("[worker] resource close failed");
+      }
       return failed;
     })();
     return cleanupPromise;
@@ -167,7 +183,7 @@ export function createWorkerRuntime(
 
   function shutdown(): Promise<void> {
     if (shutdownPromise) return shutdownPromise;
-    state = "stopping";
+    setState("stopping");
     shutdownPromise = (async () => {
       logger.log("[worker] stopping");
       if (startPromise) {
@@ -178,7 +194,7 @@ export function createWorkerRuntime(
         }
       }
       const failed = await cleanup();
-      state = "stopped";
+      setState("stopped");
       runtimeProcess.exit(failed ? 1 : 0);
     })();
     return shutdownPromise;
@@ -189,7 +205,7 @@ export function createWorkerRuntime(
       return Promise.reject(new Error("worker runtime 已停止"));
     }
     if (startPromise) return startPromise;
-    state = "starting";
+    setState("starting");
     startPromise = (async () => {
       try {
         await queue.start();
@@ -215,12 +231,12 @@ export function createWorkerRuntime(
         }
         runtimeProcess.on("SIGINT", shutdown);
         runtimeProcess.on("SIGTERM", shutdown);
-        state = "running";
+        setState("running");
         logger.log("[worker] ready");
       } catch (error) {
-        state = "stopping";
+        setState("stopping");
         await cleanup();
-        state = "stopped";
+        setState("stopped");
         throw error;
       }
     })();

@@ -77,7 +77,7 @@ export default async function OperationsPage() {
             <DepRow name={t("depCache")} value={env.hasRedis ? "Redis" : t("depCacheLru")} ok />
             <DepRow
               name={t("depQueue")}
-              value="pg-boss (PostgreSQL)"
+              value={t("depQueueWorker")}
               ok
             />
             <DepRow

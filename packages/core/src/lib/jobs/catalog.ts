@@ -1,1 +1,1 @@
-export * from "@nekusora/queue/catalog";
+export * from "@nekusora/contracts/queue";

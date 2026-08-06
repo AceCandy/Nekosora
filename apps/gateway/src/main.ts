@@ -1,8 +1,9 @@
 import { bootstrapDatabase } from "@nekusora/core/bootstrap";
 import { validateEnv } from "@nekusora/core/env";
 import { installGlobalErrorGuards } from "@nekusora/core/process-guards";
+import { configureQueueProvider } from "@nekusora/core/queue";
 import { closeDb } from "@nekusora/db";
-import { closeQueue } from "@nekusora/queue";
+import { closeQueue, getQueue } from "@nekusora/queue";
 import { buildServer } from "./server";
 
 let server: ReturnType<typeof buildServer> | undefined;
@@ -10,6 +11,7 @@ let server: ReturnType<typeof buildServer> | undefined;
 async function main(): Promise<void> {
   installGlobalErrorGuards();
   validateEnv();
+  configureQueueProvider(getQueue);
   await bootstrapDatabase();
 
   server = buildServer();

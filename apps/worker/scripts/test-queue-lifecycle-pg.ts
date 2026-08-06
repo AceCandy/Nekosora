@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import type { JobOutcome } from "@/lib/jobs/catalog";
+import type { JobOutcome } from "@nekusora/contracts/queue";
 
 const DATABASE_PREFIX = "nekusora_queue_lifecycle_test_";
 const HANDLER_START_TIMEOUT_MS = 15_000;
@@ -67,7 +67,7 @@ async function main(): Promise<void> {
   const { default: pg } = await import("pg");
   const admin = new pg.Client({ connectionString: adminUrl });
   let inspection: InstanceType<typeof pg.Client> | null = null;
-  let queue: Awaited<ReturnType<typeof import("@/lib/infra/queue")["getQueue"]>> | null = null;
+  let queue: Awaited<ReturnType<typeof import("@nekusora/queue")["getQueue"]>> | null = null;
   let created = false;
   const cleanGate = deferred<JobOutcome>();
   const timeoutGate = deferred<JobOutcome>();
@@ -87,8 +87,8 @@ async function main(): Promise<void> {
     await inspection.connect();
 
     failureStage = "load-queue";
-    const queueModule = await import("@/lib/infra/queue");
-    const { FILE_PROCESS_QUEUE } = await import("@/lib/jobs/catalog");
+    const queueModule = await import("@nekusora/queue");
+    const { FILE_PROCESS_QUEUE } = await import("@nekusora/contracts/queue");
     queue = await queueModule.getQueue();
 
     failureStage = "clean-register";

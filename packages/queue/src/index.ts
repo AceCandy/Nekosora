@@ -2,39 +2,18 @@
  * 任务队列 —— pg-boss(PostgreSQL)。
  *
  * 用途:文件处理、记忆提取与会话标题等异步任务。
- * typed catalog 入队到 pg-boss,由独立进程 src/worker.ts 消费。
+ * typed catalog 入队到 pg-boss，由独立 Worker 进程消费。
  *
  * pg-boss 的表位于独立的 `pgboss` schema,与 Drizzle 的 `public` schema 不冲突。
  *
- * pg-boss 与 pg 由 Next serverExternalPackages 保持为 Node 运行时依赖。
  */
 import type {
-  JobOutcome,
   QueueDefinition,
-  QueuePayload,
   QueuePolicy,
 } from "./catalog";
+import type { QueueAdapter } from "@nekusora/contracts/queue";
 
-type JobHandler<T = unknown> = (data: T) => Promise<JobOutcome>;
-
-export interface QueueAdapter {
-  readonly available: boolean;
-  /** 入队(返回 job id)。 */
-  send<TDefinition extends QueueDefinition<object>>(
-    definition: TDefinition,
-    data: NoInfer<QueuePayload<TDefinition>>,
-    opts?: { startAfter?: number },
-  ): Promise<string>;
-  /** 注册 handler(仅 worker 进程调用)。 */
-  work<TDefinition extends QueueDefinition<object>>(
-    definition: TDefinition,
-    handler: JobHandler<QueuePayload<TDefinition>>,
-  ): Promise<void>;
-  /** 初始化(创建 schema/表)。 */
-  start(): Promise<void>;
-  /** 关闭。 */
-  stop(): Promise<void>;
-}
+export type { JobHandler, QueueAdapter } from "@nekusora/contracts/queue";
 
 export const QUEUE_DRAIN_TIMEOUT_MESSAGE = "队列任务未在关闭期限内完成";
 const QUEUE_STOP_TIMEOUT_MS = 30_000;

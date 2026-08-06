@@ -8,11 +8,14 @@
   "scripts": {
     "dev": "pnpm --filter @nekusora/web dev",
     "dev:gateway": "pnpm --filter @nekusora/gateway dev",
+    "dev:worker": "pnpm --filter @nekusora/worker dev",
     "build": "pnpm --filter @nekusora/web build",
     "build:gateway": "pnpm --filter @nekusora/gateway build",
+    "build:worker": "pnpm --filter @nekusora/worker build",
     "build:webpack": "pnpm --filter @nekusora/web build:webpack",
     "start": "pnpm --filter @nekusora/web start",
     "start:gateway": "pnpm --filter @nekusora/gateway start",
+    "start:worker": "pnpm --filter @nekusora/worker start",
     "lint": "pnpm -r --if-present lint",
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test",
@@ -24,7 +27,7 @@
     "auth:generate": "pnpm --filter @nekusora/web auth:generate",
     "auth:migrate": "pnpm --filter @nekusora/web auth:migrate",
     "seed": "pnpm --filter @nekusora/web seed",
-    "worker": "pnpm --filter @nekusora/web worker",
+    "worker": "pnpm --filter @nekusora/worker dev",
     "icons:generate": "pnpm --filter @nekusora/web icons:generate",
     "sync:pi-models": "pnpm --filter @nekusora/web sync:pi-models",
     "backfill:web-search-keys": "pnpm --filter @nekusora/web backfill:web-search-keys"

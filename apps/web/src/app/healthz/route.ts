@@ -2,7 +2,7 @@
  * 健康检查端点。
  *
  * GET /healthz        —— 存活探针(liveness):进程在跑就 200。
- * GET /healthz/ready  —— 就绪探针(readiness):检查 DB / Storage / Queue 等依赖。
+ * GET /healthz/ready  —— 就绪探针(readiness):检查 Web 自身 DB / Storage 依赖。
  *
  * 部署时:
  *   - livenessProbe  → /healthz(重启判定)

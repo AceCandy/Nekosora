@@ -13,6 +13,7 @@ next-env.d.ts
 # production
 /build
 /apps/gateway/dist/
+/apps/worker/dist/
 
 # misc
 .DS_Store

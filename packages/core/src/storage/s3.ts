@@ -6,7 +6,7 @@
  *   - R2:       endpoint=https://<account>.r2.cloudflaretunnel.com, region="auto"
  *   - MinIO:    endpoint=http://minio:9000, region 任意(常用 "us-east-1")
  *
- * AWS SDK v3 用动态 import(对标 queue.ts 对 pg-boss 的处理),阻断 Turbopack
+ * AWS SDK v3 用动态 import，阻断 Turbopack
  * 把它拉入 Edge instrumentation bundle(aws-sdk 体积大,且依赖 node 内置模块)。
  *
  * 公网直链:配了 S3_PUBLIC_BASE_URL(CDN/公开 bucket 前缀)时 publicReadable=true,

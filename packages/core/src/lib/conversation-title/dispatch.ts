@@ -9,6 +9,7 @@ const RECOVERY_SCAN_LIMIT = 25;
 
 /** 原子 claim 到期任务并发送队列；业务完成前始终保留 outbox。 */
 export async function dispatchConversationTitleJob(jobId: string): Promise<boolean> {
+  const queue = await getQueue();
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
@@ -22,7 +23,6 @@ export async function dispatchConversationTitleJob(jobId: string): Promise<boole
     .returning({ id: s.conversationTitleJobs.id });
   if (!claimed) return false;
 
-  const queue = await getQueue();
   await queue.send(CONVERSATION_TITLE_QUEUE, { id: String(claimed.id) });
   return true;
 }

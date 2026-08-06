@@ -441,7 +441,7 @@
       "depCache": "Cache",
       "depCacheLru": "In-memory LRU (fallback)",
       "depQueue": "Task queue",
-      "depQueueDisabled": "Disabled (pg-boss not ready)",
+      "depQueueWorker": "Independent Worker",
       "depStorage": "Object storage",
       "depStorageLocal": "Local disk (fallback)",
       "depMetrics": "Metrics endpoint",

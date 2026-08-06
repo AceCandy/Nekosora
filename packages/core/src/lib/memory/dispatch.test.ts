@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   jobs: [] as Record<string, unknown>[],
+  getQueue: vi.fn(),
   send: vi.fn(),
 }));
 
@@ -14,7 +15,7 @@ vi.mock("drizzle-orm", () => ({
 }));
 
 vi.mock("@/lib/infra/queue", () => ({
-  getQueue: vi.fn(async () => ({ send: mocks.send })),
+  getQueue: mocks.getQueue,
 }));
 
 vi.mock("@/lib/infra/db", () => {
@@ -77,10 +78,21 @@ function job(id: string, dispatchAfter = -1, createdAt = 0) {
 
 beforeEach(() => {
   mocks.jobs = [];
+  mocks.getQueue.mockReset().mockResolvedValue({ send: mocks.send });
   mocks.send.mockReset().mockResolvedValue("queue-job-1");
 });
 
 describe("memory extraction dispatch", () => {
+  it("队列驱动未配置时不 claim durable intent", async () => {
+    mocks.jobs = [job("job-1")];
+    mocks.getQueue.mockRejectedValue(new Error("queue unavailable"));
+
+    await expect(dispatchMemoryExtractionJob("job-1")).rejects.toThrow("queue unavailable");
+
+    expect(mocks.jobs[0]!.dispatchAfter).toBe(-1);
+    expect(mocks.send).not.toHaveBeenCalled();
+  });
+
   it("并发 dispatcher 对同一 intent 只有一个 claim", async () => {
     mocks.jobs = [job("job-1")];
 

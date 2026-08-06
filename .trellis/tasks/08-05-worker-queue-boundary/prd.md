@@ -13,11 +13,11 @@ Move the pg-boss consumer into `apps/worker`, preserve all queue lifecycle guara
 
 ## Acceptance Criteria
 
-- [ ] Existing queue adapter/runtime/definition tests pass from the Worker/shared packages.
-- [ ] Real PostgreSQL lifecycle tests prove completion, retry and drain timeout behavior.
-- [ ] Worker readiness changes correctly across startup, running and shutdown.
-- [ ] Web build and dependency graph contain no pg-boss adapter.
-- [ ] Repeated SIGINT/SIGTERM performs one cleanup and one exit.
+- [x] Existing queue adapter/runtime/definition tests pass from the Worker/shared packages.
+- [x] Real PostgreSQL lifecycle tests prove completion, retry and drain timeout behavior.
+- [x] Worker readiness changes correctly across startup, running and shutdown.
+- [x] Web build and dependency graph contain no pg-boss adapter.
+- [x] Repeated SIGINT/SIGTERM performs one cleanup and one exit.
 
 ## Out of Scope
 

@@ -9,6 +9,7 @@ const RECOVERY_SCAN_LIMIT = 25;
 
 /** 原子 claim 到期 intent 并发送 job id；业务完成前不删除 durable row。 */
 export async function dispatchMemoryExtractionJob(jobId: string): Promise<boolean> {
+  const queue = await getQueue();
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
@@ -22,7 +23,6 @@ export async function dispatchMemoryExtractionJob(jobId: string): Promise<boolea
     .returning({ id: s.memoryExtractionJobs.id });
   if (!claimed) return false;
 
-  const queue = await getQueue();
   await queue.send(MEMORY_EXTRACTION_QUEUE, { id: String(claimed.id) });
   return true;
 }

@@ -200,6 +200,38 @@ describe("worker runtime", () => {
     await expect(runtime.start()).rejects.toThrow("worker runtime 已停止");
   });
 
+  it("按生命周期更新状态并在 queue drain 后关闭进程资源", async () => {
+    const calls: string[] = [];
+    const runtime = createWorkerRuntime({
+      queue: {
+        start: vi.fn().mockResolvedValue(undefined),
+        work: vi.fn().mockResolvedValue(undefined),
+        stop: vi.fn(async () => { calls.push("queue.stop"); }),
+      },
+      definitions: [],
+      process: {
+        on: vi.fn(),
+        exit: vi.fn((code: number) => { calls.push(`exit:${code}`); }),
+      },
+      onStateChange: (state) => { calls.push(`state:${state}`); },
+      closeResources: vi.fn(async () => { calls.push("resources.close"); }),
+      logger: { log: vi.fn(), error: vi.fn() },
+    });
+
+    await runtime.start();
+    await runtime.shutdown();
+
+    expect(calls).toEqual([
+      "state:starting",
+      "state:ready",
+      "state:stopping",
+      "queue.stop",
+      "resources.close",
+      "state:stopped",
+      "exit:0",
+    ]);
+  });
+
   it("启动期间 shutdown 等待启动收敛且不再注册后续资源", async () => {
     const queueStart = deferred<void>();
     const queue = {

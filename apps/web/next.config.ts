@@ -22,7 +22,7 @@ const nextConfig: NextConfig = {
   // mem0ai 是大 bundle,内部动态 import 各 provider SDK(aws/azure/google/qdrant...);
   // 我们只用 pgvector+openai。标为 server external,构建时不打包其依赖图,运行时按需 require,
   // 避免 webpack 解析缺失的 peer provider SDK(如 @aws-sdk/client-bedrock-runtime)。
-  serverExternalPackages: ["mem0ai", "pg", "pg-boss"],
+  serverExternalPackages: ["mem0ai", "pg"],
   experimental: {
     serverActions: { bodySizeLimit: "10mb" },
   },
