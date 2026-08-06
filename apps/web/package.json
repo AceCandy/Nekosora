@@ -14,7 +14,6 @@
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:gateway-proxy": "tsx scripts/smoke/gateway-proxy.smoke.ts",
     "test:watch": "vitest",
     "check": "pnpm lint && pnpm typecheck",
     "db:generate:pg": "drizzle-kit generate --config=drizzle.pg.config.ts",

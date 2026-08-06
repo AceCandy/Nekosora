@@ -1,0 +1,162 @@
+name: nekusora
+
+x-common-environment: &common-environment
+  NODE_ENV: production
+  DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in the production env file}
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+  DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:?Set DATA_ENCRYPTION_KEY in the production env file}
+  BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Set BETTER_AUTH_SECRET in the production env file}
+  BETTER_AUTH_URL: ${BETTER_AUTH_URL:?Set BETTER_AUTH_URL in the production env file}
+  SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@nekusora.local}
+  SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:?Set SEED_ADMIN_PASSWORD in the production env file}
+  SEED_ADMIN_NAME: ${SEED_ADMIN_NAME:-Administrator}
+
+x-storage-environment: &storage-environment
+  STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
+  LOCAL_STORAGE_DIR: /app/uploads
+  S3_ENDPOINT: ${S3_ENDPOINT:-}
+  S3_REGION: ${S3_REGION:-auto}
+  S3_BUCKET: ${S3_BUCKET:-}
+  S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+  S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+  S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-}
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-nekusora}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the production env file}
+      POSTGRES_DB: ${POSTGRES_DB:-nekusora}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [backend]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [backend]
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: nekusora-web:${IMAGE_TAG:-local}
+    restart: unless-stopped
+    environment:
+      <<: *common-environment
+      DB_POOL_MAX: ${WEB_DB_POOL_MAX:-5}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/healthz/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      start_period: 20s
+      retries: 6
+    networks: [backend, ingress]
+
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.gateway
+    image: nekusora-gateway:${IMAGE_TAG:-local}
+    restart: unless-stopped
+    stop_grace_period: 35s
+    environment:
+      <<: [*common-environment, *storage-environment]
+      DB_POOL_MAX: ${GATEWAY_DB_POOL_MAX:-10}
+      METRICS_ENABLED: ${METRICS_ENABLED:-true}
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/healthz/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      start_period: 20s
+      retries: 6
+    networks: [backend, ingress]
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    image: nekusora-worker:${IMAGE_TAG:-local}
+    restart: unless-stopped
+    stop_grace_period: 35s
+    environment:
+      <<: [*common-environment, *storage-environment]
+      WORKER_DB_POOL_MAX: ${WORKER_DB_POOL_MAX:-5}
+      WORKER_HEALTH_HOST: 0.0.0.0
+      WORKER_HEALTH_PORT: 4001
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4001/healthz/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      start_period: 20s
+      retries: 6
+    networks: [backend]
+
+  edge-router:
+    image: nginxinc/nginx-unprivileged:1.29-alpine
+    restart: unless-stopped
+    environment:
+      METRICS_ALLOW_CIDR: ${METRICS_ALLOW_CIDR:-127.0.0.1/32}
+      NGINX_ENVSUBST_FILTER: ^METRICS_ALLOW_CIDR$
+    volumes:
+      - ./edge/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./edge/gateway-proxy.conf:/etc/nginx/snippets/gateway-proxy.conf:ro
+      - ./edge/web-proxy.conf:/etc/nginx/snippets/web-proxy.conf:ro
+    depends_on:
+      web:
+        condition: service_healthy
+      gateway:
+        condition: service_healthy
+    ports:
+      - "${APP_PORT:-3000}:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/edge-healthz"]
+      interval: 10s
+      timeout: 3s
+      start_period: 5s
+      retries: 6
+    networks: [ingress]
+
+volumes:
+  postgres-data:
+  redis-data:
+  uploads:
+
+networks:
+  backend:
+    internal: true
+  ingress:

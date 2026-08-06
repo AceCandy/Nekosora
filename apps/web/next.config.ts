@@ -3,7 +3,6 @@ import createNextIntlPlugin from "next-intl/plugin";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { loadEnvFile } from "node:process";
-import { buildGatewayRewrites } from "./src/gateway-rewrites";
 
 const workspaceEnv = resolve(import.meta.dirname, "../../.env.local");
 if (existsSync(workspaceEnv)) loadEnvFile(workspaceEnv);
@@ -25,9 +24,6 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["mem0ai", "pg"],
   experimental: {
     serverActions: { bodySizeLimit: "10mb" },
-  },
-  async rewrites() {
-    return buildGatewayRewrites(process.env.GATEWAY_INTERNAL_URL);
   },
 };
 

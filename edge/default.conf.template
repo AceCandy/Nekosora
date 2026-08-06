@@ -1,0 +1,69 @@
+upstream nekusora_web {
+  zone nekusora_web 64k;
+  server web:3000 resolve;
+  keepalive 32;
+}
+
+upstream nekusora_gateway {
+  zone nekusora_gateway 64k;
+  server gateway:4000 resolve;
+  keepalive 64;
+}
+
+resolver 127.0.0.11 valid=10s ipv6=off;
+
+map $http_x_forwarded_proto $nekusora_forwarded_proto {
+  default $scheme;
+  http http;
+  https https;
+}
+
+server {
+  listen 8080 default_server;
+  server_name _;
+  client_max_body_size 10m;
+
+  location = /edge-healthz {
+    access_log off;
+    default_type application/json;
+    return 200 '{"status":"ok"}\n';
+  }
+
+  location = /metrics {
+    allow ${METRICS_ALLOW_CIDR};
+    deny all;
+    include /etc/nginx/snippets/gateway-proxy.conf;
+  }
+
+  location ^~ /v1/ {
+    include /etc/nginx/snippets/gateway-proxy.conf;
+  }
+
+  location = /api/chat {
+    include /etc/nginx/snippets/gateway-proxy.conf;
+  }
+
+  location = /api/upload {
+    include /etc/nginx/snippets/gateway-proxy.conf;
+  }
+
+  location ^~ /api/files/ {
+    include /etc/nginx/snippets/gateway-proxy.conf;
+  }
+
+  location = /api/images {
+    include /etc/nginx/snippets/gateway-proxy.conf;
+  }
+
+  location ^~ /api/images/ {
+    include /etc/nginx/snippets/gateway-proxy.conf;
+  }
+
+  location = /api/knowledge/search {
+    include /etc/nginx/snippets/gateway-proxy.conf;
+  }
+
+  location / {
+    include /etc/nginx/snippets/web-proxy.conf;
+  }
+}
