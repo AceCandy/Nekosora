@@ -30,7 +30,7 @@
 - Node-only dependencies live in `instrumentation.node.ts`; initialization order is guards, environment validation, then database bootstrap.
 - Do not use a variable alias path such as `await import(nodePath)` in the framework entrypoint. Webpack cannot resolve it and emits `Critical dependency`, followed by a runtime `MODULE_NOT_FOUND`.
 - Do not import bootstrap dependencies directly from the shared entrypoint. Edge compilation otherwise follows `bootstrap -> pg` and fails on Node built-ins such as `fs`.
-- `getDb`, bootstrap internals, and queue initialization load `pg`, the Drizzle PostgreSQL driver, and `pg-boss` with literal dynamic imports inside Node-only code. `pg` and `pg-boss` remain externalized server packages.
+- `getDb` and bootstrap internals load `pg` and the Drizzle PostgreSQL driver with literal dynamic imports inside Node-only code. Web externalizes `pg`; `pg-boss` belongs only to Gateway/Worker and must not appear in Web config or dependency output.
 
 ### 4. Validation & Error Matrix
 
