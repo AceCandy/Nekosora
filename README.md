@@ -7,7 +7,7 @@
 「猫与星空」的治愈感 × 「高可用网关」的精密工程 — 一个融合 claude.ai / chatgpt 式对话体验与 sub2api / CLIProxyAPI 式 API 网关的混合型全栈平台。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-3b82f6.svg)](./LICENSE)
-[![Next.js](https://img.shields.io/badge/Next.js%2015-App%20Router-000000.svg)](https://nextjs.org/)
+[![Next.js](https://img.shields.io/badge/Next.js%2016-App%20Router-000000.svg)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178c6.svg)](https://www.typescriptlang.org/)
 [![Drizzle ORM](https://img.shields.io/badge/Drizzle%20ORM-PostgreSQL-d6f334.svg)](https://orm.drizzle.team/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-f59e0b.svg)](.)
@@ -72,7 +72,7 @@ Nekusora(星枢,取自 Neku 猫 / Sora 天空)把两件事揉进了同一个产�
 
 | 层 | 选型 |
 |---|---|
-| 框架 | Next.js 15 App Router + TypeScript + Turbopack |
+| 框架 | Next.js 16 App Router + TypeScript + Turbopack |
 | ORM | Drizzle ORM(PostgreSQL) |
 | 缓存 | cache-manager v6 + Keyv + Redis |
 | 队列 | pg-boss(PostgreSQL) |
@@ -165,6 +165,15 @@ docker compose up -d           # 启动 pg + redis
 # 在 .env.local 中配置 DATABASE_URL / REDIS_URL
 pnpm dev                       # 主进程(首次启动自动建表 + 建管理员)
 pnpm worker                    # 另开终端:文件处理队列(pg-boss)
+```
+
+### 生产多进程部署
+
+生产环境使用 Web、Gateway、Worker 和 edge-router 分离的编排，只有 edge-router 发布应用端口。完整的健康依赖、路由边界、共享上传卷、连接预算和回滚步骤见 [`deploy/production.md`](./deploy/production.md)。
+
+```bash
+cp deploy/production.env.example deploy/production.env
+docker compose --env-file deploy/production.env -f compose.production.yml up -d --build
 ```
 
 ---

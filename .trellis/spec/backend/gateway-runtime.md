@@ -19,11 +19,10 @@ HTTP adaptation and process lifecycle; Core owns framework-neutral behavior.
 - `GET /healthz/ready -> { status: "ready" | "unready", checks: { db, storage, queue }, ts }`
 - Required env: `DATA_ENCRYPTION_KEY` (64 hex), `BETTER_AUTH_SECRET`, `DATABASE_URL`
 - Listener env: `GATEWAY_HOST` (default `0.0.0.0`), `GATEWAY_PORT` (default `4000`, integer `1..65535`)
-- Transitional Web env: `GATEWAY_INTERNAL_URL`; empty or missing disables rewrites.
 
 ### 3. Contracts
 
-- `packages/contracts/src/routes.ts` is the single route matrix for Fastify registration and Next rewrites. Do not duplicate path lists.
+- `packages/contracts/src/routes.ts` is the single route matrix for Fastify registration. Do not duplicate path lists in the Gateway adapter.
 - Gateway converts Fastify requests into standard Web `Request` objects and sends standard `Response` objects. Core handlers must not import Fastify or Next types.
 - Preserve request headers and raw JSON bytes. Convert multipart input to `FormData` and let the runtime generate its new boundary headers.
 - `/api/upload` accepts at most a 10 MiB file and 11 MiB body; `/v1/audio/transcriptions` accepts at most a 25 MiB file and 26 MiB body.
@@ -33,7 +32,15 @@ HTTP adaptation and process lifecycle; Core owns framework-neutral behavior.
 - Closing Fastify closes queue and DB resources. Startup failure also closes any initialized resources, writes only `[gateway] 启动失败`, and exits with code `1`.
 - Database bootstrap runs before listen. The default migration folder is `../../drizzle/pg` relative to the process working directory; launch through the package script or set `DRIZZLE_MIGRATIONS_DIR` explicitly.
 - The production bundle includes all `@nekusora/*` workspace packages and leaves third-party packages external. Every third-party runtime import reachable from the bundle must therefore be a direct `apps/gateway` dependency.
-- The Next rewrite is a reversible transition only. It uses `beforeFiles`, preserves the public URL, and proxies every `GATEWAY_PROXY_ROUTES` path. Production edge routing and retained-image rollback belong to `08-05-runtime-cutover`.
+
+### Production edge and process boundary
+
+- `compose.production.yml` runs PostgreSQL, Redis, Web, Gateway, Worker, and an unprivileged edge-router. Only edge-router publishes the application port; Web, Gateway, and Worker listen on the internal backend network (`3000`, `4000`, and `4001`).
+- The edge route matrix is authoritative for production ingress: `/v1/*`, `/api/chat`, `/api/upload`, `/api/files/*`, `/api/images*`, `/api/knowledge/search`, and `/metrics` go to Gateway; `/api/auth/*`, pages, static assets, and `/_next/*` go to Web.
+- Gateway SSE routes use `proxy_buffering off`; the edge preserves Host, Origin, Cookie, Authorization, and `X-Forwarded-*` headers. `/metrics` is denied by default and only allows `METRICS_ALLOW_CIDR`.
+- Gateway and Worker share the named `uploads` volume and use an explicit absolute `LOCAL_STORAGE_DIR=/app/uploads`. Web does not mount this volume.
+- Default pool budgets are Web 5, Gateway 10, and Worker 5 connections per replica. PostgreSQL capacity must cover `5 * WEB_REPLICAS + 10 * GATEWAY_REPLICAS + 5 * WORKER_REPLICAS + 20`.
+- Rollback retains the previous Web image tag and edge configuration. Restore those artifacts and restart the edge/Web services while preserving PostgreSQL, Redis, and uploads volumes; do not use `down -v` during rollback.
 
 ### 4. Validation & Error Matrix
 
@@ -48,14 +55,13 @@ HTTP adaptation and process lifecycle; Core owns framework-neutral behavior.
 | Storage error/timeout during transition | Storage diagnostic preserved; DB+queue still determine status |
 | Fastify payload limit exceeded | Localized `request.payload_too_large`; Core handler is not called |
 | Unexpected handler error | Localized `server.internal`; raw error/credential is not returned |
-| `GATEWAY_INTERNAL_URL` missing | No Next rewrite; retained Web handler executes |
 
 ### 5. Good / Base / Bad Cases
 
 - Good: Web is stopped while a real Gateway listener serves API-key `/v1/models` and `/v1/chat/completions`.
 - Good: cancelling a client SSE read aborts the Core request and cancels the upstream stream.
 - Base: a finite JSON route preserves authorization headers, raw request bytes, response status, and body.
-- Bad: add a route to Fastify and Next separately, allowing proxy and listener matrices to drift.
+- Bad: add a route to Fastify and edge-router separately, allowing listener and ingress matrices to drift.
 - Bad: bundle workspace packages but omit a transitive third-party runtime import from `apps/gateway/package.json`.
 - Bad: log the bootstrap exception, database URL, credential, request body, or raw stack on startup failure.
 
@@ -64,8 +70,6 @@ HTTP adaptation and process lifecycle; Core owns framework-neutral behavior.
 - `apps/gateway/src/server.test.ts`: route matrix, raw JSON/headers, multipart limits, safe localized errors, SSE bytes, readiness matrix, timer cleanup, and resource close.
 - `apps/gateway/src/server.listener.test.ts`: Gateway-without-Web requests and real-socket SSE cancellation.
 - Core route suites: API-key/session authorization, OpenAI JSON/SSE, WebChat SSE, file 200/206/302/416, images, knowledge, MCP, and metrics behavior.
-- `apps/web/src/gateway-rewrites.test.ts`: disabled rewrite, URL normalization, and complete route mapping.
-- `apps/web/scripts/smoke/gateway-proxy.smoke.ts`: Cookie, Authorization, multipart, Range, SSE proxy behavior and real Web-handler rollback.
 - Production checks: `pnpm build:gateway`, missing-env exit `1`, successful `/healthz` + `/healthz/ready`, clean signal shutdown, and no leftover process or build fixture.
 
 ### 7. Wrong vs Correct

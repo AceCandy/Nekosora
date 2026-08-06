@@ -1,6 +1,6 @@
 # Component Guidelines
 
-> Nekusora 前端组件约定。Next.js 15 App Router + React 19 + TailwindCSS v4。
+> Nekusora 前端组件约定。Next.js 16 App Router + React 19 + TailwindCSS v4。
 
 ---
 
