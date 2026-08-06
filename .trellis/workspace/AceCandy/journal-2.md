@@ -521,3 +521,25 @@ Added privacy-safe memory extraction stage logs, diagnosed mem0 SQLite native bi
 ### Status
 
 [OK] **Completed**
+
+
+## Session 84: 完成 Fastify 数据面迁移
+
+**Date**: 2026-08-06
+**Task**: 完成 Fastify 数据面迁移
+**Branch**: `main`
+
+### Summary
+
+新增独立 Fastify Gateway，将数据面与共享领域逻辑迁入 workspace packages，保留可回滚的 Next 代理与薄 handler；补齐真实 listener 取消、代理回滚、readiness、构建启动验证及 Gateway 运行规范。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `cf51b16` | (see git log) |
+| `345fbe8` | (see git log) |
+
+### Status
+
+[OK] **Completed**

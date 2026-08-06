@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 83
-- **Last Active**: 2026-08-05
+- **Total Sessions**: 84
+- **Last Active**: 2026-08-06
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~523 | Active |
+| `journal-2.md` | ~545 | Active |
 | `journal-1.md` | ~1981 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 84 | 2026-08-06 | 完成 Fastify 数据面迁移 | `cf51b16`, `345fbe8` | `main` |
 | 83 | 2026-08-05 | pnpm workspace 与 Next 16 迁移 | `a654df4`, `321f47b`, `02f54f3` | `main` |
 | 82 | 2026-08-04 | 联网搜索结构化时效控制 | `e23249a` | `main` |
 | 81 | 2026-08-02 | 归档并提交联网搜索与聊天修复 | `5bd3e6f`, `36510ec`, `832e3c8` | `main` |
