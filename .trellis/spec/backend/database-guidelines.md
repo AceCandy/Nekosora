@@ -164,6 +164,7 @@ if (job) void dispatchConversationTitleJob(job.id);
 - `bootstrapDatabase()` 启动时跑 Drizzle `migrate()`,消费 `drizzle/pg/*.sql`。
 - 修改迁移 SQL、`meta/_journal.json`，或应用可能多进程并发启动时，必须遵守本场景。
 - DB 连不上 / 建表失败 / 管理员创建失败 → throw 阻断启动。
+- Web is the only first-admin seed owner. Gateway and Worker call `bootstrapDatabase({ seedAdmin: false })` so concurrent process startup cannot race Better Auth account creation; they still perform connection checks and migrations.
 
 #### 2. Signatures
 - `runMigrations(db)`：从 `db.$client` 取得专用 `PoolClient`，持锁完成协调与迁移。

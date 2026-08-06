@@ -28,7 +28,7 @@ HTTP adaptation and process lifecycle; Core owns framework-neutral behavior.
 - `/api/upload` accepts at most a 10 MiB file and 11 MiB body; `/v1/audio/transcriptions` accepts at most a 25 MiB file and 26 MiB body.
 - Stream `Response.body` through the Node adapter without changing status, headers, SSE frame bytes, binary bytes, or Range responses.
 - A raw request abort or response socket close aborts the Core `Request.signal`; cancellation must reach the upstream stream and must not start another attempt.
-- `GET /healthz` is process liveness. Readiness uses independent 2-second DB, storage, and queue checks. DB must return `ok` and queue must return `{ available: true }`; storage is diagnostic in the current transition.
+- `GET /healthz` is process liveness. Readiness uses independent 2-second DB, storage, and queue checks. DB must return `ok`, queue must return `{ available: true }`, and storage must initialize as the configured driver. A configured S3-compatible driver that falls back to local is unready.
 - Closing Fastify closes queue and DB resources. Startup failure also closes any initialized resources, writes only `[gateway] 启动失败`, and exits with code `1`.
 - Database bootstrap runs before listen. The default migration folder is `../../drizzle/pg` relative to the process working directory; launch through the package script or set `DRIZZLE_MIGRATIONS_DIR` explicitly.
 - The production bundle includes all `@nekusora/*` workspace packages and leaves third-party packages external. Every third-party runtime import reachable from the bundle must therefore be a direct `apps/gateway` dependency.
@@ -52,7 +52,7 @@ HTTP adaptation and process lifecycle; Core owns framework-neutral behavior.
 | `/healthz` while event loop serves requests | HTTP `200`, independent of dependency readiness |
 | DB error/timeout | HTTP `503`, `status="unready"`, DB diagnostic preserved |
 | Queue false/error/timeout | HTTP `503`, `status="unready"`, queue diagnostic preserved |
-| Storage error/timeout during transition | Storage diagnostic preserved; DB+queue still determine status |
+| Storage error/timeout or configured driver fallback | HTTP `503`, `status="unready"`, storage diagnostic preserved |
 | Fastify payload limit exceeded | Localized `request.payload_too_large`; Core handler is not called |
 | Unexpected handler error | Localized `server.internal`; raw error/credential is not returned |
 

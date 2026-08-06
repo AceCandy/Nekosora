@@ -14,6 +14,8 @@ docker compose --env-file deploy/production.env -f compose.production.yml ps
 
 `edge-router` 的公开端口由 `APP_PORT` 设置。健康检查通过后，`/v1/*`、`/api/chat`、上传/文件/图片/知识搜索和 `/metrics` 进入 Gateway，其余页面、认证、静态资源和 Next 内部路径进入 Web。Gateway 与 Worker 使用同一个 `uploads` 卷；不要把 Worker 的 `LOCAL_STORAGE_DIR` 改成相对路径。
 
+空库首次启动时只有 Web 创建首管理员；Gateway 和 Worker 仍执行连接检查与幂等迁移，但不参与 Better Auth 账号 seed，避免多进程并发创建同一账号。
+
 ## 连接预算与扩容
 
 默认数据库连接预算为 Web 5、每个 Gateway 10、每个 Worker 5，再加 PostgreSQL/迁移和运维余量。扩容前确保 PostgreSQL `max_connections` 覆盖：
