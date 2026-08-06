@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "verbatimModuleSyntax": true,
+    "jsx": "react-jsx",
+    "paths": {
+      "@/auth": ["../../packages/core/src/auth.ts"],
+      "@/db/schema/pg": ["../../packages/db/src/schema.ts"],
+      "@/db/*": ["../../packages/db/src/*"],
+      "@/lib/*": ["../../packages/core/src/lib/*"],
+      "@/*": ["../../packages/core/src/*"]
+    }
+  },
+  "include": ["src/**/*.ts", "tsup.config.ts", "vitest.config.ts"]
+}

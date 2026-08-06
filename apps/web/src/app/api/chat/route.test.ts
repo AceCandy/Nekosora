@@ -26,7 +26,7 @@ vi.mock("drizzle-orm", () => ({
   isNull: mocks.isNull,
 }));
 vi.mock("@/lib/infra/db", () => ({ getDb: mocks.getDb, getSchema: mocks.getSchema }));
-vi.mock("@/lib/session", () => ({ getSession: mocks.getSession }));
+vi.mock("@/lib/session-request", () => ({ getSessionFromHeaders: mocks.getSession }));
 vi.mock("@/lib/conversation-title/service", () => ({
   writeFallbackTitle: mocks.writeFallbackTitle,
 }));

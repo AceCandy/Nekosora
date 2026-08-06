@@ -1,0 +1,17 @@
+{
+  "name": "@nekusora/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./chat": "./src/chat.ts",
+    "./structured": "./src/structured.ts",
+    "./routes": "./src/routes.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}

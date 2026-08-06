@@ -2,15 +2,26 @@ import { defineConfig } from "vitest/config";
 import { fileURLToPath } from "node:url";
 
 const src = fileURLToPath(new URL("./src/", import.meta.url));
+const coreSrc = fileURLToPath(new URL("../../packages/core/src/", import.meta.url));
+const dbSrc = fileURLToPath(new URL("../../packages/db/src/", import.meta.url));
 
 export default defineConfig({
   oxc: { jsx: { runtime: "automatic" } },
   resolve: {
-    alias: {
-      "@": src,
-      "@shared": fileURLToPath(new URL("./src/shared/", import.meta.url)),
-      "@features": fileURLToPath(new URL("./src/features/", import.meta.url)),
-    },
+    alias: [
+      { find: "@/auth", replacement: `${coreSrc}auth.ts` },
+      { find: "@/lib/session", replacement: `${src}lib/session.ts` },
+      { find: "@/lib/auth-client", replacement: `${src}lib/auth-client.ts` },
+      { find: "@/lib/knowledge-base/service", replacement: `${src}lib/knowledge-base/service.ts` },
+      { find: "@/lib/output-modes/service", replacement: `${src}lib/output-modes/service.ts` },
+      { find: "@/lib/render-styles/service", replacement: `${src}lib/render-styles/service.ts` },
+      { find: "@/db/schema/pg", replacement: `${dbSrc}schema.ts` },
+      { find: /^@\/db\//, replacement: dbSrc },
+      { find: /^@\/lib\//, replacement: `${coreSrc}lib/` },
+      { find: "@shared", replacement: fileURLToPath(new URL("./src/shared/", import.meta.url)) },
+      { find: "@features", replacement: fileURLToPath(new URL("./src/features/", import.meta.url)) },
+      { find: "@", replacement: src },
+    ],
   },
   test: {
     environment: "node",

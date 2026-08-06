@@ -1,37 +1,13 @@
 /** 会话辅助 —— 在 Server Components / Route Handlers 中读取当前登录用户。 */
 import { headers } from "next/headers";
-import { getAuth } from "@/auth";
 import { redirect } from "next/navigation";
+import { getSessionFromHeaders, type SessionUser } from "@/lib/session-request";
 
-export interface SessionUser {
-  id: string;
-  email: string;
-  name: string;
-  role: string;
-  status: string;
-}
+export type { SessionUser } from "@/lib/session-request";
 
 /** 获取当前会话(未登录返回 null)。 */
 export async function getSession(): Promise<SessionUser | null> {
-  try {
-    const auth = await getAuth();
-    const session = await auth.api.getSession({
-      headers: await headers(),
-      query: { disableCookieCache: true },
-    });
-    if (!session?.user) return null;
-    const u = session.user as Record<string, unknown>;
-    if (u.status !== "active") return null;
-    return {
-      id: u.id as string,
-      email: u.email as string,
-      name: u.name as string,
-      role: (u.role as string) ?? "user",
-      status: u.status,
-    };
-  } catch {
-    return null;
-  }
+  return getSessionFromHeaders(await headers());
 }
 
 /** 获取当前会话,未登录则重定向到登录页。 */

@@ -4,7 +4,7 @@
  * 知识库是一组文件的逻辑分组(fileObjects.knowledgeBaseId 关联)。
  * 检索时按 knowledgeBaseIds 收集其下全部 ragReady 的 fileId,复用 retrieve。
  */
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { cacheWrap, cacheDel } from "@/lib/infra/cache";
 import { requireSession } from "@/lib/session";
@@ -91,26 +91,4 @@ export async function attachFileToKnowledgeBase(kbId: string, fileId: string): P
   await cacheDel(kbsKey(user.id)).catch(() => {});
 }
 
-/**
- * 收集知识库下全部 ragReady 文件的 fileId(供 retrieve 限定检索范围)。
- */
-export async function getFileIdsByKnowledgeBases(
-  kbIds: string[],
-  userId: string,
-): Promise<string[]> {
-  if (kbIds.length === 0) return [];
-  const db = await getDb();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const s = getSchema() as any;
-  const rows = await db
-    .select({ id: s.fileObjects.id })
-    .from(s.fileObjects)
-    .where(
-      and(
-        inArray(s.fileObjects.knowledgeBaseId, kbIds),
-        eq(s.fileObjects.userId, userId),
-        eq(s.fileObjects.ragReady, true),
-      ),
-    );
-  return rows.map((r: { id: string }) => r.id);
-}
+export { getFileIdsByKnowledgeBases } from "@/lib/knowledge-base/files";

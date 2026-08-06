@@ -6,29 +6,18 @@
 import type { Artifact } from "@/features/artifacts/ArtifactPanel";
 import type {
   ModelCapabilities,
-  TokenUsage,
   WebSearchAttemptSummary,
   WebSearchTraceBackend,
   WebSearchTraceCitation,
 } from "@/db/types";
 import type { MessageFeedback } from "@/features/chat/model/feedback";
+import type {
+  ChatMessageAttachment,
+  MessageRunMetadata,
+} from "@nekusora/contracts/chat";
 
 export type { FeedbackReason, FeedbackRating, MessageFeedback } from "@/features/chat/model/feedback";
-
-/** assistant 消息对应的可序列化 run 投影。 */
-export interface MessageRunMetadata {
-  model?: string;
-  tokenUsage?: TokenUsage;
-  durationMs?: number;
-  completedAt?: string;
-}
-
-/** 用户消息中可持久恢复的图片附件；展示 URL 在读取时按 fileId 生成。 */
-export interface ChatMessageAttachment {
-  fileId: string;
-  filename: string;
-  mime: string;
-}
+export type { ChatMessageAttachment, MessageRunMetadata } from "@nekusora/contracts/chat";
 
 /** 单条聊天消息(含可选的运行与产物元数据)。 */
 export interface ChatMessage {

@@ -1,3 +1,4 @@
-export const MAX_TRANSCRIPTION_FILE_BYTES = 25 * 1024 * 1024;
-export const MAX_TRANSCRIPTION_BODY_BYTES =
-  MAX_TRANSCRIPTION_FILE_BYTES + 1024 * 1024;
+export {
+  MAX_TRANSCRIPTION_BODY_BYTES,
+  MAX_TRANSCRIPTION_FILE_BYTES,
+} from "@nekusora/core/http/v1/transcription-limits";

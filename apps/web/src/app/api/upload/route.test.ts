@@ -23,7 +23,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("drizzle-orm", () => ({ eq: mocks.eq, and: mocks.and }));
-vi.mock("@/lib/session", () => ({ getSession: mocks.getSession }));
+vi.mock("@/lib/session-request", () => ({ getSessionFromHeaders: mocks.getSession }));
 vi.mock("@/lib/multipart", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/multipart")>();
   return { ...actual, parseBoundedMultipartFormData: mocks.parseFormData };

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { jsonrepair } from "jsonrepair";
+import type { StructuredKind } from "@nekusora/contracts/structured";
 
 /**
  * 结构化代码块 schema —— AI 在 ```chart / ```metric / ```table 代码块内输出 JSON，
@@ -10,8 +11,7 @@ import { jsonrepair } from "jsonrepair";
  *  - 校验失败统一返回 { ok: false }，由 MarkdownCodeBlock 入口降级为源码展示。
  */
 
-/** 结构化代码块类型，与 html/svg/mermaid 的 PreviewableKind 互斥。 */
-export type StructuredKind = "chart" | "metric" | "table" | "callout";
+export type { StructuredKind } from "@nekusora/contracts/structured";
 
 /** chart 单条系列：数据字段 key + 可选展示名。 */
 const ChartSeriesSchema = z.object({

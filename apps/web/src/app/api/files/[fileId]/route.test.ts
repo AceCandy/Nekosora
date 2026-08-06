@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("drizzle-orm", () => ({
   eq: vi.fn(() => ({})),
 }));
-vi.mock("@/lib/session", () => ({ getSession: mocks.getSession }));
+vi.mock("@/lib/session-request", () => ({ getSessionFromHeaders: mocks.getSession }));
 vi.mock("@/lib/infra/db", () => ({
   getDb: mocks.getDb,
   getSchema: mocks.getSchema,

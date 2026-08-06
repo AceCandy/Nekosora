@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("better-auth", () => ({ betterAuth: mocks.betterAuth }));
 vi.mock("better-auth/adapters/drizzle", () => ({ drizzleAdapter: mocks.drizzleAdapter }));
 vi.mock("better-auth/plugins", () => ({ admin: mocks.admin }));
-vi.mock("@/lib/infra/db", () => ({ getDb: mocks.getDb }));
+vi.mock("@nekusora/db", () => ({ getDb: mocks.getDb }));
 
 describe("Better Auth user fields", () => {
   beforeEach(() => {

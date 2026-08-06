@@ -1,2 +1,4 @@
-export const MAX_UPLOAD_FILE_BYTES = 10 * 1024 * 1024;
-export const MAX_UPLOAD_BODY_BYTES = MAX_UPLOAD_FILE_BYTES + 1024 * 1024;
+export {
+  MAX_UPLOAD_BODY_BYTES,
+  MAX_UPLOAD_FILE_BYTES,
+} from "@nekusora/core/http/api/upload-limits";

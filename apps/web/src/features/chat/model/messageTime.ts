@@ -1,3 +1,5 @@
+export { toMessageCreatedAtIso } from "@nekusora/contracts/chat";
+
 type MessageTimeKind =
   | "today"
   | "yesterday"
@@ -28,16 +30,6 @@ interface MessageTimeSeparatorBase {
 }
 
 export type MessageTimeSeparatorInfo = MessageTimeSeparatorBase;
-
-/** 将数据库或 JSON 边界中的消息时间收敛为 ISO 字符串。 */
-export function toMessageCreatedAtIso(value: unknown): string | undefined {
-  const date = value instanceof Date
-    ? value
-    : typeof value === "string"
-      ? new Date(value)
-      : null;
-  return date && Number.isFinite(date.getTime()) ? date.toISOString() : undefined;
-}
 
 function calendarDay(date: Date, formatter: Intl.DateTimeFormat): CalendarDay | null {
   const parts = formatter.formatToParts(date);

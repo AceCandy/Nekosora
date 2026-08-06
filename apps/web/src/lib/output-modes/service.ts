@@ -8,19 +8,12 @@ import { eq, asc, sql } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { cacheWrap, cacheDel } from "@/lib/infra/cache";
 import { requireSession, requireAdmin } from "@/lib/session";
+import type { OutputMode } from "@/lib/output-modes/read";
+
+export { getOutputMode, type OutputMode } from "@/lib/output-modes/read";
 
 /** chat 工具栏读取的启用输出模式缓存键(全局共享;admin 写操作主动失效,TTL 兜底)。 */
 const ENABLED_OUTPUT_MODES_KEY = "chat:output-modes:enabled";
-
-export interface OutputMode {
-  id: string;
-  name: string;
-  description: string | null;
-  systemPrompt: string;
-  icon: string | null;
-  enabled: boolean;
-  sortOrder: number;
-}
 
 /** 管理员:列出全部输出模式(含禁用)。 */
 export async function listAllOutputModes(): Promise<OutputMode[]> {
@@ -57,15 +50,6 @@ export async function listEnabledOutputModes(): Promise<OutputMode[]> {
       .orderBy(asc(s.outputModes.sortOrder), asc(s.outputModes.createdAt));
     return rows as OutputMode[];
   });
-}
-
-/** 读取单个输出模式(用于 chat route 注入)。不鉴权(内部调用,route 已鉴权)。 */
-export async function getOutputMode(id: string): Promise<OutputMode | null> {
-  const db = await getDb();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const s = getSchema() as any;
-  const [row] = await db.select().from(s.outputModes).where(eq(s.outputModes.id, id)).limit(1);
-  return (row as OutputMode | undefined) ?? null;
 }
 
 /** 管理员:创建输出模式。新建项默认放末尾(sortOrder = 当前 max + 1)。 */
