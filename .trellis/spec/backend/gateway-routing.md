@@ -161,6 +161,8 @@ while a concrete OpenAI-compatible/2API route does not preserve tool-call events
   `0006_daily_wonder_man.sql` changes only the future default; it does not backfill rows.
 - Runtime: `ResolvedRoute.supportsTools?: boolean`.
 - Effective capability: `model_catalog.capabilities.tools === true && route.supportsTools === true`.
+- Route form: `supportsToolsPresent=true` means the checkbox was rendered; a checked
+  checkbox additionally submits `supportsTools=on`.
 
 ### 3. Contracts
 
@@ -187,6 +189,9 @@ while a concrete OpenAI-compatible/2API route does not preserve tool-call events
   route opt-in. This prevents a 2API route from receiving provider-executed search tools.
 - Route create/update actions own the persisted flag. Quick-attach and initial-model routes
   inherit the database default, while an explicit checkbox still persists `false`.
+- A create action with neither form field uses the new `true` default. An update action with
+  neither field preserves the stored value; `supportsToolsPresent=true` without
+  `supportsTools=on` is the only unchecked-form signal and persists `false`.
 
 ### 4. Validation & Error Matrix
 
@@ -218,7 +223,8 @@ while a concrete OpenAI-compatible/2API route does not preserve tool-call events
 
 - Migration tests assert the historical `false` default, the new `true` default, no update
   statement, and journal/snapshot continuity.
-- Route action tests assert checked and unchecked form values persist `true` and `false`.
+- Route action tests assert omitted create values default to `true`, checked and unchecked
+  form values persist `true` and `false`, and omitted update values preserve the stored flag.
 - Routing tests assert `ResolvedRoute.supportsTools` preserves each row's value.
 - Stream tests place an unsupported route before a supported route and assert only the
   supported route reaches `streamText`.
@@ -245,6 +251,14 @@ selectAdapter: (route) => request.tools?.length
 await db.update(routes)
   .set({ supportsTools: false })
   .where(and(eq(routes.id, route.routeId), eq(routes.supportsTools, true)));
+
+// Wrong: an omitted update field silently disables tools.
+supportsTools: formData.get("supportsTools") === "on";
+
+// Correct: only a submitted checkbox control changes the stored value.
+...(formData.has("supportsToolsPresent") || formData.has("supportsTools")
+  ? { supportsTools: formData.get("supportsTools") === "on" }
+  : {});
 ```
 
 ## Scenario: Unified Gateway Execution Engine
