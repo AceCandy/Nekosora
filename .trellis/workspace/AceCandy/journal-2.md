@@ -588,3 +588,26 @@ Added privacy-safe memory extraction stage logs, diagnosed mem0 SQLite native bi
 ### Status
 
 [OK] **Completed**
+
+
+## Session 87: 生产运行时切流完成
+
+**Date**: 2026-08-06
+**Task**: 生产运行时切流完成
+**Branch**: `main`
+
+### Summary
+
+完成 Web/Gateway/Worker 独立生产镜像、Compose 与 edge-router；移除 Next 临时代理；验证 lint、typecheck、全量测试、三镜像构建、Compose 路由矩阵、认证转发、Web 下线隔离、回滚重启与临时资源清理；同步 README、部署文档和 Gateway runtime 规范。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `12630f0` | (see git log) |
+| `72ff305` | (see git log) |
+| `8d8454a` | (see git log) |
+
+### Status
+
+[OK] **Completed**
