@@ -27,17 +27,17 @@
 
 ## Acceptance Criteria
 
-- [ ] AC1. workspace 的锁文件、脚本和依赖边界一致，干净环境可安装并构建全部应用。
-- [ ] AC2. Web 使用稳定 Next.js 16 和默认 Turbopack完成开发启动与生产构建，构建日志无 `Critical dependency`、`MODULE_NOT_FOUND` 或 Node-only依赖进入 Edge 图的错误。
-- [ ] AC3. 现有 `/v1/models`、聊天、图像、语音和 MCP 网关契约测试在独立 Gateway 上通过。
-- [ ] AC4. WebChat `/api/chat` 的 session 鉴权、SSE 事件序列、客户端取消、最终落库和历史恢复测试通过，前端无需更改公开调用 URL。
-- [ ] AC5. Gateway 与 Web 可独立停止和启动；Web 控制面故障不终止已运行的网关进程，Gateway 可独立扩容。
-- [ ] AC6. Worker 的队列生命周期、三类任务注册、重试、恢复和关闭 drain 测试通过。
-- [ ] AC7. Next Web 构建产物不包含 `pg-boss` 队列实现，Gateway/Worker 能用普通静态或字面量导入正常加载它。
-- [ ] AC8. Docker/本地编排能启动 Web、Gateway、Worker、PostgreSQL 和 Redis；健康检查能区分各进程状态。
-- [ ] AC9. 全量 lint、typecheck、单元测试、关键集成测试和生产构建通过；迁移前后的公共 HTTP 契约有自动化回归对照。
-- [ ] AC10. 文档准确描述新架构、启动命令、端口、反向代理边界和回滚方式，不再将实际未使用的打包器写为当前技术栈。
-- [ ] AC11. 上传、本地文件读取与 Worker 处理共享同一持久卷；S3/R2/MinIO 模式保持现有私有读取与签名 URL 语义。
+- [x] AC1. workspace 的锁文件、脚本和依赖边界一致，干净环境可安装并构建全部应用。
+- [x] AC2. Web 使用稳定 Next.js 16 和默认 Turbopack完成开发启动与生产构建，构建日志无 `Critical dependency`、`MODULE_NOT_FOUND` 或 Node-only依赖进入 Edge 图的错误。
+- [x] AC3. 现有 `/v1/models`、聊天、图像、语音和 MCP 网关契约测试在独立 Gateway 上通过。
+- [x] AC4. WebChat `/api/chat` 的 session 鉴权、SSE 事件序列、客户端取消、最终落库和历史恢复测试通过，前端无需更改公开调用 URL。
+- [x] AC5. Gateway 与 Web 可独立停止和启动；Web 控制面故障不终止已运行的网关进程，Gateway 可独立扩容。
+- [x] AC6. Worker 的队列生命周期、三类任务注册、重试、恢复和关闭 drain 测试通过。
+- [x] AC7. Next Web 构建产物不包含 `pg-boss` 队列实现，Gateway/Worker 能用普通静态或字面量导入正常加载它。
+- [x] AC8. Docker/本地编排能启动 Web、Gateway、Worker、PostgreSQL 和 Redis；健康检查能区分各进程状态。
+- [x] AC9. 全量 lint、typecheck、单元测试、关键集成测试和生产构建通过；迁移前后的公共 HTTP 契约有自动化回归对照。
+- [x] AC10. 文档准确描述新架构、启动命令、端口、反向代理边界和回滚方式，不再将实际未使用的打包器写为当前技术栈。
+- [x] AC11. 上传、本地文件读取与 Worker 处理共享同一持久卷；S3/R2/MinIO 模式保持现有私有读取与签名 URL 语义。
 
 ## Out of Scope
 

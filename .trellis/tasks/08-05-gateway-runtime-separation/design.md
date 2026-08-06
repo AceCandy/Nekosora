@@ -5,7 +5,7 @@
 ```text
 Client
   -> edge router (same public origin)
-       -> /v1/* and selected /api/* -> apps/gateway :3001
+       -> /v1/* and selected /api/* -> apps/gateway :4000
        -> all other paths          -> apps/web :3000
 
 apps/gateway -> PostgreSQL / Redis / object storage / pg-boss producer
