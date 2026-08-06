@@ -13,15 +13,15 @@ Provide production-grade multi-process images and same-origin routing, cut publi
 
 ## Acceptance Criteria
 
-- [ ] Direct edge routing sends every owned path to the correct process with no public URL change.
-- [ ] Edge route matrix explicitly sends `/v1/*`, `/api/chat`, `/api/upload`, `/api/files/*`, `/api/images*`, `/api/knowledge/search` and `/metrics` to Gateway; `/api/auth/*`, pages, assets and Next internals go to Web.
-- [ ] SSE is unbuffered and cancellation reaches Gateway.
-- [ ] Host, Origin, cookies, secure-cookie behavior and forwarding headers survive edge routing; production `/metrics` access is restricted to the configured scraper boundary.
-- [ ] Web can be stopped while `/v1/*` remains available through Gateway replicas.
-- [ ] Gateway/Worker share local uploads and all health checks converge.
-- [ ] Health failure matrix passes: Web DB failure, Gateway DB/queue/storage failure, and Worker startup/runtime/shutdown states produce the designed readiness without conflating liveness.
-- [ ] Transitional Next proxies and obsolete dynamic-import workarounds are removed.
-- [ ] Clean compose build/start/smoke/stop succeeds without leaving services running.
+- [x] Direct edge routing sends every owned path to the correct process with no public URL change.
+- [x] Edge route matrix explicitly sends `/v1/*`, `/api/chat`, `/api/upload`, `/api/files/*`, `/api/images*`, `/api/knowledge/search` and `/metrics` to Gateway; `/api/auth/*`, pages, assets and Next internals go to Web.
+- [x] SSE is unbuffered and cancellation reaches Gateway.
+- [x] Host, Origin, cookies, secure-cookie behavior and forwarding headers survive edge routing; production `/metrics` access is restricted to the configured scraper boundary.
+- [x] Web can be stopped while `/v1/*` remains available through Gateway replicas.
+- [x] Gateway/Worker share local uploads and all health checks converge.
+- [x] Health failure matrix passes: Web DB failure, Gateway DB/queue/storage failure, and Worker startup/runtime/shutdown states produce the designed readiness without conflating liveness.
+- [x] Transitional Next proxies and obsolete dynamic-import workarounds are removed.
+- [x] Clean compose build/start/smoke/stop succeeds without leaving services running.
 
 ## Out of Scope
 
