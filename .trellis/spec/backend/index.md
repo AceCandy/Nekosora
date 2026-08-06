@@ -6,7 +6,7 @@
 
 ## Overview
 
-Nekusora 是 Next.js 全栈 TypeScript 项目,无独立后端进程(除 `src/worker.ts`)。服务端逻辑分布在 `app/`(路由/API/server actions)与 `lib/`(领域逻辑 + 基建)。本目录沉淀服务端**实际存在且稳定**的模式,不预设未来架构。已填充的条目见下表;标注 `To fill` 的代表当前尚未形成稳定约定,留待对应模式沉淀后再补。
+Nekusora is a pnpm TypeScript workspace. `apps/web` is the Next.js control plane, while `apps/gateway` is an independently runnable Fastify data plane. Framework-neutral HTTP and domain logic lives in workspace packages. The legacy Worker entry remains under Web until the worker-boundary task moves it into its own application.
 
 ---
 
@@ -24,6 +24,7 @@ Nekusora 是 Next.js 全栈 TypeScript 项目,无独立后端进程(除 `src/wor
 | [Chat Generation Params](./chat-generation-params.md) | WebChat 默认生成参数边界 + reasoning providerOptions 映射 | Filled |
 | [Chat Run Metadata](./chat-run-metadata.md) | assistant run 的完成时序、SSE/历史投影、隐私与迁移契约 | Filled |
 | [Provider Probe](./provider-probe.md) | key 连通性探测契约(/models 鉴权判定 + anthropic 混搭兼容) | Filled |
+| [Gateway Runtime](./gateway-runtime.md) | Fastify adapter, route ownership, readiness, build and startup contracts | Filled |
 | [Gateway Routing](./gateway-routing.md) | 统一资源模型、resolveRoutes/resolveRoutesById 决策树、可见性四套场景、熔断 | Filled |
 | [Memory System](./memory-system.md) | 三分类生命周期、抽取去重(explicit/weak)、融合向量召回、compact 质量增强、缓存 | Filled |
 | [Prompt Caching](./prompt-caching.md) | 命中前提、AI SDK 边界、按 protocol 注入缓存控制(复刻 pi) | Filled |

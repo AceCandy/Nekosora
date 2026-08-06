@@ -6,7 +6,7 @@
 
 ### 1. Scope / Trigger
 
-Apply this contract when changing `src/lib/infra/queue.ts`, Web/worker queue producers, queue workers, or `/healthz/ready`. Web and worker processes have separate in-memory adapters, so no producer may rely on another process having started pg-boss or created a named queue.
+Apply this contract when changing `packages/queue`, Gateway/Web producers, queue workers, or process readiness. Every process has its own in-memory adapter, so no producer may rely on another process having started pg-boss or created a named queue.
 
 ### 2. Signatures
 
@@ -23,8 +23,8 @@ Apply this contract when changing `src/lib/infra/queue.ts`, Web/worker queue pro
 
 ### 3. Contracts
 
-- Load `pg-boss` with the literal dynamic import `import("pg-boss")` and keep it in Next `serverExternalPackages`; variable-path imports are not statically analyzable, while a top-level static import reaches Edge instrumentation.
-- `src/lib/jobs/catalog.ts` is the only queue-name, payload, retry-message, and policy source. The three current definitions use `retryLimit=2`, `retryDelay=0`, `retryBackoff=false`, and `expireInSeconds=900`; `createQueue` and `send` receive mutable copies because pg-boss mutates option objects.
+- `packages/queue/src/index.ts` loads `pg-boss` with the literal dynamic import `import("pg-boss")`. Variable-path imports are forbidden. Bundled Node applications keep third-party modules external; the transitional Web build keeps `pg-boss` in `serverExternalPackages` until its Worker/readiness dependency is removed.
+- `packages/queue/src/catalog.ts` is the only queue-name, payload, retry-message, and policy source. The three current definitions use `retryLimit=2`, `retryDelay=0`, `retryBackoff=false`, and `expireInSeconds=900`; `createQueue` and `send` receive mutable copies because pg-boss mutates option objects.
 - The adapter is process-local singleton API, but each pg-boss instance is a replaceable generation. Constructor/start/stop failure and normal stop poison and discard that generation; a later call constructs a new instance.
 - Start, stop, and same-name queue creation are single-flight within one generation. A start/send/work arriving during stop waits for the old generation to close, starts a new generation, and never registers work against the old identity.
 - Admission is synchronous after startup: verify current generation identity/state, then add the operation promise to that generation. Stop first changes state to `stopping`, rejects old-generation admission, waits accepted operations, then calls `boss.stop({ close: true, graceful: true, wait: true, timeout: 30000 })`.
@@ -35,7 +35,7 @@ Apply this contract when changing `src/lib/infra/queue.ts`, Web/worker queue pro
 - Retried handlers must be idempotent or use conditional writes. `conversation-title` re-reads the current title and only updates `新会话` or the job's fallback, so a retry cannot overwrite a manual title.
 - pg-boss `error` events log only `[queue] pg-boss error`. Worker/recovery lifecycle logs contain only stable stage, definition name, and `JobOutcome`; never log payload, entity id, raw error, URL, header, credential, cause, or stack.
 - The generic worker runtime owns registration order, immediate/60-second/unref/single-flight recovery scheduling, reverse rollback, and SIGINT/SIGTERM shutdown. Shutdown during startup waits for startup to converge before cleanup; repeated signals reuse one Promise and call `exit` once.
-- `queueAvailable()` awaits real pg-boss startup. Readiness requires both DB and queue checks; storage and Redis remain informational/degradable.
+- `queueAvailable()` awaits real pg-boss startup. Gateway readiness requires both DB and queue checks; storage is currently diagnostic, and Redis remains degradable.
 - Queue readiness means that this process can initialize the queue backend. It does not prove that the independent worker is alive or consuming jobs.
 
 ### 4. Validation & Error Matrix
@@ -79,7 +79,7 @@ Apply this contract when changing `src/lib/infra/queue.ts`, Web/worker queue pro
 - Run the isolated real PostgreSQL harness to prove clean drain completes the job and 30-second timeout leaves the job `retry`/`failed`, then force-drop the random temporary database in `finally`.
 - Readiness route tests cover healthy DB+queue, queue false, reject, timeout, and DB failure; assert HTTP status and `checks.queue` shape.
 - Upload regression proves acquisition/send failures still call `processFile` fallback exactly once and return the existing success response.
-- Run `pnpm build` to protect the variable dynamic-import boundary.
+- Run `pnpm build` and `pnpm build:gateway` to protect the literal dynamic-import and application bundle boundaries.
 
 ### 7. Wrong vs Correct
 

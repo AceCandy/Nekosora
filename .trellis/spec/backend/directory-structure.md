@@ -1,60 +1,43 @@
 # Directory Structure
 
-> Backend(server-side)代码组织约定。Nekusora 是 Next.js 全栈 TypeScript 项目,无独立后端进程(除 worker)。
+> Backend organization for the Next.js control plane, Fastify data plane, and framework-neutral workspace packages.
 
 ---
 
-## 核心布局
+## Core Layout
 
 ```
-src/
-  app/                      Next.js App Router(路由 + API 端点)
-    api/                    内部 API(/api/chat, /api/upload, /api/auth/*)
-    v1/                     对外网关(OpenAI 兼容,/v1/chat/completions, /v1/models)
-    admin/                  管理后台页面 + actions.ts(server actions)
-    panel/                  用户面板页面 + actions.ts
-    chat/                   WebChat 页面 + actions.ts + ChatComposer 组件
-    share/                  公开分享页
-  lib/
-    infra/                  降级基建:db/cache/queue/crypto/vector/env
-    jobs/                   Web/worker 共享的 typed queue catalog(payload/policy/retry message)
-    worker/                 后台任务装配与通用 runtime/recovery 生命周期
-    providers/              统一 IR + provider 适配(openai/openai-compatible/anthropic/gemini)
-    rag/                    RAG 流水线:embedding/chunk/extract/retrieve/context/process
-    compact/                上下文压缩:coverage(CoveragePathHash)/service(4级回退)
-    memory/                 长期记忆(user_memories)
-    conversation-title/     会话标题 durable outbox、dispatch 与 fenced processor
-    routing.ts              四表模型路由器(负载均衡/故障转移)
-    stream.ts               唯一流式核心 streamChat()
-    keys.ts                 主/子密钥签发与校验
-    tokens.ts               CJK token 估算 + 上下文裁剪
-    trace.ts                process_trace 构造
-    context-assembler.ts    槽位式上下文组装
-    usage.ts                用量记录
-    session.ts              会话/鉴权辅助
-    auth.ts / auth-client.ts  Better Auth 配置(server / client)
-  db/
-    schema/pg.ts            Drizzle schema
-    types.ts                dialect 中立领域类型
-    seed.ts                 首管理员创建
-  instrumentation.ts        进程启动钩子(日志)
-  worker.ts                 薄 pg-boss 入口(环境校验 + 动态加载 + runtime 组装)
+apps/
+  web/
+    src/app/                Next.js pages, control-plane routes/actions, and thin rollback handlers
+    src/worker.ts           Transitional Worker entry; moves in the worker-boundary task
+  gateway/
+    src/main.ts             Environment/bootstrap/listen/shutdown entry
+    src/server.ts           Fastify adapter, health checks, limits, cancellation, resource close
+    src/handlers.ts         Route-name to framework-neutral Core handler map
+packages/
+  contracts/src/routes.ts   Data-plane route matrix shared by Gateway and Web rewrites
+  core/src/http/            Framework-neutral Request -> Response handlers
+  core/src/lib/             Routing, providers, chat, RAG, memory, and Worker domain logic
+  db/src/                   Drizzle schema and process-local PostgreSQL access
+  observability/src/        Metrics, usage, and safe logging
+  queue/src/                Typed catalog and pg-boss adapter
 ```
 
 ## Module Organization
 
-- **分层**:`app/`(路由/页面/端点)→ `lib/`(业务逻辑)→ `lib/infra/`(基建)。lib 不 import app;infra 不 import 业务。
-- **任务目录**:`lib/jobs/catalog.ts` 是 queue name、payload、有限 policy 与安全 retry message 的唯一事实源;它不得 import Node driver、worker runtime 或领域 handler。
-- **Worker 所有权**:`lib/worker/definitions.ts` 是领域 handler/recovery 唯一装配表;`lib/worker/runtime.ts` 独占注册顺序、恢复 timer、回滚、signal shutdown 与 drain。领域目录只导出处理函数和单轮 recovery,不得重新增加 `start*Recovery` wrapper。
-- **Worker 入口**:`src/worker.ts` 只做环境校验、字面量动态加载和 runtime 组装,不得包含 queue name/payload、领域分支、timer 或 cleanup tree。
-- **server actions**:每个页面组(如 `admin/`)下放 `actions.ts`,用 `"use server"` 标注,内部 import lib。
-- **降级模块**(db/cache/queue)用动态 import 加载驱动,避免 bundler 把未用 dialect 打进 Edge 编译(见 `util/types` 教训)。
-- **唯一流式入口**:所有 LLM 调用(WebChat + 网关)都经 `streamChat()`,禁止直接调 AI SDK 的 streamText。
-- **新 provider 协议**:在 `lib/providers/registry.ts` 加 case,Chat 和网关同时受益。
+- **Dependency direction**: application adapters may import workspace packages; workspace packages must not import `apps/*`. Shared packages must not accept `NextRequest`/`FastifyRequest` or return `NextResponse`/`FastifyReply`.
+- **HTTP ownership**: `packages/contracts/src/routes.ts` is the route matrix. `apps/gateway` adapts those routes to Core handlers; Web route files are thin exports retained only for transition rollback.
+- **Queue catalog**: `packages/queue/src/catalog.ts` is the only source for queue names, payloads, finite policies, and safe retry messages. It must not import the pg-boss driver, Worker runtime, or domain handlers.
+- **Worker ownership**: `packages/core/src/lib/worker/definitions.ts` owns domain registration; `runtime.ts` owns ordering, recovery timers, rollback, signal shutdown, and drain. `apps/web/src/worker.ts` remains a thin transitional entry until `apps/worker` is created.
+- **Server Actions**: each Web page group keeps `actions.ts` or `{feature}-actions.ts`, marks it with `"use server"`, and calls shared domain code.
+- **Node-only dependencies**: isolate DB/queue/storage drivers behind explicit package exports. Each application bundler decides whether a workspace package is bundled and which third-party modules remain runtime externals.
+- **Streaming**: WebChat and API gateway calls share `packages/core/src/lib/stream.ts`; adapters must not call the AI SDK directly.
+- **Provider protocols**: add protocol cases in `packages/core/src/lib/providers/registry.ts` so Web and Gateway share behavior.
 
 ## Provider 协议矩阵
 
-`lib/providers/registry.ts` 的 `buildLanguageModelWithKey` 按协议四分支构造 AI SDK `LanguageModel`。关键差异在 system 消息处理:
+`packages/core/src/lib/providers/registry.ts` 的 `buildLanguageModelWithKey` 按协议四分支构造 AI SDK `LanguageModel`。关键差异在 system 消息处理:
 
 | 协议 | 构造 | system 消息 | 适用上游 |
 |------|------|-----------|---------|

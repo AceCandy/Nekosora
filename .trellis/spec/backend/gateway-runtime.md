@@ -1,0 +1,94 @@
+# Gateway Runtime
+
+> Fastify data-plane adapter, startup, readiness, proxy transition, and build contracts.
+
+## Scenario: Independently Runnable Fastify Data Plane
+
+### 1. Scope / Trigger
+
+Apply this contract when changing `apps/gateway`, `packages/core/src/http`,
+`packages/contracts/src/routes.ts`, or the transitional Next rewrite. The Gateway owns
+HTTP adaptation and process lifecycle; Core owns framework-neutral behavior.
+
+### 2. Signatures
+
+- `GATEWAY_ROUTES: readonly { method, path, handler }[]`
+- `GatewayHandler = (request: Request, params: Readonly<Record<string, string>>) => Response | Promise<Response>`
+- `buildServer({ handlers?, closeResources? }): FastifyInstance`
+- `GET /healthz -> { status: "ok", uptime: number, ts: number }`
+- `GET /healthz/ready -> { status: "ready" | "unready", checks: { db, storage, queue }, ts }`
+- Required env: `DATA_ENCRYPTION_KEY` (64 hex), `BETTER_AUTH_SECRET`, `DATABASE_URL`
+- Listener env: `GATEWAY_HOST` (default `0.0.0.0`), `GATEWAY_PORT` (default `4000`, integer `1..65535`)
+- Transitional Web env: `GATEWAY_INTERNAL_URL`; empty or missing disables rewrites.
+
+### 3. Contracts
+
+- `packages/contracts/src/routes.ts` is the single route matrix for Fastify registration and Next rewrites. Do not duplicate path lists.
+- Gateway converts Fastify requests into standard Web `Request` objects and sends standard `Response` objects. Core handlers must not import Fastify or Next types.
+- Preserve request headers and raw JSON bytes. Convert multipart input to `FormData` and let the runtime generate its new boundary headers.
+- `/api/upload` accepts at most a 10 MiB file and 11 MiB body; `/v1/audio/transcriptions` accepts at most a 25 MiB file and 26 MiB body.
+- Stream `Response.body` through the Node adapter without changing status, headers, SSE frame bytes, binary bytes, or Range responses.
+- A raw request abort or response socket close aborts the Core `Request.signal`; cancellation must reach the upstream stream and must not start another attempt.
+- `GET /healthz` is process liveness. Readiness uses independent 2-second DB, storage, and queue checks. DB must return `ok` and queue must return `{ available: true }`; storage is diagnostic in the current transition.
+- Closing Fastify closes queue and DB resources. Startup failure also closes any initialized resources, writes only `[gateway] 启动失败`, and exits with code `1`.
+- Database bootstrap runs before listen. The default migration folder is `../../drizzle/pg` relative to the process working directory; launch through the package script or set `DRIZZLE_MIGRATIONS_DIR` explicitly.
+- The production bundle includes all `@nekusora/*` workspace packages and leaves third-party packages external. Every third-party runtime import reachable from the bundle must therefore be a direct `apps/gateway` dependency.
+- The Next rewrite is a reversible transition only. It uses `beforeFiles`, preserves the public URL, and proxies every `GATEWAY_PROXY_ROUTES` path. Production edge routing and retained-image rollback belong to `08-05-runtime-cutover`.
+
+### 4. Validation & Error Matrix
+
+| Condition | Result |
+| --- | --- |
+| Required env missing/invalid | Fixed startup failure log, resources closed, exit `1` |
+| `GATEWAY_PORT` outside `1..65535` | Fixed startup failure log, resources closed, exit `1` |
+| DB bootstrap/migration failure | No listener; fixed startup failure log; exit `1` |
+| `/healthz` while event loop serves requests | HTTP `200`, independent of dependency readiness |
+| DB error/timeout | HTTP `503`, `status="unready"`, DB diagnostic preserved |
+| Queue false/error/timeout | HTTP `503`, `status="unready"`, queue diagnostic preserved |
+| Storage error/timeout during transition | Storage diagnostic preserved; DB+queue still determine status |
+| Fastify payload limit exceeded | Localized `request.payload_too_large`; Core handler is not called |
+| Unexpected handler error | Localized `server.internal`; raw error/credential is not returned |
+| `GATEWAY_INTERNAL_URL` missing | No Next rewrite; retained Web handler executes |
+
+### 5. Good / Base / Bad Cases
+
+- Good: Web is stopped while a real Gateway listener serves API-key `/v1/models` and `/v1/chat/completions`.
+- Good: cancelling a client SSE read aborts the Core request and cancels the upstream stream.
+- Base: a finite JSON route preserves authorization headers, raw request bytes, response status, and body.
+- Bad: add a route to Fastify and Next separately, allowing proxy and listener matrices to drift.
+- Bad: bundle workspace packages but omit a transitive third-party runtime import from `apps/gateway/package.json`.
+- Bad: log the bootstrap exception, database URL, credential, request body, or raw stack on startup failure.
+
+### 6. Tests Required
+
+- `apps/gateway/src/server.test.ts`: route matrix, raw JSON/headers, multipart limits, safe localized errors, SSE bytes, readiness matrix, timer cleanup, and resource close.
+- `apps/gateway/src/server.listener.test.ts`: Gateway-without-Web requests and real-socket SSE cancellation.
+- Core route suites: API-key/session authorization, OpenAI JSON/SSE, WebChat SSE, file 200/206/302/416, images, knowledge, MCP, and metrics behavior.
+- `apps/web/src/gateway-rewrites.test.ts`: disabled rewrite, URL normalization, and complete route mapping.
+- `apps/web/scripts/smoke/gateway-proxy.smoke.ts`: Cookie, Authorization, multipart, Range, SSE proxy behavior and real Web-handler rollback.
+- Production checks: `pnpm build:gateway`, missing-env exit `1`, successful `/healthz` + `/healthz/ready`, clean signal shutdown, and no leftover process or build fixture.
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong: framework-specific request handling leaks into shared domain code.
+export async function v1Models(request: FastifyRequest, reply: FastifyReply) {}
+
+// Correct: the application adapter owns Fastify and Core owns Web-standard contracts.
+export type GatewayHandler = (
+  request: Request,
+  params: Readonly<Record<string, string>>,
+) => Response | Promise<Response>;
+```
+
+```typescript
+// Wrong: third-party dependencies are accidentally bundled or resolved transitively.
+export default defineConfig({ bundle: true });
+
+// Correct: bundle workspace code, externalize third-party runtime packages, and declare them directly.
+export default defineConfig({
+  bundle: true,
+  noExternal: [/^@nekusora\//],
+  skipNodeModulesBundle: true,
+});
+```
