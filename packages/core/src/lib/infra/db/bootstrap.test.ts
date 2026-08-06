@@ -248,6 +248,32 @@ describe("bootstrapDatabase", () => {
 
     expect(updatedTables).not.toContain(schema.conversations);
   });
+
+  it("非 Web 进程显式跳过首管理员 seed", async () => {
+    process.env.BOOTSTRAP_SKIP_MIGRATE = "1";
+    process.env.NODE_ENV = "production";
+    delete process.env.SEED_ADMIN_PASSWORD;
+    const getAuth = vi.fn();
+    vi.doMock("@/lib/infra/db", () => ({
+      getDb: vi.fn().mockResolvedValue({
+        execute: vi.fn().mockResolvedValue({ rows: [] }),
+      }),
+      getSchema: vi.fn(() => ({})),
+    }));
+    vi.doMock("@/auth", () => ({ getAuth }));
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    try {
+      const { bootstrapDatabase } = await import("@/lib/infra/db/bootstrap");
+      await expect(bootstrapDatabase({ seedAdmin: false })).resolves.toBeUndefined();
+    } finally {
+      logSpy.mockRestore();
+      warnSpy.mockRestore();
+    }
+
+    expect(getAuth).not.toHaveBeenCalled();
+  });
 });
 
 describe("runMigrations", () => {

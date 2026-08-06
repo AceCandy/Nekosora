@@ -12,7 +12,7 @@ async function main(): Promise<void> {
   installGlobalErrorGuards();
   validateEnv();
   configureQueueProvider(getQueue);
-  await bootstrapDatabase();
+  await bootstrapDatabase({ seedAdmin: false });
 
   server = buildServer();
   const port = Number(process.env.GATEWAY_PORT ?? 4000);

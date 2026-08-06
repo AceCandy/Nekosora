@@ -18,7 +18,15 @@
  * drizzle-orm 的 barrel → node-postgres → pg → util/types 在 Turbopack 下解析失败。
  * 故全部用函数内动态 import,与 src/lib/infra/db/index.ts 的 getDb() 同款模式。
  */
-export async function bootstrapDatabase(): Promise<void> {
+/** 数据库启动选项；数据面进程应关闭首管理员 seed，避免多进程空库竞态。 */
+export interface BootstrapDatabaseOptions {
+  /** 是否由当前进程创建空库的首个管理员，默认仅 Web 使用。 */
+  seedAdmin?: boolean;
+}
+
+export async function bootstrapDatabase(
+  options: BootstrapDatabaseOptions = {},
+): Promise<void> {
   const { getDb, getSchema } = await import("@/lib/infra/db");
   const db = await getDb();
 
@@ -32,7 +40,9 @@ export async function bootstrapDatabase(): Promise<void> {
   await runMigrations(db);
 
   // --- 步骤 4:首个管理员(幂等 + 失败阻断) ---
-  await ensureFirstAdmin(db, await getSchema());
+  if (options.seedAdmin !== false) {
+    await ensureFirstAdmin(db, await getSchema());
+  }
 
   // --- 步骤 5:内置输出样式预设(幂等,失败不阻断) ---
   await ensureBuiltinRenderStyles(db, await getSchema());

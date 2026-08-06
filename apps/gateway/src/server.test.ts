@@ -4,6 +4,7 @@ const readinessMocks = vi.hoisted(() => ({
   dbExecute: vi.fn(),
   getDb: vi.fn(),
   getStorage: vi.fn(),
+  resolveStorageKind: vi.fn(),
   queueAvailable: vi.fn(),
 }));
 
@@ -14,6 +15,7 @@ vi.mock("@nekusora/db", async (importOriginal) => ({
 vi.mock("@nekusora/core/storage", async (importOriginal) => ({
   ...await importOriginal<typeof import("@nekusora/core/storage")>(),
   getStorage: readinessMocks.getStorage,
+  resolveStorageKind: readinessMocks.resolveStorageKind,
 }));
 vi.mock("@nekusora/queue", async (importOriginal) => ({
   ...await importOriginal<typeof import("@nekusora/queue")>(),
@@ -50,6 +52,7 @@ describe("Gateway HTTP adapter", () => {
     readinessMocks.dbExecute.mockReset().mockResolvedValue(undefined);
     readinessMocks.getDb.mockReset().mockResolvedValue({ execute: readinessMocks.dbExecute });
     readinessMocks.getStorage.mockReset().mockResolvedValue({ kind: "local" });
+    readinessMocks.resolveStorageKind.mockReset().mockReturnValue(null);
     readinessMocks.queueAvailable.mockReset().mockResolvedValue(true);
   });
 
@@ -205,6 +208,7 @@ describe("Gateway readiness", () => {
     readinessMocks.dbExecute.mockReset().mockResolvedValue(undefined);
     readinessMocks.getDb.mockReset().mockResolvedValue({ execute: readinessMocks.dbExecute });
     readinessMocks.getStorage.mockReset().mockResolvedValue({ kind: "local" });
+    readinessMocks.resolveStorageKind.mockReset().mockReturnValue(null);
     readinessMocks.queueAvailable.mockReset().mockResolvedValue(true);
   });
 
@@ -293,6 +297,32 @@ describe("Gateway readiness", () => {
     expect(response.json()).toMatchObject({
       status: "unready",
       checks: { db: "error", queue: { available: true } },
+    });
+    await app.close();
+  });
+
+  it("storage 初始化异常时返回 503", async () => {
+    readinessMocks.getStorage.mockRejectedValue(new Error("storage unavailable"));
+    const app = buildServer({ closeResources: async () => {} });
+    const response = await app.inject({ method: "GET", url: "/healthz/ready" });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toMatchObject({
+      status: "unready",
+      checks: { db: "ok", storage: "error", queue: { available: true } },
+    });
+    await app.close();
+  });
+
+  it("配置的 storage 降级为 local 时返回 503", async () => {
+    readinessMocks.resolveStorageKind.mockReturnValue("s3");
+    const app = buildServer({ closeResources: async () => {} });
+    const response = await app.inject({ method: "GET", url: "/healthz/ready" });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toMatchObject({
+      status: "unready",
+      checks: { db: "ok", storage: "error", queue: { available: true } },
     });
     await app.close();
   });

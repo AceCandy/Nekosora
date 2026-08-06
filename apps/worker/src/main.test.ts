@@ -62,6 +62,7 @@ describe("worker entry", () => {
       "runtime.start",
     ]);
     expect(mocks.configureQueueProvider).toHaveBeenCalledWith(mocks.getQueue);
+    expect(mocks.bootstrapDatabase).toHaveBeenCalledWith({ seedAdmin: false });
   });
 
   it("环境校验失败时不加载进程资源", async () => {

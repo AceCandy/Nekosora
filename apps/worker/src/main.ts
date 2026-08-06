@@ -35,7 +35,7 @@ export async function startWorker(): Promise<void> {
   const health = await startHealthServer(getWorkerHealthOptions());
   let runtimeOwnsResources = false;
   try {
-    await bootstrapDatabase();
+    await bootstrapDatabase({ seedAdmin: false });
     const queue = await queueModule.getQueue();
     const runtime = createWorkerRuntime({
       queue,

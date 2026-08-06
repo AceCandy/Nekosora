@@ -10,7 +10,7 @@ import {
   MAX_UPLOAD_BODY_BYTES,
   MAX_UPLOAD_FILE_BYTES,
 } from "@nekusora/core/http";
-import { getStorage } from "@nekusora/core/storage";
+import { getStorage, resolveStorageKind } from "@nekusora/core/storage";
 import { closeDb, getDb } from "@nekusora/db";
 import { closeQueue, queueAvailable } from "@nekusora/queue";
 import { gatewayHandlers, type GatewayHandler } from "./handlers";
@@ -50,7 +50,9 @@ async function checkReadiness() {
     })(), 2_000),
     withTimeout((async (): Promise<ReadinessCheck> => {
       try {
-        return (await getStorage()).kind;
+        const expected = resolveStorageKind();
+        const actual = (await getStorage()).kind;
+        return expected && actual !== expected ? "error" : actual;
       } catch {
         return "error";
       }
@@ -171,7 +173,11 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
   }));
   server.get("/healthz/ready", async (_request, reply) => {
     const [db, storage, queue] = await checkReadiness();
-    const ready = db === "ok" && typeof queue === "object" && queue.available;
+    const ready = db === "ok"
+      && storage !== "error"
+      && storage !== "timeout"
+      && typeof queue === "object"
+      && queue.available;
     return reply.code(ready ? 200 : 503).send({
       status: ready ? "ready" : "unready",
       checks: { db, storage, queue },
