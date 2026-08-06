@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 87
+- **Total Sessions**: 88
 - **Last Active**: 2026-08-06
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~613 | Active |
+| `journal-2.md` | ~636 | Active |
 | `journal-1.md` | ~1981 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 88 | 2026-08-06 | 网关运行时分离父任务验收完成 | `73c249b`, `e0abf6b`, `bb0a3a0` | `main` |
 | 87 | 2026-08-06 | 生产运行时切流完成 | `12630f0`, `72ff305`, `8d8454a` | `main` |
 | 86 | 2026-08-06 | 路由工具能力回退收尾 | `a3cecd1`, `fbb761c`, `d5bb224` | `main` |
 | 85 | 2026-08-06 | Worker 与队列运行时隔离 | `b694a35`, `1542e1c` | `main` |
