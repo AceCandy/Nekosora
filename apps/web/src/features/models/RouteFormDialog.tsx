@@ -173,6 +173,7 @@ export default function RouteFormDialog({
         </p>
 
         <label className="flex items-center gap-2 text-ui-body font-medium">
+          <input name="supportsToolsPresent" type="hidden" value="true" />
           <input
             name="supportsTools"
             type="checkbox"

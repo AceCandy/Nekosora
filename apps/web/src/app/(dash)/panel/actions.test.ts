@@ -234,6 +234,7 @@ describe("个人路由工具能力", () => {
     const createData = new FormData();
     createData.set("providerId", "provider-a");
     createData.set("upstreamModelName", "upstream-a");
+    createData.set("supportsToolsPresent", "true");
     createData.set("supportsTools", "on");
 
     await createMyRoute("private-a", createData);
@@ -242,12 +243,52 @@ describe("个人路由工具能力", () => {
     const updateData = new FormData();
     updateData.set("providerId", "provider-a");
     updateData.set("upstreamModelName", "upstream-b");
+    updateData.set("supportsToolsPresent", "true");
     await updateMyRoute(mockData.routes[0].id as string, updateData);
 
     expect(mockData.routes[0]).toEqual(expect.objectContaining({
       upstreamModelName: "upstream-b",
       supportsTools: false,
     }));
+  });
+
+  it("更新未提供工具能力时保持原值", async () => {
+    mockData.routes = [{
+      id: "route-a",
+      ownerUserId: "admin-a",
+      modelId: "private-a",
+      providerId: "provider-a",
+      upstreamModelName: "upstream-a",
+      supportsTools: true,
+    }];
+    const formData = new FormData();
+    formData.set("providerId", "provider-a");
+    formData.set("upstreamModelName", "upstream-b");
+
+    await updateMyRoute("route-a", formData);
+
+    expect(mockData.routes[0]).toEqual(expect.objectContaining({ supportsTools: true }));
+  });
+
+  it("未提供工具能力时默认开启", async () => {
+    const formData = new FormData();
+    formData.set("providerId", "provider-a");
+    formData.set("upstreamModelName", "upstream-a");
+
+    await createMyRoute("private-a", formData);
+
+    expect(mockData.routes[0]).toEqual(expect.objectContaining({ supportsTools: true }));
+  });
+
+  it("表单明确取消工具能力时保存关闭", async () => {
+    const formData = new FormData();
+    formData.set("providerId", "provider-a");
+    formData.set("upstreamModelName", "upstream-a");
+    formData.set("supportsToolsPresent", "true");
+
+    await createMyRoute("private-a", formData);
+
+    expect(mockData.routes[0]).toEqual(expect.objectContaining({ supportsTools: false }));
   });
 });
 

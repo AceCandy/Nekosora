@@ -486,6 +486,7 @@ describe("streamChatWithTools agent loop finish signal", () => {
     });
     expect(finishes).toHaveLength(1);
     expect(finishes[0]).toMatchObject({ finishReason: "stop" });
+    expect(markRouteToolsUnsupported).not.toHaveBeenCalled();
   });
 
   it("多轮 agent 聚合为一条 success 日志", async () => {

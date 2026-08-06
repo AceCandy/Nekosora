@@ -220,6 +220,7 @@ describe("createRoute", () => {
     const formData = new FormData();
     formData.set("providerId", "provider-a");
     formData.set("upstreamModelName", "upstream-a");
+    formData.set("supportsToolsPresent", "true");
     formData.set("supportsTools", "on");
 
     await expect(createRoute(modelId, formData)).resolves.toBeUndefined();
@@ -230,6 +231,27 @@ describe("createRoute", () => {
       upstreamModelName: "upstream-a",
       supportsTools: true,
     }));
+  });
+
+  it("未提供工具能力时默认开启", async () => {
+    const formData = new FormData();
+    formData.set("providerId", "provider-a");
+    formData.set("upstreamModelName", "upstream-a");
+
+    await createRoute("private-a", formData);
+
+    expect(mockData.routes[0]).toEqual(expect.objectContaining({ supportsTools: true }));
+  });
+
+  it("表单明确取消工具能力时保存关闭", async () => {
+    const formData = new FormData();
+    formData.set("providerId", "provider-a");
+    formData.set("upstreamModelName", "upstream-a");
+    formData.set("supportsToolsPresent", "true");
+
+    await createRoute("private-a", formData);
+
+    expect(mockData.routes[0]).toEqual(expect.objectContaining({ supportsTools: false }));
   });
 
   it("拒绝使用其他管理员的服务商", async () => {
@@ -272,6 +294,43 @@ describe("updateRoute", () => {
       weight: 3,
       supportsTools: true,
     }));
+  });
+
+  it("允许保存关闭工具能力", async () => {
+    mockData.routes = [{
+      id: "route-a",
+      ownerUserId: "admin-a",
+      modelId: "private-a",
+      providerId: "provider-a",
+      upstreamModelName: "upstream-a",
+      supportsTools: true,
+    }];
+    const formData = new FormData();
+    formData.set("providerId", "provider-a");
+    formData.set("upstreamModelName", "upstream-a");
+    formData.set("supportsToolsPresent", "true");
+
+    await updateRoute("route-a", formData);
+
+    expect(mockData.routes[0]).toEqual(expect.objectContaining({ supportsTools: false }));
+  });
+
+  it("更新未提供工具能力时保持原值", async () => {
+    mockData.routes = [{
+      id: "route-a",
+      ownerUserId: "admin-a",
+      modelId: "private-a",
+      providerId: "provider-a",
+      upstreamModelName: "upstream-a",
+      supportsTools: true,
+    }];
+    const formData = new FormData();
+    formData.set("providerId", "provider-a");
+    formData.set("upstreamModelName", "upstream-b");
+
+    await updateRoute("route-a", formData);
+
+    expect(mockData.routes[0]).toEqual(expect.objectContaining({ supportsTools: true }));
   });
 
   it("拒绝改用其他管理员的服务商", async () => {
