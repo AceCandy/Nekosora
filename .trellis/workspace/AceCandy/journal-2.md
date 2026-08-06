@@ -543,3 +543,25 @@ Added privacy-safe memory extraction stage logs, diagnosed mem0 SQLite native bi
 ### Status
 
 [OK] **Completed**
+
+
+## Session 85: Worker 与队列运行时隔离
+
+**Date**: 2026-08-06
+**Task**: Worker 与队列运行时隔离
+**Branch**: `main`
+
+### Summary
+
+新增独立 Worker 进程、健康探针与容器入口，将队列契约和 pg-boss 驱动解耦，移除 Web 的 Queue adapter 依赖并验证 PostgreSQL drain 与优雅退出。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b694a35` | (see git log) |
+| `1542e1c` | (see git log) |
+
+### Status
+
+[OK] **Completed**
