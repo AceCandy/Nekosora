@@ -565,3 +565,26 @@ Added privacy-safe memory extraction stage logs, diagnosed mem0 SQLite native bi
 ### Status
 
 [OK] **Completed**
+
+
+## Session 86: 路由工具能力回退收尾
+
+**Date**: 2026-08-06
+**Task**: 路由工具能力回退收尾
+**Branch**: `main`
+
+### Summary
+
+修复路由创建默认工具能力与更新三态表单语义，补齐自动复标隔离回归测试，同步网关路由规范并完成全量质量验证。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a3cecd1` | (see git log) |
+| `fbb761c` | (see git log) |
+| `d5bb224` | (see git log) |
+
+### Status
+
+[OK] **Completed**

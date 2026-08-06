@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 85
+- **Total Sessions**: 86
 - **Last Active**: 2026-08-06
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~567 | Active |
+| `journal-2.md` | ~590 | Active |
 | `journal-1.md` | ~1981 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 86 | 2026-08-06 | 路由工具能力回退收尾 | `a3cecd1`, `fbb761c`, `d5bb224` | `main` |
 | 85 | 2026-08-06 | Worker 与队列运行时隔离 | `b694a35`, `1542e1c` | `main` |
 | 84 | 2026-08-06 | 完成 Fastify 数据面迁移 | `cf51b16`, `345fbe8` | `main` |
 | 83 | 2026-08-05 | pnpm workspace 与 Next 16 迁移 | `a654df4`, `321f47b`, `02f54f3` | `main` |
