@@ -99,13 +99,15 @@ describe("有序外接搜索", () => {
   });
 
   it("单个后端超时后继续下一后端", async () => {
-    const totalTimeout = new AbortController();
     const firstTimeout = new AbortController();
+    const firstFallbackTimeout = new AbortController();
     const secondTimeout = new AbortController();
+    const secondFallbackTimeout = new AbortController();
     vi.spyOn(AbortSignal, "timeout")
-      .mockReturnValueOnce(totalTimeout.signal)
       .mockReturnValueOnce(firstTimeout.signal)
-      .mockReturnValueOnce(secondTimeout.signal);
+      .mockReturnValueOnce(firstFallbackTimeout.signal)
+      .mockReturnValueOnce(secondTimeout.signal)
+      .mockReturnValueOnce(secondFallbackTimeout.signal);
     let markStarted!: () => void;
     const started = new Promise<void>((resolve) => { markStarted = resolve; });
     const first = vi.fn((_query, options) => new Promise((_, reject) => {
@@ -148,12 +150,13 @@ describe("有序外接搜索", () => {
     });
   });
 
-  it("总预算超时后停止后端链", async () => {
-    const totalTimeout = new AbortController();
+  it("回退窗口到期后停止后端链", async () => {
     const backendTimeout = new AbortController();
+    const fallbackTimeout = new AbortController();
     vi.spyOn(AbortSignal, "timeout")
-      .mockReturnValueOnce(totalTimeout.signal)
-      .mockReturnValueOnce(backendTimeout.signal);
+      .mockReturnValueOnce(backendTimeout.signal)
+      .mockReturnValueOnce(fallbackTimeout.signal);
+    const now = vi.spyOn(Date, "now").mockReturnValue(0);
     let markStarted!: () => void;
     const started = new Promise<void>((resolve) => { markStarted = resolve; });
     const first = vi.fn((_query, options) => new Promise((_, reject) => {
@@ -175,7 +178,8 @@ describe("有序外接搜索", () => {
 
     const resultPromise = searchWeb("user", "query", searchOptions());
     await started;
-    totalTimeout.abort(new DOMException("Timed out", "TimeoutError"));
+    now.mockReturnValue(60_000);
+    fallbackTimeout.abort(new DOMException("Timed out", "TimeoutError"));
 
     await expect(resultPromise).resolves.toMatchObject({
       hit: false,
@@ -185,12 +189,13 @@ describe("有序外接搜索", () => {
     expect(second).not.toHaveBeenCalled();
   });
 
-  it("总预算与后端预算同时超时时不把后端记为不可用", async () => {
-    const totalTimeout = new AbortController();
+  it("回退窗口与后端预算同时超时时不把后端记为不可用", async () => {
     const backendTimeout = new AbortController();
+    const fallbackTimeout = new AbortController();
     vi.spyOn(AbortSignal, "timeout")
-      .mockReturnValueOnce(totalTimeout.signal)
-      .mockReturnValueOnce(backendTimeout.signal);
+      .mockReturnValueOnce(backendTimeout.signal)
+      .mockReturnValueOnce(fallbackTimeout.signal);
+    const now = vi.spyOn(Date, "now").mockReturnValue(0);
     let markStarted!: () => void;
     const started = new Promise<void>((resolve) => { markStarted = resolve; });
     const first = vi.fn((_query, options) => new Promise((_, reject) => {
@@ -210,7 +215,8 @@ describe("有序外接搜索", () => {
       unavailableBackends,
     });
     await started;
-    totalTimeout.abort(new DOMException("Timed out", "TimeoutError"));
+    now.mockReturnValue(60_000);
+    fallbackTimeout.abort(new DOMException("Timed out", "TimeoutError"));
     backendTimeout.abort(new DOMException("Timed out", "TimeoutError"));
 
     await expect(resultPromise).resolves.toMatchObject({
@@ -250,7 +256,7 @@ describe("有序外接搜索", () => {
     expect(first).not.toHaveBeenCalled();
     expect(result).toMatchObject({
       hit: true,
-      attempts: [{ backend: { name: "Readable First" }, outcome: "unavailable" }, { outcome: "success" }],
+      attempts: [{ backend: { name: "Readable First" }, outcome: "skipped_after_timeout" }, { outcome: "success" }],
     });
   });
 
@@ -486,6 +492,112 @@ describe("有序外接搜索", () => {
       backend: { type: "model", id: "grok-id", name: "Grok 4.5" },
       attempts: [{ outcome: "empty" }, { outcome: "success" }],
     });
+  });
+
+  it("Hosted 首包超时后在回退窗口内继续外部后端", async () => {
+    const tavily = vi.fn().mockResolvedValue([
+      { title: "Result", url: "https://example.com/a", snippet: "text" },
+    ]);
+    mocks.resolveExternalSearchBackends.mockResolvedValue([backend("tavily", tavily)]);
+    mocks.loadConfig.mockResolvedValue({
+      version: 2,
+      providers: [],
+      backends: [{ type: "current-model" }, { type: "provider", providerId: "tavily" }],
+    });
+    mocks.executeHostedModelSearch.mockRejectedValue(
+      new DOMException("Hosted Search 流等待超时", "TimeoutError"),
+    );
+    const unavailableBackends = new Map();
+
+    const result = await searchWeb("user", "query", {
+      ...searchOptions(),
+      unavailableBackends,
+    });
+
+    expect(result).toMatchObject({
+      hit: true,
+      backend: { id: "tavily" },
+      attempts: [{ outcome: "timeout" }, { outcome: "success" }],
+    });
+    expect(unavailableBackends.get("current-model")).toMatchObject({
+      id: "current-model-id",
+      name: "Current Model",
+    });
+  });
+
+  it("已开始的 Hosted 流跨过回退窗口后仍可成功", async () => {
+    const outerSignal = new AbortController().signal;
+    const now = vi.spyOn(Date, "now").mockReturnValue(0);
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    mocks.resolveExternalSearchBackends.mockResolvedValue([]);
+    mocks.loadConfig.mockResolvedValue({
+      version: 2,
+      providers: [],
+      backends: [{ type: "current-model" }],
+    });
+    mocks.executeHostedModelSearch.mockImplementation(async (input) => {
+      expect(input.signal).toBe(outerSignal);
+      now.mockReturnValue(90_000);
+      return {
+        summary: "grounded",
+        citations: [{ title: "Source", url: "https://example.com", snippet: "" }],
+        modelId: "current-model-id",
+        modelName: "Current Model",
+      };
+    });
+
+    await expect(searchWeb("user", "query", {
+      ...searchOptions(),
+      signal: outerSignal,
+    })).resolves.toMatchObject({ hit: true, groundedSummary: "grounded" });
+    expect(timeout).not.toHaveBeenCalled();
+  });
+
+  it("调用方取消会立即中止 Hosted 搜索", async () => {
+    const controller = new AbortController();
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => { markStarted = resolve; });
+    mocks.resolveExternalSearchBackends.mockResolvedValue([]);
+    mocks.loadConfig.mockResolvedValue({
+      version: 2,
+      providers: [],
+      backends: [{ type: "current-model" }],
+    });
+    mocks.executeHostedModelSearch.mockImplementation(({ signal }) => new Promise((_, reject) => {
+      markStarted();
+      signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+    }));
+
+    const result = searchWeb("user", "query", {
+      ...searchOptions(),
+      signal: controller.signal,
+    });
+    await started;
+    controller.abort(new DOMException("Aborted", "AbortError"));
+
+    await expect(result).rejects.toMatchObject({ name: "AbortError" });
+  });
+
+  it("Hosted 流在回退窗口耗尽后失败时不再启动新后端", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(0);
+    const tavily = vi.fn();
+    mocks.resolveExternalSearchBackends.mockResolvedValue([backend("tavily", tavily)]);
+    mocks.loadConfig.mockResolvedValue({
+      version: 2,
+      providers: [],
+      backends: [{ type: "current-model" }, { type: "provider", providerId: "tavily" }],
+    });
+    mocks.executeHostedModelSearch.mockImplementation(async () => {
+      now.mockReturnValue(60_000);
+      throw new Error("stream failed");
+    });
+
+    await expect(searchWeb("user", "query", searchOptions())).resolves.toMatchObject({
+      hit: false,
+      reason: "搜索超时",
+      attempts: [{ outcome: "timeout" }],
+    });
+    expect(tavily).not.toHaveBeenCalled();
   });
 
   it("Hosted 模型无结果时仍使用已选路由的可读名称", async () => {

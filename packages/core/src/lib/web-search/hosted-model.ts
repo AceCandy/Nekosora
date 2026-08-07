@@ -1,4 +1,4 @@
-import { generateText } from "ai";
+import { streamText, type TextStreamPart, type ToolSet } from "ai";
 import { recordFailure, recordSuccess } from "@/lib/circuit-breaker";
 import {
   executeAtomicGateway,
@@ -10,6 +10,8 @@ import type { CallContext, IRUsage } from "@/lib/providers/types";
 import { resolveRoutesById } from "@/lib/routing";
 import { getChatUA } from "@/lib/system-settings/ua";
 import type { SearchResult, SearchTimeRange } from "./types";
+
+const HOSTED_SEARCH_IDLE_TIMEOUT_MS = 30_000;
 
 export interface HostedModelSearchResult {
   summary: string;
@@ -58,6 +60,7 @@ export async function executeHostedModelSearch(
 ): Promise<HostedModelSearchResult | HostedModelSearchUnsupported | null> {
   const userAgent = await getChatUA();
   let supportedRouteSeen = false;
+  let watchdogTimedOut = false;
   const adapter: GatewayAttemptAdapter<never, HostedModelSearchResult> = async function* ({
     route,
     apiKey,
@@ -65,25 +68,64 @@ export async function executeHostedModelSearch(
   }) {
     const runtime = buildHostedSearchRuntime(route, apiKey, userAgent, input.timeRange);
     if (!runtime) throw new Error("当前路由不支持原生搜索协议");
-    const result = await generateText({
-      model: runtime.model,
-      maxRetries: 0,
-      abortSignal,
-      tools: runtime.tools,
-      maxOutputTokens: 1_200,
-      prompt: buildHostedSearchPrompt(input.query, new Date(), input.timeRange),
-    });
+    const watchdog = new AbortController();
+    const streamSignal = abortSignal
+      ? AbortSignal.any([abortSignal, watchdog.signal])
+      : watchdog.signal;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const resetWatchdog = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        watchdogTimedOut = true;
+        watchdog.abort(new DOMException("Hosted Search 流等待超时", "TimeoutError"));
+      }, HOSTED_SEARCH_IDLE_TIMEOUT_MS);
+    };
+    resetWatchdog();
+    let result: ReturnType<typeof streamText>;
+    try {
+      result = streamText({
+        model: runtime.model,
+        maxRetries: 0,
+        abortSignal: streamSignal,
+        tools: runtime.tools,
+        maxOutputTokens: 1_200,
+        prompt: buildHostedSearchPrompt(input.query, new Date(), input.timeRange),
+      });
+      for await (const part of result.fullStream) {
+        if (part.type === "abort") {
+          throw streamSignal.reason instanceof Error
+            ? streamSignal.reason
+            : new DOMException("Hosted Search 已中止", "AbortError");
+        }
+        if (part.type === "error") {
+          throw part.error instanceof Error ? part.error : new Error(String(part.error));
+        }
+        if (isHostedSearchProgress(part)) resetWatchdog();
+      }
+    } catch (error) {
+      if (watchdog.signal.aborted) {
+        throw new DOMException("Hosted Search 流等待超时", "AbortError");
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
+    const [text, sources, resultUsage] = await Promise.all([
+      result.text,
+      result.sources,
+      result.usage,
+    ]);
     const usage: IRUsage = {
-      inputTokens: result.usage.inputTokens,
-      outputTokens: result.usage.outputTokens,
-      totalTokens: result.usage.totalTokens,
-      reasoningTokens: result.usage.outputTokenDetails?.reasoningTokens,
-      cachedInputTokens: result.usage.inputTokenDetails?.cacheReadTokens,
+      inputTokens: resultUsage.inputTokens,
+      outputTokens: resultUsage.outputTokens,
+      totalTokens: resultUsage.totalTokens,
+      reasoningTokens: resultUsage.outputTokenDetails?.reasoningTokens,
+      cachedInputTokens: resultUsage.inputTokenDetails?.cacheReadTokens,
     };
     return {
       value: {
-        summary: result.text.trim(),
-        citations: normalizeHostedSources(result.sources),
+        summary: text.trim(),
+        citations: normalizeHostedSources(sources),
         modelId: route.modelId,
         modelName: route.modelName,
       },
@@ -123,8 +165,26 @@ export async function executeHostedModelSearch(
   ) {
     return { unsupported: true };
   }
+  if (watchdogTimedOut) {
+    throw new DOMException("Hosted Search 流等待超时", "TimeoutError");
+  }
   const value = outcome.status === "success" ? outcome.result : undefined;
   return value?.summary && value.citations.length > 0 ? value : null;
+}
+
+function isHostedSearchProgress(part: TextStreamPart<ToolSet>): boolean {
+  return part.type === "text-delta"
+    || part.type === "reasoning-delta"
+    || part.type === "source"
+    || part.type === "tool-input-start"
+    || part.type === "tool-input-delta"
+    || part.type === "tool-input-end"
+    || part.type === "tool-call"
+    || part.type === "tool-result"
+    || part.type === "tool-error"
+    || part.type === "tool-output-denied"
+    || part.type === "tool-approval-request"
+    || part.type === "tool-approval-response";
 }
 
 export function normalizeHostedSources(sources: unknown[]): SearchResult[] {
