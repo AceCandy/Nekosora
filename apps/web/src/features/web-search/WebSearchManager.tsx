@@ -52,7 +52,7 @@ interface Props {
   removeModelAction: (modelId: string) => Promise<void>;
 }
 
-const TYPES: WebSearchProviderType[] = ["tavily", "bocha", "zhipu", "searxng"];
+const TYPES: WebSearchProviderType[] = ["tavily", "exa", "bocha", "zhipu", "searxng"];
 
 export default function WebSearchManager({
   config,

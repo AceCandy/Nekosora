@@ -61,15 +61,15 @@ describe("联网搜索配置 V2", () => {
   it("数据库只保存密文，客户端只得到 hasApiKey", () => {
     const runtime = {
       version: 2 as const,
-      providers: [{ id: "a", type: "tavily" as const, name: "A", apiKey: "secret", enabled: true }],
-      backends: [{ type: "provider" as const, providerId: "a" }],
+      providers: [{ id: "exa", type: "exa" as const, name: "Exa", apiKey: "secret", enabled: true }],
+      backends: [{ type: "provider" as const, providerId: "exa" }],
     };
     const stored = serializeWebSearchConfig(runtime);
     const dto = toWebSearchConfigDto(runtime);
 
     expect(stored.providers[0].apiKeyCiphertext).toBeTruthy();
     expect(JSON.stringify(stored)).not.toContain("secret");
-    expect(dto.providers[0]).toEqual({ id: "a", type: "tavily", name: "A", enabled: true, hasApiKey: true });
+    expect(dto.providers[0]).toEqual({ id: "exa", type: "exa", name: "Exa", enabled: true, hasApiKey: true });
     expect(JSON.stringify(dto)).not.toContain("secret");
     expect(parseWebSearchConfig(stored)).toEqual(runtime);
   });

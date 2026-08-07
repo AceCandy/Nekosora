@@ -15,7 +15,7 @@ import { Globe } from "lucide-react";
 import { PageHeader } from "@/shared/components/PageHeader";
 
 const providerInputSchema = z.object({
-  type: z.enum(["tavily", "bocha", "zhipu", "searxng"]),
+  type: z.enum(["tavily", "exa", "bocha", "zhipu", "searxng"]),
   name: z.string().trim().min(1).max(100),
   apiKey: z.string().trim().min(1).max(10_000).optional(),
   model: z.string().trim().min(1).max(200).optional(),

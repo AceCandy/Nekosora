@@ -16,6 +16,7 @@ import type {
 } from "./types";
 import { isHostedSearchRouteCompatible, searchBackendKey } from "./types";
 import { createTavilyProvider } from "./tavily";
+import { createExaProvider } from "./exa";
 import { createBochaProvider } from "./bocha";
 import { createZhipuProvider } from "./zhipu";
 import { createSearxngProvider } from "./searxng";
@@ -25,7 +26,7 @@ const TTL = 60_000;
 
 const providerBaseSchema = z.object({
   id: z.string().min(1),
-  type: z.enum(["tavily", "bocha", "zhipu", "searxng"]),
+  type: z.enum(["tavily", "exa", "bocha", "zhipu", "searxng"]),
   name: z.string().min(1),
   model: z.string().optional(),
   baseUrl: z.string().optional(),
@@ -214,6 +215,8 @@ function buildProvider(provider: WebSearchProviderConfig): SearchProvider | null
   switch (provider.type) {
     case "tavily":
       return provider.apiKey ? createTavilyProvider(provider.apiKey) : null;
+    case "exa":
+      return provider.apiKey ? createExaProvider(provider.apiKey) : null;
     case "bocha":
       return provider.apiKey ? createBochaProvider(provider.apiKey) : null;
     case "zhipu":

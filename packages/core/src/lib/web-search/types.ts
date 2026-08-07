@@ -90,7 +90,7 @@ export function createFreshnessTimeRange(
   };
 }
 
-export type WebSearchProviderType = "tavily" | "bocha" | "zhipu" | "searxng";
+export type WebSearchProviderType = "tavily" | "exa" | "bocha" | "zhipu" | "searxng";
 
 export type SearchBackend =
   | { type: "current-model" }
