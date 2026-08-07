@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/web-search.md","reason":"复核 route-specific timeout、回退顺序、取消和 trace 兼容性。"}
+{"file":".trellis/spec/backend/model-message-boundary.md","reason":"复核 AI SDK 7 流式结果、来源和用量读取。"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"复核撤回事件、delta buffer 顺序、continue generation 与终态。"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"复核新增 SSE/outcome 枚举在未知输入边界的安全收敛。"}
