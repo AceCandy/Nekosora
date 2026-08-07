@@ -745,3 +745,25 @@ Added privacy-safe memory extraction stage logs, diagnosed mem0 SQLite native bi
 ### Status
 
 [OK] **Completed**
+
+
+## Session 94: 修复流式搜索超时与工具轮正文
+
+**Date**: 2026-08-07
+**Task**: 修复流式搜索超时与工具轮正文
+**Branch**: `main`
+
+### Summary
+
+Hosted Search 改为首包与流中空闲 watchdog，60 秒窗口仅限制新后端；工具轮临时正文支持跨 Core/SSE/Web 精确撤回，并区分超时后跳过状态。全量 lint、类型检查和测试通过。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0aae65f` | (see git log) |
+| `9498b85` | (see git log) |
+
+### Status
+
+[OK] **Completed**
