@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/web-search.md","reason":"联网搜索 Provider、时间范围、密钥、回退和测试的权威契约"}
+{"file":".trellis/spec/frontend/index.md","reason":"设置页 Server/Client、鉴权、i18n 与质量基线"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"外部响应与 Server Action 输入的 Zod 边界约定"}
+{"file":".trellis/tasks/08-07-exa-web-search/research/exa-api.md","reason":"Exa 官方请求字段、响应结构和参考实现证据"}
