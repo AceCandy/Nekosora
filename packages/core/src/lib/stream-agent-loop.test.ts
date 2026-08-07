@@ -145,6 +145,22 @@ const baseOpts = {
   userAgent: "Nekusora-Test",
 };
 
+function makeWebSearchTool(
+  execute: (toolCallId: string, args: unknown) => Promise<{ result: unknown; isError: boolean }>,
+) {
+  return {
+    definition: {
+      type: "function" as const,
+      function: {
+        name: "web_search",
+        description: "Search the web",
+        parameters: { type: "object", properties: {} },
+      },
+    },
+    execute: vi.fn(execute),
+  };
+}
+
 describe("streamChatWithTools agent loop finish signal", () => {
   beforeAll(() => {
     process.env.DATA_ENCRYPTION_KEY =
@@ -394,6 +410,101 @@ describe("streamChatWithTools agent loop finish signal", () => {
         }],
       },
     ]);
+  });
+
+  it("同轮多个 web_search 限流并行并按调用顺序回填结果", async () => {
+    let active = 0;
+    let maxActive = 0;
+    const webSearchTool = makeWebSearchTool(async (toolCallId) => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await Promise.resolve();
+      await Promise.resolve();
+      active -= 1;
+      if (toolCallId === "search-1") throw new Error("search failed");
+      return { result: `result-${toolCallId}`, isError: false };
+    });
+    vi.mocked(streamText)
+      .mockReturnValueOnce(mockStreamResult(
+        Array.from({ length: 4 }, (_, index) => ({
+          type: "tool-call",
+          toolCallId: `search-${index + 1}`,
+          toolName: "web_search",
+          input: { query: `query-${index + 1}` },
+        })),
+        "tool-calls",
+      ))
+      .mockReturnValueOnce(mockStreamResult([{ type: "text-delta", text: "done" }], "stop"));
+
+    const events = await collect(streamChatWithTools({
+      ...baseOpts,
+      request: { ...baseOpts.request, tools: [] },
+      webSearchTool,
+    }));
+
+    expect(maxActive).toBe(3);
+    expect(events.filter((event) => event.type === "tool-result")).toEqual([
+      expect.objectContaining({ toolCallId: "search-1", result: "search failed", isError: true }),
+      expect.objectContaining({ toolCallId: "search-2", result: "result-search-2" }),
+      expect.objectContaining({ toolCallId: "search-3", result: "result-search-3" }),
+      expect.objectContaining({ toolCallId: "search-4", result: "result-search-4" }),
+    ]);
+  });
+
+  it("web_search 与 MCP 混合时保持串行执行", async () => {
+    let active = 0;
+    let maxActive = 0;
+    const execute = async (result: string) => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await Promise.resolve();
+      active -= 1;
+      return { result, isError: false };
+    };
+    const webSearchTool = makeWebSearchTool(() => execute("search"));
+    callMcpTool.mockImplementation(() => execute("mcp"));
+    vi.mocked(streamText)
+      .mockReturnValueOnce(mockStreamResult(
+        [
+          { type: "tool-call", toolCallId: "search", toolName: "web_search", input: {} },
+          { type: "tool-call", toolCallId: "mcp", toolName: "demo__echo", input: {} },
+        ],
+        "tool-calls",
+      ))
+      .mockReturnValueOnce(mockStreamResult([{ type: "text-delta", text: "done" }], "stop"));
+
+    await collect(streamChatWithTools({ ...baseOpts, webSearchTool }));
+
+    expect(maxActive).toBe(1);
+  });
+
+  it("同轮并行 web_search 共享取消信号并终止生成", async () => {
+    const controller = new AbortController();
+    let started = 0;
+    const webSearchTool = makeWebSearchTool(async () => {
+      started += 1;
+      await Promise.resolve();
+      if (!controller.signal.aborted) controller.abort();
+      controller.signal.throwIfAborted();
+      return { result: "unreachable", isError: false };
+    });
+    vi.mocked(streamText).mockReturnValueOnce(mockStreamResult(
+      [
+        { type: "tool-call", toolCallId: "search-1", toolName: "web_search", input: {} },
+        { type: "tool-call", toolCallId: "search-2", toolName: "web_search", input: {} },
+      ],
+      "tool-calls",
+    ));
+
+    await expect(collect(streamChatWithTools({
+      ...baseOpts,
+      request: { ...baseOpts.request, tools: [] },
+      abortSignal: controller.signal,
+      webSearchTool,
+    }))).rejects.toThrow();
+
+    expect(started).toBe(2);
+    expect(controller.signal.aborted).toBe(true);
   });
 
   it("上游 error 透传且不伪造最终 finish", async () => {

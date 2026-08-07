@@ -670,20 +670,36 @@ export async function* streamChatWithTools(
 
     // 执行工具并收集结果。本轮全部 tool_calls 必须归属于同一条 assistant 消息。
     // 本轮 finish 已消费为循环控制信号,不向外 yield。
-      const toolMessages: IRMessage[] = [];
-      for (const tc of pendingToolCalls) {
-        let execution: { result: unknown; isError: boolean };
+      const executeToolCall = async (tc: (typeof pendingToolCalls)[number]) => {
         try {
-          execution = opts.webSearchTool?.definition.function.name === tc.toolName
+          return opts.webSearchTool?.definition.function.name === tc.toolName
             ? await opts.webSearchTool.execute(tc.toolCallId, tc.args)
             : await callMcpTool(mcpServers, tc.toolCallId, tc.toolName, tc.args);
         } catch (error) {
           if (opts.abortSignal?.aborted) throw error;
-          execution = {
+          return {
             result: redactErrorMessage(error, [], "tool_error"),
             isError: true,
           };
         }
+      };
+      const allWebSearchCalls = pendingToolCalls.length > 1
+        && pendingToolCalls.every((tc) => opts.webSearchTool?.definition.function.name === tc.toolName);
+      const executions: { result: unknown; isError: boolean }[] = [];
+      if (allWebSearchCalls) {
+        const maxParallelSearches = 3;
+        for (let i = 0; i < pendingToolCalls.length; i += maxParallelSearches) {
+          executions.push(...await Promise.all(
+            pendingToolCalls.slice(i, i + maxParallelSearches).map(executeToolCall),
+          ));
+        }
+      } else {
+        for (const tc of pendingToolCalls) executions.push(await executeToolCall(tc));
+      }
+      const toolMessages: IRMessage[] = [];
+      for (let i = 0; i < pendingToolCalls.length; i += 1) {
+        const tc = pendingToolCalls[i];
+        const execution = executions[i];
         const { result, isError } = execution;
         yield {
           type: "tool-result",

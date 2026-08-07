@@ -36,6 +36,10 @@ Required environment:
   tool-capable main model decide whether to call `web_search` and which query to use.
 - The main model never chooses Tavily, SearXNG, GPT, Claude, Gemini, or Grok directly.
   `searchWeb` resolves the user's ordered list and falls through unavailable or failed entries.
+- Multiple logical `web_search` calls emitted in the same model step run concurrently in stable
+  batches of at most three. Each call keeps its own ordered backend fallback chain. Mixed batches
+  containing MCP or other tools remain serial, and tool results are projected in the model's
+  original call order.
 - A model backend is eligible only when the catalog explicitly declares one of
   `openai | anthropic | google | xai` and an enabled route/provider implements the matching
   protocol and has `supports_tools=true`: OpenAI -> `openai`, Anthropic -> `anthropic`,
@@ -179,6 +183,8 @@ Required environment:
   provenance propagation, per-call success/failure details keyed by `toolCallId`, unsafe historical reason
   rejection, all four generation actions, additive continue trace/citations, history refresh, sibling
   projection, and version replacement.
+- Agent loop tests: same-step Web Search concurrency capped at three, per-call failure isolation,
+  stable tool-result ordering, and serial execution for mixed Web Search/MCP batches.
 - Release gate: `pnpm check`, `pnpm test`, `pnpm build`, migration continuity, and `git diff --check`.
 
 ## 7. Wrong vs Correct
