@@ -81,7 +81,6 @@ vi.mock("@/features/chat/hooks/useChatRuntime", () => ({
       deleteMessage: vi.fn(),
       continueGeneration: vi.fn(),
       switchVersion: vi.fn(),
-      refreshVersionInfo: vi.fn(),
       setMessageFeedbackLocal: vi.fn(),
       stopGeneration: vi.fn(),
     };

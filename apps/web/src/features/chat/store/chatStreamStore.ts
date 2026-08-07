@@ -799,6 +799,8 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
       if (generatedAssistantPublicId) {
         try {
           await selectMessageVersion(generatedAssistantPublicId);
+          // 重新生成才会新增 sibling;历史消息的版本信息已由 SSR versionMap 提供。
+          await get().refreshVersionInfo(key, generatedAssistantPublicId);
         } catch (err) {
           console.error("persist regenerated version failed:", err);
         }

@@ -89,7 +89,6 @@ export function useChatRuntime({
       deleteMessage: s.deleteMessage,
       continueGeneration: s.continueGeneration,
       switchVersion: s.switchVersion,
-      refreshVersionInfo: s.refreshVersionInfo,
       setMessageFeedbackLocal: s.setMessageFeedbackLocal,
       stopGeneration: s.stopGeneration,
     })),
@@ -178,13 +177,6 @@ export function useChatRuntime({
     [actions, key],
   );
 
-  const refreshVersionInfo = useMemo(
-    () => (publicId: string) => {
-      void actions.refreshVersionInfo(key, publicId);
-    },
-    [actions, key],
-  );
-
   const stopGeneration = useMemo(
     () => () => {
       actions.stopGeneration(key);
@@ -209,7 +201,6 @@ export function useChatRuntime({
     deleteMessage,
     continueGeneration,
     switchVersion,
-    refreshVersionInfo,
     setMessageFeedbackLocal,
     stopGeneration,
   };

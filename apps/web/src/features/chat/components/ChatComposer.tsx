@@ -179,17 +179,6 @@ export default function ChatComposer({
       setActiveConvId(newConversationId);
     },
   });
-  // 流式结束后,刷新有 publicId 的 assistant 消息版本信息(用于版本切换器)
-  useEffect(() => {
-    if (runtime.streaming) return;
-    const assistantIds = runtime.messages
-      .filter((m) => m.role === "assistant" && m.publicId)
-      .map((m) => m.publicId!);
-    if (assistantIds.length === 0) return;
-    assistantIds.forEach((pid) => runtime.refreshVersionInfo(pid));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runtime.streaming]);
-
   const sendWithCurrentSnapshot = (
     text: string,
     lifecycle?: { onAccepted?: () => void; onRejected?: (message: string) => void },

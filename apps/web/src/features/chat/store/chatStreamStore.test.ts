@@ -1047,6 +1047,13 @@ describe("chatStreamStore regenerate version selection", () => {
   });
 
   it("流成功结束后持久化后端返回的真实版本 ID", async () => {
+    mocks.getMessageSiblings.mockResolvedValue({
+      current: { publicId: "assistant-real", parentId: "user-1" },
+      siblings: [
+        { publicId: "assistant-old", content: "Old answer", reasoning: null, branchReason: null },
+        { publicId: "assistant-real", content: "New answer", reasoning: null, branchReason: "retry" },
+      ],
+    });
     mocks.consumeChatSSE.mockImplementationOnce(async (
       _body: ReadableStream<Uint8Array>,
       handlers: SSEHandlers,
@@ -1061,10 +1068,12 @@ describe("chatStreamStore regenerate version selection", () => {
     await useChatStreamStore.getState().regenerate(key, "assistant-old", "model-a", "model-id-a");
 
     expect(mocks.selectMessageVersion).toHaveBeenCalledWith("assistant-real");
+    expect(mocks.getMessageSiblings).toHaveBeenCalledWith("assistant-real");
     expect(useChatStreamStore.getState().runtimes[key].messages[0]).toMatchObject({
       publicId: "assistant-real",
       createdAt: "2026-07-28T04:00:00.000Z",
       runMetadata: finishMetadata,
+      versionInfo: { current: 2, total: 2 },
     });
   });
 
