@@ -93,7 +93,9 @@ Nekusora(星枢,取自 Neku 猫 / Sora 天空)把两件事揉进了同一个产�
 ```bash
 pnpm install
 docker compose up -d          # 起 PostgreSQL(+ Redis 可选)
-pnpm dev                      # 启动 http://localhost:3000
+./dev.sh                      # Web: http://localhost:3500
+./dev-w.sh                    # 另开终端，Gateway: http://localhost:3502
+./dev-q.sh                    # 另开终端，Worker 健康端口: 3501
 ```
 
 > 首次启动会**自动**创建首个管理员账号(读 `.env.local` 的 `SEED_ADMIN_*`)。
