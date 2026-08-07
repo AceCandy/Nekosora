@@ -1,0 +1,4 @@
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"前端 lint、typecheck、Vitest 与 Markdown 测试要求"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"Markdown 双渲染路径、浮层、图片与 Mermaid 交互契约"}
+{"file":".trellis/spec/backend/web-search.md","reason":"公网 URL DNS 固定、逐跳重定向与 SSRF 防护契约"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"link-preview API 到 Markdown 渲染的跨层数据契约"}

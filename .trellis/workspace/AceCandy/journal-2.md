@@ -634,3 +634,26 @@ Added privacy-safe memory extraction stage logs, diagnosed mem0 SQLite native bi
 ### Status
 
 [OK] **Completed**
+
+
+## Session 89: 新增 Exa 联网搜索后端
+
+**Date**: 2026-08-07
+**Task**: 新增 Exa 联网搜索后端
+**Branch**: `main`
+
+### Summary
+
+接入 Exa 外部搜索 Provider，支持有界 highlights、UTC 发布日期过滤、密钥脱敏配置和有序回退，并完成测试、构建与规格同步。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `de34157` | (see git log) |
+| `4e2f200` | (see git log) |
+| `27195c7` | (see git log) |
+
+### Status
+
+[OK] **Completed**
