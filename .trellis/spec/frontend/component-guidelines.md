@@ -165,6 +165,7 @@ AI 回复正文由 `shared/components/markdown/Markdown.tsx` 渲染,两条互斥
 
 **可执行契约(改 `parseMarkdown` 必须维持)**:
 
+- 默认/流式 Streamdown 路径必须先调用 `normalizeHtmlBlockBlankLines`:CommonMark 会在空行结束 `<div>` 等 raw HTML block,使后续缩进标签退化为代码块。规范化只在可承载块内容的 HTML 容器内用不可见注释占住空行,不得改写代码围栏、容器外 Markdown 或 custom 最终渲染；深度扫描必须忽略 HTML 注释、属性字符串和 raw-text 标签中的伪标签。对应回归测试位于 `Markdown.test.ts` 与 `customRenderer.test.ts`。
 - HTML 容器块(`htmlBlockDepth > 0`)内的所有行原样透传,**不参与 markdown 解析**——裸文字不得被包成 `<p>`,否则会被输出样式(如纸面杂志 `.rs-paper .nekusora-md p { color }`)改写颜色与边距。
 - 块深度由 `countHtmlDelta` 统计;void 标签(`br`/`hr`/`img`/...)与显式自闭合、同行开闭(`<div>x</div>`)不计入深度。
 - 代码块(` ``` `)优先级高于 HTML 块判定。

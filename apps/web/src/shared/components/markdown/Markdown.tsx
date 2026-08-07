@@ -41,7 +41,7 @@ import {
   MarkdownHTMLSpan,
 } from "./streamdown-html";
 import { MarkdownImage } from "./MarkdownImage";
-import { normalizeThematicBreakSpacing, parseMarkdown, separateBareUrlTrailingText, splitStructuredSegments } from "./customRenderer";
+import { normalizeHtmlBlockBlankLines, normalizeThematicBreakSpacing, parseMarkdown, separateBareUrlTrailingText, splitStructuredSegments } from "./customRenderer";
 import { resolvePreviewableKind, type PreviewableKind } from "@/lib/artifacts/previewable";
 import { resolveStructuredKind } from "@/lib/artifacts/structured";
 import { copyToClipboard } from "@/shared/lib/clipboard";
@@ -612,6 +612,7 @@ function MarkdownImpl({ content, isStreaming, renderer = "streamdown", className
     );
   }
 
+  const streamdownContent = normalizeHtmlBlockBlankLines(normalizedContent);
   const streamdown = (
     <Streamdown
       mode={isStreaming ? "streaming" : "static"}
@@ -630,7 +631,7 @@ function MarkdownImpl({ content, isStreaming, renderer = "streamdown", className
       plugins={{ code: codeHighlighter }}
       shikiTheme={["github-light", "github-dark"]}
     >
-      {normalizedContent}
+      {streamdownContent}
     </Streamdown>
   );
 

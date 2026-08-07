@@ -12,7 +12,7 @@ vi.mock("next-intl", () => ({
   useTranslations: () => (key: string) => key,
 }));
 
-import { MarkdownLinkSafetyModal } from "./Markdown";
+import { Markdown, MarkdownLinkSafetyModal } from "./Markdown";
 
 const originalDocument = globalThis.document;
 
@@ -49,5 +49,23 @@ describe("Markdown", () => {
     expect(shouldCollapseCodeBlock(17, true)).toBe(false);
     expect(shouldCollapseCodeBlock(17, false)).toBe(true);
     expect(shouldCollapseCodeBlock(16, false)).toBe(false);
+  });
+
+  it("默认渲染器持续解析 HTML 容器内空行后的嵌套标签", () => {
+    const html = renderToStaticMarkup(createElement(Markdown, {
+      content: [
+        '<div style="display:grid">',
+        '  <div style="font-weight:600">第一项</div>',
+        "",
+        '    <div style="color:#555">第二项</div>',
+        "</div>",
+      ].join("\n"),
+      isStreaming: true,
+    }));
+
+    expect(html).toContain('style="font-weight:600"');
+    expect(html).toContain('style="color:#555"');
+    expect(html).not.toContain('data-streamdown="code-block"');
+    expect(html).not.toContain("&lt;div");
   });
 });

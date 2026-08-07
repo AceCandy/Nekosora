@@ -1,5 +1,91 @@
 import { describe, expect, it } from "vitest";
-import { normalizeThematicBreakSpacing, parseMarkdown, separateBareUrlTrailingText, splitStructuredSegments } from "./customRenderer";
+import {
+  normalizeHtmlBlockBlankLines,
+  normalizeThematicBreakSpacing,
+  parseMarkdown,
+  separateBareUrlTrailingText,
+  splitStructuredSegments,
+} from "./customRenderer";
+
+describe("normalizeHtmlBlockBlankLines", () => {
+  it("用不可见注释保留 HTML 容器内的空行", () => {
+    expect(normalizeHtmlBlockBlankLines([
+      '<div style="display:grid">',
+      "  <div>第一项</div>",
+      "",
+      "    <div>第二项</div>",
+      "  ",
+      "</div>",
+    ].join("\n"))).toBe([
+      '<div style="display:grid">',
+      "  <div>第一项</div>",
+      "<!-- -->",
+      "    <div>第二项</div>",
+      "  <!-- -->",
+      "</div>",
+    ].join("\n"));
+  });
+
+  it("不改写普通 Markdown 和代码围栏中的空行", () => {
+    const input = [
+      "正文",
+      "",
+      "```html",
+      "<div>",
+      "",
+      "</div>",
+      "```",
+      "",
+      "结尾",
+    ].join("\n");
+
+    expect(normalizeHtmlBlockBlankLines(input)).toBe(input);
+  });
+
+  it("忽略 HTML 注释和属性字符串里的伪标签", () => {
+    const input = [
+      '<div title="<div>">',
+      "<!-- <div> -->",
+      "",
+      "</div>",
+      "",
+      "正文",
+    ].join("\n");
+
+    expect(normalizeHtmlBlockBlankLines(input)).toBe([
+      '<div title="<div>">',
+      "<!-- <div> -->",
+      "<!-- -->",
+      "</div>",
+      "",
+      "正文",
+    ].join("\n"));
+  });
+
+  it("多行 HTML 注释不会污染后续容器深度", () => {
+    expect(normalizeHtmlBlockBlankLines([
+      "<div>",
+      "<!--",
+      "<div>",
+      "",
+      "</div>",
+      "-->",
+      "</div>",
+      "",
+      "正文",
+    ].join("\n"))).toBe([
+      "<div>",
+      "<!--",
+      "<div>",
+      ".",
+      "</div>",
+      "-->",
+      "</div>",
+      "",
+      "正文",
+    ].join("\n"));
+  });
+});
 
 describe("parseMarkdown", () => {
   it("给章节标题前的分隔线补空行，避免上一段被解析为 Setext 标题", () => {

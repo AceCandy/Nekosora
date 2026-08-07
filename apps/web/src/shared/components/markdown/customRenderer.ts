@@ -185,20 +185,116 @@ const VOID_HTML_TAGS = new Set([
   "area", "base", "br", "col", "embed", "hr", "img", "input",
   "link", "meta", "param", "source", "track", "wbr",
 ]);
+const RAW_TEXT_HTML_TAGS = new Set(["script", "style", "textarea", "title"]);
+
+interface HtmlScanState {
+  inComment: boolean;
+  rawTextTag: string | null;
+}
 
 /** 统计一行内 HTML 标签的净深度(开标签 +1 / 闭标签 -1,void 与自闭合计 0)。 */
-function countHtmlDelta(line: string): number {
+function countHtmlDelta(line: string, state?: HtmlScanState): number {
+  const scanState = state ?? { inComment: false, rawTextTag: null };
   let delta = 0;
-  const re = /<(\/)?([a-zA-Z][a-zA-Z0-9]*)\b[^>]*?(\/)?>/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(line)) !== null) {
-    const closing = m[1] === "/";
-    const selfClosing = m[3] === "/";
-    const tag = m[2].toLowerCase();
+  let cursor = 0;
+  const lowerLine = line.toLowerCase();
+
+  while (cursor < line.length) {
+    if (scanState.inComment) {
+      const commentEnd = line.indexOf("-->", cursor);
+      if (commentEnd < 0) break;
+      scanState.inComment = false;
+      cursor = commentEnd + 3;
+      continue;
+    }
+    if (scanState.rawTextTag) {
+      const closingStart = lowerLine.indexOf(`</${scanState.rawTextTag}`, cursor);
+      if (closingStart < 0) break;
+      cursor = closingStart;
+    }
+
+    const tagStart = line.indexOf("<", cursor);
+    if (tagStart < 0) break;
+    if (line.startsWith("<!--", tagStart)) {
+      scanState.inComment = true;
+      cursor = tagStart + 4;
+      continue;
+    }
+
+    let tagCursor = tagStart + 1;
+    const closing = line[tagCursor] === "/";
+    if (closing) tagCursor++;
+    const tagMatch = /^[a-zA-Z][a-zA-Z0-9-]*/.exec(line.slice(tagCursor));
+    if (!tagMatch) {
+      cursor = tagStart + 1;
+      continue;
+    }
+    const tag = tagMatch[0].toLowerCase();
+    tagCursor += tagMatch[0].length;
+
+    let quote: "\"" | "'" | null = null;
+    while (tagCursor < line.length) {
+      const char = line[tagCursor];
+      if (quote) {
+        if (char === quote) quote = null;
+      } else if (char === "\"" || char === "'") {
+        quote = char;
+      } else if (char === ">") {
+        break;
+      }
+      tagCursor++;
+    }
+    if (tagCursor >= line.length) break;
+
+    const selfClosing = line.slice(tagStart, tagCursor).trimEnd().endsWith("/");
+    cursor = tagCursor + 1;
     if (selfClosing || VOID_HTML_TAGS.has(tag)) continue;
     delta += closing ? -1 : 1;
+    if (closing && scanState.rawTextTag === tag) scanState.rawTextTag = null;
+    if (!closing && RAW_TEXT_HTML_TAGS.has(tag)) scanState.rawTextTag = tag;
   }
   return delta;
+}
+
+const STREAMDOWN_HTML_CONTAINER_RE = /^\s*<(?:div|section|article|aside|main|details)\b/i;
+
+/**
+ * 用不可见注释占住 HTML 容器内的空行，避免 CommonMark 提前结束 raw HTML block。
+ * 代码围栏保持原样；注释在浏览器中不可见，也不会改变容器内的换行语义。
+ */
+export function normalizeHtmlBlockBlankLines(input: string): string {
+  let htmlBlockDepth = 0;
+  let fence: { char: "`" | "~"; length: number } | null = null;
+  const htmlScanState: HtmlScanState = { inComment: false, rawTextTag: null };
+
+  return input.split("\n").map((line) => {
+    if (htmlBlockDepth > 0) {
+      if (!line.trim()) {
+        if (htmlScanState.inComment) return `${line}.`;
+        if (htmlScanState.rawTextTag) return line;
+        return `${line}<!-- -->`;
+      }
+      htmlBlockDepth = Math.max(0, htmlBlockDepth + countHtmlDelta(line, htmlScanState));
+      return line;
+    }
+
+    const fenceMatch = line.match(/^\s*(`{3,}|~{3,})(.*)$/);
+    if (fenceMatch) {
+      const nextChar = fenceMatch[1][0] as "`" | "~";
+      if (!fence) {
+        fence = { char: nextChar, length: fenceMatch[1].length };
+      } else if (fence.char === nextChar && fenceMatch[1].length >= fence.length && !fenceMatch[2].trim()) {
+        fence = null;
+      }
+      return line;
+    }
+    if (fence) return line;
+
+    if (STREAMDOWN_HTML_CONTAINER_RE.test(line)) {
+      htmlBlockDepth = Math.max(0, countHtmlDelta(line, htmlScanState));
+    }
+    return line;
+  }).join("\n");
 }
 
 /** 判断一行是否为表格行。 */
