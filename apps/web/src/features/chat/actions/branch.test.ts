@@ -786,6 +786,11 @@ describe("getVisibleBranch 历史 toolCalls 回填", () => {
                       durationMs: 9,
                     },
                     {
+                      backend: { type: "model", id: "gpt", name: "GPT" },
+                      outcome: "skipped_after_timeout",
+                      durationMs: 0,
+                    },
+                    {
                       backend: { type: "current-model", name: "Current model" },
                       outcome: "unsupported",
                       durationMs: 1,
@@ -882,6 +887,10 @@ describe("getVisibleBranch 历史 toolCalls 回填", () => {
             {
               backend: { type: "provider", id: "tavily", name: "Tavily" },
               outcome: "failed",
+            },
+            {
+              backend: { type: "model", id: "gpt", name: "GPT" },
+              outcome: "skipped_after_timeout",
             },
             {
               backend: { type: "current-model", name: "Current model" },

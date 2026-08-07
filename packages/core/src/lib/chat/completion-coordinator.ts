@@ -36,7 +36,7 @@ const STREAM_ABORTED = Symbol("stream-aborted");
 
 export type ChatCompletionEvent =
   | { type: "started" }
-  | Extract<StreamEvent, { type: "text-delta" | "reasoning-delta" | "tool-call" | "tool-result" }>
+  | Extract<StreamEvent, { type: "text-delta" | "text-retract" | "reasoning-delta" | "tool-call" | "tool-result" }>
   | Extract<StreamEvent, { type: "error" }>
   | { type: "search_started"; toolCallId: string; query: string }
   | {
@@ -162,6 +162,11 @@ export async function executeChatCompletion(
         const event = next.value;
         if (event.type === "text-delta") {
           assistantText += event.text;
+          await input.emit(event);
+        } else if (event.type === "text-retract") {
+          if (event.text && assistantText.endsWith(event.text)) {
+            assistantText = assistantText.slice(0, -event.text.length);
+          }
           await input.emit(event);
         } else if (event.type === "reasoning-delta") {
           assistantReasoning += event.text;

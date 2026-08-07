@@ -315,12 +315,17 @@ describe("streamChatWithTools agent loop finish signal", () => {
 
     expect(events.map((e) => e.type)).toEqual([
       "text-delta",
+      "text-retract",
       "tool-call",
       "tool-result",
       "text-delta",
       "finish",
     ]);
     expect(finishes).toHaveLength(1);
+    expect(events.find((e) => e.type === "text-retract")).toEqual({
+      type: "text-retract",
+      text: "calling ",
+    });
     expect(finishes[0]).toMatchObject({
       finishReason: "stop",
       usage: { inputTokens: 30, outputTokens: 10, totalTokens: 40 },
@@ -338,6 +343,28 @@ describe("streamChatWithTools agent loop finish signal", () => {
       "demo__echo",
       { q: "1" },
     );
+  });
+
+  it("工具调用出现后不再透传该轮后续正文", async () => {
+    vi.mocked(streamText)
+      .mockReturnValueOnce(mockStreamResult(
+        [
+          { type: "text-delta", text: "search plan" },
+          { type: "tool-call", toolCallId: "tc1", toolName: "demo__echo", input: {} },
+          { type: "text-delta", text: "hidden tail" },
+        ],
+        "tool-calls",
+      ))
+      .mockReturnValueOnce(mockStreamResult([{ type: "text-delta", text: "final answer" }], "stop"));
+    callMcpTool.mockResolvedValue({ result: "ok", isError: false });
+
+    const events = await collect(streamChatWithTools(baseOpts));
+
+    expect(events.filter((event) => event.type === "text-delta")).toEqual([
+      { type: "text-delta", text: "search plan" },
+      { type: "text-delta", text: "final answer" },
+    ]);
+    expect(events).toContainEqual({ type: "text-retract", text: "search plan" });
   });
 
   it("同轮多个工具调用聚合为一条 assistant 消息后再追加全部结果", async () => {

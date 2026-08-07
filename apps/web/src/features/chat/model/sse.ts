@@ -8,6 +8,7 @@
  *   data: {"type":"user_message","publicId":"...","createdAt":"..."}       (本轮 user 消息身份)
  *   data: {"type":"assistant_message","publicId":"...","createdAt":"..."}  (本轮 assistant 消息身份)
  *   data: {"type":"delta","text":"..."}
+ *   data: {"type":"content_retract","text":"..."}
  *   data: {"type":"reasoning","text":"..."}
  *   data: {"type":"tool_call","toolName":"...","args":{...}}
  *   data: {"type":"tool_result","toolName":"...","isError":false}
@@ -38,6 +39,7 @@ export interface SSEEvent {
     | "user_message"
     | "assistant_message"
     | "delta"
+    | "content_retract"
     | "reasoning"
     | "tool_call"
     | "tool_result"
@@ -75,6 +77,7 @@ export interface SSEEvent {
 
 export interface SSEHandlers {
   onDelta: (text: string) => void;
+  onContentRetract?: (text: string) => void;
   onReasoning?: (text: string) => void;
   onToolCall?: (toolName: string, args: unknown, toolCallId?: string) => void;
   onToolResult?: (toolName: string, isError: boolean, toolCallId?: string) => void;
@@ -153,6 +156,8 @@ export async function consumeChatSSE(
 
     if (ev.type === "delta" && ev.text !== undefined) {
       handlers.onDelta(ev.text);
+    } else if (ev.type === "content_retract" && ev.text !== undefined) {
+      handlers.onContentRetract?.(ev.text);
     } else if (ev.type === "reasoning" && ev.text !== undefined) {
       handlers.onReasoning?.(ev.text);
     } else if (ev.type === "tool_call" && ev.toolName !== undefined) {

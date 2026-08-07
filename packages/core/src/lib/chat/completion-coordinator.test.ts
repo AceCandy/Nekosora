@@ -449,6 +449,27 @@ describe("executeChatCompletion", () => {
     expect(mocks.dispatchMemoryExtractionJob).toHaveBeenCalledWith("memory-job-1");
   });
 
+  it("工具轮临时正文撤回后只持久化最终回答", async () => {
+    mocks.streamChat.mockReturnValue(events(
+      { type: "text-delta", text: "search keywords" },
+      { type: "text-retract", text: "search keywords" },
+      { type: "text-delta", text: "final answer" },
+      { type: "finish", finishReason: "stop", usage: { totalTokens: 7 } },
+    ));
+    const emitted: unknown[] = [];
+
+    await executeChatCompletion({
+      ...baseInput,
+      signal: new AbortController().signal,
+      emit: (event) => { emitted.push(event); },
+    });
+
+    expect(emitted).toContainEqual({ type: "text-retract", text: "search keywords" });
+    expect(mocks.persistChatCompletion).toHaveBeenCalledWith(expect.objectContaining({
+      assistantText: "final answer",
+    }));
+  });
+
   it.each([
     [
       "finish",

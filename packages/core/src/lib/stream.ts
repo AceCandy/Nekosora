@@ -611,6 +611,8 @@ export async function* streamChatWithTools(
     let stepFinish: Extract<StreamEvent, { type: "finish" }> | null = null;
     let sawError = false;
     let stepTextSeen = false;
+    let emittedStepText = "";
+    let toolCallSeen = false;
 
       for await (const ev of streamChat({
         ctx: opts.ctx,
@@ -626,6 +628,10 @@ export async function* streamChatWithTools(
         telemetry: telemetrySession.port,
       })) {
       if (ev.type === "tool-call") {
+        if (!toolCallSeen && emittedStepText) {
+          yield { type: "text-retract", text: emittedStepText };
+        }
+        toolCallSeen = true;
         pendingToolCalls.push({
           toolCallId: ev.toolCallId,
           toolName: ev.toolName,
@@ -639,7 +645,11 @@ export async function* streamChatWithTools(
         sawError = true;
         yield ev;
       } else {
-        if (ev.type === "text-delta" && ev.text.length > 0) stepTextSeen = true;
+        if (ev.type === "text-delta" && ev.text.length > 0) {
+          stepTextSeen = true;
+          if (toolCallSeen) continue;
+          emittedStepText += ev.text;
+        }
         yield ev; // text-delta / reasoning-delta / usage 透传
       }
     }

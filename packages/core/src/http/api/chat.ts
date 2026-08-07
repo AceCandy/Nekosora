@@ -491,6 +491,10 @@ export async function POST(req: Request) {
           safeEnqueue(encoder.encode(
             `data: ${JSON.stringify({ type: "delta", text: event.text })}\n\n`,
           ));
+        } else if (event.type === "text-retract") {
+          safeEnqueue(encoder.encode(
+            `data: ${JSON.stringify({ type: "content_retract", text: event.text })}\n\n`,
+          ));
         } else if (event.type === "reasoning-delta") {
           safeEnqueue(encoder.encode(
             `data: ${JSON.stringify({ type: "reasoning", text: event.text })}\n\n`,

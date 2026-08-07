@@ -52,6 +52,7 @@ const SAFE_SEARCH_ATTEMPT_OUTCOMES = new Set<WebSearchTraceAttemptOutcome>([
   "success",
   "empty",
   "unavailable",
+  "skipped_after_timeout",
   "unsupported",
   "timeout",
   "failed",

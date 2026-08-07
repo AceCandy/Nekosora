@@ -64,6 +64,7 @@ const SEARCH_ATTEMPT_OUTCOME_I18N: Record<WebSearchTraceAttemptOutcome, string> 
   success: "webSearchAttemptSuccess",
   empty: "webSearchAttemptEmpty",
   unavailable: "webSearchAttemptUnavailable",
+  skipped_after_timeout: "webSearchAttemptSkippedAfterTimeout",
   unsupported: "webSearchAttemptUnsupported",
   timeout: "webSearchAttemptTimeout",
   failed: "webSearchAttemptFailed",

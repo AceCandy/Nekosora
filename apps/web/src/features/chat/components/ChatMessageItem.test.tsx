@@ -194,6 +194,10 @@ describe("ChatMessageItem web search metadata", () => {
                   outcome: "failed",
                 },
                 {
+                  backend: { type: "model", id: "gpt", name: "GPT" },
+                  outcome: "skipped_after_timeout",
+                },
+                {
                   backend: { type: "current-model", name: "Current model" },
                   outcome: "unsupported",
                 },
@@ -240,7 +244,7 @@ describe("ChatMessageItem web search metadata", () => {
     );
 
     expect(html).toContain("web_search");
-    expect(html).toContain("Tavily (webSearchAttemptFailed) → Current model (webSearchAttemptUnsupported)");
+    expect(html).toContain("Tavily (webSearchAttemptFailed) → GPT (webSearchAttemptSkippedAfterTimeout) → Current model (webSearchAttemptUnsupported)");
     expect(html).toContain("Tavily (webSearchAttemptSuccess)");
     expect(html).toContain("Grok (webSearchBackendModel)");
     expect(html).toContain("搜索查询无效");

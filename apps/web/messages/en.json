@@ -173,6 +173,7 @@
     "webSearchAttemptSuccess": "Succeeded",
     "webSearchAttemptEmpty": "No results",
     "webSearchAttemptUnavailable": "Unavailable",
+    "webSearchAttemptSkippedAfterTimeout": "Skipped (timed out earlier)",
     "webSearchAttemptUnsupported": "Time range unsupported",
     "webSearchAttemptTimeout": "Timed out",
     "webSearchAttemptFailed": "Failed",

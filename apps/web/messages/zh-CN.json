@@ -173,6 +173,7 @@
     "webSearchAttemptSuccess": "成功",
     "webSearchAttemptEmpty": "无结果",
     "webSearchAttemptUnavailable": "不可用",
+    "webSearchAttemptSkippedAfterTimeout": "已跳过（此前超时）",
     "webSearchAttemptUnsupported": "不支持时间范围",
     "webSearchAttemptTimeout": "超时",
     "webSearchAttemptFailed": "失败",

@@ -115,6 +115,7 @@ export type WebSearchTraceAttemptOutcome =
   | "success"
   | "empty"
   | "unavailable"
+  | "skipped_after_timeout"
   | "unsupported"
   | "timeout"
   | "failed";

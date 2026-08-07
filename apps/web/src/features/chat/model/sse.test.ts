@@ -59,6 +59,20 @@ describe("consumeChatSSE", () => {
     });
   });
 
+  it("解析工具轮正文撤回帧", async () => {
+    const onContentRetract = vi.fn();
+    const body = streamFrom(
+      'data: {"type":"delta","text":"search keywords"}\n\n' +
+      'data: {"type":"content_retract","text":"search keywords"}\n\n' +
+      'data: {"type":"terminal","status":"interrupted"}\n\n' +
+      "data: [DONE]\n\n",
+    );
+
+    await consumeChatSSE(body, { onDelta: vi.fn(), onContentRetract });
+
+    expect(onContentRetract).toHaveBeenCalledWith("search keywords");
+  });
+
   it("透传工具调用 ID 与搜索生命周期", async () => {
     const onToolCall = vi.fn();
     const onToolResult = vi.fn();

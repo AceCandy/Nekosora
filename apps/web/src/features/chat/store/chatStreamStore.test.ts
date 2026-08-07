@@ -383,6 +383,12 @@ describe("chatStreamStore terminal 状态收敛", () => {
     });
     mocks.handleStreamError.mockReturnValue({ content: "[错误] request failed" });
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("data: done\n\n")));
+    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    vi.stubGlobal("window", {
+      setTimeout: globalThis.setTimeout.bind(globalThis),
+      clearTimeout: globalThis.clearTimeout.bind(globalThis),
+    });
   });
 
   afterEach(() => {
@@ -449,6 +455,23 @@ describe("chatStreamStore terminal 状态收敛", () => {
 
     expect(message?.status).toBe("interrupted");
     expect(message?.content.match(/\[错误\]/g)).toHaveLength(1);
+  });
+
+  it.each(actions)("%s 撤回工具轮临时正文且保留既有正文", async (action) => {
+    mocks.consumeChatSSE.mockImplementationOnce(async (
+      _body: ReadableStream<Uint8Array>,
+      handlers: SSEHandlers,
+    ) => {
+      handlers.onDelta("search keywords");
+      handlers.onContentRetract?.("search keywords");
+      handlers.onDelta("final answer");
+      return "success" as const;
+    });
+
+    await invokeAction(action);
+
+    const message = useChatStreamStore.getState().runtimes[key].messages.at(-1);
+    expect(message?.content).toBe(action === "continue" ? "partialfinal answer" : "final answer");
   });
 
   it.each(actions)("%s 按 toolCallId 收敛同名搜索并保存引用", async (action) => {

@@ -314,6 +314,20 @@ function appendContentAt(key: string, idx: number, text: string) {
   });
 }
 
+/** 仅撤回当前工具轮已经流出的精确正文后缀，保留续写前已有内容。 */
+function retractContentAt(key: string, idx: number, text: string) {
+  if (!text || idx < 0) return;
+  useChatStreamStore.setState((s) => {
+    const rt = s.runtimes[key];
+    if (!rt || idx >= rt.messages.length) return s;
+    const content = rt.messages[idx].content ?? "";
+    if (!content.endsWith(text)) return s;
+    const copy = [...rt.messages];
+    copy[idx] = { ...copy[idx], content: content.slice(0, -text.length) };
+    return { runtimes: { ...s.runtimes, [key]: { ...rt, messages: copy } } };
+  });
+}
+
 /** 用终态 run 元数据覆盖目标 assistant,保持其他流式字段不变。 */
 function setRunMetadataAt(
   key: string,
@@ -450,6 +464,10 @@ function finishToolCallAt(
 /** 四种生成动作共享同一套工具与搜索事件投影。 */
 function toolAndSearchHandlers(key: string, assistantIdx: number): Partial<SSEHandlers> {
   return {
+    onContentRetract: (text) => {
+      flushDeltasNow();
+      retractContentAt(key, assistantIdx, text);
+    },
     onToolCall: (toolName, args, toolCallId) =>
       addToolCallAt(key, assistantIdx, { toolCallId, toolName, args, status: "calling" }),
     onToolResult: (toolName, isError, toolCallId) =>

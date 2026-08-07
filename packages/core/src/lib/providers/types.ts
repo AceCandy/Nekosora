@@ -115,6 +115,7 @@ export interface IRUsage {
 /** 流式产出的事件 —— streamChat yield 的统一增量。 */
 export type StreamEvent =
   | { type: "text-delta"; text: string }
+  | { type: "text-retract"; text: string }
   | { type: "reasoning-delta"; text: string }
   | { type: "tool-call"; toolCallId: string; toolName: string; args: unknown }
   | { type: "tool-result"; toolCallId: string; toolName: string; result: unknown; isError: boolean }

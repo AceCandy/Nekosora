@@ -210,6 +210,7 @@ store 的 `migrate(临时key → 真实id)` 先于回写执行，活动 id 一�
 - `consumeChatSSE(body, handlers): Promise<ChatTerminalStatus>`。
 - `ChatTerminalStatus = "success" | "failed" | "interrupted"`，唯一 owner 为 `src/lib/chat/sse-contract.ts`。
 - `ChatMessage.status?: "success" | "interrupted"`；缺省只用于历史完整消息兼容。
+- 内部正文撤回帧：`{ type: "content_retract"; text: string }`；对应 Core 事件为 `{ type: "text-retract"; text: string }`。
 
 ### 3. Contracts
 
@@ -218,6 +219,8 @@ store 的 `migrate(临时key → 真实id)` 先于回写执行，活动 id 一�
 - 四条 Store 流式动作必须消费 parser 返回值：terminal success 写 message success；failed/interrupted 写 message interrupted；协议异常 catch 也写 interrupted。
 - `stopGeneration` 在本地 Abort 时立即写 interrupted。取消后的 wire 写入由服务端抑制，不等待 terminal。
 - `onError` 必须先 `flushDeltasNow()` 再向当前稳定 assistant index 追加一次错误。若 error frame 后又发生协议异常，catch 不得追加第二份错误。
+- 模型在同一 step 先输出正文、随后调用工具时，Core 发送该 step 已输出正文的精确撤回后缀。Store 的 `onContentRetract` 必须先 `flushDeltasNow()`，再仅当当前正文以该文本结尾时删除后缀；不得清空整条消息。工具调用后的同 step 正文不再透传。
+- `content_retract` 只影响当前生成 step 的新增正文。`continueGeneration` 必须保留续写前已有正文；普通无工具回答不发送撤回帧，继续逐 token 展示。
 - Message status 表达“内容完整/可继续”，不是 run 失败分类。持久化 failed/interrupted assistant 均为 interrupted；`runs.status` 才是 success/failed/interrupted 的终态事实源。
 - `ChatMessageItem` 仅当 assistant 有正文且 status=interrupted 时显示继续生成；success/缺省不显示。
 
@@ -230,13 +233,17 @@ store 的 `migrate(临时key → 真实id)` 先于回写执行，活动 id 一�
 | error, terminal(interrupted), DONE | interrupted | interrupted | exactly one |
 | local Abort | AbortError | interrupted by stop | stopped marker |
 | terminal/DONE contract violation | throw protocol error | interrupted | one existing or fallback error |
+| content_retract matches current suffix | continue parsing | remove only that exact suffix after flushing pending deltas | none |
+| content_retract does not match current suffix | continue parsing | keep content unchanged | none |
 
 ### 5. Good / Base / Bad Cases
 
 - Good: regenerate receives a failed terminal after partial delta, keeps the partial text, appends one error, and marks the exact regenerated assistant interrupted.
+- Good: a tool-call step briefly streams its search plan, then retracts only that suffix; the final answer and persisted assistant content contain only the grounded response.
 - Base: continueGeneration receives success and changes the same assistant from interrupted to success, so the continue button disappears.
 - Bad: parser returns void on bare EOF and continueGeneration unconditionally writes success.
 - Bad: regenerate/edit catch uses the current last message instead of the assistant index captured for that request.
+- Bad: handle `content_retract` by assigning `content = ""`; this deletes pre-existing content during continue generation.
 
 ### 6. Tests Required
 
@@ -244,6 +251,8 @@ store 的 `migrate(临时key → 真实id)` 先于回写执行，活动 id 一�
 - Store table tests cover success/failed/interrupted plus protocol rejection for all four actions.
 - Assert failed/interrupted retain content, write interrupted, and contain one error marker; success preserves finish metadata and writes success.
 - Keep local Abort/stopGeneration and delta-before-error ordering regressions green.
+- Retraction tests cover parser dispatch and send/regenerate/edit/continue Store paths, including pending
+  delta flush, unmatched suffix no-op, persisted Core content, and preservation of continue-generation prefix.
 
 ### 7. Wrong vs Correct
 
@@ -255,6 +264,15 @@ setMessageStatus("success");
 // Correct: only the explicit terminal outcome can complete the message.
 const terminal = await consumeChatSSE(body, handlers);
 setCompletionStatusAt(key, assistantIdx, terminal);
+```
+
+```ts
+// Wrong: pending rAF deltas can be appended again after the deletion.
+removeSuffix(text);
+
+// Correct: settle the buffer, then remove only the exact generated suffix.
+flushDeltasNow();
+removeSuffix(text);
 ```
 
 续写仍把 interrupted assistant 正文作为 prefill。完整回答若允许续写会倾向复述，因此只有 interrupted 消息可继续生成。
