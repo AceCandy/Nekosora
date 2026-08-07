@@ -657,3 +657,28 @@ Added privacy-safe memory extraction stage logs, diagnosed mem0 SQLite native bi
 ### Status
 
 [OK] **Completed**
+
+
+## Session 90: 提交未归档改动并完成收尾
+
+**Date**: 2026-08-07
+**Task**: 提交未归档改动并完成收尾
+**Branch**: `main`
+
+### Summary
+
+完成 Markdown 外链图片与 Mermaid 预览、聊天版本刷新、Gateway/Worker 开发启动脚本及 Trellis 0.6.14 工具同步；补充 link-preview 代码规范，归档 08-06-markdown-previews。定向 Vitest、lint、typecheck、Python AST、shell 语法、JSON 解析和 diff 检查均通过。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3f09e0a` | (see git log) |
+| `76944b5` | (see git log) |
+| `865187f` | (see git log) |
+| `9f32bf9` | (see git log) |
+| `48836cd` | (see git log) |
+
+### Status
+
+[OK] **Completed**
