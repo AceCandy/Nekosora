@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 90
+- **Total Sessions**: 91
 - **Last Active**: 2026-08-07
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~684 | Active |
+| `journal-2.md` | ~705 | Active |
 | `journal-1.md` | ~1981 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 91 | 2026-08-07 | Hosted 搜索时间范围提示词降级 | `35ad1fe` | `main` |
 | 90 | 2026-08-07 | 提交未归档改动并完成收尾 | `3f09e0a`, `76944b5`, `865187f`, `9f32bf9`, `48836cd` | `main` |
 | 89 | 2026-08-07 | 新增 Exa 联网搜索后端 | `de34157`, `4e2f200`, `27195c7` | `main` |
 | 88 | 2026-08-06 | 网关运行时分离父任务验收完成 | `73c249b`, `e0abf6b`, `bb0a3a0` | `main` |

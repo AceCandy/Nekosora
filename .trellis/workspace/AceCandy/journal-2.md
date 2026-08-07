@@ -682,3 +682,24 @@ Added privacy-safe memory extraction stage logs, diagnosed mem0 SQLite native bi
 ### Status
 
 [OK] **Completed**
+
+
+## Session 91: Hosted 搜索时间范围提示词降级
+
+**Date**: 2026-08-07
+**Task**: Hosted 搜索时间范围提示词降级
+**Branch**: `main`
+
+### Summary
+
+允许不支持原生日期过滤的 Hosted 搜索通过提示词约束时间范围，并保留 Google 与外部 Provider 的原生过滤行为；补充测试并同步 Web Search 规范。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `35ad1fe` | (see git log) |
+
+### Status
+
+[OK] **Completed**
