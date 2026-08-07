@@ -12,12 +12,13 @@ import type {
   SearchTimeRange,
   SearchWebExecutionOptions,
 } from "./types";
-import { createFreshnessTimeRange, SearchProviderError } from "./types";
+import { createFreshnessTimeRange, searchBackendKey, SearchProviderError } from "./types";
 
 const MAX_RESULTS = 5;
 const MAX_TITLE_LENGTH = 200;
 const MAX_SNIPPET_LENGTH = 600;
 const SEARCH_TIMEOUT_MS = 30_000;
+const BACKEND_TIMEOUT_MS = 10_000;
 
 function normalizeResults(results: SearchResult[]): SearchResult[] {
   const seen = new Set<string>();
@@ -102,6 +103,7 @@ export async function searchWeb(
   const requestSignal = options
     ? AbortSignal.any([options.signal, timeoutSignal])
     : timeoutSignal;
+  const unavailableBackends = options?.unavailableBackends ?? new Map<string, SearchBackendIdentity>();
   let lastReason = "搜索失败";
   const attempts: SearchAttempt[] = [];
   const requestedTimeRange = options?.timeRange;
@@ -120,12 +122,25 @@ export async function searchWeb(
     effectiveTimeRange = timeRange;
     for (const backend of backends) {
       const startedAt = Date.now();
-      let identity = backendIdentity(backend, options, externalById.get(
+      const backendKey = searchBackendKey(backend);
+      let identity = unavailableBackends.get(backendKey) ?? backendIdentity(backend, options, externalById.get(
         backend.type === "provider" ? backend.providerId : "",
       ));
       const attemptRange = timeRange ? { timeRange } : {};
+      let backendTimeoutSignal: AbortSignal | undefined;
+      let attemptSignal = requestSignal;
       try {
         requestSignal.throwIfAborted();
+        if (unavailableBackends.has(backendKey)) {
+          attempts.push({
+            backend: identity,
+            outcome: "unavailable",
+            durationMs: Date.now() - startedAt,
+            ...attemptRange,
+          });
+          lastReason = "搜索后端不可用";
+          continue;
+        }
         if (backend.type === "provider") {
           const resolved = externalById.get(backend.providerId);
           if (!resolved) {
@@ -148,7 +163,10 @@ export async function searchWeb(
             lastReason = "搜索后端不支持指定时间范围";
             continue;
           }
-          const results = await searchBackend(userId, resolved, query, requestSignal, timeRange);
+          backendTimeoutSignal = AbortSignal.timeout(BACKEND_TIMEOUT_MS);
+          attemptSignal = AbortSignal.any([requestSignal, backendTimeoutSignal]);
+          const results = await searchBackend(userId, resolved, query, attemptSignal, timeRange);
+          attemptSignal.throwIfAborted();
           if (results.length === 0) {
             attempts.push({
               backend: identity,
@@ -186,6 +204,8 @@ export async function searchWeb(
           lastReason = "模型搜索不可用";
           continue;
         }
+        backendTimeoutSignal = AbortSignal.timeout(BACKEND_TIMEOUT_MS);
+        attemptSignal = AbortSignal.any([requestSignal, backendTimeoutSignal]);
         const result = await executeHostedModelSearch({
           ctx: options.ctx,
           modelId,
@@ -193,10 +213,17 @@ export async function searchWeb(
           query,
           runId: options.runId,
           toolCallId: options.toolCallId,
-          signal: requestSignal,
+          signal: attemptSignal,
           timeRange,
+          onRouteSelected: (selected) => {
+            identity = {
+              type: backend.type,
+              id: selected.modelId ?? modelId,
+              name: selected.modelName,
+            };
+          },
         });
-        requestSignal.throwIfAborted();
+        attemptSignal.throwIfAborted();
         if (result && "unsupported" in result) {
           attempts.push({
             backend: identity,
@@ -234,7 +261,9 @@ export async function searchWeb(
         );
       } catch (error) {
         if (options?.signal.aborted) throw error;
-        const timedOut = timeoutSignal.aborted;
+        const totalTimedOut = timeoutSignal.aborted;
+        const backendTimedOut = backendTimeoutSignal?.aborted ?? false;
+        const timedOut = totalTimedOut || backendTimedOut;
         attempts.push({
           backend: identity,
           outcome: timedOut ? "timeout" : "failed",
@@ -242,7 +271,8 @@ export async function searchWeb(
           ...attemptRange,
         });
         lastReason = timedOut ? "搜索超时" : "搜索后端失败";
-        if (timedOut) break searchPasses;
+        if (!totalTimedOut && backendTimedOut) unavailableBackends.set(backendKey, identity);
+        if (totalTimedOut) break searchPasses;
       }
     }
   }

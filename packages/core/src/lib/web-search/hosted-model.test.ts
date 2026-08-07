@@ -1,5 +1,26 @@
-import { describe, expect, it } from "vitest";
-import { buildHostedSearchPrompt, normalizeHostedSources } from "./hosted-model";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+  executeAtomicGateway: vi.fn(),
+  getChatUA: vi.fn(),
+}));
+
+vi.mock("@/lib/gateway-execution", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/gateway-execution")>();
+  return { ...actual, executeAtomicGateway: mocks.executeAtomicGateway };
+});
+vi.mock("@/lib/system-settings/ua", () => ({ getChatUA: mocks.getChatUA }));
+
+import {
+  buildHostedSearchPrompt,
+  executeHostedModelSearch,
+  normalizeHostedSources,
+} from "./hosted-model";
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.getChatUA.mockResolvedValue("test-ua");
+});
 
 describe("buildHostedSearchPrompt", () => {
   it("注入当前日期并要求最新问题核对来源日期", () => {
@@ -36,5 +57,51 @@ describe("buildHostedSearchPrompt", () => {
       snippet: "",
       publishedAt: "2026-08-03T00:00:00.000Z",
     }]);
+  });
+});
+
+describe("executeHostedModelSearch", () => {
+  it("选中 Hosted 路由时立即上报可读模型身份", async () => {
+    mocks.executeAtomicGateway.mockImplementation(async (options) => {
+      const adapter = options.selectAdapter({
+        modelId: "model-uuid",
+        modelName: "GPT 5.6 Luna",
+        upstreamModelName: "gpt-5.6-luna",
+        protocol: "openai",
+        provider: {
+          id: "openai",
+          name: "OpenAI",
+          protocol: "openai",
+          baseUrl: "https://api.openai.com/v1",
+          apiKey: "test-key",
+          keys: [{ key: "test-key", weight: 1 }],
+        },
+        priority: 0,
+        weight: 1,
+        source: "byo",
+        routeId: "route-1",
+        capabilities: { tools: true, webSearchFormat: "openai" },
+        supportsTools: true,
+      });
+      expect(adapter).not.toBeNull();
+      return { status: "failed", error: { code: "upstream_error" } };
+    });
+    const onRouteSelected = vi.fn();
+
+    await executeHostedModelSearch({
+      ctx: { userId: "user", keyKind: null, source: "chat" },
+      modelId: "model-uuid",
+      modelName: "model-uuid",
+      query: "latest news",
+      runId: "run-1",
+      toolCallId: "tool-1",
+      signal: new AbortController().signal,
+      onRouteSelected,
+    });
+
+    expect(onRouteSelected).toHaveBeenCalledWith({
+      modelId: "model-uuid",
+      modelName: "GPT 5.6 Luna",
+    });
   });
 });

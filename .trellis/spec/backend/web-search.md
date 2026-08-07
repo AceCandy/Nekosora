@@ -14,7 +14,8 @@ WebChat wiring in `src/lib/chat/completion-coordinator.ts` and `/api/chat`.
   tool support and an explicitly verified route.
 - `WebSearchConfig`: `{ version: 2; providers; backends }`; array order is global user priority.
 - `SearchTimeRange`: `{ preset: "week" | "month" | "custom"; startDate: "YYYY-MM-DD"; endDate: "YYYY-MM-DD" }`.
-- `searchWeb(userId, query, options): Promise<SearchBundle>` executes the ordered backend list; `options.timeRange` is optional.
+- `searchWeb(userId, query, options): Promise<SearchBundle>` executes the ordered backend list;
+  `options.timeRange` and the current answer's `unavailableBackends` identity map are optional.
 - `createExaProvider(apiKey): SearchProvider` sends `POST https://api.exa.ai/search` with `x-api-key`; its request body uses `numResults` in `1..100` and `contents.highlights.maxCharacters = 600`.
 - `listWebSearchModelCandidates(userId)` returns visible, enabled models with a compatible enabled route and explicit `model_catalog.capabilities.webSearchFormat`.
 - Main-model tool: `web_search({ query, freshness?, dateAfter?, dateBefore? })`; `freshness` is `week | month`, while explicit dates must be a complete inclusive pair and are mutually exclusive with freshness.
@@ -40,6 +41,10 @@ Required environment:
   batches of at most three. Each call keeps its own ordered backend fallback chain. Mixed batches
   containing MCP or other tools remain serial, and tool results are projected in the model's
   original call order.
+- Each backend attempt has a 10-second deadline inside the logical search's 30-second total deadline.
+  A backend timeout records `timeout` and continues the ordered chain; only total-deadline exhaustion
+  or outer cancellation stops the chain. The logical tool remembers timed-out backend identities for
+  the current assistant run, so later searches skip them as `unavailable` without a network call.
 - A model backend is eligible only when the catalog explicitly declares one of
   `openai | anthropic | google | xai` and an enabled route/provider implements the matching
   protocol and has `supports_tools=true`: OpenAI -> `openai`, Anthropic -> `anthropic`,
@@ -91,6 +96,9 @@ Required environment:
 - `search_completed.backend` is the authoritative search provenance. Live SSE state and history
   projection must preserve the deduplicated backend identities alongside citations so the UI can
   show which model or external provider actually returned the sources.
+- Hosted Search reports the selected route identity before generation completes. Timeout, empty, and
+  success attempts therefore use the route's readable `modelName`; a configured model UUID remains
+  the stable identity key but must not be used as the display name once a route was selected.
 - Each `web_search` row owns its provenance or failure detail. Live state applies `search_completed`
   and `search_failed` by `toolCallId`; history merges `ProcessTrace.webSearch.calls` into the matching
   `tool_calls.tool_call_id`. Ordered backend attempts are retained as safe summaries so a later model
@@ -118,6 +126,9 @@ Required environment:
 | Catalog supports tools but no enabled route opts in | Do not inject logical search |
 | Main model does not call the tool | Generate normally without a search request |
 | Backend is missing, disabled, invisible, or route-incompatible | Skip it and try the next ordered backend |
+| Backend exceeds its 10-second attempt deadline | Record `timeout`, remember it for this assistant run, and try the next backend |
+| Later search sees a backend that timed out in this assistant run | Record `unavailable` with the readable identity; do not call it |
+| Logical search exhausts its 30-second total deadline | Stop the chain and return the accumulated attempts |
 | Result has no grounded summary or no valid citation | Treat as failed and fall through |
 | Query is invalid | Return `invalid_search_query` plus `请检查 query、freshness 或日期范围组合`; do not call a backend |
 | Freshness and explicit dates are combined | Return `invalid_search_query` plus `freshness 不能与 dateAfter/dateBefore 同时使用`; do not call a backend |
@@ -174,6 +185,9 @@ Required environment:
   external-provider unsupported zero-network behavior, Hosted Search prompt-range fallback,
   range-specific cache keys, Tavily/SearXNG/Google parameter mapping, Exa UTC publication-boundary
   mapping, and `publishedAt` normalization/preservation.
+- Timeout tests: per-backend timeout continues fallback, total timeout stops fallback, outer cancellation
+  propagates, same-run timeout memory avoids repeat calls, and Hosted timeout/empty attempts keep the
+  selected route's readable identity.
 - Context tests: search-enabled requests receive the request-time `Asia/Shanghai` date; the value is
   generated per request rather than stored as a fixed prompt constant.
 - Public HTTP tests: IPv4/IPv6 private ranges, metadata, DNS rebinding, redirect hops, and valid public hosts.

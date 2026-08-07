@@ -31,6 +31,7 @@ interface ExecuteHostedModelSearchInput {
   toolCallId: string;
   signal: AbortSignal;
   timeRange?: SearchTimeRange;
+  onRouteSelected?: (identity: Pick<HostedModelSearchResult, "modelId" | "modelName">) => void;
 }
 
 /** 为代搜模型提供明确的当前日期与时效性约束；日期注入便于模型判断“最新”。 */
@@ -106,7 +107,10 @@ export async function executeHostedModelSearch(
         undefined,
         input.timeRange,
       );
-      if (runtime) supportedRouteSeen = true;
+      if (runtime) {
+        supportedRouteSeen = true;
+        input.onRouteSelected?.({ modelId: route.modelId, modelName: route.modelName });
+      }
       return runtime ? adapter : null;
     },
     telemetry: gatewayTelemetry,

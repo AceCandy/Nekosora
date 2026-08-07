@@ -241,6 +241,65 @@ describe("executeChatCompletion", () => {
     }));
   });
 
+  it("同一次回答的并行搜索共享已超时后端", async () => {
+    const timedOutBackend = { type: "model" as const, id: "gpt-id", name: "GPT 5.6 Luna" };
+    let markSecondStarted!: () => void;
+    let markFirstTimedOut!: () => void;
+    const secondStarted = new Promise<void>((resolve) => { markSecondStarted = resolve; });
+    const firstTimedOut = new Promise<void>((resolve) => { markFirstTimedOut = resolve; });
+    mocks.searchWeb.mockImplementation(async (_userId, query, options) => {
+      if (query === "query one") {
+        expect(options.unavailableBackends.size).toBe(0);
+        await secondStarted;
+        options.unavailableBackends.set("model:gpt-id", timedOutBackend);
+        markFirstTimedOut();
+        return {
+          hit: false,
+          results: [],
+          reason: "搜索超时",
+          attempts: [{ backend: timedOutBackend, outcome: "timeout", durationMs: 10_000 }],
+        };
+      }
+      markSecondStarted();
+      await firstTimedOut;
+      expect(options.unavailableBackends.get("model:gpt-id")).toEqual(timedOutBackend);
+      return {
+        hit: true,
+        results: [{ title: "Source", url: "https://example.com/", snippet: "fact" }],
+        groundedSummary: "grounded fact",
+        backend: { type: "provider", id: "tavily", name: "Tavily" },
+        attempts: [{
+          backend: { type: "provider", id: "tavily", name: "Tavily" },
+          outcome: "success",
+          durationMs: 10,
+        }],
+      };
+    });
+    mocks.streamChatWithTools.mockImplementation((options) => (async function* () {
+      const calls = [["search-1", "query one"], ["search-2", "query two"]] as const;
+      for (const [toolCallId, query] of calls) {
+        yield { type: "tool-call", toolCallId, toolName: "web_search", args: { query } };
+      }
+      const executions = await Promise.all(calls.map(([toolCallId, query]) => (
+        options.webSearchTool.execute(toolCallId, { query })
+      )));
+      for (const [[toolCallId], execution] of calls.map((call, index) => [call, executions[index]] as const)) {
+        yield { type: "tool-result", toolCallId, toolName: "web_search", ...execution };
+      }
+      yield { type: "finish", finishReason: "stop", usage: { totalTokens: 1 } };
+    })());
+
+    await executeChatCompletion({
+      ...baseInput,
+      processTrace: { mode: "test" },
+      webSearchEnabled: true,
+      signal: new AbortController().signal,
+      emit: () => undefined,
+    });
+
+    expect(mocks.searchWeb).toHaveBeenCalledTimes(2);
+  });
+
   it("搜索回退后失败时在工具结果和追踪中保留实际范围", async () => {
     const requestedTimeRange = {
       preset: "week" as const,

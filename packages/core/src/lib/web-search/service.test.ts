@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ResolvedExternalSearchBackend, SearchTimeRange } from "./types";
 
 const mocks = vi.hoisted(() => ({
@@ -68,6 +68,10 @@ beforeEach(() => {
   mocks.cacheSet.mockReset().mockResolvedValue(undefined);
 });
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe("有序外接搜索", () => {
   it("首个失败后使用下一后端", async () => {
     const first = vi.fn().mockRejectedValue(new Error("failed"));
@@ -92,6 +96,162 @@ describe("有序外接搜索", () => {
     });
     expect(first).toHaveBeenCalledOnce();
     expect(second).toHaveBeenCalledOnce();
+  });
+
+  it("单个后端超时后继续下一后端", async () => {
+    const totalTimeout = new AbortController();
+    const firstTimeout = new AbortController();
+    const secondTimeout = new AbortController();
+    vi.spyOn(AbortSignal, "timeout")
+      .mockReturnValueOnce(totalTimeout.signal)
+      .mockReturnValueOnce(firstTimeout.signal)
+      .mockReturnValueOnce(secondTimeout.signal);
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => { markStarted = resolve; });
+    const first = vi.fn((_query, options) => new Promise((_, reject) => {
+      markStarted();
+      options?.signal?.addEventListener("abort", () => reject(options.signal?.reason), { once: true });
+    }));
+    const second = vi.fn().mockResolvedValue([
+      { title: "Result", url: "https://example.com/a", snippet: "text" },
+    ]);
+    mocks.resolveExternalSearchBackends.mockResolvedValue([
+      backend("first", first), backend("second", second),
+    ]);
+    mocks.loadConfig.mockResolvedValue({
+      version: 2,
+      providers: [],
+      backends: [
+        { type: "provider", providerId: "first" },
+        { type: "provider", providerId: "second" },
+      ],
+    });
+
+    const unavailableBackends = new Map();
+    const resultPromise = searchWeb("user", "query", {
+      ...searchOptions(),
+      unavailableBackends,
+    });
+    await started;
+    firstTimeout.abort(new DOMException("Timed out", "TimeoutError"));
+
+    await expect(resultPromise).resolves.toMatchObject({
+      hit: true,
+      backend: { id: "second" },
+      attempts: [{ backend: { id: "first" }, outcome: "timeout" }, { outcome: "success" }],
+    });
+    expect(second).toHaveBeenCalledOnce();
+    expect(unavailableBackends.get("provider:first")).toEqual({
+      type: "provider",
+      id: "first",
+      name: "first",
+    });
+  });
+
+  it("总预算超时后停止后端链", async () => {
+    const totalTimeout = new AbortController();
+    const backendTimeout = new AbortController();
+    vi.spyOn(AbortSignal, "timeout")
+      .mockReturnValueOnce(totalTimeout.signal)
+      .mockReturnValueOnce(backendTimeout.signal);
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => { markStarted = resolve; });
+    const first = vi.fn((_query, options) => new Promise((_, reject) => {
+      markStarted();
+      options?.signal?.addEventListener("abort", () => reject(options.signal?.reason), { once: true });
+    }));
+    const second = vi.fn();
+    mocks.resolveExternalSearchBackends.mockResolvedValue([
+      backend("first", first), backend("second", second),
+    ]);
+    mocks.loadConfig.mockResolvedValue({
+      version: 2,
+      providers: [],
+      backends: [
+        { type: "provider", providerId: "first" },
+        { type: "provider", providerId: "second" },
+      ],
+    });
+
+    const resultPromise = searchWeb("user", "query", searchOptions());
+    await started;
+    totalTimeout.abort(new DOMException("Timed out", "TimeoutError"));
+
+    await expect(resultPromise).resolves.toMatchObject({
+      hit: false,
+      reason: "搜索超时",
+      attempts: [{ backend: { id: "first" }, outcome: "timeout" }],
+    });
+    expect(second).not.toHaveBeenCalled();
+  });
+
+  it("总预算与后端预算同时超时时不把后端记为不可用", async () => {
+    const totalTimeout = new AbortController();
+    const backendTimeout = new AbortController();
+    vi.spyOn(AbortSignal, "timeout")
+      .mockReturnValueOnce(totalTimeout.signal)
+      .mockReturnValueOnce(backendTimeout.signal);
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => { markStarted = resolve; });
+    const first = vi.fn((_query, options) => new Promise((_, reject) => {
+      markStarted();
+      options?.signal?.addEventListener("abort", () => reject(options.signal?.reason), { once: true });
+    }));
+    mocks.resolveExternalSearchBackends.mockResolvedValue([backend("first", first)]);
+    mocks.loadConfig.mockResolvedValue({
+      version: 2,
+      providers: [],
+      backends: [{ type: "provider", providerId: "first" }],
+    });
+    const unavailableBackends = new Map();
+
+    const resultPromise = searchWeb("user", "query", {
+      ...searchOptions(),
+      unavailableBackends,
+    });
+    await started;
+    totalTimeout.abort(new DOMException("Timed out", "TimeoutError"));
+    backendTimeout.abort(new DOMException("Timed out", "TimeoutError"));
+
+    await expect(resultPromise).resolves.toMatchObject({
+      hit: false,
+      reason: "搜索超时",
+      attempts: [{ backend: { id: "first" }, outcome: "timeout" }],
+    });
+    expect(unavailableBackends.size).toBe(0);
+  });
+
+  it("跳过本次回答中已超时的后端且保留可读身份", async () => {
+    const first = vi.fn();
+    const second = vi.fn().mockResolvedValue([
+      { title: "Result", url: "https://example.com/a", snippet: "text" },
+    ]);
+    mocks.resolveExternalSearchBackends.mockResolvedValue([
+      backend("first", first), backend("second", second),
+    ]);
+    mocks.loadConfig.mockResolvedValue({
+      version: 2,
+      providers: [],
+      backends: [
+        { type: "provider", providerId: "first" },
+        { type: "provider", providerId: "second" },
+      ],
+    });
+
+    const result = await searchWeb("user", "query", {
+      ...searchOptions(),
+      unavailableBackends: new Map([["provider:first", {
+        type: "provider",
+        id: "first",
+        name: "Readable First",
+      }]]),
+    });
+
+    expect(first).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      hit: true,
+      attempts: [{ backend: { name: "Readable First" }, outcome: "unavailable" }, { outcome: "success" }],
+    });
   });
 
   it("过滤非法 URL、凭据和重复结果", async () => {
@@ -325,6 +485,29 @@ describe("有序外接搜索", () => {
       groundedSummary: "grounded",
       backend: { type: "model", id: "grok-id", name: "Grok 4.5" },
       attempts: [{ outcome: "empty" }, { outcome: "success" }],
+    });
+  });
+
+  it("Hosted 模型无结果时仍使用已选路由的可读名称", async () => {
+    mocks.resolveExternalSearchBackends.mockResolvedValue([]);
+    mocks.loadConfig.mockResolvedValue({
+      version: 2,
+      providers: [],
+      backends: [{ type: "model", modelId: "model-uuid" }],
+    });
+    mocks.executeHostedModelSearch.mockImplementation(async (input) => {
+      input.onRouteSelected?.({ modelId: "model-uuid", modelName: "GPT 5.6 Luna" });
+      return null;
+    });
+
+    const result = await searchWeb("user", "query", searchOptions());
+
+    expect(result).toMatchObject({
+      hit: false,
+      attempts: [{
+        backend: { type: "model", id: "model-uuid", name: "GPT 5.6 Luna" },
+        outcome: "empty",
+      }],
     });
   });
 });

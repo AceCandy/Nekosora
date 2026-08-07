@@ -25,6 +25,7 @@ import { getChatUA } from "@/lib/system-settings/ua";
 import { searchWeb } from "@/lib/web-search/service";
 import {
   createFreshnessTimeRange,
+  type SearchBackendIdentity,
   type SearchTimeRange,
 } from "@/lib/web-search/types";
 import type { IRToolDef } from "@/lib/providers/types";
@@ -363,6 +364,7 @@ const webSearchToolDefinition: IRToolDef = {
 };
 
 function createWebSearchTool(input: ExecuteChatCompletionInput) {
+  const unavailableBackends = new Map<string, SearchBackendIdentity>();
   return {
     definition: webSearchToolDefinition,
     async execute(toolCallId: string, args: unknown): Promise<{ result: unknown; isError: boolean }> {
@@ -406,6 +408,7 @@ function createWebSearchTool(input: ExecuteChatCompletionInput) {
           currentModelName: input.request.model,
           signal: input.signal,
           timeRange: requestedTimeRange,
+          unavailableBackends,
         });
         const durationMs = Date.now() - startedAt;
         if (bundle.hit && bundle.backend && bundle.groundedSummary) {

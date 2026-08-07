@@ -73,6 +73,8 @@ export interface SearchWebExecutionOptions {
   currentModelName: string;
   signal: AbortSignal;
   timeRange?: SearchTimeRange;
+  /** 同一次回答内共享的已超时后端；搜索执行会直接更新，键与 `searchBackendKey` 一致。 */
+  unavailableBackends?: Map<string, SearchBackendIdentity>;
 }
 
 export function createFreshnessTimeRange(
