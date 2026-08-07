@@ -140,7 +140,6 @@ export function buildHostedSearchRuntime(
   if (!route.supportsTools || !format || !isHostedSearchRouteCompatible(format, route.protocol)) {
     return null;
   }
-  if (timeRange && format !== "google") return null;
 
   if (format === "openai") {
     const instance = createOpenAI({ ...common, name: provider.id });

@@ -44,20 +44,24 @@ describe("buildHostedSearchRuntime", () => {
     });
   });
 
-  it("非 Google Hosted Search 不接受硬时间范围", () => {
-    const openaiRoute: ResolvedRoute = {
+  it.each([
+    ["OpenAI", "openai", "openai"],
+    ["Anthropic", "anthropic", "anthropic"],
+    ["xAI", "openai-compatible", "xai"],
+  ] as const)("%s Hosted Search 将时间范围降级为提示词约束", (_, protocol, webSearchFormat) => {
+    const hostedRoute: ResolvedRoute = {
       ...route,
-      protocol: "openai",
-      provider: { ...route.provider, protocol: "openai" },
-      capabilities: { tools: true, webSearchFormat: "openai" },
+      protocol,
+      provider: { ...route.provider, protocol },
+      capabilities: { tools: true, webSearchFormat },
       supportsTools: true,
     };
 
     expect(buildHostedSearchRuntime(
-      openaiRoute,
+      hostedRoute,
       "test-key",
       undefined,
       { preset: "month", startDate: "2026-07-06", endDate: "2026-08-04" },
-    )).toBeNull();
+    )).not.toBeNull();
   });
 });

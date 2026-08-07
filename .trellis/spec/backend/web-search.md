@@ -45,8 +45,9 @@ Required environment:
   It must return a non-empty grounded summary and at least one validated citation. The outer
   main model remains the only final-answer generator.
 - Hosted search prompts include the current UTC date and instruct the nested model to prefer
-  recent sources and verify publication/update dates for time-sensitive questions. This is a
-  ranking instruction, not a provider-specific freshness filter.
+  recent sources and verify publication/update dates for time-sensitive questions. When a requested
+  time range cannot be expressed by the native hosted tool, the prompt includes the inclusive UTC
+  start/end dates as a best-effort search and source-selection constraint.
 - The outer model expresses time intent through structured tool arguments: use `week` for latest/current
   news, `month` for recent information, explicit dates for a user-supplied range, and omit all time
   fields for ordinary queries. The server never guesses freshness from localized query keywords.
@@ -54,13 +55,14 @@ Required environment:
   `Asia/Shanghai` calendar date at request time so the outer model can resolve relative expressions
   before choosing tool arguments. The date must never be hard-coded. Ordinary chats with search off
   keep the stable system prompt so this dynamic slot does not invalidate their prompt cache.
-- Time-constrained execution is capability-gated. Tavily and Exa support week/month/custom ranges; Exa
+- Time-constrained execution is capability-aware. Tavily and Exa support week/month/custom ranges; Exa
   maps the inclusive UTC boundaries to `startPublishedDate` at `T00:00:00.000Z` and
   `endPublishedDate` at `T23:59:59.999Z`. Google
   Hosted Search receives an exact `timeRangeFilter`; SearXNG participates only in month searches.
-  Bocha, Zhipu, and OpenAI/Anthropic/xAI Hosted Search must be treated as unsupported until their
-  implemented, version-specific contract provides a hard time filter. Never silently run an
-  unrestricted search for a constrained request.
+  OpenAI/Anthropic/xAI Hosted Search still runs without a native time filter and receives the inclusive
+  range in its prompt. This is a deliberate best-effort fallback and must not be represented as a hard
+  provider filter. External providers such as Bocha and Zhipu remain unsupported when they cannot
+  enforce the requested range.
 - A week request runs all eligible backends in user order. Only when that pass produces no result or
   has no eligible backend may it run one month pass in the same order. Month and custom requests never
   fall back to unrestricted search. Attempts and tool results record requested/effective
@@ -116,7 +118,8 @@ Required environment:
 | Query is invalid | Return `invalid_search_query` plus `请检查 query、freshness 或日期范围组合`; do not call a backend |
 | Freshness and explicit dates are combined | Return `invalid_search_query` plus `freshness 不能与 dateAfter/dateBefore 同时使用`; do not call a backend |
 | Only one explicit date is supplied or dates are invalid/reversed | Return `invalid_search_query` plus the generic corrective hint before any network request |
-| Backend cannot enforce the requested range | Record an `unsupported` attempt and continue without calling it |
+| External Provider cannot enforce the requested range | Record an `unsupported` attempt and continue without calling it |
+| Hosted model supports search but not a native range filter | Run hosted search with the inclusive range in its prompt |
 | Exa returns non-2xx, malformed data, or no usable results | Preserve the provider error semantics and continue the ordered backend fallback |
 | Week pass has no result or eligible backend | Run exactly one month pass; report the effective range and fallback |
 | Month/custom pass has no result | Fail the constrained search; never retry without a range |
@@ -141,6 +144,8 @@ Required environment:
   newline-joined highlights without exposing its API key.
 - Good: a latest-news call searches week-capable backends first, then records a month fallback when the
   week pass is empty; a Tavily `published_date` survives into the final model's tool context.
+- Good: a constrained OpenAI Hosted Search runs with the requested inclusive dates in its prompt while
+  sending only the supported `web_search` tool fields upstream.
 - Base: current-model hosted search succeeds and the assistant restores the same sources after refresh.
 - Good: an interrupted assistant with sources is continued; old and new search calls remain on the same
   message, and refresh restores the same merged citation set shown during streaming.
@@ -148,8 +153,8 @@ Required environment:
 - Bad: assume an `openai-compatible`/2API route supports function tools because its catalog model does.
 - Bad: overwrite an existing assistant's search trace with only the latest continuation run.
 - Bad: pre-search every message when the toggle is on or inject search results into the system prompt.
-- Bad: append "latest" to the query and claim freshness, or pass a constrained request to a backend that
-  cannot enforce it.
+- Bad: append only "latest" to the query and claim a hard freshness guarantee, or invent unsupported
+  native date-filter fields for a Hosted Search provider.
 - Bad: display the message-level backend aggregate on the first search row, merge calls by tool name,
   or render arbitrary persisted search error text.
 - Bad: send plaintext/ciphertext keys to the browser or accept an unvalidated SearXNG internal URL.
@@ -162,8 +167,9 @@ Required environment:
 - Provider tests: response schema, URL filtering/deduplication, retry classes, AbortSignal, user cache isolation,
   and Exa endpoint/header, integer `numResults`, bounded highlights, HTTP error, and response mapping.
 - Freshness tests: tool argument validation, UTC week/month boundaries, week-to-month single fallback,
-  unsupported zero-network behavior, range-specific cache keys, Tavily/SearXNG/Google parameter mapping,
-  Exa UTC publication-boundary mapping, and `publishedAt` normalization/preservation.
+  external-provider unsupported zero-network behavior, Hosted Search prompt-range fallback,
+  range-specific cache keys, Tavily/SearXNG/Google parameter mapping, Exa UTC publication-boundary
+  mapping, and `publishedAt` normalization/preservation.
 - Context tests: search-enabled requests receive the request-time `Asia/Shanghai` date; the value is
   generated per request rather than stored as a fixed prompt constant.
 - Public HTTP tests: IPv4/IPv6 private ranges, metadata, DNS rebinding, redirect hops, and valid public hosts.
@@ -211,16 +217,14 @@ const eligible = format && isHostedSearchRouteCompatible(format, route.protocol)
 Wrong:
 
 ```ts
-await provider.search(`${query} latest`, { maxResults: 5 });
+if (timeRange && format !== "google") return null;
 ```
 
 Correct:
 
 ```ts
-await provider.search(query, {
-  maxResults: 5,
-  timeRange: { preset: "week", startDate, endDate },
-});
+const prompt = buildHostedSearchPrompt(query, new Date(), timeRange);
+const runtime = buildHostedSearchRuntime(route, apiKey, userAgent, timeRange);
 ```
 
 Wrong:

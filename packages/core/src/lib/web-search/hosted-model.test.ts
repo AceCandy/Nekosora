@@ -13,6 +13,17 @@ describe("buildHostedSearchPrompt", () => {
     expect(prompt).toContain("问题：最新的模型发布信息");
   });
 
+  it("将不支持原生过滤的时间范围写入搜索提示词", () => {
+    const prompt = buildHostedSearchPrompt(
+      "OpenAI 最新动态",
+      new Date("2026-08-07T12:00:00.000Z"),
+      { preset: "week", startDate: "2026-08-01", endDate: "2026-08-07" },
+    );
+
+    expect(prompt).toContain("检索时间范围（UTC，含首尾日期）：2026-08-01 至 2026-08-07");
+    expect(prompt).toContain("范围外信息仅可作为必要背景并明确说明");
+  });
+
   it("保留来源提供的合法发布日期", () => {
     expect(normalizeHostedSources([{
       sourceType: "url",
