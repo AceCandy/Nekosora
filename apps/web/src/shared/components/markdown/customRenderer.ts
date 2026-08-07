@@ -9,6 +9,7 @@
 import { resolveStructuredKind } from "@/lib/artifacts/structured";
 import { resolvePreviewableKind } from "@/lib/artifacts/previewable";
 import type { StructuredKind } from "@/shared/components/structured-blocks/schema";
+import { getProxiedMarkdownImageUrl } from "./linkPreview";
 
 /** 混合渲染分段:结构化块(chart/metric/table)、mermaid 图、普通代码块与 markdown 文本分别处理。 */
 export type StructuredSegment =
@@ -90,6 +91,25 @@ function escapeHtmlAttribute(str: string): string {
   return escapeHtml(str).replaceAll('"', "&quot;");
 }
 
+/** 仅允许 HTTP(S) 绝对地址；链接可额外保留同源相对地址。 */
+function getSafeMarkdownUrl(value: string, allowRelative = false): string | null {
+  const href = value.trim();
+  if (!href) return null;
+  if (allowRelative && href.startsWith("&")) return null;
+  try {
+    const url = new URL(href);
+    return url.protocol === "http:" || url.protocol === "https:" ? href : null;
+  } catch {
+    if (!allowRelative) return null;
+  }
+  try {
+    const base = "https://markdown.local";
+    return new URL(href, base).origin === base ? href : null;
+  } catch {
+    return null;
+  }
+}
+
 /** 阻止 GFM 裸链接把紧跟的中文正文误识别为 URL。 */
 export function separateBareUrlTrailingText(input: string): string {
   let inCodeBlock = false;
@@ -124,6 +144,104 @@ export function separateBareUrlTrailingText(input: string): string {
     .join("\n");
 }
 
+const DIRECT_IMAGE_EXT_RE = /\.(?:png|jpe?g|gif|webp|avif)$/i;
+const INLINE_PROTECTED_RE = /(`+[^`]*`+|!?\[[^\]]*\]\((?:<[^>]*>|(?:[^()]|\([^()]*\))*)\)|<[^>]*>)/g;
+const BARE_HTTP_URL_RE = /https?:\/\/[^\s<]+/g;
+
+/** 判断 URL 是否为可直接加载的远程图片地址。 */
+export function isDirectImageUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (url.protocol === "http:" || url.protocol === "https:") && DIRECT_IMAGE_EXT_RE.test(url.pathname);
+  } catch {
+    return false;
+  }
+}
+
+function trimBareUrl(value: string): { href: string; trailing: string } {
+  let href = value.replace(/[.,;:!?，。；：！？]+$/, "");
+  while (href.endsWith(")") && href.split(")").length > href.split("(").length) {
+    href = href.slice(0, -1);
+  }
+  while (href.endsWith("）")) href = href.slice(0, -1);
+  return { href, trailing: value.slice(href.length) };
+}
+
+function transformBareHttpUrls(
+  input: string,
+  transform: (url: string) => string,
+): string {
+  let fence: { char: "`" | "~"; length: number } | null = null;
+  let htmlBlockDepth = 0;
+
+  return input.split("\n").map((line) => {
+    const fenceMatch = line.match(/^\s*(`{3,}|~{3,})(.*)$/);
+    if (fenceMatch) {
+      const nextChar = fenceMatch[1][0] as "`" | "~";
+      if (!fence) {
+        fence = { char: nextChar, length: fenceMatch[1].length };
+      } else if (fence.char === nextChar && fenceMatch[1].length >= fence.length && !fenceMatch[2].trim()) {
+        fence = null;
+      }
+      return line;
+    }
+    if (fence) return line;
+    if (htmlBlockDepth > 0) {
+      htmlBlockDepth = Math.max(0, htmlBlockDepth + countHtmlDelta(line));
+      return line;
+    }
+    if (isHtmlLine(line)) {
+      htmlBlockDepth = Math.max(0, countHtmlDelta(line));
+      return line;
+    }
+    if (/^(?: {4}|\t)/.test(line)) return line;
+
+    let cursor = 0;
+    let output = "";
+    for (const protectedMatch of line.matchAll(INLINE_PROTECTED_RE)) {
+      const index = protectedMatch.index ?? 0;
+      output += line.slice(cursor, index).replace(BARE_HTTP_URL_RE, (value) => {
+        const { href, trailing } = trimBareUrl(value);
+        return `${transform(href)}${trailing}`;
+      });
+      output += protectedMatch[0];
+      cursor = index + protectedMatch[0].length;
+    }
+    output += line.slice(cursor).replace(BARE_HTTP_URL_RE, (value) => {
+      const { href, trailing } = trimBareUrl(value);
+      return `${transform(href)}${trailing}`;
+    });
+    return output;
+  }).join("\n");
+}
+
+/** 收集代码、HTML 与显式 Markdown 链接之外的 HTTP(S) 裸 URL。 */
+export function collectBareHttpUrls(input: string): string[] {
+  const urls = new Set<string>();
+  transformBareHttpUrls(input, (url) => {
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol === "http:" || parsed.protocol === "https:") urls.add(url);
+    } catch {
+      // 无效 URL 保持普通文本。
+    }
+    return url;
+  });
+  return [...urls];
+}
+
+/** 将已确认的图片裸 URL 转为标准 Markdown 图片语法。 */
+export function normalizeBareImageUrls(
+  input: string,
+  confirmedImageUrls: ReadonlySet<string> = new Set(),
+): string {
+  return transformBareHttpUrls(input, (url) => (
+    isDirectImageUrl(url) || confirmedImageUrls.has(url)
+      ? `![图片](<${url}>)`
+      : url
+  ));
+}
+
 /** 避免章节分隔线被 CommonMark 解释为上一段的 Setext 二级标题。 */
 export function normalizeThematicBreakSpacing(input: string): string {
   const lines = input.split("\n");
@@ -150,6 +268,7 @@ export function normalizeThematicBreakSpacing(input: string): string {
 
 /** 行内 Markdown:加粗/斜体/行内代码/链接。 */
 function inlineMarkdown(str: string): string {
+  const markdownImageRe = /!\[([^\]]*)\]\((?:<([^>]+)>|([^\)\s]+))\)/g;
   const protectedFragments: string[] = [];
   const protect = (html: string) => {
     const index = protectedFragments.push(html) - 1;
@@ -159,17 +278,26 @@ function inlineMarkdown(str: string): string {
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(/\*(.+?)\*/g, "<em>$1</em>")
     .replace(/`(.+?)`/g, (_, code: string) => protect(`<code>${code}</code>`))
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label: string, href: string) =>
-      protect(`<a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`));
+    .replace(markdownImageRe, (_, alt: string, angleSrc: string | undefined, plainSrc: string | undefined) => {
+      const src = angleSrc ?? plainSrc ?? "";
+      const safeSrc = getSafeMarkdownUrl(src);
+      if (!safeSrc) return protect(escapeHtml(alt));
+      const escapedSrc = escapeHtmlAttribute(safeSrc);
+      return protect(
+        `<img src="${escapeHtmlAttribute(getProxiedMarkdownImageUrl(safeSrc))}" alt="${escapeHtmlAttribute(alt)}" data-markdown-image-url="${escapedSrc}" role="button" tabindex="0" loading="lazy" decoding="async" class="my-2 block max-w-full cursor-zoom-in rounded-lg border border-morning-mist outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:border-deep-space/80" />`,
+      );
+    })
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label: string, href: string) => {
+      const safeHref = getSafeMarkdownUrl(href, true);
+      if (!safeHref) return protect(escapeHtml(label));
+      const escapedHref = escapeHtmlAttribute(safeHref);
+      return protect(`<a href="${escapedHref}" data-preview-url="${escapedHref}" data-safety-url="${escapedHref}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`);
+    });
 
   return withProtectedFragments
     .replace(/https?:\/\/[^\s<]+/g, (value) => {
-      let href = value.replace(/[.,;:!?]+$/, "");
-      while (href.endsWith(")") && href.split(")").length > href.split("(").length) {
-        href = href.slice(0, -1);
-      }
-      const trailing = value.slice(href.length);
-      return `<a href="${escapeHtmlAttribute(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(href)}</a>${trailing}`;
+      const { href, trailing } = trimBareUrl(value);
+      return `<a href="${escapeHtmlAttribute(href)}" data-preview-url="${escapeHtmlAttribute(href)}" data-safety-url="${escapeHtmlAttribute(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(href)}</a>${trailing}`;
     })
     .replace(/\u0000FRAGMENT(\d+)\u0000/g, (_, index: string) => protectedFragments[Number(index)]);
 }

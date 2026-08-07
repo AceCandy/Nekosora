@@ -45,6 +45,9 @@
       "message": "You are about to visit the following external address.",
       "continue": "Continue",
       "cancel": "Cancel"
+    },
+    "linkPreview": {
+      "title": "External link"
     }
   },
   "nav": {
@@ -1032,6 +1035,9 @@
     "codeExpand": "Expand {count} lines",
     "imageZoom": "Zoom",
     "imageDownload": "Download",
+    "imageCopyLink": "Copy image link",
+    "imageLinkCopied": "Image link copied",
+    "imageCopyFailed": "Copy failed. Try again",
     "imageFailed": "Image failed to load",
     "mermaidDiagram": "Mermaid diagram",
     "fullscreen": "Fullscreen",

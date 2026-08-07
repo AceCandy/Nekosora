@@ -12,11 +12,13 @@ import {
   useContext,
   Children,
   isValidElement,
+  type AnchorHTMLAttributes,
   type HTMLAttributes,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
 import { clsx } from "clsx";
-import { Check, Copy, Eye, Code, ChevronDown, ChevronUp, Maximize, ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
+import { Check, Copy, Eye, Code, ChevronDown, ChevronUp, Globe2, Maximize, ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { createPortal } from "react-dom";
 import {
@@ -40,14 +42,25 @@ import {
   MarkdownHTMLSummary,
   MarkdownHTMLSpan,
 } from "./streamdown-html";
-import { MarkdownImage } from "./MarkdownImage";
-import { normalizeHtmlBlockBlankLines, normalizeThematicBreakSpacing, parseMarkdown, separateBareUrlTrailingText, splitStructuredSegments } from "./customRenderer";
+import { MarkdownImage, MarkdownImagePreviewModal } from "./MarkdownImage";
+import {
+  collectBareHttpUrls,
+  isDirectImageUrl,
+  normalizeBareImageUrls,
+  normalizeHtmlBlockBlankLines,
+  normalizeThematicBreakSpacing,
+  parseMarkdown,
+  separateBareUrlTrailingText,
+  splitStructuredSegments,
+} from "./customRenderer";
 import { resolvePreviewableKind, type PreviewableKind } from "@/lib/artifacts/previewable";
 import { resolveStructuredKind } from "@/lib/artifacts/structured";
 import { copyToClipboard } from "@/shared/lib/clipboard";
 import { StructuredInlineView } from "@/shared/components/structured-blocks";
 import { MermaidDiagram } from "@/shared/components/mermaid/MermaidDiagram";
 import { MARKDOWN_CONTROLS, shouldCollapseCodeBlock } from "./markdownControls";
+import { getLinkPreviewApiUrl, type LinkPreviewMode } from "./linkPreview";
+import type { LinkPreviewData } from "@nekusora/core/link-preview";
 
 interface MarkdownProps {
   /** 待渲染的 markdown 文本(流式增量时会持续变化)。 */
@@ -121,9 +134,296 @@ export function MarkdownLinkSafetyModal({
 }
 
 const STREAMDOWN_LINK_SAFETY: LinkSafetyConfig = {
-  enabled: true,
-  renderModal: (props) => <MarkdownLinkSafetyModal {...props} />,
+  // components.a 已由 MarkdownLink 接管，安全确认统一由根级事件委托处理。
+  enabled: false,
 };
+
+const linkPreviewRequests = new Map<string, Promise<LinkPreviewData | null>>();
+const EMPTY_IMAGE_URLS: ReadonlySet<string> = new Set();
+
+export function requestLinkPreview(mode: Exclude<LinkPreviewMode, "image">, url: string): Promise<LinkPreviewData | null> {
+  const key = `${mode}:${url}`;
+  const cached = linkPreviewRequests.get(key);
+  if (cached) return cached;
+  const request = fetch(getLinkPreviewApiUrl(mode, url), { credentials: "same-origin" })
+    .then(async (response) => response.ok ? await response.json() as LinkPreviewData : null)
+    .catch(() => null)
+    .then((result) => {
+      if (!result) linkPreviewRequests.delete(key);
+      return result;
+    });
+  linkPreviewRequests.set(key, request);
+  return request;
+}
+
+interface MarkdownLinkProps extends AnchorHTMLAttributes<HTMLAnchorElement> {
+  node?: unknown;
+}
+
+interface LinkPreviewTarget {
+  anchor: HTMLAnchorElement;
+  href: string;
+}
+
+interface LinkPreviewResult {
+  href: string;
+  data: LinkPreviewData;
+}
+
+interface MarkdownLinkPreviewLayerProps {
+  children: ReactNode;
+}
+
+function getHttpUrl(href?: string): string | null {
+  if (!href) return null;
+  try {
+    const url = new URL(href);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    return href;
+  } catch {
+    return null;
+  }
+}
+
+function getPreviewableExternalUrl(href?: string): string | null {
+  const httpUrl = getHttpUrl(href);
+  if (!httpUrl) return null;
+  if (typeof window !== "undefined" && new URL(httpUrl).origin === window.location.origin) return null;
+  return httpUrl;
+}
+
+function containsMarkdownImage(children: ReactNode): boolean {
+  return Children.toArray(children).some((child) => {
+    if (!isValidElement<{ node?: { tagName?: string } }>(child)) return false;
+    return child.type === MarkdownImage || child.props.node?.tagName === "img";
+  });
+}
+
+/** Streamdown 链接组件:给根级安全确认和 hover 浮层提供触发 URL。 */
+function MarkdownLink({ children, href, node: _node, onClick, ...props }: MarkdownLinkProps) {
+  const httpUrl = getHttpUrl(href);
+  const previewUrl = containsMarkdownImage(children) ? null : httpUrl;
+
+  return (
+    <a
+      {...props}
+      href={href}
+      target="_blank"
+      rel={props.rel ?? "noreferrer"}
+      data-streamdown="link"
+      data-preview-url={previewUrl ?? undefined}
+      data-safety-url={httpUrl ?? undefined}
+      onClick={(event) => {
+        if (!href || href === "streamdown:incomplete-link") event.preventDefault();
+        onClick?.(event);
+      }}
+    >
+      {children}
+    </a>
+  );
+}
+
+function getPreviewTarget(eventTarget: EventTarget | null): HTMLAnchorElement | null {
+  if (!(eventTarget instanceof Element)) return null;
+  const anchor = eventTarget.closest<HTMLAnchorElement>("a[data-preview-url]");
+  return anchor?.dataset.previewUrl ? anchor : null;
+}
+
+function getSafetyTarget(eventTarget: EventTarget | null): HTMLAnchorElement | null {
+  if (!(eventTarget instanceof Element)) return null;
+  const anchor = eventTarget.closest<HTMLAnchorElement>("a[data-safety-url]");
+  return anchor?.dataset.safetyUrl ? anchor : null;
+}
+
+/** 跨 Streamdown/custom 的根级链接浮层,避免 raw HTML 路径重复维护 React 链接树。 */
+function MarkdownLinkPreviewLayer({ children }: MarkdownLinkPreviewLayerProps) {
+  const t = useTranslations("markdown.linkPreview");
+  const tooltipId = useId();
+  const panelRef = useRef<HTMLDivElement>(null);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [target, setTarget] = useState<LinkPreviewTarget | null>(null);
+  const [previewResult, setPreviewResult] = useState<LinkPreviewResult | null>(null);
+  const [confirmUrl, setConfirmUrl] = useState("");
+
+  const clearCloseTimer = () => {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = null;
+  };
+
+  const scheduleClose = () => {
+    clearCloseTimer();
+    closeTimerRef.current = setTimeout(() => setTarget(null), 150);
+  };
+
+  const showTarget = (anchor: HTMLAnchorElement) => {
+    const href = getPreviewableExternalUrl(anchor.dataset.previewUrl);
+    if (!href) return;
+    clearCloseTimer();
+    setTarget({ anchor, href });
+    void requestLinkPreview("metadata", href).then((data) => {
+      if (data) setPreviewResult({ href, data });
+    });
+  };
+
+  const handlePointerOver = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const anchor = getPreviewTarget(event.target);
+    if (!anchor) return;
+    if (event.relatedTarget instanceof Node && anchor.contains(event.relatedTarget)) return;
+    showTarget(anchor);
+  };
+
+  const handlePointerOut = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!target) return;
+    if (event.relatedTarget instanceof Node && target.anchor.contains(event.relatedTarget)) return;
+    scheduleClose();
+  };
+
+  useLayoutEffect(() => {
+    const panel = panelRef.current;
+    if (!target || !panel) return;
+    let raf = 0;
+    const position = () => {
+      if (!target.anchor.isConnected) {
+        panel.style.visibility = "hidden";
+        return;
+      }
+      const rect = target.anchor.getBoundingClientRect();
+      const gap = 8;
+      const margin = 8;
+      let left = rect.left;
+      let top = rect.bottom + gap;
+      if (top + panel.offsetHeight > window.innerHeight - margin) top = rect.top - panel.offsetHeight - gap;
+      left = Math.max(margin, Math.min(left, window.innerWidth - panel.offsetWidth - margin));
+      top = Math.max(margin, Math.min(top, window.innerHeight - panel.offsetHeight - margin));
+      panel.style.left = `${left}px`;
+      panel.style.top = `${top}px`;
+      panel.style.visibility = "visible";
+    };
+    const schedulePosition = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => { raf = 0; position(); });
+    };
+    panel.style.visibility = "hidden";
+    position();
+    const resizeObserver = new ResizeObserver(schedulePosition);
+    resizeObserver.observe(target.anchor);
+    resizeObserver.observe(panel);
+    window.addEventListener("scroll", schedulePosition, true);
+    window.addEventListener("resize", schedulePosition);
+    return () => {
+      cancelAnimationFrame(raf);
+      resizeObserver.disconnect();
+      window.removeEventListener("scroll", schedulePosition, true);
+      window.removeEventListener("resize", schedulePosition);
+    };
+  }, [target]);
+
+  useEffect(() => {
+    if (!target) return;
+    target.anchor.setAttribute("aria-describedby", tooltipId);
+    return () => {
+      if (target.anchor.getAttribute("aria-describedby") === tooltipId) {
+        target.anchor.removeAttribute("aria-describedby");
+      }
+    };
+  }, [target, tooltipId]);
+
+  useEffect(() => () => {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+  }, []);
+
+  const previewHost = target ? new URL(target.href).hostname : "";
+  const preview = target && previewResult?.href === target.href ? previewResult.data : null;
+  return (
+    <>
+      <div
+        className="contents"
+        onPointerOver={handlePointerOver}
+        onPointerOut={handlePointerOut}
+        onClickCapture={(event) => {
+          const anchor = getSafetyTarget(event.target);
+          const href = getPreviewableExternalUrl(anchor?.dataset.safetyUrl);
+          if (!href) return;
+          event.preventDefault();
+          setConfirmUrl(href);
+          setTarget(null);
+        }}
+        onFocusCapture={(event) => {
+          const anchor = getPreviewTarget(event.target);
+          if (anchor) showTarget(anchor);
+        }}
+        onBlurCapture={(event) => {
+          if (event.relatedTarget instanceof Node && (
+            event.currentTarget.contains(event.relatedTarget) || panelRef.current?.contains(event.relatedTarget)
+          )) return;
+          scheduleClose();
+        }}
+      >
+        {children}
+      </div>
+      {target && typeof document !== "undefined" && createPortal(
+        <div
+          ref={panelRef}
+          id={tooltipId}
+          role="tooltip"
+          aria-live="polite"
+          className="fixed z-50 w-[min(24rem,calc(100vw-1rem))] overflow-hidden rounded-lg border border-morning-mist bg-white text-space-ink shadow-md dark:border-deep-space dark:bg-space-ink dark:text-nebula-silver"
+          style={{ visibility: "hidden" }}
+          onPointerEnter={clearCloseTimer}
+          onPointerLeave={scheduleClose}
+        >
+          {preview?.imageUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={getLinkPreviewApiUrl("image", preview.imageUrl)}
+              alt=""
+              className="h-36 w-full border-b border-morning-mist object-cover dark:border-deep-space"
+              onError={(event) => { event.currentTarget.hidden = true; }}
+            />
+          )}
+          <div className="p-3">
+            <div className="flex items-center gap-2 text-ui-caption text-neutral-600 dark:text-neutral-300">
+              {preview?.iconUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={getLinkPreviewApiUrl("image", preview.iconUrl)}
+                  alt=""
+                  className="h-4 w-4 shrink-0 rounded-sm object-contain"
+                  onError={(event) => { event.currentTarget.hidden = true; }}
+                />
+              ) : (
+                <Globe2 className="h-4 w-4 shrink-0 text-sora-blue" aria-hidden="true" />
+              )}
+              <span className="sr-only">{t("title")}: </span>
+              <span className="truncate">{preview?.siteName || previewHost}</span>
+            </div>
+            <p className="mt-2 line-clamp-2 text-ui-body font-semibold text-space-ink dark:text-nebula-silver">
+              {preview?.title || previewHost}
+            </p>
+            {preview?.description && (
+              <p className="mt-1 line-clamp-3 text-ui-caption leading-5 text-neutral-600 dark:text-neutral-300">
+                {preview.description}
+              </p>
+            )}
+            <p className="mt-2 truncate text-ui-caption text-neutral-500 dark:text-neutral-400">
+              {preview?.url || target.href}
+            </p>
+          </div>
+        </div>,
+        document.body,
+      )}
+      <MarkdownLinkSafetyModal
+        isOpen={Boolean(confirmUrl)}
+        onClose={() => setConfirmUrl("")}
+        onConfirm={() => {
+          if (confirmUrl) window.open(confirmUrl, "_blank", "noreferrer");
+          setConfirmUrl("");
+        }}
+        url={confirmUrl}
+      />
+    </>
+  );
+}
 
 /**
  * 放行 HTML 块标签及其 style 属性的白名单。
@@ -154,6 +454,7 @@ const STREAMDOWN_COMPONENTS = {
   details: MarkdownHTMLDetails,
   summary: MarkdownHTMLSummary,
   span: MarkdownHTMLSpan,
+  a: MarkdownLink,
   pre: MarkdownCodeBlock,
   img: MarkdownImage,
 };
@@ -490,13 +791,18 @@ function MermaidInlineBlock({ code, isStreaming }: { code: string; isStreaming: 
           </button>
         )}
       </div>
-      <div className="overflow-x-auto rounded-lg border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink p-3">
+      <div className="max-h-[36rem] overflow-auto rounded-lg border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink p-3">
         {showSource ? (
           <pre className="text-ui-caption leading-relaxed font-mono text-neutral-700 dark:text-neutral-300 whitespace-pre">
             <code>{code}</code>
           </pre>
         ) : (
-          <MermaidDiagram id={id} content={code} />
+          <MermaidDiagram
+            id={id}
+            content={code}
+            className="mermaid-inline-diagram w-full [&_svg]:!h-auto [&_svg]:!w-full [&_svg]:!max-w-none"
+            preserveContentScale
+          />
         )}
       </div>
     </div>
@@ -511,7 +817,7 @@ function MermaidInlineBlock({ code, isStreaming }: { code: string; isStreaming: 
 }
 
 /**
- * Mermaid 全屏查看器:复用 Modal,内含 panZoom(滚轮缩放 + 拖拽平移)。
+ * Mermaid 全屏查看器:复用 Modal,通过 Portal 脱离正文输出样式,内含 panZoom(滚轮缩放 + 拖拽平移)。
  * 独立 id 避免与内联图 mermaid.render DOM 冲突;ESC/遮罩/关闭按钮关闭(Modal 内置)。
  */
 function MermaidViewerModal({ open, onClose, code, id }: { open: boolean; onClose: () => void; code: string; id: string }) {
@@ -522,9 +828,11 @@ function MermaidViewerModal({ open, onClose, code, id }: { open: boolean; onClos
 
   const reset = () => { setScale(1); setOffset({ x: 0, y: 0 }); };
 
-  return (
+  if (!open || typeof document === "undefined") return null;
+
+  return createPortal(
     <Modal
-      open={open}
+      open
       onClose={() => { reset(); onClose(); }}
       title={t("mermaidDiagram")}
       dialogClassName="m-auto w-[min(1100px,94vw)] max-h-[92vh] rounded-lg border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/50 dark:border-deep-space dark:bg-twilight-obsidian dark:text-nebula-silver"
@@ -552,7 +860,85 @@ function MermaidViewerModal({ open, onClose, code, id }: { open: boolean; onClos
           <MermaidDiagram id={id} content={code} />
         </div>
       </div>
-    </Modal>
+    </Modal>,
+    document.body,
+  );
+}
+
+function StaticMarkdown({ children }: { children: string }) {
+  return (
+    <Streamdown
+      mode="static"
+      controls={MARKDOWN_CONTROLS}
+      linkSafety={STREAMDOWN_LINK_SAFETY}
+      allowedTags={ALLOWED_HTML_TAGS}
+      components={STREAMDOWN_COMPONENTS}
+      shikiTheme={["github-light", "github-dark"]}
+      plugins={{ code: codeHighlighter }}
+      lineNumbers={false}
+    >
+      {children}
+    </Streamdown>
+  );
+}
+
+const STANDALONE_MARKDOWN_IMAGE_RE = /^\s*!\[[^\]]*\]\((?:<[^>]+>|[^)\s]+)\)\s*$/;
+
+function CustomMarkdownSegment({ children }: { children: string }) {
+  const [previewImage, setPreviewImage] = useState<{ src: string; alt: string; title?: string } | null>(null);
+  const blocks: Array<{ type: "markdown" | "streamdown"; value: string }> = [];
+  let markdownLines: string[] = [];
+  const flushMarkdown = () => {
+    const value = markdownLines.join("\n");
+    if (value.trim()) blocks.push({ type: "markdown", value });
+    markdownLines = [];
+  };
+
+  children.split("\n").forEach((line) => {
+    // 独占图片行保留 Streamdown 的加载/失败/放大交互;列表内图片必须与列表一起解析。
+    if (STANDALONE_MARKDOWN_IMAGE_RE.test(line)) {
+      flushMarkdown();
+      blocks.push({ type: "streamdown", value: line });
+    } else {
+      markdownLines.push(line);
+    }
+  });
+  flushMarkdown();
+
+  const openPreview = (eventTarget: EventTarget | null) => {
+    if (!(eventTarget instanceof Element)) return false;
+    const image = eventTarget.closest<HTMLImageElement>("img[data-markdown-image-url]");
+    const src = image?.dataset.markdownImageUrl;
+    if (!image || !src) return false;
+    setPreviewImage({ src, alt: image.alt, title: image.title || undefined });
+    return true;
+  };
+
+  return (
+    <>
+      {blocks.map((block, index) => block.type === "streamdown" ? (
+        <StaticMarkdown key={`streamdown-${index}`}>{block.value}</StaticMarkdown>
+      ) : (
+        <div
+          key={`markdown-${index}`}
+          onClick={(event) => { openPreview(event.target); }}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" && event.key !== " ") return;
+            if (openPreview(event.target)) event.preventDefault();
+          }}
+          dangerouslySetInnerHTML={{ __html: parseMarkdown(block.value) }}
+        />
+      ))}
+      {previewImage && (
+        <MarkdownImagePreviewModal
+          open
+          onClose={() => setPreviewImage(null)}
+          src={previewImage.src}
+          alt={previewImage.alt}
+          title={previewImage.title}
+        />
+      )}
+    </>
   );
 }
 
@@ -571,10 +957,43 @@ function MermaidViewerModal({ open, onClose, code, id }: { open: boolean; onClos
  * 注:Tailwind 类扫描配置见 globals.css 的 @source 指令。
  */
 function MarkdownImpl({ content, isStreaming, renderer = "streamdown", className, onPreview, renderStyleClass }: MarkdownProps) {
+  const separatedContent = useMemo(() => separateBareUrlTrailingText(content), [content]);
+  const probeCandidates = useMemo(() => (
+    isStreaming
+      ? []
+      : collectBareHttpUrls(separatedContent).filter((url) => !isDirectImageUrl(url))
+  ), [isStreaming, separatedContent]);
+  const probeKey = probeCandidates.join("\n");
+  const [probedImages, setProbedImages] = useState<{
+    key: string;
+    urls: ReadonlySet<string>;
+  }>({ key: "", urls: EMPTY_IMAGE_URLS });
+
+  useEffect(() => {
+    if (!probeKey) return;
+    let active = true;
+    void Promise.all(probeCandidates.map(async (url) => ({
+      url,
+      preview: await requestLinkPreview("probe", url),
+    }))).then((results) => {
+      if (!active) return;
+      setProbedImages({
+        key: probeKey,
+        urls: new Set(results.filter(({ preview }) => preview?.kind === "image").map(({ url }) => url)),
+      });
+    });
+    return () => { active = false; };
+  }, [probeCandidates, probeKey]);
+
   // custom 渲染器:仅在流式结束后启用(流式中 streamdown 更稳)。原样渲染 AI 的 HTML/class。
   const useCustom = renderer === "custom" && !isStreaming;
   const isPaper = renderStyleClass === "paper";
-  const normalizedContent = normalizeThematicBreakSpacing(separateBareUrlTrailingText(content));
+  const confirmedImageUrls = probedImages.key === probeKey ? probedImages.urls : EMPTY_IMAGE_URLS;
+  const normalizedContent = normalizeThematicBreakSpacing(
+    isStreaming
+      ? separatedContent
+      : normalizeBareImageUrls(separatedContent, confirmedImageUrls),
+  );
 
   if (useCustom) {
     // 按结构化代码块分段:结构化段用受控组件内联渲染,代码块用 Streamdown
@@ -584,29 +1003,19 @@ function MarkdownImpl({ content, isStreaming, renderer = "streamdown", className
     return (
       <div className={clsx("nekusora-md", className)}>
         <MarkdownRenderContext.Provider value={{ onPreview, isStreaming, isPaper }}>
-          {segments.map((seg, i) =>
-            seg.type === "structured" ? (
-              <StructuredInlineView key={i} kind={seg.kind} raw={seg.raw} />
-            ) : seg.type === "mermaid" ? (
-              <MermaidInlineBlock key={i} code={seg.raw} isStreaming={false} />
-            ) : seg.type === "code" ? (
-              <Streamdown
-                key={i}
-                mode="static"
-                controls={MARKDOWN_CONTROLS}
-                linkSafety={STREAMDOWN_LINK_SAFETY}
-                allowedTags={ALLOWED_HTML_TAGS}
-                components={STREAMDOWN_COMPONENTS}
-                shikiTheme={["github-light", "github-dark"]}
-                plugins={{ code: codeHighlighter }}
-                lineNumbers={false}
-              >
-                {"```" + seg.language + "\n" + seg.raw + "\n```"}
-              </Streamdown>
-            ) : (
-              <div key={i} dangerouslySetInnerHTML={{ __html: parseMarkdown(seg.text) }} />
-            ),
-          )}
+          <MarkdownLinkPreviewLayer>
+            {segments.map((seg, i) =>
+              seg.type === "structured" ? (
+                <StructuredInlineView key={i} kind={seg.kind} raw={seg.raw} />
+              ) : seg.type === "mermaid" ? (
+                <MermaidInlineBlock key={i} code={seg.raw} isStreaming={false} />
+              ) : seg.type === "code" ? (
+                <StaticMarkdown key={i}>{"```" + seg.language + "\n" + seg.raw + "\n```"}</StaticMarkdown>
+              ) : (
+                <CustomMarkdownSegment key={i}>{seg.text}</CustomMarkdownSegment>
+              ),
+            )}
+          </MarkdownLinkPreviewLayer>
         </MarkdownRenderContext.Provider>
       </div>
     );
@@ -638,7 +1047,7 @@ function MarkdownImpl({ content, isStreaming, renderer = "streamdown", className
   return (
     <div className={clsx("nekusora-md", className)}>
       <MarkdownRenderContext.Provider value={{ onPreview, isStreaming, isPaper }}>
-        {streamdown}
+        <MarkdownLinkPreviewLayer>{streamdown}</MarkdownLinkPreviewLayer>
       </MarkdownRenderContext.Provider>
     </div>
   );

@@ -30,6 +30,7 @@ Nekusora is a pnpm TypeScript workspace. `apps/web` is the Next.js control plane
 | [Prompt Caching](./prompt-caching.md) | 命中前提、AI SDK 边界、按 protocol 注入缓存控制(复刻 pi) | Filled |
 | [Model Message Boundary](./model-message-boundary.md) | OpenAI IR 到 AI SDK ModelMessage 的多模态与工具消息转换契约 | Filled |
 | [Web Search](./web-search.md) | per-user V2 有序后端、按需逻辑工具、Hosted Search、安全与历史恢复 | Filled |
+| [Link Preview](./link-preview.md) | 登录态外链元数据、裸图片 MIME 探测、受限图片代理与公网请求边界 | Filled |
 | [File Storage](./file-storage.md) | StorageDriver 全量/Range 读取、私有文件 200/206/302/416 与文本预览有界读取 | Filled |
 | [Dependency Security](./dependency-security.md) | pnpm override 边界、lockfile 审查与原生依赖验证门禁 | Filled |
 | [MCP Integration](./mcp-integration.md) | MCP client transport 连接超时、取消与资源生命周期 | Filled |

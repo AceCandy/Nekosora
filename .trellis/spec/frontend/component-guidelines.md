@@ -170,7 +170,10 @@ AI 回复正文由 `shared/components/markdown/Markdown.tsx` 渲染,两条互斥
 - 块深度由 `countHtmlDelta` 统计;void 标签(`br`/`hr`/`img`/...)与显式自闭合、同行开闭(`<div>x</div>`)不计入深度。
 - 代码块(` ``` `)优先级高于 HTML 块判定。
 - `separateBareUrlTrailingText` 同时服务 streamdown/custom:裸 URL 紧跟中文时须切断链接;外层半角/全角右括号必须留在 `<a>` 外,URL 内部成对 ASCII 括号必须保留在链接内。
+- 裸 HTTP(S) 图片 URL 的提升发生在两条渲染路径之前:明确图片扩展名立即提升,无扩展名仅在流式结束后经登录态 `mode=probe` 确认为栅格图片再提升。代码围栏、缩进代码、HTML 和显式 Markdown 链接中的 URL 不得转换。
 - Streamdown 链接安全确认保持启用,但 `renderModal` 必须用 `createPortal(..., document.body)` 脱离 Markdown 段落;禁止把含块元素的确认层作为链接的内联兄弟节点,否则会形成 `<p><div>` 非法嵌套并触发 hydration 错误。
+- 外链 hover/focus 预览由 Markdown 根层事件委托和 Portal 浮层统一承载,streamdown/custom 都只在链接上提供预览 URL 标记;点击行为继续交给原安全确认,预览图片必须走登录态 `mode=image` 代理。
+- `requestLinkPreview` 只缓存成功结果;非 2xx、解析失败或网络错误必须移除缓存项,允许下一次 hover/probe 重试,不能把瞬时失败固化到页面生命周期。
 - 改 `parseMarkdown` 必须跑 `src/shared/components/markdown/customRenderer.test.ts`;该测试守住「HTML 块内文字不被打散」与「普通 markdown 回归」。
 
 **内联 style 过滤**:`streamdown-html.tsx` 对放行标签调 `sanitizeHTMLStyle`;当前为原样透传(不做属性白名单/危险值拦截/中性色映射),安全兜底依赖 streamdown 内部 rehype-harden。`custom` 路径完全不过滤。
@@ -178,7 +181,12 @@ AI 回复正文由 `shared/components/markdown/Markdown.tsx` 渲染,两条互斥
 ### Streamdown 富媒体交互契约
 
 - Markdown 图片只在 streamdown 路径通过 `components.img = MarkdownImage` 增强;必须保留懒加载、加载骨架、失败占位、原图下载和 Modal 放大。`alt` 同时是无障碍文本与失败兜底文案。custom 输出样式仍由 `customRenderer.ts` 原样渲染,不要假设两条路径自动共享 React 组件。
-- Mermaid 仅在图形模式显示全屏入口;源码模式不显示。全屏视图复用 `MermaidDiagram`,但必须传独立 `id`,避免内联图与全屏图的 `mermaid.render` DOM 标识冲突。关闭 Modal 时重置缩放和平移;缩放范围固定为 `0.3-5`。
+- 所有由 Markdown 语法或裸图片 URL 生成的远程 `http(s)` 图片都必须经 `getProxiedMarkdownImageUrl` 转为登录态 `/api/link-preview?mode=image` 地址;正文 `<img>`、Modal 与下载链接使用同一代理 URL。custom 的 `inlineMarkdown` 也必须调用该 helper,否则列表内图片会绕开 `MarkdownImage` 并重新触发外站防盗链。原样透传的手写 HTML 不属于该转换边界。
+- 图片加载地址与复制地址必须分离:正文、Modal 和下载使用代理 URL,「复制图片链接」始终复制原始 URL。Streamdown 由 `MarkdownImagePreviewModal` 承载大图与复制;custom 的静态 `<img>` 必须写入经属性转义的 `data-markdown-image-url=<原始 URL>`、`role="button"` 和 `tabindex="0"`,再由 `CustomMarkdownSegment` 的 click/Enter/Space 事件委托打开同一 Portal 弹窗。列表图片不得为获得交互而从 `parseMarkdown` 单独拆出,否则会重置有序列表编号。
+- 附件图片与 Markdown 图片的大图预览必须复用 `shared/components/file-preview/ImagePreviewModal`:附件调用方传 `/api/files/{fileId}`,Markdown 调用方传登录态图片代理 URL,复制原始 URL 和下载代理图片等业务操作通过 `toolbar` 留在 Markdown 调用方。不要给 `FilePreviewModal` 增加外链 URL 联合入参,也不要在 Markdown 层另建带标题栏的图片弹窗,否则会让同一图片交互出现两套视觉和 URL 语义。
+- `MarkdownImage` 可能被 Streamdown 放进 `<p>`，其就地 DOM 必须全部是 phrasing content（例如 `<span>`）；禁止返回 `<figure>` 或 `<div>`。放大 Modal 必须 Portal 到 `document.body`，否则会产生非法段落嵌套和 hydration error。
+- Mermaid 仅在图形模式显示全屏入口;源码模式不显示。全屏视图复用 `MermaidDiagram`,但必须传独立 `id`,避免内联图与全屏图的 `mermaid.render` DOM 标识冲突。查看器 Modal 必须 Portal 到 `document.body`,避免输出样式的 `.nekusora-md h1/h2` 规则污染查看器标题。关闭 Modal 时重置缩放和平移;缩放范围固定为 `0.3-5`。
+- Mermaid 正文实例必须给 SVG `width:100%; height:auto` 并使用正文限高滚动容器；这些 class 只由内联块传入，共享的 Artifact 与全屏实例不得继承正文尺寸语义。
 - `@streamdown/code` 的 Shiki 运行时必须在项目根 `package.json` 保持直接依赖,版本与插件解析出的版本一致。仅依赖传递依赖会让 Next.js `serverExternalPackages` 无法从项目根解析 `shiki` / `shiki/wasm`,开发服务器会持续输出 `Package shiki can't be external`。
 
 ### Streamdown 代码块几何契约

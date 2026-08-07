@@ -1,7 +1,6 @@
-import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import FilePreviewModal from "./FilePreviewModal";
+import ImagePreviewModal from "./ImagePreviewModal";
 
 const mocks = vi.hoisted(() => ({
   createPortal: vi.fn((node: unknown) => node),
@@ -19,36 +18,29 @@ afterEach(() => {
   Object.defineProperty(globalThis, "document", { configurable: true, value: originalDocument });
 });
 
-describe("FilePreviewModal", () => {
-  it("renders images without a file header or bordered container", () => {
+describe("ImagePreviewModal", () => {
+  it("使用透明 lightbox 展示大图和可选操作条", () => {
     const body = {};
     Object.defineProperty(globalThis, "document", { configurable: true, value: { body } });
+
     const html = renderToStaticMarkup(
-      <FilePreviewModal
-        file={{ fileId: "image-1", filename: "photo.png", mime: "image/png" }}
+      <ImagePreviewModal
+        open
         onClose={() => {}}
+        src="/api/files/image-1"
+        alt="photo.png"
+        toolbar={<button type="button">action</button>}
       />,
     );
 
+    expect(mocks.createPortal).toHaveBeenCalledWith(expect.anything(), body);
     expect(html).toContain('aria-label="photo.png"');
     expect(html).toContain("border-0 bg-transparent");
-    expect(mocks.createPortal).toHaveBeenCalledWith(expect.anything(), body);
-    expect(html).toContain('aria-label="close"');
-    expect(html).not.toContain("<header");
+    expect(html).toContain("backdrop:bg-black/75");
     expect(html).toContain("max-h-[92dvh]");
     expect(html).toContain("max-w-[96vw]");
-  });
-
-  it("keeps the existing header and container for non-image previews", () => {
-    const html = renderToStaticMarkup(
-      <FilePreviewModal
-        file={{ fileId: "audio-1", filename: "recording.mp3", mime: "audio/mpeg" }}
-        onClose={() => {}}
-      />,
-    );
-
-    expect(html).toContain("<header");
-    expect(html).toContain("recording.mp3");
-    expect(html).toContain("border-morning-mist");
+    expect(html).toContain('aria-label="close"');
+    expect(html).toContain('role="toolbar"');
+    expect(html).not.toContain("<header");
   });
 });

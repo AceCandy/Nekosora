@@ -45,6 +45,9 @@
       "message": "即将访问以下外部地址，请确认后继续。",
       "continue": "继续访问",
       "cancel": "取消"
+    },
+    "linkPreview": {
+      "title": "外部链接"
     }
   },
   "nav": {
@@ -1032,6 +1035,9 @@
     "codeExpand": "展开 {count} 行",
     "imageZoom": "放大",
     "imageDownload": "下载",
+    "imageCopyLink": "复制图片链接",
+    "imageLinkCopied": "图片链接已复制",
+    "imageCopyFailed": "复制失败，请重试",
     "imageFailed": "图片加载失败",
     "mermaidDiagram": "Mermaid 图",
     "fullscreen": "全屏查看",

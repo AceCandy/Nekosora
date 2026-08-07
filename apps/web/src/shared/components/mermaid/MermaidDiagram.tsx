@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { clsx } from "clsx";
 import { useTranslations } from "next-intl";
 
 /** 与全局正文一致的字体栈,让图内文字融入排版。 */
@@ -39,8 +40,17 @@ const DARK_VARS = {
  * 跟随系统明暗在两套配色间切换,主题变化时重渲。content 非法(如被转义的坏语法)
  * 时显示渲染失败提示,而非抛错崩溃。id 需调用方保证唯一,避免 mermaid DOM 节点 id 冲突。
  */
-export function MermaidDiagram({ id, content }: { id: string; content: string }) {
+export interface MermaidDiagramProps {
+  id: string;
+  content: string;
+  className?: string;
+  /** 正文图保留 Mermaid 的自然宽度下限,宽图由外层滚动而不是缩成不可读的小图。 */
+  preserveContentScale?: boolean;
+}
+
+export function MermaidDiagram({ id, content, className, preserveContentScale = false }: MermaidDiagramProps) {
   const t = useTranslations("artifacts");
+  const containerRef = useRef<HTMLDivElement>(null);
   const [svg, setSvg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isDark, setIsDark] = useState(() =>
@@ -84,7 +94,22 @@ export function MermaidDiagram({ id, content }: { id: string; content: string })
     return () => { cancelled = true; };
   }, [id, content, isDark]);
 
+  useLayoutEffect(() => {
+    if (!preserveContentScale || !svg) return;
+    const element = containerRef.current?.querySelector("svg");
+    const viewBox = element?.getAttribute("viewBox")?.trim().split(/[ ,]+/).map(Number);
+    const naturalWidth = viewBox?.[2];
+    if (!element || !naturalWidth || !Number.isFinite(naturalWidth)) return;
+    // Mermaid 的默认 max-width 会把宽图压到正文宽度;保留自然宽度后由上层 overflow-auto 承载横向阅读。
+    containerRef.current?.style.setProperty("width", `max(100%, ${Math.ceil(naturalWidth)}px)`, "important");
+    containerRef.current?.style.setProperty("flex-shrink", "0", "important");
+    element.style.setProperty("width", `max(100%, ${Math.ceil(naturalWidth)}px)`, "important");
+    element.style.setProperty("height", "auto", "important");
+    element.style.setProperty("max-width", "none", "important");
+    element.style.setProperty("flex-shrink", "0", "important");
+  }, [preserveContentScale, svg]);
+
   if (error) return <div className="text-ui-caption text-neutral-450 dark:text-neutral-500 p-3">{t("mermaidFailed")} {error}</div>;
   if (!svg) return <div className="text-ui-caption text-neutral-450 dark:text-neutral-500 animate-pulse">{t("rendering")}</div>;
-  return <div className="flex items-center justify-center min-h-full" dangerouslySetInnerHTML={{ __html: svg }} />;
+  return <div ref={containerRef} className={clsx("flex items-center justify-center min-h-full", className)} dangerouslySetInnerHTML={{ __html: svg }} />;
 }

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  collectBareHttpUrls,
+  isDirectImageUrl,
+  normalizeBareImageUrls,
   normalizeHtmlBlockBlankLines,
   normalizeThematicBreakSpacing,
   parseMarkdown,
@@ -88,6 +91,98 @@ describe("normalizeHtmlBlockBlankLines", () => {
 });
 
 describe("parseMarkdown", () => {
+  describe("图片裸 URL", () => {
+    it.each([
+      ["https://example.com/image.png", true],
+      ["https://example.com/image.webp?size=large#preview", true],
+      ["https://example.com/image.webp?next=(large)", true],
+      ["http://example.com/image.JPEG", true],
+      ["https://example.com/image.svg", false],
+      ["https://example.com/image.png/extra", false],
+      ["//example.com/image.png", false],
+    ])("识别 %s -> %s", (url, expected) => {
+      expect(isDirectImageUrl(url)).toBe(expected);
+    });
+
+    it("转换正文和列表中的图片裸 URL，并保护代码、HTML 与显式链接", () => {
+      const input = [
+        "正文 https://example.com/image.png",
+        "https://example.com/image.png?size=large",
+        "```text",
+        "https://example.com/code.png",
+        "```",
+        "    https://example.com/indented.png",
+        "<div>",
+        "https://example.com/html.png",
+        "</div>",
+        "- https://example.com/list.png",
+        "<span>https://example.com/inline.png</span>",
+        "~~~text",
+        "https://example.com/tilde.png",
+        "~~~",
+        "[链接](https://example.com/image.png)",
+      ].join("\n");
+
+      expect(normalizeBareImageUrls(input)).toBe([
+        "正文 ![图片](<https://example.com/image.png>)",
+        "![图片](<https://example.com/image.png?size=large>)",
+        "```text",
+        "https://example.com/code.png",
+        "```",
+        "    https://example.com/indented.png",
+        "<div>",
+        "https://example.com/html.png",
+        "</div>",
+        "- ![图片](<https://example.com/list.png>)",
+        "<span>https://example.com/inline.png</span>",
+        "~~~text",
+        "https://example.com/tilde.png",
+        "~~~",
+        "[链接](https://example.com/image.png)",
+      ].join("\n"));
+    });
+
+    it("用尖括号 destination 保留 URL 参数中的括号", () => {
+      expect(normalizeBareImageUrls("https://example.com/image.png?next=(large)"))
+        .toBe("![图片](<https://example.com/image.png?next=(large)>)");
+    });
+
+    it("用服务端 MIME 探测结果提升无扩展名图片", () => {
+      const url = "https://cdn.example.com/asset?id=42";
+      expect(normalizeBareImageUrls(`图片 ${url}`, new Set([url])))
+        .toBe(`图片 ![图片](<${url}>)`);
+      expect(normalizeBareImageUrls(`图片 ${url}`)).toBe(`图片 ${url}`);
+    });
+
+    it("只收集可提升的裸 URL", () => {
+      expect(collectBareHttpUrls([
+        "正文 https://cdn.example.com/asset?id=42",
+        "- https://example.com/list.png",
+        "`https://example.com/inline.png`",
+        "[链接](https://example.com/linked.png)",
+        "<span>https://example.com/html.png</span>",
+        "```text",
+        "https://example.com/code.png",
+        "```",
+      ].join("\n"))).toEqual([
+        "https://cdn.example.com/asset?id=42",
+        "https://example.com/list.png",
+      ]);
+    });
+
+    it("不会被较短的围栏误结束", () => {
+      const input = [
+        "````text",
+        "https://example.com/code.png",
+        "```",
+        "https://example.com/code-too.png",
+        "````",
+      ].join("\n");
+
+      expect(normalizeBareImageUrls(input)).toBe(input);
+    });
+  });
+
   it("给章节标题前的分隔线补空行，避免上一段被解析为 Setext 标题", () => {
     const input = "#### 辅助 On\n正文内容。\n---\n### 【TES 亚军阵容】";
 
@@ -121,7 +216,7 @@ describe("parseMarkdown", () => {
 
     expect(input).toBe("（https://openai.com/research/index/release<!-- -->)公开的最新产品为：");
     expect(parseMarkdown(input)).toBe(
-      '<p>（<a href="https://openai.com/research/index/release" target="_blank" rel="noopener noreferrer">https://openai.com/research/index/release</a><!-- -->)公开的最新产品为：</p>\n',
+      '<p>（<a href="https://openai.com/research/index/release" data-preview-url="https://openai.com/research/index/release" data-safety-url="https://openai.com/research/index/release" target="_blank" rel="noopener noreferrer">https://openai.com/research/index/release</a><!-- -->)公开的最新产品为：</p>\n',
     );
   });
 
@@ -148,7 +243,7 @@ describe("parseMarkdown", () => {
       "[说明](https://example.com/docs)中文 与 https://example.com/wiki/Function_(math)<!-- -->正文",
     );
     expect(parseMarkdown(normalized)).toContain(
-      '<a href="https://example.com/docs" target="_blank" rel="noopener noreferrer">说明</a>中文 与 <a href="https://example.com/wiki/Function_(math)" target="_blank" rel="noopener noreferrer">https://example.com/wiki/Function_(math)</a><!-- -->正文',
+      '<a href="https://example.com/docs" data-preview-url="https://example.com/docs" data-safety-url="https://example.com/docs" target="_blank" rel="noopener noreferrer">说明</a>中文 与 <a href="https://example.com/wiki/Function_(math)" data-preview-url="https://example.com/wiki/Function_(math)" data-safety-url="https://example.com/wiki/Function_(math)" target="_blank" rel="noopener noreferrer">https://example.com/wiki/Function_(math)</a><!-- -->正文',
     );
   });
 
@@ -160,8 +255,33 @@ describe("parseMarkdown", () => {
 
   it("转义裸 URL 生成的链接属性", () => {
     expect(parseMarkdown('https://example.com/?q="value"')).toContain(
-      '<a href="https://example.com/?q=&quot;value&quot;" target="_blank" rel="noopener noreferrer">https://example.com/?q="value"</a>',
+      '<a href="https://example.com/?q=&quot;value&quot;" data-preview-url="https://example.com/?q=&quot;value&quot;" data-safety-url="https://example.com/?q=&quot;value&quot;" target="_blank" rel="noopener noreferrer">https://example.com/?q="value"</a>',
     );
+  });
+
+  it("拒绝危险协议并保留 HTTP(S) 与站内相对链接", () => {
+    const out = parseMarkdown([
+      "[外链](https://example.com/docs)",
+      "[站内](/chat/example)",
+      "[脚本](javascript:alert%281%29)",
+      "[数据](data:text/html;base64,PHNjcmlwdD4=)",
+      "[实体](&#106;avascript:alert%281%29)",
+      "[十六进制实体](&#x6a;avascript:alert%281%29)",
+      "![脚本图片](javascript:alert%281%29)",
+      "![数据图片](data:image/png;base64,AAAA)",
+    ].join("\n\n"));
+
+    expect(out).toContain('<a href="https://example.com/docs"');
+    expect(out).toContain('<a href="/chat/example"');
+    expect(out).toContain("<p>脚本</p>");
+    expect(out).toContain("<p>数据</p>");
+    expect(out).toContain("<p>实体</p>");
+    expect(out).toContain("<p>十六进制实体</p>");
+    expect(out).toContain("<p>脚本图片</p>");
+    expect(out).toContain("<p>数据图片</p>");
+    expect(out).not.toContain("javascript:");
+    expect(out).not.toContain("data:text/html");
+    expect(out).not.toContain("data:image/png");
   });
 
   it("HTML 容器块内的裸文字不被打散为 <p>", () => {
@@ -279,6 +399,23 @@ describe("parseMarkdown", () => {
       "</ul>",
       "",
     ].join("\n"));
+  });
+
+  it("列表中的图片保持在同一个有序列表内", () => {
+    const out = parseMarkdown([
+      "1. 第一项",
+      "2. 第二项",
+      "3. 第三项",
+      "4. ![图片](<https://example.com/photo.png>)",
+      "5. 第五项",
+    ].join("\n"));
+
+    expect(out.match(/<ol>/g)).toHaveLength(1);
+    expect(out.match(/<li>/g)).toHaveLength(5);
+    expect(out).toContain('<img src="/api/link-preview?mode=image&amp;url=https%3A%2F%2Fexample.com%2Fphoto.png" alt="图片"');
+    expect(out).toContain('data-markdown-image-url="https://example.com/photo.png"');
+    expect(out).toContain('role="button" tabindex="0"');
+    expect(out).toContain("<li>第五项</li>");
   });
 
   it("支持有序与无序列表混合嵌套", () => {
