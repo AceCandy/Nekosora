@@ -724,3 +724,24 @@ Added privacy-safe memory extraction stage logs, diagnosed mem0 SQLite native bi
 ### Status
 
 [OK] **Completed**
+
+
+## Session 93: 修复搜索超时回退与模型展示
+
+**Date**: 2026-08-07
+**Task**: 修复搜索超时回退与模型展示
+**Branch**: `main`
+
+### Summary
+
+为搜索后端增加独立 10 秒超时和 30 秒总预算，在同次回答共享超时后端状态并继续回退；Hosted 路由选中后立即记录可读模型名称，补充竞态与回归测试。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `567226c` | (see git log) |
+
+### Status
+
+[OK] **Completed**

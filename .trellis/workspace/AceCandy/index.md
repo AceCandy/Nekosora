@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 92
+- **Total Sessions**: 93
 - **Last Active**: 2026-08-07
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~726 | Active |
+| `journal-2.md` | ~747 | Active |
 | `journal-1.md` | ~1981 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 93 | 2026-08-07 | 修复搜索超时回退与模型展示 | `567226c` | `main` |
 | 92 | 2026-08-07 | 同批联网搜索并行执行 | `03c4b83` | `main` |
 | 91 | 2026-08-07 | Hosted 搜索时间范围提示词降级 | `35ad1fe` | `main` |
 | 90 | 2026-08-07 | 提交未归档改动并完成收尾 | `3f09e0a`, `76944b5`, `865187f`, `9f32bf9`, `48836cd` | `main` |
