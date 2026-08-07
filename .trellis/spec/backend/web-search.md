@@ -15,6 +15,7 @@ WebChat wiring in `src/lib/chat/completion-coordinator.ts` and `/api/chat`.
 - `WebSearchConfig`: `{ version: 2; providers; backends }`; array order is global user priority.
 - `SearchTimeRange`: `{ preset: "week" | "month" | "custom"; startDate: "YYYY-MM-DD"; endDate: "YYYY-MM-DD" }`.
 - `searchWeb(userId, query, options): Promise<SearchBundle>` executes the ordered backend list; `options.timeRange` is optional.
+- `createExaProvider(apiKey): SearchProvider` sends `POST https://api.exa.ai/search` with `x-api-key`; its request body uses `numResults` in `1..100` and `contents.highlights.maxCharacters = 600`.
 - `listWebSearchModelCandidates(userId)` returns visible, enabled models with a compatible enabled route and explicit `model_catalog.capabilities.webSearchFormat`.
 - Main-model tool: `web_search({ query, freshness?, dateAfter?, dateBefore? })`; `freshness` is `week | month`, while explicit dates must be a complete inclusive pair and are mutually exclusive with freshness.
 - The tool schema description must explicitly tell the main model that `freshness` and `dateAfter/dateBefore` are mutually exclusive, because many models otherwise try both after deriving exact dates from a relative request.
@@ -53,7 +54,9 @@ Required environment:
   `Asia/Shanghai` calendar date at request time so the outer model can resolve relative expressions
   before choosing tool arguments. The date must never be hard-coded. Ordinary chats with search off
   keep the stable system prompt so this dynamic slot does not invalidate their prompt cache.
-- Time-constrained execution is capability-gated. Tavily supports week/month/custom ranges; Google
+- Time-constrained execution is capability-gated. Tavily and Exa support week/month/custom ranges; Exa
+  maps the inclusive UTC boundaries to `startPublishedDate` at `T00:00:00.000Z` and
+  `endPublishedDate` at `T23:59:59.999Z`. Google
   Hosted Search receives an exact `timeRangeFilter`; SearXNG participates only in month searches.
   Bocha, Zhipu, and OpenAI/Anthropic/xAI Hosted Search must be treated as unsupported until their
   implemented, version-specific contract provides a hard time filter. Never silently run an
@@ -64,6 +67,9 @@ Required environment:
   ranges and whether this week-to-month fallback occurred.
 - External Provider results are validated, bounded, HTTP(S)-only, deduplicated, and treated as
   untrusted tool content. Cancellation and the shared deadline must reach the underlying request.
+- Exa requests bounded highlights rather than full text or generated summaries. Non-empty highlights
+  are trimmed and joined in upstream order with newlines as `SearchResult.snippet`; response fields are
+  accepted only after Zod validation.
 - `SearchResult.publishedAt` is optional and contains only an upstream-provided, parseable date normalized
   to ISO. Do not infer dates from snippets. Search context, SSE, process trace, continuation, and history
   projection must preserve it when present.
@@ -111,6 +117,7 @@ Required environment:
 | Freshness and explicit dates are combined | Return `invalid_search_query` plus `freshness 不能与 dateAfter/dateBefore 同时使用`; do not call a backend |
 | Only one explicit date is supplied or dates are invalid/reversed | Return `invalid_search_query` plus the generic corrective hint before any network request |
 | Backend cannot enforce the requested range | Record an `unsupported` attempt and continue without calling it |
+| Exa returns non-2xx, malformed data, or no usable results | Preserve the provider error semantics and continue the ordered backend fallback |
 | Week pass has no result or eligible backend | Run exactly one month pass; report the effective range and fallback |
 | Month/custom pass has no result | Fail the constrained search; never retry without a range |
 | All backends fail | Return `web_search_failed`; do not claim fresh information |
@@ -130,6 +137,8 @@ Required environment:
   state and restored history.
 - Good: one failed search displays only its safe reason while a later successful search displays only
   its own backend; refresh preserves both associations.
+- Good: an Exa custom-range request sends exact inclusive UTC publication boundaries and returns
+  newline-joined highlights without exposing its API key.
 - Good: a latest-news call searches week-capable backends first, then records a month fallback when the
   week pass is empty; a Tavily `published_date` survives into the final model's tool context.
 - Base: current-model hosted search succeeds and the assistant restores the same sources after refresh.
@@ -150,10 +159,11 @@ Required environment:
 - Config tests: V1 ordering, V2 ciphertext, DTO redaction, backend deduplication, backfill planning.
 - Candidate tests: catalog capability, model/catalog/route/provider enabled predicates, visibility,
   protocol compatibility, route tool opt-in, and duplicate-route collapse.
-- Provider tests: response schema, URL filtering/deduplication, retry classes, AbortSignal, user cache isolation.
+- Provider tests: response schema, URL filtering/deduplication, retry classes, AbortSignal, user cache isolation,
+  and Exa endpoint/header, integer `numResults`, bounded highlights, HTTP error, and response mapping.
 - Freshness tests: tool argument validation, UTC week/month boundaries, week-to-month single fallback,
   unsupported zero-network behavior, range-specific cache keys, Tavily/SearXNG/Google parameter mapping,
-  and `publishedAt` normalization/preservation.
+  Exa UTC publication-boundary mapping, and `publishedAt` normalization/preservation.
 - Context tests: search-enabled requests receive the request-time `Asia/Shanghai` date; the value is
   generated per request rather than stored as a fixed prompt constant.
 - Public HTTP tests: IPv4/IPv6 private ranges, metadata, DNS rebinding, redirect hops, and valid public hosts.
