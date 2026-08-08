@@ -1,7 +1,7 @@
 import type { ChatProcessPhase, ChatProcessStep } from "@nekusora/contracts/chat";
 import type { ToolCallRecord } from "@/features/chat/model/types";
 
-export type ResearchStage = "understand" | "context" | "reasoning" | "search" | "read" | "answer";
+export type ResearchStage = "understand" | "context" | "reasoning" | "search" | "read";
 export type ResearchStepStatus = "running" | "completed" | "warning" | "error";
 
 export interface ResearchStep {
@@ -26,9 +26,9 @@ interface BuildResearchStatusInput {
   canonicalSteps: ChatProcessStep[];
   toolCalls?: ToolCallRecord[];
   sourceCount: number;
-  content: string;
   hasReasoning: boolean;
   startedAt?: string;
+  firstContentAt?: string;
   endedAt?: string;
 }
 
@@ -61,9 +61,9 @@ function durationBetween(startedAt?: string, endedAt?: string): number | undefin
 }
 
 export function buildResearchStatus(input: BuildResearchStatusInput): ResearchStatus {
-  const processActive = input.phase === "preparing" || input.phase === "processing" || input.phase === "answering";
+  const processActive = input.phase === "preparing" || input.phase === "processing";
+  const researchCompleted = input.phase === "answering" || input.phase === "completed" || Boolean(input.firstContentAt);
   const contextSteps = input.canonicalSteps.filter((step) => CONTEXT_KINDS.has(step.kind));
-  const promptRunning = input.canonicalSteps.some((step) => step.kind === "prompt" && step.status === "running");
   const reasoningSteps = input.canonicalSteps.filter((step) => step.kind === "reasoning");
   const searchSteps = input.canonicalSteps.filter((step) => step.kind === "web_search");
   const nonSearchTools = input.toolCalls?.filter((call) => call.toolName !== "web_search") ?? [];
@@ -118,28 +118,19 @@ export function buildResearchStatus(input: BuildResearchStatusInput): ResearchSt
     steps.push({ id: "read", type: "read", status: reading ? "running" : "completed" });
   }
 
-  if (input.phase === "answering" || input.content || !processActive) {
-    steps.push({
-      id: "answer",
-      type: "answer",
-      status: input.phase === "answering" ? "running" : input.content ? "completed" : "error",
-    });
-  }
-
   let currentStage: ResearchStage | undefined;
   if (processActive) {
     currentStage = [...steps].reverse().find((step) => step.status === "running")?.type;
     if (!currentStage && input.phase === "processing" && input.sourceCount > 0 && searchStatuses.length > 0) {
       currentStage = "read";
     }
-    if (!currentStage && promptRunning) currentStage = "answer";
-    currentStage ??= input.phase === "preparing" ? "understand" : input.phase === "answering" ? "answer" : "reasoning";
+    currentStage ??= steps.at(-1)?.type ?? "understand";
   }
 
   return {
-    status: processActive ? "running" : input.phase === "completed" ? "completed" : "error",
+    status: processActive ? "running" : researchCompleted ? "completed" : "error",
     currentStage,
-    durationMs: durationBetween(input.startedAt, input.endedAt),
+    durationMs: durationBetween(input.startedAt, input.firstContentAt ?? input.endedAt),
     sourceCount: input.sourceCount || undefined,
     query,
     partialSourceFailure,

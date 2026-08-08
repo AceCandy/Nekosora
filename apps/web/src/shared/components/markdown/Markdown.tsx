@@ -337,7 +337,7 @@ function MarkdownLinkPreviewLayer({ children }: MarkdownLinkPreviewLayerProps) {
   return (
     <>
       <div
-        className="contents"
+        className="contents [&>*:first-child>*:first-child]:mt-0"
         onPointerOver={handlePointerOver}
         onPointerOut={handlePointerOut}
         onClickCapture={(event) => {

@@ -247,6 +247,29 @@ describe("ChatMessageItem research process", () => {
     expect(html).not.toContain("tool_call");
   });
 
+  it("首个正文 token 前将研究状态收敛为完成", () => {
+    const html = renderToStaticMarkup(
+      <MessageProcessTrace
+        content="正文已开始"
+        searchResults={[{ title: "Source", url: "https://example.com/report" }]}
+        processRuntime={{
+          runId: "run-answering",
+          lastSeq: 5,
+          phase: "answering",
+          steps: [{ id: "search", kind: "web_search", status: "completed" }],
+          startedAt: "2026-08-08T00:00:00.000Z",
+          firstContentAt: "2026-08-08T00:00:01.500Z",
+        }}
+        isStreaming
+        isLast
+      />,
+    );
+
+    expect(html).toContain("researchCompleted · researchSourceCount · researchDuration");
+    expect(html).not.toContain("researchRunningRead");
+    expect(html).not.toContain("research-status-shimmer");
+  });
+
   it("流式空正文只显示研究状态，不重复显示思考中", () => {
     const html = renderToStaticMarkup(
       <ChatMessageItem

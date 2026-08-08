@@ -203,7 +203,7 @@ JSONB 增加字段不需要数据库迁移。快照在现有 assistant/run 完�
 
 - assistant 正文前只有一个过程 disclosure。
 - 外层默认只显示当前动作或 44-48px 的终态摘要；完整内容使用无逐行分隔线的轻量时间线，不嵌套卡片、不加静态投影。
-- 组件内通过纯语义投影把 raw steps/tool calls 归并为 `understand/context/reasoning/search/read/answer`，不直接渲染内部 kind、工具名、参数、provider 路径或 reasoning 正文。
+- 组件内通过纯语义投影把 raw steps/tool calls 归并为 `understand/context/reasoning/search/read`；进入 `answering` 时立即切换完成摘要，并使用 `firstContentAt` 截止研究耗时，正文流式期间不再变化，也不重复展示答案生成阶段。组件不直接渲染内部 kind、工具名、参数、provider 路径或 reasoning 正文。
 - 来源位于时间线下方的独立 disclosure；标题、域名和可用摘要保持 48-64px 的轻量行，不作为步骤或完成计数。
 - 过程 snapshot 只负责步骤状态；reasoning 文本、工具详情和 citations 继续从消息既有字段按 runId/toolCallId 连接，不在 snapshot 复制内容。
 

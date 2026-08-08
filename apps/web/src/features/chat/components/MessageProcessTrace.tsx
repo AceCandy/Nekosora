@@ -31,7 +31,6 @@ const RUNNING_STAGE_I18N: Record<ResearchStage, string> = {
   reasoning: "researchRunningReasoning",
   search: "researchRunningSearch",
   read: "researchRunningRead",
-  answer: "researchRunningAnswer",
 };
 
 const STEP_I18N: Record<ResearchStage, string> = {
@@ -40,7 +39,6 @@ const STEP_I18N: Record<ResearchStage, string> = {
   reasoning: "researchStepReasoning",
   search: "researchStepSearch",
   read: "researchStepRead",
-  answer: "researchStepAnswer",
 };
 
 interface MessageProcessTraceProps {
@@ -114,9 +112,9 @@ export function MessageProcessTrace({
     canonicalSteps,
     toolCalls,
     sourceCount,
-    content,
     hasReasoning: Boolean(reasoning),
     startedAt: processRuntime?.startedAt ?? historicalRun?.startedAt,
+    firstContentAt: processRuntime?.firstContentAt ?? historicalRun?.firstContentAt,
     endedAt: processRuntime?.endedAt ?? historicalRun?.endedAt,
   });
   const runId = processRuntime?.runId
@@ -154,7 +152,7 @@ export function MessageProcessTrace({
   if (!hasTrace) return null;
 
   const runningStage = research.currentStage ?? "understand";
-  const terminalTitle = phase === "completed"
+  const terminalTitle = research.status === "completed"
     ? t("researchCompleted")
     : phase === "interrupted"
       ? t("researchInterrupted")
@@ -177,7 +175,7 @@ export function MessageProcessTrace({
       <Popover
         open={expanded}
         onClose={() => setExpanded(false)}
-        panelClassName="max-h-[min(70vh,35rem)] w-[min(35rem,calc(100vw-1.5rem))] overflow-y-auto"
+        panelClassName="animate-in fade-in duration-200 motion-reduce:animate-none max-h-[min(70vh,35rem)] w-[min(35rem,calc(100vw-1.5rem))] overflow-y-auto"
         trigger={(
           <button
             ref={triggerRef}
@@ -272,14 +270,13 @@ export function MessageProcessTrace({
 
           {searchResults && searchResults.length > 0 && (
             <details className="group/sources mt-3 border-t border-morning-mist/60 pt-1 dark:border-deep-space/60">
-              <summary className="touch-target flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-md px-1.5 text-ui-caption font-medium text-space-ink/70 transition-colors duration-150 hover:text-space-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:text-nebula-silver/70 dark:hover:text-nebula-silver">
+              <summary className="touch-target flex min-h-9 cursor-pointer list-none items-center justify-between gap-3 rounded-md px-1.5 py-1 text-ui-caption font-medium text-space-ink/70 transition-colors duration-150 hover:text-space-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:text-nebula-silver/70 dark:hover:text-nebula-silver">
                 <span>{t("researchViewSources", { count: searchResults.length })}</span>
                 <span className="flex items-center gap-1 text-space-ink/45 dark:text-nebula-silver/45">
-                  <span>{t("researchView")}</span>
                   <ChevronDown className="size-4 transition-transform duration-200 group-open/sources:rotate-180 motion-reduce:transition-none" aria-hidden="true" />
                 </span>
               </summary>
-              <div className="space-y-1 pb-1 pt-1">
+              <div className="space-y-1 pb-1 pt-1 group-open/sources:animate-in group-open/sources:fade-in group-open/sources:slide-in-from-top-1 group-open/sources:duration-200 motion-reduce:animate-none">
                 {searchResults.map((result, index) => (
                   <a
                     key={`${result.url}-${index}`}

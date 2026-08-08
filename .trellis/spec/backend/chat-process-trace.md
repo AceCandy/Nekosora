@@ -22,7 +22,7 @@ Apply this contract when changing Chat context preparation, reasoning/tool/searc
 - Continue appends a run snapshot and preserves older runs and Web Search calls. Regenerate/version switch uses the selected assistant's own snapshot.
 - The SSE parser validates trace frames once with the shared guard and preserves the existing `finish -> terminal(success) -> [DONE]` contract.
 - If a best-effort terminal trace is lost, the validated SSE terminal locally converges the client runtime to the same terminal phase.
-- UI projects raw steps into user-facing research stages (`understand/context/reasoning/search/read/answer`). It never renders prompt construction, hidden reasoning, raw tool names/arguments, or provider attempt paths.
+- UI projects raw steps into user-facing research stages (`understand/context/reasoning/search/read`). When the canonical phase enters `answering`, the research summary immediately becomes completed before the first text delta is rendered; its duration is `startedAt -> firstContentAt` and no longer changes during answer streaming. It never adds a redundant answer-generation stage or renders prompt construction, hidden reasoning, raw tool names/arguments, or provider attempt paths.
 - The disclosure is collapsed by default: while active its summary shows only the current stage, safe query, and source count; a run transition to terminal collapses it once. Sources are a separate disclosure below the semantic timeline, never an execution step.
 
 ## 4. Validation & Error Matrix
@@ -53,7 +53,7 @@ Apply this contract when changing Chat context preparation, reasoning/tool/searc
 - SSE tests cover valid trace frames, invalid frames, terminal-after-trace, and terminal fallback convergence.
 - Store tests cover send, regenerate, edit-and-resend, continue, multi-run preservation, Abort, and failure.
 - History/version tests assert snapshot round-trip and selected-version isolation.
-- Component/model tests cover semantic step grouping, hidden internal details, current-stage summaries, terminal auto-collapse, partial-source warning, legacy fallback, independent sources, keyboard disclosure, and reduced motion.
+- Component/model tests cover semantic step grouping, hidden internal details, `answering` completing research at `firstContentAt`, frozen research duration during answer streaming, current-stage summaries, terminal auto-collapse, partial-source warning, legacy fallback, independent sources, keyboard disclosure, and reduced motion.
 
 ## 7. Wrong vs Correct
 
