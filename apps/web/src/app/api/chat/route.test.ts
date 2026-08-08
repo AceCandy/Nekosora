@@ -52,6 +52,7 @@ vi.mock("@/lib/chat/message-attachments", async (importOriginal) => {
 });
 
 import { POST } from "./route";
+import type { ExecuteChatCompletionInput } from "@/lib/chat/completion-coordinator";
 
 const schema = {
   conversations: {
@@ -107,6 +108,11 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+async function runLazyPrepare(input: ExecuteChatCompletionInput) {
+  const prepared = await input.prepare?.(input.processRecorder, input.signal);
+  if (prepared) Object.assign(input, prepared);
+}
+
 function mockContinuationDb(webSearch = false, processTrace?: unknown) {
   mocks.getDb.mockResolvedValue({
     select: selectQueue([
@@ -158,10 +164,11 @@ beforeEach(() => {
   mocks.loadMessageAttachmentsByMessageIds.mockResolvedValue(new Map());
   mocks.assertVisionModel.mockResolvedValue(undefined);
   mocks.insertMessageAttachments.mockResolvedValue(undefined);
-  mocks.executeChatCompletion.mockImplementation(async ({ emit }) => {
-    await emit({ type: "started" });
-    await emit({ type: "text-delta", text: " answer" });
-    await emit({
+  mocks.executeChatCompletion.mockImplementation(async (input: ExecuteChatCompletionInput) => {
+    await runLazyPrepare(input);
+    await input.emit({ type: "started" });
+    await input.emit({ type: "text-delta", text: " answer" });
+    await input.emit({
       type: "finish",
       metadata: {
         model: "model-1",
@@ -381,13 +388,14 @@ describe("POST /api/chat coordinator adapter", () => {
       ragStatus: "hit",
       compaction: { compacted: true, strategy: "summary", fallbackLevel: 1 },
     });
-    mocks.executeChatCompletion.mockImplementation(async ({ emit }) => {
-      await emit({ type: "started" });
-      await emit({ type: "text-delta", text: "answer" });
-      await emit({ type: "reasoning-delta", text: "thought" });
-      await emit({ type: "tool-call", toolCallId: "tc-1", toolName: "search", args: { q: 1 } });
-      await emit({ type: "search_started", toolCallId: "tc-1", query: "latest" });
-      await emit({
+    mocks.executeChatCompletion.mockImplementation(async (input: ExecuteChatCompletionInput) => {
+      await runLazyPrepare(input);
+      await input.emit({ type: "started" });
+      await input.emit({ type: "text-delta", text: "answer" });
+      await input.emit({ type: "reasoning-delta", text: "thought" });
+      await input.emit({ type: "tool-call", toolCallId: "tc-1", toolName: "search", args: { q: 1 } });
+      await input.emit({ type: "search_started", toolCallId: "tc-1", query: "latest" });
+      await input.emit({
         type: "search_completed",
         toolCallId: "tc-1",
         backend: { type: "provider", id: "provider-1", name: "Provider" },
@@ -399,7 +407,7 @@ describe("POST /api/chat coordinator adapter", () => {
           durationMs: 12,
         }],
       });
-      await emit({
+      await input.emit({
         type: "search_failed",
         toolCallId: "tc-2",
         reason: "模型搜索不支持指定时间范围",
@@ -417,8 +425,8 @@ describe("POST /api/chat coordinator adapter", () => {
           },
         ],
       });
-      await emit({ type: "tool-result", toolCallId: "tc-1", toolName: "search", result: {}, isError: false });
-      await emit({
+      await input.emit({ type: "tool-result", toolCallId: "tc-1", toolName: "search", result: {}, isError: false });
+      await input.emit({
         type: "finish",
         metadata: { model: "model-1", durationMs: 10, completedAt: "2026-07-30T00:00:00.000Z" },
       });

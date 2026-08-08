@@ -11,13 +11,19 @@ import type {
   WebSearchTraceCitation,
 } from "@/db/types";
 import type { MessageFeedback } from "@/features/chat/model/feedback";
+import type { ChatProcessRuntimeState } from "@/features/chat/model/processTrace";
 import type {
   ChatMessageAttachment,
+  ChatProcessSnapshot,
   MessageRunMetadata,
 } from "@nekusora/contracts/chat";
 
 export type { FeedbackReason, FeedbackRating, MessageFeedback } from "@/features/chat/model/feedback";
-export type { ChatMessageAttachment, MessageRunMetadata } from "@nekusora/contracts/chat";
+export type {
+  ChatMessageAttachment,
+  ChatProcessSnapshot,
+  MessageRunMetadata,
+} from "@nekusora/contracts/chat";
 
 /** 单条聊天消息(含可选的运行与产物元数据)。 */
 export interface ChatMessage {
@@ -42,6 +48,10 @@ export interface ChatMessage {
   feedback?: MessageFeedback;
   /** 该 assistant 回复对应的 run 元数据。 */
   runMetadata?: MessageRunMetadata;
+  /** 版本化的准备/推理/工具/搜索过程快照。 */
+  processTrace?: ChatProcessSnapshot;
+  /** 当前流式 run 的临时过程状态，不进入服务端持久化。 */
+  processRuntime?: ChatProcessRuntimeState;
   artifacts?: Artifact[]; // 关联的可渲染产物
 }
 

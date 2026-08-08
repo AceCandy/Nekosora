@@ -1,0 +1,9 @@
+{"file":".trellis/spec/backend/chat-run-metadata.md","reason":"保持 run、completion transaction、terminal SSE 与历史 metadata 契约"}
+{"file":".trellis/spec/backend/web-search.md","reason":"保持 search lifecycle、toolCallId、来源、continue 和隐私投影契约"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"保持 Chat cancellation、错误脱敏和 terminal/DONE 行为"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"遵守 runs 租约、PostgreSQL 事务与迁移约束"}
+{"file":".trellis/spec/backend/gateway-routing.md","reason":"复用既有流提交前故障转移边界，不在 Chat 层重复实现"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"流式状态驻留 zustand、四动作一致和 delta flush 顺序"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"遵守 Chat 流式 UI、无障碍、触屏和滚动原语约束"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"共享 DTO、unknown 边界与类型唯一来源"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"事件从 source 到 store/history/UI 的跨层 round-trip 契约"}

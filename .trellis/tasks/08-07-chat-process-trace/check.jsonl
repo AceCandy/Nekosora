@@ -1,0 +1,8 @@
+{"file":".trellis/spec/backend/chat-run-metadata.md","reason":"复核 run 终态、完成时序、持久化与全部必需测试"}
+{"file":".trellis/spec/backend/web-search.md","reason":"复核实时/历史搜索逐调用关联与安全错误详情"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"复核 Abort、EOF、失败和敏感错误不进入 SSE"}
+{"file":".trellis/spec/backend/gateway-routing.md","reason":"复核 trace 不改变不可撤回事件后的故障转移边界"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"复核四条生成路径、terminal gate 和 buffer flush"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"复核 responsive、focus、motion、触控与 Chat 滚动"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"执行 lint、typecheck、test 与 review checklist"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"复核共享 decoder/reducer、seq 和 live/history round-trip"}

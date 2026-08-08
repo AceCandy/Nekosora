@@ -56,4 +56,5 @@
 - [ ] selector 返回值引用稳定（无无限渲染风险）。
 - [ ] import 用了正确的路径别名。
 - [ ] 删除/替换 UI 入口后,已清理 orphan:无引用的 props、state、ref、import,以及无人使用的 i18n 键。
+- [ ] 删除 i18n 键前,已按 `useTranslations(namespace)` 核对完整路径；另一 namespace 的同名字面量不能替代当前键，并有 catalog 断言覆盖关键控件。
 - [ ] 涉及 Clipboard 等浏览器权限 API 时，已用真实用户点击验证成功与回退路径。

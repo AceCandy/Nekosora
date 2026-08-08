@@ -23,6 +23,10 @@
  *   data: [DONE]
  */
 import type { MessageRunMetadata } from "@/features/chat/model/types";
+import {
+  isChatProcessEvent,
+  type ChatProcessEvent,
+} from "@nekusora/contracts/chat";
 import type {
   WebSearchTraceAttempt,
   WebSearchTraceBackend,
@@ -38,6 +42,7 @@ export interface SSEEvent {
   type:
     | "user_message"
     | "assistant_message"
+    | "trace"
     | "delta"
     | "content_retract"
     | "reasoning"
@@ -77,6 +82,7 @@ export interface SSEEvent {
 
 export interface SSEHandlers {
   onDelta: (text: string) => void;
+  onTrace?: (event: ChatProcessEvent) => void;
   onContentRetract?: (text: string) => void;
   onReasoning?: (text: string) => void;
   onToolCall?: (toolName: string, args: unknown, toolCallId?: string) => void;
@@ -140,6 +146,12 @@ export async function consumeChatSSE(
       return null;
     }
     if (!event || typeof event !== "object" || !("type" in event)) return null;
+    if ((event as { type?: unknown }).type === "trace") {
+      if (!isChatProcessEvent(event)) throw new Error("Chat SSE trace 事件非法");
+      if (terminalStatus) throw new Error("Chat SSE terminal 后仍有业务事件");
+      handlers.onTrace?.(event);
+      return null;
+    }
     const ev = event as SSEEvent;
     if (ev.type === "terminal") {
       if (terminalStatus) throw new Error("Chat SSE 收到重复 terminal");

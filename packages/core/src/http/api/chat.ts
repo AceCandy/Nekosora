@@ -10,13 +10,15 @@
  * 上下文准备由 orchestrator 负责；流式状态机与核心收尾事务由 completion coordinator 负责。
  * route 只保留鉴权、请求准备和取消安全的 SSE 编码。
  */
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { getSessionFromHeaders } from "@/lib/session-request";
 import { writeFallbackTitle } from "@/lib/conversation-title/service";
 import { dispatchConversationTitleJob } from "@/lib/conversation-title/dispatch";
 import { prepareChatContext } from "@/lib/chat/orchestrator";
+import type { CompactionResult } from "@/lib/compact/service";
+import { getFileIdsByKnowledgeBases } from "@/lib/knowledge-base/files";
 import {
   findConversationMessage,
   withConversationMessageWrite,
@@ -29,11 +31,16 @@ import {
   type ChatCompletionEvent,
   type ChatCompletionOutcomeKind,
 } from "@/lib/chat/completion-coordinator";
+import { ChatProcessRecorder } from "@/lib/chat/process-trace";
 import type { ChatTerminalStatus } from "@/lib/chat/sse-contract";
 import { redactErrorMessage } from "@/lib/redaction";
 import type { IRRequest } from "@/lib/providers/types";
-import type { ReasoningLevel, WebSearchTraceCall } from "@/db/types";
-import { toMessageCreatedAtIso } from "@nekusora/contracts/chat";
+import type { ProcessTrace, ReasoningLevel, WebSearchTraceCall } from "@/db/types";
+import {
+  isChatProcessSnapshot,
+  toMessageCreatedAtIso,
+  type ChatProcessSnapshot,
+} from "@nekusora/contracts/chat";
 import {
   assertVisionModel,
   ChatAttachmentError,
@@ -214,6 +221,7 @@ export async function POST(req: Request) {
   let continueAssistantCreatedAt: string | undefined;
   let continueParentUserCreatedAt: string | undefined;
   let continueWebSearchCalls: WebSearchTraceCall[] = [];
+  let continueProcessSnapshot: ChatProcessSnapshot | undefined;
   if (body.continueFromPublicId) {
     const contMsg = await findConversationMessage(db, s, body.conversationId, {
       publicId: body.continueFromPublicId,
@@ -238,6 +246,10 @@ export async function POST(req: Request) {
     if (Array.isArray(priorCalls)) {
       continueWebSearchCalls = priorCalls as WebSearchTraceCall[];
     }
+    const priorProcess = contMsg.processTrace && typeof contMsg.processTrace === "object"
+      ? (contMsg.processTrace as { process?: unknown }).process
+      : undefined;
+    if (isChatProcessSnapshot(priorProcess)) continueProcessSnapshot = priorProcess;
     if (contMsg.parentId) {
       const parentUser = await findConversationMessage(db, s, body.conversationId, {
         id: contMsg.parentId as string,
@@ -386,51 +398,57 @@ export async function POST(req: Request) {
     }
   }
 
-  // ===== 段 A:上下文准备(抽到 orchestrator,纯输入→输出)=====
-  const prepared = await prepareChatContext({
-    userId: user.id,
-    conversationId: body.conversationId,
-    conv: {
-      outputModeId: composerSnapshot.data.outputModeId === undefined
-        ? conv.outputModeId
-        : composerSnapshot.data.outputModeId,
-    },
-    userContent,
-    model: body.model,
-    modelId: body.modelId,
-    messages: body.messages,
-    branchLeafPublicId: isContinue ? body.continueFromPublicId! : userPublicId,
-    messageAttachments,
-    visionValidated,
-    knowledgeBaseIds: body.knowledgeBaseIds,
-    webSearchEnabled: effectiveWebSearch,
-    templateId: body.templateId,
-    templateVars: body.templateVars,
-    instructionCardIds: body.instructionCardIds,
-    db,
-    schema: s,
-  });
-  // vision 校验失败时提前返回 400(保留原行为)
-  if ("error" in prepared) return prepared.error;
-  const { irRequest, trace, modelSupportsTools, ragStatus, compaction } = prepared;
-  if (continueWebSearchCalls.length > 0) {
-    trace.webSearch = {
-      calls: [...continueWebSearchCalls, ...(trace.webSearch?.calls ?? [])],
-    };
-  }
-
   const composerState = (conv.composerState as { reasoningByModelId?: Record<string, ReasoningLevel> } | null) ?? {};
   const reasoning = composerSnapshot.data.reasoning
     ?? (body.modelId ? composerState.reasoningByModelId?.[body.modelId] : undefined);
-  if (reasoning !== undefined) {
-    irRequest.reasoning = reasoning;
-  }
-
   const ctx = { userId: user.id, keyKind: null as null, source: "chat" as const };
 
   if (!userMessageInternalId) {
     return Response.json({ error: "用户父消息已失效" }, { status: 409 });
   }
+
+  // 知识库文件属主解析与视觉能力属于 HTTP preflight；流建立后不再返回 4xx。
+  let preparedFileIds = messageAttachments.map((attachment) => attachment.fileId);
+  if (body.knowledgeBaseIds?.length) {
+    const kbFileIds = await getFileIdsByKnowledgeBases(body.knowledgeBaseIds, user.id);
+    preparedFileIds = [...new Set([...preparedFileIds, ...kbFileIds])];
+    const unresolvedIds = kbFileIds.filter(
+      (fileId) => !messageAttachments.some((attachment) => attachment.fileId === fileId),
+    );
+    if (unresolvedIds.length > 0) {
+      const rows = await db
+        .select({ mime: s.fileObjects.mime })
+        .from(s.fileObjects)
+        .where(and(inArray(s.fileObjects.id, unresolvedIds), eq(s.fileObjects.userId, user.id)));
+      if (rows.some((row: { mime?: string }) => row.mime?.startsWith("image/"))) {
+        try {
+          await assertVisionModel(db, s, {
+            userId: user.id,
+            model: body.model,
+            modelId: body.modelId,
+          });
+          visionValidated = true;
+        } catch (error) {
+          if (error instanceof ChatAttachmentError) return attachmentError(error);
+          throw error;
+        }
+      }
+    }
+  }
+
+  const initialTrace: ProcessTrace = {};
+  if (continueWebSearchCalls.length > 0) {
+    initialTrace.webSearch = { calls: [...continueWebSearchCalls] };
+  }
+  if (continueProcessSnapshot) initialTrace.process = continueProcessSnapshot;
+  const initialRequest: IRRequest = {
+    model: body.model,
+    messages: body.messages,
+    stream: true,
+    ...(reasoning !== undefined ? { reasoning } : {}),
+  };
+  let ragStatus: string | null = null;
+  let compaction: CompactionResult | null = null;
 
   // 流式返回:text/event-stream,每条 text-delta 作为一行
   const encoder = new TextEncoder();
@@ -485,7 +503,9 @@ export async function POST(req: Request) {
         }
       };
       const emit = (event: ChatCompletionEvent) => {
-        if (event.type === "started") {
+        if (event.type === "trace") {
+          safeEnqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+        } else if (event.type === "started") {
           emitContextEvents();
         } else if (event.type === "text-delta") {
           safeEnqueue(encoder.encode(
@@ -542,11 +562,21 @@ export async function POST(req: Request) {
           ));
         }
       };
+      const processRecorder = new ChatProcessRecorder({
+        runId,
+        emit,
+        onEmitError: (error) => {
+          console.error(
+            "[chat-process] trace emit failed:",
+            redactErrorMessage(error, [], "trace emit failed").slice(0, 120),
+          );
+        },
+      });
 
       try {
         const outcome = await executeChatCompletion({
           ctx,
-          request: irRequest,
+          request: initialRequest,
           modelId: body.modelId,
           runId,
           conversationId: body.conversationId,
@@ -566,14 +596,62 @@ export async function POST(req: Request) {
                 publicId: assistantPublicId,
                 createdAt: assistantCreatedAt,
               },
-          processTrace: trace,
+          processTrace: initialTrace,
           memoryMessages: body.messages.map((message) => ({
             role: message.role,
             content: message.content,
           })),
           requestStartedAt,
           signal: abortCtl.signal,
-          webSearchEnabled: effectiveWebSearch && modelSupportsTools,
+          processRecorder,
+          prepare: async (recorder, signal) => {
+            const prepared = await prepareChatContext({
+              userId: user.id,
+              conversationId: body.conversationId,
+              conv: {
+                outputModeId: composerSnapshot.data.outputModeId === undefined
+                  ? conv.outputModeId
+                  : composerSnapshot.data.outputModeId,
+              },
+              userContent,
+              model: body.model,
+              modelId: body.modelId,
+              messages: body.messages,
+              branchLeafPublicId: isContinue ? body.continueFromPublicId! : userPublicId,
+              fileIds: preparedFileIds,
+              messageAttachments,
+              visionValidated,
+              webSearchEnabled: effectiveWebSearch,
+              templateId: body.templateId,
+              templateVars: body.templateVars,
+              instructionCardIds: body.instructionCardIds,
+              processRecorder: recorder,
+              signal,
+              db,
+              schema: s,
+            });
+            if ("error" in prepared) {
+              throw new Error("上下文准备校验失败");
+            }
+            ragStatus = prepared.ragStatus;
+            compaction = prepared.compaction;
+            const processTrace = prepared.trace;
+            if (continueWebSearchCalls.length > 0) {
+              processTrace.webSearch = {
+                calls: [
+                  ...continueWebSearchCalls,
+                  ...(processTrace.webSearch?.calls ?? []),
+                ],
+              };
+            }
+            if (continueProcessSnapshot) processTrace.process = continueProcessSnapshot;
+            if (reasoning !== undefined) prepared.irRequest.reasoning = reasoning;
+            return {
+              request: prepared.irRequest,
+              processTrace,
+              webSearchEnabled: effectiveWebSearch && prepared.modelSupportsTools,
+            };
+          },
           emit,
         });
         safeEnqueue(encoder.encode(

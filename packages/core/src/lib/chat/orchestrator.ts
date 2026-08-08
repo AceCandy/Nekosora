@@ -30,6 +30,7 @@ import {
   assertVisionModel,
   type ResolvedChatImage,
 } from "@/lib/chat/message-attachments";
+import type { ChatProcessRecorder } from "@/lib/chat/process-trace";
 
 /** 兼容默认:model_catalog 缺失时的上下文窗口与输出上限。 */
 const DEFAULT_CONTEXT_WINDOW = 32_000;
@@ -91,6 +92,8 @@ export interface PrepareContextInput {
   templateVars?: Record<string, string>;
   /** 指令卡 ID 列表。 */
   instructionCardIds?: string[];
+  processRecorder?: Pick<ChatProcessRecorder, "recordStep">;
+  signal?: AbortSignal;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -121,11 +124,32 @@ export async function prepareChatContext(
     templateId, templateVars, instructionCardIds,
     db, schema: s,
   } = input;
+  const processRecorder = input.processRecorder;
+  const hasFileContext = Boolean(
+    messageAttachments.length
+    || bodyFileIds?.length
+    || knowledgeBaseIds?.length,
+  );
+  if (hasFileContext) {
+    await processRecorder?.recordStep({
+      id: "attachments",
+      kind: "attachments",
+      status: "running",
+    });
+  }
+  await processRecorder?.recordStep({ id: "memory", kind: "memory", status: "running" });
+  await processRecorder?.recordStep({ id: "compaction", kind: "compaction", status: "running" });
+  if (hasFileContext) {
+    await processRecorder?.recordStep({ id: "rag", kind: "rag", status: "running" });
+  }
+  await processRecorder?.recordStep({ id: "prompt", kind: "prompt", status: "running" });
+  input.signal?.throwIfAborted();
 
   // ===== 阶段 1:知识库 fileIds 合并(后续 vision/RAG 链强依赖,先算)=====
-  let fileIds = messageAttachments.length > 0
-    ? messageAttachments.map((attachment) => attachment.fileId)
-    : bodyFileIds ?? [];
+  let fileIds = [...new Set([
+    ...messageAttachments.map((attachment) => attachment.fileId),
+    ...(bodyFileIds ?? []),
+  ])];
   if (knowledgeBaseIds && knowledgeBaseIds.length > 0) {
     const kbFileIds = await getFileIdsByKnowledgeBases(knowledgeBaseIds, userId);
     fileIds = [...new Set([...fileIds, ...kbFileIds])];
@@ -219,6 +243,24 @@ export async function prepareChatContext(
         });
         effectiveMessages = built.messages as IRRequest["messages"];
         ragStatus = built.ragStatus;
+        await processRecorder?.recordStep({
+          id: "attachments",
+          kind: "attachments",
+          status: "completed",
+          data: { fileCount: fileIds.length, mode: fileMode as "auto" | "full_context" | "rag" },
+        });
+        const ragCompleted = ragStatus === "rag_hit" || ragStatus === "full_text";
+        await processRecorder?.recordStep({
+          id: "rag",
+          kind: "rag",
+          status: ragCompleted ? "completed" : "skipped",
+          data: {
+            fileCount: fileIds.length,
+            ...(ragCompleted
+              ? {}
+              : { reason: ragStatus === "rag_empty" ? "empty" as const : "not_needed" as const }),
+          },
+        });
       }
 
       return { ok: true, effectiveMessages, ragStatus };
@@ -233,6 +275,15 @@ export async function prepareChatContext(
       } catch {
         /* 召回失败:project 不注入,不影响恒定注入 */
       }
+      await processRecorder?.recordStep({
+        id: "memory",
+        kind: "memory",
+        status: "completed",
+        data: {
+          availableCount: allMemories.length,
+          recalledCount: recalledMemories.length,
+        },
+      });
       return { allMemories, recalledMemories };
     })(),
 
@@ -260,6 +311,15 @@ export async function prepareChatContext(
           redactErrorMessage(error, [], "压缩失败"),
         );
       }
+      await processRecorder?.recordStep({
+        id: "compaction",
+        kind: "compaction",
+        status: "completed",
+        data: {
+          compacted: compaction?.compacted ?? false,
+          originalMessageCount: compactionMsgs.length,
+        },
+      });
       return { compactionMsgs, compaction };
     })(),
 
@@ -292,6 +352,7 @@ export async function prepareChatContext(
       return renderCardContext(cards);
     })(),
   ]);
+  input.signal?.throwIfAborted();
 
   // ===== 阶段 3:后置串行(等齐全部并行结果)=====
   // vision 校验失败 → 提前返回 400(保留原行为)
@@ -346,6 +407,26 @@ export async function prepareChatContext(
   });
 
   const trace = buildTrace(assembled, compactionResult.compactionMsgs.length);
+  await processRecorder?.recordStep({
+    id: "compaction",
+    kind: "compaction",
+    status: "completed",
+    data: {
+      compacted: compactionResult.compaction?.compacted ?? false,
+      originalMessageCount: compactionResult.compactionMsgs.length,
+      sentMessageCount: trace.sentMessageCount,
+    },
+  });
+  await processRecorder?.recordStep({
+    id: "prompt",
+    kind: "prompt",
+    status: "completed",
+    data: {
+      fullMessageCount: trace.fullMessageCount ?? 0,
+      sentMessageCount: trace.sentMessageCount ?? 0,
+      tokenEstimate: trace.totalTokenEstimate ?? 0,
+    },
+  });
 
   const irRequest: IRRequest = {
     model,

@@ -19,6 +19,7 @@ vi.mock("@/shared/lib/useClickOutside", () => ({
 }));
 
 import { ChatMessageItem, MessageRunMetadataDisplay } from "./ChatMessageItem";
+import { MessageProcessTrace } from "./MessageProcessTrace";
 import type { MessageRunMetadata } from "@/features/chat/model/types";
 import { formatDateTimeLocal } from "@/shared/lib/format";
 
@@ -172,8 +173,102 @@ describe("MessageRunMetadataDisplay", () => {
   });
 });
 
-describe("ChatMessageItem web search metadata", () => {
-  it("每条 web_search 只展示自己的后端或失败原因", () => {
+describe("ChatMessageItem research process", () => {
+  it("完成后折叠为研究摘要并隐藏内部实现步骤", () => {
+    const html = renderToStaticMarkup(
+      <MessageProcessTrace
+        content="Answer"
+        processTrace={{
+          version: 1,
+          runs: [{
+            runId: "run-1",
+            phase: "completed",
+            startedAt: "2026-08-07T00:00:00.000Z",
+            endedAt: "2026-08-07T00:00:04.200Z",
+            steps: [
+              { id: "memory", kind: "memory", status: "completed" },
+              {
+                id: "prompt",
+                kind: "prompt",
+                status: "completed",
+                data: { fullMessageCount: 2, sentMessageCount: 2, tokenEstimate: 20 },
+              },
+            ],
+          }],
+        }}
+        isStreaming={false}
+        isLast
+      />,
+    );
+
+    expect(html).toContain("researchCompleted · researchDuration");
+    expect(html).not.toContain("research-status-shimmer");
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toMatch(/aria-controls="_R_[^"]+_"/);
+    expect(html).toContain("border-0 bg-transparent");
+    expect(html).not.toContain("researchStepContext");
+    expect(html).not.toContain("researchStepAnswer");
+    expect(html).not.toContain("processStepPrompt");
+    expect(html).not.toContain("tokenEstimate");
+    expect(html).not.toContain("<details");
+    expect(html).toContain("min-h-11");
+  });
+
+  it("运行中只突出当前搜索，详情使用语义步骤且不暴露推理与工具参数", () => {
+    const html = renderToStaticMarkup(
+      <MessageProcessTrace
+        content=""
+        reasoning="PRIVATE_CHAIN_OF_THOUGHT"
+        toolCalls={[{
+          toolCallId: "search-1",
+          toolName: "web_search",
+          status: "calling",
+          args: { query: "latest", secret: "TOOL_SECRET" },
+        }]}
+        searchResults={[{ title: "Source", url: "https://www.example.com/report", snippet: "Reliable report" }]}
+        isStreaming
+        isLast
+      />,
+    );
+
+    expect(html).toContain('aria-label="processTrace"');
+    expect(html).toContain("researchRunningSearch");
+    expect(html).toContain("latest");
+    expect(html).toContain("research-status-shimmer");
+    expect(html).not.toContain("researchDetails");
+    expect(html).not.toContain("researchCollapse");
+    expect(html).not.toContain("<svg");
+    expect(html).not.toContain("researchStepReasoning");
+    expect(html).not.toContain("researchStepSearch");
+    expect(html).not.toContain("researchViewSources");
+    expect(html).not.toContain("example.com");
+    expect(html).not.toContain("PRIVATE_CHAIN_OF_THOUGHT");
+    expect(html).not.toContain("TOOL_SECRET");
+    expect(html).not.toContain("tool_call");
+  });
+
+  it("流式空正文只显示研究状态，不重复显示思考中", () => {
+    const html = renderToStaticMarkup(
+      <ChatMessageItem
+        message={{
+          role: "assistant",
+          content: "",
+          publicId: "assistant-streaming",
+        }}
+        isLast
+        isStreaming
+        model="model-a"
+        onRegenerate={() => undefined}
+        onOpenArtifact={() => undefined}
+      />,
+    );
+
+    expect(html).toContain("researchRunningUnderstand");
+    expect(html).not.toContain("thinking");
+    expect(html).not.toContain("animate-spin");
+  });
+
+  it("搜索部分失败时只显示轻量 warning，不显示 provider 调试路径", () => {
     const html = renderToStaticMarkup(
       <ChatMessageItem
         message={{
@@ -243,19 +338,14 @@ describe("ChatMessageItem web search metadata", () => {
       />,
     );
 
-    expect(html).toContain("web_search");
-    expect(html).toContain("Tavily (webSearchAttemptFailed) → GPT (webSearchAttemptSkippedAfterTimeout) → Current model (webSearchAttemptUnsupported)");
-    expect(html).toContain("Tavily (webSearchAttemptSuccess)");
-    expect(html).toContain("Grok (webSearchBackendModel)");
-    expect(html).toContain("搜索查询无效");
-    expect(html.indexOf("Tavily (webSearchAttemptFailed)")).toBeLessThan(
-      html.indexOf("Tavily (webSearchAttemptSuccess)"),
-    );
-    expect(html.indexOf("Tavily (webSearchAttemptSuccess)")).toBeLessThan(html.indexOf("Grok"));
-    expect(html.indexOf("Grok")).toBeLessThan(html.indexOf("搜索查询无效"));
-    expect(html.match(/title="webSearchAttemptPath:/g)).toHaveLength(2);
-    expect(html.match(/title="webSearchMethod:/g)).toHaveLength(1);
-    expect(html.indexOf("webSources")).toBeLessThan(html.indexOf('aria-label="copy"'));
+    expect(html).toContain("researchCompleted");
+    expect(html).not.toContain("researchPartialSources");
+    expect(html).not.toContain("researchStepSearch");
+    expect(html).not.toContain("researchStepRead");
+    expect(html).not.toContain("Tavily");
+    expect(html).not.toContain("Current model");
+    expect(html).not.toContain("搜索查询无效");
+    expect(html).not.toContain("researchViewSources");
   });
 });
 

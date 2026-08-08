@@ -1,9 +1,17 @@
 import type { ProcessTrace } from "@/db/types";
 import type { WebSearchTraceCall } from "@/db/types";
-import type { MessageRunMetadata } from "@nekusora/contracts/chat";
+import type {
+  ChatProcessEvent,
+  ChatProcessTerminalPhase,
+  MessageRunMetadata,
+} from "@nekusora/contracts/chat";
 import { extractArtifacts } from "@/lib/artifacts/extract";
 import type { AssistantWrite } from "@/lib/chat/completion-repository";
 import { persistChatCompletion } from "@/lib/chat/completion-repository";
+import {
+  appendChatProcessRun,
+  ChatProcessRecorder,
+} from "@/lib/chat/process-trace";
 import {
   finalizeRun,
   heartbeatRun,
@@ -35,6 +43,7 @@ const RUN_HEARTBEAT_INTERVAL_MS = 30_000;
 const STREAM_ABORTED = Symbol("stream-aborted");
 
 export type ChatCompletionEvent =
+  | ChatProcessEvent
   | { type: "started" }
   | Extract<StreamEvent, { type: "text-delta" | "text-retract" | "reasoning-delta" | "tool-call" | "tool-result" }>
   | Extract<StreamEvent, { type: "error" }>
@@ -86,6 +95,15 @@ export interface ExecuteChatCompletionInput {
   requestStartedAt: number;
   signal: AbortSignal;
   webSearchEnabled?: boolean;
+  processRecorder?: ChatProcessRecorder;
+  prepare?: (
+    recorder: ChatProcessRecorder | undefined,
+    signal: AbortSignal,
+  ) => Promise<{
+    request: IRRequest;
+    processTrace: ProcessTrace;
+    webSearchEnabled?: boolean;
+  }>;
   emit: (event: ChatCompletionEvent) => Promise<void> | void;
 }
 
@@ -110,8 +128,10 @@ export async function executeChatCompletion(
   }
 
   const stopHeartbeat = startHeartbeat(input.runId, input.signal);
+  const processRecorder = input.processRecorder;
   let assistantText = "";
   let assistantReasoning = "";
+  let reasoningRunning = false;
   const terminal: { status: RunTerminalStatus | null } = { status: null };
   let finalUsage: IRUsage | undefined;
   let errorEmitted = false;
@@ -123,35 +143,46 @@ export async function executeChatCompletion(
     if (input.signal.aborted) {
       latch("interrupted");
     } else {
-      await input.emit({ type: "started" });
-      const mcpServers = await resolveMcpServers(input.ctx).catch(() => []);
-      const userAgent = await getChatUA();
-      const webSearchTool = input.webSearchEnabled ? createWebSearchTool(input) : undefined;
-      const hasTools = Boolean(webSearchTool) || mcpServers.some((server) => server.tools.length > 0);
-      const stream = hasTools
-        ? streamChatWithTools({
-            ctx: input.ctx,
-            request: input.request,
-            mcpServers,
-            runId: input.runId,
-            cacheKey: input.conversationId,
-            modelId: input.modelId,
-            abortSignal: input.signal,
-            userAgent,
-            webSearchTool,
-          })
-        : streamChat({
-            ctx: input.ctx,
-            request: input.request,
-            runId: input.runId,
-            cacheKey: input.conversationId,
-            modelId: input.modelId,
-            abortSignal: input.signal,
-            userAgent,
-          });
+      await processRecorder?.start();
+      if (input.prepare) {
+        const prepared = await input.prepare(processRecorder, input.signal);
+        input.request = prepared.request;
+        input.processTrace = prepared.processTrace;
+        input.webSearchEnabled = prepared.webSearchEnabled;
+      }
+      if (input.signal.aborted) {
+        latch("interrupted");
+      } else {
+        await processRecorder?.setPhase("processing");
+        await input.emit({ type: "started" });
+        const mcpServers = await resolveMcpServers(input.ctx).catch(() => []);
+        const userAgent = await getChatUA();
+        const webSearchTool = input.webSearchEnabled ? createWebSearchTool(input) : undefined;
+        const hasTools = Boolean(webSearchTool) || mcpServers.some((server) => server.tools.length > 0);
+        const stream = hasTools
+          ? streamChatWithTools({
+              ctx: input.ctx,
+              request: input.request,
+              mcpServers,
+              runId: input.runId,
+              cacheKey: input.conversationId,
+              modelId: input.modelId,
+              abortSignal: input.signal,
+              userAgent,
+              webSearchTool,
+            })
+          : streamChat({
+              ctx: input.ctx,
+              request: input.request,
+              runId: input.runId,
+              cacheKey: input.conversationId,
+              modelId: input.modelId,
+              abortSignal: input.signal,
+              userAgent,
+            });
 
-      const iterator = stream[Symbol.asyncIterator]();
-      while (true) {
+        const iterator = stream[Symbol.asyncIterator]();
+        while (true) {
         const next = await nextEventOrAbort(iterator, input.signal);
         if (next === STREAM_ABORTED) {
           latch("interrupted");
@@ -161,6 +192,17 @@ export async function executeChatCompletion(
         if (next.done) break;
         const event = next.value;
         if (event.type === "text-delta") {
+          if (event.text.length > 0 && assistantText.length === 0 && processRecorder) {
+            if (reasoningRunning) {
+              await processRecorder.recordStep({
+                id: "reasoning",
+                kind: "reasoning",
+                status: "completed",
+              });
+              reasoningRunning = false;
+            }
+            await processRecorder.setPhase("answering");
+          }
           assistantText += event.text;
           await input.emit(event);
         } else if (event.type === "text-retract") {
@@ -170,6 +212,14 @@ export async function executeChatCompletion(
           await input.emit(event);
         } else if (event.type === "reasoning-delta") {
           assistantReasoning += event.text;
+          if (event.text.length > 0 && processRecorder && !reasoningRunning) {
+            reasoningRunning = true;
+            await processRecorder.recordStep({
+              id: "reasoning",
+              kind: "reasoning",
+              status: "running",
+            });
+          }
           await input.emit(event);
         } else if (event.type === "tool-call") {
           await recordToolCallStart({
@@ -178,6 +228,14 @@ export async function executeChatCompletion(
             toolName: event.toolName,
             args: event.args,
           });
+          if (processRecorder && event.toolName !== "web_search") {
+            await processRecorder.recordStep({
+              id: `tool:${event.toolCallId}`,
+              kind: "tool",
+              status: "running",
+              data: { toolCallId: event.toolCallId, toolName: event.toolName },
+            });
+          }
           await input.emit(event);
         } else if (event.type === "tool-result") {
           await recordToolCallResult({
@@ -186,6 +244,14 @@ export async function executeChatCompletion(
             result: event.result,
             isError: event.isError,
           });
+          if (processRecorder && event.toolName !== "web_search") {
+            await processRecorder.recordStep({
+              id: `tool:${event.toolCallId}`,
+              kind: "tool",
+              status: event.isError ? "failed" : "completed",
+              data: { toolCallId: event.toolCallId, toolName: event.toolName },
+            });
+          }
           await input.emit(event);
         } else if (event.type === "finish") {
           finalUsage = event.usage;
@@ -199,12 +265,13 @@ export async function executeChatCompletion(
           await settleIterator(iterator);
           break;
         }
-      }
-      if (!terminal.status) {
-        latch("interrupted");
-        if (!input.signal.aborted) {
-          errorEmitted = true;
-          await input.emit({ type: "error", error: "生成未正常完成" });
+        }
+        if (!terminal.status) {
+          latch("interrupted");
+          if (!input.signal.aborted) {
+            errorEmitted = true;
+            await input.emit({ type: "error", error: "生成未正常完成" });
+          }
         }
       }
     }
@@ -240,6 +307,14 @@ export async function executeChatCompletion(
         ],
       })
     : null;
+  const processPhase = toProcessTerminalPhase(settledStatus);
+  const projectedProcessRun = processRecorder?.projectedSnapshot(processPhase);
+  const processTrace = projectedProcessRun
+    ? {
+        ...input.processTrace,
+        process: appendChatProcessRun(input.processTrace.process, projectedProcessRun),
+      }
+    : input.processTrace;
 
   let committed;
   try {
@@ -253,7 +328,7 @@ export async function executeChatCompletion(
       assistant: input.assistant,
       assistantText,
       assistantReasoning,
-      processTrace: input.processTrace,
+      processTrace,
       terminalStatus: settledStatus,
       tokenUsage,
       durationMs,
@@ -275,8 +350,11 @@ export async function executeChatCompletion(
     if (!input.signal.aborted && !errorEmitted) {
       await input.emit({ type: "error", error: "收尾持久化失败" });
     }
+    await processRecorder?.finish("failed");
     return { kind: "persistence_failed", assistantText, assistantReasoning };
   }
+
+  await processRecorder?.finish(processPhase);
 
   if (memoryJob) {
     void dispatchMemoryExtractionJob(memoryJob.id).catch((error) => {
@@ -305,6 +383,11 @@ export async function executeChatCompletion(
     assistantText,
     assistantReasoning,
   };
+}
+
+function toProcessTerminalPhase(status: RunTerminalStatus): ChatProcessTerminalPhase {
+  if (status === "success") return "completed";
+  return status;
 }
 
 const searchDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => {
@@ -382,6 +465,12 @@ function createWebSearchTool(input: ExecuteChatCompletionInput) {
           && (raw.dateAfter !== undefined || raw.dateBefore !== undefined)
           ? "freshness 不能与 dateAfter/dateBefore 同时使用"
           : "请检查 query、freshness 或日期范围组合";
+        await input.processRecorder?.recordStep({
+          id: `web_search:${toolCallId}`,
+          kind: "web_search",
+          status: "failed",
+          data: { toolCallId, reason: "unavailable" },
+        });
         await input.emit({ type: "search_failed", toolCallId, reason: message, status: "failed" });
         return {
           result: { error: "invalid_search_query", message },
@@ -402,6 +491,12 @@ function createWebSearchTool(input: ExecuteChatCompletionInput) {
       const calls = input.processTrace.webSearch?.calls ?? [];
       calls.push(call);
       input.processTrace.webSearch = { calls };
+      await input.processRecorder?.recordStep({
+        id: `web_search:${toolCallId}`,
+        kind: "web_search",
+        status: "running",
+        data: { toolCallId },
+      });
       await input.emit({ type: "search_started", toolCallId, query: parsed.data.query });
 
       try {
@@ -426,6 +521,23 @@ function createWebSearchTool(input: ExecuteChatCompletionInput) {
             attempts: bundle.attempts,
             effectiveTimeRange: bundle.effectiveTimeRange,
             freshnessFallback: bundle.freshnessFallback,
+          });
+          await input.processRecorder?.recordStep({
+            id: `web_search:${toolCallId}`,
+            kind: "web_search",
+            status: "completed",
+            data: {
+              toolCallId,
+              backendName: bundle.backend.name,
+              attemptCount: bundle.attempts?.length,
+              citationCount: bundle.results.length,
+            },
+          });
+          await input.processRecorder?.recordStep({
+            id: `sources:${toolCallId}`,
+            kind: "sources",
+            status: "completed",
+            data: { count: bundle.results.length },
           });
           await input.emit({
             type: "search_completed",
@@ -461,6 +573,16 @@ function createWebSearchTool(input: ExecuteChatCompletionInput) {
           effectiveTimeRange: bundle.effectiveTimeRange,
           freshnessFallback: bundle.freshnessFallback,
         });
+        await input.processRecorder?.recordStep({
+          id: `web_search:${toolCallId}`,
+          kind: "web_search",
+          status: "failed",
+          data: {
+            toolCallId,
+            attemptCount: bundle.attempts?.length,
+            reason: "fallback",
+          },
+        });
         await input.emit({
           type: "search_failed",
           toolCallId,
@@ -486,6 +608,15 @@ function createWebSearchTool(input: ExecuteChatCompletionInput) {
           status,
           reason: input.signal.aborted ? "搜索已取消" : "搜索执行失败",
           durationMs: Date.now() - startedAt,
+        });
+        await input.processRecorder?.recordStep({
+          id: `web_search:${toolCallId}`,
+          kind: "web_search",
+          status: input.signal.aborted ? "interrupted" : "failed",
+          data: {
+            toolCallId,
+            reason: input.signal.aborted ? "unavailable" : "fallback",
+          },
         });
         if (!input.signal.aborted) {
           await input.emit({ type: "search_failed", toolCallId, reason: "搜索执行失败", status });

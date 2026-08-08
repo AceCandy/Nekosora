@@ -403,6 +403,26 @@ describe("chatStreamStore terminal 状态收敛", () => {
       _body: ReadableStream<Uint8Array>,
       handlers: SSEHandlers,
     ) => {
+      if (!(result instanceof Error)) {
+        handlers.onTrace?.({
+          type: "trace",
+          version: 1,
+          action: "phase",
+          runId: `run-${action}`,
+          seq: 1,
+          at: "2026-08-07T00:00:00.000Z",
+          phase: "preparing",
+        });
+        handlers.onTrace?.({
+          type: "trace",
+          version: 1,
+          action: "phase",
+          runId: `run-${action}`,
+          seq: 2,
+          at: "2026-08-07T00:00:01.000Z",
+          phase: result === "success" ? "completed" : result,
+        });
+      }
       if (result !== "success") handlers.onError?.("生成失败");
       if (result instanceof Error) throw result;
       return result;
@@ -444,6 +464,14 @@ describe("chatStreamStore terminal 状态收敛", () => {
     const message = await runAction(action, status);
 
     expect(message?.status).toBe(status === "success" ? "success" : "interrupted");
+    expect(message?.processRuntime).toMatchObject({
+      runId: `run-${action}`,
+      phase: status === "success" ? "completed" : status,
+    });
+    expect(message?.processTrace?.runs.at(-1)).toMatchObject({
+      runId: `run-${action}`,
+      phase: status === "success" ? "completed" : status,
+    });
     if (status !== "success") {
       expect(message?.content).toContain("[错误] 生成失败");
       expect(message?.content.match(/\[错误\]/g)).toHaveLength(1);
@@ -455,6 +483,30 @@ describe("chatStreamStore terminal 状态收敛", () => {
 
     expect(message?.status).toBe("interrupted");
     expect(message?.content.match(/\[错误\]/g)).toHaveLength(1);
+  });
+
+  it("terminal 在终态 trace 丢失时仍收敛过程状态", async () => {
+    mocks.consumeChatSSE.mockImplementationOnce(async (
+      _body: ReadableStream<Uint8Array>,
+      handlers: SSEHandlers,
+    ) => {
+      handlers.onTrace?.({
+        type: "trace",
+        version: 1,
+        action: "phase",
+        runId: "run-terminal-fallback",
+        seq: 1,
+        at: "2026-08-07T00:00:00.000Z",
+        phase: "processing",
+      });
+      return "success" as const;
+    });
+
+    await invokeAction("send");
+
+    const message = useChatStreamStore.getState().runtimes[key].messages.at(-1);
+    expect(message?.processRuntime?.phase).toBe("completed");
+    expect(message?.processTrace?.runs.at(-1)?.phase).toBe("completed");
   });
 
   it.each(actions)("%s 撤回工具轮临时正文且保留既有正文", async (action) => {

@@ -1227,6 +1227,16 @@ describe("getMessageSiblings 版本切换 toolCalls 回填", () => {
         runId: "run_v1",
         createdAt: "2026-07-25T00:00:01.000Z",
         processTrace: {
+          process: {
+            version: 1,
+            runs: [{
+              runId: "run_v1",
+              phase: "completed",
+              steps: [{ id: "prompt", kind: "prompt", status: "completed" }],
+              startedAt: "2026-07-25T00:00:00.000Z",
+              endedAt: "2026-07-25T00:00:01.000Z",
+            }],
+          },
           webSearch: {
             calls: [{
               status: "success",
@@ -1337,6 +1347,16 @@ describe("getMessageSiblings 版本切换 toolCalls 回填", () => {
       },
       toolCalls: [{ toolName: "search", status: "done", args: { q: "v1" } }],
       searchResults: [{ title: "V1 source", url: "https://v1.example" }],
+      processTrace: {
+        version: 1,
+        runs: [{
+          runId: "run_v1",
+          phase: "completed",
+          steps: [{ id: "prompt", kind: "prompt", status: "completed" }],
+          startedAt: "2026-07-25T00:00:00.000Z",
+          endedAt: "2026-07-25T00:00:01.000Z",
+        }],
+      },
     });
     expect(result.siblings[1]).toEqual({
       publicId: "pub-v2",

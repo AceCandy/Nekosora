@@ -21,6 +21,11 @@ import type {
   ToolCallRecord,
 } from "@/features/chat/model/types";
 import type { ReasoningLevel, WebSearchTraceBackend } from "@/db/types";
+import type { ChatProcessEvent } from "@nekusora/contracts/chat";
+import {
+  reduceChatProcessEvent,
+  snapshotFromProcessRuntime,
+} from "@/features/chat/model/processTrace";
 
 /** 新会话(尚无会话 id)在 store 内使用的隔离键。 */
 export const NEW_CONVERSATION_KEY = "__new__";
@@ -358,9 +363,28 @@ function setCompletionStatusAt(
     const runtime = state.runtimes[key];
     if (!runtime || idx < 0 || idx >= runtime.messages.length) return state;
     const messages = [...runtime.messages];
+    const message = messages[idx];
+    const terminalPhase = terminalStatus === "success" ? "completed" : terminalStatus;
+    const processRuntime = message.processRuntime
+      ? reduceChatProcessEvent(message.processRuntime, {
+          type: "trace",
+          version: 1,
+          action: "phase",
+          runId: message.processRuntime.runId,
+          seq: message.processRuntime.lastSeq + 1,
+          at: new Date().toISOString(),
+          phase: terminalPhase,
+        })
+      : undefined;
     messages[idx] = {
-      ...messages[idx],
+      ...message,
       status: terminalStatus === "success" ? "success" : "interrupted",
+      ...(processRuntime
+        ? {
+            processRuntime,
+            processTrace: snapshotFromProcessRuntime(processRuntime, message.processTrace),
+          }
+        : {}),
     };
     return {
       runtimes: {
@@ -461,9 +485,34 @@ function finishToolCallAt(
   });
 }
 
+function applyProcessEventAt(key: string, idx: number, event: ChatProcessEvent): void {
+  useChatStreamStore.setState((state) => {
+    const runtime = state.runtimes[key];
+    if (!runtime || idx < 0 || idx >= runtime.messages.length) return state;
+    const messages = [...runtime.messages];
+    const message = messages[idx];
+    const previous = message.processRuntime?.runId === event.runId
+      ? message.processRuntime
+      : undefined;
+    const processRuntime = reduceChatProcessEvent(previous, event);
+    messages[idx] = {
+      ...message,
+      processRuntime,
+      processTrace: snapshotFromProcessRuntime(processRuntime, message.processTrace),
+    };
+    return {
+      runtimes: {
+        ...state.runtimes,
+        [key]: { ...runtime, messages },
+      },
+    };
+  });
+}
+
 /** 四种生成动作共享同一套工具与搜索事件投影。 */
 function toolAndSearchHandlers(key: string, assistantIdx: number): Partial<SSEHandlers> {
   return {
+    onTrace: (event) => applyProcessEventAt(key, assistantIdx, event),
     onContentRetract: (text) => {
       flushDeltasNow();
       retractContentAt(key, assistantIdx, text);
@@ -1053,6 +1102,8 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
           toolCalls: target.toolCalls,
           searchResults: target.searchResults,
           searchBackends: target.searchBackends,
+          processTrace: target.processTrace,
+          processRuntime: undefined,
           // P2-A: 必须用目标版本 feedback 覆盖;无反馈时显式清空,不能残留旧版本。
           feedback: target.feedback,
           versionInfo: { current: nextIdx + 1, total: siblings.length },

@@ -3,25 +3,20 @@
 import React, { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
-  AlertCircle,
   Check,
-  CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronUp,
   Copy,
   CornerDownRight,
-  ExternalLink,
   Info,
-  Loader2,
   Pencil,
   RefreshCw,
   Sparkles,
   ThumbsDown,
   ThumbsUp,
   Trash2,
-  Wrench,
   X,
 } from "lucide-react";
 import { clsx } from "clsx";
@@ -45,7 +40,7 @@ import { ASSISTANT_MESSAGE_CLASS, USER_MESSAGE_BUBBLE_CLASS } from "@/features/c
 import { useClickOutside } from "@/shared/lib/useClickOutside";
 import { MessageImageAttachments } from "@/features/chat/components/MessageImageAttachments";
 import { RunMetadataFields } from "@/features/chat/components/RunMetadataFields";
-import type { WebSearchTraceAttemptOutcome } from "@/db/types";
+import { MessageProcessTrace } from "@/features/chat/components/MessageProcessTrace";
 
 /** 用户消息超过此行数才折叠(长消息默认收起,避免撑高会话)。 */
 const USER_MESSAGE_COLLAPSE_LINES = 6;
@@ -58,16 +53,6 @@ const FEEDBACK_REASON_I18N: Record<FeedbackReason, string> = {
   outdated: "feedbackReasonOutdated",
   unsafe: "feedbackReasonUnsafe",
   other: "feedbackReasonOther",
-};
-
-const SEARCH_ATTEMPT_OUTCOME_I18N: Record<WebSearchTraceAttemptOutcome, string> = {
-  success: "webSearchAttemptSuccess",
-  empty: "webSearchAttemptEmpty",
-  unavailable: "webSearchAttemptUnavailable",
-  skipped_after_timeout: "webSearchAttemptSkippedAfterTimeout",
-  unsupported: "webSearchAttemptUnsupported",
-  timeout: "webSearchAttemptTimeout",
-  failed: "webSearchAttemptFailed",
 };
 
 interface MessageRunMetadataDisplayProps {
@@ -188,9 +173,10 @@ function ChatMessageItemContent({
     versionInfo,
     feedback,
     runMetadata,
+    processTrace,
+    processRuntime,
     attachments = [],
   } = message;
-  const hasReasoning = Boolean(reasoning);
   const visibleRunMetadata = runMetadata && status !== "interrupted" && hasRunMetadata(runMetadata)
     ? runMetadata
     : undefined;
@@ -234,14 +220,6 @@ function ChatMessageItemContent({
   const feedbackMenuRef = useRef<HTMLDivElement>(null);
   const feedbackRequestRef = useRef(0);
 
-  // 思考样式条弹层状态:点击样式条打开侧边浮层查看完整思考内容
-  const [reasoningPanelOpen, setReasoningPanelOpen] = useState(false);
-
-  // 思考耗时计时:reasoning 首次出现记开始时间;正文开始或流结束记结束时间
-  const reasoningStartRef = useRef<number | null>(null);
-  const reasoningEndRef = useRef<number | null>(null);
-  const [elapsed, setElapsed] = useState<number | null>(null);
-
   // 用户消息长文本折叠:基于实际行高判断是否超过 6 行(含自动换行),避免纯按 \n 计数漏判。
   const [userMsgExpanded, setUserMsgExpanded] = useState(false);
   const [userMsgCanCollapse, setUserMsgCanCollapse] = useState(false);
@@ -262,54 +240,9 @@ function ChatMessageItemContent({
     };
   }, []);
 
-  // 记录思考开始/结束时间,并计算耗时
-  useEffect(() => {
-    if (!hasReasoning) return;
-    // reasoning 首次出现 → 记开始
-    if (reasoningStartRef.current === null) {
-      reasoningStartRef.current = Date.now();
-    }
-    // 思考完成的判定:有正文开始,或流式已结束
-    const done = Boolean(content) || !(isStreaming && isLast);
-    if (done && reasoningEndRef.current === null) {
-      reasoningEndRef.current = Date.now();
-      if (reasoningStartRef.current) {
-        const secs = Math.max(1, Math.round((reasoningEndRef.current - reasoningStartRef.current) / 1000));
-        setElapsed(secs);
-      }
-    }
-  }, [hasReasoning, content, isStreaming, isLast]);
-
-  // 思考是否已完成:有耗时数据即为完成
-  const reasoningDone = elapsed !== null;
-
-  // 流式思考中:正在生成且本条是最后一条且还没正文
-  // 注意:有 reasoning 时思考条已占位,下方 content 的等待态需加 !hasReasoning 判断,
-  // 否则会出现两个「思考中」(思考条 + content fallback 各一个)。
-  const isReasoningActive = hasReasoning && isStreaming && isLast && !content;
-  // 流式思考时把单行文本横向滚到最右,使最新吐字始终可见
-  const reasoningScrollRef = useRef<HTMLSpanElement>(null);
-
-  // 思考块触发区容器(含浮层):用于「点击外部收起」判定
-  const reasoningRef = useRef<HTMLDivElement>(null);
   // 重新生成换模型菜单容器
   const regenMenuRef = useRef<HTMLDivElement>(null);
-  // hover 进/出延迟计时(0.5s):避免鼠标划过误触展开,也给鼠标移动留过渡时间
-  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const clearHoverTimer = () => {
-    if (hoverTimerRef.current) { clearTimeout(hoverTimerRef.current); hoverTimerRef.current = null; }
-  };
-  useEffect(() => {
-    if (reasoningScrollRef.current) {
-      reasoningScrollRef.current.scrollLeft = reasoningScrollRef.current.scrollWidth;
-    }
-  }, [reasoning]);
-
-  // 思考块 / 重生成菜单 / 踩原因菜单:document 级外部点击收起(避免 fixed 遮罩被祖先 stacking 影响)
-  useClickOutside(reasoningRef, () => {
-    clearHoverTimer();
-    setReasoningPanelOpen(false);
-  }, reasoningPanelOpen);
+  // 重生成菜单 / 踩原因菜单:document 级外部点击收起(避免 fixed 遮罩被祖先 stacking 影响)
   useClickOutside(regenMenuRef, () => setRegenOpen(false), regenOpen);
   useClickOutside(feedbackMenuRef, () => setReasonMenuOpen(false), reasonMenuOpen);
 
@@ -581,145 +514,16 @@ function ChatMessageItemContent({
             ASSISTANT_MESSAGE_CLASS,
             renderStyleClass && `rs-${renderStyleClass}`,
           )}>
-            {hasReasoning && (
-              <div className="mb-2">
-                {/* 思考单行:未吐字显「思考中」,吐字时一行截断,完成后收成「已思考X秒」。点击看全文 */}
-                {/* 触发区只包内容(不撑满整行),箭头紧跟文字;点击展开/收起,hover 仅作视觉反馈 */}
-                <div
-                  ref={reasoningRef}
-                  role="button"
-                  tabIndex={0}
-                  aria-expanded={reasoningPanelOpen}
-                  onClick={() => { clearHoverTimer(); setReasoningPanelOpen((v) => !v); }}
-                  onMouseEnter={() => { clearHoverTimer(); hoverTimerRef.current = setTimeout(() => setReasoningPanelOpen(true), 500); }}
-                  onMouseLeave={() => { clearHoverTimer(); hoverTimerRef.current = setTimeout(() => setReasoningPanelOpen(false), 500); }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      setReasoningPanelOpen((v) => !v);
-                    }
-                  }}
-                  className={clsx(
-                    "relative inline-flex items-center gap-1.5 max-w-full rounded-md px-2.5 py-1 text-ui-caption font-mono select-none text-neutral-400 dark:text-neutral-500 transition-colors hover:bg-neutral-50/70 dark:hover:bg-[#0d0f14]/20 cursor-pointer",
-                    reasoningPanelOpen && "bg-neutral-50/70 dark:bg-[#0d0f14]/20",
-                  )}
-                >
-                  {isReasoningActive ? (
-                    <Loader2 className="w-3 h-3 shrink-0 animate-spin text-sora-blue/70" aria-hidden="true" />
-                  ) : (
-                    <Sparkles className="w-3 h-3 shrink-0 opacity-70" aria-hidden="true" />
-                  )}
-                  <span className="shrink-0">
-                    {reasoningDone ? t("thoughtFor", { seconds: elapsed }) : t("thinking")}
-                  </span>
-                  {/* 吐字区域:单行,溢出截断,弱化 */}
-                  {isReasoningActive && reasoning && (
-                    <span
-                      ref={reasoningScrollRef}
-                      className="min-w-0 max-w-[44ch] overflow-x-hidden whitespace-nowrap text-neutral-400/70 dark:text-neutral-600"
-                    >
-                      {reasoning}
-                    </span>
-                  )}
-                  {/* 箭头:紧跟文字,随触发区一起点击切换;展开时旋转 90° */}
-                  <ChevronRight
-                    className={clsx("w-3 h-3 shrink-0 opacity-40 transition-transform duration-200", reasoningPanelOpen && "rotate-90")}
-                    aria-hidden="true"
-                  />
-
-                  {/* 思考全文弹窗:点击触发区展开,紧贴下方,弱化样式;淡入 + 下滑 + 微缩放动效 */}
-                  {reasoningPanelOpen && (
-                    <div className="absolute z-40 left-0 top-full mt-1 w-max max-w-[min(75ch,90vw)] max-h-[50vh] overflow-y-auto rounded-lg border border-morning-mist dark:border-deep-space/60 bg-white dark:bg-space-ink p-3 shadow-sm animate-in fade-in slide-in-from-top-1 zoom-in-95 duration-150">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-ui-caption font-mono text-neutral-400 dark:text-neutral-500">
-                          {reasoningDone ? t("thoughtFor", { seconds: elapsed }) : t("thinking")}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); setReasoningPanelOpen(false); }}
-                          className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 cursor-pointer"
-                          aria-label="关闭"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                      <div className="text-ui-caption text-neutral-500 dark:text-neutral-400 whitespace-pre-wrap break-words leading-relaxed">
-                        {reasoning}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-            {toolCalls && toolCalls.length > 0 && (
-              <div className="mb-2 space-y-1">
-                {toolCalls.map((tc, ti) => {
-                  const searchMethod = tc.searchBackend
-                    ? `${tc.searchBackend.name} (${
-                        tc.searchBackend.type === "current-model"
-                          ? t("webSearchBackendCurrentModel")
-                          : tc.searchBackend.type === "model"
-                            ? t("webSearchBackendModel")
-                            : t("webSearchBackendProvider")
-                      })`
-                    : undefined;
-                  const searchAttemptPath = tc.searchAttempts?.length
-                    ? tc.searchAttempts
-                        .map((attempt) => `${attempt.backend.name} (${t(
-                          SEARCH_ATTEMPT_OUTCOME_I18N[attempt.outcome],
-                        )})`)
-                        .join(" → ")
-                    : undefined;
-                  const searchDetail = searchAttemptPath ?? searchMethod ?? tc.statusDetail;
-                  return (
-                    <ErrorBoundary
-                      key={ti}
-                      name="tool-call"
-                      rawContent={
-                        typeof tc.args === "string"
-                          ? tc.args
-                          : tc.args !== undefined
-                            ? JSON.stringify(tc.args)
-                            : undefined
-                      }
-                    >
-                      <details
-                        open={tc.status === "calling"}
-                        className="rounded-md border border-morning-mist dark:border-deep-space/80 bg-neutral-50/40 dark:bg-[#0d0f14]/15 overflow-hidden">
-                        <summary className="cursor-pointer hover:text-neutral-600 dark:hover:text-neutral-300 px-3 py-1.5 text-ui-caption font-mono select-none flex min-w-0 items-center gap-1.5 text-neutral-500 dark:text-neutral-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue">
-                          {tc.status === "calling" ? (
-                            <Loader2 className="w-3 h-3 animate-spin text-sora-blue" aria-hidden="true" />
-                          ) : tc.status === "error" ? (
-                            <AlertCircle className="w-3 h-3 text-red-500" aria-hidden="true" />
-                          ) : (
-                            <CheckCircle2 className="w-3 h-3 text-green-500" aria-hidden="true" />
-                          )}
-                          <Wrench className="w-3 h-3 opacity-60" aria-hidden="true" />
-                          <span className="shrink-0">{tc.toolName}</span>
-                          {tc.toolName === "web_search" && searchDetail && (
-                            <span
-                              className="min-w-0 truncate font-sans text-neutral-400/80 dark:text-neutral-500/80"
-                              title={searchAttemptPath
-                                ? `${t("webSearchAttemptPath")}: ${searchAttemptPath}`
-                                : searchMethod
-                                  ? `${t("webSearchMethod")}: ${searchMethod}`
-                                  : tc.statusDetail}
-                            >
-                              · {searchDetail}
-                            </span>
-                          )}
-                        </summary>
-                        {tc.args !== undefined && (
-                          <div className="px-3 pb-1.5 pt-1 text-ui-caption text-neutral-500 dark:text-neutral-400 border-t border-morning-mist dark:border-deep-space/60 font-mono break-all">
-                            {typeof tc.args === "string" ? tc.args : JSON.stringify(tc.args)}
-                          </div>
-                        )}
-                      </details>
-                    </ErrorBoundary>
-                  );
-                })}
-              </div>
-            )}
+            <MessageProcessTrace
+              content={content}
+              reasoning={reasoning}
+              toolCalls={toolCalls}
+              searchResults={searchResults}
+              processTrace={processTrace}
+              processRuntime={processRuntime}
+              isStreaming={isStreaming}
+              isLast={isLast}
+            />
             {content ? (
               <ErrorBoundary name="message-markdown" rawContent={content}>
                 <Markdown
@@ -730,40 +534,8 @@ function ChatMessageItemContent({
                   onPreview={onOpenArtifact}
                 />
               </ErrorBoundary>
-            ) : isStreaming && isLast && !hasReasoning ? (
-              <span className="inline-flex items-center gap-1.5 text-neutral-400">
-                <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
-                {t("thinking")}
-              </span>
             ) : null}
           </div>)
-        )}
-
-        {role === "assistant" && searchResults && searchResults.length > 0 && (
-          <details className="text-ui-caption border border-morning-mist dark:border-deep-space/80 rounded-md bg-neutral-50/30 dark:bg-[#0d0f14]/10 overflow-hidden">
-            <summary className="cursor-pointer hover:text-neutral-600 dark:hover:text-neutral-300 px-3 py-1.5 select-none flex min-w-0 items-center gap-1.5 text-neutral-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue">
-              <ExternalLink className="w-3 h-3" aria-hidden="true" />
-              <span className="shrink-0">{t("webSources")} ({searchResults.length})</span>
-            </summary>
-            <div className="px-3 pb-2 pt-0.5 space-y-1.5 border-t border-morning-mist dark:border-deep-space/60 mt-1">
-              {searchResults.map((r, i) => (
-                <a
-                  key={i}
-                  href={r.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block group/source rounded px-1 py-0.5 hover:bg-neutral-100 dark:hover:bg-neutral-900/50 transition-colors"
-                >
-                  <span className="flex items-center gap-1.5">
-                    <span className="text-sora-blue font-mono shrink-0">[{i + 1}]</span>
-                    <span className="text-neutral-700 dark:text-neutral-300 font-medium truncate">{r.title}</span>
-                    <ExternalLink className="w-2.5 h-2.5 text-neutral-400 opacity-0 group-hover/source:opacity-100 shrink-0" aria-hidden="true" />
-                  </span>
-                  <span className="text-ui-caption text-neutral-400 dark:text-neutral-500 block truncate ml-5">{r.url}</span>
-                </a>
-              ))}
-            </div>
-          </details>
         )}
 
         {role === "assistant" && publicId && !(isStreaming && isLast) && (

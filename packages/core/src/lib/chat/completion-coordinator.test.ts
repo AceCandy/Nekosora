@@ -48,6 +48,7 @@ vi.mock("@/lib/infra/db", () => ({ getDb: mocks.getDb, getSchema: mocks.getSchem
 vi.mock("@/lib/web-search/service", () => ({ searchWeb: mocks.searchWeb }));
 
 import { executeChatCompletion } from "@/lib/chat/completion-coordinator";
+import { ChatProcessRecorder } from "@/lib/chat/process-trace";
 
 const completedAt = new Date("2026-07-30T00:00:00.000Z");
 const memoryJob = {
@@ -131,6 +132,88 @@ beforeEach(() => {
 });
 
 describe("executeChatCompletion", () => {
+  it("严格启动后发准备轨迹，并在首个非空正文前切到 answering", async () => {
+    mocks.streamChat.mockReturnValue(events(
+      { type: "reasoning-delta", text: "thinking" },
+      { type: "text-delta", text: "answer" },
+      { type: "finish", finishReason: "stop", usage: { totalTokens: 3 } },
+    ));
+    const emitted: unknown[] = [];
+    const emit = (event: unknown) => { emitted.push(event); };
+    const processRecorder = new ChatProcessRecorder({ runId: "run-1", emit });
+    const prepare = vi.fn(async (recorder: ChatProcessRecorder | undefined) => {
+      await recorder?.recordStep({ id: "memory", kind: "memory", status: "running" });
+      await recorder?.recordStep({ id: "memory", kind: "memory", status: "completed" });
+      return {
+        request: baseInput.request,
+        processTrace: baseInput.processTrace,
+      };
+    });
+
+    await executeChatCompletion({
+      ...baseInput,
+      signal: new AbortController().signal,
+      processRecorder,
+      prepare,
+      emit,
+    });
+
+    expect(mocks.startRunStrict.mock.invocationCallOrder[0]).toBeLessThan(
+      prepare.mock.invocationCallOrder[0],
+    );
+    expect(prepare.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.streamChat.mock.invocationCallOrder[0],
+    );
+    const types = emitted.map((event) => (event as { type: string }).type);
+    const phases = emitted.flatMap((event) => {
+      const value = event as { type?: string; action?: string; phase?: string };
+      return value.type === "trace" && value.action === "phase" ? [value.phase] : [];
+    });
+    expect(phases).toEqual(["preparing", "processing", "answering", "completed"]);
+    expect(types.indexOf("trace", types.indexOf("reasoning-delta"))).toBeLessThan(
+      types.indexOf("text-delta"),
+    );
+    expect(mocks.persistChatCompletion).toHaveBeenCalledWith(expect.objectContaining({
+      processTrace: expect.objectContaining({
+        process: expect.objectContaining({
+          runs: [expect.objectContaining({ runId: "run-1", phase: "completed" })],
+        }),
+      }),
+    }));
+  });
+
+  it("prepare 硬失败不调用模型并持久化 failed 过程快照", async () => {
+    const emitted: unknown[] = [];
+    const emit = (event: unknown) => { emitted.push(event); };
+    const processRecorder = new ChatProcessRecorder({ runId: "run-1", emit });
+
+    const outcome = await executeChatCompletion({
+      ...baseInput,
+      signal: new AbortController().signal,
+      processRecorder,
+      prepare: async (recorder) => {
+        await recorder?.recordStep({ id: "prompt", kind: "prompt", status: "running" });
+        throw new Error("template unavailable");
+      },
+      emit,
+    });
+
+    expect(outcome.kind).toBe("committed_failed");
+    expect(mocks.streamChat).not.toHaveBeenCalled();
+    expect(mocks.streamChatWithTools).not.toHaveBeenCalled();
+    expect(mocks.persistChatCompletion).toHaveBeenCalledWith(expect.objectContaining({
+      terminalStatus: "failed",
+      processTrace: expect.objectContaining({
+        process: expect.objectContaining({
+          runs: [expect.objectContaining({
+            phase: "failed",
+            steps: [expect.objectContaining({ id: "prompt", status: "failed" })],
+          })],
+        }),
+      }),
+    }));
+  });
+
   it("联网开启时只注入逻辑搜索工具并持久化搜索追踪", async () => {
     const requestedTimeRange = {
       preset: "week" as const,

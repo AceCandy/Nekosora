@@ -68,6 +68,7 @@ export default async function ChatConversationPage({
       ? (m.searchBackends as ChatMessage["searchBackends"])
       : undefined,
     runMetadata: (m.runMetadata as ChatMessage["runMetadata"] | undefined) ?? undefined,
+    processTrace: (m.processTrace as ChatMessage["processTrace"] | undefined) ?? undefined,
     // 无反馈时必须为 undefined,避免把旧版本反馈残留到前端
     feedback: (m.feedback as ChatMessage["feedback"] | undefined) ?? undefined,
     versionInfo: versionMap[m.id as string],

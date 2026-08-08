@@ -170,6 +170,7 @@ describe("replaceMessageText", () => {
 describe("prepareChatContext 降级日志", () => {
   it("压缩失败时不暴露原始错误或 provider URL", async () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const recordStep = vi.fn().mockResolvedValue(undefined);
     mocks.maybeCompact.mockRejectedValueOnce(
       new Error("POST https://provider.example/v1?api_key=secret failed"),
     );
@@ -214,6 +215,7 @@ describe("prepareChatContext 降级日志", () => {
       model: "model-a",
       messages: [{ role: "user", content: "hello" }],
       branchLeafPublicId: "message-1",
+      processRecorder: { recordStep },
       db,
       schema,
     });
@@ -223,6 +225,26 @@ describe("prepareChatContext 降级日志", () => {
       "[chat] 压缩失败,跳过:",
       "POST [REDACTED] failed",
     );
+    expect(recordStep).toHaveBeenCalledWith({
+      id: "memory",
+      kind: "memory",
+      status: "running",
+    });
+    expect(recordStep).toHaveBeenCalledWith(expect.objectContaining({
+      id: "memory",
+      kind: "memory",
+      status: "completed",
+    }));
+    expect(recordStep).toHaveBeenCalledWith(expect.objectContaining({
+      id: "compaction",
+      kind: "compaction",
+      status: "completed",
+    }));
+    expect(recordStep).toHaveBeenCalledWith(expect.objectContaining({
+      id: "prompt",
+      kind: "prompt",
+      status: "completed",
+    }));
   });
 
   it("联网搜索启用时动态注入当前日期上下文", async () => {

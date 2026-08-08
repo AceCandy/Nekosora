@@ -3,7 +3,7 @@
  * 与具体列类型解耦。
  */
 
-import type { TokenUsage } from "@nekusora/contracts/chat";
+import type { ChatProcessSnapshot, TokenUsage } from "@nekusora/contracts/chat";
 
 export type { TokenUsage } from "@nekusora/contracts/chat";
 
@@ -153,6 +153,7 @@ export interface ProcessTrace {
   sentMessageCount?: number;
   blocks?: ProcessTraceBlock[];
   webSearch?: { calls: WebSearchTraceCall[] };
+  process?: ChatProcessSnapshot;
 }
 
 /** 分享创建时冻结的单条消息正文。 */

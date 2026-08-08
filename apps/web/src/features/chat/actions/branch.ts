@@ -26,6 +26,10 @@ import type {
 } from "@/features/chat/model/types";
 import { toMessageCreatedAtIso } from "@/features/chat/model/messageTime";
 import {
+  isChatProcessSnapshot,
+  type ChatProcessSnapshot,
+} from "@nekusora/contracts/chat";
+import {
   assertVisionModel,
   loadMessageAttachmentsByMessageIds,
   replaceMessageAttachments,
@@ -35,6 +39,12 @@ import {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const S = () => getSchema() as any;
+
+function projectProcessSnapshot(value: unknown): ChatProcessSnapshot | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const process = (value as { process?: unknown }).process;
+  return isChatProcessSnapshot(process) ? process : undefined;
+}
 
 /** DB tool_calls.status → UI ToolCallRecord.status。 */
 function mapDbToolCallStatus(status: string): ToolCallRecord["status"] {
@@ -326,6 +336,7 @@ export async function getMessageSiblings(messagePublicId: string): Promise<{
     toolCalls?: ToolCallRecord[];
     searchResults?: ChatMessage["searchResults"];
     searchBackends?: ChatMessage["searchBackends"];
+    processTrace?: ChatProcessSnapshot;
     feedback?: MessageFeedback;
   }[];
 }> {
@@ -408,6 +419,7 @@ export async function getMessageSiblings(messagePublicId: string): Promise<{
       toolCalls?: ToolCallRecord[];
       searchResults?: ChatMessage["searchResults"];
       searchBackends?: ChatMessage["searchBackends"];
+      processTrace?: ChatProcessSnapshot;
       feedback?: MessageFeedback;
     } = {
       publicId: m.publicId,
@@ -427,6 +439,8 @@ export async function getMessageSiblings(messagePublicId: string): Promise<{
     }
     if (searchTrace.message.searchResults) base.searchResults = searchTrace.message.searchResults;
     if (searchTrace.message.searchBackends) base.searchBackends = searchTrace.message.searchBackends;
+    const processTrace = projectProcessSnapshot(m.processTrace);
+    if (processTrace) base.processTrace = processTrace;
     const feedback = typeof m.id === "string" ? feedbackByMessageId.get(m.id) : undefined;
     if (feedback) base.feedback = feedback;
     return base;
@@ -746,7 +760,9 @@ export async function getVisibleBranch(conversationId: string): Promise<{
   });
 
   const messages = mainMessages.map((m) => {
-    let next = m;
+    let next = m.role === "assistant"
+      ? { ...m, processTrace: projectProcessSnapshot(m.processTrace) }
+      : m;
     const searchTrace = m.role === "assistant"
       ? projectSearchTrace(m.processTrace)
       : null;

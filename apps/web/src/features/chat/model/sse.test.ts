@@ -4,6 +4,30 @@ import { consumeChatSSE } from "./sse";
 const encoder = new TextEncoder();
 
 describe("consumeChatSSE", () => {
+  it("校验并按序透传统一过程事件", async () => {
+    const onTrace = vi.fn();
+    const body = streamFrom(
+      'data: {"type":"trace","version":1,"action":"phase","runId":"run-1","seq":1,"at":"2026-08-07T00:00:00.000Z","phase":"preparing"}\n\n' +
+      'data: {"type":"trace","version":1,"action":"step","runId":"run-1","seq":2,"at":"2026-08-07T00:00:01.000Z","phase":"processing","step":{"id":"prompt","kind":"prompt","status":"completed","data":{"fullMessageCount":2,"sentMessageCount":2,"tokenEstimate":20}}}\n\n' +
+      'data: {"type":"terminal","status":"interrupted"}\n\n' +
+      "data: [DONE]\n\n",
+    );
+
+    await consumeChatSSE(body, { onDelta: vi.fn(), onTrace });
+
+    expect(onTrace).toHaveBeenCalledTimes(2);
+    expect(onTrace.mock.calls.map(([event]) => event.seq)).toEqual([1, 2]);
+  });
+
+  it("拒绝带额外敏感字段的过程事件", async () => {
+    const body = streamFrom(
+      'data: {"type":"trace","version":1,"action":"phase","runId":"run-1","seq":1,"at":"2026-08-07T00:00:00.000Z","phase":"preparing","prompt":"secret"}\n\n',
+    );
+
+    await expect(consumeChatSSE(body, { onDelta: vi.fn() }))
+      .rejects.toThrow("trace");
+  });
+
   it("解析消息身份帧的稳定标识和创建时间", async () => {
     const onUserMessage = vi.fn();
     const onAssistantMessage = vi.fn();

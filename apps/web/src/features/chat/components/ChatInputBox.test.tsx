@@ -1,6 +1,8 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+import enMessages from "../../../../messages/en.json";
+import zhMessages from "../../../../messages/zh-CN.json";
 import { ChatInputBox } from "./ChatInputBox";
 import { ChatToolbar, type ChatToolbarProps } from "./ChatToolbar";
 
@@ -75,6 +77,11 @@ const toolbarProps: ChatToolbarProps = {
 };
 
 describe("ChatInputBox attachments", () => {
+  it("联网搜索控件在所有 locale 都有 chat 文案", () => {
+    expect(zhMessages.chat.webSearch).toBe("联网搜索");
+    expect(enMessages.chat.webSearch).toBe("Web Search");
+  });
+
   it("renders attachment details inside the input surface before the textarea", () => {
     const html = renderToStaticMarkup(
       <ChatInputBox
