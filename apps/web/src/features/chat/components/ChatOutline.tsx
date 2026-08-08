@@ -32,7 +32,7 @@ interface ChatOutlineProps {
 }
 
 /**
- * 对话大纲:贴滚动区右边缘(滚动条左侧)的一列圆点。
+ * 对话大纲:贴聊天正文右缘的一列圆点。
  * 桌面 hover / 手机在圆点上按下 均展开完整轮次列表:
  *   - 桌面:鼠标移到列表项点击跳转;
  *   - 手机:在圆点上上下滑动(scrub),列表内对应项高亮跟随,放手跳到停下的轮。
@@ -74,7 +74,6 @@ export function ChatOutline({ messages, streaming }: ChatOutlineProps) {
 
   const handleJump = (userIndex: number) => {
     scrollToMessage(`msg-${userIndex}`, { behavior: "smooth" });
-    setOpen(false);
   };
 
   const onEnter = () => {
@@ -114,16 +113,15 @@ export function ChatOutline({ messages, streaming }: ChatOutlineProps) {
   };
 
   return (
-    // 触发容器只占圆点列尺寸、垂直居中于消息区。桌面 hover / 手机 scrub 均展开完整列表。
-    // 不再撑满整列高度(避免圆点上下方空白处误触浮层)。
+    // 桌面将入口锚定在正文最大宽度右缘,面板向右填满剩余空间;手机保留紧凑浮层。
     <div
-      className="absolute top-1/2 right-0 -translate-y-1/2 z-10 flex items-center"
+      className="absolute top-1/2 right-0 z-10 flex -translate-y-1/2 items-center lg:left-[calc(50%_+_24rem)] lg:right-3"
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
     >
       {/* 完整轮次列表:桌面 hover 或 手机 scrub 时展开;手机拖动时列表项高亮跟随 scrubIdx */}
       {open && (
-        <div className="mr-1 max-h-[60vh] overflow-y-auto w-64 max-w-[80vw] rounded-lg border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink p-2 shadow-lg">
+        <div className="mr-1 max-h-[60vh] w-64 max-w-[80vw] overflow-y-auto rounded-lg border border-morning-mist bg-white p-2 shadow-lg dark:border-deep-space/80 dark:bg-space-ink lg:order-2 lg:ml-1 lg:mr-0 lg:min-w-0 lg:flex-1 lg:w-auto lg:max-w-none">
           <ul className="space-y-0.5">
             {turns.map((turn, i) => (
               <li key={turn.userIndex}>
@@ -131,7 +129,7 @@ export function ChatOutline({ messages, streaming }: ChatOutlineProps) {
                   type="button"
                   onClick={() => handleJump(turn.userIndex)}
                   className={clsx(
-                    "w-full text-left rounded-md px-2 py-1.5 text-ui-caption transition-colors line-clamp-1",
+                    "w-full truncate whitespace-nowrap rounded-md px-2 py-1.5 text-left text-ui-caption transition-colors",
                     i === scrubIdx
                       ? "bg-sora-blue/20 text-neutral-800 dark:text-white font-medium"
                       : i === activeTurnIdx
@@ -151,7 +149,7 @@ export function ChatOutline({ messages, streaming }: ChatOutlineProps) {
       {/* 点状大纲:生成中/拖动/当前轮高亮,桌面 hover 弱高亮 */}
       <nav
         ref={navRef}
-        className="flex flex-col items-end gap-[5px] w-6 pr-2 cursor-pointer touch-none"
+        className="flex w-6 cursor-pointer touch-none flex-col items-end gap-[5px] pr-2 lg:order-1"
         aria-label="对话大纲"
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
