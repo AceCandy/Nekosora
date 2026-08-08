@@ -59,6 +59,7 @@ export async function* executeGateway<TEvent, TResult>(
     apiKey: string;
     attempt: number;
     startedAt: number;
+    firstTokenAt?: number;
   } | undefined;
 
   try {
@@ -132,6 +133,9 @@ export async function* executeGateway<TEvent, TResult>(
                 upstreamKeyMasked: maskKey(apiKey) ?? undefined,
                 status: "interrupted",
                 latencyMs: completedAt - attemptStartedAt,
+                firstTokenLatencyMs: activeAttempt?.firstTokenAt !== undefined
+                  ? activeAttempt.firstTokenAt - attemptStartedAt
+                  : undefined,
                 startedAt: attemptStartedAt,
                 completedAt,
               }));
@@ -151,11 +155,16 @@ export async function* executeGateway<TEvent, TResult>(
             }
             if (next.value.commitsResponse) {
               committed = true;
-              firstTokenAt ??= Date.now();
+            }
+            if (next.value.firstTokenAt !== undefined) {
+              firstTokenAt ??= next.value.firstTokenAt;
+              if (activeAttempt) activeAttempt.firstTokenAt ??= next.value.firstTokenAt;
             }
             yield next.value.value;
           }
           const completedAt = Date.now();
+          const attemptFirstTokenAt = activeAttempt?.firstTokenAt ?? result.firstTokenAt;
+          firstTokenAt ??= attemptFirstTokenAt;
           await safeTelemetry(() => options.telemetry.recordAttempt({
             executionId,
             attempt,
@@ -165,8 +174,8 @@ export async function* executeGateway<TEvent, TResult>(
             status: "success",
             usage: result.usage,
             latencyMs: completedAt - attemptStartedAt,
-            firstTokenLatencyMs: result.firstTokenAt
-              ? result.firstTokenAt - attemptStartedAt
+            firstTokenLatencyMs: attemptFirstTokenAt !== undefined
+              ? attemptFirstTokenAt - attemptStartedAt
               : undefined,
             startedAt: attemptStartedAt,
             completedAt,
@@ -180,7 +189,7 @@ export async function* executeGateway<TEvent, TResult>(
             usage: result.usage ?? {},
             route: snapshotRoute(route),
             upstreamKeyMasked: maskKey(apiKey) ?? undefined,
-            firstTokenAt: result.firstTokenAt,
+            firstTokenAt: attemptFirstTokenAt,
             committed,
           };
           return outcome;
@@ -195,6 +204,9 @@ export async function* executeGateway<TEvent, TResult>(
               upstreamKeyMasked: maskKey(apiKey) ?? undefined,
               status: "interrupted",
               latencyMs: completedAt - attemptStartedAt,
+              firstTokenLatencyMs: activeAttempt?.firstTokenAt !== undefined
+                ? activeAttempt.firstTokenAt - attemptStartedAt
+                : undefined,
               startedAt: attemptStartedAt,
               completedAt,
             }));
@@ -222,6 +234,9 @@ export async function* executeGateway<TEvent, TResult>(
             status: "failed",
             error: safeError,
             latencyMs: completedAt - attemptStartedAt,
+            firstTokenLatencyMs: activeAttempt?.firstTokenAt !== undefined
+              ? activeAttempt.firstTokenAt - attemptStartedAt
+              : undefined,
             startedAt: attemptStartedAt,
             completedAt,
           };
@@ -277,17 +292,21 @@ export async function* executeGateway<TEvent, TResult>(
         upstreamKeyMasked: maskKey(interruptedAttempt.apiKey) ?? undefined,
         status: "interrupted",
         latencyMs: completedAt - interruptedAttempt.startedAt,
+        firstTokenLatencyMs: interruptedAttempt.firstTokenAt !== undefined
+          ? interruptedAttempt.firstTokenAt - interruptedAttempt.startedAt
+          : undefined,
         startedAt: interruptedAttempt.startedAt,
         completedAt,
       }));
     }
+    if (firstTokenAt !== undefined) outcome.firstTokenAt ??= firstTokenAt;
     const finalOutcome = outcome;
     const completedAt = Date.now();
     await safeTelemetry(() => options.telemetry.finalizeExecution({
       initial,
       outcome: finalOutcome,
       latencyMs: completedAt - startedAt,
-      firstTokenLatencyMs: firstTokenAt ? firstTokenAt - startedAt : undefined,
+      firstTokenLatencyMs: firstTokenAt !== undefined ? firstTokenAt - startedAt : undefined,
       completedAt,
     }));
   }

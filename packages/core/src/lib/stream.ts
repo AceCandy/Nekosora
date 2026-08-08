@@ -114,6 +114,7 @@ export async function* streamChat(
       abortSignal,
     }) {
       const timing: { firstTokenAt?: number } = {};
+      let firstTokenReported = false;
       let usage: IRUsage = {};
       for await (const event of streamWithRoute(
         route,
@@ -125,12 +126,19 @@ export async function* streamChat(
         opts.userAgent,
       )) {
         if (event.type === "finish") usage = event.usage;
+        const eventFirstTokenAt = !firstTokenReported
+          && event.type === "text-delta"
+          && event.text.length > 0
+          ? timing.firstTokenAt
+          : undefined;
+        if (eventFirstTokenAt !== undefined) firstTokenReported = true;
         yield {
           value: event,
           commitsResponse:
             event.type === "text-delta"
             || event.type === "reasoning-delta"
             || event.type === "tool-call",
+          firstTokenAt: eventFirstTokenAt,
         };
       }
       return { value: undefined, usage, firstTokenAt: timing.firstTokenAt };
@@ -366,7 +374,7 @@ async function* streamWithRoute(
   route: ResolvedRoute,
   request: IRRequest,
   apiKey: string,
-  /** 首 token 计时载体(mutable,由调用方持有;首个文本/推理增量时回写 firstTokenAt)。 */
+  /** 首 token 计时载体(mutable,由调用方持有;首个非空可见正文时回写 firstTokenAt)。 */
   timing: { firstTokenAt?: number },
   /** 会话级 cache key(chat=conversationId / 网关=apiKeyId);缺省不注入缓存控制。 */
   cacheKey?: string,
@@ -426,13 +434,11 @@ async function* streamWithRoute(
   for await (const part of result.stream) {
     switch (part.type) {
       case "text-delta":
-        // 首 token 采样:仅首次 text-delta 时记录(后续 delta 不覆盖)。
-        if (timing.firstTokenAt === undefined) timing.firstTokenAt = Date.now();
+        // 首 token 采样:仅首个非空可见正文记录,reasoning/空 delta 不计入。
+        if (part.text.length > 0 && timing.firstTokenAt === undefined) timing.firstTokenAt = Date.now();
         yield { type: "text-delta", text: part.text };
         break;
       case "reasoning-delta":
-        // 首 token 采样:推理增量也算首 token(部分模型先吐 reasoning 再吐正文)。
-        if (timing.firstTokenAt === undefined) timing.firstTokenAt = Date.now();
         // 推理增量(如 deepseek-r1/Claude thinking)透传给 UI。
         yield { type: "reasoning-delta", text: part.text };
         break;

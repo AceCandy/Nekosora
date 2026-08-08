@@ -22,6 +22,8 @@ export interface GatewayAttemptContext {
 export interface GatewayAttemptEvent<TEvent> {
   value: TEvent;
   commitsResponse: boolean;
+  /** 仅首个非空、用户可见正文事件携带；与响应提交/故障转移边界独立。 */
+  firstTokenAt?: number;
 }
 
 export interface GatewayAttemptResult<TResult> {

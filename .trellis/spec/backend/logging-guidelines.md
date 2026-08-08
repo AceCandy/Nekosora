@@ -37,7 +37,7 @@ Database facts:
 - `taskKind` is nullable: main reply/gateway request is `null`; background title/memory/compact calls use their stable task kind.
 - Route-layer auth/body failures occurring before the engine may use the compatibility `logUsage` entry to insert one final execution row. Engine-owned failures must not be written again by route handlers.
 - Agent tool loops share one telemetry session and one execution id. Internal steps globally renumber attempts and aggregate usage; only the outer loop finalizes.
-- `firstTokenLatencyMs` is measured from logical execution start to the first committed stream event. Atomic operations may leave it null.
+- `firstTokenLatencyMs` is measured from logical execution/attempt start to the first non-empty user-visible text delta. Response commitment is independent: reasoning, tool calls, and empty text deltas may block failover after they are emitted, but they must not set `firstTokenAt`. Atomic operations and streams without visible text leave it null.
 - Stream consumers are allowed to stop after a terminal event only through the coordinator's settlement step; the stream itself must request nested engine closure non-blockingly in `finally` for Abort/consumer `return()`. Final usage callbacks run from that cleanup path so `gateway_executions` cannot remain `running` merely because generator tail code was skipped.
 
 ### 4. Validation & Error Matrix
@@ -48,6 +48,7 @@ Database facts:
 | Unsupported route protocol | rejected | continue before commit; final outcome follows later attempt |
 | All routes fail | one row per attempt | one failed execution |
 | Abort | interrupted attempt when an attempt started | one interrupted execution; no breaker failure |
+| Reasoning/tool event before visible text | response is committed; later failure cannot fail over | `firstTokenLatencyMs` remains null until a non-empty text delta |
 | Telemetry DB/metrics throws or times out | best-effort may be missing | gateway outcome remains unchanged |
 | Route auth/body rejection before engine | no upstream attempt | one compatibility execution row |
 | Agent has multiple model steps | globally ordered attempts | one aggregated final execution |
@@ -55,15 +56,17 @@ Database facts:
 ### 5. Good / Base / Bad Cases
 
 - Good: a two-route request records two attempts and one final execution; only the final execution contributes to usage totals.
+- Good: a reasoning event commits the response without starting TTFT; the first non-empty visible text delta records TTFT.
 - Good: an error containing key/header/base URL reaches storage only after exact-value and generic redaction.
 - Base: a single successful attempt creates one attempt and one success execution.
 - Bad: each retry writes another final execution, inflating calls and tokens.
+- Bad: reuse `commitsResponse` as the TTFT trigger; it makes hidden reasoning and tool calls look like visible answer latency.
 - Bad: a route catches an engine failure and inserts a second final row.
 - Bad: attempt labels include `model`, `routeId`, `providerId`, or key masks.
 
 ### 6. Tests Required
 
-- `gateway-execution/engine.test.ts`: key retry, route failover, commit-before-yield, Abort, deterministic errors, rejected protocols, credential/route redaction, telemetry failure isolation, and iterator-close finalization.
+- `gateway-execution/engine.test.ts`: key retry, route failover, commit-before-yield, visible-text TTFT independent from reasoning/tool commitment, Abort, deterministic errors, rejected protocols, credential/route redaction, telemetry failure isolation, and iterator-close finalization.
 - `gateway-execution/telemetry.test.ts`: start/attempt/finalize mappings, DB/metrics best-effort, persistence redaction.
 - `redaction.test.ts`：断言 provider 与 PostgreSQL URL 不离开错误边界；RAG retrieve 与 Chat compaction 降级测试断言 console 只接收脱敏字符串。
 - Schema/migration tests: both facts, unique attempt number, FK actions, journal/snapshot, no `CASCADE` drop, and only old log tables removed.
@@ -81,6 +84,13 @@ await logUsage({ status: "success", ...final });
 // Correct: attempts and final outcome have separate facts.
 await telemetry.recordAttempt(attempt);
 await telemetry.finalizeExecution(final);
+
+// Wrong: response commitment is not proof that the user saw answer text.
+if (event.commitsResponse) firstTokenAt ??= Date.now();
+
+// Correct: keep failover safety and visible-answer latency as separate facts.
+if (event.commitsResponse) committed = true;
+if (event.firstTokenAt !== undefined) firstTokenAt ??= event.firstTokenAt;
 ```
 
 ## Query And Presentation Contracts

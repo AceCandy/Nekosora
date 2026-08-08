@@ -307,18 +307,21 @@ describe("chat generation circuit breaker reporting", () => {
       "正文",
       { type: "text-delta", text: "primary" },
       { type: "text-delta", text: "primary" },
+      true,
     ],
     [
       "推理",
       { type: "reasoning-delta", text: "thinking" },
       { type: "reasoning-delta", text: "thinking" },
+      false,
     ],
     [
       "工具调用",
       { type: "tool-call", toolCallId: "call-1", toolName: "search", input: { q: "hello" } },
       { type: "tool-call", toolCallId: "call-1", toolName: "search", args: { q: "hello" } },
+      false,
     ],
-  ])("首路由已输出%s后失败时不再转移到下一路由", async (_label, upstreamEvent, expectedEvent) => {
+  ])("首路由已输出%s后失败时不再转移到下一路由", async (_label, upstreamEvent, expectedEvent, isVisibleText) => {
     setRouteRepository(makeTwoRouteRepository());
     vi.mocked(streamText)
       .mockReturnValueOnce({
@@ -346,10 +349,59 @@ describe("chat generation circuit breaker reporting", () => {
     expect(mocks.finalizeExecution).toHaveBeenCalledWith(expect.objectContaining({
       outcome: expect.objectContaining({ status: "failed" }),
     }));
+    const finalTelemetry = mocks.finalizeExecution.mock.calls[0]?.[0] as {
+      firstTokenLatencyMs?: number;
+    };
+    const attemptTelemetry = mocks.recordAttempt.mock.calls[0]?.[0] as {
+      firstTokenLatencyMs?: number;
+    };
+    if (isVisibleText) {
+      expect(attemptTelemetry.firstTokenLatencyMs).toEqual(expect.any(Number));
+      expect(finalTelemetry.firstTokenLatencyMs).toEqual(expect.any(Number));
+    } else {
+      expect(attemptTelemetry.firstTokenLatencyMs).toBeUndefined();
+      expect(finalTelemetry.firstTokenLatencyMs).toBeUndefined();
+    }
     expect(snapshotBreakers()["provider-a"]).toMatchObject({
       status: "closed",
       failures: 1,
     });
+  });
+
+  it("首 token 延迟忽略 reasoning 和空 delta，只按首个非空正文统计", async () => {
+    let now = 1_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    vi.mocked(streamText).mockReturnValue({
+      stream: (async function* () {
+        now = 1_100;
+        yield { type: "reasoning-delta", text: "thinking" };
+        now = 1_200;
+        yield { type: "text-delta", text: "" };
+        now = 1_300;
+        yield { type: "text-delta", text: "visible" };
+      })(),
+      usage: Promise.resolve({ inputTokens: 1, outputTokens: 2, totalTokens: 3 }),
+      finishReason: Promise.resolve("stop"),
+    } as never);
+
+    const events = await collectStream();
+
+    expect(events).toEqual([
+      { type: "reasoning-delta", text: "thinking" },
+      { type: "text-delta", text: "" },
+      { type: "text-delta", text: "visible" },
+      {
+        type: "finish",
+        finishReason: "stop",
+        usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 },
+      },
+    ]);
+    expect(mocks.recordAttempt).toHaveBeenCalledWith(expect.objectContaining({
+      firstTokenLatencyMs: 300,
+    }));
+    expect(mocks.finalizeExecution).toHaveBeenCalledWith(expect.objectContaining({
+      firstTokenLatencyMs: 300,
+    }));
   });
 
   it("首路由未输出即失败时仍转移到下一路由", async () => {

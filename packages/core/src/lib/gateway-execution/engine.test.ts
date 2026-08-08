@@ -174,20 +174,35 @@ describe("gateway execution engine", () => {
     expect(h.breaker.recordFailure).not.toHaveBeenCalled();
   });
 
-  it("事件 commit 后失败不再换 key 或 route", async () => {
+  it.each([
+    ["可见正文", "visible", 1_100, 100],
+    ["非正文事件", "reasoning", undefined, undefined],
+  ] as const)("%s commit 后失败不换路由，TTFT 只按正文记录", async (
+    _label,
+    text,
+    firstTokenAt,
+    firstTokenLatencyMs,
+  ) => {
+    let now = 1_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
     const calls: string[] = [];
     const adapter: GatewayAttemptAdapter<Event, Result> = async function* ({ route: current, apiKey }) {
       calls.push(`${current.routeId}:${apiKey}`);
-      yield { value: { text: "visible" }, commitsResponse: true };
+      yield { value: { text }, commitsResponse: true, firstTokenAt };
+      now = 1_200;
       throw Object.assign(new Error("late failure"), { statusCode: 503 });
     };
     const h = harness([route("a", ["key-a", "key-b"]), route("b")], () => adapter);
 
     const { events, outcome } = await consume(h.generator);
 
-    expect(events).toEqual([{ text: "visible" }]);
+    expect(events).toEqual([{ text }]);
     expect(outcome).toMatchObject({ status: "failed", committed: true });
+    expect(outcome.firstTokenAt).toBe(firstTokenAt);
     expect(calls).toEqual(["a:key-a"]);
+    expect(h.attempts[0]?.firstTokenLatencyMs).toBe(firstTokenLatencyMs);
+    expect((h.finalized[0] as { firstTokenLatencyMs?: number }).firstTokenLatencyMs)
+      .toBe(firstTokenLatencyMs);
   });
 
   it("Abort 立即中断且不更新 breaker", async () => {
@@ -207,6 +222,8 @@ describe("gateway execution engine", () => {
   });
 
   it("adapter 不响应 AbortSignal 时 engine 仍立即终结 execution", async () => {
+    let now = 1_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
     const abortController = new AbortController();
     let release!: () => void;
     const never = new Promise<void>((resolve) => {
@@ -215,6 +232,12 @@ describe("gateway execution engine", () => {
     let adapterStarted = false;
     const adapter: GatewayAttemptAdapter<Event, Result> = async function* () {
       adapterStarted = true;
+      now = 1_100;
+      yield {
+        value: { text: "visible" },
+        commitsResponse: true,
+        firstTokenAt: now,
+      };
       await never;
       return { value: { text: "never" } };
     };
@@ -230,10 +253,17 @@ describe("gateway execution engine", () => {
       ]);
 
       expect(result).not.toBe("timeout");
-      expect(result).toMatchObject({ outcome: { status: "interrupted" } });
+      expect(result).toMatchObject({
+        events: [{ text: "visible" }],
+        outcome: { status: "interrupted", firstTokenAt: 1_100 },
+      });
       expect(h.attempts.map((item) => item.status)).toEqual(["interrupted"]);
+      expect(h.attempts[0]?.firstTokenLatencyMs).toBe(100);
       expect(h.finalized).toHaveLength(1);
-      expect(h.finalized[0]).toMatchObject({ outcome: { status: "interrupted" } });
+      expect(h.finalized[0]).toMatchObject({
+        outcome: { status: "interrupted", firstTokenAt: 1_100 },
+        firstTokenLatencyMs: 100,
+      });
     } finally {
       release();
     }
