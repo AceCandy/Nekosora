@@ -22,6 +22,7 @@ import ModelsManager, {
 import { getTranslations } from "next-intl/server";
 import { Boxes } from "lucide-react";
 import { PageHeader } from "@/shared/components/PageHeader";
+import type { ProviderProtocol, RouteApiFormat } from "@/db/types";
 
 export default async function ModelsPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   const tn = await getTranslations("nav");
@@ -41,6 +42,7 @@ export default async function ModelsPage({ searchParams }: { searchParams?: Prom
     displayName: m.displayName as string,
     catalogId: m.catalogId as string,
     catalogName: ((m.catalog as Record<string, unknown>)?.name as string) ?? "-",
+    modelType: (m.catalog as Record<string, unknown>).modelType as string,
     visibility: m.visibility as string,
     enabled: m.enabled as boolean,
     systemPrompt: (m.systemPrompt as string) ?? null,
@@ -54,6 +56,7 @@ export default async function ModelsPage({ searchParams }: { searchParams?: Prom
     providerId: (r.route as Record<string, unknown>).providerId as string,
     providerName: r.providerName as string,
     upstreamModelName: (r.route as Record<string, unknown>).upstreamModelName as string,
+    apiFormat: (r.route as Record<string, unknown>).apiFormat as RouteApiFormat,
     priority: (r.route as Record<string, unknown>).priority as number,
     weight: (r.route as Record<string, unknown>).weight as number,
     supportsTools: (r.route as Record<string, unknown>).supportsTools === true,
@@ -63,6 +66,7 @@ export default async function ModelsPage({ searchParams }: { searchParams?: Prom
   const providerOptions: ProviderOption[] = providers.map((p: Record<string, unknown>) => ({
     id: p.id as string,
     name: p.name as string,
+    protocol: p.protocol as ProviderProtocol,
   }));
 
   // —— 预先 bind 每个 id / modelId 对应的 action,组成按 id 索引的表 ——

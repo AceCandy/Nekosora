@@ -41,12 +41,18 @@ export interface SafeGatewayError {
   message: string;
   phase: string;
   httpStatus?: number;
+  details?: Record<string, unknown>;
 }
+
+export type GatewayAdapterSelection<TEvent, TResult> =
+  | { kind: "selected"; adapter: GatewayAttemptAdapter<TEvent, TResult> }
+  | { kind: "rejected"; error: SafeGatewayError };
 
 /** 可离开 execution 安全域的 route 快照，不包含 key、header 或 base URL。 */
 export interface GatewayRouteSnapshot {
   modelName: string;
   upstreamModelName: string;
+  apiFormat?: ResolvedRoute["apiFormat"];
   protocol: ResolvedRoute["protocol"];
   provider: { id: string; name: string };
   priority: number;
@@ -126,7 +132,10 @@ export interface ExecuteGatewayOptions<TEvent, TResult> {
   abortSignal?: AbortSignal;
   maxKeyAttempts?: number;
   resolveRoutes(): Promise<ResolvedRoute[]>;
-  selectAdapter(route: ResolvedRoute): GatewayAttemptAdapter<TEvent, TResult> | null;
+  selectAdapter(route: ResolvedRoute):
+    | GatewayAttemptAdapter<TEvent, TResult>
+    | GatewayAdapterSelection<TEvent, TResult>
+    | null;
   /** 识别当前 operation 的路由级工具兼容性拒绝。 */
   isToolUnsupported?(error: unknown): boolean;
   /** 记录具体路由的工具能力降级；失败不得改变当前请求结果。 */

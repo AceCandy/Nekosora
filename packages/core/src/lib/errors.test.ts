@@ -33,6 +33,7 @@ describe("错误码 → HTTP status 契约", () => {
   it("request.* → 400", () => {
     expect(ERROR_META[ErrorCode.REQUEST_INVALID_JSON].status).toBe(400);
     expect(ERROR_META[ErrorCode.REQUEST_MISSING_FIELD].status).toBe(400);
+    expect(ERROR_META[ErrorCode.REQUEST_UNSUPPORTED_PARAMETER].status).toBe(400);
   });
 
   it("routing.model_not_found → 404", () => {
@@ -72,6 +73,7 @@ describe("错误码 → OpenAI type 分类", () => {
 
   it("request.* → invalid_request_error", () => {
     expect(ERROR_META[ErrorCode.REQUEST_MISSING_FIELD].type).toBe("invalid_request_error");
+    expect(ERROR_META[ErrorCode.REQUEST_UNSUPPORTED_PARAMETER].type).toBe("invalid_request_error");
   });
 
   it("routing.model_not_found → not_found_error", () => {

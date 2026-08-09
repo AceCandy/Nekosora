@@ -20,7 +20,7 @@ import ModelsManager, {
   type RouteItem,
   type ProviderOption,
 } from "@/features/models/ModelsManager";
-import type { ModelCapabilities } from "@/db/types";
+import type { ModelCapabilities, ProviderProtocol, RouteApiFormat } from "@/db/types";
 import { getTranslations } from "next-intl/server";
 import { requireSession } from "@/lib/session";
 import { Boxes } from "lucide-react";
@@ -46,6 +46,7 @@ export default async function MyModelsPage({ searchParams }: { searchParams?: Pr
     displayName: (r.model as Record<string, unknown>).displayName as string,
     catalogId: (r.model as Record<string, unknown>).catalogId as string,
     catalogName: (((r.model as Record<string, unknown>).catalog as Record<string, unknown>).name as string),
+    modelType: (((r.model as Record<string, unknown>).catalog as Record<string, unknown>).modelType as string),
     visibility: (r.model as Record<string, unknown>).visibility as string,
     enabled: (r.model as Record<string, unknown>).enabled as boolean,
     systemPrompt: ((r.model as Record<string, unknown>).systemPrompt as string) ?? null,
@@ -64,6 +65,7 @@ export default async function MyModelsPage({ searchParams }: { searchParams?: Pr
         providerId: route.providerId as string,
         providerName: rr.providerName as string,
         upstreamModelName: route.upstreamModelName as string,
+        apiFormat: route.apiFormat as RouteApiFormat,
         priority: route.priority as number,
         weight: route.weight as number,
         supportsTools: route.supportsTools === true,
@@ -75,6 +77,7 @@ export default async function MyModelsPage({ searchParams }: { searchParams?: Pr
   const providerOptions: ProviderOption[] = providers.map((p: Record<string, unknown>) => ({
     id: p.id as string,
     name: p.name as string,
+    protocol: p.protocol as ProviderProtocol,
   }));
 
   // —— 预先 bind 每个 id / modelId 对应的 action,组成按 id 索引的表 ——

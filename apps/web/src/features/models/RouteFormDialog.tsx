@@ -4,10 +4,24 @@ import { useTranslations } from "next-intl";
 import type { FormDataSerializableAction } from "@/features/providers/types";
 import Modal from "@/shared/ui/Modal";
 import UpstreamModelPicker, { type FetchModelsAction } from "@/features/models/UpstreamModelPicker";
+import {
+  ROUTE_API_FORMATS,
+  defaultRouteApiFormat,
+  isChatRouteApiFormat,
+  type ProviderProtocol,
+  type RouteApiFormat,
+} from "@/db/types";
+
+export interface RouteProviderOption {
+  id: string;
+  name: string;
+  protocol: ProviderProtocol;
+}
 
 export interface RouteInitial {
   providerId?: string;
   upstreamModelName?: string;
+  apiFormat?: RouteApiFormat;
   priority?: number;
   weight?: number;
   supportsTools?: boolean;
@@ -19,7 +33,8 @@ interface RouteFormDialogProps {
   mode: "add" | "edit";
   action: FormDataSerializableAction;
   /** 可选 provider 下拉项。 */
-  providers: { id: string; name: string }[];
+  providers: RouteProviderOption[];
+  modelType: string;
   /** 拉取上游模型列表的 action(按 providerId)。不传则不显示拉取按钮。 */
   fetchModelsAction?: FetchModelsAction;
   /** 当前模型对外名;新增模式下选好 provider 后据此在上游列表里匹配同名自动填充。 */
@@ -32,8 +47,7 @@ const inputCls =
 
 /**
  * 路由(模型 → Provider)新增/编辑弹窗。
- * 字段:providerId(必填)、upstreamModelName(必填)、priority、weight。
- * 协议由所选 provider 决定,路由不再单独配置。
+ * 字段:providerId(必填)、apiFormat(必填)、upstreamModelName(必填)、priority、weight。
  * 提交时塞进隐藏的 modelId(由调用方 action 已 .bind 好 modelId 时可不传)。
  *
  * priority/weight 语义说明:
@@ -45,6 +59,7 @@ export default function RouteFormDialog({
   mode,
   action,
   providers,
+  modelType,
   fetchModelsAction,
   modelName,
   initial,
@@ -54,6 +69,8 @@ export default function RouteFormDialog({
   const [formKey, setFormKey] = useState(0);
   // provider 选择需受控,以便拉取按钮据此请求对应上游。
   const [providerId, setProviderId] = useState(initial?.providerId ?? "");
+  const [apiFormat, setApiFormat] = useState<RouteApiFormat | "">(initial?.apiFormat ?? "");
+  const apiFormatTouched = useRef(Boolean(initial?.apiFormat));
   const upstreamInputRef = useRef<HTMLInputElement>(null);
   // upstreamModelName 受控:兼容手填、拉取器 ref 写回(经 input 事件同步)与下面的自动匹配填充。
   const [upstreamModelName, setUpstreamModelName] = useState(initial?.upstreamModelName ?? "");
@@ -91,6 +108,22 @@ export default function RouteFormDialog({
     setFormKey((k) => k + 1);
   };
 
+  const selectedProvider = providers.find((provider) => provider.id === providerId);
+  const formatOptions = modelType === "chat"
+    ? ROUTE_API_FORMATS.filter(isChatRouteApiFormat)
+    : selectedProvider
+      ? [defaultRouteApiFormat(selectedProvider.protocol)]
+      : apiFormat ? [apiFormat] : [];
+  const formatLabels: Record<RouteApiFormat, string> = {
+    "openai-chat": t("apiFormatOpenAIChat"),
+    "openai-responses": t("apiFormatOpenAIResponses"),
+    "anthropic-messages": t("apiFormatAnthropicMessages"),
+    "gemini-generate-content": t("apiFormatGeminiGenerateContent"),
+    "openai-images": t("apiFormatOpenAIImages"),
+    "openai-audio-stt": t("apiFormatOpenAIAudioStt"),
+    "openai-audio-tts": t("apiFormatOpenAIAudioTts"),
+  };
+
   return (
     <Modal
       open={open}
@@ -109,12 +142,38 @@ export default function RouteFormDialog({
             name="providerId"
             required
             value={providerId}
-            onChange={(e) => setProviderId(e.target.value)}
+            onChange={(e) => {
+              const nextProviderId = e.target.value;
+              setProviderId(nextProviderId);
+              const nextProvider = providers.find((provider) => provider.id === nextProviderId);
+              if (nextProvider && (!apiFormatTouched.current || modelType !== "chat")) {
+                setApiFormat(defaultRouteApiFormat(nextProvider.protocol));
+              }
+            }}
             className={inputCls}
           >
             <option value="">{t("selectProvider")}</option>
             {providers.map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        </label>
+
+        <label className="block">
+          <span className="text-ui-body font-medium">{t("apiFormatLabel")}</span>
+          <select
+            name="apiFormat"
+            required
+            value={apiFormat}
+            onChange={(e) => {
+              apiFormatTouched.current = true;
+              setApiFormat(e.target.value as RouteApiFormat);
+            }}
+            className={inputCls}
+          >
+            <option value="">{t("selectApiFormat")}</option>
+            {formatOptions.map((format) => (
+              <option key={format} value={format}>{formatLabels[format]}</option>
             ))}
           </select>
         </label>

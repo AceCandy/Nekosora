@@ -118,20 +118,24 @@ describe("POST /v1/chat/completions 流式取消", () => {
     expect(body).toContain("data: [DONE]\n\n");
   });
 
-  it("忽略 WebChat 联网配置且不注入逻辑搜索工具", async () => {
+  it("拒绝 WebChat 专有联网参数且不触网上游", async () => {
     mocks.streamChat.mockReturnValue((async function* () {
       yield { type: "finish", finishReason: "stop", usage: {} };
     })());
 
     const response = await POST(request({ webSearch: true }));
-    await response.text();
+    const body = await response.json();
 
+    expect(response.status).toBe(400);
+    expect(body).toMatchObject({
+      error: {
+        code: "request.unsupported_parameter",
+        message: "Unsupported parameter: 'webSearch'.",
+        param: "webSearch",
+      },
+    });
     expect(mocks.loadWebSearchConfig).not.toHaveBeenCalled();
-    expect(mocks.streamChat).toHaveBeenCalledWith(expect.objectContaining({
-      request: expect.not.objectContaining({
-        tools: expect.anything(),
-      }),
-    }));
+    expect(mocks.streamChat).not.toHaveBeenCalled();
   });
 
   it("普通异常时保留 SSE server_error 帧", async () => {

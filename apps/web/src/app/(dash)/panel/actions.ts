@@ -7,8 +7,12 @@ import type { WeightedKey } from "@/lib/providers/keys";
 import { probeProviderKey, fetchUpstreamModels, type ProbeResult, type UpstreamModel } from "@/lib/providers/probe";
 import { getProbeHeaders } from "@/lib/system-settings/ua";
 import { normalizeBaseUrl } from "@/lib/providers/defaults";
+import {
+  resolveCatalogRouteApiFormat,
+  resolveModelRouteApiFormat,
+} from "@/lib/providers/route-api-format";
 import { recordSuccess, recordFailure } from "@/lib/circuit-breaker";
-import type { ProviderProtocol } from "@/db/types";
+import type { ProviderProtocol, RouteApiFormat } from "@/db/types";
 import type { ProviderKeyResult } from "@/db/schema/pg";
 import { requireSession } from "@/lib/session";
 import { findCatalogMatch, pickDisplayName } from "@/lib/model-catalog";
@@ -584,9 +588,15 @@ export async function createMyModel(formData: FormData) {
     });
     const [created] = await tx.select({ id: S().models.id }).from(S().models).where(and(eq(S().models.ownerUserId, user.id), eq(S().models.name, name))).limit(1);
     if (providerId && upstreamModelName) {
-      const [provider] = await tx.select({ id: S().providers.id }).from(S().providers).where(and(eq(S().providers.id, providerId), eq(S().providers.ownerUserId, user.id))).limit(1);
+      const [provider] = await tx.select({ id: S().providers.id, protocol: S().providers.protocol }).from(S().providers).where(and(eq(S().providers.id, providerId), eq(S().providers.ownerUserId, user.id))).limit(1);
       if (!provider) throw new Error("服务商不存在");
-      await tx.insert(S().routes).values({ ownerUserId: user.id, modelId: created.id, providerId, upstreamModelName, enabled: true });
+      const apiFormat = await resolveCatalogRouteApiFormat(
+        tx,
+        catalog.id,
+        provider.protocol as ProviderProtocol,
+        String(formData.get("apiFormat") ?? ""),
+      );
+      await tx.insert(S().routes).values({ ownerUserId: user.id, modelId: created.id, providerId, upstreamModelName, apiFormat, enabled: true });
     }
   });
   revalidatePath("/panel", "layout");
@@ -776,11 +786,18 @@ export async function createMyRoute(modelId: string, formData: FormData) {
     .from(S().providers)
     .where(and(eq(S().providers.id, providerId), eq(S().providers.ownerUserId, user.id)));
   if (!provider) throw new Error("服务商不存在");
+  const apiFormat = await resolveModelRouteApiFormat(
+    db,
+    modelId,
+    provider.protocol as ProviderProtocol,
+    String(formData.get("apiFormat") ?? ""),
+  );
   await db.insert(S().routes).values({
     ownerUserId: user.id,
     modelId,
     providerId,
     upstreamModelName: String(formData.get("upstreamModelName") ?? ""),
+    apiFormat,
     priority: Number(formData.get("priority") ?? 0),
     weight: Number(formData.get("weight") ?? 1),
     supportsTools:
@@ -805,7 +822,7 @@ export async function attachMyProviderModelRoute(
     .limit(1);
   if (!model) throw new Error("模型不存在");
   const [provider] = await db
-    .select({ id: S().providers.id })
+    .select({ id: S().providers.id, protocol: S().providers.protocol })
     .from(S().providers)
     .where(and(eq(S().providers.id, providerId), eq(S().providers.ownerUserId, user.id)))
     .limit(1);
@@ -821,11 +838,17 @@ export async function attachMyProviderModelRoute(
     .limit(1);
   if (existing) return { status: "exists" };
 
+  const apiFormat = await resolveModelRouteApiFormat(
+    db,
+    modelId,
+    provider.protocol as ProviderProtocol,
+  );
   await db.insert(S().routes).values({
     ownerUserId: user.id,
     modelId,
     providerId,
     upstreamModelName,
+    apiFormat,
     enabled: true,
   });
   revalidatePath("/panel", "layout");
@@ -843,11 +866,26 @@ export async function updateMyRoute(id: string, formData: FormData) {
     .from(S().providers)
     .where(and(eq(S().providers.id, providerId), eq(S().providers.ownerUserId, user.id)));
   if (!provider) throw new Error("服务商不存在");
+  const [route] = await db
+    .select({ modelId: S().routes.modelId })
+    .from(S().routes)
+    .where(and(eq(S().routes.id, id), eq(S().routes.ownerUserId, user.id)))
+    .limit(1);
+  if (!route) throw new Error("路由不存在");
+  const apiFormat = formData.has("apiFormat")
+    ? await resolveModelRouteApiFormat(
+        db,
+        route.modelId as string,
+        provider.protocol as ProviderProtocol,
+        String(formData.get("apiFormat") ?? ""),
+      )
+    : undefined;
   await db
     .update(S().routes)
     .set({
       providerId,
       upstreamModelName: String(formData.get("upstreamModelName") ?? ""),
+      ...(apiFormat ? { apiFormat } : {}),
       priority: Number(formData.get("priority") ?? 0),
       weight: Number(formData.get("weight") ?? 1),
       ...(formData.has("supportsToolsPresent") || formData.has("supportsTools")
@@ -905,6 +943,7 @@ export async function testMyRoute(routeId: string): Promise<ProbeResult> {
   const providerId = provider.id as string;
   const result = await probeProviderKey({
     protocol: provider.protocol as ProviderProtocol,
+    apiFormat: route.apiFormat as RouteApiFormat,
     baseUrl: provider.baseUrl,
     apiKey,
     upstreamModelName: route.upstreamModelName as string,

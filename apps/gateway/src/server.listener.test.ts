@@ -43,12 +43,18 @@ describe("Gateway listener", () => {
     }
   });
 
-  it("客户端断开 SSE 后中止 handler 请求并取消上游流", async () => {
+  it.each([
+    ["v1ChatCompletions", "/v1/chat/completions"],
+    ["v1Responses", "/v1/responses"],
+    ["v1Messages", "/v1/messages"],
+    ["v1GeminiGenerateContent", "/v1beta/models/gemini-2.5-pro:generateContent"],
+    ["v1GeminiStreamGenerateContent", "/v1beta/models/gemini-2.5-pro:streamGenerateContent"],
+  ] as const)("%s 客户端断开后中止 handler 请求并取消上游流", async (handlerName, path) => {
     let handlerSignal: AbortSignal | undefined;
     let streamCancelled = false;
     const app = buildServer({
       handlers: {
-        apiChat: async (request) => {
+        [handlerName]: async (request: Request) => {
           handlerSignal = request.signal;
           return new Response(
             new ReadableStream<Uint8Array>({
@@ -70,7 +76,7 @@ describe("Gateway listener", () => {
     let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
 
     try {
-      const response = await fetch(`${address}/api/chat`, {
+      const response = await fetch(`${address}${path}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: "{}",

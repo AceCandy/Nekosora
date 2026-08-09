@@ -8,9 +8,13 @@ import { probeProviderKey, fetchUpstreamModels, type ProbeResult, type UpstreamM
 import { getProbeHeaders } from "@/lib/system-settings/ua";
 import { normalizeBaseUrl } from "@/lib/providers/defaults";
 import { requireOwnedProvider } from "@/lib/providers/ownership";
+import {
+  resolveCatalogRouteApiFormat,
+  resolveModelRouteApiFormat,
+} from "@/lib/providers/route-api-format";
 import { recordSuccess, recordFailure } from "@/lib/circuit-breaker";
 import { pickWeightedKey } from "@/lib/providers/keys";
-import type { ProviderProtocol } from "@/db/types";
+import type { ProviderProtocol, RouteApiFormat } from "@/db/types";
 import type { ProviderKeyResult } from "@/db/schema/pg";
 import { requireAdmin } from "@/lib/session";
 import { pickDisplayName } from "@/lib/model-catalog";
@@ -72,6 +76,7 @@ async function assertRouteManageable(db: unknown, routeId: string, adminId: stri
       modelId: S().routes.modelId,
       providerId: S().routes.providerId,
       upstreamModelName: S().routes.upstreamModelName,
+      apiFormat: S().routes.apiFormat,
     })
     .from(S().routes)
     .where(eq(S().routes.id, routeId))
@@ -86,6 +91,7 @@ async function assertRouteManageable(db: unknown, routeId: string, adminId: stri
     modelId: string;
     providerId: string;
     upstreamModelName: string;
+    apiFormat: RouteApiFormat;
   };
 }
 
@@ -463,6 +469,7 @@ export async function testRoute(routeId: string): Promise<ProbeResult> {
   const providerId = provider.id as string;
   const result = await probeProviderKey({
     protocol: provider.protocol as ProviderProtocol,
+    apiFormat: route.apiFormat,
     baseUrl: provider.baseUrl,
     apiKey,
     upstreamModelName: route.upstreamModelName as string,
@@ -557,13 +564,20 @@ export async function createModel(formData: FormData) {
   const nextSort = (maxRow?.maxSort ?? -1) + 1;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await db.transaction(async (tx: any) => {
+    let provider: Awaited<ReturnType<typeof requireOwnedProvider>> | undefined;
     if (providerId) {
-      await requireOwnedProvider(tx, providerId, admin.id);
+      provider = await requireOwnedProvider(tx, providerId, admin.id);
     }
     await tx.insert(S().models).values({ ownerUserId: admin.id, visibility, name, displayName, catalogId, enabled: true, systemPrompt: String(formData.get("systemPrompt") ?? "") || null, description: String(formData.get("description") ?? "") || null, sortOrder: nextSort });
     const [created] = await tx.select({ id: S().models.id }).from(S().models).where(and(eq(S().models.ownerUserId, admin.id), eq(S().models.name, name))).limit(1);
-    if (providerId && upstreamModelName) {
-      await tx.insert(S().routes).values({ ownerUserId: admin.id, modelId: created.id, providerId, upstreamModelName, enabled: true });
+    if (provider && upstreamModelName) {
+      const apiFormat = await resolveCatalogRouteApiFormat(
+        tx,
+        catalogId,
+        provider.protocol,
+        String(formData.get("apiFormat") ?? ""),
+      );
+      await tx.insert(S().routes).values({ ownerUserId: admin.id, modelId: created.id, providerId, upstreamModelName, apiFormat, enabled: true });
     }
   });
   revalidatePath("/admin", "layout");
@@ -582,12 +596,19 @@ export async function createRoute(modelIdOrFormData: string | FormData, formData
   const providerId = String(fd.get("providerId") ?? "");
   // 路由归属模型:校验模型存在且 admin 有管理权(public 或自己的)。
   const model = await assertModelManageable(db, modelId, admin.id);
-  await requireOwnedProvider(db, providerId, admin.id);
+  const provider = await requireOwnedProvider(db, providerId, admin.id);
+  const apiFormat = await resolveModelRouteApiFormat(
+    db,
+    modelId,
+    provider.protocol,
+    String(fd.get("apiFormat") ?? ""),
+  );
   await db.insert(S().routes).values({
     ownerUserId: model.ownerUserId, // 跟随所属 model owner
     modelId,
     providerId,
     upstreamModelName: String(fd.get("upstreamModelName") ?? ""),
+    apiFormat,
     priority: Number(fd.get("priority") ?? 0),
     weight: Number(fd.get("weight") ?? 1),
     supportsTools: !fd.has("supportsToolsPresent") || fd.get("supportsTools") === "on",
@@ -605,7 +626,7 @@ export async function attachProviderModelRoute(
   const admin = await requireAdmin();
   const db = await getDb();
   const model = await assertModelManageable(db, modelId, admin.id);
-  await requireOwnedProvider(db, providerId, admin.id);
+  const provider = await requireOwnedProvider(db, providerId, admin.id);
   const [existing] = await db
     .select({ id: S().routes.id })
     .from(S().routes)
@@ -617,11 +638,13 @@ export async function attachProviderModelRoute(
     .limit(1);
   if (existing) return { status: "exists" };
 
+  const apiFormat = await resolveModelRouteApiFormat(db, modelId, provider.protocol);
   await db.insert(S().routes).values({
     ownerUserId: model.ownerUserId,
     modelId,
     providerId,
     upstreamModelName,
+    apiFormat,
     enabled: true,
   });
   revalidatePath("/admin", "layout");
@@ -706,13 +729,22 @@ export async function updateRoute(id: string, formData: FormData) {
   const admin = await requireAdmin();
   const db = await getDb();
   const providerId = String(formData.get("providerId") ?? "");
-  await assertRouteManageable(db, id, admin.id);
-  await requireOwnedProvider(db, providerId, admin.id);
+  const route = await assertRouteManageable(db, id, admin.id);
+  const provider = await requireOwnedProvider(db, providerId, admin.id);
+  const apiFormat = formData.has("apiFormat")
+    ? await resolveModelRouteApiFormat(
+        db,
+        route.modelId,
+        provider.protocol,
+        String(formData.get("apiFormat") ?? ""),
+      )
+    : undefined;
   await db
     .update(S().routes)
     .set({
       providerId,
       upstreamModelName: String(formData.get("upstreamModelName") ?? ""),
+      ...(apiFormat ? { apiFormat } : {}),
       priority: Number(formData.get("priority") ?? 0),
       weight: Number(formData.get("weight") ?? 1),
       ...(formData.has("supportsToolsPresent") || formData.has("supportsTools")

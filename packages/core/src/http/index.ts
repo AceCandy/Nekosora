@@ -1,6 +1,12 @@
 export { GET as v1Models } from "./v1/models";
 export { apiErrorLocalized, ErrorCode } from "../lib/errors";
 export { POST as v1ChatCompletions } from "./v1/chat-completions";
+export { POST as v1Responses } from "./v1/responses";
+export { POST as v1Messages } from "./v1/messages";
+export {
+  generateContent as v1GeminiGenerateContent,
+  streamGenerateContent as v1GeminiStreamGenerateContent,
+} from "./v1/gemini-generate-content";
 export { POST as v1ImageGenerations } from "./v1/image-generations";
 export { POST as v1AudioSpeech } from "./v1/audio-speech";
 export { POST as v1AudioTranscriptions } from "./v1/audio-transcriptions";

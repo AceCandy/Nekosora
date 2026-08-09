@@ -143,9 +143,11 @@ async function resolveModelRoutes(
     (row: { route: Record<string, unknown>; provider: Record<string, unknown> }) => ({
       modelName: model.name,
       upstreamModelName: row.route.upstreamModelName as string,
-      // 协议归属 provider,路由不再单独存。
+      apiFormat: row.route.apiFormat as ResolvedRoute["apiFormat"],
+      // Provider protocol 只保留为连接类型；普通聊天 wire format 读取 apiFormat。
       protocol: row.provider.protocol as ResolvedRoute["protocol"],
       provider: toResolvedProvider(row.provider),
+      headers: (row.route.headersJson as Record<string, string>) ?? undefined,
       priority: row.route.priority as number,
       weight: row.route.weight as number,
       source,

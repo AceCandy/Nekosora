@@ -29,6 +29,7 @@ import type {
   ConversationShareRenderStyleSnapshot,
   MessageVersionSelections,
   MemoryExtractionMessage,
+  RouteApiFormat,
 } from "./types";
 
 // ===========================================================================
@@ -148,6 +149,15 @@ export const providerProtocol = pgEnum("provider_protocol", [
   "openai-audio-tts",
 ]);
 export const modelVisibility = pgEnum("model_visibility", ["public", "private"]);
+export const routeApiFormat = pgEnum("route_api_format", [
+  "openai-chat",
+  "openai-responses",
+  "anthropic-messages",
+  "gemini-generate-content",
+  "openai-images",
+  "openai-audio-stt",
+  "openai-audio-tts",
+]);
 
 export const modelCatalog = pgTable(
   "model_catalog",
@@ -267,6 +277,7 @@ export const routes = pgTable(
       .notNull()
       .references(() => providers.id, { onDelete: "cascade" }),
     upstreamModelName: text("upstream_model_name").notNull(),
+    apiFormat: routeApiFormat("api_format").$type<RouteApiFormat>().notNull(),
     priority: integer("priority").notNull().default(0),
     weight: integer("weight").notNull().default(1),
     supportsTools: boolean("supports_tools").notNull().default(true),

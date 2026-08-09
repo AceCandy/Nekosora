@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { executeGateway } from "./engine";
 import type {
   AttemptTelemetry,
+  GatewayAdapterSelection,
   GatewayAttemptAdapter,
   GatewayBreakerPort,
   GatewayTelemetryPort,
@@ -34,7 +35,10 @@ function route(id: string, keys = [`key-${id}`], protocol: ResolvedRoute["protoc
 
 function harness(
   routes: ResolvedRoute[],
-  selectAdapter: (route: ResolvedRoute) => GatewayAttemptAdapter<Event, Result> | null,
+  selectAdapter: (route: ResolvedRoute) =>
+    | GatewayAttemptAdapter<Event, Result>
+    | GatewayAdapterSelection<Event, Result>
+    | null,
   abortSignal?: AbortSignal,
   options: {
     isToolUnsupported?: (error: unknown) => boolean;
@@ -298,6 +302,98 @@ describe("gateway execution engine", () => {
     expect(outcome).toMatchObject({ status: "success", route: { routeId: "b" } });
     expect(h.attempts.map((item) => item.status)).toEqual(["rejected", "success"]);
     expect(h.breaker.recordFailure).not.toHaveBeenCalled();
+  });
+
+  it("显式拒绝不读取 key、不调用 adapter，并继续后续 route", async () => {
+    const rejectedRoute = route("a");
+    Object.defineProperty(rejectedRoute.provider, "keys", {
+      get: () => {
+        throw new Error("rejected route must not read keys");
+      },
+    });
+    const calls: string[] = [];
+    const adapter: GatewayAttemptAdapter<Event, Result> = async function* ({ route: current }) {
+      calls.push(current.routeId);
+      return { value: { text: "ok" } };
+    };
+    const h = harness([rejectedRoute, route("b")], (current) => current.routeId === "a"
+      ? {
+          kind: "rejected",
+          error: {
+            code: "request.unsupported_parameter",
+            message: "Unsupported parameter: 'messages[0].role'.",
+            phase: "request",
+            httpStatus: 400,
+            details: { parameter: "messages[0].role" },
+          },
+        }
+      : { kind: "selected", adapter });
+
+    const { outcome } = await consume(h.generator);
+
+    expect(calls).toEqual(["b"]);
+    expect(h.attempts).toMatchObject([
+      { status: "rejected", error: { code: "request.unsupported_parameter" } },
+      { status: "success" },
+    ]);
+    expect(outcome).toMatchObject({ status: "success", route: { routeId: "b" } });
+    expect(h.breaker.recordFailure).not.toHaveBeenCalled();
+  });
+
+  it("全部 route 被拒绝时返回有序第一条确定性错误", async () => {
+    const h = harness([route("a"), route("b")], (current) => ({
+      kind: "rejected",
+      error: {
+        code: "request.unsupported_parameter",
+        message: `Unsupported parameter: '${current.routeId}'.`,
+        phase: "request",
+        httpStatus: 400,
+        details: { parameter: current.routeId },
+      },
+    }));
+
+    const { outcome } = await consume(h.generator);
+
+    expect(h.attempts.map((item) => item.status)).toEqual(["rejected", "rejected"]);
+    expect(outcome).toMatchObject({
+      status: "failed",
+      route: { routeId: "a" },
+      error: {
+        code: "request.unsupported_parameter",
+        message: "Unsupported parameter: 'a'.",
+        httpStatus: 400,
+        details: { parameter: "a" },
+      },
+    });
+    expect(h.breaker.recordFailure).not.toHaveBeenCalled();
+    expect(h.breaker.recordSuccess).not.toHaveBeenCalled();
+  });
+
+  it("存在真实 upstream attempt 时最终错误优先于 route rejection", async () => {
+    const adapter: GatewayAttemptAdapter<Event, Result> = async function* () {
+      throw Object.assign(new Error("real upstream failure"), { statusCode: 503 });
+    };
+    const h = harness([route("a"), route("b")], (current) => current.routeId === "a"
+      ? {
+          kind: "rejected",
+          error: {
+            code: "request.unsupported_parameter",
+            message: "Unsupported parameter: 'messages[0].role'.",
+            phase: "request",
+            httpStatus: 400,
+          },
+        }
+      : { kind: "selected", adapter });
+
+    const { outcome } = await consume(h.generator);
+
+    expect(h.attempts.map((item) => item.status)).toEqual(["rejected", "failed"]);
+    expect(outcome).toMatchObject({
+      status: "failed",
+      route: { routeId: "b" },
+      error: { code: "upstream_error", message: "real upstream failure", httpStatus: 503 },
+    });
+    expect(h.breaker.recordFailure).toHaveBeenCalledOnce();
   });
 
   it("原始凭据和 route 地址不会进入 attempt 或最终 outcome", async () => {

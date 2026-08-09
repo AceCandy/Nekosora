@@ -6,7 +6,12 @@
  *
  * 加新 provider 协议 = 写一个 adapter,Chat 和网关同时受益。
  */
-import type { ProviderProtocol, ModelCapabilities, ReasoningLevel } from "@/db/types";
+import type {
+  ProviderProtocol,
+  RouteApiFormat,
+  ModelCapabilities,
+  ReasoningLevel,
+} from "@/db/types";
 import type { WeightedKey } from "./keys";
 
 /** 上游 provider 的运行时配置(从数据库解密后得到)。 */
@@ -31,8 +36,13 @@ export interface ResolvedRoute {
   modelName: string;
   /** 上游实际模型名。 */
   upstreamModelName: string;
+  /** 具体 route 使用的上游 wire protocol；真实数据库 route 始终提供。 */
+  apiFormat?: RouteApiFormat;
+  /** Provider 连接类型，保留给默认值、兼容 Chat 与媒体 adapter 使用。 */
   protocol: ProviderProtocol;
   provider: ResolvedProvider;
+  /** route 级自定义 headers，优先于 Provider headers，但不能覆盖认证头。 */
+  headers?: Record<string, string>;
   /** 该路由的优先级(用于分组);weight 用于组内加权。 */
   priority: number;
   weight: number;
@@ -62,7 +72,7 @@ export interface CallContext {
 
 /** IR 消息(OpenAI Chat Completions 的 messages 元素)。 */
 export interface IRMessage {
-  role: "system" | "user" | "assistant" | "tool";
+  role: "system" | "developer" | "user" | "assistant" | "tool";
   content: string | IRContentPart[];
   name?: string;
   tool_call_id?: string;
@@ -90,6 +100,8 @@ export interface IRRequest {
   max_tokens?: number;
   top_p?: number;
   tools?: IRToolDef[];
+  tool_choice?: IRToolChoice;
+  response_format?: IRResponseFormat;
   stop?: string | string[];
   /** 推理级别(off/low/medium/high);stream 层据此 + route.capabilities 翻译为 providerOptions。 */
   reasoning?: ReasoningLevel;
@@ -100,6 +112,21 @@ export interface IRRequest {
 export interface IRToolDef {
   type: "function";
   function: { name: string; description?: string; parameters?: unknown };
+}
+
+export type IRToolChoice = "auto" | "none" | "required" | {
+  type: "function";
+  function: { name: string };
+};
+
+export interface IRResponseFormat {
+  type: "json_schema";
+  json_schema: {
+    name: string;
+    description?: string;
+    schema: unknown;
+    strict?: boolean;
+  };
 }
 
 /** IR 用量(AI SDK v5 字段名)。 */
@@ -117,8 +144,11 @@ export type StreamEvent =
   | { type: "text-delta"; text: string }
   | { type: "text-retract"; text: string }
   | { type: "reasoning-delta"; text: string }
+  | { type: "tool-call-start"; toolCallId: string; toolName: string }
+  | { type: "tool-call-delta"; toolCallId: string; delta: string }
+  | { type: "tool-call-end"; toolCallId: string }
   | { type: "tool-call"; toolCallId: string; toolName: string; args: unknown }
   | { type: "tool-result"; toolCallId: string; toolName: string; result: unknown; isError: boolean }
   | { type: "usage"; usage: IRUsage }
   | { type: "finish"; finishReason: string; usage: IRUsage }
-  | { type: "error"; error: string; code?: string };
+  | { type: "error"; error: string; code?: string; details?: Record<string, unknown> };

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockData = vi.hoisted(() => ({
   models: [] as Record<string, unknown>[],
-  catalogs: [{ id: "catalog-chat", canonicalModelId: "__generic_chat__", aliases: [], enabled: true }],
+  catalogs: [{ id: "catalog-chat", name: "Chat", canonicalModelId: "__generic_chat__", modelType: "chat", aliases: [], enabled: true }],
   providers: [] as Record<string, unknown>[],
   routes: [] as Record<string, unknown>[],
   user: { id: "admin-a", role: "admin" },
@@ -56,7 +56,7 @@ vi.mock("@/lib/infra/db", () => {
         return query;
       },
       then(resolve: (value: unknown[]) => unknown, reject: (reason: unknown) => unknown) {
-        if (fields && Object.values(fields).some((field) => (field as { type?: string }).type === "sql")) {
+        if (fields && Object.values(fields).some((field) => (field as { type?: string } | undefined)?.type === "sql")) {
           const aggregate = Object.fromEntries(
             Object.entries(fields).map(([key, field]) => [
               key,
@@ -90,6 +90,7 @@ vi.mock("@/lib/infra/db", () => {
       sortOrder: "sortOrder",
       createdAt: "createdAt",
       name: "name",
+      catalogId: "catalogId",
     },
     modelCatalog: {
       __table: "modelCatalog",
@@ -97,6 +98,7 @@ vi.mock("@/lib/infra/db", () => {
       enabled: "enabled",
       sortOrder: "sortOrder",
       name: "name",
+      modelType: "modelType",
     },
     providers: {
       __table: "providers",
@@ -113,6 +115,7 @@ vi.mock("@/lib/infra/db", () => {
       modelId: "modelId",
       providerId: "providerId",
       upstreamModelName: "upstreamModelName",
+      apiFormat: "apiFormat",
     },
   };
 
@@ -173,7 +176,7 @@ vi.mock("@/lib/infra/db", () => {
   return { getDb: async () => db, getSchema: () => schema, isPg: false };
 });
 
-import { attachMyProviderModelRoute, createMyModel, createMyRoute, reorderMyModels, updateMyModel, updateMyRoute, checkMyProviderHealth, testMyProviderModel, testMyKeyDirect, getBindableModels } from "./actions";
+import { attachMyProviderModelRoute, createMyModel, createMyRoute, reorderMyModels, updateMyModel, updateMyRoute, checkMyProviderHealth, testMyProviderModel, testMyKeyDirect, testMyRoute, getBindableModels } from "./actions";
 import { probeProviderKey } from "@/lib/providers/probe";
 import { parseKeyBundle, pickWeightedKey } from "@/lib/providers/keys";
 
@@ -184,16 +187,16 @@ beforeEach(() => {
   vi.mocked(probeProviderKey).mockReset();
   vi.mocked(parseKeyBundle).mockReset();
   mockData.models = [
-    { id: "public-a", name: "public-a", ownerUserId: "admin-a", visibility: "public", sortOrder: 0 },
-    { id: "public-b", name: "public-b", ownerUserId: "admin-a", visibility: "public", sortOrder: 1 },
-    { id: "private-a", name: "private-a", ownerUserId: "admin-a", visibility: "private", sortOrder: 5 },
-    { id: "private-b", name: "private-b", ownerUserId: "user-b", visibility: "private", sortOrder: 2 },
+    { id: "public-a", name: "public-a", ownerUserId: "admin-a", visibility: "public", sortOrder: 0, catalogId: "catalog-chat" },
+    { id: "public-b", name: "public-b", ownerUserId: "admin-a", visibility: "public", sortOrder: 1, catalogId: "catalog-chat" },
+    { id: "private-a", name: "private-a", ownerUserId: "admin-a", visibility: "private", sortOrder: 5, catalogId: "catalog-chat" },
+    { id: "private-b", name: "private-b", ownerUserId: "user-b", visibility: "private", sortOrder: 2, catalogId: "catalog-chat" },
   ];
 });
 
 describe("attachMyProviderModelRoute", () => {
   beforeEach(() => {
-    mockData.providers = [{ id: "provider-a", ownerUserId: "admin-a" }];
+    mockData.providers = [{ id: "provider-a", ownerUserId: "admin-a", protocol: "openai" }];
   });
 
   it("首次绑定创建路由，重复绑定返回 exists 且不重复写入", async () => {
@@ -207,6 +210,7 @@ describe("attachMyProviderModelRoute", () => {
       modelId: "private-a",
       providerId: "provider-a",
       upstreamModelName: "upstream-a",
+      apiFormat: "openai-chat",
     })]);
   });
 
@@ -227,7 +231,7 @@ describe("attachMyProviderModelRoute", () => {
 
 describe("个人路由工具能力", () => {
   beforeEach(() => {
-    mockData.providers = [{ id: "provider-a", ownerUserId: "admin-a" }];
+    mockData.providers = [{ id: "provider-a", ownerUserId: "admin-a", protocol: "openai" }];
   });
 
   it("创建和更新时保存显式工具能力", async () => {
@@ -238,7 +242,10 @@ describe("个人路由工具能力", () => {
     createData.set("supportsTools", "on");
 
     await createMyRoute("private-a", createData);
-    expect(mockData.routes[0]).toEqual(expect.objectContaining({ supportsTools: true }));
+    expect(mockData.routes[0]).toEqual(expect.objectContaining({
+      supportsTools: true,
+      apiFormat: "openai-chat",
+    }));
 
     const updateData = new FormData();
     updateData.set("providerId", "provider-a");
@@ -289,6 +296,51 @@ describe("个人路由工具能力", () => {
     await createMyRoute("private-a", formData);
 
     expect(mockData.routes[0]).toEqual(expect.objectContaining({ supportsTools: false }));
+  });
+
+  it("保存显式格式，更新省略时保持原值", async () => {
+    const createData = new FormData();
+    createData.set("providerId", "provider-a");
+    createData.set("upstreamModelName", "upstream-a");
+    createData.set("apiFormat", "openai-responses");
+    await createMyRoute("private-a", createData);
+
+    const updateData = new FormData();
+    updateData.set("providerId", "provider-a");
+    updateData.set("upstreamModelName", "upstream-b");
+    await updateMyRoute(mockData.routes[0].id as string, updateData);
+
+    expect(mockData.routes[0]).toEqual(expect.objectContaining({ apiFormat: "openai-responses" }));
+  });
+});
+
+describe("testMyRoute", () => {
+  it("按 route apiFormat 探测具体模型", async () => {
+    mockData.providers = [{
+      id: "provider-a",
+      ownerUserId: "admin-a",
+      protocol: "openai-compatible",
+      baseUrl: "https://provider.example/v1",
+      apiKeysEnc: "encrypted",
+    }];
+    mockData.routes = [{
+      id: "route-a",
+      ownerUserId: "admin-a",
+      providerId: "provider-a",
+      upstreamModelName: "demo-model",
+      apiFormat: "anthropic-messages",
+    }];
+    vi.mocked(parseKeyBundle).mockReturnValue([{ key: "secret", weight: 1 }]);
+    vi.mocked(pickWeightedKey).mockReturnValue("secret");
+    vi.mocked(probeProviderKey).mockResolvedValue({ ok: true, latencyMs: 1 });
+
+    await expect(testMyRoute("route-a")).resolves.toEqual({ ok: true, latencyMs: 1 });
+    expect(probeProviderKey).toHaveBeenCalledWith(expect.objectContaining({
+      protocol: "openai-compatible",
+      apiFormat: "anthropic-messages",
+      upstreamModelName: "demo-model",
+      apiKey: "secret",
+    }));
   });
 });
 

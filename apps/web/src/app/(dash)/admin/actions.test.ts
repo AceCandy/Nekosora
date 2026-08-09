@@ -82,6 +82,7 @@ vi.mock("@/lib/infra/db", () => {
       ownerUserId: "ownerUserId",
       visibility: "visibility",
       name: "name",
+      catalogId: "catalogId",
       sortOrder: "sortOrder",
     },
     modelCatalog: {
@@ -89,11 +90,13 @@ vi.mock("@/lib/infra/db", () => {
       id: "id",
       name: "name",
       canonicalModelId: "canonicalModelId",
+      modelType: "modelType",
     },
     providers: {
       __table: "providers",
       id: "id",
       ownerUserId: "ownerUserId",
+      protocol: "protocol",
     },
     routes: {
       __table: "routes",
@@ -102,6 +105,7 @@ vi.mock("@/lib/infra/db", () => {
       modelId: "modelId",
       providerId: "providerId",
       upstreamModelName: "upstreamModelName",
+      apiFormat: "apiFormat",
     },
   };
 
@@ -161,12 +165,12 @@ import {
 beforeEach(() => {
   vi.clearAllMocks();
   mockData.models = [
-    { id: "private-a", ownerUserId: "admin-a", visibility: "private", name: "private-a" },
-    { id: "private-b", ownerUserId: "user-b", visibility: "private", name: "private-b" },
-    { id: "public-b", ownerUserId: "user-b", visibility: "public", name: "public-b" },
+    { id: "private-a", ownerUserId: "admin-a", visibility: "private", name: "private-a", catalogId: "catalog-chat" },
+    { id: "private-b", ownerUserId: "user-b", visibility: "private", name: "private-b", catalogId: "catalog-chat" },
+    { id: "public-b", ownerUserId: "user-b", visibility: "public", name: "public-b", catalogId: "catalog-chat" },
   ];
-  mockData.catalogs = [];
-  mockData.providers = [{ id: "provider-a", ownerUserId: "admin-a" }];
+  mockData.catalogs = [{ id: "catalog-chat", name: "Chat", canonicalModelId: "__generic_chat__", modelType: "chat" }];
+  mockData.providers = [{ id: "provider-a", ownerUserId: "admin-a", protocol: "openai" }];
   mockData.routes = [];
 });
 
@@ -174,6 +178,7 @@ describe("createModel", () => {
   it("允许使用自己的服务商创建模型和初始路由", async () => {
     const formData = new FormData();
     formData.set("name", "model-new");
+    formData.set("catalogId", "catalog-chat");
     formData.set("providerId", "provider-a");
     formData.set("upstreamModelName", "upstream-a");
 
@@ -185,6 +190,7 @@ describe("createModel", () => {
       modelId: model?.id,
       providerId: "provider-a",
       upstreamModelName: "upstream-a",
+      apiFormat: "openai-chat",
     }));
   });
 
@@ -192,6 +198,7 @@ describe("createModel", () => {
     mockData.providers = [{ id: "provider-b", ownerUserId: "admin-b" }];
     const formData = new FormData();
     formData.set("name", "model-new");
+    formData.set("catalogId", "catalog-chat");
     formData.set("providerId", "provider-b");
     formData.set("upstreamModelName", "upstream-b");
 
@@ -204,6 +211,7 @@ describe("createModel", () => {
     mockData.providers = [{ id: "provider-b", ownerUserId: "admin-b" }];
     const formData = new FormData();
     formData.set("name", "model-new");
+    formData.set("catalogId", "catalog-chat");
     formData.set("providerId", "provider-b");
 
     await expect(createModel(formData)).rejects.toThrow("服务商不存在");
@@ -229,6 +237,7 @@ describe("createRoute", () => {
       modelId,
       providerId: "provider-a",
       upstreamModelName: "upstream-a",
+      apiFormat: "openai-chat",
       supportsTools: true,
     }));
   });
@@ -252,6 +261,27 @@ describe("createRoute", () => {
     await createRoute("private-a", formData);
 
     expect(mockData.routes[0]).toEqual(expect.objectContaining({ supportsTools: false }));
+  });
+
+  it("保存显式选择的上游 API 格式", async () => {
+    const formData = new FormData();
+    formData.set("providerId", "provider-a");
+    formData.set("upstreamModelName", "upstream-a");
+    formData.set("apiFormat", "openai-responses");
+
+    await createRoute("private-a", formData);
+
+    expect(mockData.routes[0]).toEqual(expect.objectContaining({ apiFormat: "openai-responses" }));
+  });
+
+  it("拒绝给 chat 模型选择媒体 API 格式", async () => {
+    const formData = new FormData();
+    formData.set("providerId", "provider-a");
+    formData.set("upstreamModelName", "upstream-a");
+    formData.set("apiFormat", "openai-images");
+
+    await expect(createRoute("private-a", formData)).rejects.toThrow("上游 API 格式与模型类型不匹配");
+    expect(mockData.routes).toHaveLength(0);
   });
 
   it("拒绝使用其他管理员的服务商", async () => {
@@ -278,6 +308,7 @@ describe("updateRoute", () => {
       upstreamModelName: "upstream-old",
       priority: 0,
       weight: 1,
+      apiFormat: "openai-chat",
     }];
     const formData = new FormData();
     formData.set("providerId", "provider-a");
@@ -323,6 +354,7 @@ describe("updateRoute", () => {
       providerId: "provider-a",
       upstreamModelName: "upstream-a",
       supportsTools: true,
+      apiFormat: "openai-chat",
     }];
     const formData = new FormData();
     formData.set("providerId", "provider-a");
@@ -330,7 +362,29 @@ describe("updateRoute", () => {
 
     await updateRoute("route-a", formData);
 
-    expect(mockData.routes[0]).toEqual(expect.objectContaining({ supportsTools: true }));
+    expect(mockData.routes[0]).toEqual(expect.objectContaining({
+      supportsTools: true,
+      apiFormat: "openai-chat",
+    }));
+  });
+
+  it("显式提供格式时更新 route", async () => {
+    mockData.routes = [{
+      id: "route-a",
+      ownerUserId: "admin-a",
+      modelId: "private-a",
+      providerId: "provider-a",
+      upstreamModelName: "upstream-a",
+      apiFormat: "openai-chat",
+    }];
+    const formData = new FormData();
+    formData.set("providerId", "provider-a");
+    formData.set("upstreamModelName", "upstream-a");
+    formData.set("apiFormat", "anthropic-messages");
+
+    await updateRoute("route-a", formData);
+
+    expect(mockData.routes[0]).toEqual(expect.objectContaining({ apiFormat: "anthropic-messages" }));
   });
 
   it("拒绝改用其他管理员的服务商", async () => {
@@ -375,12 +429,14 @@ describe("testRoute", () => {
       modelId,
       providerId,
       upstreamModelName: `upstream-${modelId}`,
+      apiFormat: "openai-responses",
     }];
 
     await expect(testRoute(`route-${modelId}`)).resolves.toEqual({ ok: true, latencyMs: 1 });
     expect(mockFunctions.probeProviderKey).toHaveBeenCalledWith(expect.objectContaining({
       apiKey: "secret",
       upstreamModelName: `upstream-${modelId}`,
+      apiFormat: "openai-responses",
     }));
     expect(mockFunctions.recordSuccess).toHaveBeenCalledWith(providerId);
     expect(mockFunctions.recordFailure).not.toHaveBeenCalled();

@@ -64,6 +64,50 @@ describe("Gateway HTTP adapter", () => {
     await app.close();
   });
 
+  it.each([
+    [
+      "v1GeminiGenerateContent",
+      "/v1beta/models/publishers/google/models/gemini-2.5-pro:generateContent",
+    ],
+    [
+      "v1GeminiStreamGenerateContent",
+      "/v1beta/models/publishers/google/models/gemini-2.5-pro:streamGenerateContent",
+    ],
+  ] as const)("%s 捕获完整 Gemini model 路径", async (handlerName, url) => {
+    const handler = vi.fn(async (request: Request, params: Readonly<Record<string, string>>) => {
+      expect(params.model).toBe("publishers/google/models/gemini-2.5-pro");
+      expect(await request.json()).toEqual({ contents: [{ parts: [{ text: "hello" }] }] });
+      return Response.json({ ok: true });
+    });
+    const app = withHandler(handlerName, handler);
+
+    const response = await app.inject({
+      method: "POST",
+      url,
+      headers: { "content-type": "application/json" },
+      payload: { contents: [{ parts: [{ text: "hello" }] }] },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(handler).toHaveBeenCalledOnce();
+    await app.close();
+  });
+
+  it("Gemini 未知操作不进入协议 handler", async () => {
+    const handler = vi.fn(async () => Response.json({ ok: true }));
+    const app = withHandler("v1GeminiGenerateContent", handler);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1beta/models/gemini-2.5-pro:unknownOperation",
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(handler).not.toHaveBeenCalled();
+    await app.close();
+  });
+
   it("保留请求头、原始 JSON 与响应状态", async () => {
     const app = withHandler("v1ChatCompletions", async (request) => {
       expect(request.headers.get("authorization")).toBe("Bearer sk-test");

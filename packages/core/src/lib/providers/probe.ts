@@ -24,7 +24,7 @@ import { buildLanguageModelWithKey } from "@/lib/providers/registry";
 import { isKeyAuthError } from "@/lib/stream";
 import { redactErrorMessage } from "@/lib/redaction";
 import type { ResolvedRoute } from "@/lib/providers/types";
-import type { ProviderProtocol } from "@/db/types";
+import type { ProviderProtocol, RouteApiFormat } from "@/db/types";
 
 /** 探测结果。ok=false 时 errorKind 区分认证/网络/未知,供 UI 分类展示。 */
 export interface ProbeResult {
@@ -162,6 +162,7 @@ function buildKeyAuthRequest(
  */
 export async function probeProviderKey(opts: {
   protocol: ProviderProtocol;
+  apiFormat?: RouteApiFormat;
   baseUrl: string;
   apiKey: string;
   /** 传入则测试该具体模型可用性;缺省只验证 key + baseUrl + 协议鉴权。 */
@@ -173,13 +174,7 @@ export async function probeProviderKey(opts: {
     return { ok: false, error: "缺少接口地址", errorKind: "unknown" };
   }
   if (upstreamModelName) {
-    return probeModelAvailability(opts as {
-      protocol: ProviderProtocol;
-      baseUrl: string;
-      apiKey: string;
-      upstreamModelName: string;
-      headers?: Record<string, string>;
-    });
+    return probeModelAvailability({ ...opts, upstreamModelName });
   }
   return probeKeyAuth(opts);
 }
@@ -190,17 +185,19 @@ export async function probeProviderKey(opts: {
  */
 async function probeModelAvailability(opts: {
   protocol: ProviderProtocol;
+  apiFormat?: RouteApiFormat;
   baseUrl: string;
   apiKey: string;
   upstreamModelName: string;
   headers?: Record<string, string>;
 }): Promise<ProbeResult> {
-  const { protocol, baseUrl, apiKey, headers, upstreamModelName } = opts;
+  const { protocol, apiFormat, baseUrl, apiKey, headers, upstreamModelName } = opts;
   // 构造一次性 ResolvedRoute(mock),复用 registry 的协议构建逻辑。
   const route: ResolvedRoute = {
     modelName: "__probe__",
     upstreamModelName,
     protocol,
+    apiFormat,
     provider: {
       id: "__probe__",
       name: "__probe__",
@@ -239,11 +236,16 @@ async function probeModelAvailability(opts: {
       errorKind,
     };
   }
+  const providerOptions = apiFormat === "openai-responses"
+    ? { openai: { store: false } }
+    : undefined;
   try {
     await generateText({
       model,
       prompt: "hi",
       maxOutputTokens: 1,
+      maxRetries: 0,
+      providerOptions,
     });
     return { ok: true, latencyMs: Date.now() - startedAt, mode: "non-stream" };
   } catch (err) {
@@ -258,7 +260,13 @@ async function probeModelAvailability(opts: {
     }
     try {
       let streamError: unknown;
-      const result = streamText({ model, prompt: "hi", maxOutputTokens: 8 });
+      const result = streamText({
+        model,
+        prompt: "hi",
+        maxOutputTokens: 8,
+        maxRetries: 0,
+        providerOptions,
+      });
       await result.consumeStream({ onError: (error) => { streamError = error; } });
       if (streamError) throw streamError;
       return {

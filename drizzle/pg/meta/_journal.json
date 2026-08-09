@@ -50,6 +50,13 @@
       "when": 1785672276514,
       "tag": "0006_daily_wonder_man",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786270137459,
+      "tag": "0007_modern_harrier",
+      "breakpoints": true
     }
   ]
 }

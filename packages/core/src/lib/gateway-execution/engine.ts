@@ -54,6 +54,8 @@ export async function* executeGateway<TEvent, TResult>(
   let firstTokenAt: number | undefined;
   let committed = false;
   let stopExecution = false;
+  let hadUpstreamAttempt = false;
+  let firstRejection: { error: SafeGatewayError; route: ResolvedRoute } | undefined;
   let activeAttempt: {
     route: ResolvedRoute;
     apiKey: string;
@@ -78,15 +80,22 @@ export async function* executeGateway<TEvent, TResult>(
         return outcome;
       }
 
-      const adapter = options.selectAdapter(route);
+      const selection = options.selectAdapter(route);
+      const rejectedError = selection && typeof selection === "object" && "kind" in selection && selection.kind === "rejected"
+        ? selection.error
+        : null;
+      const adapter = selection && typeof selection === "object" && "kind" in selection
+        ? selection.kind === "selected" ? selection.adapter : null
+        : selection;
       if (!adapter) {
         attempt += 1;
         const now = Date.now();
-        const error: SafeGatewayError = {
+        const error: SafeGatewayError = rejectedError ?? {
           code: "protocol_not_supported",
           message: `协议 ${route.protocol} 不支持操作 ${options.operation}`,
           phase: "routing",
         };
+        firstRejection ??= { error, route };
         await safeTelemetry(() => options.telemetry.recordAttempt({
           executionId,
           attempt,
@@ -107,6 +116,7 @@ export async function* executeGateway<TEvent, TResult>(
         options.maxKeyAttempts ?? DEFAULT_MAX_KEY_ATTEMPTS,
       );
       for (let keyIndex = 0; keyIndex < keys.length; keyIndex += 1) {
+        hadUpstreamAttempt = true;
         const apiKey = keys[keyIndex].key;
         const attemptStartedAt = Date.now();
         attempt += 1;
@@ -266,11 +276,20 @@ export async function* executeGateway<TEvent, TResult>(
       if (stopExecution) break;
     }
 
-    outcome ??= failedOutcome(executionId, {
-      code: "no_route",
-      message: "没有可用路由",
-      phase: "routing",
-    }, committed);
+    if (!hadUpstreamAttempt && firstRejection) {
+      outcome = failedOutcome(
+        executionId,
+        firstRejection.error,
+        committed,
+        snapshotRoute(firstRejection.route),
+      );
+    } else {
+      outcome ??= failedOutcome(executionId, {
+        code: "no_route",
+        message: "没有可用路由",
+        phase: "routing",
+      }, committed);
+    }
     return outcome;
   } finally {
     outcome ??= options.abortSignal?.aborted
@@ -375,6 +394,7 @@ function snapshotRoute(route: import("@/lib/providers/types").ResolvedRoute): Ga
   return {
     modelName: route.modelName,
     upstreamModelName: route.upstreamModelName,
+    apiFormat: route.apiFormat,
     protocol: route.protocol,
     provider: { id: route.provider.id, name: route.provider.name },
     priority: route.priority,

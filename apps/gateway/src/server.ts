@@ -185,7 +185,12 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
     });
   });
 
+  const registeredRoutes = new Set<string>();
   for (const route of GATEWAY_ROUTES) {
+    const registrationKey = `${route.method} ${route.path}`;
+    if (registeredRoutes.has(registrationKey)) continue;
+    registeredRoutes.add(registrationKey);
+
     const multipartLimits = route.path === "/api/upload"
       ? { bodyLimit: MAX_UPLOAD_BODY_BYTES, fileSize: MAX_UPLOAD_FILE_BYTES }
       : route.path === "/v1/audio/transcriptions"
@@ -213,11 +218,27 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
           if (!reply.raw.writableEnded) abort();
         });
 
+        const params = (request.params ?? {}) as Record<string, string>;
+        let handlerName: GatewayHandlerName = route.handler;
+        if ("suffix" in route) {
+          const wildcard = params["*"] ?? "";
+          const matchedRoute = GATEWAY_ROUTES.find((candidate) =>
+            candidate.method === route.method
+            && candidate.path === route.path
+            && "suffix" in candidate
+            && wildcard.endsWith(candidate.suffix)
+          );
+          if (!matchedRoute || !("suffix" in matchedRoute)) return reply.callNotFound();
+
+          const model = wildcard.slice(0, -matchedRoute.suffix.length);
+          if (!model) return reply.callNotFound();
+          params.model = model;
+          delete params["*"];
+          handlerName = matchedRoute.handler;
+        }
+
         const fetchRequest = await toFetchRequest(request, abortController.signal);
-        const response = await handlers[route.handler](
-          fetchRequest,
-          (request.params ?? {}) as Record<string, string>,
-        );
+        const response = await handlers[handlerName](fetchRequest, params);
         return sendFetchResponse(reply, response);
       },
     });

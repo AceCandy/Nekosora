@@ -192,6 +192,54 @@ export type ProviderProtocol =
   | "openai" | "anthropic" | "gemini" | "openai-compatible"
   // P1-D:非 chat 协议族(图像生成 / 语音转写 / 语音合成,均 OpenAI 兼容格式)
   | "openai-images" | "openai-audio-stt" | "openai-audio-tts";
+export const ROUTE_API_FORMATS = [
+  "openai-chat",
+  "openai-responses",
+  "anthropic-messages",
+  "gemini-generate-content",
+  "openai-images",
+  "openai-audio-stt",
+  "openai-audio-tts",
+] as const;
+export type RouteApiFormat = (typeof ROUTE_API_FORMATS)[number];
+
+/** Provider 的连接类型只用于给新 route 选择兼容的默认 wire format。 */
+export function defaultRouteApiFormat(protocol: ProviderProtocol): RouteApiFormat {
+  switch (protocol) {
+    case "openai":
+    case "openai-compatible":
+      return "openai-chat";
+    case "anthropic":
+      return "anthropic-messages";
+    case "gemini":
+      return "gemini-generate-content";
+    default:
+      return protocol;
+  }
+}
+
+export function isChatRouteApiFormat(format: RouteApiFormat): boolean {
+  return format === "openai-chat"
+    || format === "openai-responses"
+    || format === "anthropic-messages"
+    || format === "gemini-generate-content";
+}
+
+/** 校验 route wire format 与模型类型相容；空值使用 Provider 的兼容默认格式。 */
+export function routeApiFormatForModel(
+  value: string | null | undefined,
+  protocol: ProviderProtocol,
+  modelType: ModelType,
+): RouteApiFormat {
+  const format = value || defaultRouteApiFormat(protocol);
+  if (!(ROUTE_API_FORMATS as readonly string[]).includes(format)) {
+    throw new Error("不支持的上游 API 格式");
+  }
+  if (modelType === "chat" ? !isChatRouteApiFormat(format as RouteApiFormat) : format !== defaultRouteApiFormat(protocol)) {
+    throw new Error("上游 API 格式与模型类型不匹配");
+  }
+  return format as RouteApiFormat;
+}
 export type MessageStatus = "pending" | "streaming" | "success" | "interrupted";
 /** 网关执行错误的生命周期阶段(gateway_executions.errorPhase，以 text 存储)。 */
 export type ErrorPhase =

@@ -206,6 +206,33 @@ describe("probeProviderKey gemini /models 无效 key 识别", () => {
 });
 
 describe("probeProviderKey 模型深度探测脱敏", () => {
+  it("具体 route 探测保留 route apiFormat，不按 provider protocol 猜测", async () => {
+    vi.mocked(generateText).mockResolvedValue({} as never);
+
+    const result = await probeProviderKey({
+      ...baseOpts,
+      protocol: "openai-compatible",
+      apiFormat: "openai-responses",
+      upstreamModelName: "demo-model",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(mocks.buildLanguageModelWithKey).toHaveBeenCalledWith(
+      expect.objectContaining({
+        protocol: "openai-compatible",
+        apiFormat: "openai-responses",
+      }),
+      "sk-test",
+      undefined,
+      undefined,
+      undefined,
+    );
+    expect(generateText).toHaveBeenCalledWith(expect.objectContaining({
+      maxRetries: 0,
+      providerOptions: { openai: { store: false } },
+    }));
+  });
+
   it("provider model 构造失败也收敛为安全 ProbeResult", async () => {
     const apiKey = "MODEL_BUILD_SECRET";
     const headerSecret = "MODEL_BUILD_HEADER_SECRET";
