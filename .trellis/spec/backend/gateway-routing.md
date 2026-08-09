@@ -443,6 +443,71 @@ if (failoverable && route.provider.id) recordFailure(route.provider.id);
 if (i === routes.length - 1 || !failoverable) break;
 ```
 
+## Scenario: Route-Level Wire Format And Multi-Protocol Gateway
+
+### 1. Scope / Trigger
+
+修改 `/v1/chat/completions`、`/v1/responses`、`/v1/messages`、Gemini
+GenerateContent、route 表单/迁移、Provider registry 或协议 parser/encoder 时适用。
+
+### 2. Signatures
+
+- DB：`routes.api_format route_api_format NOT NULL`。
+- Runtime：`ResolvedRoute.apiFormat?: RouteApiFormat`。
+- Registry：`buildLanguageModelWithKey(route, apiKey, cacheKey?, reasoning?, userAgent?)`。
+- HTTP：`handleProtocolRequest(request, ingressProtocol, requestPath, parser)`。
+- Chat wire formats：`openai-chat | openai-responses | anthropic-messages | gemini-generate-content`。
+
+### 3. Contracts
+
+- 数据流固定为 `ingress parser -> IRRequest -> executeGateway -> route apiFormat adapter -> StreamEvent -> ingress encoder`；入口协议不得影响 route 选择。
+- 普通聊天的上游 wire format 只读 route `apiFormat`。Provider `protocol` 仅用于新 route 默认值、Provider `/models`/key 探测和 OpenAI 官方/compatible Chat 差异。
+- `model_catalog` 是模型类型、能力、推理语义和档位的唯一事实源；不得按模型名、Provider 名、Base URL 或入口路径猜测。
+- route 深度探测必须把 route `apiFormat` 传给同一个 registry；Provider 模型列表仍按 Provider `protocol`。
+- 上游 SDK 调用固定 `maxRetries: 0`；retry、Key 轮换、route 故障转移、breaker 和 telemetry 由 `executeGateway` 独占。
+- Responses adapter 和深度探测显式发送 `providerOptions.openai.store=false`，避免无状态网关在上游创建持久对象。
+- 自定义认证头先过滤 `authorization`、`x-api-key`、`x-goog-api-key`，再由目标 adapter 注入原生凭据。
+- 文本、推理或工具事件提交后不得切换 Key/route；Abort 不 retry、不 failover、不更新普通 Provider failure。
+
+### 4. Validation & Error Matrix
+
+| Condition | Result |
+| --- | --- |
+| Route format can express the IR request | Build that SDK adapter and execute once |
+| Route format cannot express a parameter | Record rejected attempt, do not fetch or update breaker, continue route |
+| All routes are rejected | Return ordered first `request.unsupported_parameter` as HTTP 400 |
+| Client aborts before/during generation | Interrupt current attempt; no retry, failover, success terminator, or ordinary failure |
+| OpenAI-compatible Provider route selects Responses/Anthropic/Gemini | Use route format endpoint and native auth, not Provider protocol |
+| Chat operation receives a media apiFormat | Reject before upstream; media registry remains operation-specific |
+
+### 5. Good / Base / Bad Cases
+
+- Good：客户端用 `/v1/responses` 调 Claude route；上游发 `/messages`，结果再编码为 Responses。
+- Base：OpenAI Chat ingress + `openai-chat` route 保持既有 JSON/SSE、usage 和 `[DONE]`。
+- Bad：用 `provider.protocol` 决定普通聊天 endpoint，使同 Provider 下多格式 route 全部走同一种协议。
+- Bad：Responses 上游省略 `store:false`，客户端虽无状态但上游仍持久化响应。
+
+### 6. Tests Required
+
+- 真实 parser、encoder、engine、registry 和 AI SDK 的 4 ingress x 4 egress 矩阵；断言 endpoint、认证头、协议请求体、入口响应和 telemetry。
+- route probe 使用真实 registry，至少断言四种生成 endpoint、原生认证头及 SDK 网络错误只请求一次。
+- 五个 HTTP 路径的 listener 取消测试，加四种 encoder 到 `streamChat.abortSignal` 的传播测试。
+- engine 分别以文本、推理和工具事件提交后失败，断言第二 Key/route 未调用；Abort 断言 breaker 不更新。
+- DB migration、admin/panel action、repository/routing 和媒体格式回归测试必须同时存在。
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong: Provider 连接类型被当成 route wire format。
+const model = provider.protocol === "anthropic"
+  ? createAnthropic(...).messages(route.upstreamModelName)
+  : createOpenAI(...).chat(route.upstreamModelName);
+
+// Correct: route 保存并决定实际 wire format；Provider protocol 仅提供连接语义。
+const apiFormat = resolveRouteApiFormat(route);
+return buildLanguageModelWithKey({ ...route, apiFormat }, apiKey);
+```
+
 ---
 
 ## Gotcha
