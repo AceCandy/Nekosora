@@ -238,13 +238,13 @@
       "deleteConfirm": "确认删除此密钥?",
       "lastUsed": "最近使用",
       "neverUsed": "从未使用",
-      "saveSubkeyPrompt": "请复制并保存您的子密钥",
+      "saveSubkeyPrompt": "请复制并保存您的密钥",
       "subkeyWarning": "该密钥名称为 \"{name}\"。出于安全考虑，此明文密钥仅在此处显示一次，刷新或关闭卡片后将无法找回。",
       "recordedClose": "我已妥善记录，关闭此卡片",
       "masterKey": "主密钥",
-      "copyPrefix": "复制前缀",
       "masterKeyDesc": "主密钥可直接调用全部可见模型。仅在创建时显示明文。",
       "disable": "禁用",
+      "revoke": "撤销",
       "generateMaster": "生成主密钥",
       "subKeys": "子密钥",
       "subkeyNamePlaceholder": "子密钥名称(如:生产环境)",
@@ -582,7 +582,8 @@
       "taskKinds": {
         "title": "标题",
         "memory": "记忆",
-        "compact": "摘要"
+        "compact": "摘要",
+        "web_search": "联网搜索"
       },
       "tabs": {
         "usage": "用量明细",

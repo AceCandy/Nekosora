@@ -5,23 +5,163 @@ const mocks = vi.hoisted(() => ({
   getSchema: vi.fn(),
   eq: vi.fn((left: unknown, right: unknown) => ({ op: "eq", left, right })),
   and: vi.fn((...conditions: unknown[]) => ({ op: "and", conditions })),
+  or: vi.fn((...conditions: unknown[]) => ({ op: "or", conditions })),
 }));
 
-vi.mock("drizzle-orm", () => ({ eq: mocks.eq, and: mocks.and }));
+vi.mock("drizzle-orm", () => ({ eq: mocks.eq, and: mocks.and, or: mocks.or }));
 vi.mock("@/lib/infra/db", () => ({ getDb: mocks.getDb, getSchema: mocks.getSchema }));
 
 import { hashSecret } from "@/lib/infra/crypto";
-import { setKeyEnabled, verifyKey } from "./keys";
+import { createMasterKey, createSubKey, setKeyEnabled, verifyKey } from "./keys";
 
 const schema = {
   apiKeys: {
     id: "apiKeys.id",
     userId: "apiKeys.userId",
+    kind: "apiKeys.kind",
+    keyHash: "apiKeys.keyHash",
     keyPrefix: "apiKeys.keyPrefix",
     enabled: "apiKeys.enabled",
+    lastUsedAt: "apiKeys.lastUsedAt",
   },
   user: { id: "user.id", status: "user.status" },
 };
+
+describe("createMasterKey", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getSchema.mockReturnValue(schema);
+  });
+
+  it("将已撤销的主密钥原位轮换为全新密钥", async () => {
+    const existingMaster = {
+      id: "master-1",
+      userId: "user-1",
+      kind: "master" as const,
+      enabled: false,
+      keyHash: hashSecret("sk-old-master-key"),
+      keyPrefix: "sk-old-m…",
+    };
+    const selectWhere = vi.fn().mockResolvedValue([existingMaster]);
+    const select = vi.fn(() => ({
+      from: vi.fn(() => ({ where: selectWhere })),
+    }));
+    const returning = vi.fn().mockResolvedValue([{ id: existingMaster.id }]);
+    const updateWhere = vi.fn(() => ({ returning }));
+    const set = vi.fn(() => ({ where: updateWhere }));
+    const update = vi.fn(() => ({ set }));
+    mocks.getDb.mockResolvedValue({ select, update });
+
+    const rawKey = await createMasterKey("user-1");
+
+    expect(rawKey).not.toBe("sk-old-master-key");
+    expect(set).toHaveBeenCalledWith({
+      keyHash: hashSecret(rawKey),
+      keyPrefix: `${rawKey.slice(0, 8)}****${rawKey.slice(-4)}`,
+      enabled: true,
+      lastUsedAt: null,
+    });
+    expect(updateWhere).toHaveBeenCalledWith({
+      op: "and",
+      conditions: [
+        { op: "eq", left: schema.apiKeys.id, right: "master-1" },
+        { op: "eq", left: schema.apiKeys.userId, right: "user-1" },
+        { op: "eq", left: schema.apiKeys.kind, right: "master" },
+        { op: "eq", left: schema.apiKeys.enabled, right: false },
+      ],
+    });
+  });
+
+  it("已有有效主密钥时拒绝生成", async () => {
+    const selectWhere = vi.fn().mockResolvedValue([{
+      id: "master-1",
+      userId: "user-1",
+      kind: "master",
+      enabled: true,
+    }]);
+    const select = vi.fn(() => ({
+      from: vi.fn(() => ({ where: selectWhere })),
+    }));
+    const update = vi.fn();
+    const insert = vi.fn();
+    mocks.getDb.mockResolvedValue({ select, update, insert });
+
+    await expect(createMasterKey("user-1")).rejects.toThrow("该用户已存在主密钥");
+    expect(update).not.toHaveBeenCalled();
+    expect(insert).not.toHaveBeenCalled();
+  });
+
+  it("轮换并发失败时不返回未落库的明文", async () => {
+    const selectWhere = vi.fn().mockResolvedValue([{
+      id: "master-1",
+      userId: "user-1",
+      kind: "master",
+      enabled: false,
+    }]);
+    const select = vi.fn(() => ({
+      from: vi.fn(() => ({ where: selectWhere })),
+    }));
+    const returning = vi.fn().mockResolvedValue([]);
+    const update = vi.fn(() => ({
+      set: vi.fn(() => ({ where: vi.fn(() => ({ returning })) })),
+    }));
+    mocks.getDb.mockResolvedValue({ select, update });
+
+    await expect(createMasterKey("user-1")).rejects.toThrow("该用户已存在主密钥");
+  });
+});
+
+describe("createSubKey", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getSchema.mockReturnValue(schema);
+  });
+
+  it("没有有效主密钥时拒绝创建子密钥", async () => {
+    const selectWhere = vi.fn().mockResolvedValue([{
+      id: "master-1",
+      userId: "user-1",
+      kind: "master",
+      enabled: false,
+    }]);
+    const select = vi.fn(() => ({
+      from: vi.fn(() => ({ where: selectWhere })),
+    }));
+    const insert = vi.fn();
+    mocks.getDb.mockResolvedValue({ select, insert });
+
+    await expect(createSubKey("user-1", "测试子密钥"))
+      .rejects.toThrow("用户尚无主密钥,无法创建子密钥");
+    expect(insert).not.toHaveBeenCalled();
+  });
+
+  it("新子密钥只持久化前后脱敏预览", async () => {
+    const selectWhere = vi.fn().mockResolvedValue([{
+      id: "master-1",
+      userId: "user-1",
+      kind: "master",
+      enabled: true,
+    }]);
+    const select = vi.fn(() => ({
+      from: vi.fn(() => ({ where: selectWhere })),
+    }));
+    const values = vi.fn().mockResolvedValue(undefined);
+    const insert = vi.fn(() => ({ values }));
+    mocks.getDb.mockResolvedValue({ select, insert });
+
+    const rawKey = await createSubKey("user-1", "测试子密钥");
+
+    expect(values).toHaveBeenCalledWith({
+      userId: "user-1",
+      parentId: "master-1",
+      kind: "sub",
+      name: "测试子密钥",
+      keyHash: hashSecret(rawKey),
+      keyPrefix: `${rawKey.slice(0, 8)}****${rawKey.slice(-4)}`,
+      enabled: true,
+    });
+  });
+});
 
 describe("setKeyEnabled", () => {
   beforeEach(() => {
@@ -74,7 +214,13 @@ describe("verifyKey", () => {
     expect(joinedWhere).toHaveBeenCalledWith({
       op: "and",
       conditions: [
-        { op: "eq", left: schema.apiKeys.keyPrefix, right: `${rawKey.slice(0, 8)}…` },
+        {
+          op: "or",
+          conditions: [
+            { op: "eq", left: schema.apiKeys.keyPrefix, right: `${rawKey.slice(0, 8)}…` },
+            { op: "eq", left: schema.apiKeys.keyPrefix, right: `${rawKey.slice(0, 8)}****${rawKey.slice(-4)}` },
+          ],
+        },
         { op: "eq", left: schema.apiKeys.enabled, right: true },
         { op: "eq", left: schema.user.status, right: "active" },
       ],
@@ -82,7 +228,7 @@ describe("verifyKey", () => {
     expect(update).not.toHaveBeenCalled();
   });
 
-  it("active 用户的 enabled key 保持可用并更新使用时间", async () => {
+  it("旧前缀格式的 active 用户 key 保持可用并更新使用时间", async () => {
     const rawKey = "sk-active-owner";
     const key = {
       id: "key-2",
@@ -116,6 +262,20 @@ describe("verifyKey", () => {
       },
     });
     expect(set).toHaveBeenCalledWith({ lastUsedAt: expect.any(Date) });
+    expect(joinedWhere).toHaveBeenCalledWith({
+      op: "and",
+      conditions: [
+        {
+          op: "or",
+          conditions: [
+            { op: "eq", left: schema.apiKeys.keyPrefix, right: `${rawKey.slice(0, 8)}…` },
+            { op: "eq", left: schema.apiKeys.keyPrefix, right: `${rawKey.slice(0, 8)}****${rawKey.slice(-4)}` },
+          ],
+        },
+        { op: "eq", left: schema.apiKeys.enabled, right: true },
+        { op: "eq", left: schema.user.status, right: "active" },
+      ],
+    });
     expect(updateFrom).toHaveBeenCalledWith(schema.user);
     expect(updateWhere).toHaveBeenCalledWith({
       op: "and",

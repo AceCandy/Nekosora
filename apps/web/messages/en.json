@@ -238,13 +238,13 @@
       "deleteConfirm": "Delete this key?",
       "lastUsed": "Last used",
       "neverUsed": "Never used",
-      "saveSubkeyPrompt": "Please copy and save your sub key",
+      "saveSubkeyPrompt": "Please copy and save your key",
       "subkeyWarning": "This key is named \"{name}\". For security, this plaintext key is shown only once. Cannot be recovered after refresh or close.",
       "recordedClose": "I've saved it, close this card",
       "masterKey": "Master key",
-      "copyPrefix": "Copy prefix",
       "masterKeyDesc": "Master key can call all visible models. Plaintext shown only at creation.",
       "disable": "Disable",
+      "revoke": "Revoke",
       "generateMaster": "Generate master key",
       "subKeys": "Sub keys",
       "subkeyNamePlaceholder": "Sub key name (e.g. production)",
@@ -582,7 +582,8 @@
       "taskKinds": {
         "title": "Title",
         "memory": "Memory",
-        "compact": "Summary"
+        "compact": "Summary",
+        "web_search": "Web search"
       },
       "tabs": {
         "usage": "Usage logs",

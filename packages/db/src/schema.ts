@@ -118,7 +118,7 @@ export const apiKeys = pgTable(
     kind: apiKeyKinds("kind").notNull(),
     name: text("name").notNull(),
     keyHash: text("key_hash").notNull(), // sha256(完整 sk 字符串)
-    keyPrefix: text("key_prefix").notNull(), // 显示用,如 "sk-abcd…"
+    keyPrefix: text("key_prefix").notNull(), // 脱敏预览;兼容旧的前缀+省略号格式
     enabled: boolean("enabled").notNull().default(true),
     lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

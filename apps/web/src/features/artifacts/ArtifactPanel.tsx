@@ -9,6 +9,7 @@ import { X, Copy, Download, Check } from "lucide-react";
 import { clsx } from "clsx";
 import { HtmlPreviewFrame } from "./HtmlPreviewFrame";
 import { MermaidDiagram } from "@/shared/components/mermaid/MermaidDiagram";
+import { copyToClipboard } from "@/shared/lib/clipboard";
 
 export interface Artifact {
   id: string;
@@ -60,8 +61,8 @@ export function ArtifactPanel({
   }, []);
 
 
-  const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText(artifact.content);
+  const handleCopy = useCallback(async () => {
+    if (!(await copyToClipboard(artifact.content))) return;
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   }, [artifact.content]);

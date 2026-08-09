@@ -5,13 +5,13 @@
  * 兼容 http 局域网 IP 等非安全上下文。返回是否复制成功。
  */
 export async function copyToClipboard(text: string): Promise<boolean> {
-  if (navigator.clipboard) {
-    try {
+  try {
+    if (navigator.clipboard) {
       await navigator.clipboard.writeText(text);
       return true;
-    } catch {
-      // 权限被拒等场景,继续走 execCommand 兜底
     }
+  } catch {
+    // 权限被拒等场景,继续走 execCommand 兜底
   }
   let textarea: HTMLTextAreaElement | null = null;
   let container: Element | null = null;
