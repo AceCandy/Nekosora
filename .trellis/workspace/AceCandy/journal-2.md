@@ -767,3 +767,25 @@ Hosted Search 改为首包与流中空闲 watchdog，60 秒窗口仅限制新后
 ### Status
 
 [OK] **Completed**
+
+
+## Session 95: 多协议双向网关
+
+**Date**: 2026-08-09
+**Task**: 多协议双向网关
+**Branch**: `main`
+
+### Summary
+
+实现 Chat Completions、Responses、Messages 与 Gemini 四种协议的双向转换、路由格式配置、原生错误响应、取消传播、迁移及测试，并补充网关契约规范。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `139e137` | (see git log) |
+| `2714750` | (see git log) |
+
+### Status
+
+[OK] **Completed**

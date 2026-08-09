@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 94
-- **Last Active**: 2026-08-07
+- **Total Sessions**: 95
+- **Last Active**: 2026-08-09
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~769 | Active |
+| `journal-2.md` | ~791 | Active |
 | `journal-1.md` | ~1981 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 95 | 2026-08-09 | 多协议双向网关 | `139e137`, `2714750` | `main` |
 | 94 | 2026-08-07 | 修复流式搜索超时与工具轮正文 | `0aae65f`, `9498b85` | `main` |
 | 93 | 2026-08-07 | 修复搜索超时回退与模型展示 | `567226c` | `main` |
 | 92 | 2026-08-07 | 同批联网搜索并行执行 | `03c4b83` | `main` |
