@@ -20,6 +20,7 @@ import { formatDateTimeLocal, formatDuration } from "@/shared/lib/format";
 import { type ErrorCategory } from "@/lib/error-classify";
 import { ErrorFilterBar, type ErrorFilterValues } from "./ErrorFilterBar";
 import { ErrorDetailDrawer } from "./ErrorDetailDrawer";
+import { getTaskKindMessageKey } from "./task-kind";
 
 /**
  * 客户端行类型(createdAt 已序列化为 ISO 字符串)。
@@ -53,7 +54,7 @@ export interface ErrorLogClientRow {
   userName: string | null;
   /** 用户邮箱(LEFT JOIN user.email;仅 admin 列展示)。 */
   userEmail: string | null;
-  /** 副任务类型(null=主回复/网关请求;title/memory/compact=后台副任务)。 */
+  /** 副任务类型(null=主回复/网关请求;title/memory/compact/web_search=后台副任务)。 */
   taskKind: string | null;
   /** 尝试序号(1..N);null=非尝试记录(中断)。同 requestId 按 attempt 升序即完整重试链。 */
   attempt: number | null;
@@ -158,6 +159,7 @@ export function ErrorLogsTable({
               )}
               {rows.map((r, idx) => {
                 const category = r.category;
+                const taskKindMessageKey = r.taskKind ? getTaskKindMessageKey(r.taskKind) : null;
                 // 同 requestId 相邻的非首行 = 同一请求的重试尝试,浅色底标识。
                 const isRetry = idx > 0 && rows[idx - 1].requestId === r.requestId;
                 return (
@@ -185,7 +187,7 @@ export function ErrorLogsTable({
                         {t(`sources.${r.source}` as const)}
                         {r.taskKind && (
                           <Badge variant="neutral" className="rounded-full font-sans text-ui-caption font-normal">
-                            {t(`taskKinds.${r.taskKind}` as const)}
+                            {taskKindMessageKey ? t(taskKindMessageKey) : r.taskKind}
                           </Badge>
                         )}
                       </span>

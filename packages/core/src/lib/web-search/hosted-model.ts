@@ -139,7 +139,7 @@ export async function executeHostedModelSearch(
     operation: "chat.generate",
     model: input.modelName,
     modelId: input.modelId,
-    taskKind: `web_search:${input.toolCallId}`,
+    taskKind: "web_search",
     abortSignal: input.signal,
     resolveRoutes: () => resolveRoutesById(input.ctx, input.modelId),
     selectAdapter: (route) => {

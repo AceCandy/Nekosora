@@ -283,5 +283,8 @@ describe("executeHostedModelSearch", () => {
       modelId: "model-uuid",
       modelName: "GPT 5.6 Luna",
     });
+    expect(mocks.executeAtomicGateway).toHaveBeenCalledWith(
+      expect.objectContaining({ taskKind: "web_search" }),
+    );
   });
 });

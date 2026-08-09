@@ -55,7 +55,7 @@ export interface StreamChatOptions {
   request: IRRequest;
   /** 标识一次生成(WebChat 传入 message 的 run_id;网关自动生成)。 */
   runId?: string;
-  /** 副任务类型(title/memory/compact);主回复 / 网关请求不传 → null。 */
+  /** 副任务类型(title/memory/compact/web_search);主回复 / 网关请求不传 → null。 */
   taskKind?: string;
   /** 会话级 cache key(chat=conversationId / 网关=apiKeyId);用于注入 prompt 缓存控制,缺省不注入。 */
   cacheKey?: string;
