@@ -17,7 +17,7 @@ import type {
  *   - uploadPending:发送消息时等待全部附件上传,返回消息附件 DTO
  *
  * 上传端点:/api/upload(FormData:file, conversationId)
- * 文件来源仅粘贴/拖拽,不再提供独立上传按钮。
+ * 文件来源包括文件选择、粘贴与拖拽。
  */
 export function useChatAttachments(conversationId: string | null) {
   const t = useTranslations("chat");

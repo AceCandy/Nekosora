@@ -10,6 +10,8 @@ import ChatComposer, { type ModelOption } from "@/features/chat/components/ChatC
 import type { ModelCapabilities } from "@/db/types";
 import type { ChatMessage } from "@/features/chat/model/types";
 import { toMessageCreatedAtIso } from "@/features/chat/model/messageTime";
+import { requireSession } from "@/lib/session";
+import { isWebSearchEnabled } from "@/lib/web-search/registry";
 
 export default async function ChatConversationPage({
   params,
@@ -18,7 +20,8 @@ export default async function ChatConversationPage({
 }) {
   const { id } = await params;
   void getTranslations("chat"); // 保持命名空间预热,与 chat/page 行为一致
-  const [visibleModels, branch, artifactsMap, cards, kbs, outputModes, renderStyles, composerState] = await Promise.all([
+  const user = await requireSession();
+  const [visibleModels, branch, artifactsMap, cards, kbs, outputModes, renderStyles, composerState, webSearchAvailable] = await Promise.all([
     getVisibleModels(),
     getVisibleBranch(id).catch(() => ({ messages: [], versionMap: {} })),
     getArtifactsByConversation(id).catch(() => ({})),
@@ -36,6 +39,7 @@ export default async function ChatConversationPage({
       kbIds: [],
       reasoningByModelId: {},
     })),
+    isWebSearchEnabled(user.id).catch(() => false),
   ]);
   const msgs = branch.messages;
   const versionMap = branch.versionMap as Record<string, { current: number; total: number }>;
@@ -127,6 +131,7 @@ export default async function ChatConversationPage({
           initialOutputModeId={composerState.outputModeId}
           initialRenderStyleId={composerState.renderStyleId}
           initialWebSearch={composerState.webSearch}
+          webSearchAvailable={webSearchAvailable}
           initialCardIds={composerState.cardIds}
           initialKbIds={composerState.kbIds}
           initialReasoningByModelId={composerState.reasoningByModelId}

@@ -4,7 +4,13 @@ import { describe, expect, it, vi } from "vitest";
 import enMessages from "../../../../messages/en.json";
 import zhMessages from "../../../../messages/zh-CN.json";
 import { ChatInputBox } from "./ChatInputBox";
-import { ChatToolbar, type ChatToolbarProps } from "./ChatToolbar";
+import {
+  ChatToolbar,
+  ComposerPlusMenu,
+  ModelControlMenu,
+  RenderStyleMenu,
+  type ChatToolbarProps,
+} from "./ChatToolbar";
 
 vi.mock("next-intl", () => ({
   useTranslations: () => (key: string) => ({
@@ -16,6 +22,10 @@ vi.mock("next-intl", () => ({
     placeholder: "输入消息",
     send: "发送",
     voicePlaceholder: "语音输入",
+    uploadAttachment: "上传文件",
+    outputMode: "输出模式",
+    renderStyle: "输出样式",
+    webSearch: "联网搜索",
   })[key] ?? key,
 }));
 
@@ -42,19 +52,14 @@ const toolbarProps: ChatToolbarProps = {
     isImage: true,
     previewUrl: "blob:preview",
   }],
+  onUploadFiles: noop,
   onRemoveAttachment: noop,
   onPreviewFile: noop,
   cards: [],
   selectedCardIds: [],
-  cardPickerOpen: false,
-  onCardPickerToggle: noop,
-  onCardPickerClose: noop,
   onCardToggle: noop,
   knowledgeBases: [],
   selectedKbIds: [],
-  kbPickerOpen: false,
-  onKbPickerToggle: noop,
-  onKbPickerClose: noop,
   onKbToggle: noop,
   outputModes: [],
   outputModeId: null,
@@ -70,6 +75,7 @@ const toolbarProps: ChatToolbarProps = {
   onRenderStylePickerClose: noop,
   onRenderStyleToggle: noop,
   onRenderStyleClear: noop,
+  webSearchAvailable: false,
   webSearch: false,
   onWebSearchToggle: noop,
   reasoning: "off",
@@ -141,5 +147,69 @@ describe("ChatInputBox attachments", () => {
     expect(html).toContain("PNG · 待发送");
     expect(html).toContain("PNG · 上传中");
     expect(html).toContain("PNG · 上传失败");
+  });
+});
+
+describe("RenderStyleMenu", () => {
+  it("renders only the output style icon in the conversation header", () => {
+    const html = renderToStaticMarkup(
+      <RenderStyleMenu
+        {...toolbarProps}
+        outputModes={[{ id: "mode-html", name: "HTML" }]}
+        renderStyles={[{ id: "style-default", name: "默认", cssClass: "default", renderer: "streamdown" }]}
+      />,
+    );
+
+    expect(html).toContain('aria-label="输出样式"');
+    expect(html).toContain('title="输出样式"');
+    expect(html).toContain('aria-expanded="false"');
+    expect(html.match(/<button/g)).toHaveLength(1);
+    expect(html).not.toContain("HTML");
+  });
+});
+
+describe("composer controls", () => {
+  it("keeps the plus button and file selector without the previous option entries", () => {
+    const html = renderToStaticMarkup(
+      <ComposerPlusMenu
+        {...toolbarProps}
+        cards={[{ id: "card-1", title: "指令卡", trigger: "card" }]}
+        knowledgeBases={[{ id: "kb-1", name: "知识库", fileCount: 1 }]}
+        outputModes={[{ id: "mode-html", name: "HTML" }]}
+      />,
+    );
+
+    expect(html).toContain('aria-label="更多设置"');
+    expect(html).toContain('type="file"');
+    expect(html).toContain('multiple=""');
+    expect(html).not.toContain("指令卡");
+    expect(html).not.toContain("知识库");
+    expect(html).not.toContain("HTML");
+  });
+
+  it("renders the output mode icon before web search and hides search when unavailable", () => {
+    const availableHtml = renderToStaticMarkup(
+      <ModelControlMenu
+        {...toolbarProps}
+        outputModes={[{ id: "mode-html", name: "HTML" }]}
+        outputModeId="mode-html"
+        webSearchAvailable
+        webSearch
+      />,
+    );
+    const unavailableHtml = renderToStaticMarkup(
+      <ModelControlMenu
+        {...toolbarProps}
+        outputModes={[{ id: "mode-html", name: "HTML" }]}
+      />,
+    );
+
+    expect(availableHtml).toContain('aria-label="输出模式"');
+    expect(availableHtml).toContain('title="输出模式"');
+    expect(availableHtml).not.toContain("HTML");
+    expect(availableHtml.indexOf('aria-label="输出模式"')).toBeLessThan(
+      availableHtml.indexOf('aria-label="联网搜索"'),
+    );
+    expect(unavailableHtml).not.toContain('aria-label="联网搜索"');
   });
 });

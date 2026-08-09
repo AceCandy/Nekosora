@@ -10,7 +10,7 @@ import { useChatRuntime } from "@/features/chat/hooks/useChatRuntime";
 import { useChatAttachments } from "@/features/chat/hooks/useChatAttachments";
 import { useComposerCoordinator } from "@/features/chat/hooks/useComposerCoordinator";
 import { ChatMessageList } from "@/features/chat/components/ChatMessageList";
-import { ChatToolbar, ComposerPlusMenu, ModelControlMenu, type ChatToolbarProps } from "@/features/chat/components/ChatToolbar";
+import { ChatToolbar, ComposerPlusMenu, ModelControlMenu, RenderStyleMenu, type ChatToolbarProps } from "@/features/chat/components/ChatToolbar";
 import { ChatInputBox } from "@/features/chat/components/ChatInputBox";
 import ChatHeader from "@/features/chat/components/ChatHeader";
 import { useChatStreamStore } from "@/features/chat/store/chatStreamStore";
@@ -28,7 +28,7 @@ export type { ChatMessage, ModelOption, CardOption, KnowledgeBaseOption, OutputM
 
 interface ChatComposerProps {
   models: ModelOption[];
-  /** 可用的指令卡(空数组则不显示选择器)。 */
+  /** 可用的指令卡(空数组则不启用斜杠命令)。 */
   cards?: CardOption[];
   /** 可用的知识库(空数组则不显示选择器)。 */
   knowledgeBases?: KnowledgeBaseOption[];
@@ -44,6 +44,8 @@ interface ChatComposerProps {
   initialModelName?: string | null;
   /** 当前会话联网状态(回填)。 */
   initialWebSearch?: boolean;
+  /** 当前用户是否已配置联网搜索。 */
+  webSearchAvailable?: boolean;
   /** 当前会话已选指令卡(回填)。 */
   initialCardIds?: string[];
   /** 当前会话已选知识库(回填)。 */
@@ -67,7 +69,7 @@ interface ChatComposerProps {
  * 持有所有会话级 selection state 与持久化逻辑，把渲染拆给三个子组件：
  *   - ChatMessageList：消息滚动区 + 对话大纲
  *   - ChatToolbar：已选资源与附件状态
- *   - ChatInputBox：自适应输入框 + 紧凑设置入口 + 发送/停止
+ *   - ChatInputBox：自适应输入框 + 发送/停止
  */
 export default function ChatComposer({
   models,
@@ -79,6 +81,7 @@ export default function ChatComposer({
   initialRenderStyleId = null,
   initialModelName = null,
   initialWebSearch = false,
+  webSearchAvailable = false,
   initialCardIds = [],
   initialKbIds = [],
   initialReasoningByModelId = {},
@@ -95,8 +98,6 @@ export default function ChatComposer({
   const [activeArtifact, setActiveArtifact] = useState<Artifact | null>(null);
   const [previewFile, setPreviewFile] = useState<PreviewableFile | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
-  const [cardPickerOpen, setCardPickerOpen] = useState(false);
-  const [kbPickerOpen, setKbPickerOpen] = useState(false);
   const [outputModePickerOpen, setOutputModePickerOpen] = useState(false);
   const [renderStylePickerOpen, setRenderStylePickerOpen] = useState(false);
   // 活动会话 id:历史会话来自路由参数;新会话建会后由 useChatRuntime 回写,使订阅键与持久化目标跟随切换。
@@ -293,19 +294,14 @@ export default function ChatComposer({
     onModelPickerToggle: () => setModelPickerOpen((value) => !value),
     onModelPickerClose: () => setModelPickerOpen(false),
     attached,
+    onUploadFiles: handleUpload,
     onRemoveAttachment: removeAttachment,
     onPreviewFile: setPreviewFile,
     cards,
     selectedCardIds,
-    cardPickerOpen,
-    onCardPickerToggle: () => setCardPickerOpen((value) => !value),
-    onCardPickerClose: () => setCardPickerOpen(false),
     onCardToggle: handleCardToggle,
     knowledgeBases,
     selectedKbIds,
-    kbPickerOpen,
-    onKbPickerToggle: () => setKbPickerOpen((value) => !value),
-    onKbPickerClose: () => setKbPickerOpen(false),
     onKbToggle: handleKbToggle,
     outputModes,
     outputModeId,
@@ -322,6 +318,7 @@ export default function ChatComposer({
     onRenderStyleToggle: handleRenderStyleChange,
     onRenderStyleClear: () => handleRenderStyleChange(""),
     webSearch,
+    webSearchAvailable,
     onWebSearchToggle: handleWebSearchToggle,
     reasoning,
     onReasoningChange: handleReasoningChange,
@@ -333,16 +330,15 @@ export default function ChatComposer({
     <div className="flex-1 flex h-full bg-nebula-white dark:bg-twilight-obsidian transition-colors duration-250">
       {/* 主区:消息 + 输入(可被 artifact 面板挤压) */}
       <div className={clsx("relative flex flex-col h-full min-w-0 flex-1", activeArtifact && "lg:flex-[3] lg:border-r lg:border-morning-mist lg:dark:border-deep-space/80")}>
-        {activeConvId && (
-          <ChatHeader
-            title={conversationTitle}
-            conversationId={activeConvId}
-            canShare={canShare}
-            createShareAction={createShareAction}
-            listSharesAction={listSharesAction}
-            revokeShareAction={revokeShareAction}
-          />
-        )}
+        <ChatHeader
+          title={conversationTitle}
+          renderStyleMenu={<RenderStyleMenu {...toolbarProps} />}
+          conversationId={activeConvId}
+          canShare={canShare}
+          createShareAction={createShareAction}
+          listSharesAction={listSharesAction}
+          revokeShareAction={revokeShareAction}
+        />
         <ChatMessageList
           messages={runtime.messages}
           streaming={runtime.streaming}
