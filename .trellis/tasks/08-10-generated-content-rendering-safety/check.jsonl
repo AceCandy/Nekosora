@@ -1,0 +1,4 @@
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"组件测试、i18n、DTO 与 orphan 清理复核清单。"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"核对 custom 行为兼容、管理提醒和设计 token。"}
+{"file":".trellis/spec/backend/conversation-sharing.md","reason":"核对公开分享未被意外改变或泄露额外数据。"}
+{"file":".trellis/tasks/08-10-generated-content-rendering-safety/research/trust-boundary.md","reason":"独立复核应以用户接受的剩余风险和 artifact 隔离目标为准。"}
