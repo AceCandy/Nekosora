@@ -74,6 +74,7 @@ export async function* executeGateway<TEvent, TResult>(
       return outcome;
     }
 
+    let streamOptionsFallbackUsed = false;
     for (const route of routes) {
       if (options.abortSignal?.aborted) {
         outcome = interruptedOutcome(executionId, snapshotRoute(route), committed);
@@ -231,10 +232,15 @@ export async function* executeGateway<TEvent, TResult>(
           }
 
           const toolUnsupported = options.isToolUnsupported?.(error) === true;
+          const streamOptionsUnsupported = !committed
+            && !streamOptionsFallbackUsed
+            && options.isStreamOptionsUnsupported?.(route, error) === true;
           const classifiedError = classifyGatewayError(error, providerSecrets(route, apiKey));
-          const safeError: SafeGatewayError = toolUnsupported
-            ? { ...classifiedError, code: "tools_not_supported", phase: "routing" }
-            : classifiedError;
+          const safeError: SafeGatewayError = streamOptionsUnsupported
+            ? { ...classifiedError, code: "stream_options_not_supported", phase: "routing" }
+            : toolUnsupported
+              ? { ...classifiedError, code: "tools_not_supported", phase: "routing" }
+              : classifiedError;
           const attemptTelemetry: AttemptTelemetry = {
             executionId,
             attempt,
@@ -256,9 +262,17 @@ export async function* executeGateway<TEvent, TResult>(
           if (toolUnsupported) {
             await safeOperation(() => options.onToolUnsupported?.(route));
           }
+          if (streamOptionsUnsupported) {
+            streamOptionsFallbackUsed = true;
+            await safeOperation(() => options.onStreamOptionsUnsupported?.(route));
+          }
 
-          const failoverable = toolUnsupported || isFailoverableError(error);
-          if (failoverable && !toolUnsupported) options.breaker.recordFailure(route.provider.id);
+          const failoverable = toolUnsupported
+            || streamOptionsUnsupported
+            || isFailoverableError(error);
+          if (failoverable && !toolUnsupported && !streamOptionsUnsupported) {
+            options.breaker.recordFailure(route.provider.id);
+          }
           stopExecution = committed || !failoverable;
           outcome = failedOutcome(
             executionId,
@@ -267,6 +281,10 @@ export async function* executeGateway<TEvent, TResult>(
             snapshotRoute(route),
             maskKey(apiKey) ?? undefined,
           );
+          if (streamOptionsUnsupported) {
+            keys.splice(keyIndex + 1, 0, keys[keyIndex]);
+            continue;
+          }
           const hasMoreKeys = keyIndex < keys.length - 1;
           if (!committed && !toolUnsupported && hasMoreKeys && isRetryableForKey(error)) continue;
           break;

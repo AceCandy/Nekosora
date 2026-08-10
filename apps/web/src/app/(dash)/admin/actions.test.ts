@@ -97,6 +97,7 @@ vi.mock("@/lib/infra/db", () => {
       id: "id",
       ownerUserId: "ownerUserId",
       protocol: "protocol",
+      supportsStreamUsage: "supportsStreamUsage",
     },
     routes: {
       __table: "routes",
@@ -159,6 +160,7 @@ import {
   createModel,
   createRoute,
   testRoute,
+  updateProvider,
   updateRoute,
 } from "./actions";
 
@@ -170,8 +172,31 @@ beforeEach(() => {
     { id: "public-b", ownerUserId: "user-b", visibility: "public", name: "public-b", catalogId: "catalog-chat" },
   ];
   mockData.catalogs = [{ id: "catalog-chat", name: "Chat", canonicalModelId: "__generic_chat__", modelType: "chat" }];
-  mockData.providers = [{ id: "provider-a", ownerUserId: "admin-a", protocol: "openai" }];
+  mockData.providers = [{
+    id: "provider-a",
+    ownerUserId: "admin-a",
+    name: "Provider A",
+    protocol: "openai",
+    baseUrl: "https://api.example.com/v1",
+    supportsStreamUsage: false,
+  }];
   mockData.routes = [];
+});
+
+describe("updateProvider", () => {
+  it("保存 Provider 配置时重置流式 usage 能力", async () => {
+    const formData = new FormData();
+    formData.set("name", "Provider A");
+    formData.set("protocol", "openai-compatible");
+    formData.set("baseUrl", "https://api.example.com/v1");
+    formData.set("testModel", "model-a");
+
+    await updateProvider("provider-a", formData);
+
+    expect(mockData.providers[0]).toEqual(expect.objectContaining({
+      supportsStreamUsage: null,
+    }));
+  });
 });
 
 describe("createModel", () => {

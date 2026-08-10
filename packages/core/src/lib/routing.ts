@@ -48,6 +48,7 @@ function toResolvedProvider(row: any): ResolvedProvider {
     connectTimeoutMs: row.connectTimeoutMs ?? undefined,
     readTimeoutMs: row.readTimeoutMs ?? undefined,
     headers: (row.headersJson as Record<string, string>) ?? undefined,
+    supportsStreamUsage: row.supportsStreamUsage ?? null,
   };
 }
 

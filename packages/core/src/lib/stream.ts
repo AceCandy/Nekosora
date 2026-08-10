@@ -13,7 +13,10 @@
  */
 import { streamText, generateText, jsonSchema, Output, type ModelMessage, type ToolSet } from "ai";
 import { resolveRoutes, resolveRoutesById } from "@/lib/routing";
-import { markRouteToolsUnsupported } from "@/lib/repositories/route-repository";
+import {
+  markProviderStreamUsageUnsupported,
+  markRouteToolsUnsupported,
+} from "@/lib/repositories/route-repository";
 import { buildLanguageModelWithKey, resolveRouteApiFormat } from "@/lib/providers/registry";
 import { getChatUA } from "@/lib/system-settings/ua";
 import { recordSuccess, recordFailure } from "@/lib/circuit-breaker";
@@ -35,6 +38,7 @@ import {
   executeAtomicGateway,
   executeGateway,
   gatewayTelemetry,
+  isStreamOptionsUnsupportedError,
   isToolUnsupportedError,
   type GatewayAdapterSelection,
   type GatewayAttemptAdapter,
@@ -48,6 +52,7 @@ export {
   isAbortError,
   isFailoverableError,
   isKeyAuthError,
+  isStreamOptionsUnsupportedError,
   isToolUnsupportedError,
   isRetryableForKey,
 } from "@/lib/gateway-execution";
@@ -171,6 +176,16 @@ export async function* streamChat(
       onToolUnsupported: currentRequest.tools?.length
         ? (route) => markRouteToolsUnsupported(route.routeId)
         : undefined,
+      isStreamOptionsUnsupported: (route, error) =>
+        route.protocol === "openai-compatible"
+        && resolveRouteApiFormat(route) === "openai-chat"
+        && route.provider.supportsStreamUsage !== false
+        && isStreamOptionsUnsupportedError(error),
+      onStreamOptionsUnsupported: async (route) => {
+        const { id, baseUrl } = route.provider;
+        route.provider.supportsStreamUsage = false;
+        await markProviderStreamUsageUnsupported(id, baseUrl);
+      },
       telemetry: opts.telemetry ?? gatewayTelemetry,
       breaker: { recordSuccess, recordFailure },
     });

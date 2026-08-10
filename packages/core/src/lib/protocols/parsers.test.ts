@@ -52,9 +52,33 @@ describe("multi-protocol parsers", () => {
     ]);
   });
 
+  it("Chat Completions 接受标准 stream_options.include_usage", () => {
+    const parsed = parseChatCompletions({
+      model: "model-a",
+      messages: [{ role: "user", content: "hello" }],
+      stream: true,
+      stream_options: { include_usage: true },
+    });
+
+    expect(parsed.stream).toBe(true);
+    expect(parsed.request).not.toHaveProperty("stream_options");
+    expect(() => parseChatCompletions({
+      model: "model-a",
+      messages: [{ role: "user", content: "hello" }],
+      stream: true,
+      stream_options: { include_usage: "true" },
+    })).toThrow("stream_options.include_usage 必须是布尔值");
+  });
+
   it("Chat Completions 拒绝未知顶层字段和多候选", () => {
     expectUnsupported(() => parseChatCompletions({ model: "m", messages: [{ role: "user", content: "x" }], logprobs: true }), "logprobs");
     expectUnsupported(() => parseChatCompletions({ model: "m", messages: [{ role: "user", content: "x" }], n: 2 }), "n");
+    expectUnsupported(() => parseChatCompletions({
+      model: "m",
+      messages: [{ role: "user", content: "x" }],
+      stream: true,
+      stream_options: { include_cost: true },
+    }), "stream_options.include_cost");
   });
 
   it("Responses 解析无状态文本与 function call/result", () => {

@@ -141,6 +141,23 @@ export async function markRouteToolsUnsupported(routeId: string): Promise<void> 
     ));
 }
 
+/** 仅在 Provider 仍指向本次失败的 Base URL 时持久化流式 usage 能力降级。 */
+export async function markProviderStreamUsageUnsupported(
+  providerId: string,
+  baseUrl: string,
+): Promise<void> {
+  const db = await getDb();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const s = getSchema() as any;
+  await db
+    .update(s.providers)
+    .set({ supportsStreamUsage: false })
+    .where(and(
+      eq(s.providers.id, providerId),
+      eq(s.providers.baseUrl, baseUrl),
+    ));
+}
+
 /** 当前生效的 Repository 实例(默认 Drizzle;测试可覆盖)。 */
 let currentRepo: RouteRepository = new DrizzleRouteRepository();
 

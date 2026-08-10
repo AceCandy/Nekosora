@@ -43,6 +43,8 @@ function harness(
   options: {
     isToolUnsupported?: (error: unknown) => boolean;
     onToolUnsupported?: (route: ResolvedRoute) => Promise<void>;
+    isStreamOptionsUnsupported?: (route: ResolvedRoute, error: unknown) => boolean;
+    onStreamOptionsUnsupported?: (route: ResolvedRoute) => Promise<void>;
   } = {},
 ) {
   const attempts: AttemptTelemetry[] = [];
@@ -66,6 +68,8 @@ function harness(
     selectAdapter,
     isToolUnsupported: options.isToolUnsupported,
     onToolUnsupported: options.onToolUnsupported,
+    isStreamOptionsUnsupported: options.isStreamOptionsUnsupported,
+    onStreamOptionsUnsupported: options.onStreamOptionsUnsupported,
     telemetry,
     breaker,
   });
@@ -176,6 +180,168 @@ describe("gateway execution engine", () => {
     expect(onToolUnsupported).toHaveBeenCalledOnce();
     expect(outcome).toMatchObject({ status: "success", route: { routeId: "b" } });
     expect(h.breaker.recordFailure).not.toHaveBeenCalled();
+  });
+
+  it("stream_options 拒绝后用同 route 和同 key 重试一次", async () => {
+    const calls: string[] = [];
+    let learned = false;
+    const onStreamOptionsUnsupported = vi.fn(async (current: ResolvedRoute) => {
+      current.provider.supportsStreamUsage = false;
+      learned = true;
+    });
+    const adapter: GatewayAttemptAdapter<Event, Result> = async function* ({ route: current, apiKey }) {
+      calls.push(`${current.routeId}:${apiKey}:${learned}`);
+      if (!learned) {
+        throw Object.assign(
+          new Error("invalid_request_error: Unsupported parameter: 'stream_options'."),
+          { statusCode: 400 },
+        );
+      }
+      return { value: { text: "ok" }, usage: { inputTokens: 2, outputTokens: 1 } };
+    };
+    const h = harness(
+      [route("a", ["key-a", "key-b"], "openai-compatible")],
+      () => adapter,
+      undefined,
+      {
+        isStreamOptionsUnsupported: () => true,
+        onStreamOptionsUnsupported,
+      },
+    );
+
+    const { outcome } = await consume(h.generator);
+
+    expect(calls).toEqual(["a:key-a:false", "a:key-a:true"]);
+    expect(onStreamOptionsUnsupported).toHaveBeenCalledOnce();
+    expect(h.attempts).toMatchObject([
+      { status: "failed", error: { code: "stream_options_not_supported", phase: "routing" } },
+      { status: "success" },
+    ]);
+    expect(outcome).toMatchObject({ status: "success", result: { text: "ok" } });
+    expect(h.breaker.recordFailure).not.toHaveBeenCalled();
+    expect(h.breaker.recordSuccess).toHaveBeenCalledOnce();
+    expect(h.finalized).toHaveLength(1);
+  });
+
+  it("stream_options 能力持久化失败不覆盖内存降级与重试结果", async () => {
+    const adapter: GatewayAttemptAdapter<Event, Result> = async function* ({ route: current }) {
+      if (current.provider.supportsStreamUsage !== false) {
+        throw Object.assign(new Error("stream_options is unsupported"), { statusCode: 400 });
+      }
+      return { value: { text: "ok" } };
+    };
+    const onStreamOptionsUnsupported = vi.fn(async (current: ResolvedRoute) => {
+      current.provider.supportsStreamUsage = false;
+      throw new Error("database unavailable");
+    });
+    const h = harness(
+      [route("a", ["key-a"], "openai-compatible")],
+      () => adapter,
+      undefined,
+      {
+        isStreamOptionsUnsupported: () => true,
+        onStreamOptionsUnsupported,
+      },
+    );
+
+    const { outcome } = await consume(h.generator);
+
+    expect(onStreamOptionsUnsupported).toHaveBeenCalledOnce();
+    expect(h.attempts.map((attempt) => attempt.status)).toEqual(["failed", "success"]);
+    expect(outcome).toMatchObject({ status: "success", result: { text: "ok" } });
+    expect(h.breaker.recordFailure).not.toHaveBeenCalled();
+  });
+
+  it("stream_options 降级后仍失败时不会循环重试", async () => {
+    const calls: string[] = [];
+    const onStreamOptionsUnsupported = vi.fn(async (current: ResolvedRoute) => {
+      current.provider.supportsStreamUsage = false;
+    });
+    const adapter: GatewayAttemptAdapter<Event, Result> = async function* ({ route: current, apiKey }) {
+      calls.push(`${current.routeId}:${apiKey}`);
+      throw Object.assign(
+        new Error("invalid_request_error: Unsupported parameter: 'stream_options'."),
+        { statusCode: 400 },
+      );
+    };
+    const h = harness(
+      [route("a", ["key-a", "key-b"], "openai-compatible"), route("b")],
+      () => adapter,
+      undefined,
+      {
+        isStreamOptionsUnsupported: () => true,
+        onStreamOptionsUnsupported,
+      },
+    );
+
+    const { outcome } = await consume(h.generator);
+
+    expect(calls).toEqual(["a:key-a", "a:key-a"]);
+    expect(onStreamOptionsUnsupported).toHaveBeenCalledOnce();
+    expect(h.attempts.map((item) => item.status)).toEqual(["failed", "failed"]);
+    expect(outcome.status).toBe("failed");
+    expect(h.finalized).toHaveLength(1);
+  });
+
+  it("同一 execution 的后续 route 不会再次执行 stream_options 降级", async () => {
+    const firstRoute = route("a", ["key-a"], "openai-compatible");
+    const secondRoute = route("b", ["key-b"], "openai-compatible");
+    secondRoute.provider = {
+      ...secondRoute.provider,
+      id: firstRoute.provider.id,
+      baseUrl: firstRoute.provider.baseUrl,
+    };
+    const calls: string[] = [];
+    const onStreamOptionsUnsupported = vi.fn(async (current: ResolvedRoute) => {
+      current.provider.supportsStreamUsage = false;
+    });
+    const adapter: GatewayAttemptAdapter<Event, Result> = async function* ({ route: current }) {
+      calls.push(current.routeId);
+      if (current.routeId === "a" && calls.length === 2) {
+        throw Object.assign(new Error("temporary upstream failure"), { statusCode: 503 });
+      }
+      throw Object.assign(new Error("stream_options is unsupported"), { statusCode: 400 });
+    };
+    const h = harness(
+      [firstRoute, secondRoute],
+      () => adapter,
+      undefined,
+      {
+        isStreamOptionsUnsupported: () => true,
+        onStreamOptionsUnsupported,
+      },
+    );
+
+    await consume(h.generator);
+
+    expect(calls).toEqual(["a", "a", "b"]);
+    expect(onStreamOptionsUnsupported).toHaveBeenCalledOnce();
+    expect(h.attempts).toHaveLength(3);
+    expect(h.finalized).toHaveLength(1);
+  });
+
+  it("响应已经提交后不执行 stream_options 降级", async () => {
+    const onStreamOptionsUnsupported = vi.fn(async () => undefined);
+    const adapter: GatewayAttemptAdapter<Event, Result> = async function* () {
+      yield { value: { text: "visible" }, commitsResponse: true };
+      throw Object.assign(new Error("stream_options is unsupported"), { statusCode: 400 });
+    };
+    const h = harness(
+      [route("a", ["key-a", "key-b"], "openai-compatible")],
+      () => adapter,
+      undefined,
+      {
+        isStreamOptionsUnsupported: () => true,
+        onStreamOptionsUnsupported,
+      },
+    );
+
+    const { events, outcome } = await consume(h.generator);
+
+    expect(events).toEqual([{ text: "visible" }]);
+    expect(onStreamOptionsUnsupported).not.toHaveBeenCalled();
+    expect(h.attempts).toHaveLength(1);
+    expect(outcome).toMatchObject({ status: "failed", committed: true });
   });
 
   it.each([

@@ -169,6 +169,7 @@ export async function updateProvider(id: string, formData: FormData) {
       String(formData.get("baseUrl") ?? ""),
     ),
     testModel: String(formData.get("testModel") ?? ""),
+    supportsStreamUsage: null,
     updatedAt: new Date(),
   };
   const keys = collectKeys(formData);

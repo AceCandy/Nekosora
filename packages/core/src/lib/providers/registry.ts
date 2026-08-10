@@ -86,7 +86,7 @@ export function buildLanguageModelWithKey(
           apiKey,
           headers: { ...commonHeaders, ...sessionHeaders },
           ...fetchOpts,
-          includeUsage: true,
+          includeUsage: provider.supportsStreamUsage !== false,
           transformRequestBody: (body) => applyReasoningToCompatibleBody(body, route.capabilities, reasoning),
         });
         return providerInstance.chatModel(upstreamModelName);

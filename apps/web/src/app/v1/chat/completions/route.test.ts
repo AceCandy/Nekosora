@@ -118,6 +118,38 @@ describe("POST /v1/chat/completions 流式取消", () => {
     expect(body).toContain("data: [DONE]\n\n");
   });
 
+  it("接受 OpenAI 客户端发送的 stream_options.include_usage", async () => {
+    mocks.streamChat.mockReturnValue((async function* () {
+      yield { type: "finish", finishReason: "stop", usage: {} };
+    })());
+
+    const response = await POST(request({
+      stream_options: { include_usage: true },
+    }));
+    const body = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(mocks.streamChat).toHaveBeenCalledOnce();
+    expect(body).toContain("data: [DONE]\n\n");
+  });
+
+  it("拒绝未知 stream_options 子字段且不触网上游", async () => {
+    const response = await POST(request({
+      stream_options: { include_cost: true },
+    }));
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body).toMatchObject({
+      error: {
+        code: "request.unsupported_parameter",
+        message: "Unsupported parameter: 'stream_options.include_cost'.",
+        param: "stream_options.include_cost",
+      },
+    });
+    expect(mocks.streamChat).not.toHaveBeenCalled();
+  });
+
   it("拒绝 WebChat 专有联网参数且不触网上游", async () => {
     mocks.streamChat.mockReturnValue((async function* () {
       yield { type: "finish", finishReason: "stop", usage: {} };

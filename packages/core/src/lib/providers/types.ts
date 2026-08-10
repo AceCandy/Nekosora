@@ -28,6 +28,8 @@ export interface ResolvedProvider {
   connectTimeoutMs?: number;
   readTimeoutMs?: number;
   headers?: Record<string, string>;
+  /** null/undefined=待探测；false=上游明确拒绝 stream_options。 */
+  supportsStreamUsage?: boolean | null;
 }
 
 /** 一条路由解析结果:对应一个具体可调用的上游模型。 */

@@ -47,6 +47,7 @@ interface MockProvider {
   protocol: string;
   baseUrl: string;
   apiKeysEnc: string;
+  supportsStreamUsage: boolean | null;
   enabled: boolean;
 }
 
@@ -90,11 +91,13 @@ function makeMockRepo(data: MockData): RouteRepository {
 function makeDefaultData(): MockData {
   const providerA: MockProvider = {
     id: "PA", name: "上游A", protocol: "openai",
-    baseUrl: "https://a.example.com/v1", apiKeysEnc: ENC_KEY, enabled: true,
+    baseUrl: "https://a.example.com/v1", apiKeysEnc: ENC_KEY,
+    supportsStreamUsage: false, enabled: true,
   };
   const providerB: MockProvider = {
     id: "PB", name: "上游B", protocol: "openai",
-    baseUrl: "https://b.example.com/v1", apiKeysEnc: ENC_KEY, enabled: true,
+    baseUrl: "https://b.example.com/v1", apiKeysEnc: ENC_KEY,
+    supportsStreamUsage: null, enabled: true,
   };
   const pubModel: MockModel = {
     id: "M_PUB", name: "gpt-pub", ownerUserId: "U_A", visibility: "public",
@@ -283,6 +286,21 @@ describe("routing", () => {
       const routes = await resolveRoutes(ctx, "gpt-pub");
       expect(routes[0].provider.apiKey).toBe("sk-test-fake");
       expect(routes[0].provider.keys).toHaveLength(1);
+    });
+
+    it("保留 Provider 的流式 usage 兼容状态", async () => {
+      const ctx: CallContext = { userId: "U_A", keyKind: null, source: "chat" };
+
+      await expect(resolveRoutesById(ctx, "M_PUB")).resolves.toEqual([
+        expect.objectContaining({
+          provider: expect.objectContaining({ supportsStreamUsage: false }),
+        }),
+      ]);
+      await expect(resolveRoutesById(ctx, "M_PRIV")).resolves.toEqual([
+        expect.objectContaining({
+          provider: expect.objectContaining({ supportsStreamUsage: null }),
+        }),
+      ]);
     });
 
     it("保留每条路由实际配置的工具能力", async () => {

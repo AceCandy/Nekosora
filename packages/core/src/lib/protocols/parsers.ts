@@ -191,8 +191,16 @@ export function parseChatCompletions(body: unknown): ParsedGatewayRequest {
   assertAllowed(object, [
     "model", "messages", "stream", "temperature", "max_tokens", "max_completion_tokens",
     "top_p", "stop", "tools", "tool_choice", "response_format", "reasoning_effort", "n",
+    "stream_options",
   ]);
   if (object.n !== undefined && numberAt(object.n, "n") !== 1) unsupported("n");
+  if (object.stream_options !== undefined) {
+    const streamOptions = objectAt(object.stream_options, "stream_options");
+    assertAllowed(streamOptions, ["include_usage"], "stream_options");
+    if (streamOptions.include_usage !== undefined && typeof streamOptions.include_usage !== "boolean") {
+      invalid("stream_options.include_usage 必须是布尔值");
+    }
+  }
   const model = typeof object.model === "string" ? object.model : missing("model");
   return {
     protocol: "openai-chat",

@@ -42,6 +42,7 @@ vi.mock("@/lib/infra/metrics", () => ({
   releaseStream: vi.fn(),
 }));
 vi.mock("@/lib/repositories/route-repository", () => ({
+  markProviderStreamUsageUnsupported: vi.fn(),
   markRouteToolsUnsupported: vi.fn(),
 }));
 vi.mock("@/lib/system-settings/ua", () => ({
@@ -281,6 +282,7 @@ function expectUpstreamBody(
         model: UPSTREAM_MODEL,
         messages: expect.any(Array),
         stream: true,
+        stream_options: { include_usage: true },
       });
       break;
     case "openai-responses":
@@ -384,4 +386,31 @@ describe("multi-protocol gateway matrix", () => {
       expect(mocks.finalizeExecution).toHaveBeenCalledOnce();
     },
   );
+
+  it("已学习不支持流式 usage 的 Provider 不发送 stream_options", async () => {
+    const ingress = ingressCases[0];
+    const route = routeFor("openai-chat");
+    route.provider.supportsStreamUsage = false;
+    let upstreamBody: Record<string, unknown> | undefined;
+    mocks.resolveRoutes.mockResolvedValueOnce([route]);
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const request = new Request(input, init);
+      upstreamBody = JSON.parse(await request.text()) as Record<string, unknown>;
+      return upstreamResponse("openai-chat");
+    }));
+
+    const response = await handleProtocolRequest(
+      new Request(`https://gateway.test${ingress.path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(ingress.body),
+      }),
+      ingress.protocol,
+      ingress.path,
+      ingress.parse,
+    );
+
+    expect(response.status).toBe(200);
+    expect(upstreamBody).not.toHaveProperty("stream_options");
+  });
 });

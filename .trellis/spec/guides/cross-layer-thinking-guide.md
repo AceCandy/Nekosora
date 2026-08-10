@@ -113,6 +113,20 @@ same error for missing and unauthorized resources.
 resource ID. Complete authorization before database writes, secret decryption,
 network requests, cache invalidation, or health/circuit-breaker side effects.
 
+### Mistake 6: Same-Named Wire Fields Are Treated As One Boundary
+
+**Bad**: An error names stream_options, so the fix changes the Provider adapter
+without proving whether the field came from the client or was generated for the
+upstream.
+
+**Good**: Trace both directions independently:
+
+    Client payload -> ingress parser -> IR -> route adapter -> upstream payload
+
+Use telemetry to find the rejection boundary. No upstream attempt means the
+Provider cannot be the cause; an attempt exists only after ingress validation
+and routing have succeeded.
+
 ---
 
 ## Checklist for Cross-Layer Features
@@ -120,6 +134,7 @@ network requests, cache invalidation, or health/circuit-breaker side effects.
 Before implementation:
 
 - [ ] Mapped the complete data flow
+- [ ] Marked the direction of same-named fields at every wire boundary
 - [ ] Identified all layer boundaries
 - [ ] Defined format at each boundary
 - [ ] Decided where validation happens
@@ -129,6 +144,7 @@ After implementation:
 
 - [ ] Tested with edge cases (null, empty, invalid)
 - [ ] Verified error handling at each boundary
+- [ ] Confirmed telemetry/log evidence identifies the boundary that actually rejected the request
 - [ ] Verified resource authorization occurs before every external or persistent side effect
 - [ ] Checked data survives round-trip
 - [ ] Checked that consumers import shared decoders / projections instead of

@@ -140,6 +140,10 @@ export interface ExecuteGatewayOptions<TEvent, TResult> {
   isToolUnsupported?(error: unknown): boolean;
   /** 记录具体路由的工具能力降级；失败不得改变当前请求结果。 */
   onToolUnsupported?(route: ResolvedRoute): Promise<void>;
+  /** 识别 compatible Chat 上游对 stream_options 的明确拒绝。 */
+  isStreamOptionsUnsupported?(route: ResolvedRoute, error: unknown): boolean;
+  /** 让当前请求立即降级并持久化 Provider 能力；失败不得覆盖请求结果。 */
+  onStreamOptionsUnsupported?(route: ResolvedRoute): Promise<void>;
   telemetry: GatewayTelemetryPort;
   breaker: GatewayBreakerPort;
 }

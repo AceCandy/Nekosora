@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   startExecution: vi.fn(async () => undefined),
   recordAttempt: vi.fn(async () => undefined),
   finalizeExecution: vi.fn(async () => undefined),
+  markProviderStreamUsageUnsupported: vi.fn(async () => undefined),
 }));
 
 vi.mock("@/lib/usage", async () => {
@@ -29,6 +30,13 @@ vi.mock("@/lib/gateway-execution", async (importOriginal) => {
       recordAttempt: mocks.recordAttempt,
       finalizeExecution: mocks.finalizeExecution,
     },
+  };
+});
+vi.mock("@/lib/repositories/route-repository", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/repositories/route-repository")>();
+  return {
+    ...actual,
+    markProviderStreamUsageUnsupported: mocks.markProviderStreamUsageUnsupported,
   };
 });
 
@@ -159,6 +167,7 @@ describe("chat generation circuit breaker reporting", () => {
     mocks.startExecution.mockClear();
     mocks.recordAttempt.mockClear();
     mocks.finalizeExecution.mockClear();
+    mocks.markProviderStreamUsageUnsupported.mockClear();
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
   });
@@ -441,6 +450,69 @@ describe("chat generation circuit breaker reporting", () => {
     expect(snapshotBreakers()["provider-a"]).toMatchObject({
       status: "closed",
       failures: 1,
+    });
+  });
+
+  it("OpenAI-compatible 明确拒绝 stream_options 时自动持久化并同 key 重试", async () => {
+    const repository = makeSingleRouteRepository();
+    setRouteRepository({
+      ...repository,
+      findEnabledRoutes: async (modelId) => {
+        const [entry] = await repository.findEnabledRoutes(modelId);
+        return [{
+          route: { ...entry!.route, apiFormat: "openai-chat" },
+          provider: {
+            ...entry!.provider,
+            protocol: "openai-compatible",
+            supportsStreamUsage: true,
+          },
+        }];
+      },
+    });
+    vi.mocked(streamText)
+      .mockReturnValueOnce({
+        stream: (async function* () {
+          yield {
+            type: "error",
+            error: Object.assign(
+              new Error("invalid_request_error: Unsupported parameter: 'stream_options'."),
+              { statusCode: 400 },
+            ),
+          };
+        })(),
+      } as never)
+      .mockReturnValueOnce(mockStreamResult(
+        [{ type: "text-delta", text: "answer" }],
+        "stop",
+        { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+      ));
+
+    const events = await collectStream();
+
+    expect(streamText).toHaveBeenCalledTimes(2);
+    expect(mocks.markProviderStreamUsageUnsupported)
+      .toHaveBeenCalledWith("provider-a", "https://example.com/v1");
+    expect(events).toEqual([
+      { type: "text-delta", text: "answer" },
+      {
+        type: "finish",
+        finishReason: "stop",
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+      },
+    ]);
+    expect(mocks.recordAttempt).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      status: "failed",
+      error: expect.objectContaining({ code: "stream_options_not_supported" }),
+    }));
+    expect(mocks.recordAttempt).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      status: "success",
+    }));
+    expect(mocks.finalizeExecution).toHaveBeenCalledWith(expect.objectContaining({
+      outcome: expect.objectContaining({ status: "success" }),
+    }));
+    expect(snapshotBreakers()["provider-a"]).toMatchObject({
+      status: "closed",
+      failures: 0,
     });
   });
 

@@ -208,6 +208,8 @@ export const providers = pgTable(
     readTimeoutMs: integer("read_timeout_ms"),
     streamIdleTimeoutMs: integer("stream_idle_timeout_ms"),
     headersJson: jsonb("headers_json").$type<Record<string, string>>(),
+    // null=待探测;false=上游明确拒绝 stream_options。true 保留给显式正向能力。
+    supportsStreamUsage: boolean("supports_stream_usage"),
     // 最近一次全量密钥检测的聚合健康度(检测所有 key 后回写)。
     lastHealthCheckedAt: timestamp("last_health_checked_at", { withTimezone: true }),
     lastHealthyKeyCount: integer("last_healthy_key_count"),
