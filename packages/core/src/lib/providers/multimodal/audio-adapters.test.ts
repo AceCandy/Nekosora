@@ -49,6 +49,7 @@ const route: ResolvedRoute = {
     baseUrl: "https://example.test/v1",
     apiKey: "AUDIO_SECRET",
     keys: [{ key: "AUDIO_SECRET", weight: 1 }],
+    connectTimeoutMs: 1_234,
     headers: { "x-custom-auth": "AUDIO_HEADER_SECRET" },
   },
   priority: 0,
@@ -130,6 +131,16 @@ describe("multimodal audio adapter redaction", () => {
     expect([...speech.audioBuffer]).toEqual([1, 2, 3]);
     expect(speech.mime).toBe("audio/mpeg");
     expect(transcription.text).toBe("hello");
+    expect(vi.mocked(createOpenAI).mock.calls).toHaveLength(2);
+    for (const [config] of vi.mocked(createOpenAI).mock.calls) {
+      expect(config).toEqual(expect.objectContaining({ fetch: expect.any(Function) }));
+    }
+    expect(generateSpeech).toHaveBeenCalledWith(expect.objectContaining({
+      abortSignal: expect.any(AbortSignal),
+    }));
+    expect(transcribe).toHaveBeenCalledWith(expect.objectContaining({
+      abortSignal: expect.any(AbortSignal),
+    }));
   });
 
   it("TTS 首 key 可转移失败后使用同一 provider 的下一 key", async () => {

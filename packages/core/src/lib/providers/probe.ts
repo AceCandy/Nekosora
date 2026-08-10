@@ -24,6 +24,12 @@ import { buildLanguageModelWithKey } from "@/lib/providers/registry";
 import { isKeyAuthError } from "@/lib/stream";
 import { redactErrorMessage } from "@/lib/redaction";
 import type { ResolvedRoute } from "@/lib/providers/types";
+import {
+  createProviderFetch,
+  createProviderTimeoutScope,
+  resolveProviderTimeouts,
+  type ProviderTimeoutConfig,
+} from "@/lib/providers/timeouts";
 import type { ProviderProtocol, RouteApiFormat } from "@/db/types";
 
 /** 探测结果。ok=false 时 errorKind 区分认证/网络/未知,供 UI 分类展示。 */
@@ -60,7 +66,6 @@ function buildModelsRequest(
 ): { url: string; init: RequestInit } {
   const merged = headers ?? {};
   const common: RequestInit = {
-    signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     cache: "no-store",
   };
   switch (protocol) {
@@ -112,7 +117,6 @@ function buildKeyAuthRequest(
 ): { url: string; init: RequestInit } {
   const merged = headers ?? {};
   const common: RequestInit = {
-    signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     cache: "no-store",
   };
   switch (protocol) {
@@ -168,7 +172,7 @@ export async function probeProviderKey(opts: {
   /** 传入则测试该具体模型可用性;缺省只验证 key + baseUrl + 协议鉴权。 */
   upstreamModelName?: string;
   headers?: Record<string, string>;
-}): Promise<ProbeResult> {
+} & ProviderTimeoutConfig): Promise<ProbeResult> {
   const { baseUrl, upstreamModelName } = opts;
   if (!baseUrl) {
     return { ok: false, error: "缺少接口地址", errorKind: "unknown" };
@@ -190,104 +194,122 @@ async function probeModelAvailability(opts: {
   apiKey: string;
   upstreamModelName: string;
   headers?: Record<string, string>;
-}): Promise<ProbeResult> {
+} & ProviderTimeoutConfig): Promise<ProbeResult> {
   const { protocol, apiFormat, baseUrl, apiKey, headers, upstreamModelName } = opts;
-  // 构造一次性 ResolvedRoute(mock),复用 registry 的协议构建逻辑。
-  const route: ResolvedRoute = {
-    modelName: "__probe__",
-    upstreamModelName,
-    protocol,
-    apiFormat,
-    provider: {
-      id: "__probe__",
-      name: "__probe__",
-      protocol,
-      baseUrl,
-      apiKey,
-      keys: [{ key: apiKey, weight: 1 }],
-      headers,
-    },
-    priority: 0,
-    weight: 1,
-    source: "global",
-    routeId: "__probe__",
-  };
+  const timeouts = resolveProviderTimeouts(opts);
+  const timeoutScope = createProviderTimeoutScope(
+    undefined,
+    Math.min(timeouts.readTimeoutMs, PROBE_TIMEOUT_MS),
+    "read",
+  );
   const startedAt = Date.now();
   const secrets = [apiKey, ...Object.values(headers ?? {})];
-  let model: ReturnType<typeof buildLanguageModelWithKey>;
   try {
-    model = buildLanguageModelWithKey(
-      route,
-      apiKey,
-      undefined,
-      undefined,
-      headers?.["user-agent"],
-    );
-  } catch (err) {
-    const errorKind: ProbeResult["errorKind"] = isKeyAuthError(err)
-      ? "auth"
-      : isNetworkError(err)
-        ? "network"
-        : "unknown";
-    return {
-      ok: false,
-      latencyMs: Date.now() - startedAt,
-      error: redactErrorMessage(err, secrets),
-      errorKind,
+    // 构造一次性 ResolvedRoute(mock),复用 registry 的协议构建逻辑。
+    const route: ResolvedRoute = {
+      modelName: "__probe__",
+      upstreamModelName,
+      protocol,
+      apiFormat,
+      provider: {
+        id: "__probe__",
+        name: "__probe__",
+        protocol,
+        baseUrl,
+        apiKey,
+        keys: [{ key: apiKey, weight: 1 }],
+        connectTimeoutMs: timeouts.connectTimeoutMs,
+        readTimeoutMs: timeouts.readTimeoutMs,
+        streamIdleTimeoutMs: timeouts.streamIdleTimeoutMs,
+        headers,
+      },
+      priority: 0,
+      weight: 1,
+      source: "global",
+      routeId: "__probe__",
     };
-  }
-  const providerOptions = apiFormat === "openai-responses"
-    ? { openai: { store: false } }
-    : undefined;
-  try {
-    await generateText({
-      model,
-      prompt: "hi",
-      maxOutputTokens: 1,
-      maxRetries: 0,
-      providerOptions,
-    });
-    return { ok: true, latencyMs: Date.now() - startedAt, mode: "non-stream" };
-  } catch (err) {
-    const msg = redactErrorMessage(err, secrets);
-    const errorKind: ProbeResult["errorKind"] = isKeyAuthError(err)
-      ? "auth"
-      : isNetworkError(err)
-        ? "network"
-        : "unknown";
-    if (errorKind === "auth" || errorKind === "network") {
-      return { ok: false, latencyMs: Date.now() - startedAt, error: msg, errorKind };
-    }
+    let model: ReturnType<typeof buildLanguageModelWithKey>;
     try {
-      let streamError: unknown;
-      const result = streamText({
-        model,
-        prompt: "hi",
-        maxOutputTokens: 8,
-        maxRetries: 0,
-        providerOptions,
-      });
-      await result.consumeStream({ onError: (error) => { streamError = error; } });
-      if (streamError) throw streamError;
-      return {
-        ok: true,
-        latencyMs: Date.now() - startedAt,
-        mode: "stream",
-        nonStreamError: msg,
-      };
-    } catch (streamErr) {
-      const streamMsg = redactErrorMessage(streamErr, secrets);
+      model = buildLanguageModelWithKey(
+        route,
+        apiKey,
+        undefined,
+        undefined,
+        headers?.["user-agent"],
+      );
+    } catch (err) {
+      const errorKind: ProbeResult["errorKind"] = isKeyAuthError(err)
+        ? "auth"
+        : isNetworkError(err)
+          ? "network"
+          : "unknown";
       return {
         ok: false,
         latencyMs: Date.now() - startedAt,
-        error: `非流式: ${msg}; 流式: ${streamMsg}`,
-        errorKind: isKeyAuthError(streamErr)
-          ? "auth"
-          : isNetworkError(streamErr)
-            ? "network"
-            : "unknown",
+        error: redactErrorMessage(err, secrets),
+        errorKind,
       };
     }
+    const providerOptions = apiFormat === "openai-responses"
+      ? { openai: { store: false } }
+      : undefined;
+    try {
+      await generateText({
+        model,
+        prompt: "hi",
+        maxOutputTokens: 1,
+        maxRetries: 0,
+        providerOptions,
+        abortSignal: timeoutScope.signal,
+      });
+      return { ok: true, latencyMs: Date.now() - startedAt, mode: "non-stream" };
+    } catch (err) {
+      const failure = preserveProbeTimeoutReason(err, timeoutScope.signal);
+      const msg = redactErrorMessage(failure, secrets);
+      const errorKind: ProbeResult["errorKind"] = isKeyAuthError(failure)
+        ? "auth"
+        : isNetworkError(failure)
+          ? "network"
+          : "unknown";
+      if (errorKind === "auth" || errorKind === "network") {
+        return { ok: false, latencyMs: Date.now() - startedAt, error: msg, errorKind };
+      }
+      try {
+        let streamError: unknown;
+        const result = streamText({
+          model,
+          prompt: "hi",
+          maxOutputTokens: 8,
+          maxRetries: 0,
+          providerOptions,
+          abortSignal: timeoutScope.signal,
+          timeout: { chunkMs: timeouts.streamIdleTimeoutMs },
+        });
+        await result.consumeStream({ onError: (error) => { streamError = error; } });
+        if (streamError) throw streamError;
+        return {
+          ok: true,
+          latencyMs: Date.now() - startedAt,
+          mode: "stream",
+          nonStreamError: msg,
+        };
+      } catch (streamErr) {
+        const failure = preserveProbeTimeoutReason(streamErr, timeoutScope.signal);
+        const streamMsg = redactErrorMessage(failure, secrets);
+        return {
+          ok: false,
+          latencyMs: Date.now() - startedAt,
+          error: `非流式: ${msg}; 流式: ${streamMsg}`,
+          errorKind: isKeyAuthError(failure)
+            ? "auth"
+            : isNetworkError(failure)
+              ? "network"
+              : "unknown",
+        };
+      }
+    }
+  } finally {
+    timeoutScope.dispose();
   }
 }
 
@@ -303,17 +325,26 @@ async function probeKeyAuth(opts: {
   baseUrl: string;
   apiKey: string;
   headers?: Record<string, string>;
-}): Promise<ProbeResult> {
+} & ProviderTimeoutConfig): Promise<ProbeResult> {
   const { protocol, baseUrl, apiKey, headers } = opts;
   const base = baseUrl.replace(/\/+$/, "");
   const { url, init } = buildKeyAuthRequest(protocol, base, apiKey, headers);
+  const timeouts = resolveProviderTimeouts(opts);
+  const timeoutScope = createProviderTimeoutScope(
+    undefined,
+    Math.min(timeouts.readTimeoutMs, PROBE_TIMEOUT_MS),
+    "read",
+  );
+  const providerFetch = createProviderFetch({
+    connectTimeoutMs: Math.min(timeouts.connectTimeoutMs, PROBE_TIMEOUT_MS),
+  });
   const startedAt = Date.now();
   try {
-    const res = await fetch(url, init);
+    const res = await providerFetch(url, { ...init, signal: timeoutScope.signal });
     const latencyMs = Date.now() - startedAt;
     const status = res.status;
     if (status === 401 || status === 403) {
-      const body = typeof res.text === "function" ? await res.text().catch(() => "") : "";
+      const body = await readProbeResponseText(res, timeoutScope.signal);
       // 伪 401/403:opencode 等先校验 model 的上游,空 body 缺 model 直接返 401 + ModelError,
       // 压根没到 key 校验。判 unknown(网络层仍通),避免误导成"密钥错";要验 key 需带 model 深度检测。
       if (/modelerror|not supported|unsupported model|model.{0,10}not/i.test(body)) {
@@ -344,7 +375,7 @@ async function probeKeyAuth(opts: {
     // gemini 退回 GET /models:官方对无效 key 返 400(非 401/403),body 含 "API key not valid"。
     // 通用判定把 400 当"key 有效",此处单独解析 body,命中 key 无效字样判 auth 失败。
     if (protocol === "gemini") {
-      const body = typeof res.text === "function" ? await res.text().catch(() => "") : "";
+      const body = await readProbeResponseText(res, timeoutScope.signal);
       if (
         /api key not valid|api[_-]?key.{0,20}invalid|invalid.{0,20}api[_-]?key|api_key_invalid|permission_denied/i.test(
           body,
@@ -361,13 +392,30 @@ async function probeKeyAuth(opts: {
     // 400(valid key 缺 messages 等字段)/2xx/404 等:chat 端点已校验过 key,视为 key 有效 + 网络通。
     return { ok: true, latencyMs };
   } catch (err) {
+    const failure = preserveProbeTimeoutReason(err, timeoutScope.signal);
     const latencyMs = Date.now() - startedAt;
-    const errorKind: ProbeResult["errorKind"] = isNetworkError(err)
+    const errorKind: ProbeResult["errorKind"] = isNetworkError(failure)
       ? "network"
       : "unknown";
-    const msg = redactErrorMessage(err, [apiKey, ...Object.values(headers ?? {})]);
+    const msg = redactErrorMessage(failure, [apiKey, ...Object.values(headers ?? {})]);
     return { ok: false, latencyMs, error: msg, errorKind };
+  } finally {
+    timeoutScope.dispose();
   }
+}
+
+async function readProbeResponseText(response: Response, signal: AbortSignal): Promise<string> {
+  if (typeof response.text !== "function") return "";
+  try {
+    return await response.text();
+  } catch (error) {
+    if (signal.aborted) throw signal.reason ?? error;
+    return "";
+  }
+}
+
+function preserveProbeTimeoutReason(error: unknown, signal: AbortSignal): unknown {
+  return signal.aborted ? (signal.reason ?? error) : error;
 }
 
 /** 判断错误是否为网络/超时类(非鉴权、非业务逻辑)。 */
@@ -387,14 +435,23 @@ export async function fetchUpstreamModels(opts: {
   baseUrl: string;
   apiKey: string;
   headers?: Record<string, string>;
-}): Promise<UpstreamModel[]> {
+} & ProviderTimeoutConfig): Promise<UpstreamModel[]> {
   const { protocol, baseUrl, apiKey, headers } = opts;
   if (!baseUrl) throw new Error("缺少接口地址");
 
   const base = baseUrl.replace(/\/+$/, "");
   const { url, init } = buildModelsRequest(protocol, base, apiKey, headers);
+  const timeouts = resolveProviderTimeouts(opts);
+  const timeoutScope = createProviderTimeoutScope(
+    undefined,
+    Math.min(timeouts.readTimeoutMs, PROBE_TIMEOUT_MS),
+    "read",
+  );
+  const providerFetch = createProviderFetch({
+    connectTimeoutMs: Math.min(timeouts.connectTimeoutMs, PROBE_TIMEOUT_MS),
+  });
   try {
-    const res = await fetch(url, init);
+    const res = await providerFetch(url, { ...init, signal: timeoutScope.signal });
     if (!res.ok) {
       throw new Error(`上游返回 ${res.status} ${res.statusText}`);
     }
@@ -406,9 +463,12 @@ export async function fetchUpstreamModels(opts: {
     }
     return parseDataModels(json);
   } catch (error) {
+    const failure = preserveProbeTimeoutReason(error, timeoutScope.signal);
     throw new Error(
-      redactErrorMessage(error, [apiKey, ...Object.values(headers ?? {})], "拉取上游模型失败"),
+      redactErrorMessage(failure, [apiKey, ...Object.values(headers ?? {})], "拉取上游模型失败"),
     );
+  } finally {
+    timeoutScope.dispose();
   }
 }
 

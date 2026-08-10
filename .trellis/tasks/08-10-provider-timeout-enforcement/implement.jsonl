@@ -1,1 +1,13 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file":".trellis/spec/backend/index.md","reason":"加载后端分层入口与执行前检查清单"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"约束 PostgreSQL schema、追加迁移、journal 与 snapshot 同步"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"保持 gateway.timeout、取消、HTTP/SSE 与凭据脱敏错误契约"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"保持 attempt/execution 单终态、breaker 与 telemetry 事实模型"}
+{"file":".trellis/spec/backend/gateway-routing.md","reason":"保持统一 Engine 的 route/key fallback、commit 与多协议边界"}
+{"file":".trellis/spec/backend/gateway-runtime.md","reason":"保持 Fastify listener 取消、Web Request signal 与进程边界"}
+{"file":".trellis/spec/backend/provider-probe.md","reason":"保持 Provider discovery、深度探测、固定预算与脱敏契约"}
+{"file":".trellis/spec/frontend/index.md","reason":"加载管理端 Server/Client、i18n 与质量入口"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"约束 Provider 弹窗表单、单位说明、响应式与可访问性"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"约束 Server/Client 边界、测试位置和全量质量门禁"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Server Action 外部 FormData 只在共享边界校验一次"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"核对 DB 到 UI、runtime、stream 与 telemetry 的完整字段流"}
+{"file":".trellis/tasks/08-10-provider-timeout-enforcement/research/timeout-execution-boundary.md","reason":"提供当前缺口、SDK 版本能力、调用链和测试模式证据"}

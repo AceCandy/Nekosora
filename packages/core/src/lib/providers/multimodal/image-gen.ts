@@ -22,6 +22,7 @@ import {
   type GatewayAttemptAdapter,
 } from "@/lib/gateway-execution";
 import { selectMediaAdapter } from "@/lib/gateway-execution/media-registry";
+import { createProviderFetch } from "@/lib/providers/timeouts";
 
 export interface ImageGenOptions {
   prompt: string;
@@ -73,6 +74,7 @@ export async function generateImageViaRoute(
       apiKey,
       name: route.provider.id,
       headers: route.provider.headers,
+      fetch: createProviderFetch({ connectTimeoutMs: route.provider.connectTimeoutMs }),
     });
     const result = await generateImage({
       model: provider.image(route.upstreamModelName),

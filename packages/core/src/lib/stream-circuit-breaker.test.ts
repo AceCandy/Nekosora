@@ -87,6 +87,7 @@ function makeSingleRouteRepository(): RouteRepository {
         baseUrl: "https://example.com/v1",
         apiKeysEnc: encryptedKeys,
         headersJson: { "x-custom-auth": "HEADER_SECRET" },
+        streamIdleTimeoutMs: 12_345,
         enabled: true,
       },
     }],
@@ -308,6 +309,7 @@ describe("chat generation circuit breaker reporting", () => {
     expect(result.text).toBe('{"memory":[]}');
     expect(generateText).toHaveBeenCalledWith(expect.objectContaining({
       output: { kind: "json-output" },
+      abortSignal: expect.any(AbortSignal),
     }));
   });
 
@@ -354,6 +356,10 @@ describe("chat generation circuit breaker reporting", () => {
       expectedEvent,
       { type: "error", error: "connect ETIMEDOUT", code: "generation_failed" },
     ]);
+    expect(streamText).toHaveBeenCalledWith(expect.objectContaining({
+      abortSignal: expect.any(AbortSignal),
+      timeout: { chunkMs: 12_345 },
+    }));
     expect(mocks.recordAttempt).toHaveBeenCalledTimes(1);
     expect(mocks.finalizeExecution).toHaveBeenCalledWith(expect.objectContaining({
       outcome: expect.objectContaining({ status: "failed" }),

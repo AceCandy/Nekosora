@@ -76,6 +76,9 @@ export default async function MyProvidersPage() {
       modelProbeError: (p.lastModelProbeError as string | null) ?? null,
     },
     testModel: (p.testModel as string | null) ?? null,
+    connectTimeoutMs: (p.connectTimeoutMs as number | null) ?? null,
+    readTimeoutMs: (p.readTimeoutMs as number | null) ?? null,
+    streamIdleTimeoutMs: (p.streamIdleTimeoutMs as number | null) ?? null,
     upstreamModels: (p.upstreamModels as string[] | null) ?? [],
     upstreamModelsAt: (p.upstreamModelsAt as Date | null) ?? null,
   }));

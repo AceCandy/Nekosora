@@ -160,12 +160,19 @@ vi.mock("@/lib/infra/db", () => {
       }),
     }),
     insert: (table?: { __table?: string }) => ({
-      values: async (row: Record<string, unknown>) => {
+      values: (row: Record<string, unknown>) => {
+        let id = "";
         if (table?.__table === "routes") {
-          mockData.routes.push({ id: `route-${mockData.routes.length + 1}`, ...row });
+          id = `route-${mockData.routes.length + 1}`;
+          mockData.routes.push({ id, ...row });
+        } else if (table?.__table === "providers") {
+          id = `provider-${mockData.providers.length + 1}`;
+          mockData.providers.push({ id, ...row });
         } else {
-          mockData.models.push({ id: `model-${mockData.models.length + 1}`, ...row });
+          id = `model-${mockData.models.length + 1}`;
+          mockData.models.push({ id, ...row });
         }
+        return { returning: async () => [{ id }] };
       },
     }),
     transaction: async (callback: (tx: typeof db) => Promise<unknown>) => {
@@ -176,8 +183,8 @@ vi.mock("@/lib/infra/db", () => {
   return { getDb: async () => db, getSchema: () => schema, isPg: false };
 });
 
-import { attachMyProviderModelRoute, createMyModel, createMyRoute, reorderMyModels, updateMyModel, updateMyRoute, checkMyProviderHealth, testMyProviderModel, testMyKeyDirect, testMyRoute, getBindableModels } from "./actions";
-import { probeProviderKey } from "@/lib/providers/probe";
+import { attachMyProviderModelRoute, createMyModel, createMyProvider, createMyRoute, reorderMyModels, updateMyModel, updateMyProvider, updateMyRoute, checkMyProviderHealth, testMyProviderModel, testMyKeyDirect, testMyRoute, getBindableModels } from "./actions";
+import { fetchUpstreamModels, probeProviderKey } from "@/lib/providers/probe";
 import { parseKeyBundle, pickWeightedKey } from "@/lib/providers/keys";
 
 beforeEach(() => {
@@ -185,6 +192,7 @@ beforeEach(() => {
   mockData.providers = [];
   mockData.routes = [];
   vi.mocked(probeProviderKey).mockReset();
+  vi.mocked(fetchUpstreamModels).mockReset().mockResolvedValue([]);
   vi.mocked(parseKeyBundle).mockReset();
   mockData.models = [
     { id: "public-a", name: "public-a", ownerUserId: "admin-a", visibility: "public", sortOrder: 0, catalogId: "catalog-chat" },
@@ -192,6 +200,67 @@ beforeEach(() => {
     { id: "private-a", name: "private-a", ownerUserId: "admin-a", visibility: "private", sortOrder: 5, catalogId: "catalog-chat" },
     { id: "private-b", name: "private-b", ownerUserId: "user-b", visibility: "private", sortOrder: 2, catalogId: "catalog-chat" },
   ];
+});
+
+describe("个人 Provider 超时配置", () => {
+  it("创建时把表单秒值保存为 nullable 毫秒值", async () => {
+    const formData = new FormData();
+    formData.set("name", "Provider A");
+    formData.set("protocol", "openai");
+    formData.set("baseUrl", "https://api.example.com/v1");
+    formData.set("connectTimeoutSeconds", "60");
+    formData.set("readTimeoutSeconds", "900.125");
+    formData.set("streamIdleTimeoutSeconds", "");
+
+    await createMyProvider(formData);
+
+    expect(mockData.providers[0]).toEqual(expect.objectContaining({
+      connectTimeoutMs: 60_000,
+      readTimeoutMs: 900_125,
+      streamIdleTimeoutMs: null,
+    }));
+    expect(fetchUpstreamModels).toHaveBeenCalledWith(expect.objectContaining({
+      connectTimeoutMs: 60_000,
+      readTimeoutMs: 900_125,
+      streamIdleTimeoutMs: null,
+    }));
+  });
+
+  it("无 marker 时保留旧值，有 marker 时更新并清空", async () => {
+    mockData.providers = [{
+      id: "provider-a",
+      ownerUserId: "admin-a",
+      connectTimeoutMs: 2_000,
+      readTimeoutMs: 20_000,
+      streamIdleTimeoutMs: 6_000,
+    }];
+    const legacy = new FormData();
+    legacy.set("name", "Provider A");
+    legacy.set("protocol", "openai");
+    legacy.set("baseUrl", "https://api.example.com/v1");
+    await updateMyProvider("provider-a", legacy);
+    expect(mockData.providers[0]).toEqual(expect.objectContaining({
+      connectTimeoutMs: 2_000,
+      readTimeoutMs: 20_000,
+      streamIdleTimeoutMs: 6_000,
+    }));
+
+    const current = new FormData();
+    current.set("name", "Provider A");
+    current.set("protocol", "openai");
+    current.set("baseUrl", "https://api.example.com/v1");
+    current.set("providerTimeoutsPresent", "1");
+    current.set("connectTimeoutSeconds", "1.5");
+    current.set("readTimeoutSeconds", "");
+    current.set("streamIdleTimeoutSeconds", "5");
+    await updateMyProvider("provider-a", current);
+
+    expect(mockData.providers[0]).toEqual(expect.objectContaining({
+      connectTimeoutMs: 1_500,
+      readTimeoutMs: null,
+      streamIdleTimeoutMs: 5_000,
+    }));
+  });
 });
 
 describe("attachMyProviderModelRoute", () => {
@@ -322,6 +391,9 @@ describe("testMyRoute", () => {
       protocol: "openai-compatible",
       baseUrl: "https://provider.example/v1",
       apiKeysEnc: "encrypted",
+      connectTimeoutMs: 2_000,
+      readTimeoutMs: 20_000,
+      streamIdleTimeoutMs: 6_000,
     }];
     mockData.routes = [{
       id: "route-a",
@@ -340,6 +412,9 @@ describe("testMyRoute", () => {
       apiFormat: "anthropic-messages",
       upstreamModelName: "demo-model",
       apiKey: "secret",
+      connectTimeoutMs: 2_000,
+      readTimeoutMs: 20_000,
+      streamIdleTimeoutMs: 6_000,
     }));
   });
 });
@@ -530,6 +605,7 @@ describe("checkMyProviderHealth", () => {
     mockData.providers = [{
       id: "p-d", ownerUserId: "admin-a", apiKeysEnc: "enc",
       protocol: "openai", baseUrl: "https://d", testModel: "claude-fable-5",
+      connectTimeoutMs: 2_000, readTimeoutMs: 20_000, streamIdleTimeoutMs: 6_000,
       lastNetworkOk: null, lastKeyResults: null,
     }];
     vi.mocked(parseKeyBundle).mockReturnValue([{ key: "k1", weight: 1 }]);
@@ -545,6 +621,13 @@ describe("checkMyProviderHealth", () => {
     expect(r.keyResults[0]).toMatchObject({ index: 0, ok: true });
     expect(mockData.providers[0].lastModelProbeOk).toBe(true);
     expect(vi.mocked(probeProviderKey).mock.calls[1][0]).toMatchObject({ upstreamModelName: "claude-fable-5" });
+    expect(vi.mocked(probeProviderKey).mock.calls).toEqual(expect.arrayContaining([
+      [expect.objectContaining({
+        connectTimeoutMs: 2_000,
+        readTimeoutMs: 20_000,
+        streamIdleTimeoutMs: 6_000,
+      })],
+    ]));
   });
 });
 
@@ -567,6 +650,7 @@ describe("testMyProviderModel", () => {
     mockData.providers = [{
       id: "p-b", ownerUserId: "admin-a", apiKeysEnc: "enc",
       protocol: "openai", baseUrl: "https://b", testModel: "claude-fable-5",
+      connectTimeoutMs: 2_000, readTimeoutMs: 20_000, streamIdleTimeoutMs: 6_000,
     }];
     vi.mocked(parseKeyBundle).mockReturnValue([{ key: "k1", weight: 1 }]);
     vi.mocked(pickWeightedKey).mockReturnValue("k1");
@@ -578,6 +662,9 @@ describe("testMyProviderModel", () => {
     expect(vi.mocked(probeProviderKey)).toHaveBeenCalledWith(expect.objectContaining({
       upstreamModelName: "claude-fable-5",
       apiKey: "k1",
+      connectTimeoutMs: 2_000,
+      readTimeoutMs: 20_000,
+      streamIdleTimeoutMs: 6_000,
     }));
     expect(mockData.providers[0].lastModelProbeOk).toBe(true);
     expect(mockData.providers[0].lastModelProbeError).toBeNull();
@@ -601,6 +688,9 @@ describe("testMyKeyDirect", () => {
     expect(r.ok).toBe(true);
     const callArg = vi.mocked(probeProviderKey).mock.calls[0][0];
     expect(callArg.upstreamModelName).toBeFalsy();
+    expect(callArg).not.toHaveProperty("connectTimeoutMs");
+    expect(callArg).not.toHaveProperty("readTimeoutMs");
+    expect(callArg).not.toHaveProperty("streamIdleTimeoutMs");
   });
 
   it("有 testModel -> 带 upstreamModelName 走深度检测", async () => {

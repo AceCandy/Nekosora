@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { executeGateway } from "./engine";
 import type {
   AttemptTelemetry,
@@ -88,6 +88,10 @@ async function consume<TEvent, TResult>(generator: AsyncGenerator<TEvent, TResul
 describe("gateway execution engine", () => {
   beforeEach(() => {
     vi.spyOn(Math, "random").mockReturnValue(0);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("可转移失败先换 key，最终 execution 只终结一次", async () => {
@@ -389,6 +393,111 @@ describe("gateway execution engine", () => {
     expect(h.attempts.map((item) => item.status)).toEqual(["interrupted"]);
     expect(h.breaker.recordFailure).not.toHaveBeenCalled();
     expect(h.breaker.recordSuccess).not.toHaveBeenCalled();
+  });
+
+  it("总读取超时在响应提交前记录失败并进入下一 route", async () => {
+    vi.useFakeTimers();
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => { release = resolve; });
+    const calls: string[] = [];
+    const first = route("a");
+    first.provider.readTimeoutMs = 10_000;
+    const adapter: GatewayAttemptAdapter<Event, Result> = async function* ({ route: current }) {
+      calls.push(current.routeId);
+      if (current.routeId === "a") await blocked;
+      return { value: { text: "backup" } };
+    };
+    const h = harness([first, route("b")], () => adapter);
+    const executing = consume(h.generator);
+
+    try {
+      await vi.advanceTimersByTimeAsync(10_000);
+      const { outcome } = await executing;
+
+      expect(calls).toEqual(["a", "b"]);
+      expect(h.attempts).toMatchObject([
+        { status: "failed", error: { code: "gateway.timeout", httpStatus: 504 } },
+        { status: "success" },
+      ]);
+      expect(h.breaker.recordFailure).toHaveBeenCalledOnce();
+      expect(h.finalized).toHaveLength(1);
+      expect(outcome).toMatchObject({ status: "success", route: { routeId: "b" } });
+    } finally {
+      release();
+    }
+  });
+
+  it("总读取超时在响应提交后停止且非阻塞关闭 iterator", async () => {
+    vi.useFakeTimers();
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => { release = resolve; });
+    let closed = false;
+    const calls: string[] = [];
+    const first = route("a", ["key-a", "key-b"]);
+    first.provider.readTimeoutMs = 10_000;
+    const adapter: GatewayAttemptAdapter<Event, Result> = async function* ({ route: current }) {
+      calls.push(current.routeId);
+      try {
+        yield { value: { text: "visible" }, commitsResponse: true };
+        await blocked;
+        return { value: { text: "never" } };
+      } finally {
+        closed = true;
+      }
+    };
+    const h = harness([first, route("b")], () => adapter);
+    const executing = consume(h.generator);
+
+    try {
+      await vi.advanceTimersByTimeAsync(10_000);
+      const { events, outcome } = await executing;
+
+      expect(events).toEqual([{ text: "visible" }]);
+      expect(calls).toEqual(["a"]);
+      expect(h.attempts).toMatchObject([
+        { status: "failed", error: { code: "gateway.timeout", httpStatus: 504 } },
+      ]);
+      expect(h.breaker.recordFailure).toHaveBeenCalledOnce();
+      expect(h.finalized).toHaveLength(1);
+      expect(outcome).toMatchObject({ status: "failed", committed: true });
+      expect(closed).toBe(false);
+    } finally {
+      release();
+      await vi.waitFor(() => expect(closed).toBe(true));
+    }
+  });
+
+  it("caller abort 先发生时仍记 interrupted 且不更新 breaker", async () => {
+    vi.useFakeTimers();
+    const caller = new AbortController();
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => { markStarted = resolve; });
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => { release = resolve; });
+    const first = route("a");
+    first.provider.readTimeoutMs = 10_000;
+    const adapter: GatewayAttemptAdapter<Event, Result> = async function* () {
+      markStarted();
+      await blocked;
+      return { value: { text: "never" } };
+    };
+    const h = harness([first, route("b")], () => adapter, caller.signal);
+    const executing = consume(h.generator);
+
+    await started;
+    caller.abort(new DOMException("client closed", "AbortError"));
+    try {
+      const { outcome } = await executing;
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      expect(outcome.status).toBe("interrupted");
+      expect(h.attempts.map((item) => item.status)).toEqual(["interrupted"]);
+      expect(h.breaker.recordFailure).not.toHaveBeenCalled();
+      expect(h.finalized).toHaveLength(1);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      release();
+    }
   });
 
   it("adapter 不响应 AbortSignal 时 engine 仍立即终结 execution", async () => {

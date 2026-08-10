@@ -1,1 +1,13 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file":".trellis/spec/backend/index.md","reason":"执行后端最终 Quality Check 清单"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"复核迁移只追加且 SQL/journal/snapshot 连续"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"复核 timeout/cancel 分类、504 映射和错误脱敏"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"复核 attempt/execution 恰好一次与 telemetry 不重复"}
+{"file":".trellis/spec/backend/gateway-routing.md","reason":"复核多协议、fallback、commit 和 breaker 行为"}
+{"file":".trellis/spec/backend/gateway-runtime.md","reason":"复核 listener 取消传播和资源清理"}
+{"file":".trellis/spec/backend/provider-probe.md","reason":"复核 raw/deep probe 的预算组合、UA 与脱敏"}
+{"file":".trellis/spec/frontend/index.md","reason":"执行前端最终 Quality Check 清单"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"复核表单可访问性、响应式、设计 token 与 i18n"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"复核 Server/Client 边界、测试位置和全量质量门禁"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"复核 FormData 信任边界和 DTO 单一来源"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"复核每个消费者都读取唯一 timeout policy"}
+{"file":".trellis/tasks/08-10-provider-timeout-enforcement/research/timeout-execution-boundary.md","reason":"按仓库证据检查范围遗漏和测试真实性"}

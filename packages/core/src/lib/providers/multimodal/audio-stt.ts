@@ -11,6 +11,7 @@ import { resolveRoutesByCapability, RoutingError } from "@/lib/routing";
 import { recordFailure, recordSuccess } from "@/lib/circuit-breaker";
 import { executeAtomicGateway, gatewayTelemetry, type GatewayAttemptAdapter } from "@/lib/gateway-execution";
 import { selectMediaAdapter } from "@/lib/gateway-execution/media-registry";
+import { createProviderFetch } from "@/lib/providers/timeouts";
 
 export interface TranscribeOptions {
   /** 音频字节(必填)。 */
@@ -48,6 +49,7 @@ export async function transcribeViaRoute(
       apiKey,
       name: route.provider.id,
       headers: route.provider.headers,
+      fetch: createProviderFetch({ connectTimeoutMs: route.provider.connectTimeoutMs }),
     });
     const model = provider.transcription(route.upstreamModelName);
 

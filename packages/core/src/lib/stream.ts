@@ -18,6 +18,7 @@ import {
   markRouteToolsUnsupported,
 } from "@/lib/repositories/route-repository";
 import { buildLanguageModelWithKey, resolveRouteApiFormat } from "@/lib/providers/registry";
+import { resolveProviderTimeouts } from "@/lib/providers/timeouts";
 import { getChatUA } from "@/lib/system-settings/ua";
 import { recordSuccess, recordFailure } from "@/lib/circuit-breaker";
 import type { LogUsageParams } from "@/lib/usage";
@@ -518,6 +519,9 @@ async function* streamWithRoute(
       : undefined,
     // 客户端断开时中止上游 fetch,避免继续写已关闭 socket → uncaughtException。
     abortSignal,
+    timeout: {
+      chunkMs: resolveProviderTimeouts(route.provider).streamIdleTimeoutMs,
+    },
   });
 
   // 优先用 fullStream 捕获 tool-call 增量；stream fallback 兼容旧 adapter/test double。
@@ -608,7 +612,7 @@ export interface GenerateChatOptions extends StreamChatOptions {
 export async function generateChat(opts: GenerateChatOptions): Promise<GenerateChatResult> {
   const { ctx, request, runId = `run_${crypto.randomUUID()}` } = opts;
   const userAgent = opts.userAgent ?? await getChatUA();
-  const adapter: GatewayAttemptAdapter<never, string> = async function* ({ route, apiKey }) {
+  const adapter: GatewayAttemptAdapter<never, string> = async function* ({ route, apiKey, abortSignal }) {
     const model = buildLanguageModelWithKey(route, apiKey, undefined, undefined, userAgent);
     const { system, messages } = separateSystem(request);
     const result = await generateText({
@@ -620,6 +624,7 @@ export async function generateChat(opts: GenerateChatOptions): Promise<GenerateC
       maxOutputTokens: request.max_tokens,
       topP: request.top_p,
       output: opts.output === "json" ? Output.json() : undefined,
+      abortSignal,
     });
     return {
       value: result.text,
@@ -639,6 +644,7 @@ export async function generateChat(opts: GenerateChatOptions): Promise<GenerateC
     model: request.model,
     modelId: opts.modelId,
     taskKind: opts.taskKind,
+    abortSignal: opts.abortSignal,
     resolveRoutes: () => opts.modelId
       ? resolveRoutesById(ctx, opts.modelId)
       : resolveRoutes(ctx, request.model),

@@ -27,19 +27,11 @@ import {
   isHostedSearchRouteCompatible,
   type SearchTimeRange,
 } from "@/lib/web-search/types";
+import { createProviderFetch } from "./timeouts";
 
 /** 从 ResolvedRoute 构造 AI SDK LanguageModel(V4,兼容 ai@7)。 */
 export function buildLanguageModel(route: ResolvedRoute): LanguageModel {
   return buildLanguageModelWithKey(route, route.provider.apiKey);
-}
-
-/** 包装 fetch,强制覆盖 user-agent(AI SDK 内部 UA 无法用 headers 覆盖,需在 fetch 层 set)。 */
-function withUAFetch(ua: string) {
-  return async (url: string | URL | Request, init?: RequestInit): Promise<Response> => {
-    const headers = new Headers(init?.headers);
-    headers.set("user-agent", ua);
-    return globalThis.fetch(url, init ? { ...init, headers } : { headers });
-  };
 }
 
 const AUTH_HEADERS = new Set(["authorization", "x-api-key", "x-goog-api-key"]);
@@ -71,7 +63,12 @@ export function buildLanguageModelWithKey(
   const { baseUrl } = provider;
 
   const commonHeaders = getSafeHeaders(route);
-  const fetchOpts = userAgent ? { fetch: withUAFetch(userAgent) } : {};
+  const fetchOpts = {
+    fetch: createProviderFetch({
+      connectTimeoutMs: provider.connectTimeoutMs,
+      userAgent,
+    }),
+  };
   const apiFormat = resolveRouteApiFormat(route);
 
   switch (apiFormat) {
@@ -149,7 +146,12 @@ export function buildHostedSearchRuntime(
 ): HostedSearchRuntime | null {
   const format = route.capabilities?.webSearchFormat;
   const { provider, upstreamModelName } = route;
-  const fetchOpts = userAgent ? { fetch: withUAFetch(userAgent) } : {};
+  const fetchOpts = {
+    fetch: createProviderFetch({
+      connectTimeoutMs: provider.connectTimeoutMs,
+      userAgent,
+    }),
+  };
   const common = {
     baseURL: provider.baseUrl,
     apiKey,

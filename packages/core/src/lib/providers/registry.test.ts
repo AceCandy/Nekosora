@@ -1,14 +1,35 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  createOpenAI: vi.fn(() => ({
+    chat: vi.fn(() => ({ specificationVersion: "v4" })),
+    responses: vi.fn(() => ({ specificationVersion: "v4" })),
+    tools: { webSearch: vi.fn((args) => ({ args })) },
+  })),
   createOpenAICompatible: vi.fn(() => ({
     chatModel: vi.fn(() => ({ specificationVersion: "v4" })),
   })),
+  createAnthropic: vi.fn(() => ({
+    messages: vi.fn(() => ({ specificationVersion: "v4" })),
+    tools: { webSearch_20250305: vi.fn((args) => ({ args })) },
+  })),
+  createGoogle: vi.fn(() => Object.assign(
+    vi.fn(() => ({ specificationVersion: "v4" })),
+    { tools: { googleSearch: vi.fn((args) => ({ args })) } },
+  )),
+  createXai: vi.fn(() => ({
+    responses: vi.fn(() => ({ specificationVersion: "v4" })),
+    tools: { webSearch: vi.fn((args) => ({ args })) },
+  })),
 }));
 
+vi.mock("@ai-sdk/openai", () => ({ createOpenAI: mocks.createOpenAI }));
 vi.mock("@ai-sdk/openai-compatible", () => ({
   createOpenAICompatible: mocks.createOpenAICompatible,
 }));
+vi.mock("@ai-sdk/anthropic", () => ({ createAnthropic: mocks.createAnthropic }));
+vi.mock("@ai-sdk/google", () => ({ createGoogle: mocks.createGoogle }));
+vi.mock("@ai-sdk/xai", () => ({ createXai: mocks.createXai }));
 
 import {
   buildHostedSearchRuntime,
@@ -74,6 +95,36 @@ describe("OpenAI-compatible stream usage", () => {
   });
 });
 
+describe("Provider shared fetch", () => {
+  it.each([
+    ["OpenAI Chat", "openai", "openai-chat", "createOpenAI"],
+    ["OpenAI-compatible Chat", "openai-compatible", "openai-chat", "createOpenAICompatible"],
+    ["OpenAI Responses", "openai", "openai-responses", "createOpenAI"],
+    ["Anthropic Messages", "anthropic", "anthropic-messages", "createAnthropic"],
+    ["Gemini GenerateContent", "gemini", "gemini-generate-content", "createGoogle"],
+  ] as const)("%s 始终安装 connect timeout fetch", (
+    _label,
+    protocol,
+    apiFormat,
+    factory,
+  ) => {
+    buildLanguageModelWithKey({
+      ...route,
+      protocol,
+      apiFormat,
+      provider: {
+        ...route.provider,
+        protocol,
+        connectTimeoutMs: 1_234,
+      },
+    }, "test-key", undefined, undefined, "Nekusora/Test");
+
+    expect(mocks[factory]).toHaveBeenCalledWith(expect.objectContaining({
+      fetch: expect.any(Function),
+    }));
+  });
+});
+
 describe("buildHostedSearchRuntime", () => {
   it("只有路由显式支持工具时才构造 Hosted Search", () => {
     expect(buildHostedSearchRuntime({ ...route, supportsTools: false }, "test-key")).toBeNull();
@@ -89,6 +140,9 @@ describe("buildHostedSearchRuntime", () => {
     );
     const tool = runtime?.tools.google_search as { args?: unknown };
 
+    expect(mocks.createGoogle).toHaveBeenCalledWith(expect.objectContaining({
+      fetch: expect.any(Function),
+    }));
     expect(tool.args).toMatchObject({
       timeRangeFilter: {
         startTime: "2026-07-29T00:00:00.000Z",

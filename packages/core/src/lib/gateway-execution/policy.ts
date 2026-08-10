@@ -1,6 +1,7 @@
 import { classifyError, NETWORK_KEYWORDS } from "@/lib/error-classify";
 import { redactSensitiveText } from "@/lib/redaction";
 import type { ResolvedRoute } from "@/lib/providers/types";
+import { isProviderTimeoutError } from "@/lib/providers/timeouts";
 import type { SafeGatewayError } from "./types";
 
 const TOOL_REFERENCE = /\b(?:tools?|tool[_ -]?choice|function[_ -]?calls?)\b/i;
@@ -53,6 +54,7 @@ function compatibilityError(error: unknown): { statusCode: unknown; haystack: st
 }
 
 export function isAbortError(error: unknown): boolean {
+  if (isProviderTimeoutError(error)) return false;
   if (error instanceof Error && error.name === "AbortError") return true;
   const message = error instanceof Error ? error.message : String(error);
   return /this operation was aborted|aborted/i.test(message);
@@ -94,6 +96,14 @@ export function classifyGatewayError(
   error: unknown,
   secrets: readonly (string | null | undefined)[] = [],
 ): SafeGatewayError {
+  if (isProviderTimeoutError(error)) {
+    return {
+      code: "gateway.timeout",
+      message: "上游 Provider 请求超时",
+      phase: "network",
+      httpStatus: 504,
+    };
+  }
   const nested = (error as { lastError?: unknown } | null)?.lastError;
   const source = (nested ?? error) as { statusCode?: number };
   const httpStatus = typeof source?.statusCode === "number" ? source.statusCode : undefined;

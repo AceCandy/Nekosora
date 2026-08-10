@@ -27,6 +27,7 @@ export interface ResolvedProvider {
   keys: WeightedKey[];
   connectTimeoutMs?: number;
   readTimeoutMs?: number;
+  streamIdleTimeoutMs?: number;
   headers?: Record<string, string>;
   /** null/undefined=待探测；false=上游明确拒绝 stream_options。 */
   supportsStreamUsage?: boolean | null;

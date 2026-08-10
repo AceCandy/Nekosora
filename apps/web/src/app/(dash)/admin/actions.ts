@@ -7,6 +7,11 @@ import type { WeightedKey } from "@/lib/providers/keys";
 import { probeProviderKey, fetchUpstreamModels, type ProbeResult, type UpstreamModel } from "@/lib/providers/probe";
 import { getProbeHeaders } from "@/lib/system-settings/ua";
 import { normalizeBaseUrl } from "@/lib/providers/defaults";
+import {
+  parseProviderTimeoutFormData,
+  pickProviderTimeoutConfig,
+  type ProviderTimeoutConfig,
+} from "@/lib/providers/timeouts";
 import { requireOwnedProvider } from "@/lib/providers/ownership";
 import {
   resolveCatalogRouteApiFormat,
@@ -118,8 +123,9 @@ async function fetchAndStoreUpstreamModels(
   protocol: ProviderProtocol,
   baseUrl: string,
   apiKey: string,
+  timeouts: ProviderTimeoutConfig,
 ): Promise<{ models: string[]; checkedAt: number }> {
-  const fetched = await fetchUpstreamModels({ protocol, baseUrl, apiKey });
+  const fetched = await fetchUpstreamModels({ protocol, baseUrl, apiKey, ...timeouts });
   const models = fetched.map((m) => m.id);
   const checkedAt = Date.now();
   await db
@@ -137,6 +143,7 @@ export async function createProvider(formData: FormData) {
   const apiKeysEnc = encryptKeyBundle(keys);
   const protocol = String(formData.get("protocol") ?? "openai") as ProviderProtocol;
   const baseUrl = normalizeBaseUrl(protocol, String(formData.get("baseUrl") ?? ""));
+  const timeouts = parseProviderTimeoutFormData(formData);
   const [created] = await db
     .insert(S().providers)
     .values({
@@ -146,6 +153,7 @@ export async function createProvider(formData: FormData) {
       baseUrl,
       apiKeysEnc,
       testModel: String(formData.get("testModel") ?? ""),
+      ...timeouts,
       keyStrategy: "weighted",
       enabled: true,
       priority: 0,
@@ -154,7 +162,14 @@ export async function createProvider(formData: FormData) {
   revalidatePath("/admin", "layout");
 
   // 创建后自动拉取一次上游模型列表并落库;失败静默不阻塞创建(无 key 用空 key,与转发一致)。
-  await fetchAndStoreUpstreamModels(db, created.id, protocol, baseUrl, keys[0]?.key ?? "").catch(() => {});
+  await fetchAndStoreUpstreamModels(
+    db,
+    created.id,
+    protocol,
+    baseUrl,
+    keys[0]?.key ?? "",
+    timeouts,
+  ).catch(() => {});
 }
 
 /** 更新 provider(支持改 name/baseUrl/protocol/keys)。keys 为空表示不改 key。 */
@@ -173,6 +188,9 @@ export async function updateProvider(id: string, formData: FormData) {
     updatedAt: new Date(),
   };
   const keys = collectKeys(formData);
+  if (formData.get("providerTimeoutsPresent") === "1") {
+    Object.assign(patch, parseProviderTimeoutFormData(formData));
+  }
   const noKey = formData.get("noKey") === "1";
   // 无 key 模式:显式清空 bundle;否则 keys 非空才更新,空表示不改 key。
   if (noKey) {
@@ -263,11 +281,18 @@ export async function checkProviderHealth(id: string): Promise<ProviderHealthRes
   const keyResults: ProviderKeyResult[] = [];
   // 检测请求 UA(与聊天 UA 一致);循环外读一次,两条探测路径共用。
   const probeHeaders = await getProbeHeaders();
+  const timeoutOptions = pickProviderTimeoutConfig(provider);
   // 存活检测回退深度检测时,聚合 provider 级深度结果(任一 key 深度成功即 true)。null=未回退。
   let modelProbeOk: boolean | null = null;
   let modelProbeError: string | null = null;
   for (let i = 0; i < probeList.length; i++) {
-    let result = await probeProviderKey({ protocol, baseUrl, apiKey: probeList[i].key, headers: probeHeaders });
+    let result = await probeProviderKey({
+      protocol,
+      baseUrl,
+      apiKey: probeList[i].key,
+      headers: probeHeaders,
+      ...timeoutOptions,
+    });
     // 存活检测失败(非网络)+配了 testModel -> 回退深度检测(带 model 极小生成)。
     // opencode 等先验 model 的上游空 body 验不了 key,靠深度检测确认;成功则该 key 标通过。
     if (!result.ok && result.errorKind !== "network" && testModel) {
@@ -277,6 +302,7 @@ export async function checkProviderHealth(id: string): Promise<ProviderHealthRes
         apiKey: probeList[i].key,
         upstreamModelName: testModel,
         headers: probeHeaders,
+        ...timeoutOptions,
       });
       result = deep.ok
         ? { ok: true, latencyMs: deep.latencyMs, mode: deep.mode }
@@ -345,6 +371,7 @@ export async function testProviderModel(id: string): Promise<ProbeResult> {
     apiKey,
     upstreamModelName: testModel,
     headers: await getProbeHeaders(),
+    ...pickProviderTimeoutConfig(provider),
   });
   await db
     .update(S().providers)
@@ -374,6 +401,7 @@ export async function listUpstreamModels(id: string): Promise<UpstreamModel[]> {
     protocol: provider.protocol,
     baseUrl: provider.baseUrl,
     apiKey: firstKey,
+    ...pickProviderTimeoutConfig(provider),
   });
 }
 
@@ -415,6 +443,7 @@ export async function listUpstreamModelsCached(id: string): Promise<UpstreamMode
       provider.protocol as ProviderProtocol,
       provider.baseUrl as string,
       firstKey,
+      pickProviderTimeoutConfig(provider),
     );
     return models.map((mid) => ({ id: mid }));
   } catch {
@@ -445,6 +474,7 @@ export async function refreshUpstreamModels(
     provider.protocol as ProviderProtocol,
     provider.baseUrl as string,
     keys[0]?.key ?? "",
+    pickProviderTimeoutConfig(provider),
   );
   revalidatePath("/admin", "layout");
   return result;
@@ -475,6 +505,7 @@ export async function testRoute(routeId: string): Promise<ProbeResult> {
     apiKey,
     upstreamModelName: route.upstreamModelName as string,
     headers: await getProbeHeaders(),
+    ...pickProviderTimeoutConfig(provider),
   });
   // 喂养熔断器:成功重置,失败累计。
   if (result.ok) recordSuccess(providerId);

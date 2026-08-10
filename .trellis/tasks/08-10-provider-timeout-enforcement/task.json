@@ -3,7 +3,7 @@
   "name": "provider-timeout-enforcement",
   "title": "Provider 超时强制执行",
   "description": "让连接、读取与流空闲超时在实际 Provider 请求链路生效。",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

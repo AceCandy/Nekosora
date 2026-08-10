@@ -12,6 +12,7 @@ const mockFunctions = vi.hoisted(() => ({
   parseKeyBundle: vi.fn(() => [{ key: "secret", weight: 1 }]),
   pickWeightedKey: vi.fn(() => "secret"),
   probeProviderKey: vi.fn(async () => ({ ok: true, latencyMs: 1 })),
+  fetchUpstreamModels: vi.fn(async () => []),
   recordSuccess: vi.fn(),
   recordFailure: vi.fn(),
 }));
@@ -34,7 +35,7 @@ vi.mock("@/lib/providers/keys", () => ({
 }));
 vi.mock("@/lib/providers/probe", () => ({
   probeProviderKey: mockFunctions.probeProviderKey,
-  fetchUpstreamModels: vi.fn(),
+  fetchUpstreamModels: mockFunctions.fetchUpstreamModels,
 }));
 vi.mock("@/lib/circuit-breaker", () => ({
   recordSuccess: mockFunctions.recordSuccess,
@@ -122,12 +123,19 @@ vi.mock("@/lib/infra/db", () => {
       from: (table: { __table?: string }) => makeQuery(rowsForTable(table), fields),
     }),
     insert: (table: { __table?: string }) => ({
-      values: async (row: Record<string, unknown>) => {
+      values: (row: Record<string, unknown>) => {
+        let id = "";
         if (table.__table === "models") {
-          mockData.models.push({ id: `model-${mockData.models.length + 1}`, ...row });
+          id = `model-${mockData.models.length + 1}`;
+          mockData.models.push({ id, ...row });
+        } else if (table.__table === "providers") {
+          id = `provider-${mockData.providers.length + 1}`;
+          mockData.providers.push({ id, ...row });
         } else if (table.__table === "routes") {
-          mockData.routes.push({ id: `route-${mockData.routes.length + 1}`, ...row });
+          id = `route-${mockData.routes.length + 1}`;
+          mockData.routes.push({ id, ...row });
         }
+        return { returning: async () => [{ id }] };
       },
     }),
     update: (table: { __table?: string }) => ({
@@ -157,6 +165,7 @@ vi.mock("@/lib/infra/db", () => {
 
 import {
   attachProviderModelRoute,
+  createProvider,
   createModel,
   createRoute,
   testRoute,
@@ -195,6 +204,70 @@ describe("updateProvider", () => {
 
     expect(mockData.providers[0]).toEqual(expect.objectContaining({
       supportsStreamUsage: null,
+    }));
+  });
+
+  it("无 marker 时保留旧超时值", async () => {
+    Object.assign(mockData.providers[0], {
+      connectTimeoutMs: 2_000,
+      readTimeoutMs: 20_000,
+      streamIdleTimeoutMs: 6_000,
+    });
+    const formData = new FormData();
+    formData.set("name", "Provider A");
+    formData.set("protocol", "openai");
+    formData.set("baseUrl", "https://api.example.com/v1");
+
+    await updateProvider("provider-a", formData);
+
+    expect(mockData.providers[0]).toEqual(expect.objectContaining({
+      connectTimeoutMs: 2_000,
+      readTimeoutMs: 20_000,
+      streamIdleTimeoutMs: 6_000,
+    }));
+  });
+
+  it("有 marker 时更新并可清空超时值", async () => {
+    const formData = new FormData();
+    formData.set("name", "Provider A");
+    formData.set("protocol", "openai");
+    formData.set("baseUrl", "https://api.example.com/v1");
+    formData.set("providerTimeoutsPresent", "1");
+    formData.set("connectTimeoutSeconds", "1.25");
+    formData.set("readTimeoutSeconds", "");
+    formData.set("streamIdleTimeoutSeconds", "5");
+
+    await updateProvider("provider-a", formData);
+
+    expect(mockData.providers[0]).toEqual(expect.objectContaining({
+      connectTimeoutMs: 1_250,
+      readTimeoutMs: null,
+      streamIdleTimeoutMs: 5_000,
+    }));
+  });
+});
+
+describe("createProvider", () => {
+  it("创建时把表单秒值保存为 nullable 毫秒值", async () => {
+    const formData = new FormData();
+    formData.set("name", "Provider B");
+    formData.set("protocol", "openai");
+    formData.set("baseUrl", "https://api.example.com/v1");
+    formData.set("connectTimeoutSeconds", "60");
+    formData.set("readTimeoutSeconds", "");
+    formData.set("streamIdleTimeoutSeconds", "120.5");
+
+    await createProvider(formData);
+
+    expect(mockData.providers.at(-1)).toEqual(expect.objectContaining({
+      connectTimeoutMs: 60_000,
+      readTimeoutMs: null,
+      streamIdleTimeoutMs: 120_500,
+    }));
+    expect(mockFunctions.fetchUpstreamModels).toHaveBeenCalledWith(expect.objectContaining({
+      connectTimeoutMs: 60_000,
+      readTimeoutMs: null,
+      streamIdleTimeoutMs: 120_500,
     }));
   });
 });
@@ -447,6 +520,9 @@ describe("testRoute", () => {
       apiKeysEnc: `encrypted-${modelId}`,
       protocol: "openai",
       baseUrl: `https://${providerId}.example`,
+      connectTimeoutMs: 2_000,
+      readTimeoutMs: 20_000,
+      streamIdleTimeoutMs: 6_000,
     }];
     mockData.routes = [{
       id: `route-${modelId}`,
@@ -462,6 +538,9 @@ describe("testRoute", () => {
       apiKey: "secret",
       upstreamModelName: `upstream-${modelId}`,
       apiFormat: "openai-responses",
+      connectTimeoutMs: 2_000,
+      readTimeoutMs: 20_000,
+      streamIdleTimeoutMs: 6_000,
     }));
     expect(mockFunctions.recordSuccess).toHaveBeenCalledWith(providerId);
     expect(mockFunctions.recordFailure).not.toHaveBeenCalled();

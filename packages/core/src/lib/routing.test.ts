@@ -48,6 +48,9 @@ interface MockProvider {
   baseUrl: string;
   apiKeysEnc: string;
   supportsStreamUsage: boolean | null;
+  connectTimeoutMs?: number | null;
+  readTimeoutMs?: number | null;
+  streamIdleTimeoutMs?: number | null;
   enabled: boolean;
 }
 
@@ -299,6 +302,23 @@ describe("routing", () => {
       await expect(resolveRoutesById(ctx, "M_PRIV")).resolves.toEqual([
         expect.objectContaining({
           provider: expect.objectContaining({ supportsStreamUsage: null }),
+        }),
+      ]);
+    });
+
+    it("透传 Provider 的三类超时配置", async () => {
+      data.providers[0].connectTimeoutMs = 1_000;
+      data.providers[0].readTimeoutMs = 10_000;
+      data.providers[0].streamIdleTimeoutMs = 5_000;
+      const ctx: CallContext = { userId: "U_A", keyKind: null, source: "chat" };
+
+      await expect(resolveRoutesById(ctx, "M_PUB")).resolves.toEqual([
+        expect.objectContaining({
+          provider: expect.objectContaining({
+            connectTimeoutMs: 1_000,
+            readTimeoutMs: 10_000,
+            streamIdleTimeoutMs: 5_000,
+          }),
         }),
       ]);
     });

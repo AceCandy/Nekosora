@@ -15,6 +15,7 @@ import {
   vector,
   pgEnum,
   primaryKey,
+  check,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type {
@@ -233,6 +234,18 @@ export const providers = pgTable(
   (t) => [
     index("providers_owner_idx").on(t.ownerUserId),
     uniqueIndex("providers_owner_name_idx").on(t.ownerUserId, t.name),
+    check(
+      "providers_connect_timeout_ms_check",
+      sql`${t.connectTimeoutMs} between 1000 and 300000`,
+    ),
+    check(
+      "providers_read_timeout_ms_check",
+      sql`${t.readTimeoutMs} between 10000 and 3600000`,
+    ),
+    check(
+      "providers_stream_idle_timeout_ms_check",
+      sql`${t.streamIdleTimeoutMs} between 5000 and 900000`,
+    ),
   ],
 );
 

@@ -25,6 +25,7 @@ Nekusora is a pnpm TypeScript workspace. `apps/web` is the Next.js control plane
 | [Chat Run Metadata](./chat-run-metadata.md) | assistant run 的完成时序、SSE/历史投影、隐私与迁移契约 | Filled |
 | [Chat Process Trace](./chat-process-trace.md) | 正文前过程事件、终态快照、SSE/reducer/UI 与隐私契约 | Filled |
 | [Provider Probe](./provider-probe.md) | key 连通性探测契约(/models 鉴权判定 + anthropic 混搭兼容) | Filled |
+| [Provider Timeouts](./provider-timeouts.md) | Provider 连接、总读取、流空闲超时的跨层执行契约 | Filled |
 | [Gateway Runtime](./gateway-runtime.md) | Fastify adapter, route ownership, readiness, build and startup contracts | Filled |
 | [Gateway Routing](./gateway-routing.md) | 统一资源模型、resolveRoutes/resolveRoutesById 决策树、可见性四套场景、熔断 | Filled |
 | [Memory System](./memory-system.md) | 三分类生命周期、抽取去重(explicit/weak)、融合向量召回、compact 质量增强、缓存 | Filled |

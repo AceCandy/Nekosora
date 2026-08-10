@@ -64,6 +64,9 @@ export interface ProviderItem {
   };
   /** 检测模型(手填或从上游模型列表选);用于后续深度健康检测。 */
   testModel?: string | null;
+  connectTimeoutMs?: number | null;
+  readTimeoutMs?: number | null;
+  streamIdleTimeoutMs?: number | null;
   /** 已拉取并落库的上游模型 id 列表(/models)。 */
   upstreamModels?: string[];
   /** 上次拉取上游模型列表的时间。 */
@@ -687,6 +690,9 @@ export default function ProvidersManager({
             baseUrl: editing.baseUrl,
             keys: editing.keys,
             testModel: editing.testModel ?? "",
+            connectTimeoutMs: editing.connectTimeoutMs,
+            readTimeoutMs: editing.readTimeoutMs,
+            streamIdleTimeoutMs: editing.streamIdleTimeoutMs,
             upstreamModels: modelsFor(editing),
             upstreamModelsAt: fetchedAtFor(editing),
           }}

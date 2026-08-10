@@ -2,6 +2,11 @@ import { orderedWeightedKeys } from "@/lib/providers/keys";
 import { maskKey } from "@/lib/usage";
 import type { ResolvedRoute } from "@/lib/providers/types";
 import {
+  createProviderTimeoutScope,
+  isProviderTimeoutError,
+  resolveProviderTimeouts,
+} from "@/lib/providers/timeouts";
+import {
   classifyGatewayError,
   isAbortError,
   isFailoverableError,
@@ -122,6 +127,11 @@ export async function* executeGateway<TEvent, TResult>(
         const attemptStartedAt = Date.now();
         attempt += 1;
         activeAttempt = { route, apiKey, attempt, startedAt: attemptStartedAt };
+        const timeoutScope = createProviderTimeoutScope(
+          options.abortSignal,
+          resolveProviderTimeouts(route.provider).readTimeoutMs,
+          "read",
+        );
         try {
           const iterator = adapter({
             executionId,
@@ -129,12 +139,17 @@ export async function* executeGateway<TEvent, TResult>(
             operation: options.operation,
             route,
             apiKey,
-            abortSignal: options.abortSignal,
+            abortSignal: timeoutScope.signal,
           });
           let result;
           while (true) {
-            const next = await nextAdapterOrAbort(iterator, options.abortSignal);
+            const next = await nextAdapterOrAbort(iterator, timeoutScope.signal);
             if (next === ADAPTER_ABORTED) {
+              const reason = timeoutScope.signal.reason;
+              if (isProviderTimeoutError(reason)) {
+                closeIterator(iterator);
+                throw reason;
+              }
               const completedAt = Date.now();
               await safeTelemetry(() => options.telemetry.recordAttempt({
                 executionId,
@@ -206,7 +221,10 @@ export async function* executeGateway<TEvent, TResult>(
           return outcome;
         } catch (error) {
           const completedAt = Date.now();
-          if (isAbortError(error) || options.abortSignal?.aborted) {
+          const scopeReason = timeoutScope.signal.aborted ? timeoutScope.signal.reason : undefined;
+          const failure = isProviderTimeoutError(scopeReason) ? scopeReason : error;
+          if (!isProviderTimeoutError(failure)
+            && (isAbortError(failure) || options.abortSignal?.aborted)) {
             await safeTelemetry(() => options.telemetry.recordAttempt({
               executionId,
               attempt,
@@ -231,11 +249,11 @@ export async function* executeGateway<TEvent, TResult>(
             return outcome;
           }
 
-          const toolUnsupported = options.isToolUnsupported?.(error) === true;
+          const toolUnsupported = options.isToolUnsupported?.(failure) === true;
           const streamOptionsUnsupported = !committed
             && !streamOptionsFallbackUsed
-            && options.isStreamOptionsUnsupported?.(route, error) === true;
-          const classifiedError = classifyGatewayError(error, providerSecrets(route, apiKey));
+            && options.isStreamOptionsUnsupported?.(route, failure) === true;
+          const classifiedError = classifyGatewayError(failure, providerSecrets(route, apiKey));
           const safeError: SafeGatewayError = streamOptionsUnsupported
             ? { ...classifiedError, code: "stream_options_not_supported", phase: "routing" }
             : toolUnsupported
@@ -269,7 +287,7 @@ export async function* executeGateway<TEvent, TResult>(
 
           const failoverable = toolUnsupported
             || streamOptionsUnsupported
-            || isFailoverableError(error);
+            || isFailoverableError(failure);
           if (failoverable && !toolUnsupported && !streamOptionsUnsupported) {
             options.breaker.recordFailure(route.provider.id);
           }
@@ -286,8 +304,10 @@ export async function* executeGateway<TEvent, TResult>(
             continue;
           }
           const hasMoreKeys = keyIndex < keys.length - 1;
-          if (!committed && !toolUnsupported && hasMoreKeys && isRetryableForKey(error)) continue;
+          if (!committed && !toolUnsupported && hasMoreKeys && isRetryableForKey(failure)) continue;
           break;
+        } finally {
+          timeoutScope.dispose();
         }
       }
 

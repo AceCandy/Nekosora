@@ -64,12 +64,17 @@ function useAdapterGateway() {
         usage: next.value.usage ?? {},
         committed: false,
       };
-    } catch {
+    } catch (error) {
       return {
         executionId: "execution-1",
-        status: "interrupted",
+        status: "failed",
         usage: {},
         committed: false,
+        error: {
+          code: error instanceof Error && error.name === "TimeoutError"
+            ? "gateway.timeout"
+            : "gateway.upstream_error",
+        },
       };
     }
   });
@@ -197,19 +202,18 @@ describe("buildHostedSearchPrompt", () => {
 });
 
 describe("executeHostedModelSearch", () => {
-  it("30 秒内没有有效上游进度时按超时结束", async () => {
-    vi.useFakeTimers();
+  it("把 Hosted Search 空闲上限交给 AI SDK", async () => {
     useAdapterGateway();
     const stream = createControlledStream();
-    mocks.streamText.mockImplementation(({ abortSignal }) => stream.result(abortSignal, true));
+    mocks.streamText.mockImplementation(({ abortSignal }) => stream.result(abortSignal));
 
     const result = hostedSearch();
-    const assertion = expect(result).rejects.toMatchObject({ name: "TimeoutError" });
-    await vi.advanceTimersByTimeAsync(0);
-    stream.push({ type: "start" });
-    await vi.advanceTimersByTimeAsync(30_000);
+    stream.end();
 
-    await assertion;
+    await expect(result).resolves.toMatchObject({ summary: "grounded summary" });
+    expect(mocks.streamText).toHaveBeenCalledWith(expect.objectContaining({
+      timeout: { chunkMs: 30_000 },
+    }));
   });
 
   it("持续收到有效进度时允许总耗时超过 60 秒并保留摘要与来源", async () => {
@@ -245,19 +249,19 @@ describe("executeHostedModelSearch", () => {
     });
   });
 
-  it("流开始后连续 30 秒无进度时按超时结束", async () => {
-    vi.useFakeTimers();
-    useAdapterGateway();
-    const stream = createControlledStream();
-    mocks.streamText.mockImplementation(({ abortSignal }) => stream.result(abortSignal));
+  it("Engine timeout 在 Hosted 边界保持 TimeoutError", async () => {
+    mocks.executeAtomicGateway.mockImplementation(async (options) => {
+      expect(options.selectAdapter(hostedRoute)).not.toBeNull();
+      return {
+        executionId: "execution-1",
+        status: "failed",
+        usage: {},
+        committed: false,
+        error: { code: "gateway.timeout" },
+      };
+    });
 
-    const result = hostedSearch();
-    const assertion = expect(result).rejects.toMatchObject({ name: "TimeoutError" });
-    await vi.advanceTimersByTimeAsync(0);
-    stream.push({ type: "text-delta", id: "text-1", text: "a" });
-    await vi.advanceTimersByTimeAsync(30_000);
-
-    await assertion;
+    await expect(hostedSearch()).rejects.toMatchObject({ name: "TimeoutError" });
   });
 
   it("选中 Hosted 路由时立即上报可读模型身份", async () => {

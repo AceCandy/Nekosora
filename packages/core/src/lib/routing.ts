@@ -47,6 +47,7 @@ function toResolvedProvider(row: any): ResolvedProvider {
     apiKey: pickWeightedKey(keys),
     connectTimeoutMs: row.connectTimeoutMs ?? undefined,
     readTimeoutMs: row.readTimeoutMs ?? undefined,
+    streamIdleTimeoutMs: row.streamIdleTimeoutMs ?? undefined,
     headers: (row.headersJson as Record<string, string>) ?? undefined,
     supportsStreamUsage: row.supportsStreamUsage ?? null,
   };

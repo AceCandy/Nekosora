@@ -34,6 +34,7 @@ vi.mock("@/lib/gateway-execution", async (importOriginal) => {
 });
 
 import { generateImage } from "ai";
+import { createOpenAI } from "@ai-sdk/openai";
 import { generateImageViaRoute, RoutingError } from "@/lib/providers/multimodal/image-gen";
 import {
   setRouteRepository,
@@ -74,6 +75,7 @@ interface MockProvider {
   baseUrl: string;
   apiKeysEnc: string;
   headersJson?: Record<string, string>;
+  connectTimeoutMs?: number;
   enabled: boolean;
 }
 
@@ -116,7 +118,7 @@ function makeDefaultData(): MockData {
   const provider: MockProvider = {
     id: "PA", name: "上游A", protocol: "openai",
     baseUrl: "https://a.example.com/v1", apiKeysEnc: ENC_KEY,
-    headersJson: { "x-custom-auth": "HEADER_SECRET" }, enabled: true,
+    headersJson: { "x-custom-auth": "HEADER_SECRET" }, connectTimeoutMs: 1_234, enabled: true,
   };
   const pubModel: MockModel = {
     id: "M_PUB", name: "dalle-pub", ownerUserId: "U_A", visibility: "public",
@@ -179,6 +181,12 @@ describe("generateImageViaRoute (image byId 可见性)", () => {
     expect(result.images[0].base64).toBe("ZmFrZQ==");
     expect(result.providerName).toBe("上游A");
     expect(result.upstreamModel).toBe("dall-e-3");
+    expect(createOpenAI).toHaveBeenCalledWith(expect.objectContaining({
+      fetch: expect.any(Function),
+    }));
+    expect(generateImage).toHaveBeenCalledWith(expect.objectContaining({
+      abortSignal: expect.any(AbortSignal),
+    }));
   });
 
   it("WebChat byId:owner 自己可生成 private 图像模型", async () => {
