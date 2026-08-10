@@ -834,3 +834,24 @@ Added protocol-native model discovery, accepted inbound OpenAI stream_options, a
 ### Status
 
 [OK] **Completed**
+
+
+## Session 98: Provider 超时强制执行
+
+**Date**: 2026-08-10
+**Task**: Provider 超时强制执行
+**Branch**: `main`
+
+### Summary
+
+统一连接、总读取与流空闲超时策略，覆盖 Gateway、Chat、Hosted Search、媒体与 Provider 探测；补齐管理配置、数据库约束、迁移和跨层测试。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4f41ec8` | (see git log) |
+
+### Status
+
+[OK] **Completed**
