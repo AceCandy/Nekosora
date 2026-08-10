@@ -789,3 +789,26 @@ Hosted Search 改为首包与流中空闲 watchdog，60 秒窗口仅限制新后
 ### Status
 
 [OK] **Completed**
+
+
+## Session 96: Gateway protocol compatibility fixes
+
+**Date**: 2026-08-10
+**Task**: Gateway protocol compatibility fixes
+**Branch**: `main`
+
+### Summary
+
+Added protocol-native model discovery, accepted inbound OpenAI stream_options, and persisted automatic upstream stream usage fallback.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ee4cff9` | (see git log) |
+| `b6fe9a0` | (see git log) |
+| `f4582b5` | (see git log) |
+
+### Status
+
+[OK] **Completed**
