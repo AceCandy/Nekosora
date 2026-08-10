@@ -855,3 +855,24 @@ Added protocol-native model discovery, accepted inbound OpenAI stream_options, a
 ### Status
 
 [OK] **Completed**
+
+
+## Session 99: 完成 Gateway 请求流量治理
+
+**Date**: 2026-08-11
+**Task**: 完成 Gateway 请求流量治理
+**Branch**: `main`
+
+### Summary
+
+完成 API Key 与用户双层速率、并发租约和四类月额度治理，接入 Gateway 全入口、管理配置、媒体用量 telemetry、PostgreSQL 并发回归与生产构建门禁。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `22e6332` | (see git log) |
+
+### Status
+
+[OK] **Completed**
