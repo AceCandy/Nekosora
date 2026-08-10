@@ -320,6 +320,139 @@ return invoke(routes[0], routes[0].provider.keys[0]);
 return executeGateway({ resolveRoutes, selectAdapter, telemetry, breaker });
 ```
 
+## Scenario: OpenAI Chat Inbound Stream Options
+
+### 1. Scope / Trigger
+
+修改 /v1/chat/completions parser、OpenAI Chat 流响应，或排查包含
+stream_options 的 400 时适用。入站字段和 Provider adapter 生成的同名出站字段是两个
+独立边界，不能用一侧的能力开关代替另一侧的协议解析。
+
+### 2. Signatures
+
+- HTTP：POST /v1/chat/completions。
+- Parser：parseChatCompletions(body): ParsedGatewayRequest。
+- 入站字段：stream_options?: { include_usage?: boolean }。
+
+### 3. Contracts
+
+- OpenAI Chat parser 允许 stream_options，仅接受可选布尔字段 include_usage。
+- 未知子字段抛出 UnsupportedParameterError，参数路径保留为
+  stream_options.<field>；类型错误按现有 invalid JSON 契约返回 400。
+- stream_options 是调用方到网关的响应控制字段。Parser 消费后不得把它复制进 IR，
+  更不得原样透传上游；Provider adapter 是否发送同名字段由下一节的 endpoint 能力独立决定。
+- 当前 OpenAI Chat encoder 保持既有最终 usage 输出布局；改成 OpenAI 官方的空
+  choices usage 尾帧属于单独的响应兼容任务，不与入口 400 修复捆绑。
+- 排障时先看边界证据：没有上游 attempt 且入口错误的 model 为 (unknown)，说明请求在
+  parser/auth 边界被拒绝；已有 attempt 才检查 Provider 请求体与出站能力学习。
+
+### 4. Validation & Error Matrix
+
+| Input | Result |
+| --- | --- |
+| stream: true + stream_options.include_usage=true | 进入 streamChat，不在入口返回 400 |
+| include_usage=false 或空对象 | 接受；字段不进入 IR |
+| include_usage 非布尔值 | 400 invalid request；不触发上游 |
+| stream_options.include_cost | 400 Unsupported parameter: 'stream_options.include_cost'. |
+| 其他未知顶层字段 | 保持现有严格 400 行为 |
+
+### 5. Good / Base / Bad Cases
+
+- Good：OpenAI SDK 向网关发送标准 stream_options.include_usage，parser 校验后进入统一 IR。
+- Base：未发送 stream_options 的既有客户端行为不变。
+- Bad：只给 Provider 增加出站开关，入站 parser 仍在路由执行前拒绝同名字段。
+- Bad：把整个入站对象塞进 IR 并透传，导致调用方控制具体上游请求细节。
+
+### 6. Tests Required
+
+- Parser 单测覆盖 true、非布尔类型、未知子字段准确路径，以及 IR 不含该字段。
+- /v1/chat/completions 路由测试覆盖有效输入返回 200 并调用 streamChat。
+- 路由测试覆盖未知子字段返回 400 且 streamChat 未调用。
+
+### 7. Wrong vs Correct
+
+    // Wrong:只修出站 Provider；请求实际在 parser 就失败。
+    createOpenAICompatible({ includeUsage: false });
+
+    // Correct:入站字段在协议边界校验并消费，不进入统一 IR。
+    const streamOptions = objectAt(body.stream_options, "stream_options");
+    assertAllowed(streamOptions, ["include_usage"], "stream_options");
+
+## Scenario: OpenAI-Compatible Stream Usage Negotiation
+
+### 1. Scope / Trigger
+
+修改 OpenAI-compatible Chat、`includeUsage`、Provider 配置保存、Gateway 重试或
+`providers` 能力字段时适用。该能力描述具体上游 endpoint 是否接受
+`stream_options`，不属于 model catalog 的模型语义。
+
+### 2. Signatures
+
+- DB：`providers.supports_stream_usage boolean NULL`。
+- Runtime：`ResolvedProvider.supportsStreamUsage?: boolean | null`。
+- Registry：`includeUsage = provider.supportsStreamUsage !== false`。
+- Persistence：`markProviderStreamUsageUnsupported(providerId, baseUrl): Promise<void>`。
+- Engine hooks：`isStreamOptionsUnsupported(route, error)`、`onStreamOptionsUnsupported(route)`。
+
+### 3. Contracts
+
+- `null`/`true` 继续发送 `stream_options: { include_usage: true }`；`false` 省略该字段。
+- 自动协商只用于流式 `openai-compatible + openai-chat` route；官方 OpenAI、Responses、
+  Anthropic、Gemini 与非流式调用不注册降级 hook。
+- 仅 HTTP 400 且同一个直接错误或 `lastError` 同时包含 `stream_options` 与明确拒绝语义时学习。
+  外层 RetryError 文案不得与无关的嵌套 400 混合匹配。
+- 客户端尚未收到正文、推理或工具事件时，先记录 failed attempt，再把当前 Provider
+  状态改为 `false`，按 Provider ID + 本次 Base URL best-effort 持久化，随后用同 route、
+  同 key 重试一次。整个 execution 最多进行一次这种兼容性重试。
+- 第一次兼容性 400 不更新 breaker；重试成功只 finalize 一次 success。重试仍失败时恢复
+  既有错误分类、breaker 与 route/key 收敛规则。已提交响应后禁止学习和重试。
+- 持久化失败不覆盖当前请求结果；内存状态仍保证本次重试省略该字段。Provider 配置保存
+  一律把字段重置为 `null`，让变更后的 endpoint 重新探测；后台不提供手动开关。
+- 条件更新必须同时匹配 ID 与 Base URL，防止旧请求在管理员换址后把新 endpoint 标为不支持。
+
+### 4. Validation & Error Matrix
+
+| Condition | Result |
+| --- | --- |
+| 未知能力，上游接受字段 | 单次请求成功，保留流式 usage |
+| 400 明确拒绝 `stream_options`，尚未 commit | 记录失败，持久化 `false`，同 route/key 无字段重试一次 |
+| 普通 400、其他参数、422 或 5xx | 不学习；走既有错误与故障转移规则 |
+| 外层文案命中、嵌套 400 与该字段无关 | 不学习 |
+| 明确拒绝发生在 commit 后 | 不学习、不重试，保留已输出事件 |
+| 条件持久化零行或抛错 | 当前请求继续使用内存降级；不覆盖业务结果 |
+| Provider 保存或换址 | 状态重置 `null`；旧 Base URL 的迟到更新不能命中新行 |
+
+### 5. Good / Base / Bad Cases
+
+- Good：兼容上游首次返回 400，网关用同一 key 省略可选字段后成功；后续进程首发即省略。
+- Base：支持 `stream_options` 的上游保持原请求体和 usage 统计。
+- Bad：为兼容一个上游全局删除 `includeUsage`，让所有支持方失去流式 usage。
+- Bad：按模型名记录该能力，或仅按 Provider ID 更新，导致不同 endpoint 互相污染。
+
+### 6. Tests Required
+
+- Policy 覆盖直接错误、`lastError`、普通 400、其他字段、其他状态码及外层误导文案。
+- Registry 断言 `null`/`true` 发送、`false` 省略；routing 保留数据库状态。
+- Engine 断言同 route/key 单次重试、整个 execution 不重复、两条 attempt、单次 finalize、
+  committed 禁止降级、breaker 隔离和持久化失败隔离。
+- `streamChat` 接线测试断言客户端看不到首个 400，且持久化收到准确的 Provider ID/Base URL。
+- Migration 测试断言 nullable 列、journal/snapshot 连续；管理 action 测试断言保存重置 `null`。
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong:所有 compatible 上游永久发送可选字段，且错误后换 key 重复探测。
+createOpenAICompatible({ includeUsage: true });
+
+// Correct:读取 endpoint 能力；仅在精确兼容性 400 后同 key 降级一次。
+createOpenAICompatible({
+  includeUsage: route.provider.supportsStreamUsage !== false,
+});
+await db.update(providers)
+  .set({ supportsStreamUsage: false })
+  .where(and(eq(providers.id, providerId), eq(providers.baseUrl, failedBaseUrl)));
+```
+
 ## Scenario: 流式响应提交后的故障转移边界
 
 ### 1. Scope / Trigger
@@ -506,6 +639,76 @@ const model = provider.protocol === "anthropic"
 // Correct: route 保存并决定实际 wire format；Provider protocol 仅提供连接语义。
 const apiFormat = resolveRouteApiFormat(route);
 return buildLanguageModelWithKey({ ...route, apiFormat }, apiKey);
+```
+
+---
+
+## Scenario: Protocol-Native Model Discovery
+
+### 1. Scope / Trigger
+
+修改 `GET /v1/models`、入口 Key 解析、模型列表字段或客户端协议兼容时适用。
+模型生成协议兼容必须包含客户端发现阶段；只验证 `/v1/messages` 等生成端点不算完整兼容。
+
+### 2. Signatures
+
+- HTTP：`GET /v1/models?limit=&after_id=&before_id=`。
+- 协议选择：存在 `x-api-key` 或 `anthropic-version` 请求头时使用 Anthropic；否则保持 OpenAI。
+- OpenAI：`{ object: "list", data: [{ id, object, created, owned_by }] }`。
+- Anthropic：`{ data: [{ id, created_at, display_name, type }], first_id, has_more, last_id }`。
+
+### 3. Contracts
+
+- 入口统一复用 `authenticateGatewayRequest`。OpenAI 接受 Bearer；Anthropic 接受 `x-api-key` 或 Bearer；两种 Key 同时存在且值不一致时返回原生 401。
+- 协议选择只改变认证头、错误 envelope 和成功响应，不改变模型集合。主 Key 只列 owner 的 enabled 模型；子 Key 还必须命中 `key_model_bindings`。
+- OpenAI 响应保持既有兼容结构。Anthropic `display_name` 使用模型显示名，空值回退对外模型 ID；目录没有可靠发布日期时 `created_at` 使用 RFC 3339 epoch，不伪造发布日期。
+- Anthropic 默认 `limit=20`，合法范围 `1..1000`；`after_id` 与 `before_id` 互斥。分页前按模型 ID 的固定代码点顺序排序，禁止使用依赖运行环境 locale 的比较器。
+- `after_id` 向后取页，`before_id` 反向取其前一页。空页返回 `data=[]`、`first_id=null`、`last_id=null`、`has_more=false`。
+- 未知查询参数返回原生 400 `Unsupported parameter`；重复、空或越界值返回 Anthropic `invalid_request_error`，且这些语法校验失败不得查询模型数据。未知 cursor 在读取当前 Key 的可见模型集后返回同类 400。
+- `model_catalog` 仍是能力和 token 上限的唯一事实源。列表不得从模型名猜测 Anthropic 新增 capability 字段；目录尚未表达的字段应省略，而不是伪造。
+
+### 4. Validation & Error Matrix
+
+| Condition | Result |
+| --- | --- |
+| Bearer，无 Anthropic 标记 | OpenAI 列表与 OpenAI 错误 envelope |
+| `x-api-key` 或 `anthropic-version` | Anthropic 列表与 Anthropic 错误 envelope |
+| Bearer 与 `x-api-key` 相同 | 接受并按 Anthropic 返回 |
+| Bearer 与 `x-api-key` 不同 | HTTP 401；不查询数据库 |
+| 子 Key 绑定外的模型 | 不出现在任一协议列表 |
+| 合法 limit/cursor | 稳定分页并返回正确 cursor 元数据 |
+| 未知参数或语法非法值 | HTTP 400；不查询模型数据 |
+| cursor 不在当前可见模型集 | 读取可见模型后 HTTP 400，不泄露其他用户模型 |
+
+### 5. Good / Base / Bad Cases
+
+- Good：Anthropic SDK 用 `x-api-key` 调 `/v1/models`，解析原生分页后再调用 `/v1/messages`。
+- Base：现有 OpenAI SDK 用 Bearer 获取原有 `{ object: "list" }` 响应，不受 Anthropic 兼容影响。
+- Bad：只让 `/v1/messages` 接受 `x-api-key`，模型列表仍要求 Bearer，导致客户端在生成前失败。
+- Bad：用 `localeCompare` 排序 cursor，多个 locale 不同的 Gateway 副本返回不同分页顺序。
+
+### 6. Tests Required
+
+- 路由测试覆盖 `x-api-key`、`anthropic-version + Bearer`、冲突 Key 与 OpenAI Bearer 回归。
+- 主/子 Key 测试必须断言 owner、enabled 和 binding 查询谓词，不能只给 mock 预过滤结果。
+- 覆盖默认/边界 limit、after/before、空页、未知 cursor、互斥/重复/未知参数；仅语法和未知参数失败断言发生在 `getDb()` 前。
+- 真实 Gateway HTTP 探测至少证明 `x-api-key` 进入 Anthropic 鉴权，而不是返回“缺少 Authorization: Bearer”。
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong：发现接口仍被固定成 OpenAI Bearer，生成接口兼容也无法被客户端使用。
+const rawKey = extractBearer(request.headers.get("authorization"));
+return Response.json({ object: "list", data: models });
+
+// Correct：先由原生请求头选择入口协议，再复用共享鉴权并编码对应列表。
+const anthropic = request.headers.has("x-api-key")
+  || request.headers.has("anthropic-version");
+const ctx = await authenticateGatewayRequest(
+  request,
+  anthropic ? "anthropic" : "openai-chat",
+);
+return anthropic ? anthropicModels(models) : openAIModels(models);
 ```
 
 ---
