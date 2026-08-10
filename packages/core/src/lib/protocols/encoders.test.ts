@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ErrorCode } from "@/lib/errors";
+import { ErrorCode, gatewayGovernanceErrorHeaders } from "@/lib/errors";
 import type { CallContext, IRRequest, StreamEvent } from "@/lib/providers/types";
 import {
   nonStreamProtocolResponse,
@@ -145,6 +145,39 @@ describe("protocol encoders", () => {
       expect(body).toMatchObject({ type: "error", error: { type: "invalid_request_error" } });
     } else {
       expect(body.error).toMatchObject({ code: 400, status: "INVALID_ARGUMENT" });
+    }
+  });
+
+  it.each<GatewayProtocol>([
+    "openai-chat",
+    "openai-responses",
+    "anthropic",
+    "gemini",
+  ])("%s 保留治理 429 的原生 envelope 和统一响应头", async (protocol) => {
+    for (const code of [
+      ErrorCode.GATEWAY_RATE_LIMIT_EXCEEDED,
+      ErrorCode.GATEWAY_CONCURRENCY_LIMIT_EXCEEDED,
+      ErrorCode.GATEWAY_QUOTA_EXCEEDED,
+    ] as const) {
+      const response = protocolErrorResponse(
+        protocol,
+        code,
+        undefined,
+        { scope: "key", resource: "requests" },
+        gatewayGovernanceErrorHeaders(code, 2.01),
+      );
+
+      expect(response.status).toBe(429);
+      expect(response.headers.get("Retry-After")).toBe("3");
+      expect(response.headers.get("X-Gateway-Error-Code")).toBe(code);
+      const body = await response.json() as Record<string, any>;
+      if (protocol.startsWith("openai")) {
+        expect(body.error).toMatchObject({ code, type: "rate_limit_exceeded" });
+      } else if (protocol === "anthropic") {
+        expect(body).toMatchObject({ type: "error", error: { type: "rate_limit_error" } });
+      } else {
+        expect(body.error).toMatchObject({ code: 429, status: "RESOURCE_EXHAUSTED" });
+      }
     }
   });
 

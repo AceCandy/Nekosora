@@ -18,8 +18,12 @@ export interface TranscribeOptions {
   audio: Buffer;
   /** MIME(如 audio/mpeg、audio/wav、audio/webm)。 */
   mime: string;
+  /** 由音频内容测得并向上取整的计量秒数。 */
+  durationSeconds: number;
   language?: string; // ISO-639-1,如 "zh"
   prompt?: string; // 引导词
+  abortSignal?: AbortSignal;
+  onProviderStart?: () => Promise<void>;
 }
 
 export interface TranscribeResult {
@@ -65,7 +69,7 @@ export async function transcribeViaRoute(
       },
       abortSignal,
     });
-    return { value: result.text };
+    return { value: result.text, usage: { sttSeconds: opts.durationSeconds } };
   };
   const outcome = await executeAtomicGateway({
     ctx,
@@ -73,8 +77,10 @@ export async function transcribeViaRoute(
     operation: "audio.transcription",
     model: modelName,
     requestPath: "/v1/audio/transcriptions",
+    abortSignal: opts.abortSignal,
     resolveRoutes: () => resolveRoutesByCapability(ctx, modelName, "audioTranscription"),
     selectAdapter: (route) => selectMediaAdapter("audio.transcription", route.protocol, adapter),
+    onProviderStart: opts.onProviderStart,
     telemetry: gatewayTelemetry,
     breaker: { recordSuccess, recordFailure },
   });

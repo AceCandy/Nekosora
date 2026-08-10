@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { ErrorCode, ERROR_META, routingCodeToErrorCode, errorResponse } from "@/lib/errors";
+import {
+  ErrorCode,
+  ERROR_META,
+  apiError,
+  describeGatewayGovernanceLimitError,
+  errorResponse,
+  gatewayGovernanceErrorHeaders,
+  routingCodeToErrorCode,
+} from "@/lib/errors";
 
 describe("ERROR_META 完整性", () => {
   it("每个 ErrorCode 都有对应映射", () => {
@@ -54,6 +62,16 @@ describe("错误码 → HTTP status 契约", () => {
 
   it("gateway.upstream_error → 502", () => {
     expect(ERROR_META[ErrorCode.GATEWAY_UPSTREAM_ERROR].status).toBe(502);
+  });
+
+  it("gateway governance limits → 429", () => {
+    for (const code of [
+      ErrorCode.GATEWAY_RATE_LIMIT_EXCEEDED,
+      ErrorCode.GATEWAY_CONCURRENCY_LIMIT_EXCEEDED,
+      ErrorCode.GATEWAY_QUOTA_EXCEEDED,
+    ]) {
+      expect(ERROR_META[code]).toMatchObject({ status: 429, type: "rate_limit_exceeded" });
+    }
   });
 
   it("media.* → 502", () => {
@@ -130,5 +148,55 @@ describe("errorResponse", () => {
   it("无 details 时 body 不含 details 字段", () => {
     const body = errorResponse(ErrorCode.AUTH_INVALID_KEY);
     expect(body.error).not.toHaveProperty("details");
+  });
+});
+
+describe("gateway governance error headers", () => {
+  it.each([
+    ["rate", ErrorCode.GATEWAY_RATE_LIMIT_EXCEEDED, "rate"],
+    ["concurrency", ErrorCode.GATEWAY_CONCURRENCY_LIMIT_EXCEEDED, "concurrency"],
+    ["quota", ErrorCode.GATEWAY_QUOTA_EXCEEDED, "chat_tokens"],
+  ] as const)("describes a %s rejection once for every HTTP boundary", (reason, code, resource) => {
+    const descriptor = describeGatewayGovernanceLimitError({
+      reason,
+      scope: "user",
+      retryAfterSeconds: 1.01,
+      ...(reason === "quota" ? { quotaKind: "chat_tokens" } : {}),
+    });
+
+    expect(descriptor).toMatchObject({
+      code,
+      details: { scope: "user", resource, retryAfterSeconds: 2 },
+    });
+    expect(descriptor.headers.get("Retry-After")).toBe("2");
+    expect(descriptor.headers.get("X-Gateway-Error-Code")).toBe(code);
+  });
+
+  it("returns the stable machine code and a rounded-up Retry-After", async () => {
+    const code = ErrorCode.GATEWAY_CONCURRENCY_LIMIT_EXCEEDED;
+    const response = apiError(
+      code,
+      { scope: "user", resource: "concurrency" },
+      undefined,
+      gatewayGovernanceErrorHeaders(code, 1.01),
+    );
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("Retry-After")).toBe("2");
+    expect(response.headers.get("X-Gateway-Error-Code")).toBe(code);
+    expect(await response.json()).toMatchObject({
+      error: {
+        code,
+        type: "rate_limit_exceeded",
+        details: { scope: "user", resource: "concurrency" },
+      },
+    });
+  });
+
+  it("rejects an invalid Retry-After", () => {
+    expect(() => gatewayGovernanceErrorHeaders(
+      ErrorCode.GATEWAY_QUOTA_EXCEEDED,
+      Number.NaN,
+    )).toThrow(TypeError);
   });
 });

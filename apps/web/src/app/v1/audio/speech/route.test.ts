@@ -6,6 +6,11 @@ const mocks = vi.hoisted(() => ({
   verifyKey: vi.fn(),
   synthesizeViaRoute: vi.fn(),
   logUsage: vi.fn(),
+  beginGatewayGovernance: vi.fn(),
+  reserveQuota: vi.fn(),
+  markProviderStarted: vi.fn(),
+  finalize: vi.fn(),
+  governanceSignal: new AbortController().signal,
 }));
 
 vi.mock("@/lib/keys", () => ({
@@ -21,7 +26,12 @@ vi.mock("@/lib/providers/multimodal/audio-tts", () => ({
   synthesizeViaRoute: mocks.synthesizeViaRoute,
 }));
 vi.mock("@/lib/usage", () => ({ logUsage: mocks.logUsage }));
+vi.mock("@/lib/gateway-governance/lifecycle", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/gateway-governance/lifecycle")>(),
+  beginGatewayGovernance: mocks.beginGatewayGovernance,
+}));
 
+import { GovernanceStateError } from "@/lib/gateway-governance/repository";
 import { POST } from "@/app/v1/audio/speech/route";
 
 function request(body: Record<string, unknown>, language = "en") {
@@ -53,15 +63,25 @@ describe("POST /v1/audio/speech", () => {
       upstreamKeyMasked: "sk-***",
     });
     mocks.logUsage.mockReset().mockResolvedValue(undefined);
+    mocks.reserveQuota.mockReset().mockResolvedValue(undefined);
+    mocks.markProviderStarted.mockReset().mockResolvedValue(undefined);
+    mocks.finalize.mockReset().mockResolvedValue({ settled: true });
+    mocks.beginGatewayGovernance.mockReset().mockResolvedValue({
+      signal: mocks.governanceSignal,
+      reserveQuota: mocks.reserveQuota,
+      markProviderStarted: mocks.markProviderStarted,
+      finalize: mocks.finalize,
+    });
   });
 
   it("合法请求保持 OpenAI 字段透传和音频响应", async () => {
-    const response = await POST(request({
+    const req = request({
       model: "tts-1",
       input: "hello",
       voice: "alloy",
       response_format: "mp3",
-    }));
+    });
+    const response = await POST(req);
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("audio/mpeg");
@@ -70,8 +90,57 @@ describe("POST /v1/audio/speech", () => {
     expect(mocks.synthesizeViaRoute).toHaveBeenCalledWith(
       expect.objectContaining({ userId: "user-1" }),
       "tts-1",
-      { text: "hello", voice: "alloy", outputFormat: "mp3" },
+      expect.objectContaining({
+        text: "hello",
+        voice: "alloy",
+        outputFormat: "mp3",
+        abortSignal: mocks.governanceSignal,
+        onProviderStart: expect.any(Function),
+      }),
     );
+    expect(mocks.beginGatewayGovernance).toHaveBeenCalledWith({
+      identity: { userId: "user-1", apiKeyId: "key-1" },
+      operation: "audio.speech",
+      requestSignal: req.signal,
+    });
+    expect(mocks.reserveQuota).toHaveBeenCalledWith("tts_code_points", 5);
+    const options = mocks.synthesizeViaRoute.mock.calls[0]?.[2];
+    await options.onProviderStart();
+    expect(mocks.markProviderStarted).toHaveBeenCalledOnce();
+    expect(mocks.finalize).toHaveBeenCalledWith(5);
+  });
+
+  it("TTS 上限按 Unicode code point 计算", async () => {
+    const accepted = await POST(request({ model: "tts-1", input: "😀".repeat(4096) }));
+
+    expect(accepted.status).toBe(200);
+    expect(mocks.reserveQuota).toHaveBeenCalledWith("tts_code_points", 4096);
+    expect(mocks.finalize).toHaveBeenCalledWith(4096);
+
+    mocks.reserveQuota.mockClear();
+    mocks.finalize.mockClear();
+    const rejected = await POST(request({ model: "tts-1", input: "😀".repeat(4097) }));
+
+    expect(rejected.status).toBe(400);
+    expect(mocks.reserveQuota).not.toHaveBeenCalled();
+    expect(mocks.synthesizeViaRoute).toHaveBeenCalledTimes(1);
+    expect(mocks.finalize).toHaveBeenCalledWith(undefined);
+  });
+
+  it("Provider-start 治理失败保持 503", async () => {
+    mocks.markProviderStarted.mockRejectedValueOnce(new GovernanceStateError());
+    mocks.synthesizeViaRoute.mockImplementationOnce(async (_ctx, _model, options) => {
+      await options.onProviderStart();
+      throw new Error("unreachable");
+    });
+
+    const response = await POST(request({ model: "tts-1", input: "hello" }));
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      error: { code: "server.service_unavailable" },
+    });
+    expect(mocks.finalize).toHaveBeenCalledWith(undefined);
   });
 
   it("缺失 input 时返回 OpenAI 风格本地化错误且不调用上游", async () => {

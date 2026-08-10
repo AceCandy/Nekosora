@@ -10,6 +10,7 @@ import {
   MAX_UPLOAD_BODY_BYTES,
   MAX_UPLOAD_FILE_BYTES,
 } from "@nekusora/core/http";
+import type { GovernanceReaperController } from "@nekusora/core/gateway-governance";
 import { getStorage, resolveStorageKind } from "@nekusora/core/storage";
 import { closeDb, getDb } from "@nekusora/db";
 import { closeQueue, queueAvailable } from "@nekusora/queue";
@@ -18,6 +19,13 @@ import { gatewayHandlers, type GatewayHandler } from "./handlers";
 export interface BuildServerOptions {
   handlers?: Partial<Record<GatewayHandlerName, GatewayHandler>>;
   closeResources?: () => Promise<void>;
+}
+
+export async function closeGatewayResources(
+  reaper: GovernanceReaperController,
+): Promise<void> {
+  await reaper.stop();
+  await Promise.allSettled([closeQueue(), closeDb()]);
 }
 
 type ReadinessCheck = string | { available: boolean } | "error";

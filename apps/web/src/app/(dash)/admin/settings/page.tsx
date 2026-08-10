@@ -1,7 +1,7 @@
 /**
  * 系统设置页 —— /admin/settings
  *
- * 集中管理系统级配置:模型配置 / 输出模式 / 输出样式,以二级 tab 呈现。
+ * 集中管理系统级配置:模型配置 / 输出模式 / 输出样式 / 请求治理,以二级 tab 呈现。
  * tab 走 ?tab= 切换(纯 Link,服务端渲染),默认「模型配置」。
  * 与「运维监控」(/admin/operations)分离:本页只放可配置项,监控页只放只读状态。
  */
@@ -10,13 +10,20 @@ import { Settings } from "lucide-react";
 import { PageHeader } from "@/shared/components/PageHeader";
 import { SettingsTabs, type SettingsTab } from "./SettingsTabs";
 import BasicSettingsSection from "./BasicSettingsSection";
+import GovernanceSettingsSection from "./GovernanceSettingsSection";
 import ModelConfigSection from "./ModelConfigSection";
 import OutputModesSection from "./OutputModesSection";
 import RenderStylesSection from "./RenderStylesSection";
 
 export const dynamic = "force-dynamic";
 
-const VALID_TABS: SettingsTab[] = ["basic", "model", "output-modes", "render-styles"];
+const VALID_TABS: SettingsTab[] = [
+  "basic",
+  "model",
+  "output-modes",
+  "render-styles",
+  "governance",
+];
 
 export default async function SettingsPage({
   searchParams,
@@ -69,6 +76,7 @@ export default async function SettingsPage({
       {tab === "basic" && <BasicSettingsSection />}
       {tab === "output-modes" && <OutputModesSection />}
       {tab === "render-styles" && <RenderStylesSection />}
+      {tab === "governance" && <GovernanceSettingsSection />}
     </div>
   );
 }

@@ -3,7 +3,7 @@
   "name": "gateway-request-governance",
   "title": "Gateway 请求流量治理",
   "description": "增加按 API Key 的限流、并发保护与可审计配额边界。",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

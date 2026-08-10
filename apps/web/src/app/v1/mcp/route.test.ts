@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({
   verifyKey: vi.fn(),
   getDb: vi.fn(),
   getSchema: vi.fn(),
+  consumeGatewayGovernanceRate: vi.fn(),
+  acquireGatewayGovernanceLease: vi.fn(),
   eq: vi.fn((left: unknown, right: unknown) => ({ op: "eq", left, right })),
   and: vi.fn((...conditions: unknown[]) => ({ op: "and", conditions })),
 }));
@@ -21,6 +23,11 @@ vi.mock("@/lib/infra/db", () => ({
 }));
 vi.mock("@/lib/rag/retrieve", () => ({ retrieve: vi.fn() }));
 vi.mock("@/lib/routing", () => ({ resolveRoutesByCapability: vi.fn() }));
+vi.mock("@/lib/gateway-governance/lifecycle", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/gateway-governance/lifecycle")>(),
+  consumeGatewayGovernanceRate: mocks.consumeGatewayGovernanceRate,
+  acquireGatewayGovernanceLease: mocks.acquireGatewayGovernanceLease,
+}));
 
 import { POST } from "./route";
 
@@ -67,6 +74,7 @@ describe("MCP list_models 子密钥约束", () => {
     vi.clearAllMocks();
     mocks.extractBearer.mockReturnValue("sk-test");
     mocks.getSchema.mockReturnValue(schema);
+    mocks.consumeGatewayGovernanceRate.mockResolvedValue({});
   });
 
   it("master key 返回当前用户全部已启用模型", async () => {
@@ -84,6 +92,11 @@ describe("MCP list_models 子密钥约束", () => {
 
     expect(body.result.content[0].text).toContain("model-a");
     expect(body.result.content[0].text).toContain("model-b");
+    expect(mocks.consumeGatewayGovernanceRate).toHaveBeenCalledWith({
+      identity: { userId: "user-1", apiKeyId: "master-1" },
+      operation: "mcp.request",
+    });
+    expect(mocks.acquireGatewayGovernanceLease).not.toHaveBeenCalled();
     expect(query.innerJoin).not.toHaveBeenCalled();
     expect(mocks.eq).toHaveBeenCalledWith(schema.models.ownerUserId, "user-1");
     expect(mocks.eq).toHaveBeenCalledWith(schema.models.enabled, true);

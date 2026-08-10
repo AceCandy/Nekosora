@@ -140,6 +140,9 @@ export interface IRUsage {
   reasoningTokens?: number;
   /** Anthropic prompt cache。 */
   cachedInputTokens?: number;
+  imageCount?: number;
+  ttsCodePoints?: number;
+  sttSeconds?: number;
 }
 
 /** 流式产出的事件 —— streamChat yield 的统一增量。 */

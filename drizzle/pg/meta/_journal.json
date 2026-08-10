@@ -71,6 +71,13 @@
       "when": 1786362120651,
       "tag": "0009_massive_hellcat",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1786382125024,
+      "tag": "0010_pale_sharon_ventura",
+      "breakpoints": true
     }
   ]
 }

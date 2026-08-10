@@ -21,14 +21,30 @@ import {
   ERROR_META,
 } from "@/lib/errors";
 import { classifyError } from "@/lib/error-classify";
+import {
+  beginGatewayGovernance,
+  runWithGatewayGovernance,
+} from "@/lib/gateway-governance/lifecycle";
+import { parseImageCount } from "@/lib/gateway-governance/metering";
 import { redactErrorMessage } from "@/lib/redaction";
 import type { CallContext } from "@/lib/providers/types";
+import {
+  gatewayGovernanceErrorResponse,
+  gatewayGovernanceIdentity,
+} from "./governance";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** 请求路径常量(错误日志 requestPath 用)。 */
 const REQUEST_PATH = "/v1/images/generations";
+type GovernedImageResult =
+  | { kind: "response"; response: Response }
+  | {
+    kind: "result";
+    result: Awaited<ReturnType<typeof generateImageViaRoute>>;
+    responseFormat: "b64_json" | "url";
+  };
 
 export async function POST(req: Request) {
   const startedAt = Date.now();
@@ -44,40 +60,94 @@ export async function POST(req: Request) {
     return apiErrorLocalized(ErrorCode.AUTH_INVALID_KEY, req);
   }
 
-  // 2. 解析请求体
-  let body: Record<string, unknown>;
-  try {
-    body = await req.json();
-  } catch {
-    await logRouteError({ startedAt, ctx: verified.ctx, code: ErrorCode.REQUEST_INVALID_JSON });
-    return apiErrorLocalized(ErrorCode.REQUEST_INVALID_JSON, req);
-  }
-
-  const model = body.model as string | undefined;
-  const prompt = body.prompt as string | undefined;
-  if (!model || !prompt) {
-    await logRouteError({
-      startedAt,
-      ctx: verified.ctx,
-      code: ErrorCode.REQUEST_MISSING_FIELD,
-      model: model || "(unknown)",
-    });
-    return apiErrorLocalized(ErrorCode.REQUEST_MISSING_FIELD, req, { fields: ["model", "prompt"] });
-  }
-
-  const n = Number(body.n ?? 1);
-  const size = (body.size as ImageGenOptions["size"]) || undefined;
-  const responseFormat = (body.response_format as "b64_json" | "url") ?? "b64_json";
-
-  // 3. 调用适配器
   const ctx = verified.ctx;
+  let governance;
   try {
-    const result = await generateImageViaRoute(ctx, model, {
-      prompt,
-      n: Number.isFinite(n) && n > 0 ? Math.min(n, 10) : 1, // 上限 10 张
-      size,
-      responseFormat,
+    governance = await beginGatewayGovernance({
+      identity: gatewayGovernanceIdentity(ctx),
+      operation: "image.generate",
+      requestSignal: req.signal,
     });
+  } catch (error) {
+    const response = await gatewayGovernanceErrorResponse(error, req);
+    if (response) return response;
+    throw error;
+  }
+
+  try {
+    const governed = await runWithGatewayGovernance<GovernedImageResult>(governance, async () => {
+      // 2. 解析请求体
+      let body: Record<string, unknown>;
+      try {
+        body = await req.json();
+      } catch {
+        await logRouteError({ startedAt, ctx, code: ErrorCode.REQUEST_INVALID_JSON });
+        return {
+          value: {
+            kind: "response",
+            response: await apiErrorLocalized(ErrorCode.REQUEST_INVALID_JSON, req),
+          },
+        };
+      }
+
+      const model = body.model as string | undefined;
+      const prompt = body.prompt as string | undefined;
+      if (!model || !prompt) {
+        await logRouteError({
+          startedAt,
+          ctx,
+          code: ErrorCode.REQUEST_MISSING_FIELD,
+          model: model || "(unknown)",
+        });
+        return {
+          value: {
+            kind: "response",
+            response: await apiErrorLocalized(
+              ErrorCode.REQUEST_MISSING_FIELD,
+              req,
+              { fields: ["model", "prompt"] },
+            ),
+          },
+        };
+      }
+
+      let n: number;
+      try {
+        n = parseImageCount(body.n);
+      } catch {
+        await logRouteError({ startedAt, ctx, code: ErrorCode.REQUEST_INVALID_JSON, model });
+        return {
+          value: {
+            kind: "response",
+            response: await apiErrorLocalized(
+              ErrorCode.REQUEST_INVALID_JSON,
+              req,
+              { field: "n", min: 1, max: 10 },
+            ),
+          },
+        };
+      }
+
+      const size = (body.size as ImageGenOptions["size"]) || undefined;
+      const responseFormat = (body.response_format as "b64_json" | "url") ?? "b64_json";
+
+      await governance.reserveQuota("image_count", n);
+      const result = await generateImageViaRoute(ctx, model, {
+        prompt,
+        n,
+        size,
+        responseFormat,
+        abortSignal: governance.signal,
+        onProviderStart: () => governance.markProviderStarted(),
+      });
+      return {
+        value: { kind: "result", result, responseFormat },
+        actualUnits: result.images.length,
+      };
+    });
+
+    if (governed.kind === "response") return governed.response;
+    const { result, responseFormat } = governed;
 
     // 4. response_format=url 时存到 StorageDriver
     const data: { b64_json?: string; url?: string; revised_prompt?: string }[] = [];
@@ -103,6 +173,8 @@ export async function POST(req: Request) {
       data,
     });
   } catch (err) {
+    const governanceResponse = await gatewayGovernanceErrorResponse(err, req);
+    if (governanceResponse) return governanceResponse;
     const safeMessage = redactErrorMessage(err);
     // 路由/能力解析失败由 route 层写入最终 execution 事实。
     if (err instanceof RoutingError) {

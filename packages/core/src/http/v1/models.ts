@@ -5,6 +5,7 @@
 import { eq, and } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { apiErrorLocalized, ErrorCode } from "@/lib/errors";
+import { consumeGatewayGovernanceRate } from "@/lib/gateway-governance/lifecycle";
 import { resolveLocale, translateError } from "@/lib/i18n";
 import type { CallContext } from "@/lib/providers/types";
 import { authenticateGatewayRequest } from "@/lib/protocols/auth";
@@ -13,6 +14,10 @@ import {
   GatewayRequestError,
   UnsupportedParameterError,
 } from "@/lib/protocols/validation";
+import {
+  gatewayGovernanceErrorResponse,
+  gatewayGovernanceIdentity,
+} from "./governance";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,8 +40,18 @@ export async function GET(req: Request) {
   let pagination: AnthropicPagination | null = null;
   try {
     ctx = await authenticateGatewayRequest(req, anthropic ? "anthropic" : "openai-chat");
+    await consumeGatewayGovernanceRate({
+      identity: gatewayGovernanceIdentity(ctx),
+      operation: "models.list",
+    });
     if (anthropic) pagination = parseAnthropicPagination(req.url);
   } catch (error) {
+    const governanceResponse = await gatewayGovernanceErrorResponse(
+      error,
+      req,
+      anthropic ? "anthropic" : undefined,
+    );
+    if (governanceResponse) return governanceResponse;
     if (!(error instanceof GatewayRequestError)) throw error;
     return modelListError(req, anthropic, error);
   }

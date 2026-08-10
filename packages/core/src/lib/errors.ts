@@ -56,6 +56,9 @@ export const ErrorCode = {
   GATEWAY_GENERATION_FAILED: "gateway.generation_failed",
   GATEWAY_ALL_ROUTES_FAILED: "gateway.all_routes_failed",
   GATEWAY_TIMEOUT: "gateway.timeout",
+  GATEWAY_RATE_LIMIT_EXCEEDED: "gateway.rate_limit_exceeded",
+  GATEWAY_CONCURRENCY_LIMIT_EXCEEDED: "gateway.concurrency_limit_exceeded",
+  GATEWAY_QUOTA_EXCEEDED: "gateway.quota_exceeded",
 
   // --- 多模态 (media.*) ---
   MEDIA_IMAGE_GEN_FAILED: "media.image_gen_failed",
@@ -165,6 +168,21 @@ export const ERROR_META: Record<ErrorCodeValue, ErrorMeta> = {
     type: "server_error",
     i18nKey: "errors.gateway_timeout",
   },
+  [ErrorCode.GATEWAY_RATE_LIMIT_EXCEEDED]: {
+    status: 429,
+    type: "rate_limit_exceeded",
+    i18nKey: "errors.gateway_rate_limit_exceeded",
+  },
+  [ErrorCode.GATEWAY_CONCURRENCY_LIMIT_EXCEEDED]: {
+    status: 429,
+    type: "rate_limit_exceeded",
+    i18nKey: "errors.gateway_concurrency_limit_exceeded",
+  },
+  [ErrorCode.GATEWAY_QUOTA_EXCEEDED]: {
+    status: 429,
+    type: "rate_limit_exceeded",
+    i18nKey: "errors.gateway_quota_exceeded",
+  },
 
   // media.*
   [ErrorCode.MEDIA_IMAGE_GEN_FAILED]: {
@@ -204,6 +222,61 @@ export interface ErrorResponseBody {
     type: ErrorType;
     details?: unknown;
   };
+}
+
+export type GatewayGovernanceLimitErrorCode =
+  | typeof ErrorCode.GATEWAY_RATE_LIMIT_EXCEEDED
+  | typeof ErrorCode.GATEWAY_CONCURRENCY_LIMIT_EXCEEDED
+  | typeof ErrorCode.GATEWAY_QUOTA_EXCEEDED;
+
+export interface GatewayGovernanceLimitErrorInput {
+  reason: "rate" | "concurrency" | "quota";
+  scope: "key" | "user";
+  retryAfterSeconds: number;
+  quotaKind?: string;
+}
+
+export interface GatewayGovernanceLimitErrorDescriptor {
+  code: GatewayGovernanceLimitErrorCode;
+  details: {
+    scope: "key" | "user";
+    resource: string;
+    retryAfterSeconds: number;
+  };
+  headers: Headers;
+}
+
+export function describeGatewayGovernanceLimitError(
+  error: GatewayGovernanceLimitErrorInput,
+): GatewayGovernanceLimitErrorDescriptor {
+  const code = error.reason === "rate"
+    ? ErrorCode.GATEWAY_RATE_LIMIT_EXCEEDED
+    : error.reason === "concurrency"
+      ? ErrorCode.GATEWAY_CONCURRENCY_LIMIT_EXCEEDED
+      : ErrorCode.GATEWAY_QUOTA_EXCEEDED;
+  const retryAfterSeconds = Math.max(1, Math.ceil(error.retryAfterSeconds));
+  return {
+    code,
+    details: {
+      scope: error.scope,
+      resource: error.reason === "quota" ? (error.quotaKind ?? "quota") : error.reason,
+      retryAfterSeconds,
+    },
+    headers: gatewayGovernanceErrorHeaders(code, retryAfterSeconds),
+  };
+}
+
+export function gatewayGovernanceErrorHeaders(
+  code: GatewayGovernanceLimitErrorCode,
+  retryAfterSeconds: number,
+): Headers {
+  if (!Number.isFinite(retryAfterSeconds) || retryAfterSeconds <= 0) {
+    throw new TypeError("retryAfterSeconds must be a finite positive number");
+  }
+  return new Headers({
+    "Retry-After": String(Math.ceil(retryAfterSeconds)),
+    "X-Gateway-Error-Code": code,
+  });
 }
 
 /**
@@ -252,11 +325,12 @@ export function apiError(
   code: ErrorCodeValue,
   details?: unknown,
   messageOverride?: string,
+  headers?: HeadersInit,
 ) {
   const meta = ERROR_META[code];
   return Response.json(
     errorResponse(code, details, messageOverride),
-    { status: meta.status },
+    { status: meta.status, headers },
   );
 }
 
@@ -293,9 +367,10 @@ export async function apiErrorLocalized(
   code: ErrorCodeValue,
   req: Request,
   details?: unknown,
+  headers?: HeadersInit,
 ) {
   const { resolveLocale } = await import("@/lib/i18n");
   const locale = resolveLocale(req.headers.get("accept-language"));
   const message = translateError(code, locale);
-  return apiError(code, details, message);
+  return apiError(code, details, message, headers);
 }

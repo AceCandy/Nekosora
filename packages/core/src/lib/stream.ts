@@ -91,6 +91,8 @@ export interface StreamChatOptions {
   telemetry?: GatewayTelemetryPort;
   /** 对外网关实际入口路径；用于统一 execution telemetry。 */
   requestPath?: string;
+  /** 首个真实 Provider attempt 前执行的严格门禁。 */
+  onProviderStart?: () => Promise<void>;
 }
 
 interface StreamChatFinalUsage {
@@ -166,6 +168,7 @@ export async function* streamChat(
       requestPath: ctx.source === "gateway" ? (opts.requestPath ?? "/v1/chat/completions") : undefined,
       taskKind: opts.taskKind,
       abortSignal: opts.abortSignal,
+      onProviderStart: opts.onProviderStart,
       resolveRoutes: () => opts.modelId
         ? resolveRoutesById(ctx, opts.modelId)
         : resolveRoutes(ctx, currentRequest.model),
@@ -645,6 +648,7 @@ export async function generateChat(opts: GenerateChatOptions): Promise<GenerateC
     modelId: opts.modelId,
     taskKind: opts.taskKind,
     abortSignal: opts.abortSignal,
+    onProviderStart: opts.onProviderStart,
     resolveRoutes: () => opts.modelId
       ? resolveRoutesById(ctx, opts.modelId)
       : resolveRoutes(ctx, request.model),

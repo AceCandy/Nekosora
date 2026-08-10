@@ -35,6 +35,9 @@ export const errorsEn: Record<ErrorCodeValue, string> = {
   "gateway.generation_failed": "Generation failed",
   "gateway.all_routes_failed": "All routes failed",
   "gateway.timeout": "Upstream response timed out",
+  "gateway.rate_limit_exceeded": "Request rate limit exceeded",
+  "gateway.concurrency_limit_exceeded": "Concurrent request limit exceeded",
+  "gateway.quota_exceeded": "Monthly usage quota exceeded",
 
   // media.*
   "media.image_gen_failed": "Image generation failed",

@@ -7,6 +7,11 @@ const mocks = vi.hoisted(() => ({
   generateImageViaRoute: vi.fn(),
   getStorage: vi.fn(),
   logUsage: vi.fn(),
+  beginGatewayGovernance: vi.fn(),
+  reserveQuota: vi.fn(),
+  markProviderStarted: vi.fn(),
+  finalize: vi.fn(),
+  governanceSignal: new AbortController().signal,
 }));
 
 vi.mock("@/lib/keys", () => ({
@@ -23,7 +28,12 @@ vi.mock("@/lib/providers/multimodal/image-gen", () => ({
 }));
 vi.mock("@/lib/infra/storage", () => ({ getStorage: mocks.getStorage }));
 vi.mock("@/lib/usage", () => ({ logUsage: mocks.logUsage }));
+vi.mock("@/lib/gateway-governance/lifecycle", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/gateway-governance/lifecycle")>(),
+  beginGatewayGovernance: mocks.beginGatewayGovernance,
+}));
 
+import { GovernanceRejectedError } from "@/lib/gateway-governance/repository";
 import { POST } from "@/app/v1/images/generations/route";
 
 function request(body: Record<string, unknown>, language = "en") {
@@ -55,16 +65,26 @@ describe("POST /v1/images/generations", () => {
     });
     mocks.getStorage.mockReset();
     mocks.logUsage.mockReset().mockResolvedValue(undefined);
+    mocks.reserveQuota.mockReset().mockResolvedValue(undefined);
+    mocks.markProviderStarted.mockReset().mockResolvedValue(undefined);
+    mocks.finalize.mockReset().mockResolvedValue({ settled: true });
+    mocks.beginGatewayGovernance.mockReset().mockResolvedValue({
+      signal: mocks.governanceSignal,
+      reserveQuota: mocks.reserveQuota,
+      markProviderStarted: mocks.markProviderStarted,
+      finalize: mocks.finalize,
+    });
   });
 
   it("b64_json 保持 OpenAI Images 请求和响应字段", async () => {
-    const response = await POST(request({
+    const req = request({
       model: "image-1",
       prompt: "a cat",
       n: 2,
       size: "1024x1024",
       response_format: "b64_json",
-    }));
+    });
+    const response = await POST(req);
     const body = await response.json();
 
     expect(response.status).toBe(200);
@@ -75,13 +95,58 @@ describe("POST /v1/images/generations", () => {
     expect(mocks.generateImageViaRoute).toHaveBeenCalledWith(
       expect.objectContaining({ userId: "user-1" }),
       "image-1",
-      {
+      expect.objectContaining({
         prompt: "a cat",
         n: 2,
         size: "1024x1024",
         responseFormat: "b64_json",
-      },
+        abortSignal: mocks.governanceSignal,
+        onProviderStart: expect.any(Function),
+      }),
     );
+    expect(mocks.beginGatewayGovernance).toHaveBeenCalledWith({
+      identity: { userId: "user-1", apiKeyId: "key-1" },
+      operation: "image.generate",
+      requestSignal: req.signal,
+    });
+    expect(mocks.reserveQuota).toHaveBeenCalledWith("image_count", 2);
+    const options = mocks.generateImageViaRoute.mock.calls[0]?.[2];
+    await options.onProviderStart();
+    expect(mocks.markProviderStarted).toHaveBeenCalledOnce();
+    expect(mocks.finalize).toHaveBeenCalledWith(1);
+  });
+
+  it("Rate 拒绝发生在 JSON 解析之前", async () => {
+    mocks.beginGatewayGovernance.mockRejectedValueOnce(new GovernanceRejectedError({
+      reason: "rate",
+      scope: "key",
+      retryAfterSeconds: 7,
+    }));
+    const malformed = new NextRequest("http://localhost/v1/images/generations", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer sk-test",
+        "content-type": "application/json",
+      },
+      body: "{",
+    });
+
+    const response = await POST(malformed);
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("7");
+    expect(response.headers.get("x-gateway-error-code")).toBe("gateway.rate_limit_exceeded");
+    expect(mocks.generateImageViaRoute).not.toHaveBeenCalled();
+    expect(mocks.finalize).not.toHaveBeenCalled();
+  });
+
+  it("非法 n 在 Provider 前拒绝并释放租约", async () => {
+    const response = await POST(request({ model: "image-1", prompt: "a cat", n: 1.5 }));
+
+    expect(response.status).toBe(400);
+    expect(mocks.reserveQuota).not.toHaveBeenCalled();
+    expect(mocks.generateImageViaRoute).not.toHaveBeenCalled();
+    expect(mocks.finalize).toHaveBeenCalledWith(undefined);
   });
 
   it("缺失 prompt 时返回 OpenAI 风格本地化错误且不调用上游", async () => {

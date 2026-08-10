@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   verifyKey: vi.fn(),
   getDb: vi.fn(),
   getSchema: vi.fn(),
+  consumeGatewayGovernanceRate: vi.fn(),
   eq: vi.fn((left: unknown, right: unknown) => ({ op: "eq", left, right })),
   and: vi.fn((...conditions: unknown[]) => ({ op: "and", conditions })),
 }));
@@ -19,7 +20,12 @@ vi.mock("@/lib/keys", () => ({
   verifyKey: mocks.verifyKey,
 }));
 vi.mock("@/lib/infra/db", () => ({ getDb: mocks.getDb, getSchema: mocks.getSchema }));
+vi.mock("@/lib/gateway-governance/lifecycle", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/gateway-governance/lifecycle")>(),
+  consumeGatewayGovernanceRate: mocks.consumeGatewayGovernanceRate,
+}));
 
+import { GovernanceRejectedError } from "@/lib/gateway-governance/repository";
 import { GET } from "./route";
 
 const schema = {
@@ -52,6 +58,7 @@ describe("GET /v1/models", () => {
       ctx: { userId: "user-1", apiKeyId: "sub-1", keyKind: "sub", source: "gateway" },
       record: { id: "sub-1" },
     });
+    mocks.consumeGatewayGovernanceRate.mockResolvedValue({});
   });
 
   it("历史跨用户绑定不会出现在响应中", async () => {
@@ -71,6 +78,10 @@ describe("GET /v1/models", () => {
 
     expect(body.data.map((model: { id: string }) => model.id)).toEqual(["own-model"]);
     expect(body.object).toBe("list");
+    expect(mocks.consumeGatewayGovernanceRate).toHaveBeenCalledWith({
+      identity: { userId: "user-1", apiKeyId: "sub-1" },
+      operation: "models.list",
+    });
     expect(mocks.eq).toHaveBeenCalledWith(schema.keyModelBindings.keyId, "sub-1");
     expect(mocks.eq).toHaveBeenCalledWith(schema.models.ownerUserId, "user-1");
     expect(mocks.eq).toHaveBeenCalledWith(schema.models.enabled, true);
@@ -170,10 +181,32 @@ describe("GET /v1/models", () => {
 
     expect(response.status).toBe(401);
     expect(mocks.verifyKey).not.toHaveBeenCalled();
+    expect(mocks.consumeGatewayGovernanceRate).not.toHaveBeenCalled();
     expect(await response.json()).toEqual({
       type: "error",
       error: { type: "authentication_error", message: "无效的 API 密钥" },
     });
+  });
+
+  it("Rate 拒绝优先于 Anthropic 参数解析并保留原生错误", async () => {
+    mocks.consumeGatewayGovernanceRate.mockRejectedValueOnce(new GovernanceRejectedError({
+      reason: "rate",
+      scope: "user",
+      retryAfterSeconds: 9,
+    }));
+
+    const response = await GET(new NextRequest("http://localhost/v1/models?limit=0", {
+      headers: { "x-api-key": "sk-test", "accept-language": "en" },
+    }));
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("9");
+    expect(response.headers.get("x-gateway-error-code")).toBe("gateway.rate_limit_exceeded");
+    expect(await response.json()).toEqual({
+      type: "error",
+      error: { type: "rate_limit_error", message: "Request rate limit exceeded" },
+    });
+    expect(mocks.getDb).not.toHaveBeenCalled();
   });
 
   it.each([

@@ -11,6 +11,7 @@ import { resolveRoutesByCapability, RoutingError } from "@/lib/routing";
 import { recordFailure, recordSuccess } from "@/lib/circuit-breaker";
 import { executeAtomicGateway, gatewayTelemetry, type GatewayAttemptAdapter } from "@/lib/gateway-execution";
 import { selectMediaAdapter } from "@/lib/gateway-execution/media-registry";
+import { countUnicodeCodePoints } from "@/lib/gateway-governance/metering";
 import { createProviderFetch } from "@/lib/providers/timeouts";
 
 export interface SynthesizeOptions {
@@ -18,6 +19,8 @@ export interface SynthesizeOptions {
   voice?: string; // OpenAI: alloy/echo/fable/onyx/nova/shimmer
   /** 输出格式(默认 mp3)。 */
   outputFormat?: "mp3" | "opus" | "aac" | "flac" | "wav" | "pcm";
+  abortSignal?: AbortSignal;
+  onProviderStart?: () => Promise<void>;
 }
 
 export interface SynthesizeResult {
@@ -74,10 +77,13 @@ export async function synthesizeViaRoute(
     // AI SDK v5 的 SpeechResult.audio 是 GeneratedAudioFile(含 uint8Array + format)。
     const u8 = result.audio.uint8Array;
     if (!u8) throw new Error("TTS 上游未返回音频数据");
-    return { value: {
-      audioBuffer: Buffer.from(u8),
-      mime: FORMAT_MIME[format] ?? "audio/mpeg",
-    } };
+    return {
+      value: {
+        audioBuffer: Buffer.from(u8),
+        mime: FORMAT_MIME[format] ?? "audio/mpeg",
+      },
+      usage: { ttsCodePoints: countUnicodeCodePoints(opts.text) },
+    };
   };
   const outcome = await executeAtomicGateway({
     ctx,
@@ -85,8 +91,10 @@ export async function synthesizeViaRoute(
     operation: "audio.speech",
     model: modelName,
     requestPath: "/v1/audio/speech",
+    abortSignal: opts.abortSignal,
     resolveRoutes: () => resolveRoutesByCapability(ctx, modelName, "audioSynthesis"),
     selectAdapter: (route) => selectMediaAdapter("audio.speech", route.protocol, adapter),
+    onProviderStart: opts.onProviderStart,
     telemetry: gatewayTelemetry,
     breaker: { recordSuccess, recordFailure },
   });

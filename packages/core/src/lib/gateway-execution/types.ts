@@ -136,6 +136,8 @@ export interface ExecuteGatewayOptions<TEvent, TResult> {
     | GatewayAttemptAdapter<TEvent, TResult>
     | GatewayAdapterSelection<TEvent, TResult>
     | null;
+  /** 首个真实 adapter invocation 前执行；失败必须终止整个 execution。 */
+  onProviderStart?(): Promise<void>;
   /** 识别当前 operation 的路由级工具兼容性拒绝。 */
   isToolUnsupported?(error: unknown): boolean;
   /** 记录具体路由的工具能力降级；失败不得改变当前请求结果。 */

@@ -7,6 +7,12 @@ const mocks = vi.hoisted(() => ({
   streamChat: vi.fn(),
   getGatewayUA: vi.fn(),
   loadWebSearchConfig: vi.fn(),
+  consumeRate: vi.fn(),
+  acquireLease: vi.fn(),
+  reserveQuota: vi.fn(),
+  markProviderStarted: vi.fn(),
+  finalizeGovernance: vi.fn(),
+  findModel: vi.fn(),
 }));
 
 vi.mock("@/lib/keys", () => ({
@@ -16,6 +22,14 @@ vi.mock("@/lib/keys", () => ({
 vi.mock("@/lib/stream", () => ({ streamChat: mocks.streamChat }));
 vi.mock("@/lib/system-settings/ua", () => ({ getGatewayUA: mocks.getGatewayUA }));
 vi.mock("@/lib/web-search/registry", () => ({ loadConfig: mocks.loadWebSearchConfig }));
+vi.mock("@/lib/gateway-governance/lifecycle", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/gateway-governance/lifecycle")>(),
+  consumeGatewayGovernanceRate: mocks.consumeRate,
+  acquireGatewayGovernanceLease: mocks.acquireLease,
+}));
+vi.mock("@/lib/repositories/route-repository", () => ({
+  getRouteRepository: () => ({ findEnabledModelByNameForOwner: mocks.findModel }),
+}));
 
 import { POST } from "./route";
 
@@ -45,6 +59,21 @@ describe("POST /v1/chat/completions 流式取消", () => {
       ctx: { userId: "user-1", apiKeyId: "key-1", keyKind: "master", source: "gateway" },
     });
     mocks.getGatewayUA.mockResolvedValue("Nekusora-Test");
+    mocks.consumeRate.mockReset().mockResolvedValue({ version: 1 });
+    mocks.reserveQuota.mockReset().mockResolvedValue(undefined);
+    mocks.markProviderStarted.mockReset().mockResolvedValue(undefined);
+    mocks.finalizeGovernance.mockReset().mockResolvedValue({ settled: true });
+    mocks.acquireLease.mockReset().mockResolvedValue({
+      signal: new AbortController().signal,
+      reserveQuota: mocks.reserveQuota,
+      markProviderStarted: mocks.markProviderStarted,
+      finalize: mocks.finalizeGovernance,
+      getFailure: () => null,
+    });
+    mocks.findModel.mockReset().mockResolvedValue({
+      contextWindow: 32_000,
+      maxOutputTokens: 16_384,
+    });
   });
 
   afterEach(() => {

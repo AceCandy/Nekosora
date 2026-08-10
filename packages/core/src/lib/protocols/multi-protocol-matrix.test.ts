@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RouteApiFormat } from "@/db/types";
+import { DEFAULT_GATEWAY_GOVERNANCE_POLICY } from "@/lib/gateway-governance/policy";
 import type { CallContext, ResolvedRoute } from "@/lib/providers/types";
 import { handleProtocolRequest } from "./handler";
 import {
@@ -18,6 +19,12 @@ const mocks = vi.hoisted(() => ({
   finalizeExecution: vi.fn(),
   recordSuccess: vi.fn(),
   recordFailure: vi.fn(),
+  consumeRate: vi.fn(),
+  acquireLease: vi.fn(),
+  reserveQuota: vi.fn(),
+  markProviderStarted: vi.fn(),
+  finalizeGovernance: vi.fn(),
+  findModel: vi.fn(),
 }));
 
 vi.mock("./auth", () => ({ authenticateGatewayRequest: mocks.authenticate }));
@@ -41,7 +48,12 @@ vi.mock("@/lib/infra/metrics", () => ({
   acquireStream: vi.fn(),
   releaseStream: vi.fn(),
 }));
+vi.mock("@/lib/gateway-governance/lifecycle", () => ({
+  consumeGatewayGovernanceRate: mocks.consumeRate,
+  acquireGatewayGovernanceLease: mocks.acquireLease,
+}));
 vi.mock("@/lib/repositories/route-repository", () => ({
+  getRouteRepository: () => ({ findEnabledModelByNameForOwner: mocks.findModel }),
   markProviderStreamUsageUnsupported: vi.fn(),
   markRouteToolsUnsupported: vi.fn(),
 }));
@@ -344,6 +356,21 @@ describe("multi-protocol gateway matrix", () => {
     mocks.finalizeExecution.mockReset().mockResolvedValue(undefined);
     mocks.recordSuccess.mockReset();
     mocks.recordFailure.mockReset();
+    mocks.consumeRate.mockReset().mockResolvedValue(DEFAULT_GATEWAY_GOVERNANCE_POLICY);
+    mocks.reserveQuota.mockReset().mockResolvedValue(undefined);
+    mocks.markProviderStarted.mockReset().mockResolvedValue(undefined);
+    mocks.finalizeGovernance.mockReset().mockResolvedValue({ settled: true });
+    mocks.acquireLease.mockReset().mockResolvedValue({
+      signal: new AbortController().signal,
+      reserveQuota: mocks.reserveQuota,
+      markProviderStarted: mocks.markProviderStarted,
+      finalize: mocks.finalizeGovernance,
+      getFailure: () => null,
+    });
+    mocks.findModel.mockReset().mockResolvedValue({
+      contextWindow: 32_000,
+      maxOutputTokens: 16_384,
+    });
   });
 
   afterEach(() => vi.unstubAllGlobals());
@@ -384,6 +411,10 @@ describe("multi-protocol gateway matrix", () => {
       expect(mocks.recordSuccess).toHaveBeenCalledOnce();
       expect(mocks.recordFailure).not.toHaveBeenCalled();
       expect(mocks.finalizeExecution).toHaveBeenCalledOnce();
+      expect(mocks.consumeRate).toHaveBeenCalledOnce();
+      expect(mocks.reserveQuota).toHaveBeenCalledOnce();
+      expect(mocks.markProviderStarted).toHaveBeenCalledOnce();
+      expect(mocks.finalizeGovernance).toHaveBeenCalledOnce();
     },
   );
 

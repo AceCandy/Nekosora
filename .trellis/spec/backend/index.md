@@ -27,6 +27,7 @@ Nekusora is a pnpm TypeScript workspace. `apps/web` is the Next.js control plane
 | [Provider Probe](./provider-probe.md) | key 连通性探测契约(/models 鉴权判定 + anthropic 混搭兼容) | Filled |
 | [Provider Timeouts](./provider-timeouts.md) | Provider 连接、总读取、流空闲超时的跨层执行契约 | Filled |
 | [Gateway Runtime](./gateway-runtime.md) | Fastify adapter, route ownership, readiness, build and startup contracts | Filled |
+| [Gateway Request Governance](./gateway-governance.md) | API-key rate, concurrency, quota, lease, settlement, and media usage contracts | Filled |
 | [Gateway Routing](./gateway-routing.md) | 统一资源模型、resolveRoutes/resolveRoutesById 决策树、可见性四套场景、熔断 | Filled |
 | [Memory System](./memory-system.md) | 三分类生命周期、抽取去重(explicit/weak)、融合向量召回、compact 质量增强、缓存 | Filled |
 | [Prompt Caching](./prompt-caching.md) | 命中前提、AI SDK 边界、按 protocol 注入缓存控制(复刻 pi) | Filled |

@@ -1,1 +1,20 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file":".trellis/spec/backend/index.md","reason":"加载 Gateway/Core/PostgreSQL 分层与后端质量入口"}
+{"file":".trellis/spec/backend/directory-structure.md","reason":"约束新 gateway-governance 领域模块的职责与依赖方向"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"约束 PostgreSQL 时钟、锁、租约、追加迁移与 journal/snapshot"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"保持多协议错误 envelope、429/503 映射、取消与脱敏契约"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"保持 execution/attempt 单终态、媒体 usage 与低基数观测边界"}
+{"file":".trellis/spec/backend/gateway-routing.md","reason":"保持 route/key retry、commit、breaker、Engine ownership 与四协议矩阵"}
+{"file":".trellis/spec/backend/gateway-runtime.md","reason":"保持 Fastify Request/Response、multipart、signal 与 Gateway bundle 契约"}
+{"file":".trellis/spec/backend/key-binding-authorization.md","reason":"保持主子 Key owner/binding/禁用语义并构造 Key/User 双主体"}
+{"file":".trellis/spec/backend/provider-timeouts.md","reason":"协调治理 heartbeat abort 与既有 Provider timeout/caller cancel 首因"}
+{"file":".trellis/spec/backend/dependency-security.md","reason":"约束 music-metadata 与 Gateway 直接依赖、lockfile 和生产构建验证"}
+{"file":".trellis/spec/frontend/index.md","reason":"加载管理员设置页 Server/Client、i18n 与质量入口"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"约束设置 Tab、表单原语、亮色主题、响应式与可访问性"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"约束 admin 鉴权、测试位置、设计 token 与全量门禁"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"确保 policy DTO 单一来源并在 FormData 边界整组 Zod 校验"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"核对配置、DB、HTTP、Engine、stream、telemetry 与 UI 完整数据流"}
+{"file":".trellis/tasks/08-10-gateway-request-governance/research/request-paths.md","reason":"提供全部 Gateway 入口、流生命周期与 media signal 缺口证据"}
+{"file":".trellis/tasks/08-10-gateway-request-governance/research/shared-state-and-key-policy.md","reason":"提供 PostgreSQL/Redis 能力与主子 Key 现状证据"}
+{"file":".trellis/tasks/08-10-gateway-request-governance/research/quota-metering.md","reason":"提供四模态单位、预留/结算与音频解析依据"}
+{"file":".trellis/tasks/08-10-gateway-request-governance/research/chat-settlement-boundary.md","reason":"定位外部 Chat 唯一预留/终态和重试幂等边界"}
+{"file":".trellis/tasks/08-10-gateway-request-governance/research/settings-and-state.md","reason":"提供 system_settings、状态表、租约与真实 PostgreSQL 测试依据"}

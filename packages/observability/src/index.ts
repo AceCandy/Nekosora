@@ -68,6 +68,27 @@ export const gatewayExecutionDurationMs = new Histogram({
   registers: [registry],
 });
 
+export const gatewayGovernanceRejectionsTotal = new Counter({
+  name: "nekusora_gateway_governance_rejections_total",
+  help: "Gateway governance rejections",
+  labelNames: ["reason", "scope", "operation"],
+  registers: [registry],
+});
+
+export const gatewayGovernanceSettlementsTotal = new Counter({
+  name: "nekusora_gateway_governance_settlements_total",
+  help: "Gateway governance quota settlements",
+  labelNames: ["quota_kind", "outcome"],
+  registers: [registry],
+});
+
+export const gatewayGovernanceFailuresTotal = new Counter({
+  name: "nekusora_gateway_governance_failures_total",
+  help: "Gateway governance failures by fixed lifecycle stage",
+  labelNames: ["stage"],
+  registers: [registry],
+});
+
 /** 当前活跃流式连接数(Gauge,反映实时并发)。 */
 export const activeStreams = new Gauge({
   name: "nekusora_active_streams",
@@ -129,6 +150,28 @@ export function observeGatewayAttempt(params: {
   protocol: string;
 }): void {
   gatewayAttemptsTotal.inc(params);
+}
+
+export function observeGatewayGovernanceRejection(params: {
+  reason: string;
+  scope: string;
+  operation: string;
+}): void {
+  gatewayGovernanceRejectionsTotal.inc(params);
+}
+
+export function observeGatewayGovernanceSettlement(params: {
+  quotaKind: string;
+  outcome: "settled" | "overage";
+}): void {
+  gatewayGovernanceSettlementsTotal.inc({
+    quota_kind: params.quotaKind,
+    outcome: params.outcome,
+  });
+}
+
+export function observeGatewayGovernanceFailure(stage: string): void {
+  gatewayGovernanceFailuresTotal.inc({ stage });
 }
 
 /** 进入 streamChat 时 +1(配合 releaseStream 在 finally 调用)。 */

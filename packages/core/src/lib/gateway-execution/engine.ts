@@ -1,5 +1,6 @@
 import { orderedWeightedKeys } from "@/lib/providers/keys";
 import { maskKey } from "@/lib/usage";
+import { ErrorCode } from "@/lib/errors";
 import type { ResolvedRoute } from "@/lib/providers/types";
 import {
   createProviderTimeoutScope,
@@ -60,6 +61,7 @@ export async function* executeGateway<TEvent, TResult>(
   let committed = false;
   let stopExecution = false;
   let hadUpstreamAttempt = false;
+  let providerStartCommitted = options.onProviderStart === undefined;
   let firstRejection: { error: SafeGatewayError; route: ResolvedRoute } | undefined;
   let activeAttempt: {
     route: ResolvedRoute;
@@ -122,8 +124,34 @@ export async function* executeGateway<TEvent, TResult>(
         options.maxKeyAttempts ?? DEFAULT_MAX_KEY_ATTEMPTS,
       );
       for (let keyIndex = 0; keyIndex < keys.length; keyIndex += 1) {
-        hadUpstreamAttempt = true;
         const apiKey = keys[keyIndex].key;
+        if (!providerStartCommitted) {
+          try {
+            await options.onProviderStart?.();
+            providerStartCommitted = true;
+          } catch (error) {
+            const classified = classifyGatewayError(error);
+            outcome = isAbortError(error) || options.abortSignal?.aborted
+              ? interruptedOutcome(executionId, snapshotRoute(route), committed)
+              : failedOutcome(
+                  executionId,
+                  {
+                    ...classified,
+                    code: ErrorCode.SERVER_SERVICE_UNAVAILABLE,
+                    phase: "internal",
+                    httpStatus: 503,
+                  },
+                  committed,
+                  snapshotRoute(route),
+                );
+            return outcome;
+          }
+          if (options.abortSignal?.aborted) {
+            outcome = interruptedOutcome(executionId, snapshotRoute(route), committed);
+            return outcome;
+          }
+        }
+        hadUpstreamAttempt = true;
         const attemptStartedAt = Date.now();
         attempt += 1;
         activeAttempt = { route, apiKey, attempt, startedAt: attemptStartedAt };

@@ -7,7 +7,9 @@ import {
   pgTable,
   text,
   boolean,
+  bigint,
   integer,
+  numeric,
   timestamp,
   jsonb,
   index,
@@ -928,6 +930,116 @@ export const userSettings = pgTable(
   (t) => [uniqueIndex("user_settings_unique_idx").on(t.userId, t.key)],
 );
 
+export const gatewayGovernanceOperation = pgEnum("gateway_governance_operation", [
+  "chat.stream",
+  "chat.generate",
+  "image.generate",
+  "audio.speech",
+  "audio.transcription",
+  "mcp.search",
+]);
+
+export const gatewayQuotaKind = pgEnum("gateway_quota_kind", [
+  "chat_tokens",
+  "image_count",
+  "tts_code_points",
+  "stt_seconds",
+]);
+
+/** API Key 或用户的速率状态，同时作为治理事务的稳定锁点。 */
+export const gatewayGovernanceSubjects = pgTable(
+  "gateway_governance_subjects",
+  {
+    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
+    apiKeyId: text("api_key_id").references(() => apiKeys.id, { onDelete: "cascade" }),
+    rateTokens: numeric("rate_tokens", { precision: 20, scale: 6 }).notNull(),
+    rateRefilledAt: timestamp("rate_refilled_at", { withTimezone: true }).notNull(),
+    policyFingerprint: text("policy_fingerprint").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("gateway_governance_subjects_user_unique_idx")
+      .on(t.userId)
+      .where(sql`${t.userId} is not null`),
+    uniqueIndex("gateway_governance_subjects_api_key_unique_idx")
+      .on(t.apiKeyId)
+      .where(sql`${t.apiKeyId} is not null`),
+    check(
+      "gateway_governance_subjects_identity_check",
+      sql`num_nonnulls(${t.userId}, ${t.apiKeyId}) = 1`,
+    ),
+    check("gateway_governance_subjects_rate_tokens_check", sql`${t.rateTokens} >= 0`),
+  ],
+);
+
+/** 按主体、计量单位与 UTC 月份隔离的活动预留和已结算额度。 */
+export const gatewayQuotaWindows = pgTable(
+  "gateway_quota_windows",
+  {
+    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
+    subjectId: text("subject_id")
+      .notNull()
+      .references(() => gatewayGovernanceSubjects.id, { onDelete: "cascade" }),
+    quotaKind: gatewayQuotaKind("quota_kind").notNull(),
+    monthStart: timestamp("month_start", { withTimezone: true }).notNull(),
+    reservedUnits: bigint("reserved_units", { mode: "number" }).notNull().default(0),
+    usedUnits: bigint("used_units", { mode: "number" }).notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("gateway_quota_windows_subject_kind_month_unique_idx")
+      .on(t.subjectId, t.quotaKind, t.monthStart),
+    index("gateway_quota_windows_subject_idx").on(t.subjectId),
+    check("gateway_quota_windows_reserved_units_check", sql`${t.reservedUnits} >= 0`),
+    check("gateway_quota_windows_used_units_check", sql`${t.usedUnits} >= 0`),
+    check(
+      "gateway_quota_windows_month_start_check",
+      sql`${t.monthStart} = date_trunc('month', ${t.monthStart} at time zone 'UTC') at time zone 'UTC'`,
+    ),
+  ],
+);
+
+/** 活动请求的并发 ownership token 与可选月度额度 reservation。 */
+export const gatewayGovernanceLeases = pgTable(
+  "gateway_governance_leases",
+  {
+    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
+    keySubjectId: text("key_subject_id")
+      .notNull()
+      .references(() => gatewayGovernanceSubjects.id, { onDelete: "restrict" }),
+    userSubjectId: text("user_subject_id")
+      .notNull()
+      .references(() => gatewayGovernanceSubjects.id, { onDelete: "restrict" }),
+    operation: gatewayGovernanceOperation("operation").notNull(),
+    quotaKind: gatewayQuotaKind("quota_kind"),
+    quotaMonthStart: timestamp("quota_month_start", { withTimezone: true }),
+    reservedUnits: bigint("reserved_units", { mode: "number" }),
+    providerStartedAt: timestamp("provider_started_at", { withTimezone: true }),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("gateway_governance_leases_key_expiry_idx").on(t.keySubjectId, t.leaseExpiresAt),
+    index("gateway_governance_leases_user_expiry_idx").on(t.userSubjectId, t.leaseExpiresAt),
+    index("gateway_governance_leases_expiry_id_idx").on(t.leaseExpiresAt, t.id),
+    check(
+      "gateway_governance_leases_quota_fields_check",
+      sql`(
+        ${t.quotaKind} is null
+        and ${t.quotaMonthStart} is null
+        and ${t.reservedUnits} is null
+      ) or (
+        ${t.quotaKind} is not null
+        and ${t.quotaMonthStart} is not null
+        and ${t.reservedUnits} > 0
+      )`,
+    ),
+  ],
+);
+
 /** 一次用户可见或后台逻辑网关执行的最终事实。 */
 export const gatewayExecutions = pgTable(
   "gateway_executions",
@@ -962,6 +1074,9 @@ export const gatewayExecutions = pgTable(
     cacheReadTokens: integer("cache_read_tokens").notNull().default(0),
     cacheWriteTokens: integer("cache_write_tokens").notNull().default(0),
     reasoningTokens: integer("reasoning_tokens").notNull().default(0),
+    imageCount: integer("image_count"),
+    ttsCodePoints: integer("tts_code_points"),
+    sttSeconds: integer("stt_seconds"),
     latencyMs: integer("latency_ms"),
     firstTokenLatencyMs: integer("first_token_latency_ms"),
     taskKind: text("task_kind"),
@@ -1005,6 +1120,9 @@ export const gatewayAttempts = pgTable(
     cacheReadTokens: integer("cache_read_tokens").notNull().default(0),
     cacheWriteTokens: integer("cache_write_tokens").notNull().default(0),
     reasoningTokens: integer("reasoning_tokens").notNull().default(0),
+    imageCount: integer("image_count"),
+    ttsCodePoints: integer("tts_code_points"),
+    sttSeconds: integer("stt_seconds"),
     latencyMs: integer("latency_ms"),
     firstTokenLatencyMs: integer("first_token_latency_ms"),
     startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),

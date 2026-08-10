@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ErrorCode } from "@/lib/errors";
 import { executeGateway } from "./engine";
 import type {
   AttemptTelemetry,
@@ -45,6 +46,7 @@ function harness(
     onToolUnsupported?: (route: ResolvedRoute) => Promise<void>;
     isStreamOptionsUnsupported?: (route: ResolvedRoute, error: unknown) => boolean;
     onStreamOptionsUnsupported?: (route: ResolvedRoute) => Promise<void>;
+    onProviderStart?: () => Promise<void>;
   } = {},
 ) {
   const attempts: AttemptTelemetry[] = [];
@@ -66,6 +68,7 @@ function harness(
     abortSignal,
     resolveRoutes: async () => routes,
     selectAdapter,
+    onProviderStart: options.onProviderStart,
     isToolUnsupported: options.isToolUnsupported,
     onToolUnsupported: options.onToolUnsupported,
     isStreamOptionsUnsupported: options.isStreamOptionsUnsupported,
@@ -83,6 +86,17 @@ async function consume<TEvent, TResult>(generator: AsyncGenerator<TEvent, TResul
     if (next.done) return { events, outcome: next.value };
     events.push(next.value);
   }
+}
+
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve(value?: T): void;
+} {
+  let resolve!: (value?: T) => void;
+  const promise = new Promise<T>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
 }
 
 describe("gateway execution engine", () => {
@@ -112,6 +126,93 @@ describe("gateway execution engine", () => {
     expect(h.attempts.map((item) => item.status)).toEqual(["failed", "success"]);
     expect(h.breaker.recordFailure).toHaveBeenCalledOnce();
     expect(h.breaker.recordSuccess).toHaveBeenCalledOnce();
+    expect(h.finalized).toHaveLength(1);
+  });
+
+  it("在首个 adapter 前标记 Provider start，key 重试不重复标记", async () => {
+    const calls: string[] = [];
+    const onProviderStart = vi.fn(async () => {
+      calls.push("provider-start");
+    });
+    const adapter: GatewayAttemptAdapter<Event, Result> = async function* ({ apiKey }) {
+      calls.push(`adapter:${apiKey}`);
+      if (apiKey === "key-a") {
+        throw Object.assign(new Error("temporary failure"), { statusCode: 503 });
+      }
+      return { value: { text: "ok" } };
+    };
+    const h = harness(
+      [route("a", ["key-a", "key-b"])],
+      () => adapter,
+      undefined,
+      { onProviderStart },
+    );
+
+    const { outcome } = await consume(h.generator);
+
+    expect(outcome.status).toBe("success");
+    expect(calls).toEqual(["provider-start", "adapter:key-a", "adapter:key-b"]);
+    expect(onProviderStart).toHaveBeenCalledOnce();
+  });
+
+  it("Provider-start 失败时不创建 attempt、failover 或 breaker 事实", async () => {
+    const adapter: GatewayAttemptAdapter<Event, Result> = vi.fn(async function* () {
+      return { value: { text: "unexpected" } };
+    });
+    const failure = Object.assign(new Error("governance unavailable"), {
+      code: ErrorCode.SERVER_SERVICE_UNAVAILABLE,
+      statusCode: 503,
+    });
+    const onProviderStart = vi.fn().mockRejectedValue(failure);
+    const h = harness(
+      [route("a"), route("b")],
+      () => adapter,
+      undefined,
+      { onProviderStart },
+    );
+
+    const { outcome } = await consume(h.generator);
+
+    expect(outcome).toMatchObject({
+      status: "failed",
+      route: { routeId: "a" },
+      error: {
+        code: ErrorCode.SERVER_SERVICE_UNAVAILABLE,
+        phase: "internal",
+        httpStatus: 503,
+      },
+    });
+    expect(adapter).not.toHaveBeenCalled();
+    expect(h.attempts).toEqual([]);
+    expect(h.breaker.recordFailure).not.toHaveBeenCalled();
+    expect(h.breaker.recordSuccess).not.toHaveBeenCalled();
+    expect(h.finalized).toHaveLength(1);
+  });
+
+  it("Provider-start 等待期间的 caller abort 保持 interrupted 语义", async () => {
+    const controller = new AbortController();
+    const started = deferred<void>();
+    const onProviderStart = vi.fn().mockReturnValue(started.promise);
+    const adapter: GatewayAttemptAdapter<Event, Result> = vi.fn(async function* () {
+      return { value: { text: "unexpected" } };
+    });
+    const h = harness(
+      [route("a")],
+      () => adapter,
+      controller.signal,
+      { onProviderStart },
+    );
+    const executing = consume(h.generator);
+
+    await vi.waitFor(() => expect(onProviderStart).toHaveBeenCalledOnce());
+    controller.abort();
+    started.resolve();
+    const { outcome } = await executing;
+
+    expect(outcome.status).toBe("interrupted");
+    expect(adapter).not.toHaveBeenCalled();
+    expect(h.attempts).toEqual([]);
+    expect(h.breaker.recordFailure).not.toHaveBeenCalled();
     expect(h.finalized).toHaveLength(1);
   });
 

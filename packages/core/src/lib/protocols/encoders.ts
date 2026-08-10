@@ -1,5 +1,10 @@
 import { streamChat } from "@/lib/stream";
 import { getGatewayUA } from "@/lib/system-settings/ua";
+import { settleChatUsage } from "@/lib/gateway-governance/metering";
+import {
+  GatewayGovernanceHandle,
+} from "@/lib/gateway-governance/lifecycle";
+import { GovernanceStateError } from "@/lib/gateway-governance/repository";
 import {
   ERROR_META,
   ErrorCode,
@@ -24,6 +29,12 @@ interface CollectedResponse {
   finishReason: string;
   usage: IRUsage;
   error?: { code: ErrorCodeValue; message: string; details?: Record<string, unknown> };
+}
+
+export interface ProtocolGovernance {
+  handle: GatewayGovernanceHandle;
+  reservation: number;
+  serviceUnavailableMessage: string;
 }
 
 type SupportedFinishReason = "stop" | "length" | "tool-calls" | "content-filter";
@@ -58,6 +69,7 @@ export function protocolErrorResponse(
   code: ErrorCodeValue,
   message?: string,
   details?: Record<string, unknown>,
+  headers?: HeadersInit,
 ): Response {
   const meta = ERROR_META[code];
   const standard = errorResponse(code, details, message).error;
@@ -65,17 +77,26 @@ export function protocolErrorResponse(
   if (protocol === "anthropic") {
     return Response.json({
       type: "error",
-      error: { type: standard.type, message: standard.message },
-    }, { status: meta.status });
+      error: {
+        type: meta.status === 429 ? anthropicErrorType(meta.status) : standard.type,
+        message: standard.message,
+      },
+    }, { status: meta.status, headers });
   }
   if (protocol === "gemini") {
     return Response.json({
       error: {
         code: meta.status,
         message: standard.message,
-        status: meta.status === 400 ? "INVALID_ARGUMENT" : meta.status === 401 ? "UNAUTHENTICATED" : "INTERNAL",
+        status: meta.status === 429
+          ? geminiErrorStatus(meta.status)
+          : meta.status === 400
+            ? "INVALID_ARGUMENT"
+            : meta.status === 401
+              ? "UNAUTHENTICATED"
+              : "INTERNAL",
       },
-    }, { status: meta.status });
+    }, { status: meta.status, headers });
   }
   return Response.json({
     error: {
@@ -83,8 +104,9 @@ export function protocolErrorResponse(
       type: standard.type,
       param: parameter ?? null,
       code,
+      ...(details !== undefined ? { details } : {}),
     },
-  }, { status: meta.status });
+  }, { status: meta.status, headers });
 }
 
 function usageOpenAI(usage: IRUsage) {
@@ -131,6 +153,7 @@ async function collect(
   request: IRRequest,
   signal: AbortSignal,
   requestPath: string,
+  governance?: ProtocolGovernance,
 ): Promise<CollectedResponse> {
   const tools = new Map<string, ToolCallState>();
   const result: CollectedResponse = {
@@ -147,6 +170,9 @@ async function collect(
     abortSignal: signal,
     userAgent: await getGatewayUA(),
     requestPath,
+    onProviderStart: governance
+      ? () => governance.handle.markProviderStarted()
+      : undefined,
   })) {
     if (signal.aborted) break;
     switch (event.type) {
@@ -325,10 +351,35 @@ export async function nonStreamProtocolResponse(
   request: IRRequest,
   signal: AbortSignal,
   requestPath: string,
+  governance?: ProtocolGovernance,
 ): Promise<Response> {
-  const result = await collect(ctx, request, signal, requestPath);
+  let result: CollectedResponse;
+  try {
+    result = await collect(ctx, request, signal, requestPath, governance);
+    await finalizeChatGovernance(governance, result.usage);
+  } catch (error) {
+    let finalError = error;
+    if (governance) {
+      try {
+        await finalizeChatGovernance(governance, {});
+      } catch (settlementError) {
+        finalError = settlementError;
+      }
+    }
+    if (finalError instanceof GovernanceStateError) {
+      return protocolErrorResponse(
+        protocol,
+        ErrorCode.SERVER_SERVICE_UNAVAILABLE,
+        governance?.serviceUnavailableMessage,
+      );
+    }
+    throw finalError;
+  }
   if (result.error) {
-    return protocolErrorResponse(protocol, result.error.code, result.error.message, result.error.details);
+    const message = result.error.code === ErrorCode.SERVER_SERVICE_UNAVAILABLE
+      ? governance?.serviceUnavailableMessage
+      : result.error.message;
+    return protocolErrorResponse(protocol, result.error.code, message, result.error.details);
   }
   if (signal.aborted) return new Response(null, { status: 499 });
   if (protocol === "anthropic" && result.finishReason === "content-filter") {
@@ -389,6 +440,7 @@ export function streamProtocolResponse(
   request: IRRequest,
   sourceSignal: AbortSignal,
   requestPath: string,
+  governance?: ProtocolGovernance,
 ): Response {
   const encoder = new TextEncoder();
   const abortController = new AbortController();
@@ -414,6 +466,9 @@ export function streamProtocolResponse(
     sequenceNumber: 0,
     usage: {},
   };
+  let governanceSettled = false;
+  let terminalEmitted = false;
+  let transportCancelled = false;
 
   const body = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -428,29 +483,75 @@ export function streamProtocolResponse(
           abortSignal: abortController.signal,
           userAgent,
           requestPath,
+          onProviderStart: governance
+            ? () => governance.handle.markProviderStarted()
+            : undefined,
         })) {
           if (abortController.signal.aborted) break;
-          emitEvent(protocol, controller, encoder, id, request.model, created, event, state);
+          if (event.type === "finish" || event.type === "error") {
+            const usage = event.type === "finish"
+              ? mergeUsage(state.usage, event.usage)
+              : state.usage;
+            await finalizeChatGovernance(governance, usage);
+            governanceSettled = true;
+          }
+          const outbound = event.type === "error"
+            && event.code === ErrorCode.SERVER_SERVICE_UNAVAILABLE
+            && governance
+            ? { ...event, error: governance.serviceUnavailableMessage }
+            : event;
+          emitEvent(protocol, controller, encoder, id, request.model, created, outbound, state);
+          if (event.type === "finish" || event.type === "error") terminalEmitted = true;
         }
       } catch (error) {
-        if (!abortController.signal.aborted) {
+        const governanceFailure = governance?.handle.getFailure();
+        if (!transportCancelled && (governanceFailure || !abortController.signal.aborted)) {
           emitStreamError(
             protocol,
             controller,
             encoder,
             id,
-            redactErrorMessage(error, [], "Generation failed"),
+            governanceFailure
+              ? governance?.serviceUnavailableMessage ?? "Service unavailable"
+              : redactErrorMessage(error, [], "Generation failed"),
             state,
+            governanceFailure ? ErrorCode.SERVER_SERVICE_UNAVAILABLE : undefined,
           );
+          terminalEmitted = true;
         }
       } finally {
+        if (!governanceSettled) {
+          try {
+            await finalizeChatGovernance(governance, state.usage);
+            governanceSettled = true;
+          } catch {
+            if (!transportCancelled && !terminalEmitted) {
+              emitStreamError(
+                protocol,
+                controller,
+                encoder,
+                id,
+                governance?.serviceUnavailableMessage ?? "Service unavailable",
+                state,
+                ErrorCode.SERVER_SERVICE_UNAVAILABLE,
+              );
+            }
+          }
+        }
         sourceSignal.removeEventListener("abort", abort);
-        if (!abortController.signal.aborted) controller.close();
+        if (!transportCancelled && (!abortController.signal.aborted || governance?.handle.getFailure())) {
+          controller.close();
+        }
       }
     },
     cancel() {
+      transportCancelled = true;
       abortController.abort();
       sourceSignal.removeEventListener("abort", abort);
+      return finalizeChatGovernance(governance, state.usage).then(
+        () => undefined,
+        () => undefined,
+      );
     },
   });
 
@@ -462,6 +563,15 @@ export function streamProtocolResponse(
       "X-Accel-Buffering": "no",
     },
   });
+}
+
+async function finalizeChatGovernance(
+  governance: ProtocolGovernance | undefined,
+  usage: IRUsage,
+): Promise<void> {
+  if (!governance) return;
+  const actualUnits = settleChatUsage(governance.reservation, true, usage);
+  await governance.handle.finalize(actualUnits);
 }
 
 function emitStart(

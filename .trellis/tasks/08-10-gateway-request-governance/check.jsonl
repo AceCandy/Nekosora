@@ -1,1 +1,19 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file":".trellis/spec/backend/index.md","reason":"执行后端最终质量清单"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"复核事务锁序、数据库时钟、迁移只追加与 SQL/journal/snapshot 连续"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"复核三类 429、治理 503、多协议 envelope、Retry-After 与凭据脱敏"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"复核治理严格路径不被 telemetry best-effort 吞掉且用量不重复"}
+{"file":".trellis/spec/backend/gateway-routing.md","reason":"复核 Engine retry/commit/breaker 与治理 Provider-start hook 边界"}
+{"file":".trellis/spec/backend/gateway-runtime.md","reason":"复核全部入口、multipart、listener cancel、media signal 和 bundle"}
+{"file":".trellis/spec/backend/key-binding-authorization.md","reason":"复核 Key/User 双桶不改变父子 Key 和模型绑定授权"}
+{"file":".trellis/spec/backend/provider-timeouts.md","reason":"复核 timeout、client cancel、heartbeat failure 的首因分类和清理"}
+{"file":".trellis/spec/backend/dependency-security.md","reason":"复核新增依赖解析、lockfile、Gateway 直接依赖和生产构建"}
+{"file":".trellis/spec/frontend/index.md","reason":"执行管理端 Server/Client 与 i18n 最终质量清单"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"复核无嵌套卡片、亮色 token、控件状态、触屏和窄屏布局"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"复核管理员鉴权、组件测试、设计 token 与全量门禁"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"复核 policy DTO、Zod 信任边界和可序列化 props"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"逐消费者复核配置到 DB、HTTP、Engine、stream、metrics 与 UI 数据流"}
+{"file":".trellis/tasks/08-10-gateway-request-governance/research/request-paths.md","reason":"按入口矩阵检查遗漏和取消生命周期"}
+{"file":".trellis/tasks/08-10-gateway-request-governance/research/shared-state-and-key-policy.md","reason":"检查多实例事实源、失败关闭与 Key 归属没有漂移"}
+{"file":".trellis/tasks/08-10-gateway-request-governance/research/quota-metering.md","reason":"检查四单位可靠计量、退款、保守结算和音频边界"}
+{"file":".trellis/tasks/08-10-gateway-request-governance/research/chat-settlement-boundary.md","reason":"检查 Chat fallback/attempt/stream terminal 不重复扣减"}
+{"file":".trellis/tasks/08-10-gateway-request-governance/research/settings-and-state.md","reason":"检查管理配置、三张状态表、租约回收和真实 PG 证据"}

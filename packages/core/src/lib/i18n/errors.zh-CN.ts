@@ -29,6 +29,9 @@ export const errorsZhCN: Record<ErrorCodeValue, string> = {
   "gateway.generation_failed": "生成失败",
   "gateway.all_routes_failed": "所有路由均调用失败",
   "gateway.timeout": "上游响应超时",
+  "gateway.rate_limit_exceeded": "请求速率已超出限制",
+  "gateway.concurrency_limit_exceeded": "并发请求数已超出限制",
+  "gateway.quota_exceeded": "月度用量额度已耗尽",
 
   // media.*
   "media.image_gen_failed": "图像生成失败",
