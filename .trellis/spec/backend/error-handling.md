@@ -12,7 +12,8 @@
 
 ## API Error Responses(契约)
 
-所有 `/v1/*` 网关与 `/api/*` 路由返回错误时,body 必须是此结构:
+所有 `/v1/*` 网关与 `/api/*` 路由默认使用此结构；Anthropic/Gemini 原生入口及
+Anthropic 模型发现按本文件后述多协议契约只转换最外层 envelope:
 
 ```ts
 {
