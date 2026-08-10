@@ -812,3 +812,25 @@ Added protocol-native model discovery, accepted inbound OpenAI stream_options, a
 ### Status
 
 [OK] **Completed**
+
+
+## Session 97: 生成内容渲染安全与架构加固路线图
+
+**Date**: 2026-08-10
+**Task**: 生成内容渲染安全与架构加固路线图
+**Branch**: `main`
+
+### Summary
+
+建立架构审计加固路线图及八项顺序任务；保留管理员 custom renderer 的人为管控，增加非阻断提醒，并将模型生成的 SVG/HTML Artifact 统一隔离到 sandbox iframe。定向测试、工作区 check、全量测试与独立复核均通过。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `eb9d3f4` | (see git log) |
+| `cce55ad` | (see git log) |
+
+### Status
+
+[OK] **Completed**
