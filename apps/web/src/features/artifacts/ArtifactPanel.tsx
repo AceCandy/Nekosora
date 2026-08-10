@@ -122,9 +122,7 @@ export function ArtifactPanel({
       <div className="flex-1 overflow-auto p-4">
         {artifact.kind === "mermaid" ? (
           <MermaidDiagram id={artifact.id} content={artifact.content} />
-        ) : artifact.kind === "svg" ? (
-          <div className="flex items-center justify-center min-h-full" dangerouslySetInnerHTML={{ __html: artifact.content }} />
-        ) : artifact.kind === "html" ? (
+        ) : artifact.kind === "svg" || artifact.kind === "html" ? (
           <HtmlPreviewFrame html={artifact.content} />
         ) : (
           <SyntaxHighlighter
@@ -145,4 +143,3 @@ export function ArtifactPanel({
     </div>
   );
 }
-

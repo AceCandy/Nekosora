@@ -428,8 +428,8 @@ function MarkdownLinkPreviewLayer({ children }: MarkdownLinkPreviewLayerProps) {
 /**
  * 放行 HTML 块标签及其 style 属性的白名单。
  * streamdown 内部据此扩展 rehype-sanitize schema,使 AI 输出的
- * 带样式 HTML(如多色卡片布局)能被解析;style 的安全过滤由
- * streamdown-html 的自定义组件承担。
+ * 带样式 HTML(如多色卡片布局)能被解析。streamdown-html 只映射
+ * 纯黑/纯白颜色,其余 style 原样透传;XSS 边界依赖 rehype-harden。
  */
 const ALLOWED_HTML_TAGS: AllowedTags = {
   div: ["style"],
@@ -948,8 +948,9 @@ function CustomMarkdownSegment({ children }: { children: string }) {
  * 相比 react-markdown 的优势:
  *   - 流式优化:isStreaming 时启用 remend 补全未闭合的代码块/表格(见 parseIncompleteMarkdown),不闪烁
  *   - 内置 GFM(表格/任务列表/删除线)+ Mermaid 图 + Shiki 代码高亮
- *   - 安全:内置 rehype-harden 防 XSS
+ *   - 默认/流式路径:内置 rehype-harden 防 XSS
  *   - 放行 AI 输出的带样式 HTML 块,style 经中性色映射(color 纯黑白->currentColor,适配暗色),其余原样透传
+ *   - custom 静态路径不做 HTML/class/style 过滤,仅供管理员在受控来源下启用
  *
  * 用法:
  *   <Markdown content={msg.content} isStreaming={streaming} />

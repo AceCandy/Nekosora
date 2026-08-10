@@ -1,5 +1,5 @@
 /**
- * HTML Artifact 预览 —— 把模型输出的 HTML 包装成可安全渲染的 iframe srcDoc。
+ * HTML/SVG Artifact 预览 —— 把模型输出包装成隔离渲染的 iframe srcDoc。
  *
  * 方案(借鉴 DEEIX + AMC):
  *   - srcDoc 注入 iframe,sandbox="allow-scripts"(不开 allow-same-origin,隔离成 unique origin)
@@ -48,7 +48,7 @@ const BRIDGE_SCRIPT = `
 `;
 
 /**
- * 把 HTML 内容包装成完整的预览文档(含 CSP + bridge 脚本)。
+ * 把 HTML/SVG 内容包装成完整的预览文档(含 CSP + bridge 脚本)。
  * 若已是完整文档(含 <html>),则在其内插入 CSP/bridge;否则拼一个最小文档。
  */
 export function buildHtmlPreviewDoc(html: string): string {

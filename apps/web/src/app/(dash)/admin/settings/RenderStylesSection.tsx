@@ -24,6 +24,7 @@ export default async function RenderStylesSection() {
     cssClass: s.cssClass,
     css: s.css,
     icon: s.icon,
+    renderer: s.renderer,
     builtin: s.builtin,
     enabled: s.enabled,
     sortOrder: s.sortOrder,

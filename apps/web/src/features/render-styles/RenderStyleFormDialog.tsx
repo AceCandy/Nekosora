@@ -4,6 +4,7 @@ import { useTranslations } from "next-intl";
 import Modal from "@/shared/ui/Modal";
 import Input from "@/shared/ui/Input";
 import { Button } from "@/shared/ui/Button";
+import { ShieldAlert } from "lucide-react";
 
 export interface RenderStyle {
   id: string;
@@ -12,6 +13,7 @@ export interface RenderStyle {
   cssClass: string;
   css: string;
   icon: string | null;
+  renderer: "streamdown" | "custom";
   builtin: boolean;
   enabled: boolean;
   sortOrder: number;
@@ -59,6 +61,17 @@ export default function RenderStyleFormDialog({
         }}
         className="space-y-5"
       >
+        {isEdit && initial?.renderer === "custom" && (
+          <div
+            role="note"
+            className="flex items-start gap-2.5 rounded-md border border-neku-amber/30 bg-neku-amber/[0.04] p-3"
+          >
+            <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-neku-amber" aria-hidden="true" />
+            <p className="text-ui-body leading-5 text-space-ink">
+              {t("customRendererWarning")}
+            </p>
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-4">
           <label className="block">
             <span className={labelCls}>{t("fieldName")}</span>

@@ -34,8 +34,13 @@ Nekusora 的关键安全机制(供审计参考):
 - **API Key**:BCrypt 哈希存储,仅比对哈希;明文 key 仅在创建时返回一次
 - **文件访问**:属主校验(userId === 当前用户),非公开
 - **注入防护**:API key 用户提交的 system prompt 等以 system message 注入,有边界标记
-- **XSS 防护**:用户消息纯文本渲染;assistant 消息经 streamdown(rehype-harden)消毒
+- **XSS 防护**:用户消息纯文本渲染;默认及流式 assistant 内容由 Streamdown(rehype-harden)加固
+- **Artifact 隔离**:模型生成的 HTML/SVG 在不含 `allow-same-origin` 的 sandbox iframe 中预览,不提供脱离 sandbox 的顶层执行入口;复制与下载仍是用户主动操作
 - **CORS**:`/v1/*` 网关端点允许跨域;管理端点同源
+
+### 管理员受信的 custom renderer
+
+管理员启用 custom 输出样式后,静态 assistant 内容中的 HTML/class/style 会原样进入聊天页和公开分享页,不属于 Streamdown 的净化边界。该能力用于模型与内容来源可控的部署,管理员应在启用前确认其信任范围;管理界面的提醒不构成技术隔离。
 
 ## 🚫 不在范围内的报告
 

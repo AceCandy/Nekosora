@@ -224,10 +224,20 @@ function SortableRenderStyleRow({
         </button>
       </td>
       <td className="p-3.5 font-semibold text-neutral-800 dark:text-white">
-        <span className="inline-flex items-center gap-1.5">
-          {style.name}
+        <span className="inline-flex flex-wrap items-center gap-1.5">
+          <span>{style.name}</span>
           {style.builtin && (
             <Lock className="w-3 h-3 text-neutral-400" aria-label={t("builtin")} />
+          )}
+          {style.renderer === "custom" && (
+            <Badge
+              variant="warning"
+              className="shrink-0 gap-1"
+              title={t("customRendererBadgeTitle")}
+            >
+              <ShieldAlert className="h-3 w-3" aria-hidden="true" />
+              <span className="text-space-ink">{t("customRendererBadge")}</span>
+            </Badge>
           )}
         </span>
       </td>
