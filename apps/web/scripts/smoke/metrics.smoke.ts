@@ -5,6 +5,7 @@
 import assert from "node:assert";
 import {
   observeGatewayAttempt,
+  observeGatewayCircuitBreakerEvent,
   observeGatewayExecution,
   observeRequest,
   acquireStream,
@@ -37,6 +38,7 @@ async function run() {
     promptTokens: 1, completionTokens: 1,
   });
   observeGatewayAttempt({ operation: "chat.stream", status: "success", protocol: "openai" });
+  observeGatewayCircuitBreakerEvent("no_healthy_route");
 
   // 2. activeStreams gauge 增减(prom-client v15 的 get() 异步,改用 metrics 文本解析)
   acquireStream();
@@ -68,6 +70,10 @@ async function run() {
   assert.ok(names.includes("nekusora_file_uploads_total"), "应注册文件上传计数");
   assert.ok(names.includes("nekusora_gateway_executions_total"), "应注册 execution 计数");
   assert.ok(names.includes("nekusora_gateway_attempts_total"), "应注册 attempt 计数");
+  assert.ok(
+    names.includes("nekusora_gateway_circuit_breaker_events_total"),
+    "应注册 circuit breaker 事件计数",
+  );
   assert.ok(names.includes("nekusora_gateway_execution_duration_ms"), "应注册 execution 延迟");
   console.log("✓ 所有关键指标注册通过");
 

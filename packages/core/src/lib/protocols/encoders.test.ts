@@ -181,6 +181,28 @@ describe("protocol encoders", () => {
     }
   });
 
+  it.each<GatewayProtocol>([
+    "openai-chat",
+    "openai-responses",
+    "anthropic",
+    "gemini",
+  ])("%s 将无健康路由编码为原生 503 envelope", async (protocol) => {
+    const response = protocolErrorResponse(protocol, ErrorCode.ROUTING_NO_HEALTHY_ROUTE);
+
+    expect(response.status).toBe(503);
+    const body = await response.json() as Record<string, any>;
+    if (protocol.startsWith("openai")) {
+      expect(body.error).toMatchObject({
+        code: ErrorCode.ROUTING_NO_HEALTHY_ROUTE,
+        type: "server_error",
+      });
+    } else if (protocol === "anthropic") {
+      expect(body).toMatchObject({ type: "error", error: { type: "server_error" } });
+    } else {
+      expect(body.error).toMatchObject({ code: 503, status: "INTERNAL" });
+    }
+  });
+
   it("Chat SSE 保留 reasoning、tool_calls、usage 和 [DONE]", async () => {
     mockEvents(completeEvents());
     const frames = parseSse(await (await streamProtocolResponse(

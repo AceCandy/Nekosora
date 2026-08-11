@@ -43,6 +43,7 @@ export const ErrorCode = {
   ROUTING_MODEL_NOT_AVAILABLE: "routing.model_not_available",
   ROUTING_MODEL_NOT_BOUND: "routing.model_not_bound",
   ROUTING_NO_ROUTE: "routing.no_route",
+  ROUTING_NO_HEALTHY_ROUTE: "routing.no_healthy_route",
   ROUTING_CAPABILITY_NOT_SUPPORTED: "routing.capability_not_supported",
 
   // --- 请求校验 (request.*) ---
@@ -118,6 +119,11 @@ export const ERROR_META: Record<ErrorCodeValue, ErrorMeta> = {
     status: 503,
     type: "server_error",
     i18nKey: "errors.routing_no_route",
+  },
+  [ErrorCode.ROUTING_NO_HEALTHY_ROUTE]: {
+    status: 503,
+    type: "server_error",
+    i18nKey: "errors.routing_no_healthy_route",
   },
   [ErrorCode.ROUTING_CAPABILITY_NOT_SUPPORTED]: {
     status: 400,
@@ -344,11 +350,13 @@ const ROUTING_CODE_MAP: Record<string, ErrorCodeValue> = {
   model_not_available: ErrorCode.ROUTING_MODEL_NOT_AVAILABLE,
   model_not_bound: ErrorCode.ROUTING_MODEL_NOT_BOUND,
   no_route: ErrorCode.ROUTING_NO_ROUTE,
+  no_healthy_route: ErrorCode.ROUTING_NO_HEALTHY_ROUTE,
   capability_not_supported: ErrorCode.ROUTING_CAPABILITY_NOT_SUPPORTED,
   routing_error: ErrorCode.SERVER_INTERNAL,
 };
 
 export function routingCodeToErrorCode(routingCode: string): ErrorCodeValue {
+  if (routingCode in ERROR_META) return routingCode as ErrorCodeValue;
   return ROUTING_CODE_MAP[routingCode] ?? ErrorCode.SERVER_INTERNAL;
 }
 

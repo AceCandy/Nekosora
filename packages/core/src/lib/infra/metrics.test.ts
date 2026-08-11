@@ -1,17 +1,34 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  gatewayCircuitBreakerEventsTotal,
   gatewayGovernanceFailuresTotal,
   gatewayGovernanceRejectionsTotal,
   gatewayGovernanceSettlementsTotal,
+  observeGatewayCircuitBreakerEvent,
   observeGatewayGovernanceFailure,
   observeGatewayGovernanceRejection,
   observeGatewayGovernanceSettlement,
 } from "./metrics";
 
 beforeEach(() => {
+  gatewayCircuitBreakerEventsTotal.reset();
   gatewayGovernanceFailuresTotal.reset();
   gatewayGovernanceRejectionsTotal.reset();
   gatewayGovernanceSettlementsTotal.reset();
+});
+
+describe("gateway circuit breaker metrics", () => {
+  it("只使用固定的 event 低基数标签", async () => {
+    observeGatewayCircuitBreakerEvent("no_healthy_route");
+    observeGatewayCircuitBreakerEvent("probe_released");
+
+    const metric = await gatewayCircuitBreakerEventsTotal.get();
+    expect(metric.name).toBe("nekusora_gateway_circuit_breaker_events_total");
+    expect(metric.values).toEqual([
+      expect.objectContaining({ labels: { event: "no_healthy_route" }, value: 1 }),
+      expect.objectContaining({ labels: { event: "probe_released" }, value: 1 }),
+    ]);
+  });
 });
 
 describe("gateway governance metrics", () => {

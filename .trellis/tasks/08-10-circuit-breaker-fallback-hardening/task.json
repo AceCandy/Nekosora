@@ -3,7 +3,7 @@
   "name": "circuit-breaker-fallback-hardening",
   "title": "熔断降级策略加固",
   "description": "消除全部路由熔断时的无界 fail-open，并保留受控恢复探测。",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

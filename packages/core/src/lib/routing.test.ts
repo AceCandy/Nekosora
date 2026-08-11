@@ -4,7 +4,7 @@
  * 覆盖:网关 owner-only 等价 + WebChat byId 可见性(public/owner/private-other)
  *      + 子 key 绑定过滤 + source 基于 visibility 推导 + 路由链结构。
  */
-import { describe, it, expect, beforeAll, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 import {
   resolveRoutes,
   resolveRoutesById,
@@ -16,6 +16,11 @@ import {
 } from "@/lib/repositories/route-repository";
 import { encrypt } from "@/lib/infra/crypto";
 import type { CallContext } from "@/lib/providers/types";
+import {
+  acquireProviderPermit,
+  recordFailure,
+  resetAllBreakers,
+} from "@/lib/circuit-breaker";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>;
@@ -134,12 +139,14 @@ describe("routing", () => {
   });
 
   beforeEach(() => {
+    resetAllBreakers();
     data = makeDefaultData();
     setRouteRepository(makeMockRepo(data));
   });
 
   afterEach(() => {
     resetRouteRepository();
+    vi.restoreAllMocks();
   });
 
   // =========================================================================
@@ -178,6 +185,49 @@ describe("routing", () => {
       const ctx: CallContext = { userId: "U_A", keyKind: null, source: "gateway" };
       await expect(resolveRoutes(ctx, "gpt-pub")).rejects.toMatchObject({
         code: "no_route",
+      });
+    });
+
+    it("部分 Provider 熔断时只保留健康备用路由", async () => {
+      data.routes.push({
+        id: "R_PUB2", modelId: "M_PUB", providerId: "PB",
+        upstreamModelName: "gpt-4o-fallback", priority: 1, weight: 1,
+        supportsTools: false, enabled: true,
+      });
+      for (let i = 0; i < 5; i++) recordFailure("PA");
+      const ctx: CallContext = { userId: "U_A", keyKind: null, source: "gateway" };
+
+      const routes = await resolveRoutes(ctx, "gpt-pub");
+
+      expect(routes.map((route) => route.provider.id)).toEqual(["PB"]);
+    });
+
+    it("全部 Provider 熔断时返回 no_healthy_route", async () => {
+      data.routes.push({
+        id: "R_PUB2", modelId: "M_PUB", providerId: "PB",
+        upstreamModelName: "gpt-4o-fallback", priority: 1, weight: 1,
+        supportsTools: false, enabled: true,
+      });
+      for (const providerId of ["PA", "PB"]) {
+        for (let i = 0; i < 5; i++) recordFailure(providerId);
+      }
+      const ctx: CallContext = { userId: "U_A", keyKind: null, source: "gateway" };
+
+      await expect(resolveRoutes(ctx, "gpt-pub")).rejects.toMatchObject({
+        code: "no_healthy_route",
+      });
+    });
+
+    it("探针已被占用时返回 no_healthy_route", async () => {
+      const now = vi.spyOn(Date, "now").mockReturnValue(1_000);
+      for (let i = 0; i < 5; i++) recordFailure("PA");
+      now.mockReturnValue(31_000);
+      const permit = acquireProviderPermit("PA");
+      const ctx: CallContext = { userId: "U_A", keyKind: null, source: "gateway" };
+
+      expect(permit).not.toBeNull();
+      await expect(resolveRoutes(ctx, "gpt-pub")).rejects.toMatchObject({
+        code: "no_healthy_route",
       });
     });
   });

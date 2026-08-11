@@ -56,9 +56,14 @@ function harness(
     recordAttempt: vi.fn(async (input) => { attempts.push(input); }),
     finalizeExecution: vi.fn(async (input) => { finalized.push(input); }),
   };
-  const breaker: GatewayBreakerPort = {
+  const permit = {
     recordSuccess: vi.fn(),
     recordFailure: vi.fn(),
+    release: vi.fn(),
+  };
+  const breaker: GatewayBreakerPort = {
+    acquire: vi.fn(() => permit),
+    recordNoHealthyRoute: vi.fn(),
   };
   const generator = executeGateway<Event, Result>({
     ctx: { userId: "user-1", keyKind: null, source: "gateway" },
@@ -76,7 +81,7 @@ function harness(
     telemetry,
     breaker,
   });
-  return { generator, attempts, finalized, telemetry, breaker };
+  return { generator, attempts, finalized, telemetry, breaker, permit };
 }
 
 async function consume<TEvent, TResult>(generator: AsyncGenerator<TEvent, TResult, void>) {
@@ -124,8 +129,9 @@ describe("gateway execution engine", () => {
     expect(calls).toEqual(["key-a", "key-b"]);
     expect(outcome).toMatchObject({ status: "success", result: { text: "ok" } });
     expect(h.attempts.map((item) => item.status)).toEqual(["failed", "success"]);
-    expect(h.breaker.recordFailure).toHaveBeenCalledOnce();
-    expect(h.breaker.recordSuccess).toHaveBeenCalledOnce();
+    expect(h.permit.recordFailure).toHaveBeenCalledOnce();
+    expect(h.permit.recordSuccess).toHaveBeenCalledOnce();
+    expect(h.permit.release).toHaveBeenCalledOnce();
     expect(h.finalized).toHaveLength(1);
   });
 
@@ -153,6 +159,40 @@ describe("gateway execution engine", () => {
     expect(outcome.status).toBe("success");
     expect(calls).toEqual(["provider-start", "adapter:key-a", "adapter:key-b"]);
     expect(onProviderStart).toHaveBeenCalledOnce();
+  });
+
+  it("所有 route 的 permit 都被占用时不调用 adapter 并返回 no_healthy_route", async () => {
+    const adapter: GatewayAttemptAdapter<Event, Result> = vi.fn(async function* () {
+      return { value: { text: "unexpected" } };
+    });
+    const h = harness([route("a"), route("b")], () => adapter);
+    vi.mocked(h.breaker.acquire).mockReturnValue(null);
+
+    const { outcome } = await consume(h.generator);
+
+    expect(adapter).not.toHaveBeenCalled();
+    expect(h.attempts).toEqual([]);
+    expect(outcome).toMatchObject({
+      status: "failed",
+      error: { code: ErrorCode.ROUTING_NO_HEALTHY_ROUTE, phase: "routing" },
+    });
+    expect(h.breaker.recordNoHealthyRoute).toHaveBeenCalledOnce();
+    expect(h.finalized).toHaveLength(1);
+  });
+
+  it("route 没有 Key 时中性释放 permit 且不调用 adapter", async () => {
+    const adapter: GatewayAttemptAdapter<Event, Result> = vi.fn(async function* () {
+      return { value: { text: "unexpected" } };
+    });
+    const h = harness([route("a", [])], () => adapter);
+
+    const { outcome } = await consume(h.generator);
+
+    expect(adapter).not.toHaveBeenCalled();
+    expect(outcome).toMatchObject({ status: "failed", error: { code: "no_route" } });
+    expect(h.permit.recordFailure).not.toHaveBeenCalled();
+    expect(h.permit.recordSuccess).not.toHaveBeenCalled();
+    expect(h.permit.release).toHaveBeenCalledOnce();
   });
 
   it("Provider-start 失败时不创建 attempt、failover 或 breaker 事实", async () => {
@@ -184,8 +224,9 @@ describe("gateway execution engine", () => {
     });
     expect(adapter).not.toHaveBeenCalled();
     expect(h.attempts).toEqual([]);
-    expect(h.breaker.recordFailure).not.toHaveBeenCalled();
-    expect(h.breaker.recordSuccess).not.toHaveBeenCalled();
+    expect(h.permit.recordFailure).not.toHaveBeenCalled();
+    expect(h.permit.recordSuccess).not.toHaveBeenCalled();
+    expect(h.permit.release).toHaveBeenCalledOnce();
     expect(h.finalized).toHaveLength(1);
   });
 
@@ -212,7 +253,8 @@ describe("gateway execution engine", () => {
     expect(outcome.status).toBe("interrupted");
     expect(adapter).not.toHaveBeenCalled();
     expect(h.attempts).toEqual([]);
-    expect(h.breaker.recordFailure).not.toHaveBeenCalled();
+    expect(h.permit.recordFailure).not.toHaveBeenCalled();
+    expect(h.permit.release).toHaveBeenCalledOnce();
     expect(h.finalized).toHaveLength(1);
   });
 
@@ -259,8 +301,8 @@ describe("gateway execution engine", () => {
       error: { code: "tools_not_supported", phase: "routing", httpStatus: 400 },
     });
     expect(outcome).toMatchObject({ status: "success", route: { routeId: "b" } });
-    expect(h.breaker.recordFailure).not.toHaveBeenCalled();
-    expect(h.breaker.recordSuccess).toHaveBeenCalledOnce();
+    expect(h.permit.recordFailure).not.toHaveBeenCalled();
+    expect(h.permit.recordSuccess).toHaveBeenCalledOnce();
   });
 
   it("复标持久化失败不改变工具拒绝后的故障转移结果", async () => {
@@ -284,7 +326,7 @@ describe("gateway execution engine", () => {
 
     expect(onToolUnsupported).toHaveBeenCalledOnce();
     expect(outcome).toMatchObject({ status: "success", route: { routeId: "b" } });
-    expect(h.breaker.recordFailure).not.toHaveBeenCalled();
+    expect(h.permit.recordFailure).not.toHaveBeenCalled();
   });
 
   it("stream_options 拒绝后用同 route 和同 key 重试一次", async () => {
@@ -323,8 +365,8 @@ describe("gateway execution engine", () => {
       { status: "success" },
     ]);
     expect(outcome).toMatchObject({ status: "success", result: { text: "ok" } });
-    expect(h.breaker.recordFailure).not.toHaveBeenCalled();
-    expect(h.breaker.recordSuccess).toHaveBeenCalledOnce();
+    expect(h.permit.recordFailure).not.toHaveBeenCalled();
+    expect(h.permit.recordSuccess).toHaveBeenCalledOnce();
     expect(h.finalized).toHaveLength(1);
   });
 
@@ -354,7 +396,7 @@ describe("gateway execution engine", () => {
     expect(onStreamOptionsUnsupported).toHaveBeenCalledOnce();
     expect(h.attempts.map((attempt) => attempt.status)).toEqual(["failed", "success"]);
     expect(outcome).toMatchObject({ status: "success", result: { text: "ok" } });
-    expect(h.breaker.recordFailure).not.toHaveBeenCalled();
+    expect(h.permit.recordFailure).not.toHaveBeenCalled();
   });
 
   it("stream_options 降级后仍失败时不会循环重试", async () => {
@@ -492,8 +534,8 @@ describe("gateway execution engine", () => {
 
     expect(outcome.status).toBe("interrupted");
     expect(h.attempts.map((item) => item.status)).toEqual(["interrupted"]);
-    expect(h.breaker.recordFailure).not.toHaveBeenCalled();
-    expect(h.breaker.recordSuccess).not.toHaveBeenCalled();
+    expect(h.permit.recordFailure).not.toHaveBeenCalled();
+    expect(h.permit.recordSuccess).not.toHaveBeenCalled();
   });
 
   it("总读取超时在响应提交前记录失败并进入下一 route", async () => {
@@ -520,7 +562,7 @@ describe("gateway execution engine", () => {
         { status: "failed", error: { code: "gateway.timeout", httpStatus: 504 } },
         { status: "success" },
       ]);
-      expect(h.breaker.recordFailure).toHaveBeenCalledOnce();
+      expect(h.permit.recordFailure).toHaveBeenCalledOnce();
       expect(h.finalized).toHaveLength(1);
       expect(outcome).toMatchObject({ status: "success", route: { routeId: "b" } });
     } finally {
@@ -558,7 +600,7 @@ describe("gateway execution engine", () => {
       expect(h.attempts).toMatchObject([
         { status: "failed", error: { code: "gateway.timeout", httpStatus: 504 } },
       ]);
-      expect(h.breaker.recordFailure).toHaveBeenCalledOnce();
+      expect(h.permit.recordFailure).toHaveBeenCalledOnce();
       expect(h.finalized).toHaveLength(1);
       expect(outcome).toMatchObject({ status: "failed", committed: true });
       expect(closed).toBe(false);
@@ -593,7 +635,7 @@ describe("gateway execution engine", () => {
 
       expect(outcome.status).toBe("interrupted");
       expect(h.attempts.map((item) => item.status)).toEqual(["interrupted"]);
-      expect(h.breaker.recordFailure).not.toHaveBeenCalled();
+      expect(h.permit.recordFailure).not.toHaveBeenCalled();
       expect(h.finalized).toHaveLength(1);
       expect(vi.getTimerCount()).toBe(0);
     } finally {
@@ -661,7 +703,8 @@ describe("gateway execution engine", () => {
 
     expect(outcome.status).toBe("failed");
     expect(calls).toEqual(["a"]);
-    expect(h.breaker.recordFailure).not.toHaveBeenCalled();
+    expect(h.permit.recordFailure).not.toHaveBeenCalled();
+    expect(h.permit.release).toHaveBeenCalledOnce();
   });
 
   it("协议不兼容记录 rejected attempt 后继续兼容 route", async () => {
@@ -677,7 +720,7 @@ describe("gateway execution engine", () => {
 
     expect(outcome).toMatchObject({ status: "success", route: { routeId: "b" } });
     expect(h.attempts.map((item) => item.status)).toEqual(["rejected", "success"]);
-    expect(h.breaker.recordFailure).not.toHaveBeenCalled();
+    expect(h.permit.recordFailure).not.toHaveBeenCalled();
   });
 
   it("显式拒绝不读取 key、不调用 adapter，并继续后续 route", async () => {
@@ -713,7 +756,7 @@ describe("gateway execution engine", () => {
       { status: "success" },
     ]);
     expect(outcome).toMatchObject({ status: "success", route: { routeId: "b" } });
-    expect(h.breaker.recordFailure).not.toHaveBeenCalled();
+    expect(h.permit.recordFailure).not.toHaveBeenCalled();
   });
 
   it("全部 route 被拒绝时返回有序第一条确定性错误", async () => {
@@ -741,8 +784,9 @@ describe("gateway execution engine", () => {
         details: { parameter: "a" },
       },
     });
-    expect(h.breaker.recordFailure).not.toHaveBeenCalled();
-    expect(h.breaker.recordSuccess).not.toHaveBeenCalled();
+    expect(h.permit.recordFailure).not.toHaveBeenCalled();
+    expect(h.permit.recordSuccess).not.toHaveBeenCalled();
+    expect(h.permit.release).toHaveBeenCalledTimes(2);
   });
 
   it("存在真实 upstream attempt 时最终错误优先于 route rejection", async () => {
@@ -769,7 +813,7 @@ describe("gateway execution engine", () => {
       route: { routeId: "b" },
       error: { code: "upstream_error", message: "real upstream failure", httpStatus: 503 },
     });
-    expect(h.breaker.recordFailure).toHaveBeenCalledOnce();
+    expect(h.permit.recordFailure).toHaveBeenCalledOnce();
   });
 
   it("原始凭据和 route 地址不会进入 attempt 或最终 outcome", async () => {

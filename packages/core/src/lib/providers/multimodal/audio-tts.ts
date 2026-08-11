@@ -8,7 +8,7 @@ import { generateSpeech as generateSpeech } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import type { CallContext } from "@/lib/providers/types";
 import { resolveRoutesByCapability, RoutingError } from "@/lib/routing";
-import { recordFailure, recordSuccess } from "@/lib/circuit-breaker";
+import { gatewayBreaker } from "@/lib/circuit-breaker";
 import { executeAtomicGateway, gatewayTelemetry, type GatewayAttemptAdapter } from "@/lib/gateway-execution";
 import { selectMediaAdapter } from "@/lib/gateway-execution/media-registry";
 import { countUnicodeCodePoints } from "@/lib/gateway-governance/metering";
@@ -96,7 +96,7 @@ export async function synthesizeViaRoute(
     selectAdapter: (route) => selectMediaAdapter("audio.speech", route.protocol, adapter),
     onProviderStart: opts.onProviderStart,
     telemetry: gatewayTelemetry,
-    breaker: { recordSuccess, recordFailure },
+    breaker: gatewayBreaker,
   });
   if (outcome.status !== "success" || !outcome.result || !outcome.route) {
     if (outcome.error?.phase === "routing" || outcome.error?.phase === "request") {

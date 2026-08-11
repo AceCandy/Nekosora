@@ -13,17 +13,31 @@
  * 失败信息不共享——这是有意的取舍:零依赖、无 Redis 开销。
  * 若未来需要全集群统一熔断,可替换为 Redis 实现(接口不变)。
  */
+import {
+  observeGatewayCircuitBreakerEvent,
+  type GatewayCircuitBreakerEvent,
+} from "@/lib/infra/metrics";
+import type {
+  GatewayBreakerPermit,
+  GatewayBreakerPort,
+} from "@/lib/gateway-execution/types";
+
+export type ProviderAvailability = "closed" | "probe_ready" | "open" | "probe_busy";
+
+export type ProviderPermit = GatewayBreakerPermit;
 
 /** 单个熔断器的运行时状态。 */
 interface BreakerState {
   /** 当前状态。 */
   status: "closed" | "open" | "half-open";
-  /** 连续失败次数(open 触发后归零)。 */
+  /** 连续失败次数，Provider 成功后归零。 */
   failures: number;
   /** 上次失败时间戳(ms)。 */
   lastFailureAt: number;
   /** open 状态下,此时间之前都拒绝(half-open 触发时间)。 */
   openUntil: number;
+  /** 当前 half-open 探针的一次性所有权 token。 */
+  probeToken?: symbol;
 }
 
 /** 熔断器配置(可通过环境变量覆盖)。 */
@@ -58,26 +72,62 @@ function getState(id: string): BreakerState {
   return s;
 }
 
-/**
- * 查询某 provider 是否允许通过(即不在 open 态)。
- *
- * 若处于 open 但已过冷却期,自动转为 half-open 并放行(试探请求)。
- * half-open 期间只允许通过一次,结果回报前拒绝其他请求。
- */
-export function isProviderAllowed(providerId: string): boolean {
-  const s = getState(providerId);
-  const now = Date.now();
+/** 纯查询 Provider 当前可用性，不占用 half-open 探针。 */
+export function getProviderAvailability(providerId: string): ProviderAvailability {
+  const s = breakers.get(providerId);
+  if (!s || s.status === "closed") return "closed";
+  if (s.status === "half-open") return "probe_busy";
+  return Date.now() >= s.openUntil ? "probe_ready" : "open";
+}
 
-  if (s.status === "open") {
-    if (now >= s.openUntil) {
-      // 冷却到期 → half-open,放一次试探。
-      s.status = "half-open";
-      return true;
-    }
-    return false; // 仍在熔断期
+/** 获取覆盖一次有界路由执行的 Provider permit。 */
+export function acquireProviderPermit(providerId: string): ProviderPermit | null {
+  const availability = getProviderAvailability(providerId);
+  if (availability === "open" || availability === "probe_busy") return null;
+
+  const state = getState(providerId);
+  const probeToken = availability === "probe_ready" ? Symbol(providerId) : undefined;
+  if (probeToken) {
+    state.status = "half-open";
+    state.probeToken = probeToken;
+    recordBreakerEvent("probe_acquired");
   }
-  // half-open 表示探测名额已占用,结果回报前拒绝其他请求。
-  return s.status === "closed";
+
+  let succeeded = false;
+  let failed = false;
+  let released = false;
+  return {
+    recordSuccess() {
+      if (!released) succeeded = true;
+    },
+    recordFailure() {
+      if (!released) failed = true;
+    },
+    release() {
+      if (released) return;
+      released = true;
+      const current = breakers.get(providerId);
+      if (!current) return;
+      if (probeToken) {
+        if (current.status !== "half-open" || current.probeToken !== probeToken) return;
+        if (succeeded) {
+          recordSuccess(providerId);
+          recordBreakerEvent("probe_succeeded");
+        } else if (failed) {
+          recordFailure(providerId);
+          recordBreakerEvent("probe_failed");
+        } else {
+          current.status = "open";
+          current.probeToken = undefined;
+        }
+        recordBreakerEvent("probe_released");
+        return;
+      }
+      if (current.status === "half-open") return;
+      if (succeeded) recordSuccess(providerId);
+      else if (failed) recordFailure(providerId);
+    },
+  };
 }
 
 /**
@@ -90,6 +140,7 @@ export function recordSuccess(providerId: string): void {
   s.status = "closed";
   s.failures = 0;
   s.openUntil = 0;
+  s.probeToken = undefined;
 }
 
 /**
@@ -118,19 +169,24 @@ export function recordFailure(providerId: string): void {
 function openCircuit(s: BreakerState, now: number, cfg: BreakerConfig): void {
   s.status = "open";
   s.openUntil = now + cfg.cooldownMs;
+  s.probeToken = undefined;
 }
 
-/**
- * 批量过滤:给定一组 providerId,返回当前允许通过(非 open)的子集。
- *
- * 供 resolveRoutes 使用:跳过熔断中的 provider 的路由。
- * 注意:若全部被熔断(避免全站不可用),返回原始全集(降级放行),
- * 由调用方逐条尝试——宁可撞墙也不静默拒绝所有请求。
- */
-export function filterAllowedOrFallback(providerIds: string[]): string[] {
-  const allowed = providerIds.filter((id) => isProviderAllowed(id));
-  // 全部被熔断:降级返回全集,避免雪崩式全站 503。
-  return allowed.length > 0 ? allowed : providerIds;
+export function recordNoHealthyRoute(): void {
+  recordBreakerEvent("no_healthy_route");
+}
+
+export const gatewayBreaker: GatewayBreakerPort = {
+  acquire: acquireProviderPermit,
+  recordNoHealthyRoute,
+};
+
+function recordBreakerEvent(event: GatewayCircuitBreakerEvent): void {
+  try {
+    observeGatewayCircuitBreakerEvent(event);
+  } catch {
+    /* 指标失败不得改变熔断结果。 */
+  }
 }
 
 /** 诊断:导出所有熔断器当前状态(供 /admin/operations 运维页展示)。 */

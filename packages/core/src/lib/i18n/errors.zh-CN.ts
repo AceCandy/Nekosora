@@ -16,6 +16,7 @@ export const errorsZhCN: Record<ErrorCodeValue, string> = {
   "routing.model_not_available": "该模型不可用",
   "routing.model_not_bound": "该模型未绑定到当前密钥",
   "routing.no_route": "该模型没有可用路由",
+  "routing.no_healthy_route": "该模型当前没有健康的可用路由",
   "routing.capability_not_supported": "该模型不支持请求的能力",
 
   // request.*

@@ -34,6 +34,7 @@ vi.mock("@/lib/gateway-governance/lifecycle", async (importOriginal) => ({
 }));
 
 import { GovernanceRejectedError } from "@/lib/gateway-governance/repository";
+import { RoutingError } from "@/lib/providers/multimodal/image-gen";
 import { POST } from "@/app/v1/images/generations/route";
 
 function request(body: Record<string, unknown>, language = "en") {
@@ -160,6 +161,17 @@ describe("POST /v1/images/generations", () => {
       },
     });
     expect(mocks.generateImageViaRoute).not.toHaveBeenCalled();
+  });
+
+  it("无健康路由时保留 routing.no_healthy_route 和 503", async () => {
+    mocks.generateImageViaRoute.mockRejectedValueOnce(new RoutingError("no_healthy_route"));
+
+    const response = await POST(request({ model: "image-1", prompt: "a cat" }));
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      error: { code: "routing.no_healthy_route", type: "server_error" },
+    });
   });
 
   it("上游错误 envelope、console 与日志不暴露凭据", async () => {

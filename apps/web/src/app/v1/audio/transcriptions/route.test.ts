@@ -42,6 +42,7 @@ vi.mock("@/lib/gateway-governance/metering", async (importOriginal) => ({
 }));
 
 import { RequestBodyTooLargeError } from "@/lib/multipart";
+import { RoutingError } from "@/lib/providers/multimodal/audio-stt";
 import {
   MAX_TRANSCRIPTION_BODY_BYTES,
   MAX_TRANSCRIPTION_FILE_BYTES,
@@ -182,6 +183,17 @@ describe("POST /v1/audio/transcriptions", () => {
     expect(mocks.reserveQuota).not.toHaveBeenCalled();
     expect(mocks.transcribeViaRoute).not.toHaveBeenCalled();
     expect(mocks.finalize).toHaveBeenCalledWith(undefined);
+  });
+
+  it("无健康路由时保留 routing.no_healthy_route 和 503", async () => {
+    mocks.transcribeViaRoute.mockRejectedValueOnce(new RoutingError("no_healthy_route"));
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      error: { code: "routing.no_healthy_route", type: "server_error" },
+    });
   });
 
   it("异常兜底不会把凭据写入 HTTP、console 或错误日志", async () => {

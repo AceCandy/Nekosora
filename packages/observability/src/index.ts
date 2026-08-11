@@ -60,6 +60,13 @@ export const gatewayAttemptsTotal = new Counter({
   registers: [registry],
 });
 
+export const gatewayCircuitBreakerEventsTotal = new Counter({
+  name: "nekusora_gateway_circuit_breaker_events_total",
+  help: "Gateway circuit breaker lifecycle events",
+  labelNames: ["event"],
+  registers: [registry],
+});
+
 export const gatewayExecutionDurationMs = new Histogram({
   name: "nekusora_gateway_execution_duration_ms",
   help: "Gateway execution latency in milliseconds",
@@ -150,6 +157,17 @@ export function observeGatewayAttempt(params: {
   protocol: string;
 }): void {
   gatewayAttemptsTotal.inc(params);
+}
+
+export type GatewayCircuitBreakerEvent =
+  | "no_healthy_route"
+  | "probe_acquired"
+  | "probe_succeeded"
+  | "probe_failed"
+  | "probe_released";
+
+export function observeGatewayCircuitBreakerEvent(event: GatewayCircuitBreakerEvent): void {
+  gatewayCircuitBreakerEventsTotal.inc({ event });
 }
 
 export function observeGatewayGovernanceRejection(params: {

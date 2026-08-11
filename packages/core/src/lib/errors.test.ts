@@ -56,6 +56,13 @@ describe("错误码 → HTTP status 契约", () => {
     expect(ERROR_META[ErrorCode.ROUTING_NO_ROUTE].status).toBe(503);
   });
 
+  it("routing.no_healthy_route → 503/server_error", () => {
+    expect(ERROR_META[ErrorCode.ROUTING_NO_HEALTHY_ROUTE]).toMatchObject({
+      status: 503,
+      type: "server_error",
+    });
+  });
+
   it("gateway.timeout → 504", () => {
     expect(ERROR_META[ErrorCode.GATEWAY_TIMEOUT].status).toBe(504);
   });
@@ -115,6 +122,13 @@ describe("routingCodeToErrorCode", () => {
 
   it("no_route 短码映射", () => {
     expect(routingCodeToErrorCode("no_route")).toBe(ErrorCode.ROUTING_NO_ROUTE);
+  });
+
+  it("no_healthy_route 短码映射", () => {
+    expect(routingCodeToErrorCode("no_healthy_route"))
+      .toBe(ErrorCode.ROUTING_NO_HEALTHY_ROUTE);
+    expect(routingCodeToErrorCode(ErrorCode.ROUTING_NO_HEALTHY_ROUTE))
+      .toBe(ErrorCode.ROUTING_NO_HEALTHY_ROUTE);
   });
 
   it("capability_not_supported 短码映射", () => {

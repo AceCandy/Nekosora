@@ -48,7 +48,12 @@ import {
   type RouteRepository,
 } from "@/lib/repositories/route-repository";
 import { encrypt } from "@/lib/infra/crypto";
-import { resetAllBreakers, snapshotBreakers } from "@/lib/circuit-breaker";
+import {
+  getProviderAvailability,
+  recordFailure,
+  resetAllBreakers,
+  snapshotBreakers,
+} from "@/lib/circuit-breaker";
 
 let encryptedKeys = "";
 
@@ -215,6 +220,75 @@ describe("chat generation circuit breaker reporting", () => {
       status: "closed",
       failures: 0,
     });
+  });
+
+  it("half-open 的确定性错误中性释放后可立即重新探测", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_000);
+    for (let i = 0; i < 5; i++) recordFailure("provider-a");
+    now.mockReturnValue(31_000);
+    vi.mocked(generateText).mockRejectedValue(new Error("invalid_request_error"));
+
+    const result = await generateChat({
+      ctx: { userId: "user-a", keyKind: null, source: "chat" },
+      request: {
+        model: "test-model",
+        messages: [{ role: "user", content: "hello" }],
+      },
+      userAgent: "Nekusora-Test",
+    });
+
+    expect(result.error).toBe("invalid_request_error");
+    expect(snapshotBreakers()["provider-a"]).toMatchObject({ status: "open", failures: 5 });
+    expect(getProviderAvailability("provider-a")).toBe("probe_ready");
+  });
+
+  it("generateChat 全熔断时不调用上游并记录 no_healthy_route", async () => {
+    for (let i = 0; i < 5; i++) recordFailure("provider-a");
+
+    const result = await generateChat({
+      ctx: { userId: "user-a", keyKind: null, source: "gateway" },
+      request: {
+        model: "test-model",
+        messages: [{ role: "user", content: "hello" }],
+      },
+      userAgent: "Nekusora-Test",
+    });
+
+    expect(generateText).not.toHaveBeenCalled();
+    expect(result.error).toBe("模型没有健康的可用路由");
+    expect(mocks.recordAttempt).not.toHaveBeenCalled();
+    expect(mocks.finalizeExecution).toHaveBeenCalledWith(expect.objectContaining({
+      outcome: expect.objectContaining({
+        status: "failed",
+        error: expect.objectContaining({
+          code: "routing.no_healthy_route",
+          phase: "routing",
+        }),
+      }),
+    }));
+  });
+
+  it("streamChat 全熔断时不调用上游并输出 no_healthy_route", async () => {
+    for (let i = 0; i < 5; i++) recordFailure("provider-a");
+
+    const events = [];
+    for await (const event of streamChat({
+      ctx: { userId: "user-a", keyKind: null, source: "gateway" },
+      request: {
+        model: "test-model",
+        messages: [{ role: "user", content: "hello" }],
+      },
+      userAgent: "Nekusora-Test",
+    })) {
+      events.push(event);
+    }
+
+    expect(streamText).not.toHaveBeenCalled();
+    expect(events).toEqual([expect.objectContaining({
+      type: "error",
+      code: "routing.no_healthy_route",
+    })]);
+    expect(mocks.recordAttempt).not.toHaveBeenCalled();
   });
 
   it("generateChat 对外结果与尝试日志不包含实际 key/header,分类保持原始状态码", async () => {

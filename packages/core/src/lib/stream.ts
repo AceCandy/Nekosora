@@ -20,7 +20,7 @@ import {
 import { buildLanguageModelWithKey, resolveRouteApiFormat } from "@/lib/providers/registry";
 import { resolveProviderTimeouts } from "@/lib/providers/timeouts";
 import { getChatUA } from "@/lib/system-settings/ua";
-import { recordSuccess, recordFailure } from "@/lib/circuit-breaker";
+import { gatewayBreaker } from "@/lib/circuit-breaker";
 import type { LogUsageParams } from "@/lib/usage";
 import { classifyError } from "@/lib/error-classify";
 import { redactErrorMessage } from "@/lib/redaction";
@@ -191,7 +191,7 @@ export async function* streamChat(
         await markProviderStreamUsageUnsupported(id, baseUrl);
       },
       telemetry: opts.telemetry ?? gatewayTelemetry,
-      breaker: { recordSuccess, recordFailure },
+      breaker: gatewayBreaker,
     });
   };
 
@@ -654,7 +654,7 @@ export async function generateChat(opts: GenerateChatOptions): Promise<GenerateC
       : resolveRoutes(ctx, request.model),
     selectAdapter: () => adapter,
     telemetry: gatewayTelemetry,
-    breaker: { recordSuccess, recordFailure },
+    breaker: gatewayBreaker,
   });
   if (outcome.status === "success") {
     return { text: outcome.result ?? "", usage: outcome.usage };

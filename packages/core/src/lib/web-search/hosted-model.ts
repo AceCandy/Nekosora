@@ -1,5 +1,5 @@
 import { streamText } from "ai";
-import { recordFailure, recordSuccess } from "@/lib/circuit-breaker";
+import { gatewayBreaker } from "@/lib/circuit-breaker";
 import {
   executeAtomicGateway,
   gatewayTelemetry,
@@ -138,7 +138,7 @@ export async function executeHostedModelSearch(
       return runtime ? adapter : null;
     },
     telemetry: gatewayTelemetry,
-    breaker: { recordSuccess, recordFailure },
+    breaker: gatewayBreaker,
   });
   if (
     input.timeRange

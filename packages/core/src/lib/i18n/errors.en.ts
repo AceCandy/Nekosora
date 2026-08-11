@@ -22,6 +22,7 @@ export const errorsEn: Record<ErrorCodeValue, string> = {
   "routing.model_not_available": "Model is not available",
   "routing.model_not_bound": "Model is not bound to the current key",
   "routing.no_route": "No available route for this model",
+  "routing.no_healthy_route": "No healthy route is currently available for this model",
   "routing.capability_not_supported": "Model does not support the requested capability",
 
   // request.*

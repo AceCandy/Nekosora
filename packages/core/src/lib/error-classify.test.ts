@@ -50,6 +50,14 @@ describe("classifyError - 已知 errorCode 精确匹配", () => {
       phase: "routing",
       category: "service_unavailable",
     });
+    expect(classifyError({ errorCode: "no_healthy_route" })).toEqual({
+      phase: "routing",
+      category: "service_unavailable",
+    });
+    expect(classifyError({ errorCode: ErrorCode.ROUTING_NO_HEALTHY_ROUTE })).toEqual({
+      phase: "routing",
+      category: "service_unavailable",
+    });
   });
 
   it("请求校验类 → phase=request, category=invalid_request", () => {

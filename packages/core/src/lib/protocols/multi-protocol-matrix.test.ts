@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   finalizeExecution: vi.fn(),
   recordSuccess: vi.fn(),
   recordFailure: vi.fn(),
+  releasePermit: vi.fn(),
   consumeRate: vi.fn(),
   acquireLease: vi.fn(),
   reserveQuota: vi.fn(),
@@ -33,8 +34,14 @@ vi.mock("@/lib/routing", () => ({
   resolveRoutesById: vi.fn(),
 }));
 vi.mock("@/lib/circuit-breaker", () => ({
-  recordSuccess: mocks.recordSuccess,
-  recordFailure: mocks.recordFailure,
+  gatewayBreaker: {
+    acquire: vi.fn(() => ({
+      recordSuccess: mocks.recordSuccess,
+      recordFailure: mocks.recordFailure,
+      release: mocks.releasePermit,
+    })),
+    recordNoHealthyRoute: vi.fn(),
+  },
 }));
 vi.mock("@/lib/gateway-execution", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/gateway-execution")>(),
@@ -356,6 +363,7 @@ describe("multi-protocol gateway matrix", () => {
     mocks.finalizeExecution.mockReset().mockResolvedValue(undefined);
     mocks.recordSuccess.mockReset();
     mocks.recordFailure.mockReset();
+    mocks.releasePermit.mockReset();
     mocks.consumeRate.mockReset().mockResolvedValue(DEFAULT_GATEWAY_GOVERNANCE_POLICY);
     mocks.reserveQuota.mockReset().mockResolvedValue(undefined);
     mocks.markProviderStarted.mockReset().mockResolvedValue(undefined);
@@ -410,6 +418,7 @@ describe("multi-protocol gateway matrix", () => {
       expectIngressResponse(ingress.protocol, responseBody);
       expect(mocks.recordSuccess).toHaveBeenCalledOnce();
       expect(mocks.recordFailure).not.toHaveBeenCalled();
+      expect(mocks.releasePermit).toHaveBeenCalledOnce();
       expect(mocks.finalizeExecution).toHaveBeenCalledOnce();
       expect(mocks.consumeRate).toHaveBeenCalledOnce();
       expect(mocks.reserveQuota).toHaveBeenCalledOnce();

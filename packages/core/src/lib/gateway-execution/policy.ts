@@ -1,4 +1,5 @@
 import { classifyError, NETWORK_KEYWORDS } from "@/lib/error-classify";
+import { ErrorCode } from "@/lib/errors";
 import { redactSensitiveText } from "@/lib/redaction";
 import type { ResolvedRoute } from "@/lib/providers/types";
 import { isProviderTimeoutError } from "@/lib/providers/timeouts";
@@ -112,6 +113,7 @@ export function classifyGatewayError(
 
   const explicitCode = (error as { code?: unknown } | null)?.code;
   let code = typeof explicitCode === "string" ? explicitCode : "generation_failed";
+  if (code === "no_healthy_route") code = ErrorCode.ROUTING_NO_HEALTHY_ROUTE;
   if (httpStatus === 429) code = "rate_limited";
   else if (httpStatus === 401 || httpStatus === 403) code = "auth_error";
   else if (httpStatus !== undefined && httpStatus >= 500) code = "upstream_error";

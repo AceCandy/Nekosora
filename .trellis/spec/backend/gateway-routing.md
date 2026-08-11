@@ -140,11 +140,12 @@ WebChat 发消息、图像工作室生成(session 鉴权)。前端传 `modelId` 
 
 ---
 
-## Scenario: 路由排序与熔断(不变)
+## Scenario: 路由排序与熔断
 - `orderRoutes(routes)`:priority 升序分组,组内 `weightedShuffle`(按 weight 加权无放回抽取)。
-- `filterByCircuitBreaker(routes)`:跳过熔断 open 态 provider;全熔断则**降级返回全集**(避免雪崩 503)。熔断 key 是 `provider.id`。
-- 核心算法 `orderRoutes`/`weightedShuffle`/`filterByCircuitBreaker`/`pickWeightedKey`/`parseKeyBundle` 原样保留,对 route 来源透明。
-- `gateway-execution` engine 拿到 `routes[]` 后逐路由故障转移 × 路由内逐 key 重试,对 operation 与 `source` 透明。
+- `filterByCircuitBreaker(routes)` 只读取 Provider availability,保留 `closed`/`probe_ready`,过滤 `open`/`probe_busy`;它不得占用探针。
+- 全部路由不健康时抛 `no_healthy_route`,不得返回原全集;对外稳定映射为 `routing.no_healthy_route` / HTTP 503。
+- `gateway-execution` engine 在每个 route 前原子获取 Provider permit,再执行路由内 Key fallback;permit 在 route 级 `finally` 释放。
+- 熔断 key 固定为 `provider.id`;priority、weight、Key 顺序和 route failover 算法不因熔断契约改变。
 
 ## Scenario: Route-Level Tool Capability
 
@@ -522,58 +523,75 @@ if (responseCommitted || !failoverable || i === routes.length - 1) break;
 
 ### 1. Scope / Trigger
 
-修改 `circuit-breaker.ts` 状态转换，或修改 gateway engine 的路由失败处理时，必须保持本节契约。目标是防止 half-open 并发探测冲击刚恢复的 provider，并确保终端路由失败也能更新健康状态。
+修改 `circuit-breaker.ts`、路由过滤、gateway engine、错误映射或熔断指标时适用。目标是让路由判断无副作用，由能观察全部终态的 Engine 持有 half-open 探针，并在全部 Provider 不健康时 fail closed。
 
 ### 2. Signatures
 
-- `isProviderAllowed(providerId: string): boolean`
+- `getProviderAvailability(providerId): "closed" | "probe_ready" | "open" | "probe_busy"`
+- `acquireProviderPermit(providerId): GatewayBreakerPermit | null`
+- `GatewayBreakerPermit.recordSuccess(): void`
+- `GatewayBreakerPermit.recordFailure(): void`
+- `GatewayBreakerPermit.release(): void`
 - `recordSuccess(providerId: string): void`
 - `recordFailure(providerId: string): void`
-- `isFailoverableError(err: unknown): boolean`
+- `recordNoHealthyRoute(): void`
 
 ### 3. Contracts
 
 - `closed`：允许请求；连续可转移失败达到 threshold 后转 `open`。
-- `open`：冷却期内拒绝；到期后的第一个调用转 `half-open` 并放行。
-- `half-open`：表示唯一探测名额已占用；结果回报前其他调用必须拒绝。
-- 探测成功调用 `recordSuccess` 回到 `closed`；探测失败调用 `recordFailure` 立即重新 `open` 并刷新冷却时间。
-- Gateway engine 必须先判断错误是否可转移；若可转移，先 `recordFailure`，再判断是否存在下一条路由。
-- `model_not_found`、`invalid_request`、context length 等确定性请求错误不计入 provider 失败。
+- `open` 冷却未到返回 `open`;冷却已到只返回 `probe_ready`,availability 查询不得改变状态。
+- `acquireProviderPermit` 是唯一占用点：`probe_ready -> half-open`,同一 Provider 同时最多一个 probe token;`open`/`probe_busy` 返回 null。
+- permit 覆盖一个 route 及其全部 Key fallback。前序 Key 失败但后续 Key 成功时，成功优先并恢复 `closed`;没有成功且出现可转移失败时重新 `open` 并刷新冷却。
+- Abort、确定性请求错误、adapter/能力拒绝、空 Key、Provider-start 失败属于中性终态：不判健康、不增加失败，probe release 后回到 `open` 并保留已到期的 `openUntil`,允许下一请求立即竞争。
+- permit `release()` 必须幂等并校验 token;迟到的旧 permit 不得结算新的 half-open 探针。管理员 route probe 继续使用公开 `recordSuccess/recordFailure`。
+- 路由快照全部为 `open/probe_busy`，或 Engine 竞争窗口中所有 acquire 均失败时，禁止调用 adapter，返回 `routing.no_healthy_route` / HTTP 503，且不增加伪造 attempt。
+- Prometheus 仅记录 `nekusora_gateway_circuit_breaker_events_total{event}`。`event` 固定为 `no_healthy_route|probe_acquired|probe_succeeded|probe_failed|probe_released`,禁止 Provider/route/model/request/Key 标签。
+- 不返回 `Retry-After`;`probe_busy` 没有可靠完成时间。进程内 Map 仍是熔断边界，不引入跨实例协调。
 
 ### 4. Validation & Error Matrix
 
-| 条件 | breaker 行为 | 路由行为 |
+| 条件 | permit / breaker | 执行与错误 |
 |---|---|---|
-| open 且冷却未到 | 拒绝 | 过滤该 provider |
-| open 且冷却到期的首个调用 | 转 half-open，放行 | 执行一次探测 |
-| half-open 且探测未回报 | 拒绝 | 不重复探测 |
-| 可转移错误，仍有后续路由 | 记录失败 | 转移下一路由 |
-| 可转移错误，已是最后/唯一路由 | 记录失败 | 返回生成失败 |
-| 确定性请求错误 | 不记录失败 | 停止转移 |
+| `closed` | 获取普通 permit | 保持现有 Key/route 顺序 |
+| `open` 且冷却未到 | acquire 拒绝 | 跳过 Provider |
+| `open` 且冷却到期 | 单个 acquire 转 `half-open` | 仅一个恢复探针执行 |
+| `probe_busy` | acquire 拒绝 | 使用健康备用;无备用则 503 |
+| 探针最终成功 | `half-open -> closed`,失败计数清零 | 返回成功 |
+| 探针可转移失败/Provider timeout | `half-open -> open`,刷新冷却 | 按既有规则 failover |
+| 探针中性终态 | `half-open -> open`,保留到期时间 | 不新增健康或失败事实 |
+| 全部 acquire 拒绝 | 记录一次 `no_healthy_route` | 零 adapter/attempt,稳定 503 |
 
 ### 5. Good / Base / Bad Cases
 
-- Good：多个请求在冷却边界并发到达，只有第一个获得 half-open 探测名额。
-- Base：普通 closed provider 成功后保持 closed；可转移失败按 route 一次计数。
-- Bad：唯一 provider 连接超时，因为没有下一条路由而未记录失败，导致 breaker 永远无法达到 threshold。
+- Good：多个请求在冷却边界并发到达，只有一个 Engine 获得 probe permit;其他请求走健康备用或立即 503。
+- Good：同一 probe 的首 Key 503、次 Key 成功，最终 Provider 恢复 `closed`。
+- Base：普通 closed Provider 成功后保持 closed;可转移失败按 route 结算一次。
+- Bad：路由解析调用会占用探针的 boolean API，随后 Abort/拒绝路径无法释放所有权。
+- Bad：全部 Provider 被拒绝后返回原路由全集，重新冲击已 open 的上游。
 
 ### 6. Tests Required
 
-- `circuit-breaker.test.ts`：断言 half-open 首次 `true`、再次 `false`；覆盖探测成功恢复和失败重开。
-- `stream-circuit-breaker.test.ts`：分别通过 `generateChat` 和 `streamChat` 断言唯一可转移失败使 `failures + 1`。
-- 两条生成路径都要断言确定性请求错误保持 `failures=0`。
+- `circuit-breaker.test.ts`:纯 availability、单 token、成功优先、失败重开、中性 release、迟到/重复 release、多 Provider 隔离。
+- `routing.test.ts`:部分熔断保留健康 Provider;全 open/probe busy 抛 `no_healthy_route`,不返回原全集。
+- `gateway-execution/engine.test.ts`:acquire 竞争、Key fallback，以及 success/failure/timeout/Abort/确定性错误/adapter 拒绝/空 Key/Provider-start 的 release。
+- `stream-circuit-breaker.test.ts`:Chat stream/generate 全熔断时 adapter 调用与 attempt 均为 0;真实 half-open 中性终态可立即重探。
+- 错误、i18n、protocol encoder、Image/TTS/STT route 与 metrics tests 断言点分码、HTTP 503、原生 envelope 和固定低基数标签。
 
 ### 7. Wrong vs Correct
 
 ```typescript
-// Wrong:最后一条路由提前退出,失败不会进入 breaker。
-if (i === routes.length - 1 || !isFailoverableError(lastError)) break;
-recordFailure(route.provider.id);
+// Wrong:路由解析阶段占用探针;全拒绝又返回原全集。
+const allowed = routes.filter((route) => isProviderAllowed(route.provider.id));
+return allowed.length > 0 ? allowed : routes;
 
-// Correct:健康上报与“是否还有后续路由”解耦。
-const failoverable = isFailoverableError(lastError);
-if (failoverable && route.provider.id) recordFailure(route.provider.id);
-if (i === routes.length - 1 || !failoverable) break;
+// Correct:路由只读 availability,Engine 获取并可靠释放所有权。
+const permit = breaker.acquire(route.provider.id);
+if (!permit) continue;
+try {
+  await executeRouteWithKeyFallback(route, permit);
+} finally {
+  permit.release();
+}
 ```
 
 ## Scenario: Route-Level Wire Format And Multi-Protocol Gateway

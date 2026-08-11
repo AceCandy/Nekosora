@@ -32,6 +32,7 @@ vi.mock("@/lib/gateway-governance/lifecycle", async (importOriginal) => ({
 }));
 
 import { GovernanceStateError } from "@/lib/gateway-governance/repository";
+import { RoutingError } from "@/lib/providers/multimodal/audio-tts";
 import { POST } from "@/app/v1/audio/speech/route";
 
 function request(body: Record<string, unknown>, language = "en") {
@@ -154,6 +155,17 @@ describe("POST /v1/audio/speech", () => {
       },
     });
     expect(mocks.synthesizeViaRoute).not.toHaveBeenCalled();
+  });
+
+  it("无健康路由时保留 routing.no_healthy_route 和 503", async () => {
+    mocks.synthesizeViaRoute.mockRejectedValueOnce(new RoutingError("no_healthy_route"));
+
+    const response = await POST(request({ model: "tts-1", input: "hello" }));
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      error: { code: "routing.no_healthy_route", type: "server_error" },
+    });
   });
 
   it("上游错误 envelope、console 与日志不暴露凭据", async () => {

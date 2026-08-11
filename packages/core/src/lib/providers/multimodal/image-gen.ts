@@ -15,7 +15,7 @@ import { generateImage as generateImage } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import type { CallContext } from "@/lib/providers/types";
 import { resolveRoutes, resolveRoutesById, RoutingError } from "@/lib/routing";
-import { recordFailure, recordSuccess } from "@/lib/circuit-breaker";
+import { gatewayBreaker } from "@/lib/circuit-breaker";
 import {
   executeAtomicGateway,
   gatewayTelemetry,
@@ -117,7 +117,7 @@ export async function generateImageViaRoute(
     selectAdapter: (route) => selectMediaAdapter("image.generate", route.protocol, adapter),
     onProviderStart: opts.onProviderStart,
     telemetry: gatewayTelemetry,
-    breaker: { recordSuccess, recordFailure },
+    breaker: gatewayBreaker,
   });
   if (outcome.status !== "success" || !outcome.result || !outcome.route) {
     throwExecutionError(outcome.error?.code, outcome.error?.message, outcome.error?.phase);

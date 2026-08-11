@@ -116,9 +116,15 @@ export interface GatewayTelemetryPort {
   finalizeExecution<TResult>(input: FinalExecutionTelemetry<TResult>): Promise<void>;
 }
 
+export interface GatewayBreakerPermit {
+  recordSuccess(): void;
+  recordFailure(): void;
+  release(): void;
+}
+
 export interface GatewayBreakerPort {
-  recordSuccess(providerId: string): void;
-  recordFailure(providerId: string): void;
+  acquire(providerId: string): GatewayBreakerPermit | null;
+  recordNoHealthyRoute(): void;
 }
 
 export interface ExecuteGatewayOptions<TEvent, TResult> {
