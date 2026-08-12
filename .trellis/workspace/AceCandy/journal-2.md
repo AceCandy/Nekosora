@@ -897,3 +897,24 @@ Added protocol-native model discovery, accepted inbound OpenAI stream_options, a
 ### Status
 
 [OK] **Completed**
+
+
+## Session 101: API Key 数据路径加固
+
+**Date**: 2026-08-12
+**Task**: API Key 数据路径加固
+**Branch**: `main`
+
+### Summary
+
+增加 API Key 前缀索引与显式展示 DTO，移除无授权语义的 parent_id，补齐 0010 到 0011 PostgreSQL 升级、RSC 数据边界、迁移与启动验证。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ed80cce` | (see git log) |
+
+### Status
+
+[OK] **Completed**

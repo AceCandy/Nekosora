@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 100
-- **Last Active**: 2026-08-11
+- **Total Sessions**: 101
+- **Last Active**: 2026-08-12
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~899 | Active |
+| `journal-2.md` | ~920 | Active |
 | `journal-1.md` | ~1981 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 101 | 2026-08-12 | API Key 数据路径加固 | `ed80cce` | `main` |
 | 100 | 2026-08-11 | 熔断降级策略加固 | `7096d60` | `main` |
 | 99 | 2026-08-11 | 完成 Gateway 请求流量治理 | `22e6332` | `main` |
 | 98 | 2026-08-10 | Provider 超时强制执行 | `4f41ec8` | `main` |
