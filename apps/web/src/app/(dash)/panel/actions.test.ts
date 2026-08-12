@@ -90,6 +90,7 @@ vi.mock("@/lib/infra/db", () => {
       sortOrder: "sortOrder",
       createdAt: "createdAt",
       name: "name",
+      displayName: "displayName",
       catalogId: "catalogId",
     },
     modelCatalog: {
@@ -437,14 +438,28 @@ describe("reorderMyModels", () => {
 });
 
 describe("getBindableModels", () => {
-  it("只返回当前用户自己的 enabled 模型", async () => {
+  it("只查询并返回当前用户 enabled 模型的展示字段", async () => {
     mockData.models.forEach((model) => { model.enabled = true; });
+    Object.assign(mockData.models[0], {
+      displayName: "Public A",
+      systemPrompt: "secret system prompt",
+      description: "private description",
+      updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+    });
 
     const result = await getBindableModels();
 
     expect(result.globals).toEqual([]);
     expect(result.byos.map((model) => model.id)).toEqual(["public-a", "public-b", "private-a"]);
     expect(result.byos.some((model) => model.id === "private-b")).toBe(false);
+    expect(result.byos[0]).toEqual({
+      id: "public-a",
+      name: "public-a",
+      displayName: "Public A",
+    });
+    expect(JSON.stringify(result)).not.toContain("systemPrompt");
+    expect(JSON.stringify(result)).not.toContain("description");
+    expect(JSON.stringify(result)).not.toContain("updatedAt");
   });
 });
 

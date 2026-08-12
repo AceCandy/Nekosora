@@ -8,6 +8,8 @@ import Input from "@/shared/ui/Input";
 import Select from "@/shared/ui/Select";
 import Badge from "@/shared/ui/Badge";
 import { copyToClipboard } from "@/shared/lib/clipboard";
+import type { ApiKeyListItem } from "@/lib/keys";
+import type { BindableModels } from "../actions";
 
 export interface KeyModelBindingRecord {
   id: string;
@@ -17,24 +19,8 @@ export interface KeyModelBindingRecord {
   createdAt: Date | string | null;
 }
 
-export interface ApiKeyRecord {
-  id: string;
-  name: string;
-  keyPrefix: string;
-  kind: "master" | "sub";
-  enabled: boolean;
+export interface ApiKeyRecord extends ApiKeyListItem {
   bindings: KeyModelBindingRecord[];
-}
-
-export interface ModelRecord {
-  id: string;
-  name: string;
-  displayName?: string;
-}
-
-export interface BindableModels {
-  globals: ModelRecord[];
-  byos: ModelRecord[];
 }
 
 function displayKeyPreview(value: string): string {

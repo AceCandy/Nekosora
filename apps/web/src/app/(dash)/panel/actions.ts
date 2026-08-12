@@ -768,17 +768,32 @@ export async function toggleMyModel(id: string, enabled: boolean) {
   revalidatePath("/panel", "layout");
 }
 
+export interface BindableModelListItem {
+  id: string;
+  name: string;
+  displayName: string | null;
+}
+
+export interface BindableModels {
+  globals: BindableModelListItem[];
+  byos: BindableModelListItem[];
+}
+
 /** 可供子 key 绑定的模型列表:网关 owner-only,只包含自己的 enabled 模型。 */
-export async function getBindableModels() {
+export async function getBindableModels(): Promise<BindableModels> {
   const user = await requireSession();
   const db = await getDb();
   const byos = await db
-    .select()
+    .select({
+      id: S().models.id,
+      name: S().models.name,
+      displayName: S().models.displayName,
+    })
     .from(S().models)
     .where(and(eq(S().models.ownerUserId, user.id), eq(S().models.enabled, true)));
   return {
-    globals: [] as Record<string, unknown>[],
-    byos: byos as Record<string, unknown>[],
+    globals: [],
+    byos,
   };
 }
 

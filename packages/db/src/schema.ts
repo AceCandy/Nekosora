@@ -104,9 +104,9 @@ export const verification = pgTable("verification", {
 });
 
 // ===========================================================================
-// 密钥层级(单表自引用)
-//   主 Key: kind='master', parent_id=NULL, 每用户唯一
-//   子 Key: kind='sub', parent_id=主key.id, 可多个
+// 密钥类型
+//   主 Key:每用户唯一,不受模型绑定限制
+//   子 Key:可多个,按自身 key ID 绑定模型
 // ===========================================================================
 
 export const apiKeyKinds = pgEnum("api_key_kind", ["master", "sub"]);
@@ -118,7 +118,6 @@ export const apiKeys = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    parentId: text("parent_id"), // 主 key 为 NULL;子 key 指向主 key.id
     kind: apiKeyKinds("kind").notNull(),
     name: text("name").notNull(),
     keyHash: text("key_hash").notNull(), // sha256(完整 sk 字符串)
@@ -129,7 +128,7 @@ export const apiKeys = pgTable(
   },
   (t) => [
     index("api_keys_user_idx").on(t.userId),
-    index("api_keys_parent_idx").on(t.parentId),
+    index("api_keys_key_prefix_idx").on(t.keyPrefix),
     // 每用户仅一个主 key:部分唯一索引,仅约束 kind='master' 的行。
     uniqueIndex("api_keys_master_unique_idx")
       .on(t.userId)

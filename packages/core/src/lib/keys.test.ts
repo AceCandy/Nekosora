@@ -12,13 +12,14 @@ vi.mock("drizzle-orm", () => ({ eq: mocks.eq, and: mocks.and, or: mocks.or }));
 vi.mock("@/lib/infra/db", () => ({ getDb: mocks.getDb, getSchema: mocks.getSchema }));
 
 import { hashSecret } from "@/lib/infra/crypto";
-import { createMasterKey, createSubKey, setKeyEnabled, verifyKey } from "./keys";
+import { createMasterKey, createSubKey, listKeys, setKeyEnabled, verifyKey } from "./keys";
 
 const schema = {
   apiKeys: {
     id: "apiKeys.id",
     userId: "apiKeys.userId",
     kind: "apiKeys.kind",
+    name: "apiKeys.name",
     keyHash: "apiKeys.keyHash",
     keyPrefix: "apiKeys.keyPrefix",
     enabled: "apiKeys.enabled",
@@ -153,13 +154,64 @@ describe("createSubKey", () => {
 
     expect(values).toHaveBeenCalledWith({
       userId: "user-1",
-      parentId: "master-1",
       kind: "sub",
       name: "测试子密钥",
       keyHash: hashSecret(rawKey),
       keyPrefix: `${rawKey.slice(0, 8)}****${rawKey.slice(-4)}`,
       enabled: true,
     });
+  });
+});
+
+describe("listKeys", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getSchema.mockReturnValue(schema);
+  });
+
+  it("只查询并返回客户端展示字段", async () => {
+    const storedRow = {
+      id: "key-1",
+      userId: "user-1",
+      parentId: "master-1",
+      kind: "sub" as const,
+      name: "测试子密钥",
+      keyHash: "secret-hash",
+      keyPrefix: "sk-test-****abcd",
+      enabled: true,
+      lastUsedAt: new Date("2026-01-02T00:00:00.000Z"),
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    };
+    const where = vi.fn();
+    const from = vi.fn();
+    const select = vi.fn((projection?: Record<string, string>) => {
+      const row = projection
+        ? Object.fromEntries(Object.keys(projection).map((key) => [key, storedRow[key as keyof typeof storedRow]]))
+        : storedRow;
+      where.mockResolvedValue([row]);
+      from.mockReturnValue({ where });
+      return { from };
+    });
+    mocks.getDb.mockResolvedValue({ select });
+
+    const rows = await listKeys("user-1");
+
+    expect(select).toHaveBeenCalledWith({
+      id: schema.apiKeys.id,
+      name: schema.apiKeys.name,
+      keyPrefix: schema.apiKeys.keyPrefix,
+      kind: schema.apiKeys.kind,
+      enabled: schema.apiKeys.enabled,
+    });
+    expect(rows).toEqual([{
+      id: "key-1",
+      name: "测试子密钥",
+      keyPrefix: "sk-test-****abcd",
+      kind: "sub",
+      enabled: true,
+    }]);
+    expect(JSON.stringify(rows)).not.toContain("keyHash");
+    expect(JSON.stringify(rows)).not.toContain("parentId");
   });
 });
 
@@ -233,7 +285,6 @@ describe("verifyKey", () => {
     const key = {
       id: "key-2",
       userId: "user-2",
-      parentId: null,
       kind: "master" as const,
       name: "主密钥",
       keyHash: hashSecret(rawKey),
@@ -285,6 +336,43 @@ describe("verifyKey", () => {
         { op: "eq", left: schema.apiKeys.userId, right: schema.user.id },
         { op: "eq", left: schema.user.status, right: "active" },
       ],
+    });
+  });
+
+  it("当前预览格式的 active 用户 key 保持可用", async () => {
+    const rawKey = "sk-current-owner";
+    const key = {
+      id: "key-3",
+      userId: "user-3",
+      kind: "sub" as const,
+      name: "子密钥",
+      keyHash: hashSecret(rawKey),
+      keyPrefix: `${rawKey.slice(0, 8)}****${rawKey.slice(-4)}`,
+      enabled: true,
+      lastUsedAt: null,
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    };
+    const joinedWhere = vi.fn().mockResolvedValue([{ key }]);
+    const select = vi.fn(() => ({
+      from: vi.fn(() => ({
+        innerJoin: vi.fn(() => ({ where: joinedWhere })),
+      })),
+    }));
+    const update = vi.fn(() => ({
+      set: vi.fn(() => ({
+        from: vi.fn(() => ({ where: vi.fn().mockResolvedValue(undefined) })),
+      })),
+    }));
+    mocks.getDb.mockResolvedValue({ select, update });
+
+    await expect(verifyKey(rawKey)).resolves.toMatchObject({
+      record: key,
+      ctx: {
+        userId: "user-3",
+        apiKeyId: "key-3",
+        keyKind: "sub",
+        source: "gateway",
+      },
     });
   });
 });

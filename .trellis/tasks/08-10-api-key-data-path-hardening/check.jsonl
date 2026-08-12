@@ -1,1 +1,4 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"复核 migration/journal/snapshot、真实 PostgreSQL 与自动迁移兼容性"}
+{"file":".trellis/spec/backend/auth-guidelines.md","reason":"复核 legacy/current Key、owner 状态与 hash 校验未回归"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"复核 `keyHash` 未跨越 RSC 到 Client props"}
+{"file":".trellis/tasks/08-10-api-key-data-path-hardening/research/data-path-evidence.md","reason":"按已确认调用链检查实现覆盖与无范围扩张"}

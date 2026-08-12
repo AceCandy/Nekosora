@@ -20,7 +20,6 @@ const generateSecret = customAlphabet(alphabet, 48);
 export interface ApiKeyRecord {
   id: string;
   userId: string;
-  parentId: string | null;
   kind: "master" | "sub";
   name: string;
   keyHash: string;
@@ -28,6 +27,15 @@ export interface ApiKeyRecord {
   enabled: boolean;
   lastUsedAt: Date | null;
   createdAt: Date;
+}
+
+/** 密钥管理页面可见的最小字段集合。 */
+export interface ApiKeyListItem {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  kind: "master" | "sub";
+  enabled: boolean;
 }
 
 /** 生成一个新的明文 key 字符串。 */
@@ -52,7 +60,7 @@ export async function createMasterKey(userId: string, name = "主密钥"): Promi
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
 
-  // 每个用户只保留一条主 key 记录，避免轮换破坏子 key 的 parentId。
+  // 每个用户只保留一条主 key 记录，撤销后原位轮换。
   const existing = await db
     .select()
     .from(s.apiKeys)
@@ -83,7 +91,6 @@ export async function createMasterKey(userId: string, name = "主密钥"): Promi
 
   await db.insert(s.apiKeys).values({
     userId,
-    parentId: null,
     kind: "master",
     name,
     keyHash: hashSecret(rawKey),
@@ -102,18 +109,17 @@ export async function createSubKey(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
 
-  // 找到该用户的主 key 作为 parent。
+  // 子 key 仅在该用户有可用主 key 时创建。
   const keys = await db
     .select()
     .from(s.apiKeys)
     .where(eq(s.apiKeys.userId, userId));
-  const master = keys.find((k: ApiKeyRecord) => k.kind === "master" && k.enabled);
-  if (!master) throw new Error("用户尚无主密钥,无法创建子密钥");
+  const hasEnabledMaster = keys.some((k: ApiKeyRecord) => k.kind === "master" && k.enabled);
+  if (!hasEnabledMaster) throw new Error("用户尚无主密钥,无法创建子密钥");
 
   const rawKey = generateRawKey();
   await db.insert(s.apiKeys).values({
     userId,
-    parentId: master.id,
     kind: "sub",
     name,
     keyHash: hashSecret(rawKey),
@@ -123,12 +129,21 @@ export async function createSubKey(
   return rawKey;
 }
 
-/** 列出用户所有密钥(不含明文 hash,仅展示用)。 */
-export async function listKeys(userId: string): Promise<ApiKeyRecord[]> {
+/** 列出用户所有密钥，仅查询页面需要的脱敏字段。 */
+export async function listKeys(userId: string): Promise<ApiKeyListItem[]> {
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
-  return db.select().from(s.apiKeys).where(eq(s.apiKeys.userId, userId));
+  return db
+    .select({
+      id: s.apiKeys.id,
+      name: s.apiKeys.name,
+      keyPrefix: s.apiKeys.keyPrefix,
+      kind: s.apiKeys.kind,
+      enabled: s.apiKeys.enabled,
+    })
+    .from(s.apiKeys)
+    .where(eq(s.apiKeys.userId, userId));
 }
 
 /** 禁用/启用密钥。 */

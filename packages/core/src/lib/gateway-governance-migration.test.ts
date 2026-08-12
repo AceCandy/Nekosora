@@ -31,7 +31,7 @@ describe("gateway governance PostgreSQL migration", () => {
     expect(migrationFiles).toHaveLength(1);
     const tag = migrationFiles[0].replace(/\.sql$/, "");
     const journal = JSON.parse(readFileSync(join(migrationsDir, "meta", "_journal.json"), "utf8"));
-    const entry = journal.entries.at(-1);
+    const entry = journal.entries.find((candidate: { tag?: string }) => candidate.tag === tag);
     expect(entry).toMatchObject({ idx: 10, version: "7", tag, breakpoints: true });
 
     const previous = JSON.parse(readFileSync(join(migrationsDir, "meta", "0009_snapshot.json"), "utf8"));
