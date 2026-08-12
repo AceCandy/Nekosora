@@ -18,6 +18,11 @@ import {
   ERROR_META,
 } from "@/lib/errors";
 import { classifyError } from "@/lib/error-classify";
+import {
+  beginGatewayGovernance,
+  runWithGatewayGovernance,
+} from "@/lib/gateway-governance/lifecycle";
+import { measureSttSeconds } from "@/lib/gateway-governance/metering";
 import { redactErrorMessage } from "@/lib/redaction";
 import { logUsage } from "@/lib/usage";
 import type { CallContext } from "@/lib/providers/types";
@@ -29,12 +34,19 @@ import {
   MAX_TRANSCRIPTION_BODY_BYTES,
   MAX_TRANSCRIPTION_FILE_BYTES,
 } from "./transcription-limits";
+import {
+  gatewayGovernanceErrorResponse,
+  gatewayGovernanceIdentity,
+} from "./governance";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** 请求路径常量(错误日志 requestPath 用)。 */
 const REQUEST_PATH = "/v1/audio/transcriptions";
+type GovernedTranscriptionResult =
+  | { kind: "response"; response: Response }
+  | { kind: "result"; result: Awaited<ReturnType<typeof transcribeViaRoute>> };
 
 export async function POST(req: Request) {
   const startedAt = Date.now();
@@ -49,66 +61,147 @@ export async function POST(req: Request) {
     return apiErrorLocalized(ErrorCode.AUTH_INVALID_KEY, req);
   }
 
-  let formData: FormData;
-  try {
-    formData = await parseBoundedMultipartFormData(
-      req,
-      MAX_TRANSCRIPTION_BODY_BYTES,
-    );
-  } catch (error) {
-    if (error instanceof RequestBodyTooLargeError) {
-      await logRouteError({
-        startedAt,
-        ctx: verified.ctx,
-        code: ErrorCode.REQUEST_PAYLOAD_TOO_LARGE,
-      });
-      return apiErrorLocalized(ErrorCode.REQUEST_PAYLOAD_TOO_LARGE, req, {
-        maxFileBytes: MAX_TRANSCRIPTION_FILE_BYTES,
-      });
-    }
-    await logRouteError({ startedAt, ctx: verified.ctx, code: ErrorCode.REQUEST_INVALID_JSON });
-    return apiErrorLocalized(ErrorCode.REQUEST_INVALID_JSON, req);
-  }
-
-  const model = String(formData.get("model") ?? "");
-  const file = formData.get("file");
-  const language = String(formData.get("language") ?? "") || undefined;
-  const prompt = String(formData.get("prompt") ?? "") || undefined;
-
-  if (!model) {
-    await logRouteError({ startedAt, ctx: verified.ctx, code: ErrorCode.REQUEST_MISSING_FIELD });
-    return apiErrorLocalized(ErrorCode.REQUEST_MISSING_FIELD, req, { fields: ["model"] });
-  }
-  if (!(file instanceof File)) {
-    await logRouteError({
-      startedAt, ctx: verified.ctx, code: ErrorCode.REQUEST_MISSING_FIELD, model,
-    });
-    return apiErrorLocalized(ErrorCode.REQUEST_MISSING_FIELD, req, { fields: ["file"] });
-  }
-  if (file.size > MAX_TRANSCRIPTION_FILE_BYTES) {
-    await logRouteError({
-      startedAt,
-      ctx: verified.ctx,
-      model,
-      code: ErrorCode.REQUEST_PAYLOAD_TOO_LARGE,
-    });
-    return apiErrorLocalized(ErrorCode.REQUEST_PAYLOAD_TOO_LARGE, req, {
-      maxFileBytes: MAX_TRANSCRIPTION_FILE_BYTES,
-    });
-  }
-
-  const audio = Buffer.from(await file.arrayBuffer());
   const ctx = verified.ctx;
+  let governance;
+  try {
+    governance = await beginGatewayGovernance({
+      identity: gatewayGovernanceIdentity(ctx),
+      operation: "audio.transcription",
+      requestSignal: req.signal,
+    });
+  } catch (error) {
+    const response = await gatewayGovernanceErrorResponse(error, req);
+    if (response) return response;
+    throw error;
+  }
 
   try {
-    const result = await transcribeViaRoute(ctx, model, {
-      audio,
-      mime: file.type || "audio/mpeg",
-      language,
-      prompt,
-    });
+    const governed = await runWithGatewayGovernance<GovernedTranscriptionResult>(
+      governance,
+      async () => {
+        let formData: FormData;
+        try {
+          formData = await parseBoundedMultipartFormData(
+            req,
+            MAX_TRANSCRIPTION_BODY_BYTES,
+          );
+        } catch (error) {
+          if (error instanceof RequestBodyTooLargeError) {
+            await logRouteError({
+              startedAt,
+              ctx,
+              code: ErrorCode.REQUEST_PAYLOAD_TOO_LARGE,
+            });
+            return {
+              value: {
+                kind: "response",
+                response: await apiErrorLocalized(ErrorCode.REQUEST_PAYLOAD_TOO_LARGE, req, {
+                  maxFileBytes: MAX_TRANSCRIPTION_FILE_BYTES,
+                }),
+              },
+            };
+          }
+          await logRouteError({ startedAt, ctx, code: ErrorCode.REQUEST_INVALID_JSON });
+          return {
+            value: {
+              kind: "response",
+              response: await apiErrorLocalized(ErrorCode.REQUEST_INVALID_JSON, req),
+            },
+          };
+        }
+
+        const model = String(formData.get("model") ?? "");
+        const file = formData.get("file");
+        const language = String(formData.get("language") ?? "") || undefined;
+        const prompt = String(formData.get("prompt") ?? "") || undefined;
+
+        if (!model) {
+          await logRouteError({ startedAt, ctx, code: ErrorCode.REQUEST_MISSING_FIELD });
+          return {
+            value: {
+              kind: "response",
+              response: await apiErrorLocalized(
+                ErrorCode.REQUEST_MISSING_FIELD,
+                req,
+                { fields: ["model"] },
+              ),
+            },
+          };
+        }
+        if (!(file instanceof File)) {
+          await logRouteError({
+            startedAt, ctx, code: ErrorCode.REQUEST_MISSING_FIELD, model,
+          });
+          return {
+            value: {
+              kind: "response",
+              response: await apiErrorLocalized(
+                ErrorCode.REQUEST_MISSING_FIELD,
+                req,
+                { fields: ["file"] },
+              ),
+            },
+          };
+        }
+        if (file.size > MAX_TRANSCRIPTION_FILE_BYTES) {
+          await logRouteError({
+            startedAt,
+            ctx,
+            model,
+            code: ErrorCode.REQUEST_PAYLOAD_TOO_LARGE,
+          });
+          return {
+            value: {
+              kind: "response",
+              response: await apiErrorLocalized(ErrorCode.REQUEST_PAYLOAD_TOO_LARGE, req, {
+                maxFileBytes: MAX_TRANSCRIPTION_FILE_BYTES,
+              }),
+            },
+          };
+        }
+
+        const audio = Buffer.from(await file.arrayBuffer());
+        const mime = file.type || "audio/mpeg";
+        let seconds: number;
+        try {
+          seconds = await measureSttSeconds(audio, mime);
+        } catch {
+          await logRouteError({ startedAt, ctx, code: ErrorCode.REQUEST_INVALID_JSON, model });
+          return {
+            value: {
+              kind: "response",
+              response: await apiErrorLocalized(
+                ErrorCode.REQUEST_INVALID_JSON,
+                req,
+                { field: "file" },
+              ),
+            },
+          };
+        }
+
+        await governance.reserveQuota("stt_seconds", seconds);
+        const result = await transcribeViaRoute(ctx, model, {
+          audio,
+          mime,
+          durationSeconds: seconds,
+          language,
+          prompt,
+          abortSignal: governance.signal,
+          onProviderStart: () => governance.markProviderStarted(),
+        });
+        return {
+          value: { kind: "result", result },
+          actualUnits: seconds,
+        };
+      },
+    );
+
+    if (governed.kind === "response") return governed.response;
+    const { result } = governed;
     return Response.json({ text: result.text });
   } catch (err) {
+    const governanceResponse = await gatewayGovernanceErrorResponse(err, req);
+    if (governanceResponse) return governanceResponse;
     const safeMessage = redactErrorMessage(err);
     // 路由/能力解析失败由 route 层写入最终 execution 事实。
     if (err instanceof RoutingError) {

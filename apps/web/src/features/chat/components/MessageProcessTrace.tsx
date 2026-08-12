@@ -7,7 +7,6 @@ import {
   AlertCircle,
   AlertTriangle,
   Check,
-  CheckCircle2,
   ChevronDown,
   ExternalLink,
   Sparkles,
@@ -186,47 +185,36 @@ export function MessageProcessTrace({
             onClick={() => setExpanded((value) => !value)}
             className="touch-target inline-flex min-h-11 max-w-full min-w-0 items-center gap-3 rounded-md border-0 bg-transparent px-1.5 py-2 text-left transition-colors duration-150 hover:bg-nebula-silver/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:hover:bg-deep-space/25"
           >
-            <span className="flex min-w-0 items-start gap-2.5">
-              {runningWarning ? (
-                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
-              ) : research.status !== "running" && (
-                phase === "completed" ? (
-                  <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-green-600 dark:text-green-400" aria-hidden="true" />
-                ) : (
-                  <AlertCircle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
-                )
-              )}
-              <span className="min-w-0">
-                <span
-                  data-shimmer={research.status === "running" && !runningWarning ? summaryText : undefined}
-                  className={clsx(
-                    "block truncate text-ui-body font-medium",
-                    research.status === "running" && !runningWarning && "research-status-shimmer",
-                  )}
-                  aria-live="polite"
-                >
-                  {summaryText}
-                </span>
-                {research.status === "running" && !runningWarning && currentQuery && (
-                  <span className="mt-0.5 block truncate text-ui-caption text-space-ink/60 dark:text-nebula-silver/60">
-                    {currentQuery}
-                  </span>
+            <span className="min-w-0">
+              <span
+                data-shimmer={research.status === "running" && !runningWarning ? summaryText : undefined}
+                className={clsx(
+                  "block truncate text-ui-body font-medium",
+                  research.status === "running" && !runningWarning && "research-status-shimmer",
                 )}
-                {research.status === "running" && runningStage === "read" && !runningWarning && (
-                  <span className="mt-0.5 block text-ui-caption text-space-ink/60 dark:text-nebula-silver/60">
-                    {t("researchReadingReliableSources")}
-                  </span>
-                )}
-                {runningWarning && research.sourceCount ? (
-                  <span className="mt-0.5 block text-ui-caption text-space-ink/60 dark:text-nebula-silver/60">
-                    {t("researchContinueWithSources", { count: research.sourceCount })}
-                  </span>
-                ) : research.status === "running" && research.sourceCount && (
-                  <span className="mt-0.5 block text-ui-caption text-space-ink/55 dark:text-nebula-silver/55">
-                    {t("researchReadCount", { count: research.sourceCount })}
-                  </span>
-                )}
+                aria-live="polite"
+              >
+                {summaryText}
               </span>
+              {research.status === "running" && !runningWarning && currentQuery && (
+                <span className="mt-0.5 block truncate text-ui-caption text-space-ink/60 dark:text-nebula-silver/60">
+                  {currentQuery}
+                </span>
+              )}
+              {research.status === "running" && runningStage === "read" && !runningWarning && (
+                <span className="mt-0.5 block text-ui-caption text-space-ink/60 dark:text-nebula-silver/60">
+                  {t("researchReadingReliableSources")}
+                </span>
+              )}
+              {runningWarning && research.sourceCount ? (
+                <span className="mt-0.5 block text-ui-caption text-space-ink/60 dark:text-nebula-silver/60">
+                  {t("researchContinueWithSources", { count: research.sourceCount })}
+                </span>
+              ) : research.status === "running" && research.sourceCount && (
+                <span className="mt-0.5 block text-ui-caption text-space-ink/55 dark:text-nebula-silver/55">
+                  {t("researchReadCount", { count: research.sourceCount })}
+                </span>
+              )}
             </span>
           </button>
         )}

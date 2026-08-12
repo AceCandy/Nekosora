@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { Share2 } from "lucide-react";
 import type { ConversationShareListItem, CreateShareInput } from "@/features/chat/actions/share";
@@ -8,7 +8,9 @@ import ShareDialog from "@/features/chat/components/ShareDialog";
 
 interface ChatHeaderProps {
   title: string;
-  /** 当前会话 id;新会话(未建会)为 undefined,分享按钮禁用。 */
+  /** 会话标题后的输出样式入口。 */
+  renderStyleMenu?: ReactNode;
+  /** 当前会话 id;新会话(未建会)为 undefined,不显示分享按钮。 */
   conversationId?: string;
   /** 点击时可完整快照的当前可见消息 ID;空数组表示暂不可分享。 */
   canShare: boolean;
@@ -19,6 +21,7 @@ interface ChatHeaderProps {
 
 export default function ChatHeader({
   title,
+  renderStyleMenu,
   conversationId,
   canShare,
   createShareAction,
@@ -29,20 +32,24 @@ export default function ChatHeader({
   const [dialogOpen, setDialogOpen] = useState(false);
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between bg-nebula-white pl-14 pr-4 dark:bg-twilight-obsidian md:px-6">
-      <h1 className="min-w-0 truncate text-ui-reading font-semibold text-space-ink dark:text-nebula-silver" title={title}>
-        {title}
-      </h1>
-      <button
-        type="button"
-        onClick={() => setDialogOpen(true)}
-        disabled={!conversationId}
-        className="touch-target ml-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-space-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transition-none dark:text-neutral-300 dark:hover:bg-neutral-900 dark:hover:text-nebula-silver"
-        aria-label={t("shareThisConversation")}
-        title={t("shareThisConversation")}
-      >
-        <Share2 className="h-5 w-5" aria-hidden="true" />
-      </button>
+    <header className="flex h-14 shrink-0 items-center bg-nebula-white pl-14 pr-4 dark:bg-twilight-obsidian md:px-6">
+      <div className="flex min-w-0 flex-1 items-center gap-1">
+        <h1 className="min-w-0 truncate text-ui-reading font-semibold text-space-ink dark:text-nebula-silver" title={title}>
+          {title}
+        </h1>
+        {renderStyleMenu}
+      </div>
+      {conversationId && (
+        <button
+          type="button"
+          onClick={() => setDialogOpen(true)}
+          className="touch-target ml-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-space-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none dark:text-neutral-300 dark:hover:bg-neutral-900 dark:hover:text-nebula-silver"
+          aria-label={t("shareThisConversation")}
+          title={t("shareThisConversation")}
+        >
+          <Share2 className="h-5 w-5" aria-hidden="true" />
+        </button>
+      )}
       {conversationId && dialogOpen && <ShareDialog open onClose={() => setDialogOpen(false)} conversationId={conversationId} canShare={canShare} createShareAction={createShareAction} listSharesAction={listSharesAction} revokeShareAction={revokeShareAction} />}
     </header>
   );

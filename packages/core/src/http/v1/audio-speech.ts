@@ -18,16 +18,30 @@ import {
   ERROR_META,
 } from "@/lib/errors";
 import { classifyError } from "@/lib/error-classify";
+import {
+  beginGatewayGovernance,
+  runWithGatewayGovernance,
+} from "@/lib/gateway-governance/lifecycle";
+import {
+  MAX_TTS_CODE_POINTS,
+  parseTtsInput,
+} from "@/lib/gateway-governance/metering";
 import { redactErrorMessage } from "@/lib/redaction";
 import { logUsage } from "@/lib/usage";
 import type { CallContext } from "@/lib/providers/types";
+import {
+  gatewayGovernanceErrorResponse,
+  gatewayGovernanceIdentity,
+} from "./governance";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const MAX_INPUT_CHARS = 4096; // OpenAI TTS 输入上限
 /** 请求路径常量(错误日志 requestPath 用)。 */
 const REQUEST_PATH = "/v1/audio/speech";
+type GovernedSpeechResult =
+  | { kind: "response"; response: Response }
+  | { kind: "result"; result: Awaited<ReturnType<typeof synthesizeViaRoute>> };
 
 export async function POST(req: Request) {
   const startedAt = Date.now();
@@ -42,51 +56,108 @@ export async function POST(req: Request) {
     return apiErrorLocalized(ErrorCode.AUTH_INVALID_KEY, req);
   }
 
-  let body: Record<string, unknown>;
-  try {
-    body = await req.json();
-  } catch {
-    await logRouteError({ startedAt, ctx: verified.ctx, code: ErrorCode.REQUEST_INVALID_JSON });
-    return apiErrorLocalized(ErrorCode.REQUEST_INVALID_JSON, req);
-  }
-
-  const model = body.model as string | undefined;
-  const input = body.input as string | undefined;
-  const voice = (body.voice as string | undefined) || undefined;
-  const outputFormat = (body.response_format as
-    | "mp3"
-    | "opus"
-    | "aac"
-    | "flac"
-    | "wav"
-    | "pcm"
-    | undefined);
-
-  if (!model) {
-    await logRouteError({ startedAt, ctx: verified.ctx, code: ErrorCode.REQUEST_MISSING_FIELD });
-    return apiErrorLocalized(ErrorCode.REQUEST_MISSING_FIELD, req, { fields: ["model"] });
-  }
-  if (!input) {
-    await logRouteError({
-      startedAt, ctx: verified.ctx, code: ErrorCode.REQUEST_MISSING_FIELD, model,
-    });
-    return apiErrorLocalized(ErrorCode.REQUEST_MISSING_FIELD, req, { fields: ["input"] });
-  }
-  if (input.length > MAX_INPUT_CHARS) {
-    await logRouteError({
-      startedAt, ctx: verified.ctx, code: ErrorCode.REQUEST_MISSING_FIELD, model,
-    });
-    return apiErrorLocalized(ErrorCode.REQUEST_MISSING_FIELD, req, { limit: MAX_INPUT_CHARS, field: "input" });
-  }
-
   const ctx = verified.ctx;
+  let governance;
+  try {
+    governance = await beginGatewayGovernance({
+      identity: gatewayGovernanceIdentity(ctx),
+      operation: "audio.speech",
+      requestSignal: req.signal,
+    });
+  } catch (error) {
+    const response = await gatewayGovernanceErrorResponse(error, req);
+    if (response) return response;
+    throw error;
+  }
 
   try {
-    const result = await synthesizeViaRoute(ctx, model, {
-      text: input,
-      voice,
-      outputFormat,
+    const governed = await runWithGatewayGovernance<GovernedSpeechResult>(governance, async () => {
+      let body: Record<string, unknown>;
+      try {
+        body = await req.json();
+      } catch {
+        await logRouteError({ startedAt, ctx, code: ErrorCode.REQUEST_INVALID_JSON });
+        return {
+          value: {
+            kind: "response",
+            response: await apiErrorLocalized(ErrorCode.REQUEST_INVALID_JSON, req),
+          },
+        };
+      }
+
+      const model = body.model as string | undefined;
+      if (!model) {
+        await logRouteError({ startedAt, ctx, code: ErrorCode.REQUEST_MISSING_FIELD });
+        return {
+          value: {
+            kind: "response",
+            response: await apiErrorLocalized(
+              ErrorCode.REQUEST_MISSING_FIELD,
+              req,
+              { fields: ["model"] },
+            ),
+          },
+        };
+      }
+      if (body.input === undefined || body.input === "") {
+        await logRouteError({
+          startedAt, ctx, code: ErrorCode.REQUEST_MISSING_FIELD, model,
+        });
+        return {
+          value: {
+            kind: "response",
+            response: await apiErrorLocalized(
+              ErrorCode.REQUEST_MISSING_FIELD,
+              req,
+              { fields: ["input"] },
+            ),
+          },
+        };
+      }
+
+      let parsedInput: ReturnType<typeof parseTtsInput>;
+      try {
+        parsedInput = parseTtsInput(body.input);
+      } catch {
+        await logRouteError({ startedAt, ctx, code: ErrorCode.REQUEST_INVALID_JSON, model });
+        return {
+          value: {
+            kind: "response",
+            response: await apiErrorLocalized(
+              ErrorCode.REQUEST_INVALID_JSON,
+              req,
+              { field: "input", maxCodePoints: MAX_TTS_CODE_POINTS },
+            ),
+          },
+        };
+      }
+
+      const voice = (body.voice as string | undefined) || undefined;
+      const outputFormat = (body.response_format as
+        | "mp3"
+        | "opus"
+        | "aac"
+        | "flac"
+        | "wav"
+        | "pcm"
+        | undefined);
+
+      await governance.reserveQuota("tts_code_points", parsedInput.units);
+      const result = await synthesizeViaRoute(ctx, model, {
+        text: parsedInput.input,
+        voice,
+        outputFormat,
+        abortSignal: governance.signal,
+        onProviderStart: () => governance.markProviderStarted(),
+      });
+      return {
+        value: { kind: "result", result },
+        actualUnits: parsedInput.units,
+      };
     });
+
+    if (governed.kind === "response") return governed.response;
+    const { result } = governed;
     return new Response(new Uint8Array(result.audioBuffer), {
       status: 200,
       headers: {
@@ -96,6 +167,8 @@ export async function POST(req: Request) {
       },
     });
   } catch (err) {
+    const governanceResponse = await gatewayGovernanceErrorResponse(err, req);
+    if (governanceResponse) return governanceResponse;
     const safeMessage = redactErrorMessage(err);
     // 路由/能力解析失败由 route 层写入最终 execution 事实。
     if (err instanceof RoutingError) {

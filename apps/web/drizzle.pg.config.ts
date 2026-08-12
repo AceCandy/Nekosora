@@ -3,7 +3,6 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { loadEnvFile } from "node:process";
 
-const workspaceRoot = fileURLToPath(new URL("../..", import.meta.url));
 const envFile = fileURLToPath(new URL("../../.env.local", import.meta.url));
 
 if (!process.env.DATABASE_URL && existsSync(envFile)) {
@@ -14,7 +13,7 @@ if (!process.env.DATABASE_URL && existsSync(envFile)) {
 // 运行:pnpm db:generate:pg  /  pnpm db:migrate:pg
 export default defineConfig({
   schema: fileURLToPath(new URL("./src/db/schema/pg.ts", import.meta.url)),
-  out: `${workspaceRoot}/drizzle/pg`,
+  out: "../../drizzle/pg",
   dialect: "postgresql",
   dbCredentials: {
     url: process.env.DATABASE_URL!,

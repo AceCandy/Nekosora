@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 94
-- **Last Active**: 2026-08-07
+- **Total Sessions**: 101
+- **Last Active**: 2026-08-12
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~769 | Active |
+| `journal-2.md` | ~920 | Active |
 | `journal-1.md` | ~1981 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,13 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 101 | 2026-08-12 | API Key 数据路径加固 | `ed80cce` | `main` |
+| 100 | 2026-08-11 | 熔断降级策略加固 | `7096d60` | `main` |
+| 99 | 2026-08-11 | 完成 Gateway 请求流量治理 | `22e6332` | `main` |
+| 98 | 2026-08-10 | Provider 超时强制执行 | `4f41ec8` | `main` |
+| 97 | 2026-08-10 | 生成内容渲染安全与架构加固路线图 | `eb9d3f4`, `cce55ad` | `main` |
+| 96 | 2026-08-10 | Gateway protocol compatibility fixes | `ee4cff9`, `b6fe9a0`, `f4582b5` | `main` |
+| 95 | 2026-08-09 | 多协议双向网关 | `139e137`, `2714750` | `main` |
 | 94 | 2026-08-07 | 修复流式搜索超时与工具轮正文 | `0aae65f`, `9498b85` | `main` |
 | 93 | 2026-08-07 | 修复搜索超时回退与模型展示 | `567226c` | `main` |
 | 92 | 2026-08-07 | 同批联网搜索并行执行 | `03c4b83` | `main` |

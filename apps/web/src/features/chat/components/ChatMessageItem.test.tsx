@@ -202,6 +202,7 @@ describe("ChatMessageItem research process", () => {
     );
 
     expect(html).toContain("researchCompleted · researchDuration");
+    expect(html).not.toContain("<svg");
     expect(html).not.toContain("research-status-shimmer");
     expect(html).toContain('aria-expanded="false"');
     expect(html).toMatch(/aria-controls="_R_[^"]+_"/);
@@ -266,6 +267,7 @@ describe("ChatMessageItem research process", () => {
     );
 
     expect(html).toContain("researchCompleted · researchSourceCount · researchDuration");
+    expect(html).not.toContain("<svg");
     expect(html).not.toContain("researchRunningRead");
     expect(html).not.toContain("research-status-shimmer");
   });

@@ -1,0 +1,7 @@
+{"file":".trellis/tasks/08-10-ci-artifact-quality-gates/research/current-ci-evidence.md","reason":"实现必须遵循已核验的 workflow、workspace、Docker 制品、镜像命名和 Action SHA 现状。"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"根质量门禁需保持现有 lint、typecheck、test 与 pnpm check 契约。"}
+{"file":".trellis/spec/backend/gateway-runtime.md","reason":"Gateway 镜像必须覆盖独立构建、bundle 和生产制品边界。"}
+{"file":".trellis/spec/backend/queue-lifecycle.md","reason":"Worker/Queue 镜像与构建验证需遵循现有生命周期和生产检查契约。"}
+{"file":".trellis/spec/backend/directory-structure.md","reason":"workspace 策略和三应用制品必须保持应用与共享包的归属、依赖及 bundle 边界。"}
+{"file":".trellis/spec/backend/dependency-security.md","reason":"冻结安装、lockfile、Action pin 和供应链门禁需遵循现有依赖安全检查。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"两个 workflow、根脚本、三制品和文档之间的契约必须一致。"}

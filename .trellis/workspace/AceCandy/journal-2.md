@@ -767,3 +767,154 @@ Hosted Search 改为首包与流中空闲 watchdog，60 秒窗口仅限制新后
 ### Status
 
 [OK] **Completed**
+
+
+## Session 95: 多协议双向网关
+
+**Date**: 2026-08-09
+**Task**: 多协议双向网关
+**Branch**: `main`
+
+### Summary
+
+实现 Chat Completions、Responses、Messages 与 Gemini 四种协议的双向转换、路由格式配置、原生错误响应、取消传播、迁移及测试，并补充网关契约规范。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `139e137` | (see git log) |
+| `2714750` | (see git log) |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 96: Gateway protocol compatibility fixes
+
+**Date**: 2026-08-10
+**Task**: Gateway protocol compatibility fixes
+**Branch**: `main`
+
+### Summary
+
+Added protocol-native model discovery, accepted inbound OpenAI stream_options, and persisted automatic upstream stream usage fallback.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ee4cff9` | (see git log) |
+| `b6fe9a0` | (see git log) |
+| `f4582b5` | (see git log) |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 97: 生成内容渲染安全与架构加固路线图
+
+**Date**: 2026-08-10
+**Task**: 生成内容渲染安全与架构加固路线图
+**Branch**: `main`
+
+### Summary
+
+建立架构审计加固路线图及八项顺序任务；保留管理员 custom renderer 的人为管控，增加非阻断提醒，并将模型生成的 SVG/HTML Artifact 统一隔离到 sandbox iframe。定向测试、工作区 check、全量测试与独立复核均通过。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `eb9d3f4` | (see git log) |
+| `cce55ad` | (see git log) |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 98: Provider 超时强制执行
+
+**Date**: 2026-08-10
+**Task**: Provider 超时强制执行
+**Branch**: `main`
+
+### Summary
+
+统一连接、总读取与流空闲超时策略，覆盖 Gateway、Chat、Hosted Search、媒体与 Provider 探测；补齐管理配置、数据库约束、迁移和跨层测试。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4f41ec8` | (see git log) |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 99: 完成 Gateway 请求流量治理
+
+**Date**: 2026-08-11
+**Task**: 完成 Gateway 请求流量治理
+**Branch**: `main`
+
+### Summary
+
+完成 API Key 与用户双层速率、并发租约和四类月额度治理，接入 Gateway 全入口、管理配置、媒体用量 telemetry、PostgreSQL 并发回归与生产构建门禁。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `22e6332` | (see git log) |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 100: 熔断降级策略加固
+
+**Date**: 2026-08-11
+**Task**: 熔断降级策略加固
+**Branch**: `main`
+
+### Summary
+
+完成熔断路由 fail-closed、Engine permit 生命周期、稳定 503 错误与低基数指标，并通过全量测试和构建
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7096d60` | (see git log) |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 101: API Key 数据路径加固
+
+**Date**: 2026-08-12
+**Task**: API Key 数据路径加固
+**Branch**: `main`
+
+### Summary
+
+增加 API Key 前缀索引与显式展示 DTO，移除无授权语义的 parent_id，补齐 0010 到 0011 PostgreSQL 升级、RSC 数据边界、迁移与启动验证。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ed80cce` | (see git log) |
+
+### Status
+
+[OK] **Completed**

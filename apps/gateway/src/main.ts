@@ -1,12 +1,18 @@
 import { bootstrapDatabase } from "@nekusora/core/bootstrap";
 import { validateEnv } from "@nekusora/core/env";
+import {
+  createGatewayGovernanceRepository,
+  startGatewayGovernanceReaper,
+  type GovernanceReaperController,
+} from "@nekusora/core/gateway-governance";
 import { installGlobalErrorGuards } from "@nekusora/core/process-guards";
 import { configureQueueProvider } from "@nekusora/core/queue";
 import { closeDb } from "@nekusora/db";
 import { closeQueue, getQueue } from "@nekusora/queue";
-import { buildServer } from "./server";
+import { buildServer, closeGatewayResources } from "./server";
 
 let server: ReturnType<typeof buildServer> | undefined;
+let governanceReaper: GovernanceReaperController | undefined;
 
 async function main(): Promise<void> {
   installGlobalErrorGuards();
@@ -14,7 +20,14 @@ async function main(): Promise<void> {
   configureQueueProvider(getQueue);
   await bootstrapDatabase({ seedAdmin: false });
 
-  server = buildServer();
+  const reaper = startGatewayGovernanceReaper({
+    repository: await createGatewayGovernanceRepository(),
+    onFailure: () => console.error("[gateway] 治理租约回收失败"),
+  });
+  governanceReaper = reaper;
+  server = buildServer({
+    closeResources: () => closeGatewayResources(reaper),
+  });
   const port = Number(process.env.GATEWAY_PORT ?? 4000);
   const host = process.env.GATEWAY_HOST ?? "0.0.0.0";
 
@@ -41,6 +54,7 @@ void main().catch(async () => {
   if (server) {
     await server.close().catch(() => undefined);
   } else {
+    await governanceReaper?.stop().catch(() => undefined);
     await Promise.allSettled([closeQueue(), closeDb()]);
   }
   process.exitCode = 1;

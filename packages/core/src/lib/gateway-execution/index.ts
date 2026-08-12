@@ -5,6 +5,7 @@ export {
   classifyStreamError,
   isAbortError,
   isFailoverableError,
+  isStreamOptionsUnsupportedError,
   isToolUnsupportedError,
   isKeyAuthError,
   isRetryableForKey,

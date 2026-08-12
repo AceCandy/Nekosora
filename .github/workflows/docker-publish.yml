@@ -1,117 +1,292 @@
-# Docker 镜像发布:
-#   GHCR      —— 每 12h 定时检查 main 有更新则发布;打 v* tag 或手动触发也发布。
-#   DockerHub —— 仅在打 v* tag 时发布(需配 DOCKERHUB_USERNAME / DOCKERHUB_TOKEN)。
-# 定时触发时若 main 自上次成功构建后无新提交,自动跳过,避免无意义重复构建。
-#
-# 拉取镜像:
-#   ghcr.io/acecandy/nekosora:edge      定时构建的最新 main
-#   ghcr.io/acecandy/nekosora:1.2.3     打 v1.2.3 tag 时
-#   acecandy/nekosora:latest            打 v* tag 时(DockerHub)
-name: Publish Docker image
+name: Publish Docker images
 
 on:
   schedule:
-    - cron: '17 */12 * * *'   # 每 12 小时(UTC 00:17 / 12:17,GitHub schedule 按 UTC)
+    - cron: "17 */12 * * *"
   push:
-    tags: ['v*']
+    tags: ["v*"]
   workflow_dispatch:
 
-env:
-  GHCR_REGISTRY: ghcr.io
-  DOCKERHUB_REGISTRY: docker.io
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-publish-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  build-and-push:
+  quality:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      skip: ${{ steps.freshness.outputs.skip || 'false' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event_name == 'schedule' && 'refs/heads/main' || github.ref }}
+
+      - name: Check scheduled build freshness
+        id: freshness
+        if: github.event_name == 'schedule'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          head_sha=$(git rev-parse HEAD)
+          url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/docker-publish.yml/runs?branch=main&event=schedule&status=success&per_page=1"
+          if response=$(curl --fail --silent --show-error \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$url"); then
+            last_sha=$(printf '%s' "$response" | jq -er '.workflow_runs[0].head_sha // empty' 2>/dev/null || true)
+            if [ -n "$last_sha" ] && [ "$head_sha" = "$last_sha" ]; then
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              echo "main has no changes since the last successful scheduled publish"
+            fi
+          else
+            echo "freshness query failed; continuing with the publish"
+          fi
+
+      - name: Set up pnpm
+        if: steps.freshness.outputs.skip != 'true'
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+
+      - name: Set up Node.js
+        if: steps.freshness.outputs.skip != 'true'
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        if: steps.freshness.outputs.skip != 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint workflows
+        if: steps.freshness.outputs.skip != 'true'
+        run: pnpm lint:workflows
+
+      - name: Check workspace policy
+        if: steps.freshness.outputs.skip != 'true'
+        run: pnpm quality:workspace
+
+      - name: Check source
+        if: steps.freshness.outputs.skip != 'true'
+        run: pnpm check
+
+      - name: Test
+        if: steps.freshness.outputs.skip != 'true'
+        run: pnpm test
+
+      - name: Build applications
+        if: steps.freshness.outputs.skip != 'true'
+        run: |
+          pnpm build
+          pnpm build:gateway
+          pnpm build:worker
+
+  ghcr_publish:
+    needs: quality
+    if: needs.quality.outputs.skip != 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-      id-token: write
-      actions: read   # 定时检查时查询最近一次成功构建的 commit
-
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: web
+            file: Dockerfile
+            image: nekusora-web
+          - component: gateway
+            file: Dockerfile.gateway
+            image: nekusora-gateway
+          - component: worker
+            file: Dockerfile.worker
+            image: nekusora-worker
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event_name == 'schedule' && 'refs/heads/main' || github.ref }}
 
-      # 仅定时触发时检查:对比当前 main HEAD 与最近一次成功构建的 commit,
-      # 相同则跳过本次构建(push tag / 手动触发不检查,必定构建)
-      - name: 检查是否有更新(仅定时触发)
-        id: check
-        if: github.event_name == 'schedule'
-        run: |
-          HEAD_SHA=$(git rev-parse HEAD)
-          LAST_SHA=$(curl -sf -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/runs?conclusion=success&per_page=1" \
-            | jq -r '.workflow_runs[0].head_sha // ""')
-          echo "head=$HEAD_SHA last=$LAST_SHA"
-          if [ "$HEAD_SHA" = "$LAST_SHA" ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "main 自上次成功构建后无更新,跳过本次构建"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Set up QEMU(多架构支持)
-        if: steps.check.outputs.skip != 'true'
-        uses: docker/setup-qemu-action@v3
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
 
       - name: Set up Docker Buildx
-        if: steps.check.outputs.skip != 'true'
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
-      # --- GHCR 登录(用自动注入的 GITHUB_TOKEN,无需额外 secret)---
       - name: Log in to GHCR
-        if: steps.check.outputs.skip != 'true'
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
-          registry: ${{ env.GHCR_REGISTRY }}
+          registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ github.token }}
 
-      # --- DockerHub 登录:仅在打 v* tag 时(定时/手动只发 GHCR)---
-      # secret 未配时 continue-on-error 跳过,不影响 GHCR 发布
-      - name: Log in to DockerHub
-        if: steps.check.outputs.skip != 'true' && startsWith(github.ref, 'refs/tags/v')
-        id: dockerhub-login
-        uses: docker/login-action@v3
-        continue-on-error: true
-        with:
-          registry: ${{ env.DOCKERHUB_REGISTRY }}
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Resolve image name
+        id: image
+        shell: bash
+        run: |
+          owner=$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
+          echo "name=ghcr.io/${owner}/${{ matrix.image }}" >> "$GITHUB_OUTPUT"
 
-      # 标签:语义化版本(tag) + sha + edge(定时 main)。
-      # DockerHub image 仅在 DockerHub 登录成功时加入,否则只推 GHCR。
-      - name: Extract metadata(标签 + labels)
-        if: steps.check.outputs.skip != 'true'
+      - name: Extract image metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
-          images: |
-            ${{ env.GHCR_REGISTRY }}/${{ github.repository }}
-            ${{ steps.dockerhub-login.outcome == 'success' && format('{0}/{1}', env.DOCKERHUB_REGISTRY, github.repository) || '' }}
+          images: ${{ steps.image.outputs.name }}
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=semver,pattern=latest
-            type=edge,branch=main
+            type=semver,pattern={{version}},enable=${{ github.event_name == 'push' && github.ref_type == 'tag' }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ github.event_name == 'push' && github.ref_type == 'tag' }}
+            type=semver,pattern={{major}},enable=${{ github.event_name == 'push' && github.ref_type == 'tag' }}
+            type=raw,value=latest,enable=${{ github.event_name == 'push' && github.ref_type == 'tag' }}
+            type=edge,branch=main,enable=${{ github.ref == 'refs/heads/main' }}
             type=sha,format=short
 
-      - name: Build and push
-        if: steps.check.outputs.skip != 'true'
+      - name: Build and push ${{ matrix.component }} image
         id: push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
+          file: ${{ matrix.file }}
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=publish-${{ matrix.component }}
+          cache-to: type=gha,mode=max,scope=publish-${{ matrix.component }}
 
-      - name: Print image digest
-        if: steps.check.outputs.skip != 'true'
-        run: echo "digest ${{ steps.push.outputs.digest }}"
+      - name: Record GHCR digest
+        run: |
+          echo "- GHCR ${{ matrix.image }}: \`${{ steps.push.outputs.digest }}\`" >> "$GITHUB_STEP_SUMMARY"
+
+  dockerhub_sync:
+    needs: ghcr_publish
+    if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: web
+            file: Dockerfile
+            image: nekusora-web
+          - component: gateway
+            file: Dockerfile.gateway
+            image: nekusora-gateway
+          - component: worker
+            file: Dockerfile.worker
+            image: nekusora-worker
+    steps:
+      - name: Check DockerHub credentials
+        id: credentials
+        shell: bash
+        run: |
+          if [ -n "$DOCKERHUB_USERNAME" ] && [ -n "$DOCKERHUB_TOKEN" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        id: checkout
+        if: steps.credentials.outputs.available == 'true'
+        continue-on-error: true
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up QEMU
+        id: qemu
+        if: steps.credentials.outputs.available == 'true' && steps.checkout.outcome == 'success'
+        continue-on-error: true
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+
+      - name: Set up Docker Buildx
+        id: buildx
+        if: steps.credentials.outputs.available == 'true' && steps.qemu.outcome == 'success'
+        continue-on-error: true
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Log in to DockerHub
+        id: login
+        if: steps.credentials.outputs.available == 'true' && steps.buildx.outcome == 'success'
+        continue-on-error: true
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: docker.io
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ env.DOCKERHUB_TOKEN }}
+
+      - name: Extract image metadata
+        id: meta
+        if: steps.login.outcome == 'success'
+        continue-on-error: true
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        with:
+          images: docker.io/${{ env.DOCKERHUB_USERNAME }}/${{ matrix.image }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest
+            type=sha,format=short
+
+      - name: Build and push DockerHub image
+        id: push
+        if: steps.meta.outcome == 'success'
+        continue-on-error: true
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=dockerhub-${{ matrix.component }}
+          cache-to: type=gha,mode=max,scope=dockerhub-${{ matrix.component }}
+
+      - name: Record DockerHub result
+        id: summary
+        if: always()
+        shell: bash
+        run: |
+          if [ "${{ steps.credentials.outputs.available }}" != "true" ]; then
+            echo "- DockerHub ${{ matrix.image }}: skipped (credentials not configured)" >> "$GITHUB_STEP_SUMMARY"
+          elif [ "${{ steps.push.outcome }}" = "success" ]; then
+            echo "- DockerHub ${{ matrix.image }}: published" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- DockerHub ${{ matrix.image }}: failed (optional sync)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  publish_summary:
+    needs: [quality, ghcr_publish, dockerhub_sync]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Record publish result
+        shell: bash
+        run: |
+          echo "## Container publish" >> "$GITHUB_STEP_SUMMARY"
+          echo "- GHCR: ${{ needs.ghcr_publish.result }}" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ needs.quality.outputs.skip }}" = "true" ]; then
+            echo "- Scheduled publish: skipped (no new main commit)" >> "$GITHUB_STEP_SUMMARY"
+            echo "- DockerHub: not applicable for schedule/manual publishing" >> "$GITHUB_STEP_SUMMARY"
+          elif [ "${{ github.event_name }}" != "push" ] || [ "${{ github.ref_type }}" != "tag" ]; then
+            echo "- DockerHub: not applicable for schedule/manual publishing" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- DockerHub: see component summaries" >> "$GITHUB_STEP_SUMMARY"
+          fi

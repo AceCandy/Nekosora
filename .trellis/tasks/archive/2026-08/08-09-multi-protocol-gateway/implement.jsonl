@@ -1,0 +1,3 @@
+{"file":".trellis/spec/backend/gateway-routing.md","reason":"实现必须复用统一执行引擎，并保持 route/key 故障转移、响应提交、熔断与遥测契约。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"apiFormat 跨越数据库、action、repository、runtime、adapter、HTTP 与 UI，需要逐层保持同一事实源。"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"四种协议必须共享 CanonicalRequest、CanonicalEvent、鉴权和执行链，避免两两转换与重复状态机。"}

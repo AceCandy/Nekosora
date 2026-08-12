@@ -1,0 +1,28 @@
+{
+  "id": "generated-content-rendering-safety",
+  "name": "generated-content-rendering-safety",
+  "title": "生成内容渲染安全",
+  "description": "保留管理员受信的 custom renderer，补非阻断提醒并隔离模型 SVG/HTML artifact。",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P1",
+  "creator": "AceCandy",
+  "assignee": "AceCandy",
+  "createdAt": "2026-08-10",
+  "completedAt": "2026-08-10",
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": "08-10-architecture-audit-hardening-roadmap",
+  "relatedFiles": [],
+  "notes": "custom renderer 与管理员 CSS 保持现状；未净化 HTML 风险由产品决策接受。",
+  "meta": {
+    "custom_renderer_policy": "trusted_admin_warning_only"
+  }
+}

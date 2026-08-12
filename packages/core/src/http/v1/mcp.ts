@@ -16,8 +16,19 @@
 import { verifyKey, extractBearer } from "@/lib/keys";
 import { eq, and } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
+import {
+  acquireGatewayGovernanceLease,
+  consumeGatewayGovernanceRate,
+  runWithGatewayGovernance,
+} from "@/lib/gateway-governance/lifecycle";
+import type { GatewayGovernancePolicy } from "@/lib/gateway-governance/policy";
+import type { GovernanceIdentity } from "@/lib/gateway-governance/repository";
 import { retrieve } from "@/lib/rag/retrieve";
 import type { CallContext } from "@/lib/providers/types";
+import {
+  gatewayGovernanceErrorResponse,
+  gatewayGovernanceIdentity,
+} from "./governance";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,6 +40,12 @@ interface JsonRpcRequest {
   params?: Record<string, unknown>;
 }
 
+interface McpGovernanceContext {
+  identity: GovernanceIdentity;
+  policy: GatewayGovernancePolicy;
+  requestSignal: AbortSignal;
+}
+
 export async function POST(req: Request) {
   // 1. 鉴权
   const rawKey = extractBearer(req.headers.get("authorization"));
@@ -37,6 +54,19 @@ export async function POST(req: Request) {
   if (!verified) return jsonRpcError(null, -32001, "无效的 API 密钥");
 
   const ctx = verified.ctx;
+  let identity: GovernanceIdentity;
+  let policy: GatewayGovernancePolicy;
+  try {
+    identity = gatewayGovernanceIdentity(ctx);
+    policy = await consumeGatewayGovernanceRate({
+      identity,
+      operation: "mcp.request",
+    });
+  } catch (error) {
+    const response = await gatewayGovernanceErrorResponse(error, req);
+    if (response) return response;
+    throw error;
+  }
 
   // 2. 解析 JSON-RPC 请求
   let rpc: JsonRpcRequest;
@@ -72,14 +102,20 @@ export async function POST(req: Request) {
       case "tools/call": {
         const toolName = params?.name as string;
         const args = (params?.arguments ?? {}) as Record<string, unknown>;
-        const result = await handleToolCall(ctx, toolName, args);
+        const result = await handleToolCall(ctx, toolName, args, {
+          identity,
+          policy,
+          requestSignal: req.signal,
+        });
         return Response.json({ jsonrpc: "2.0", id, result });
       }
 
       default:
         return jsonRpcError(id, -32601, `Method not found: ${method}`);
     }
-  } catch {
+  } catch (error) {
+    const response = await gatewayGovernanceErrorResponse(error, req);
+    if (response) return response;
     return jsonRpcError(id, -32603, "Internal error");
   }
 }
@@ -119,6 +155,7 @@ async function handleToolCall(
   ctx: CallContext,
   name: string,
   args: Record<string, unknown>,
+  governance: McpGovernanceContext,
 ): Promise<{ content: unknown[]; isError?: boolean }> {
   switch (name) {
     case "list_models": {
@@ -151,14 +188,22 @@ async function handleToolCall(
     case "search_knowledge": {
       const query = String(args.query ?? "");
       if (!query) return { content: [{ type: "text", text: "缺少 query 参数" }], isError: true };
-      const result = await retrieve(query, [], { userId: ctx.userId, topK: 5 });
-      if (result.chunks.length === 0) {
-        return { content: [{ type: "text", text: "未找到相关文档" }] };
-      }
-      const text = result.chunks
-        .map((c, i) => `## 片段 ${i + 1}(${c.filename},相似度 ${c.similarity.toFixed(2)})\n${c.content}`)
-        .join("\n\n");
-      return { content: [{ type: "text", text }] };
+      const handle = await acquireGatewayGovernanceLease({
+        identity: governance.identity,
+        operation: "mcp.search",
+        policy: governance.policy,
+        requestSignal: governance.requestSignal,
+      });
+      return runWithGatewayGovernance(handle, async () => {
+        const result = await retrieve(query, [], { userId: ctx.userId, topK: 5 });
+        if (result.chunks.length === 0) {
+          return { value: { content: [{ type: "text", text: "未找到相关文档" }] } };
+        }
+        const text = result.chunks
+          .map((c, i) => `## 片段 ${i + 1}(${c.filename},相似度 ${c.similarity.toFixed(2)})\n${c.content}`)
+          .join("\n\n");
+        return { value: { content: [{ type: "text", text }] } };
+      });
     }
     default:
       return { content: [{ type: "text", text: `未知工具: ${name}` }], isError: true };

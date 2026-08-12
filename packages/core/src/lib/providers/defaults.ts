@@ -38,15 +38,35 @@ export function resolveModelsUrl(protocol: ProviderProtocol, baseUrl: string): s
 }
 
 /**
- * 规范化 provider 接口地址:openai-compatible 协议下若缺少版本前缀,
- * 在保存时自动补 /v1;其他协议原样返回。
+ * 规范化 provider API 根地址，并拒绝会被 adapter 重复追加的生成端点。
+ * openai-compatible 的纯 host 自动补 /v1；已有版本或自定义 path 保持原样。
  *
  * 用户填 openai-compatible 上游时常漏 /v1,导致 /models、/chat/completions
  * 落到错误路径。保存瞬间补全,列表/详情展示的就是入库后的最终地址。
  */
 export function normalizeBaseUrl(protocol: ProviderProtocol, baseUrl: string): string {
-  if (protocol !== "openai-compatible") return baseUrl;
   const trimmed = baseUrl.trim().replace(/\/+$/, "");
-  if (/\/v\d+$/.test(trimmed)) return trimmed;
+  const path = baseUrlPath(trimmed).replace(/\/+$/, "") || "/";
+  if (
+    path.endsWith("/responses")
+    || path.endsWith("/messages")
+    || path.endsWith("/chat/completions")
+    || path.endsWith(":generateContent")
+    || path.endsWith(":streamGenerateContent")
+  ) {
+    throw new Error("接口地址必须填写 API 根地址，不能包含具体生成端点");
+  }
+  if (protocol !== "openai-compatible" || path !== "/") return trimmed;
   return `${trimmed}/v1`;
+}
+
+function baseUrlPath(baseUrl: string): string {
+  try {
+    return new URL(baseUrl).pathname;
+  } catch {
+    const withoutQuery = baseUrl.split(/[?#]/, 1)[0] ?? "";
+    const schemeEnd = withoutQuery.indexOf("://");
+    const pathStart = withoutQuery.indexOf("/", schemeEnd >= 0 ? schemeEnd + 3 : 0);
+    return pathStart < 0 ? "/" : withoutQuery.slice(pathStart);
+  }
 }

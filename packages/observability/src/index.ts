@@ -60,11 +60,39 @@ export const gatewayAttemptsTotal = new Counter({
   registers: [registry],
 });
 
+export const gatewayCircuitBreakerEventsTotal = new Counter({
+  name: "nekusora_gateway_circuit_breaker_events_total",
+  help: "Gateway circuit breaker lifecycle events",
+  labelNames: ["event"],
+  registers: [registry],
+});
+
 export const gatewayExecutionDurationMs = new Histogram({
   name: "nekusora_gateway_execution_duration_ms",
   help: "Gateway execution latency in milliseconds",
   labelNames: ["operation", "source", "status"],
   buckets: [100, 300, 500, 1000, 3000, 5000, 10000, 30000, 60000],
+  registers: [registry],
+});
+
+export const gatewayGovernanceRejectionsTotal = new Counter({
+  name: "nekusora_gateway_governance_rejections_total",
+  help: "Gateway governance rejections",
+  labelNames: ["reason", "scope", "operation"],
+  registers: [registry],
+});
+
+export const gatewayGovernanceSettlementsTotal = new Counter({
+  name: "nekusora_gateway_governance_settlements_total",
+  help: "Gateway governance quota settlements",
+  labelNames: ["quota_kind", "outcome"],
+  registers: [registry],
+});
+
+export const gatewayGovernanceFailuresTotal = new Counter({
+  name: "nekusora_gateway_governance_failures_total",
+  help: "Gateway governance failures by fixed lifecycle stage",
+  labelNames: ["stage"],
   registers: [registry],
 });
 
@@ -129,6 +157,39 @@ export function observeGatewayAttempt(params: {
   protocol: string;
 }): void {
   gatewayAttemptsTotal.inc(params);
+}
+
+export type GatewayCircuitBreakerEvent =
+  | "no_healthy_route"
+  | "probe_acquired"
+  | "probe_succeeded"
+  | "probe_failed"
+  | "probe_released";
+
+export function observeGatewayCircuitBreakerEvent(event: GatewayCircuitBreakerEvent): void {
+  gatewayCircuitBreakerEventsTotal.inc({ event });
+}
+
+export function observeGatewayGovernanceRejection(params: {
+  reason: string;
+  scope: string;
+  operation: string;
+}): void {
+  gatewayGovernanceRejectionsTotal.inc(params);
+}
+
+export function observeGatewayGovernanceSettlement(params: {
+  quotaKind: string;
+  outcome: "settled" | "overage";
+}): void {
+  gatewayGovernanceSettlementsTotal.inc({
+    quota_kind: params.quotaKind,
+    outcome: params.outcome,
+  });
+}
+
+export function observeGatewayGovernanceFailure(stage: string): void {
+  gatewayGovernanceFailuresTotal.inc({ stage });
 }
 
 /** 进入 streamChat 时 +1(配合 releaseStream 在 finally 调用)。 */

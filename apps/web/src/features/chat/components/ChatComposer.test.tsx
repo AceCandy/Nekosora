@@ -10,9 +10,12 @@ const mocks = vi.hoisted(() => ({
   dispatch: vi.fn(),
   retry: vi.fn(),
   send: vi.fn(),
+  handleUpload: vi.fn(),
 }));
 
 interface CapturedToolbarProps {
+  onUploadFiles: (files: FileList | File[] | null) => void;
+  webSearchAvailable: boolean;
   onCardToggle: (id: string) => void;
   onKbToggle: (id: string) => void;
   onWebSearchToggle: () => void;
@@ -25,10 +28,17 @@ interface CapturedToolbarProps {
 interface CapturedInputBoxProps {
   onSend: () => void;
   topContent?: React.ReactNode;
+  leadingControl?: React.ReactNode;
 }
 
 interface CapturedMessageListProps {
   onAsk?: (text: string) => void;
+}
+
+interface CapturedHeaderProps {
+  title: string;
+  conversationId?: string;
+  renderStyleMenu?: React.ReactNode;
 }
 
 interface CapturedRuntimeOptions {
@@ -38,6 +48,7 @@ interface CapturedRuntimeOptions {
 let capturedToolbar: CapturedToolbarProps | null = null;
 let capturedInputBox: CapturedInputBoxProps | null = null;
 let capturedMessageList: CapturedMessageListProps | null = null;
+let capturedHeader: CapturedHeaderProps | null = null;
 let capturedRuntimeOptions: CapturedRuntimeOptions | null = null;
 let coordinatorState: ComposerSelectionState;
 let currentSnapshot: ComposerSelectionState;
@@ -63,7 +74,7 @@ vi.mock("@/shared/components/file-preview/FilePreviewModal", () => ({
 vi.mock("@/features/chat/hooks/useChatAttachments", () => ({
   useChatAttachments: () => ({
     attached: [],
-    handleUpload: vi.fn(),
+    handleUpload: mocks.handleUpload,
     removeAttachment: vi.fn(),
     clearConsumedAttachments: vi.fn(),
     uploadPending: vi.fn(),
@@ -107,16 +118,22 @@ vi.mock("@/features/chat/components/ChatToolbar", () => ({
     capturedToolbar = props;
     return React.createElement("div", { "data-toolbar": "true" });
   },
-  ComposerPlusMenu: () => null,
+  ComposerPlusMenu: () => React.createElement("button", { "data-plus-menu": "true" }),
   ModelControlMenu: () => null,
+  RenderStyleMenu: () => React.createElement("button", { "data-render-style": "true" }),
 }));
 vi.mock("@/features/chat/components/ChatInputBox", () => ({
   ChatInputBox: (props: CapturedInputBoxProps) => {
     capturedInputBox = props;
-    return React.createElement("div", null, props.topContent);
+    return React.createElement("div", null, props.topContent, props.leadingControl);
   },
 }));
-vi.mock("@/features/chat/components/ChatHeader", () => ({ default: () => null }));
+vi.mock("@/features/chat/components/ChatHeader", () => ({
+  default: (props: CapturedHeaderProps) => {
+    capturedHeader = props;
+    return React.createElement("header", null, props.title, props.renderStyleMenu);
+  },
+}));
 vi.mock("@/features/chat/store/chatStreamStore", () => ({
   useChatStreamStore: (selector: (state: { optimisticConversation: null }) => unknown) => selector({
     optimisticConversation: null,
@@ -156,11 +173,12 @@ function collectElements(node: React.ReactNode): React.ReactElement<Record<strin
   return [node, ...React.Children.toArray(node.props.children as React.ReactNode).flatMap(collectElements)];
 }
 
-function renderComposer(conversationId?: string): string {
+function renderComposer(conversationId?: string, webSearchAvailable = false): string {
   return renderToStaticMarkup(
     <ChatComposer
       models={models}
       conversationId={conversationId}
+      webSearchAvailable={webSearchAvailable}
       createShareAction={async () => { throw new Error("unused"); }}
       listSharesAction={async () => []}
       revokeShareAction={async () => undefined}
@@ -173,6 +191,7 @@ beforeEach(() => {
   capturedToolbar = null;
   capturedInputBox = null;
   capturedMessageList = null;
+  capturedHeader = null;
   capturedRuntimeOptions = null;
   coordinatorState = {
     ...initialState,
@@ -185,6 +204,25 @@ beforeEach(() => {
 });
 
 describe("ChatComposer coordinator integration", () => {
+  it("renders the style menu after the title and keeps the plus menu", () => {
+    const html = renderComposer();
+
+    expect(capturedHeader?.title).toBe("新对话");
+    expect(capturedHeader?.conversationId).toBeUndefined();
+    expect(html.indexOf("新对话")).toBeLessThan(html.indexOf("data-render-style"));
+    expect(html).toContain("data-plus-menu");
+  });
+
+  it("forwards file selection and web search availability to the toolbar", () => {
+    renderComposer(undefined, true);
+    const files = [{ name: "notes.txt" } as File];
+
+    capturedToolbar?.onUploadFiles(files);
+
+    expect(mocks.handleUpload).toHaveBeenCalledWith(files);
+    expect(capturedToolbar?.webSearchAvailable).toBe(true);
+  });
+
   it("routes every selection control through domain transitions", () => {
     renderComposer("conversation-a");
 

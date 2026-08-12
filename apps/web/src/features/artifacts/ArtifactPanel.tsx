@@ -9,6 +9,7 @@ import { X, Copy, Download, Check } from "lucide-react";
 import { clsx } from "clsx";
 import { HtmlPreviewFrame } from "./HtmlPreviewFrame";
 import { MermaidDiagram } from "@/shared/components/mermaid/MermaidDiagram";
+import { copyToClipboard } from "@/shared/lib/clipboard";
 
 export interface Artifact {
   id: string;
@@ -60,8 +61,8 @@ export function ArtifactPanel({
   }, []);
 
 
-  const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText(artifact.content);
+  const handleCopy = useCallback(async () => {
+    if (!(await copyToClipboard(artifact.content))) return;
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   }, [artifact.content]);
@@ -121,9 +122,7 @@ export function ArtifactPanel({
       <div className="flex-1 overflow-auto p-4">
         {artifact.kind === "mermaid" ? (
           <MermaidDiagram id={artifact.id} content={artifact.content} />
-        ) : artifact.kind === "svg" ? (
-          <div className="flex items-center justify-center min-h-full" dangerouslySetInnerHTML={{ __html: artifact.content }} />
-        ) : artifact.kind === "html" ? (
+        ) : artifact.kind === "svg" || artifact.kind === "html" ? (
           <HtmlPreviewFrame html={artifact.content} />
         ) : (
           <SyntaxHighlighter
@@ -144,4 +143,3 @@ export function ArtifactPanel({
     </div>
   );
 }
-

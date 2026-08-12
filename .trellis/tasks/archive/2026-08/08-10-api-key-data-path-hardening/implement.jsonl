@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"PostgreSQL-only schema、Drizzle migration、自动启动迁移与锁风险约束"}
+{"file":".trellis/spec/backend/auth-guidelines.md","reason":"API Key active owner、候选查询与常量时间 hash 契约"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Server/Client 边界显式 DTO 与可序列化 props 约束"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"数据库、Core、Server Component 与 Client Component 的跨层数据流检查"}
+{"file":".trellis/tasks/08-10-api-key-data-path-hardening/research/data-path-evidence.md","reason":"当前调用链、父子关系用途与迁移发布风险的任务证据"}

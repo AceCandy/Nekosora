@@ -22,11 +22,13 @@ export const errorsEn: Record<ErrorCodeValue, string> = {
   "routing.model_not_available": "Model is not available",
   "routing.model_not_bound": "Model is not bound to the current key",
   "routing.no_route": "No available route for this model",
+  "routing.no_healthy_route": "No healthy route is currently available for this model",
   "routing.capability_not_supported": "Model does not support the requested capability",
 
   // request.*
   "request.invalid_json": "Request body is not valid JSON",
   "request.missing_field": "Missing required field",
+  "request.unsupported_parameter": "Unsupported parameter",
   "request.payload_too_large": "Request payload is too large",
 
   // gateway.*
@@ -34,6 +36,9 @@ export const errorsEn: Record<ErrorCodeValue, string> = {
   "gateway.generation_failed": "Generation failed",
   "gateway.all_routes_failed": "All routes failed",
   "gateway.timeout": "Upstream response timed out",
+  "gateway.rate_limit_exceeded": "Request rate limit exceeded",
+  "gateway.concurrency_limit_exceeded": "Concurrent request limit exceeded",
+  "gateway.quota_exceeded": "Monthly usage quota exceeded",
 
   // media.*
   "media.image_gen_failed": "Image generation failed",

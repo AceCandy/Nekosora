@@ -50,6 +50,41 @@
       "when": 1785672276514,
       "tag": "0006_daily_wonder_man",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786270137459,
+      "tag": "0007_modern_harrier",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1786295959377,
+      "tag": "0008_amused_vengeance",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1786362120651,
+      "tag": "0009_massive_hellcat",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1786382125024,
+      "tag": "0010_pale_sharon_ventura",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1786463416426,
+      "tag": "0011_wet_changeling",
+      "breakpoints": true
     }
   ]
 }

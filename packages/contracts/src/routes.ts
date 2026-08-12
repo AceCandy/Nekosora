@@ -1,6 +1,20 @@
 export const GATEWAY_ROUTES = [
   { method: "GET", path: "/v1/models", handler: "v1Models" },
   { method: "POST", path: "/v1/chat/completions", handler: "v1ChatCompletions" },
+  { method: "POST", path: "/v1/responses", handler: "v1Responses" },
+  { method: "POST", path: "/v1/messages", handler: "v1Messages" },
+  {
+    method: "POST",
+    path: "/v1beta/models/*",
+    suffix: ":generateContent",
+    handler: "v1GeminiGenerateContent",
+  },
+  {
+    method: "POST",
+    path: "/v1beta/models/*",
+    suffix: ":streamGenerateContent",
+    handler: "v1GeminiStreamGenerateContent",
+  },
   { method: "POST", path: "/v1/images/generations", handler: "v1ImageGenerations" },
   { method: "POST", path: "/v1/audio/speech", handler: "v1AudioSpeech" },
   { method: "POST", path: "/v1/audio/transcriptions", handler: "v1AudioTranscriptions" },

@@ -7,8 +7,17 @@ import type { WeightedKey } from "@/lib/providers/keys";
 import { probeProviderKey, fetchUpstreamModels, type ProbeResult, type UpstreamModel } from "@/lib/providers/probe";
 import { getProbeHeaders } from "@/lib/system-settings/ua";
 import { normalizeBaseUrl } from "@/lib/providers/defaults";
+import {
+  parseProviderTimeoutFormData,
+  pickProviderTimeoutConfig,
+  type ProviderTimeoutConfig,
+} from "@/lib/providers/timeouts";
+import {
+  resolveCatalogRouteApiFormat,
+  resolveModelRouteApiFormat,
+} from "@/lib/providers/route-api-format";
 import { recordSuccess, recordFailure } from "@/lib/circuit-breaker";
-import type { ProviderProtocol } from "@/db/types";
+import type { ProviderProtocol, RouteApiFormat } from "@/db/types";
 import type { ProviderKeyResult } from "@/db/schema/pg";
 import { requireSession } from "@/lib/session";
 import { findCatalogMatch, pickDisplayName } from "@/lib/model-catalog";
@@ -138,8 +147,9 @@ async function fetchAndStoreUpstreamModels(
   protocol: ProviderProtocol,
   baseUrl: string,
   apiKey: string,
+  timeouts: ProviderTimeoutConfig,
 ): Promise<{ models: string[]; checkedAt: number }> {
-  const fetched = await fetchUpstreamModels({ protocol, baseUrl, apiKey });
+  const fetched = await fetchUpstreamModels({ protocol, baseUrl, apiKey, ...timeouts });
   const models = fetched.map((m) => m.id);
   const checkedAt = Date.now();
   await db
@@ -170,6 +180,7 @@ export async function createMyProvider(formData: FormData) {
   }
   const protocol = String(formData.get("protocol") ?? "openai") as ProviderProtocol;
   const baseUrl = normalizeBaseUrl(protocol, String(formData.get("baseUrl") ?? ""));
+  const timeouts = parseProviderTimeoutFormData(formData);
   const [created] = await db
     .insert(S().providers)
     .values({
@@ -179,6 +190,7 @@ export async function createMyProvider(formData: FormData) {
       baseUrl,
       apiKeysEnc: encryptKeyBundle(keys),
       testModel: String(formData.get("testModel") ?? ""),
+      ...timeouts,
       keyStrategy: "weighted",
       enabled: true,
     })
@@ -186,7 +198,14 @@ export async function createMyProvider(formData: FormData) {
   revalidatePath("/panel", "layout");
 
   // 创建后自动拉取一次上游模型列表并落库;失败静默不阻塞创建(无 key 用空 key,与转发一致)。
-  await fetchAndStoreUpstreamModels(db, created.id, protocol, baseUrl, keys[0]?.key ?? "").catch(() => {});
+  await fetchAndStoreUpstreamModels(
+    db,
+    created.id,
+    protocol,
+    baseUrl,
+    keys[0]?.key ?? "",
+    timeouts,
+  ).catch(() => {});
 }
 
 /** 删除 provider。 */
@@ -264,11 +283,18 @@ export async function checkMyProviderHealth(id: string): Promise<{
   const keyResults: ProviderKeyResult[] = [];
   // 检测请求 UA(与聊天 UA 一致);循环外读一次,两条探测路径共用。
   const probeHeaders = await getProbeHeaders();
+  const timeoutOptions = pickProviderTimeoutConfig(provider);
   // 存活检测回退深度检测时,聚合 provider 级深度结果(任一 key 深度成功即 true)。null=未回退。
   let modelProbeOk: boolean | null = null;
   let modelProbeError: string | null = null;
   for (let i = 0; i < probeList.length; i++) {
-    let result = await probeProviderKey({ protocol, baseUrl, apiKey: probeList[i].key, headers: probeHeaders });
+    let result = await probeProviderKey({
+      protocol,
+      baseUrl,
+      apiKey: probeList[i].key,
+      headers: probeHeaders,
+      ...timeoutOptions,
+    });
     // 存活检测失败(非网络)+配了 testModel -> 回退深度检测(带 model 极小生成)。
     // opencode 等先验 model 的上游空 body 验不了 key,靠深度检测确认;成功则该 key 标通过。
     if (!result.ok && result.errorKind !== "network" && testModel) {
@@ -278,6 +304,7 @@ export async function checkMyProviderHealth(id: string): Promise<{
         apiKey: probeList[i].key,
         upstreamModelName: testModel,
         headers: probeHeaders,
+        ...timeoutOptions,
       });
       result = deep.ok
         ? { ok: true, latencyMs: deep.latencyMs, mode: deep.mode }
@@ -346,6 +373,7 @@ export async function testMyProviderModel(id: string): Promise<ProbeResult> {
     apiKey,
     upstreamModelName: testModel,
     headers: await getProbeHeaders(),
+    ...pickProviderTimeoutConfig(provider),
   });
   await db
     .update(S().providers)
@@ -375,6 +403,7 @@ export async function listMyUpstreamModels(id: string): Promise<UpstreamModel[]>
     protocol: provider.protocol,
     baseUrl: provider.baseUrl,
     apiKey: firstKey,
+    ...pickProviderTimeoutConfig(provider),
   });
 }
 
@@ -399,6 +428,7 @@ export async function refreshMyUpstreamModels(
     provider.protocol as ProviderProtocol,
     provider.baseUrl as string,
     keys[0]?.key ?? "",
+    pickProviderTimeoutConfig(provider),
   );
   revalidatePath("/panel", "layout");
   return result;
@@ -431,6 +461,9 @@ export async function updateMyProvider(id: string, formData: FormData) {
     updatedAt: new Date(),
   };
   const noKey = formData.get("noKey") === "1";
+  if (formData.get("providerTimeoutsPresent") === "1") {
+    Object.assign(patch, parseProviderTimeoutFormData(formData));
+  }
   // 无 key 模式:显式清空 bundle;否则 keys 非空才更新,空表示不改 key。
   if (noKey) {
     patch.apiKeysEnc = encryptKeyBundle([]);
@@ -584,9 +617,15 @@ export async function createMyModel(formData: FormData) {
     });
     const [created] = await tx.select({ id: S().models.id }).from(S().models).where(and(eq(S().models.ownerUserId, user.id), eq(S().models.name, name))).limit(1);
     if (providerId && upstreamModelName) {
-      const [provider] = await tx.select({ id: S().providers.id }).from(S().providers).where(and(eq(S().providers.id, providerId), eq(S().providers.ownerUserId, user.id))).limit(1);
+      const [provider] = await tx.select({ id: S().providers.id, protocol: S().providers.protocol }).from(S().providers).where(and(eq(S().providers.id, providerId), eq(S().providers.ownerUserId, user.id))).limit(1);
       if (!provider) throw new Error("服务商不存在");
-      await tx.insert(S().routes).values({ ownerUserId: user.id, modelId: created.id, providerId, upstreamModelName, enabled: true });
+      const apiFormat = await resolveCatalogRouteApiFormat(
+        tx,
+        catalog.id,
+        provider.protocol as ProviderProtocol,
+        String(formData.get("apiFormat") ?? ""),
+      );
+      await tx.insert(S().routes).values({ ownerUserId: user.id, modelId: created.id, providerId, upstreamModelName, apiFormat, enabled: true });
     }
   });
   revalidatePath("/panel", "layout");
@@ -729,17 +768,32 @@ export async function toggleMyModel(id: string, enabled: boolean) {
   revalidatePath("/panel", "layout");
 }
 
+export interface BindableModelListItem {
+  id: string;
+  name: string;
+  displayName: string | null;
+}
+
+export interface BindableModels {
+  globals: BindableModelListItem[];
+  byos: BindableModelListItem[];
+}
+
 /** 可供子 key 绑定的模型列表:网关 owner-only,只包含自己的 enabled 模型。 */
-export async function getBindableModels() {
+export async function getBindableModels(): Promise<BindableModels> {
   const user = await requireSession();
   const db = await getDb();
   const byos = await db
-    .select()
+    .select({
+      id: S().models.id,
+      name: S().models.name,
+      displayName: S().models.displayName,
+    })
     .from(S().models)
     .where(and(eq(S().models.ownerUserId, user.id), eq(S().models.enabled, true)));
   return {
-    globals: [] as Record<string, unknown>[],
-    byos: byos as Record<string, unknown>[],
+    globals: [],
+    byos,
   };
 }
 
@@ -776,11 +830,18 @@ export async function createMyRoute(modelId: string, formData: FormData) {
     .from(S().providers)
     .where(and(eq(S().providers.id, providerId), eq(S().providers.ownerUserId, user.id)));
   if (!provider) throw new Error("服务商不存在");
+  const apiFormat = await resolveModelRouteApiFormat(
+    db,
+    modelId,
+    provider.protocol as ProviderProtocol,
+    String(formData.get("apiFormat") ?? ""),
+  );
   await db.insert(S().routes).values({
     ownerUserId: user.id,
     modelId,
     providerId,
     upstreamModelName: String(formData.get("upstreamModelName") ?? ""),
+    apiFormat,
     priority: Number(formData.get("priority") ?? 0),
     weight: Number(formData.get("weight") ?? 1),
     supportsTools:
@@ -805,7 +866,7 @@ export async function attachMyProviderModelRoute(
     .limit(1);
   if (!model) throw new Error("模型不存在");
   const [provider] = await db
-    .select({ id: S().providers.id })
+    .select({ id: S().providers.id, protocol: S().providers.protocol })
     .from(S().providers)
     .where(and(eq(S().providers.id, providerId), eq(S().providers.ownerUserId, user.id)))
     .limit(1);
@@ -821,11 +882,17 @@ export async function attachMyProviderModelRoute(
     .limit(1);
   if (existing) return { status: "exists" };
 
+  const apiFormat = await resolveModelRouteApiFormat(
+    db,
+    modelId,
+    provider.protocol as ProviderProtocol,
+  );
   await db.insert(S().routes).values({
     ownerUserId: user.id,
     modelId,
     providerId,
     upstreamModelName,
+    apiFormat,
     enabled: true,
   });
   revalidatePath("/panel", "layout");
@@ -843,11 +910,26 @@ export async function updateMyRoute(id: string, formData: FormData) {
     .from(S().providers)
     .where(and(eq(S().providers.id, providerId), eq(S().providers.ownerUserId, user.id)));
   if (!provider) throw new Error("服务商不存在");
+  const [route] = await db
+    .select({ modelId: S().routes.modelId })
+    .from(S().routes)
+    .where(and(eq(S().routes.id, id), eq(S().routes.ownerUserId, user.id)))
+    .limit(1);
+  if (!route) throw new Error("路由不存在");
+  const apiFormat = formData.has("apiFormat")
+    ? await resolveModelRouteApiFormat(
+        db,
+        route.modelId as string,
+        provider.protocol as ProviderProtocol,
+        String(formData.get("apiFormat") ?? ""),
+      )
+    : undefined;
   await db
     .update(S().routes)
     .set({
       providerId,
       upstreamModelName: String(formData.get("upstreamModelName") ?? ""),
+      ...(apiFormat ? { apiFormat } : {}),
       priority: Number(formData.get("priority") ?? 0),
       weight: Number(formData.get("weight") ?? 1),
       ...(formData.has("supportsToolsPresent") || formData.has("supportsTools")
@@ -905,10 +987,12 @@ export async function testMyRoute(routeId: string): Promise<ProbeResult> {
   const providerId = provider.id as string;
   const result = await probeProviderKey({
     protocol: provider.protocol as ProviderProtocol,
+    apiFormat: route.apiFormat as RouteApiFormat,
     baseUrl: provider.baseUrl,
     apiKey,
     upstreamModelName: route.upstreamModelName as string,
     headers: await getProbeHeaders(),
+    ...pickProviderTimeoutConfig(provider),
   });
   if (result.ok) recordSuccess(providerId);
   else recordFailure(providerId);

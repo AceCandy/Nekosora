@@ -1,0 +1,37 @@
+{
+  "id": "architecture-audit-hardening-roadmap",
+  "name": "architecture-audit-hardening-roadmap",
+  "title": "架构审计加固路线图",
+  "description": "将已确认的架构审计问题按风险与依赖拆分为可独立验收、逐个激活的修复任务。",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P1",
+  "creator": "AceCandy",
+  "assignee": "AceCandy",
+  "createdAt": "2026-08-10",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "08-10-generated-content-rendering-safety",
+    "08-10-provider-timeout-enforcement",
+    "08-10-gateway-request-governance",
+    "08-10-circuit-breaker-fallback-hardening",
+    "08-10-api-key-data-path-hardening",
+    "08-10-ci-artifact-quality-gates",
+    "08-10-observability-growth-controls",
+    "08-10-chat-navigation-client-load"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "implementation_policy": "activate_one_child_at_a_time"
+  }
+}

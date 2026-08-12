@@ -7,6 +7,9 @@ import { Button } from "@/shared/ui/Button";
 import Input from "@/shared/ui/Input";
 import Select from "@/shared/ui/Select";
 import Badge from "@/shared/ui/Badge";
+import { copyToClipboard } from "@/shared/lib/clipboard";
+import type { ApiKeyListItem } from "@/lib/keys";
+import type { BindableModels } from "../actions";
 
 export interface KeyModelBindingRecord {
   id: string;
@@ -16,24 +19,12 @@ export interface KeyModelBindingRecord {
   createdAt: Date | string | null;
 }
 
-export interface ApiKeyRecord {
-  id: string;
-  name: string;
-  keyPrefix: string;
-  kind: "master" | "sub";
-  enabled: boolean;
+export interface ApiKeyRecord extends ApiKeyListItem {
   bindings: KeyModelBindingRecord[];
 }
 
-export interface ModelRecord {
-  id: string;
-  name: string;
-  displayName?: string;
-}
-
-export interface BindableModels {
-  globals: ModelRecord[];
-  byos: ModelRecord[];
+function displayKeyPreview(value: string): string {
+  return value.endsWith("…") ? `${value.slice(0, -1)}****` : value;
 }
 
 interface KeysManagerProps {
@@ -56,37 +47,31 @@ export default function KeysManager({
   unbindBindingAction,
 }: KeysManagerProps) {
   const t = useTranslations("panel.keys");
-  const master = keys.find((k) => k.kind === "master");
-  const subKeys = keys.filter((k) => k.kind === "sub");
+  const master = keys.find((k) => k.kind === "master" && k.enabled);
+  const subKeys = keys.filter((k) => k.kind === "sub" && k.enabled);
 
   const [selectedSubKeyId, setSelectedSubKeyId] = useState<string | null>(
     subKeys[0]?.id ?? null
   );
   const [newRawKey, setNewRawKey] = useState<{ name: string; key: string } | null>(null);
   const [copiedRaw, setCopiedRaw] = useState(false);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [subKeyNameInput, setSubKeyNameInput] = useState("");
   const [selectedModelVal, setSelectedModelVal] = useState("");
 
   const selectedSubKey = subKeys.find((sk) => sk.id === selectedSubKeyId) ?? null;
 
-  const handleCopyRaw = () => {
+  const handleCopyRaw = async () => {
     if (!newRawKey) return;
-    navigator.clipboard.writeText(newRawKey.key);
+    if (!(await copyToClipboard(newRawKey.key))) return;
     setCopiedRaw(true);
     setTimeout(() => setCopiedRaw(false), 2000);
   };
 
-  const handleCopyPrefix = (id: string, text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
-  };
-
   const handleCreateMaster = () => {
     startTransition(async () => {
-      await ensureMasterAction();
+      const { key } = await ensureMasterAction();
+      if (key) setNewRawKey({ name: t("masterKey"), key });
     });
   };
 
@@ -109,6 +94,7 @@ export default function KeysManager({
   const handleDisableKey = (id: string) => {
     startTransition(async () => {
       await disableKeyAction(id);
+      setNewRawKey(null);
       if (selectedSubKeyId === id) {
         setSelectedSubKeyId(null);
       }
@@ -191,14 +177,7 @@ export default function KeysManager({
               <div className="space-y-1.5 max-w-[75%]">
                 <div className="flex items-center gap-1.5 font-mono text-ui-body font-semibold text-neutral-800 dark:text-neutral-200">
                   <Key className="w-4 h-4 text-sora-blue shrink-0" />
-                  <span>{master.keyPrefix}</span>
-                  <button
-                    onClick={() => handleCopyPrefix(master.id, master.keyPrefix)}
-                    className="text-neutral-400 hover:text-neutral-600 p-0.5 rounded transition-colors"
-                    title={t("copyPrefix")}
-                  >
-                    {copiedId === master.id ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
-                  </button>
+                  <span>{displayKeyPreview(master.keyPrefix)}</span>
                 </div>
                 <div className="text-ui-caption text-neutral-400 leading-normal">
                   {t("masterKeyDesc")}
@@ -210,7 +189,7 @@ export default function KeysManager({
                 onClick={() => handleDisableKey(master.id)}
                 className="text-red-500 hover:text-red-650 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20"
               >
-                {t("disable")}
+                {t("revoke")}
               </Button>
             </div>
           ) : (
@@ -272,17 +251,7 @@ export default function KeysManager({
                     <div className="space-y-1">
                       <div className="font-semibold text-ui-body">{sk.name}</div>
                       <div className="flex items-center gap-1 font-mono text-ui-caption text-neutral-400 dark:text-neutral-500">
-                        <span>{sk.keyPrefix}</span>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleCopyPrefix(sk.id, sk.keyPrefix);
-                          }}
-                          className="text-neutral-400 hover:text-neutral-600 p-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                          title={t("copyPrefix")}
-                        >
-                          {copiedId === sk.id ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
-                        </button>
+                        <span>{displayKeyPreview(sk.keyPrefix)}</span>
                       </div>
                     </div>
                     <Button
@@ -322,7 +291,7 @@ export default function KeysManager({
               <h3 className="text-ui-title font-bold text-neutral-800 dark:text-white flex items-center gap-2">
                 <span>{selectedSubKey.name}</span>
                 <span className="font-mono text-ui-caption text-neutral-400 dark:text-neutral-500 bg-neutral-50 dark:bg-[#0f121a] px-2 py-0.5 rounded border border-neutral-200/50 dark:border-neutral-800/50">
-                  {selectedSubKey.keyPrefix}
+                  {displayKeyPreview(selectedSubKey.keyPrefix)}
                 </span>
               </h3>
             </div>

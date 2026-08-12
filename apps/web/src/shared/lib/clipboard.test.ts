@@ -67,6 +67,31 @@ describe("copyToClipboard", () => {
     expect(execCommand).toHaveBeenCalledWith("copy");
   });
 
+  it("falls back when accessing the Clipboard API throws", async () => {
+    const textarea = {
+      value: "",
+      style: {},
+      setAttribute: vi.fn(),
+      focus: vi.fn(),
+      select: vi.fn(),
+      setSelectionRange: vi.fn(),
+    };
+    const execCommand = vi.fn(() => true);
+    const navigatorMock = {};
+    Object.defineProperty(navigatorMock, "clipboard", {
+      get: () => { throw new Error("blocked"); },
+    });
+    vi.stubGlobal("navigator", navigatorMock);
+    vi.stubGlobal("document", {
+      createElement: vi.fn(() => textarea),
+      body: { appendChild: vi.fn(), removeChild: vi.fn() },
+      execCommand,
+    });
+
+    await expect(copyToClipboard("text")).resolves.toBe(true);
+    expect(execCommand).toHaveBeenCalledWith("copy");
+  });
+
   it("appends the fallback textarea inside an open dialog", async () => {
     const textarea = {
       value: "",

@@ -1,0 +1,7 @@
+{"file":".trellis/spec/backend/index.md","reason":"Backend quality review entry point."}
+{"file":".trellis/spec/backend/gateway-routing.md","reason":"Verify route/key fallback, breaker ownership, commit, Abort, and protocol behavior."}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Verify stable errors, status ownership, localization, envelopes, and redaction."}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"Verify execution facts, no duplicate attempts, best-effort telemetry, and label cardinality."}
+{"file":".trellis/spec/backend/provider-timeouts.md","reason":"Verify timeout is a Provider failure while caller cancellation remains neutral."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Review every boundary from route resolution to client response and metrics."}
+{"file":".trellis/tasks/08-10-circuit-breaker-fallback-hardening/research/circuit-breaker-execution-boundary.md","reason":"Check implementation against the verified root cause and terminal matrix."}

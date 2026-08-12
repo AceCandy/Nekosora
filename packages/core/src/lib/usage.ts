@@ -44,7 +44,7 @@ export interface LogUsageParams {
   errorType?: string;
   /** 命中上游 key 的脱敏快照(前3后3,中间 *;运行时从明文算,绝不存明文)。 */
   upstreamKeyMasked?: string | null;
-  /** 副任务类型(null=主回复/网关请求;title/memory/compact=后台副任务)。 */
+  /** 副任务类型(null=主回复/网关请求;title/memory/compact/web_search=后台副任务)。 */
   taskKind?: string;
   /** 旧调用方兼容字段；上游尝试审计由 gateway_attempts 统一负责。 */
   attempt?: number;

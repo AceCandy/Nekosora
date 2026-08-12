@@ -16,11 +16,13 @@
     "start": "pnpm --filter @nekusora/web start",
     "start:gateway": "pnpm --filter @nekusora/gateway start",
     "start:worker": "pnpm --filter @nekusora/worker start",
+    "quality:workspace": "node scripts/workspace-quality.mjs",
+    "lint:workflows": "sh scripts/actionlint.sh",
     "lint": "pnpm -r --if-present lint",
     "typecheck": "pnpm -r --if-present typecheck",
-    "test": "pnpm -r --if-present test",
+    "test": "node --test scripts/*.test.mjs && pnpm -r --if-present test",
     "test:watch": "pnpm --filter @nekusora/web test:watch",
-    "check": "pnpm lint && pnpm typecheck",
+    "check": "pnpm quality:workspace && pnpm lint && pnpm typecheck",
     "db:generate:pg": "pnpm --filter @nekusora/web db:generate:pg",
     "db:migrate:pg": "pnpm --filter @nekusora/web db:migrate:pg",
     "db:studio:pg": "pnpm --filter @nekusora/web db:studio:pg",
@@ -33,6 +35,11 @@
     "backfill:web-search-keys": "pnpm --filter @nekusora/web backfill:web-search-keys"
   },
   "packageManager": "pnpm@10.22.0",
+  "devDependencies": {
+    "eslint": "^9.17.0",
+    "typescript-eslint": "8.66.0",
+    "yaml": "^2.4.2"
+  },
   "pnpm": {
     "overrides": {
       "@esbuild-kit/core-utils>esbuild": "0.25.12",

@@ -8,17 +8,22 @@ import { transcribe as transcribe } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import type { CallContext } from "@/lib/providers/types";
 import { resolveRoutesByCapability, RoutingError } from "@/lib/routing";
-import { recordFailure, recordSuccess } from "@/lib/circuit-breaker";
+import { gatewayBreaker } from "@/lib/circuit-breaker";
 import { executeAtomicGateway, gatewayTelemetry, type GatewayAttemptAdapter } from "@/lib/gateway-execution";
 import { selectMediaAdapter } from "@/lib/gateway-execution/media-registry";
+import { createProviderFetch } from "@/lib/providers/timeouts";
 
 export interface TranscribeOptions {
   /** 音频字节(必填)。 */
   audio: Buffer;
   /** MIME(如 audio/mpeg、audio/wav、audio/webm)。 */
   mime: string;
+  /** 由音频内容测得并向上取整的计量秒数。 */
+  durationSeconds: number;
   language?: string; // ISO-639-1,如 "zh"
   prompt?: string; // 引导词
+  abortSignal?: AbortSignal;
+  onProviderStart?: () => Promise<void>;
 }
 
 export interface TranscribeResult {
@@ -48,6 +53,7 @@ export async function transcribeViaRoute(
       apiKey,
       name: route.provider.id,
       headers: route.provider.headers,
+      fetch: createProviderFetch({ connectTimeoutMs: route.provider.connectTimeoutMs }),
     });
     const model = provider.transcription(route.upstreamModelName);
 
@@ -63,7 +69,7 @@ export async function transcribeViaRoute(
       },
       abortSignal,
     });
-    return { value: result.text };
+    return { value: result.text, usage: { sttSeconds: opts.durationSeconds } };
   };
   const outcome = await executeAtomicGateway({
     ctx,
@@ -71,10 +77,12 @@ export async function transcribeViaRoute(
     operation: "audio.transcription",
     model: modelName,
     requestPath: "/v1/audio/transcriptions",
+    abortSignal: opts.abortSignal,
     resolveRoutes: () => resolveRoutesByCapability(ctx, modelName, "audioTranscription"),
     selectAdapter: (route) => selectMediaAdapter("audio.transcription", route.protocol, adapter),
+    onProviderStart: opts.onProviderStart,
     telemetry: gatewayTelemetry,
-    breaker: { recordSuccess, recordFailure },
+    breaker: gatewayBreaker,
   });
   if (outcome.status !== "success" || outcome.result === undefined || !outcome.route) {
     if (outcome.error?.phase === "routing" || outcome.error?.phase === "request") {

@@ -46,12 +46,22 @@ export class DrizzleRouteRepository implements RouteRepository {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const s = getSchema() as any;
     const [row] = await db
-      .select({ model: s.models, capabilities: s.modelCatalog.capabilities })
+      .select({
+        model: s.models,
+        capabilities: s.modelCatalog.capabilities,
+        contextWindow: s.modelCatalog.contextWindow,
+        maxOutputTokens: s.modelCatalog.maxOutputTokens,
+      })
       .from(s.models)
       .innerJoin(s.modelCatalog, eq(s.models.catalogId, s.modelCatalog.id))
       .where(and(eq(s.models.id, modelId), eq(s.models.enabled, true)))
       .limit(1);
-    return row ? { ...row.model, capabilities: row.capabilities } : null;
+    return row ? {
+      ...row.model,
+      capabilities: row.capabilities,
+      contextWindow: row.contextWindow,
+      maxOutputTokens: row.maxOutputTokens,
+    } : null;
   }
 
   async findEnabledModelByNameForOwner(
@@ -62,7 +72,12 @@ export class DrizzleRouteRepository implements RouteRepository {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const s = getSchema() as any;
     const [row] = await db
-      .select({ model: s.models, capabilities: s.modelCatalog.capabilities })
+      .select({
+        model: s.models,
+        capabilities: s.modelCatalog.capabilities,
+        contextWindow: s.modelCatalog.contextWindow,
+        maxOutputTokens: s.modelCatalog.maxOutputTokens,
+      })
       .from(s.models)
       .innerJoin(s.modelCatalog, eq(s.models.catalogId, s.modelCatalog.id))
       .where(
@@ -73,7 +88,12 @@ export class DrizzleRouteRepository implements RouteRepository {
         ),
       )
       .limit(1);
-    return row ? { ...row.model, capabilities: row.capabilities } : null;
+    return row ? {
+      ...row.model,
+      capabilities: row.capabilities,
+      contextWindow: row.contextWindow,
+      maxOutputTokens: row.maxOutputTokens,
+    } : null;
   }
 
   async findEnabledRoutes(
@@ -138,6 +158,23 @@ export async function markRouteToolsUnsupported(routeId: string): Promise<void> 
     .where(and(
       eq(s.routes.id, routeId),
       eq(s.routes.supportsTools, true),
+    ));
+}
+
+/** 仅在 Provider 仍指向本次失败的 Base URL 时持久化流式 usage 能力降级。 */
+export async function markProviderStreamUsageUnsupported(
+  providerId: string,
+  baseUrl: string,
+): Promise<void> {
+  const db = await getDb();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const s = getSchema() as any;
+  await db
+    .update(s.providers)
+    .set({ supportsStreamUsage: false })
+    .where(and(
+      eq(s.providers.id, providerId),
+      eq(s.providers.baseUrl, baseUrl),
     ));
 }
 

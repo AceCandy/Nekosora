@@ -157,6 +157,36 @@ describe("gateway telemetry repository", () => {
     }));
   });
 
+  it.each([
+    ["image.generate", "imageCount", 2],
+    ["audio.speech", "ttsCodePoints", 3],
+    ["audio.transcription", "sttSeconds", 7],
+  ] as const)("映射 %s 的媒体用量", async (operation, field, units) => {
+    const usage = { [field]: units };
+    const mediaColumns = {
+      imageCount: field === "imageCount" ? units : null,
+      ttsCodePoints: field === "ttsCodePoints" ? units : null,
+      sttSeconds: field === "sttSeconds" ? units : null,
+    };
+
+    await gatewayTelemetry.recordAttempt({ ...attempt, operation, usage });
+    await gatewayTelemetry.finalizeExecution({
+      initial: { ...initial, operation },
+      outcome: {
+        executionId: initial.executionId,
+        status: "success",
+        usage,
+        route,
+        committed: true,
+      },
+      latencyMs: 50,
+      completedAt: 1_050,
+    });
+
+    expect(db.insertValues).toHaveBeenCalledWith(expect.objectContaining(mediaColumns));
+    expect(db.updateSet).toHaveBeenCalledWith(expect.objectContaining(mediaColumns));
+  });
+
   it("数据库和 metrics 失败均不改变调用方结果", async () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     mocks.getDb.mockRejectedValue(new Error("db unavailable"));

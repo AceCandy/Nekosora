@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Sparkles, Globe, Library, Wand2, Palette, X, File as FileIcon, Brain, ChevronDown, Plus, Search, Check } from "lucide-react";
+import { Sparkles, Globe, Library, Wand2, Palette, X, File as FileIcon, Brain, ChevronDown, Plus, Search, Check, Paperclip } from "lucide-react";
 import { clsx } from "clsx";
 import { OptionPicker, type OptionItem } from "@/shared/ui/OptionPicker";
 import { Popover } from "@/shared/ui/Popover";
@@ -23,7 +23,7 @@ import { useClickOutside } from "@/shared/lib/useClickOutside";
 const MENU_ROW = "flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-ui-caption font-medium text-neutral-700 transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:text-neutral-200 dark:hover:bg-neutral-900";
 /** 输入栏内联控件:与发送按钮同高,无多余描边框。 */
 const TOOLBAR_CHIP =
-  "pointer-events-auto inline-flex h-8 max-w-28 items-center gap-1 rounded-full px-2 text-ui-caption font-medium text-neutral-600 transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none dark:text-neutral-300 dark:hover:bg-neutral-800 sm:max-w-52";
+  "pointer-events-auto inline-flex h-8 max-w-20 items-center gap-1 rounded-full px-2 text-ui-caption font-medium text-neutral-600 transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none dark:text-neutral-300 dark:hover:bg-neutral-800 sm:max-w-52";
 const TOOLBAR_ICON =
   "pointer-events-auto inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200";
 
@@ -38,23 +38,18 @@ export interface ChatToolbarProps {
 
   // 已上传附件
   attached: UploadFileItem[];
+  onUploadFiles: (files: FileList | File[] | null) => void;
   onRemoveAttachment: (id: string) => void;
   onPreviewFile: (file: PreviewableFile) => void;
 
   // 指令卡（多选）
   cards: CardOption[];
   selectedCardIds: string[];
-  cardPickerOpen: boolean;
-  onCardPickerToggle: () => void;
-  onCardPickerClose: () => void;
   onCardToggle: (id: string) => void;
 
   // 知识库（多选）
   knowledgeBases: KnowledgeBaseOption[];
   selectedKbIds: string[];
-  kbPickerOpen: boolean;
-  onKbPickerToggle: () => void;
-  onKbPickerClose: () => void;
   onKbToggle: (id: string) => void;
 
   // 输出模式（单选可清除）
@@ -76,6 +71,7 @@ export interface ChatToolbarProps {
   onRenderStyleClear: () => void;
 
   // 联网搜索（纯 toggle，非 listbox）
+  webSearchAvailable: boolean;
   webSearch: boolean;
   onWebSearchToggle: () => void;
 
@@ -202,30 +198,76 @@ export function ChatToolbar(props: ChatToolbarProps) {
   );
 }
 
-/** 输入框左侧加号菜单：输出模式、输出样式，以及原有指令卡/知识库入口。 */
+/** 会话标题后的输出样式入口。 */
+export function RenderStyleMenu(props: ChatToolbarProps) {
+  const t = useTranslations("chat");
+  if (props.renderStyles.length === 0) return null;
+
+  return (
+    <OptionPicker
+      open={props.renderStylePickerOpen}
+      onClose={props.onRenderStylePickerClose}
+      options={props.renderStyles.map((item): OptionItem => ({ id: item.id, label: item.name, description: item.description }))}
+      selectedIds={props.renderStyleId ? [props.renderStyleId] : []}
+      mode="single"
+      onToggle={props.onRenderStyleToggle}
+      onClear={props.onRenderStyleClear}
+      side="bottom"
+      align="left"
+      trigger={(
+        <button
+          type="button"
+          onClick={props.onRenderStylePickerToggle}
+          className="touch-target inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-space-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none dark:text-neutral-300 dark:hover:bg-neutral-900 dark:hover:text-nebula-silver"
+          aria-label={t("renderStyle")}
+          title={t("renderStyle")}
+          aria-haspopup="listbox"
+          aria-expanded={props.renderStylePickerOpen}
+        >
+          <Palette className="h-5 w-5" aria-hidden="true" />
+        </button>
+      )}
+    />
+  );
+}
+
+/** 输入框左侧加号菜单：暂时只保留文件上传入口。 */
 export function ComposerPlusMenu(props: ChatToolbarProps) {
   const t = useTranslations("chat");
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
-  const close = () => {
-    setOpen(false);
-    props.onOutputModePickerClose();
-    props.onRenderStylePickerClose();
-    props.onCardPickerClose();
-    props.onKbPickerClose();
-  };
+  const inputRef = useRef<HTMLInputElement>(null);
+  const close = () => setOpen(false);
   useClickOutside(rootRef, close, open);
   return (
     <div ref={rootRef} className="pointer-events-auto relative shrink-0">
-      <button type="button" onClick={() => { if (open) close(); else setOpen(true); }} className="inline-flex h-8 w-8 items-center justify-center rounded-full text-neutral-600 transition-colors duration-200 hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none dark:text-neutral-300 dark:hover:bg-neutral-900" aria-label="更多设置" aria-expanded={open}>
+      <input
+        ref={inputRef}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={(event) => {
+          props.onUploadFiles(event.currentTarget.files);
+          event.currentTarget.value = "";
+        }}
+      />
+      <button type="button" onClick={() => { if (open) close(); else setOpen(true); }} className="inline-flex h-8 w-8 items-center justify-center rounded-full text-neutral-600 transition-colors duration-200 hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none dark:text-neutral-300 dark:hover:bg-neutral-900" aria-label="更多设置" aria-haspopup="menu" aria-expanded={open}>
         <Plus className="h-4.5 w-4.5" aria-hidden="true" />
       </button>
       {open && (
-        <div className="absolute bottom-full left-0 z-20 mb-2 w-56 space-y-1 rounded-lg border border-morning-mist bg-white p-1.5 shadow-lg dark:border-deep-space dark:bg-space-ink">
-          {props.outputModes.length > 0 && <OptionPicker open={props.outputModePickerOpen} onClose={props.onOutputModePickerClose} options={props.outputModes.map((item): OptionItem => ({ id: item.id, label: item.name, description: item.description }))} selectedIds={props.outputModeId ? [props.outputModeId] : []} mode="single" onToggle={props.onOutputModeToggle} onClear={props.onOutputModeClear} side="top" trigger={<button type="button" onClick={props.onOutputModePickerToggle} className={MENU_ROW}><Wand2 className="h-4 w-4" aria-hidden="true" /><span className="flex-1">{t("outputMode")}</span><span className="max-w-20 truncate text-neutral-400">{props.outputModes.find((item) => item.id === props.outputModeId)?.name}</span></button>} />}
-          {props.renderStyles.length > 0 && <OptionPicker open={props.renderStylePickerOpen} onClose={props.onRenderStylePickerClose} options={props.renderStyles.map((item): OptionItem => ({ id: item.id, label: item.name, description: item.description }))} selectedIds={props.renderStyleId ? [props.renderStyleId] : []} mode="single" onToggle={props.onRenderStyleToggle} onClear={props.onRenderStyleClear} side="top" trigger={<button type="button" onClick={props.onRenderStylePickerToggle} className={MENU_ROW}><Palette className="h-4 w-4" aria-hidden="true" /><span className="flex-1">{t("renderStyle")}</span><span className="max-w-20 truncate text-neutral-400">{props.renderStyles.find((item) => item.id === props.renderStyleId)?.name}</span></button>} />}
-          {props.cards.length > 0 && <OptionPicker open={props.cardPickerOpen} onClose={props.onCardPickerClose} options={props.cards.map((item): OptionItem => ({ id: item.id, label: item.title, description: item.description, badge: `/${item.trigger}` }))} selectedIds={props.selectedCardIds} mode="multi" onToggle={props.onCardToggle} side="top" trigger={<button type="button" onClick={props.onCardPickerToggle} className={MENU_ROW}><Sparkles className="h-4 w-4" aria-hidden="true" /><span className="flex-1">{t("instructionCard")}</span>{props.selectedCardIds.length > 0 && <span className="text-sora-blue">{props.selectedCardIds.length}</span>}</button>} />}
-          {props.knowledgeBases.length > 0 && <OptionPicker open={props.kbPickerOpen} onClose={props.onKbPickerClose} options={props.knowledgeBases.map((item): OptionItem => ({ id: item.id, label: item.name, badge: `${item.fileCount} 文件` }))} selectedIds={props.selectedKbIds} mode="multi" onToggle={props.onKbToggle} side="top" trigger={<button type="button" onClick={props.onKbPickerToggle} className={MENU_ROW}><Library className="h-4 w-4" aria-hidden="true" /><span className="flex-1">{t("knowledgeBase")}</span>{props.selectedKbIds.length > 0 && <span className="text-sora-blue">{props.selectedKbIds.length}</span>}</button>} />}
+        <div role="menu" className="absolute bottom-full left-0 z-20 mb-2 w-48 rounded-lg border border-morning-mist bg-white p-1.5 shadow-lg dark:border-deep-space dark:bg-space-ink">
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              close();
+              inputRef.current?.click();
+            }}
+            className={MENU_ROW}
+          >
+            <Paperclip className="h-4 w-4" aria-hidden="true" />
+            <span>{t("uploadAttachment")}</span>
+          </button>
         </div>
       )}
     </div>
@@ -241,7 +283,33 @@ export function ModelControlMenu(props: ChatToolbarProps) {
   const current = props.models.find((item) => item.modelId === props.model);
   return (
     <div className="flex shrink-0 items-center gap-0.5">
-      <div className="hidden sm:block">
+      {props.outputModes.length > 0 && (
+        <OptionPicker
+          open={props.outputModePickerOpen}
+          onClose={props.onOutputModePickerClose}
+          options={props.outputModes.map((item): OptionItem => ({ id: item.id, label: item.name, description: item.description }))}
+          selectedIds={props.outputModeId ? [props.outputModeId] : []}
+          mode="single"
+          onToggle={props.onOutputModeToggle}
+          onClear={props.onOutputModeClear}
+          side="top"
+          align="right"
+          trigger={(
+            <button
+              type="button"
+              onClick={props.onOutputModePickerToggle}
+              className={clsx(TOOLBAR_ICON, props.outputModeId && "bg-sora-blue/[0.08] text-sora-blue hover:bg-sora-blue/[0.12] hover:text-sora-blue dark:hover:bg-sora-blue/[0.12] dark:hover:text-sora-blue")}
+              aria-label={t("outputMode")}
+              title={t("outputMode")}
+              aria-haspopup="listbox"
+              aria-expanded={props.outputModePickerOpen}
+            >
+              <Wand2 className="h-4 w-4" aria-hidden="true" />
+            </button>
+          )}
+        />
+      )}
+      {props.webSearchAvailable && <div className="hidden sm:block">
         <button
           type="button"
           onClick={props.onWebSearchToggle}
@@ -252,7 +320,7 @@ export function ModelControlMenu(props: ChatToolbarProps) {
         >
           <Globe className="h-4 w-4" aria-hidden="true" />
         </button>
-      </div>
+      </div>}
       <ModelConfigPicker
         {...props}
         current={current}

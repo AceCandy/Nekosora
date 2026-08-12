@@ -461,7 +461,7 @@ describe("route tool capability migration", () => {
       tables: Record<string, { columns: Record<string, { default?: unknown }> }>;
     };
 
-    expect(journal.entries.at(-1)).toMatchObject({
+    expect(journal.entries.find((entry) => entry.tag === "0006_daily_wonder_man")).toMatchObject({
       idx: 6,
       tag: "0006_daily_wonder_man",
       breakpoints: true,

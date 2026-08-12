@@ -42,7 +42,7 @@ export interface ErrorLogRow {
   userName: string | null;
   /** 用户邮箱(LEFT JOIN user.email;admin 用户列展示)。 */
   userEmail: string | null;
-  /** 副任务类型(null=主回复/网关请求;title/memory/compact=后台副任务)。 */
+  /** 副任务类型(null=主回复/网关请求;title/memory/compact/web_search=后台副任务)。 */
   taskKind: string | null;
   /** 尝试序号(1..N);null=非尝试记录(中断)。同 requestId 按 attempt 升序即完整重试链。 */
   attempt: number | null;

@@ -15,19 +15,22 @@ import { generateImage as generateImage } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import type { CallContext } from "@/lib/providers/types";
 import { resolveRoutes, resolveRoutesById, RoutingError } from "@/lib/routing";
-import { recordFailure, recordSuccess } from "@/lib/circuit-breaker";
+import { gatewayBreaker } from "@/lib/circuit-breaker";
 import {
   executeAtomicGateway,
   gatewayTelemetry,
   type GatewayAttemptAdapter,
 } from "@/lib/gateway-execution";
 import { selectMediaAdapter } from "@/lib/gateway-execution/media-registry";
+import { createProviderFetch } from "@/lib/providers/timeouts";
 
 export interface ImageGenOptions {
   prompt: string;
   n?: number; // 生成数量(默认 1)
   size?: "256x256" | "512x512" | "1024x1024" | "1792x1024" | "1024x1792";
   responseFormat?: "b64_json" | "url";
+  abortSignal?: AbortSignal;
+  onProviderStart?: () => Promise<void>;
 }
 
 export interface GeneratedImage {
@@ -40,7 +43,7 @@ export interface GeneratedImage {
 
 export interface ImageGenResult {
   images: GeneratedImage[];
-  /** 图像生成无 token 计费概念,usage 为空(计费按张,后续 Billing 补)。 */
+  /** 图像生成无 token 计费概念，执行用量按实际返回张数记录。 */
   providerRef?: string;
   /** 可读服务商名快照(用量日志展示)。 */
   providerName?: string;
@@ -73,6 +76,7 @@ export async function generateImageViaRoute(
       apiKey,
       name: route.provider.id,
       headers: route.provider.headers,
+      fetch: createProviderFetch({ connectTimeoutMs: route.provider.connectTimeoutMs }),
     });
     const result = await generateImage({
       model: provider.image(route.upstreamModelName),
@@ -81,15 +85,14 @@ export async function generateImageViaRoute(
       providerOptions: opts.size ? { openai: { size: opts.size } } : undefined,
       abortSignal,
     });
-    return {
-      value: result.images.flatMap((image) => {
-        if (image.base64) return [{ base64: image.base64 }];
-        if (image.uint8Array) {
-          return [{ base64: Buffer.from(image.uint8Array).toString("base64") }];
-        }
-        return [];
-      }),
-    };
+    const images = result.images.flatMap((image) => {
+      if (image.base64) return [{ base64: image.base64 }];
+      if (image.uint8Array) {
+        return [{ base64: Buffer.from(image.uint8Array).toString("base64") }];
+      }
+      return [];
+    });
+    return { value: images, usage: { imageCount: images.length } };
   };
   const outcome = await executeAtomicGateway({
     ctx,
@@ -98,6 +101,7 @@ export async function generateImageViaRoute(
     model: modelName,
     modelId,
     requestPath: "/v1/images/generations",
+    abortSignal: opts.abortSignal,
     resolveRoutes: async () => {
       const routes = modelId
         ? await resolveRoutesById(ctx, modelId)
@@ -111,8 +115,9 @@ export async function generateImageViaRoute(
       return routes;
     },
     selectAdapter: (route) => selectMediaAdapter("image.generate", route.protocol, adapter),
+    onProviderStart: opts.onProviderStart,
     telemetry: gatewayTelemetry,
-    breaker: { recordSuccess, recordFailure },
+    breaker: gatewayBreaker,
   });
   if (outcome.status !== "success" || !outcome.result || !outcome.route) {
     throwExecutionError(outcome.error?.code, outcome.error?.message, outcome.error?.phase);

@@ -22,6 +22,13 @@ Apply this contract to panel server actions that read or mutate API keys and `ke
 - `bindModel` accepts only a caller-owned `kind='sub'` key.
 - A bindable model is enabled and owned by the caller. Public visibility affects WebChat, not gateway key authorization. This must match `getBindableModels`.
 - `unbindBinding` resolves the binding's `keyId`, verifies ownership of that key, and only then deletes the binding.
+- Master and sub keys are flat permission roles under the same user, not a database parent/child hierarchy. Sub-key authorization is keyed by the sub key's own ID and `key_model_bindings` rows.
+- Revoking a master key disables only that key; existing sub keys remain independently valid.
+- Regenerating a revoked master key rotates the same row in place with an owner-scoped `kind='master' AND enabled=false` update. Return the new plaintext only after the update succeeds so the single-master record remains stable under concurrent rotation.
+- Creating a sub key requires an enabled master key.
+- New keys store only `first 8 + **** + last 4` in `key_prefix`; verification also accepts the legacy `first 8 + …` format. Partial key previews are display-only and must not expose a copy action.
+- `key_prefix` has a PostgreSQL B-tree index for authentication candidate lookup. Key-management lists use an explicit DTO projection and never query or serialize `key_hash`.
+- `getBindableModels` selects only `id`, `name`, and `displayName`; the Key page reconstructs the same DTO before Client props. Model `systemPrompt`, `description`, owner fields, and timestamps must not enter the RSC payload.
 - Model-list endpoints are authorization surfaces: MCP `list_models` returns all enabled owner models for a master key, but joins `key_model_bindings` for a sub key and returns only rows bound to `ctx.apiKeyId`.
 - Authorization failures occur before insert, update, or delete. UUID foreign keys and UI filtering are not authorization controls.
 
@@ -53,6 +60,10 @@ Apply this contract to panel server actions that read or mutate API keys and `ke
 - Reject deleting a binding whose key belongs to another user without calling delete.
 - Keep positive owner tests for key disable and binding reads.
 - Low-level key tests assert `setKeyEnabled` combines key ID and user ID in the update predicate.
+- Master-key lifecycle tests cover revoked-key rotation, concurrent rotation rejection, and disabled-master rejection for new sub keys.
+- Key-preview tests cover masked persistence, legacy verification, and the absence of partial-value copy controls.
+- Key-list and RSC boundary tests assert that `key_hash` and storage-only fields never reach Client Component props.
+- Bindable-model action and Key-page tests seed storage-only model fields and assert both the action result and Client props contain only `id`, `name`, and `displayName`.
 - MCP route tests cover master-key owner filtering, sub-key binding join conditions, and an empty binding set.
 - Run lint, typecheck, full tests, production build, and diff checks.
 
@@ -99,4 +110,16 @@ await db.update(s.apiKeys).set({ enabled })
 // Correct:the data write remains owner-scoped even after action authorization.
 await db.update(s.apiKeys).set({ enabled })
   .where(and(eq(s.apiKeys.id, keyId), eq(s.apiKeys.userId, userId)));
+```
+
+```typescript
+// Wrong:a bindable dropdown does not need the complete model storage row.
+await db.select().from(s.models);
+
+// Correct:query only the fields that cross the Server-to-Client boundary.
+await db.select({
+  id: s.models.id,
+  name: s.models.name,
+  displayName: s.models.displayName,
+}).from(s.models);
 ```

@@ -8,10 +8,14 @@ import {
   v1AudioSpeech,
   v1AudioTranscriptions,
   v1ChatCompletions,
+  v1GeminiGenerateContent,
+  v1GeminiStreamGenerateContent,
   v1ImageGenerations,
+  v1Messages,
   v1McpGet,
   v1McpPost,
   v1Models,
+  v1Responses,
 } from "@nekusora/core/http";
 import { metricsEnabled, metricsOutput } from "@nekusora/observability";
 import type { GatewayHandlerName } from "@nekusora/contracts/routes";
@@ -34,6 +38,10 @@ async function getMetrics(): Promise<Response> {
 export const gatewayHandlers: Record<GatewayHandlerName, GatewayHandler> = {
   v1Models: (request) => v1Models(request),
   v1ChatCompletions: (request) => v1ChatCompletions(request),
+  v1Responses: (request) => v1Responses(request),
+  v1Messages: (request) => v1Messages(request),
+  v1GeminiGenerateContent: (request, params) => v1GeminiGenerateContent(request, params.model),
+  v1GeminiStreamGenerateContent: (request, params) => v1GeminiStreamGenerateContent(request, params.model),
   v1ImageGenerations: (request) => v1ImageGenerations(request),
   v1AudioSpeech: (request) => v1AudioSpeech(request),
   v1AudioTranscriptions: (request) => v1AudioTranscriptions(request),

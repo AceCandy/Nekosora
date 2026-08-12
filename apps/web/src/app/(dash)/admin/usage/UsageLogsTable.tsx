@@ -14,6 +14,7 @@ import { Popover } from "@/shared/ui/Popover";
 import Badge from "@/shared/ui/Badge";
 import { formatDateTimeLocal, formatDuration } from "@/shared/lib/format";
 import { UsageFilterBar, type UsageFilterValues } from "./UsageFilterBar";
+import { getTaskKindMessageKey } from "./task-kind";
 
 /** 客户端行类型(createdAt 已序列化为 ISO 字符串)。 */
 export interface UsageLogClientRow {
@@ -38,7 +39,7 @@ export interface UsageLogClientRow {
   userName: string | null;
   /** 用户邮箱(LEFT JOIN user.email;仅 admin 列展示)。 */
   userEmail: string | null;
-  /** 副任务类型(null=主回复/网关请求;title/memory/compact=后台副任务)。 */
+  /** 副任务类型(null=主回复/网关请求;title/memory/compact/web_search=后台副任务)。 */
   taskKind: string | null;
   createdAt: string;
 }
@@ -114,6 +115,7 @@ export function UsageLogsTable({
               )}
               {rows.map((r) => {
                 const totalTokens = r.promptTokens + r.completionTokens + r.cacheReadTokens;
+                const taskKindMessageKey = r.taskKind ? getTaskKindMessageKey(r.taskKind) : null;
                 return (
                   <tr key={r.id} className="hover:bg-neutral-50/30 dark:hover:bg-neutral-900/10 transition-colors duration-150">
                     <td className="px-4 py-3 font-mono text-neutral-500 dark:text-neutral-400 whitespace-nowrap">
@@ -132,7 +134,7 @@ export function UsageLogsTable({
                         {t(`sources.${r.source}` as const)}
                         {r.taskKind && (
                           <Badge variant="neutral" className="rounded-full font-sans text-ui-caption font-normal">
-                            {t(`taskKinds.${r.taskKind}` as const)}
+                            {taskKindMessageKey ? t(taskKindMessageKey) : r.taskKind}
                           </Badge>
                         )}
                       </span>

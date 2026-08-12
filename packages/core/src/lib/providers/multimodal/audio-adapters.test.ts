@@ -33,6 +33,7 @@ vi.mock("@/lib/gateway-execution", async (importOriginal) => {
 
 import { generateSpeech, transcribe } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
+import { gatewayTelemetry } from "@/lib/gateway-execution";
 import { transcribeViaRoute } from "@/lib/providers/multimodal/audio-stt";
 import { synthesizeViaRoute } from "@/lib/providers/multimodal/audio-tts";
 import type { CallContext, ResolvedRoute } from "@/lib/providers/types";
@@ -49,6 +50,7 @@ const route: ResolvedRoute = {
     baseUrl: "https://example.test/v1",
     apiKey: "AUDIO_SECRET",
     keys: [{ key: "AUDIO_SECRET", weight: 1 }],
+    connectTimeoutMs: 1_234,
     headers: { "x-custom-auth": "AUDIO_HEADER_SECRET" },
   },
   priority: 0,
@@ -104,6 +106,7 @@ describe("multimodal audio adapter redaction", () => {
       await transcribeViaRoute(ctx, "audio-model", {
         audio: Buffer.from("audio"),
         mime: "audio/wav",
+        durationSeconds: 7,
       });
     } catch (error) {
       caught = error as Error;
@@ -125,11 +128,83 @@ describe("multimodal audio adapter redaction", () => {
     const transcription = await transcribeViaRoute(ctx, "audio-model", {
       audio: Buffer.from("audio"),
       mime: "audio/wav",
+      durationSeconds: 7,
     });
 
     expect([...speech.audioBuffer]).toEqual([1, 2, 3]);
     expect(speech.mime).toBe("audio/mpeg");
     expect(transcription.text).toBe("hello");
+    expect(vi.mocked(createOpenAI).mock.calls).toHaveLength(2);
+    for (const [config] of vi.mocked(createOpenAI).mock.calls) {
+      expect(config).toEqual(expect.objectContaining({ fetch: expect.any(Function) }));
+    }
+    expect(generateSpeech).toHaveBeenCalledWith(expect.objectContaining({
+      abortSignal: expect.any(AbortSignal),
+    }));
+    expect(transcribe).toHaveBeenCalledWith(expect.objectContaining({
+      abortSignal: expect.any(AbortSignal),
+    }));
+  });
+
+  it("成功路径把 TTS code point 与 STT 秒数写入 attempt 和 execution", async () => {
+    vi.mocked(generateSpeech).mockResolvedValue({
+      audio: { uint8Array: new Uint8Array([1]) },
+    } as never);
+    vi.mocked(transcribe).mockResolvedValue({ text: "hello" } as never);
+
+    await synthesizeViaRoute(ctx, "audio-model", { text: "A😀" });
+    await transcribeViaRoute(ctx, "audio-model", {
+      audio: Buffer.from("audio"),
+      mime: "audio/wav",
+      durationSeconds: 7,
+    });
+
+    expect(gatewayTelemetry.recordAttempt).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ usage: { ttsCodePoints: 2 } }),
+    );
+    expect(gatewayTelemetry.recordAttempt).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ usage: { sttSeconds: 7 } }),
+    );
+    expect(gatewayTelemetry.finalizeExecution).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ outcome: expect.objectContaining({ usage: { ttsCodePoints: 2 } }) }),
+    );
+    expect(gatewayTelemetry.finalizeExecution).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ outcome: expect.objectContaining({ usage: { sttSeconds: 7 } }) }),
+    );
+  });
+
+  it("把取消信号与 Provider-start 钩子交给两种音频执行", async () => {
+    vi.mocked(generateSpeech).mockResolvedValue({
+      audio: { uint8Array: new Uint8Array([1]) },
+    } as never);
+    vi.mocked(transcribe).mockResolvedValue({ text: "hello" } as never);
+    const abortController = new AbortController();
+    const onProviderStart = vi.fn(async () => undefined);
+
+    await synthesizeViaRoute(ctx, "audio-model", {
+      text: "hello",
+      abortSignal: abortController.signal,
+      onProviderStart,
+    });
+    await transcribeViaRoute(ctx, "audio-model", {
+      audio: Buffer.from("audio"),
+      mime: "audio/wav",
+      durationSeconds: 7,
+      abortSignal: abortController.signal,
+      onProviderStart,
+    });
+
+    expect(onProviderStart).toHaveBeenCalledTimes(2);
+    expect(generateSpeech).toHaveBeenCalledWith(expect.objectContaining({
+      abortSignal: expect.any(AbortSignal),
+    }));
+    expect(transcribe).toHaveBeenCalledWith(expect.objectContaining({
+      abortSignal: expect.any(AbortSignal),
+    }));
   });
 
   it("TTS 首 key 可转移失败后使用同一 provider 的下一 key", async () => {
@@ -185,6 +260,7 @@ describe("multimodal audio adapter redaction", () => {
     const result = await transcribeViaRoute(ctx, "audio-model", {
       audio: Buffer.from("audio"),
       mime: "audio/wav",
+      durationSeconds: 7,
     });
 
     expect(result.text).toBe("fallback text");
@@ -200,6 +276,7 @@ describe("multimodal audio adapter redaction", () => {
     ["STT", transcribe, () => transcribeViaRoute(ctx, "audio-model", {
       audio: Buffer.from("audio"),
       mime: "audio/wav",
+      durationSeconds: 7,
     })],
   ] as const)("%s 首 route 可转移失败后使用下一 route", async (_name, operation, invoke) => {
     const fallbackRoute = makeRoute({

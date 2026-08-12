@@ -5,6 +5,7 @@ import {
   isFailoverableError,
   isKeyAuthError,
   isRetryableForKey,
+  isStreamOptionsUnsupportedError,
   isToolUnsupportedError,
   separateSystem,
   classifyStreamError,
@@ -156,6 +157,49 @@ describe("isToolUnsupportedError", () => {
     expect(isToolUnsupportedError(makeApiError(400, "tool execution failed"))).toBe(false);
     expect(isToolUnsupportedError(makeApiError(500, "tools are not supported"))).toBe(false);
     expect(isToolUnsupportedError(makeApiError(400, "unsupported request format"))).toBe(false);
+  });
+});
+
+describe("isStreamOptionsUnsupportedError", () => {
+  function makeApiError(statusCode: number, message: string, extra: Record<string, unknown> = {}): Error {
+    return Object.assign(new Error(message), { statusCode }, extra);
+  }
+
+  it("识别明确拒绝 stream_options 的 400", () => {
+    expect(isStreamOptionsUnsupportedError(makeApiError(
+      400,
+      "Unsupported parameter: 'stream_options'.",
+    ))).toBe(true);
+    expect(isStreamOptionsUnsupportedError(makeApiError(400, "Bad Request", {
+      responseBody: JSON.stringify({ error: { message: "Unknown parameter: stream_options" } }),
+    }))).toBe(true);
+  });
+
+  it("识别 RetryError 的 lastError", () => {
+    const error = new Error("request failed");
+    (error as Record<string, unknown>).lastError = {
+      statusCode: 400,
+      data: { error: { message: "stream_options is not supported" } },
+    };
+
+    expect(isStreamOptionsUnsupportedError(error)).toBe(true);
+  });
+
+  it("不把外层 RetryError 文案与无关的 lastError 400 混合匹配", () => {
+    const error = new Error("stream_options is unsupported");
+    (error as Record<string, unknown>).lastError = {
+      statusCode: 400,
+      data: { error: { message: "temperature must be between 0 and 2" } },
+    };
+
+    expect(isStreamOptionsUnsupportedError(error)).toBe(false);
+  });
+
+  it("不误判其他状态码、字段或普通请求错误", () => {
+    expect(isStreamOptionsUnsupportedError(makeApiError(422, "stream_options is unsupported"))).toBe(false);
+    expect(isStreamOptionsUnsupportedError(makeApiError(400, "Unsupported parameter: tools"))).toBe(false);
+    expect(isStreamOptionsUnsupportedError(makeApiError(400, "stream_options is invalid"))).toBe(false);
+    expect(isStreamOptionsUnsupportedError(makeApiError(500, "stream_options is unsupported"))).toBe(false);
   });
 });
 

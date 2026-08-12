@@ -12,7 +12,8 @@
 
 ## API Error Responses(契约)
 
-所有 `/v1/*` 网关与 `/api/*` 路由返回错误时,body 必须是此结构:
+所有 `/v1/*` 网关与 `/api/*` 路由默认使用此结构；Anthropic/Gemini 原生入口及
+Anthropic 模型发现按本文件后述多协议契约只转换最外层 envelope:
 
 ```ts
 {
@@ -346,6 +347,68 @@ try {
 } catch {
   throw new Error(definition.retryMessage);
 }
+```
+
+## Scenario: Multi-Protocol Gateway Errors
+
+### 1. Scope / Trigger
+
+修改四种聊天入口的 parser、HTTP handler、encoder、请求参数或错误映射时适用。
+
+### 2. Signatures
+
+- `UnsupportedParameterError(parameter)` -> `request.unsupported_parameter`。
+- `handleProtocolRequest(request, protocol, requestPath, parser)`。
+- `protocolErrorResponse(protocol, code, message?, details?)`。
+- `ERROR_META[code]` 是 HTTP status 和内部 error type 的唯一来源。
+
+### 3. Contracts
+
+- parser 对顶层和嵌套字段使用显式 allowlist。无法等价转换的字段在访问 route/upstream 前抛出 `UnsupportedParameterError`。
+- 错误文案固定为 `Unsupported parameter: '<path>'.`，稳定参数路径同时写入 `details.parameter`。
+- OpenAI Chat/Responses 使用 OpenAI envelope；Anthropic 和 Gemini 只在最外层转换为各自原生 envelope。错误码、status、文案、分类、i18n 和脱敏仍由共享错误层拥有。
+- HTTP status 不得由协议 encoder 自行硬编码；必须取 `ERROR_META[code].status`。
+- engine 内已记录的 route/upstream 失败不得由 HTTP boundary 重复写 telemetry；鉴权、JSON 和 parser 失败由 boundary 恰好记录一次。
+- 流式异常在生成原生 error 终端事件前调用共享 `redactErrorMessage`。Abort 后不输出 error、成功终止帧、`[DONE]` 或显式 close。
+
+### 4. Validation & Error Matrix
+
+| Condition | HTTP / stream result |
+| --- | --- |
+| Unknown or unsupported request field | HTTP 400, `request.unsupported_parameter`, exact parameter path, no upstream |
+| Invalid JSON | HTTP 400 from `request.invalid_json` mapping |
+| Missing/invalid ingress key | HTTP 401 in the selected ingress envelope |
+| OpenAI ingress error | `{ error: { message, type, param, code } }` |
+| Anthropic ingress error | `{ type: "error", error: { type, message } }` |
+| Gemini ingress error | `{ error: { code, message, status } }` |
+| Provider throws after stream starts | One redacted native error event; no success terminal |
+| Client aborts | No later bytes and no ordinary failure telemetry |
+
+### 5. Good / Base / Bad Cases
+
+- Good：Responses 请求含 `store:true`，网关在触网上游前返回参数为 `store` 的 400。
+- Base：四种入口对同一内部错误保留相同 status/message，仅 envelope 不同。
+- Bad：未知字段被 parser 忽略，导致客户端误以为参数生效。
+- Bad：Anthropic/Gemini encoder 自行选择 status 或把原始 Provider `Error` 写入 SSE。
+
+### 6. Tests Required
+
+- 每种 parser 覆盖合法公共语义、未知顶层字段、嵌套字段和首期禁用能力，并断言准确参数路径。
+- 四种 `protocolErrorResponse` 均断言 status、原生 envelope 和 Unsupported parameter 文案。
+- HTTP boundary 断言 parser 400 不调用 encoder/upstream，并且 boundary telemetry 恰好一次。
+- 流式 encoder 断言普通异常经过脱敏且没有成功终态；取消期间和取消后没有额外写入。
+- 旧 `/v1/chat/completions` 回归测试必须把历史上静默忽略的专有参数更新为明确 400。
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong:静默丢弃未知字段，并在协议层自行决定 status。
+const { model, messages } = body;
+return Response.json({ error: { message: "bad request" } }, { status: 400 });
+
+// Correct:共享校验产生稳定错误，协议层仅改变 envelope。
+assertAllowed(body, ["model", "messages", "stream"]);
+return protocolErrorResponse(protocol, error.code, error.message, error.details);
 ```
 
 ---

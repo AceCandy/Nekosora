@@ -7,7 +7,9 @@ import {
   pgTable,
   text,
   boolean,
+  bigint,
   integer,
+  numeric,
   timestamp,
   jsonb,
   index,
@@ -15,6 +17,7 @@ import {
   vector,
   pgEnum,
   primaryKey,
+  check,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type {
@@ -29,6 +32,7 @@ import type {
   ConversationShareRenderStyleSnapshot,
   MessageVersionSelections,
   MemoryExtractionMessage,
+  RouteApiFormat,
 } from "./types";
 
 // ===========================================================================
@@ -100,9 +104,9 @@ export const verification = pgTable("verification", {
 });
 
 // ===========================================================================
-// 密钥层级(单表自引用)
-//   主 Key: kind='master', parent_id=NULL, 每用户唯一
-//   子 Key: kind='sub', parent_id=主key.id, 可多个
+// 密钥类型
+//   主 Key:每用户唯一,不受模型绑定限制
+//   子 Key:可多个,按自身 key ID 绑定模型
 // ===========================================================================
 
 export const apiKeyKinds = pgEnum("api_key_kind", ["master", "sub"]);
@@ -114,18 +118,17 @@ export const apiKeys = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    parentId: text("parent_id"), // 主 key 为 NULL;子 key 指向主 key.id
     kind: apiKeyKinds("kind").notNull(),
     name: text("name").notNull(),
     keyHash: text("key_hash").notNull(), // sha256(完整 sk 字符串)
-    keyPrefix: text("key_prefix").notNull(), // 显示用,如 "sk-abcd…"
+    keyPrefix: text("key_prefix").notNull(), // 脱敏预览;兼容旧的前缀+省略号格式
     enabled: boolean("enabled").notNull().default(true),
     lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("api_keys_user_idx").on(t.userId),
-    index("api_keys_parent_idx").on(t.parentId),
+    index("api_keys_key_prefix_idx").on(t.keyPrefix),
     // 每用户仅一个主 key:部分唯一索引,仅约束 kind='master' 的行。
     uniqueIndex("api_keys_master_unique_idx")
       .on(t.userId)
@@ -148,6 +151,15 @@ export const providerProtocol = pgEnum("provider_protocol", [
   "openai-audio-tts",
 ]);
 export const modelVisibility = pgEnum("model_visibility", ["public", "private"]);
+export const routeApiFormat = pgEnum("route_api_format", [
+  "openai-chat",
+  "openai-responses",
+  "anthropic-messages",
+  "gemini-generate-content",
+  "openai-images",
+  "openai-audio-stt",
+  "openai-audio-tts",
+]);
 
 export const modelCatalog = pgTable(
   "model_catalog",
@@ -198,6 +210,8 @@ export const providers = pgTable(
     readTimeoutMs: integer("read_timeout_ms"),
     streamIdleTimeoutMs: integer("stream_idle_timeout_ms"),
     headersJson: jsonb("headers_json").$type<Record<string, string>>(),
+    // null=待探测;false=上游明确拒绝 stream_options。true 保留给显式正向能力。
+    supportsStreamUsage: boolean("supports_stream_usage"),
     // 最近一次全量密钥检测的聚合健康度(检测所有 key 后回写)。
     lastHealthCheckedAt: timestamp("last_health_checked_at", { withTimezone: true }),
     lastHealthyKeyCount: integer("last_healthy_key_count"),
@@ -221,6 +235,18 @@ export const providers = pgTable(
   (t) => [
     index("providers_owner_idx").on(t.ownerUserId),
     uniqueIndex("providers_owner_name_idx").on(t.ownerUserId, t.name),
+    check(
+      "providers_connect_timeout_ms_check",
+      sql`${t.connectTimeoutMs} between 1000 and 300000`,
+    ),
+    check(
+      "providers_read_timeout_ms_check",
+      sql`${t.readTimeoutMs} between 10000 and 3600000`,
+    ),
+    check(
+      "providers_stream_idle_timeout_ms_check",
+      sql`${t.streamIdleTimeoutMs} between 5000 and 900000`,
+    ),
   ],
 );
 
@@ -267,6 +293,7 @@ export const routes = pgTable(
       .notNull()
       .references(() => providers.id, { onDelete: "cascade" }),
     upstreamModelName: text("upstream_model_name").notNull(),
+    apiFormat: routeApiFormat("api_format").$type<RouteApiFormat>().notNull(),
     priority: integer("priority").notNull().default(0),
     weight: integer("weight").notNull().default(1),
     supportsTools: boolean("supports_tools").notNull().default(true),
@@ -902,6 +929,116 @@ export const userSettings = pgTable(
   (t) => [uniqueIndex("user_settings_unique_idx").on(t.userId, t.key)],
 );
 
+export const gatewayGovernanceOperation = pgEnum("gateway_governance_operation", [
+  "chat.stream",
+  "chat.generate",
+  "image.generate",
+  "audio.speech",
+  "audio.transcription",
+  "mcp.search",
+]);
+
+export const gatewayQuotaKind = pgEnum("gateway_quota_kind", [
+  "chat_tokens",
+  "image_count",
+  "tts_code_points",
+  "stt_seconds",
+]);
+
+/** API Key 或用户的速率状态，同时作为治理事务的稳定锁点。 */
+export const gatewayGovernanceSubjects = pgTable(
+  "gateway_governance_subjects",
+  {
+    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
+    apiKeyId: text("api_key_id").references(() => apiKeys.id, { onDelete: "cascade" }),
+    rateTokens: numeric("rate_tokens", { precision: 20, scale: 6 }).notNull(),
+    rateRefilledAt: timestamp("rate_refilled_at", { withTimezone: true }).notNull(),
+    policyFingerprint: text("policy_fingerprint").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("gateway_governance_subjects_user_unique_idx")
+      .on(t.userId)
+      .where(sql`${t.userId} is not null`),
+    uniqueIndex("gateway_governance_subjects_api_key_unique_idx")
+      .on(t.apiKeyId)
+      .where(sql`${t.apiKeyId} is not null`),
+    check(
+      "gateway_governance_subjects_identity_check",
+      sql`num_nonnulls(${t.userId}, ${t.apiKeyId}) = 1`,
+    ),
+    check("gateway_governance_subjects_rate_tokens_check", sql`${t.rateTokens} >= 0`),
+  ],
+);
+
+/** 按主体、计量单位与 UTC 月份隔离的活动预留和已结算额度。 */
+export const gatewayQuotaWindows = pgTable(
+  "gateway_quota_windows",
+  {
+    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
+    subjectId: text("subject_id")
+      .notNull()
+      .references(() => gatewayGovernanceSubjects.id, { onDelete: "cascade" }),
+    quotaKind: gatewayQuotaKind("quota_kind").notNull(),
+    monthStart: timestamp("month_start", { withTimezone: true }).notNull(),
+    reservedUnits: bigint("reserved_units", { mode: "number" }).notNull().default(0),
+    usedUnits: bigint("used_units", { mode: "number" }).notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("gateway_quota_windows_subject_kind_month_unique_idx")
+      .on(t.subjectId, t.quotaKind, t.monthStart),
+    index("gateway_quota_windows_subject_idx").on(t.subjectId),
+    check("gateway_quota_windows_reserved_units_check", sql`${t.reservedUnits} >= 0`),
+    check("gateway_quota_windows_used_units_check", sql`${t.usedUnits} >= 0`),
+    check(
+      "gateway_quota_windows_month_start_check",
+      sql`${t.monthStart} = date_trunc('month', ${t.monthStart} at time zone 'UTC') at time zone 'UTC'`,
+    ),
+  ],
+);
+
+/** 活动请求的并发 ownership token 与可选月度额度 reservation。 */
+export const gatewayGovernanceLeases = pgTable(
+  "gateway_governance_leases",
+  {
+    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
+    keySubjectId: text("key_subject_id")
+      .notNull()
+      .references(() => gatewayGovernanceSubjects.id, { onDelete: "restrict" }),
+    userSubjectId: text("user_subject_id")
+      .notNull()
+      .references(() => gatewayGovernanceSubjects.id, { onDelete: "restrict" }),
+    operation: gatewayGovernanceOperation("operation").notNull(),
+    quotaKind: gatewayQuotaKind("quota_kind"),
+    quotaMonthStart: timestamp("quota_month_start", { withTimezone: true }),
+    reservedUnits: bigint("reserved_units", { mode: "number" }),
+    providerStartedAt: timestamp("provider_started_at", { withTimezone: true }),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("gateway_governance_leases_key_expiry_idx").on(t.keySubjectId, t.leaseExpiresAt),
+    index("gateway_governance_leases_user_expiry_idx").on(t.userSubjectId, t.leaseExpiresAt),
+    index("gateway_governance_leases_expiry_id_idx").on(t.leaseExpiresAt, t.id),
+    check(
+      "gateway_governance_leases_quota_fields_check",
+      sql`(
+        ${t.quotaKind} is null
+        and ${t.quotaMonthStart} is null
+        and ${t.reservedUnits} is null
+      ) or (
+        ${t.quotaKind} is not null
+        and ${t.quotaMonthStart} is not null
+        and ${t.reservedUnits} > 0
+      )`,
+    ),
+  ],
+);
+
 /** 一次用户可见或后台逻辑网关执行的最终事实。 */
 export const gatewayExecutions = pgTable(
   "gateway_executions",
@@ -936,6 +1073,9 @@ export const gatewayExecutions = pgTable(
     cacheReadTokens: integer("cache_read_tokens").notNull().default(0),
     cacheWriteTokens: integer("cache_write_tokens").notNull().default(0),
     reasoningTokens: integer("reasoning_tokens").notNull().default(0),
+    imageCount: integer("image_count"),
+    ttsCodePoints: integer("tts_code_points"),
+    sttSeconds: integer("stt_seconds"),
     latencyMs: integer("latency_ms"),
     firstTokenLatencyMs: integer("first_token_latency_ms"),
     taskKind: text("task_kind"),
@@ -979,6 +1119,9 @@ export const gatewayAttempts = pgTable(
     cacheReadTokens: integer("cache_read_tokens").notNull().default(0),
     cacheWriteTokens: integer("cache_write_tokens").notNull().default(0),
     reasoningTokens: integer("reasoning_tokens").notNull().default(0),
+    imageCount: integer("image_count"),
+    ttsCodePoints: integer("tts_code_points"),
+    sttSeconds: integer("stt_seconds"),
     latencyMs: integer("latency_ms"),
     firstTokenLatencyMs: integer("first_token_latency_ms"),
     startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),

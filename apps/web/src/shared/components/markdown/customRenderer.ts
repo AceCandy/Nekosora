@@ -3,7 +3,7 @@
  *
  * 流式期间仍用 streamdown(支持增量解析),流式结束后切换到本渲染器以应用完整的
  * 自定义 CSS(含 class 选择器,如 .takeaway/.card 等高级组件)。原样保留 AI 输出的
- * HTML/class/style,不做过滤(信任 AI 输出,由调用方保证会话可信)。
+ * HTML/class/style,不做过滤,不属于 XSS 净化边界;仅由管理员在模型与内容来源可控时启用。
  */
 
 import { resolveStructuredKind } from "@/lib/artifacts/structured";

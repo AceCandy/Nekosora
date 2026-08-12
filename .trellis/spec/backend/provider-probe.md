@@ -10,7 +10,7 @@
 - Trigger: 配置/编辑 provider key 时、健康检测(`checkProviderHealth`/`checkMyProviderHealth`)时。验证「key + baseUrl + 协议鉴权头」三件套,避免配错要等真实调用才发现。
 
 ### 2. Signatures
-- `probeProviderKey({ protocol, baseUrl, apiKey, upstreamModelName?, headers? })`(`src/lib/providers/probe.ts`)--按是否传 `upstreamModelName` 分双路(对齐 AQBot 的 `validate_key` / `test_model` 职责分离)。
+- `probeProviderKey({ protocol, baseUrl, apiKey, upstreamModelName?, headers?, connectTimeoutMs?, readTimeoutMs?, streamIdleTimeoutMs? })`(`src/lib/providers/probe.ts`)--按是否传 `upstreamModelName` 分双路(对齐 AQBot 的 `validate_key` / `test_model` 职责分离)。
 - `buildKeyAuthRequest(protocol, base, apiKey, headers)` -- 按协议构造 key 探测请求:openai/anthropic 对 chat 端点发空 body POST(`/chat/completions`、`/messages`),gemini 退回 `GET /models`。
 - `buildModelsRequest(protocol, base, apiKey, headers)` -- 统一各协议 `/models` 的 URL + 鉴权头,`fetchUpstreamModels` 与 gemini key 探测共用,鉴权头逻辑单一来源。
 - `testKeyDirect` / `testMyKeyDirect`(`src/app/(dash)/admin|panel/actions.ts`)-- 编辑服务商弹窗 `KeyBundleEditor` 逐 key 检测:用表单当前 `protocol/baseUrl/apiKey/testModel` 直接探测,**不读 DB、不落库**。有 `testModel` 传 `upstreamModelName` 走深度(`probeModelAvailability`),无则空 body 验 key(`probeKeyAuth`)。
@@ -24,6 +24,7 @@
 - **传 upstreamModelName(测具体模型可用性)** -> 先用极小 `generateText`(`maxOutputTokens:1`)测非流式；非流式出现非鉴权、非网络失败时再用 `streamText` 完整消费流复核。任一模式成功即路由可用，结果用 `mode` 标明通过方式并保留 `nonStreamError`。鉴权或网络失败不重复请求。
 - 流式兼容性属于 route/provider 组合，不写入模型目录。禁止从模型名推断 stream 支持，也禁止把所有模型强制改为流式测试。
 - **编辑页逐 key 检测**(`testKeyDirect`/`testMyKeyDirect`): 配 key 时(尚未保存)即测,用表单当前值,**不读 DB、不落库**(区别于列表存活检测/深度检测落库回显)。有 `testModel` -> 传 `upstreamModelName` 走深度(极小生成验全链路);无 -> 空 body 验 key。与列表存活检测「先空 body 失败回退深度」不同:编辑页有 `testModel` 直接深度(用户填了模型即意图验模型,省一次空 body 请求)。
+- **超时预算**: 已保存 Provider 发起的存活、模型、路由与模型列表探测必须传递三项 timeout 配置;未保存的编辑页逐 key 检测省略配置并使用系统默认。raw fetch 与 body 读取、非流式生成和流式回退共用一个 `min(provider read timeout, 15s)` 总预算,流式回退同时传 Provider `streamIdleTimeoutMs`;详见 [Provider Timeouts](./provider-timeouts.md)。
 - **错误脱敏边界**: `probeProviderKey`、`probeModelAvailability`、`probeKeyAuth` 与 `fetchUpstreamModels` 必须用 `[apiKey, ...Object.values(headers ?? {})]` 作为精确 secrets。模型构造和上游调用都必须位于同一 `try/catch` 内，确保同步构造异常也只能形成脱敏后的 `error` / `nonStreamError`。原始 `Error`、key、header 值不得进入 `ProbeResult`、健康字段或 UI。
 
 ### 4. 为什么用 POST chat 空 body 验证 key(而非 GET /models)

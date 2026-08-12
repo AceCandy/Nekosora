@@ -7,10 +7,19 @@ import type { WeightedKey } from "@/lib/providers/keys";
 import { probeProviderKey, fetchUpstreamModels, type ProbeResult, type UpstreamModel } from "@/lib/providers/probe";
 import { getProbeHeaders } from "@/lib/system-settings/ua";
 import { normalizeBaseUrl } from "@/lib/providers/defaults";
+import {
+  parseProviderTimeoutFormData,
+  pickProviderTimeoutConfig,
+  type ProviderTimeoutConfig,
+} from "@/lib/providers/timeouts";
 import { requireOwnedProvider } from "@/lib/providers/ownership";
+import {
+  resolveCatalogRouteApiFormat,
+  resolveModelRouteApiFormat,
+} from "@/lib/providers/route-api-format";
 import { recordSuccess, recordFailure } from "@/lib/circuit-breaker";
 import { pickWeightedKey } from "@/lib/providers/keys";
-import type { ProviderProtocol } from "@/db/types";
+import type { ProviderProtocol, RouteApiFormat } from "@/db/types";
 import type { ProviderKeyResult } from "@/db/schema/pg";
 import { requireAdmin } from "@/lib/session";
 import { pickDisplayName } from "@/lib/model-catalog";
@@ -72,6 +81,7 @@ async function assertRouteManageable(db: unknown, routeId: string, adminId: stri
       modelId: S().routes.modelId,
       providerId: S().routes.providerId,
       upstreamModelName: S().routes.upstreamModelName,
+      apiFormat: S().routes.apiFormat,
     })
     .from(S().routes)
     .where(eq(S().routes.id, routeId))
@@ -86,6 +96,7 @@ async function assertRouteManageable(db: unknown, routeId: string, adminId: stri
     modelId: string;
     providerId: string;
     upstreamModelName: string;
+    apiFormat: RouteApiFormat;
   };
 }
 
@@ -112,8 +123,9 @@ async function fetchAndStoreUpstreamModels(
   protocol: ProviderProtocol,
   baseUrl: string,
   apiKey: string,
+  timeouts: ProviderTimeoutConfig,
 ): Promise<{ models: string[]; checkedAt: number }> {
-  const fetched = await fetchUpstreamModels({ protocol, baseUrl, apiKey });
+  const fetched = await fetchUpstreamModels({ protocol, baseUrl, apiKey, ...timeouts });
   const models = fetched.map((m) => m.id);
   const checkedAt = Date.now();
   await db
@@ -131,6 +143,7 @@ export async function createProvider(formData: FormData) {
   const apiKeysEnc = encryptKeyBundle(keys);
   const protocol = String(formData.get("protocol") ?? "openai") as ProviderProtocol;
   const baseUrl = normalizeBaseUrl(protocol, String(formData.get("baseUrl") ?? ""));
+  const timeouts = parseProviderTimeoutFormData(formData);
   const [created] = await db
     .insert(S().providers)
     .values({
@@ -140,6 +153,7 @@ export async function createProvider(formData: FormData) {
       baseUrl,
       apiKeysEnc,
       testModel: String(formData.get("testModel") ?? ""),
+      ...timeouts,
       keyStrategy: "weighted",
       enabled: true,
       priority: 0,
@@ -148,7 +162,14 @@ export async function createProvider(formData: FormData) {
   revalidatePath("/admin", "layout");
 
   // 创建后自动拉取一次上游模型列表并落库;失败静默不阻塞创建(无 key 用空 key,与转发一致)。
-  await fetchAndStoreUpstreamModels(db, created.id, protocol, baseUrl, keys[0]?.key ?? "").catch(() => {});
+  await fetchAndStoreUpstreamModels(
+    db,
+    created.id,
+    protocol,
+    baseUrl,
+    keys[0]?.key ?? "",
+    timeouts,
+  ).catch(() => {});
 }
 
 /** 更新 provider(支持改 name/baseUrl/protocol/keys)。keys 为空表示不改 key。 */
@@ -163,9 +184,13 @@ export async function updateProvider(id: string, formData: FormData) {
       String(formData.get("baseUrl") ?? ""),
     ),
     testModel: String(formData.get("testModel") ?? ""),
+    supportsStreamUsage: null,
     updatedAt: new Date(),
   };
   const keys = collectKeys(formData);
+  if (formData.get("providerTimeoutsPresent") === "1") {
+    Object.assign(patch, parseProviderTimeoutFormData(formData));
+  }
   const noKey = formData.get("noKey") === "1";
   // 无 key 模式:显式清空 bundle;否则 keys 非空才更新,空表示不改 key。
   if (noKey) {
@@ -256,11 +281,18 @@ export async function checkProviderHealth(id: string): Promise<ProviderHealthRes
   const keyResults: ProviderKeyResult[] = [];
   // 检测请求 UA(与聊天 UA 一致);循环外读一次,两条探测路径共用。
   const probeHeaders = await getProbeHeaders();
+  const timeoutOptions = pickProviderTimeoutConfig(provider);
   // 存活检测回退深度检测时,聚合 provider 级深度结果(任一 key 深度成功即 true)。null=未回退。
   let modelProbeOk: boolean | null = null;
   let modelProbeError: string | null = null;
   for (let i = 0; i < probeList.length; i++) {
-    let result = await probeProviderKey({ protocol, baseUrl, apiKey: probeList[i].key, headers: probeHeaders });
+    let result = await probeProviderKey({
+      protocol,
+      baseUrl,
+      apiKey: probeList[i].key,
+      headers: probeHeaders,
+      ...timeoutOptions,
+    });
     // 存活检测失败(非网络)+配了 testModel -> 回退深度检测(带 model 极小生成)。
     // opencode 等先验 model 的上游空 body 验不了 key,靠深度检测确认;成功则该 key 标通过。
     if (!result.ok && result.errorKind !== "network" && testModel) {
@@ -270,6 +302,7 @@ export async function checkProviderHealth(id: string): Promise<ProviderHealthRes
         apiKey: probeList[i].key,
         upstreamModelName: testModel,
         headers: probeHeaders,
+        ...timeoutOptions,
       });
       result = deep.ok
         ? { ok: true, latencyMs: deep.latencyMs, mode: deep.mode }
@@ -338,6 +371,7 @@ export async function testProviderModel(id: string): Promise<ProbeResult> {
     apiKey,
     upstreamModelName: testModel,
     headers: await getProbeHeaders(),
+    ...pickProviderTimeoutConfig(provider),
   });
   await db
     .update(S().providers)
@@ -367,6 +401,7 @@ export async function listUpstreamModels(id: string): Promise<UpstreamModel[]> {
     protocol: provider.protocol,
     baseUrl: provider.baseUrl,
     apiKey: firstKey,
+    ...pickProviderTimeoutConfig(provider),
   });
 }
 
@@ -408,6 +443,7 @@ export async function listUpstreamModelsCached(id: string): Promise<UpstreamMode
       provider.protocol as ProviderProtocol,
       provider.baseUrl as string,
       firstKey,
+      pickProviderTimeoutConfig(provider),
     );
     return models.map((mid) => ({ id: mid }));
   } catch {
@@ -438,6 +474,7 @@ export async function refreshUpstreamModels(
     provider.protocol as ProviderProtocol,
     provider.baseUrl as string,
     keys[0]?.key ?? "",
+    pickProviderTimeoutConfig(provider),
   );
   revalidatePath("/admin", "layout");
   return result;
@@ -463,10 +500,12 @@ export async function testRoute(routeId: string): Promise<ProbeResult> {
   const providerId = provider.id as string;
   const result = await probeProviderKey({
     protocol: provider.protocol as ProviderProtocol,
+    apiFormat: route.apiFormat,
     baseUrl: provider.baseUrl,
     apiKey,
     upstreamModelName: route.upstreamModelName as string,
     headers: await getProbeHeaders(),
+    ...pickProviderTimeoutConfig(provider),
   });
   // 喂养熔断器:成功重置,失败累计。
   if (result.ok) recordSuccess(providerId);
@@ -557,13 +596,20 @@ export async function createModel(formData: FormData) {
   const nextSort = (maxRow?.maxSort ?? -1) + 1;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await db.transaction(async (tx: any) => {
+    let provider: Awaited<ReturnType<typeof requireOwnedProvider>> | undefined;
     if (providerId) {
-      await requireOwnedProvider(tx, providerId, admin.id);
+      provider = await requireOwnedProvider(tx, providerId, admin.id);
     }
     await tx.insert(S().models).values({ ownerUserId: admin.id, visibility, name, displayName, catalogId, enabled: true, systemPrompt: String(formData.get("systemPrompt") ?? "") || null, description: String(formData.get("description") ?? "") || null, sortOrder: nextSort });
     const [created] = await tx.select({ id: S().models.id }).from(S().models).where(and(eq(S().models.ownerUserId, admin.id), eq(S().models.name, name))).limit(1);
-    if (providerId && upstreamModelName) {
-      await tx.insert(S().routes).values({ ownerUserId: admin.id, modelId: created.id, providerId, upstreamModelName, enabled: true });
+    if (provider && upstreamModelName) {
+      const apiFormat = await resolveCatalogRouteApiFormat(
+        tx,
+        catalogId,
+        provider.protocol,
+        String(formData.get("apiFormat") ?? ""),
+      );
+      await tx.insert(S().routes).values({ ownerUserId: admin.id, modelId: created.id, providerId, upstreamModelName, apiFormat, enabled: true });
     }
   });
   revalidatePath("/admin", "layout");
@@ -582,12 +628,19 @@ export async function createRoute(modelIdOrFormData: string | FormData, formData
   const providerId = String(fd.get("providerId") ?? "");
   // 路由归属模型:校验模型存在且 admin 有管理权(public 或自己的)。
   const model = await assertModelManageable(db, modelId, admin.id);
-  await requireOwnedProvider(db, providerId, admin.id);
+  const provider = await requireOwnedProvider(db, providerId, admin.id);
+  const apiFormat = await resolveModelRouteApiFormat(
+    db,
+    modelId,
+    provider.protocol,
+    String(fd.get("apiFormat") ?? ""),
+  );
   await db.insert(S().routes).values({
     ownerUserId: model.ownerUserId, // 跟随所属 model owner
     modelId,
     providerId,
     upstreamModelName: String(fd.get("upstreamModelName") ?? ""),
+    apiFormat,
     priority: Number(fd.get("priority") ?? 0),
     weight: Number(fd.get("weight") ?? 1),
     supportsTools: !fd.has("supportsToolsPresent") || fd.get("supportsTools") === "on",
@@ -605,7 +658,7 @@ export async function attachProviderModelRoute(
   const admin = await requireAdmin();
   const db = await getDb();
   const model = await assertModelManageable(db, modelId, admin.id);
-  await requireOwnedProvider(db, providerId, admin.id);
+  const provider = await requireOwnedProvider(db, providerId, admin.id);
   const [existing] = await db
     .select({ id: S().routes.id })
     .from(S().routes)
@@ -617,11 +670,13 @@ export async function attachProviderModelRoute(
     .limit(1);
   if (existing) return { status: "exists" };
 
+  const apiFormat = await resolveModelRouteApiFormat(db, modelId, provider.protocol);
   await db.insert(S().routes).values({
     ownerUserId: model.ownerUserId,
     modelId,
     providerId,
     upstreamModelName,
+    apiFormat,
     enabled: true,
   });
   revalidatePath("/admin", "layout");
@@ -706,13 +761,22 @@ export async function updateRoute(id: string, formData: FormData) {
   const admin = await requireAdmin();
   const db = await getDb();
   const providerId = String(formData.get("providerId") ?? "");
-  await assertRouteManageable(db, id, admin.id);
-  await requireOwnedProvider(db, providerId, admin.id);
+  const route = await assertRouteManageable(db, id, admin.id);
+  const provider = await requireOwnedProvider(db, providerId, admin.id);
+  const apiFormat = formData.has("apiFormat")
+    ? await resolveModelRouteApiFormat(
+        db,
+        route.modelId,
+        provider.protocol,
+        String(formData.get("apiFormat") ?? ""),
+      )
+    : undefined;
   await db
     .update(S().routes)
     .set({
       providerId,
       upstreamModelName: String(formData.get("upstreamModelName") ?? ""),
+      ...(apiFormat ? { apiFormat } : {}),
       priority: Number(formData.get("priority") ?? 0),
       weight: Number(formData.get("weight") ?? 1),
       ...(formData.has("supportsToolsPresent") || formData.has("supportsTools")

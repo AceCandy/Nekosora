@@ -38,6 +38,7 @@
     "jsonrepair": "^3.15.0",
     "keyv": "^5.3.0",
     "mem0ai": "^3.1.0",
+    "music-metadata": "11.14.0",
     "nanoid": "^5.0.0",
     "pdfjs-dist": "^6.1.200",
     "pg": "^8.22.0",

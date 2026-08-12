@@ -31,6 +31,7 @@ function mockFetch(
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.mocked(generateText).mockReset();
   vi.mocked(streamText).mockReset();
@@ -38,6 +39,28 @@ afterEach(() => {
 });
 
 describe("probeProviderKey 连通性探测(errorKind 分级)", () => {
+  it("连接停滞时使用 Provider connect timeout 并清理计时器", async () => {
+    vi.useFakeTimers();
+    mockFetch((_url, init) => new Promise((_resolve, reject) => {
+      const signal = init?.signal;
+      signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+    }));
+
+    const pending = probeProviderKey({
+      ...baseOpts,
+      connectTimeoutMs: 1_000,
+      readTimeoutMs: 10_000,
+    });
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    await expect(pending).resolves.toMatchObject({
+      ok: false,
+      errorKind: "network",
+      error: "Provider connect timeout after 1000ms",
+    });
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("fetch 抛网络错 -> errorKind network, ok false", async () => {
     mockFetch(() => Promise.reject(new Error("fetch failed")));
     const r = await probeProviderKey(baseOpts);
@@ -57,6 +80,32 @@ describe("probeProviderKey 连通性探测(errorKind 分级)", () => {
     const r = await probeProviderKey(baseOpts);
     expect(r.ok).toBe(false);
     expect(r.errorKind).toBe("auth");
+  });
+
+  it("鉴权响应体停滞时使用 Provider read timeout", async () => {
+    vi.useFakeTimers();
+    mockFetch((_url, init) => Promise.resolve({
+      status: 401,
+      statusText: "Unauthorized",
+      text: () => new Promise((_resolve, reject) => {
+        const signal = init?.signal;
+        signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+      }),
+    }));
+
+    const pending = probeProviderKey({
+      ...baseOpts,
+      connectTimeoutMs: 15_000,
+      readTimeoutMs: 10_000,
+    });
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    await expect(pending).resolves.toMatchObject({
+      ok: false,
+      errorKind: "network",
+      error: "Provider read timeout after 10000ms",
+    });
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("403 -> errorKind auth", async () => {
@@ -206,6 +255,82 @@ describe("probeProviderKey gemini /models 无效 key 识别", () => {
 });
 
 describe("probeProviderKey 模型深度探测脱敏", () => {
+  it("具体 route 探测保留 route apiFormat，不按 provider protocol 猜测", async () => {
+    vi.useFakeTimers();
+    vi.mocked(generateText).mockResolvedValue({} as never);
+
+    const result = await probeProviderKey({
+      ...baseOpts,
+      protocol: "openai-compatible",
+      apiFormat: "openai-responses",
+      upstreamModelName: "demo-model",
+      connectTimeoutMs: 2_000,
+      readTimeoutMs: 10_000,
+      streamIdleTimeoutMs: 5_000,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(mocks.buildLanguageModelWithKey).toHaveBeenCalledWith(
+      expect.objectContaining({
+        protocol: "openai-compatible",
+        apiFormat: "openai-responses",
+        provider: expect.objectContaining({
+          connectTimeoutMs: 2_000,
+          readTimeoutMs: 10_000,
+          streamIdleTimeoutMs: 5_000,
+        }),
+      }),
+      "sk-test",
+      undefined,
+      undefined,
+      undefined,
+    );
+    expect(generateText).toHaveBeenCalledWith(expect.objectContaining({
+      maxRetries: 0,
+      providerOptions: { openai: { store: false } },
+      abortSignal: expect.any(AbortSignal),
+    }));
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("非流式与流式回退共用 15 秒总预算并传递流空闲超时", async () => {
+    vi.useFakeTimers();
+    let generateSignal: AbortSignal | undefined;
+    vi.mocked(generateText).mockImplementationOnce((options) => {
+      generateSignal = options.abortSignal;
+      return new Promise((_resolve, reject) => {
+        setTimeout(() => reject(new Error("non-stream failed")), 12_000);
+      });
+    });
+    vi.mocked(streamText).mockImplementationOnce((options) => ({
+      consumeStream: vi.fn(() => new Promise((_resolve, reject) => {
+        const signal = options.abortSignal;
+        signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+      })),
+    }) as never);
+
+    const pending = probeProviderKey({
+      ...baseOpts,
+      upstreamModelName: "demo-model",
+      readTimeoutMs: 900_000,
+      streamIdleTimeoutMs: 900_000,
+    });
+    let settled = false;
+    void pending.then(() => { settled = true; });
+
+    await vi.advanceTimersByTimeAsync(12_000);
+    expect(streamText).toHaveBeenCalledWith(expect.objectContaining({
+      abortSignal: generateSignal,
+      timeout: { chunkMs: 900_000 },
+    }));
+    await vi.advanceTimersByTimeAsync(2_999);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+
+    await expect(pending).resolves.toMatchObject({ ok: false, errorKind: "network" });
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("provider model 构造失败也收敛为安全 ProbeResult", async () => {
     const apiKey = "MODEL_BUILD_SECRET";
     const headerSecret = "MODEL_BUILD_HEADER_SECRET";
@@ -279,6 +404,30 @@ describe("probeProviderKey 模型深度探测脱敏", () => {
 });
 
 describe("fetchUpstreamModels 脱敏边界", () => {
+  it("响应体停滞时使用 Provider read timeout 并清理计时器", async () => {
+    vi.useFakeTimers();
+    mockFetch((_url, init) => Promise.resolve({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: () => new Promise((_resolve, reject) => {
+        const signal = init?.signal;
+        signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+      }),
+    }));
+
+    const pending = fetchUpstreamModels({
+      ...baseOpts,
+      connectTimeoutMs: 15_000,
+      readTimeoutMs: 10_000,
+    });
+    const rejection = expect(pending).rejects.toThrow("Provider read timeout after 10000ms");
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    await rejection;
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("Gemini fetch 异常离开持 key 边界前会重建为安全 Error", async () => {
     const apiKey = "LIST_SECRET";
     const headerSecret = "LIST_HEADER_SECRET";

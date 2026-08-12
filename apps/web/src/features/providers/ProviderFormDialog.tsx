@@ -6,6 +6,7 @@ import type { FormDataSerializableAction } from "@/features/providers/types";
 import Modal from "@/shared/ui/Modal";
 import KeyBundleEditor, { type EditorRow, type KeyBundleEditorHandle, type TestKeyAction } from "@/features/providers/KeyBundleEditor";
 import { DEFAULT_HOSTS, resolveModelsUrl } from "@/lib/providers/defaults";
+import { PROVIDER_TIMEOUT_LIMITS } from "@/lib/providers/timeouts";
 import Input from "@/shared/ui/Input";
 import Select from "@/shared/ui/Select";
 import Popover from "@/shared/ui/Popover";
@@ -29,6 +30,9 @@ interface ProviderFormDialogProps {
     keys?: EditorRow[];
     /** 检测模型(手填或从上游模型列表选)。 */
     testModel?: string;
+    connectTimeoutMs?: number | null;
+    readTimeoutMs?: number | null;
+    streamIdleTimeoutMs?: number | null;
     /** 已拉取的上游模型 id 列表,供检测模型下拉选择。 */
     upstreamModels?: string[];
     /** 上次拉取上游模型列表的时间(毫秒),用于下拉时按需刷新的缓存判定。 */
@@ -294,6 +298,74 @@ export default function ProviderFormDialog({
               )}
             </div>
           </label>
+          <fieldset className="col-span-2">
+            <legend className="text-ui-caption font-semibold text-neutral-500 dark:text-neutral-400">
+              {t("timeoutTitle")}
+            </legend>
+            <p className="mt-1 text-ui-caption text-neutral-500 dark:text-neutral-400">
+              {t("timeoutHint")}
+            </p>
+            <input type="hidden" name="providerTimeoutsPresent" value="1" />
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <label className="block">
+                <span className={labelCls}>{t("connectTimeoutLabel")}</span>
+                <Input
+                  type="number"
+                  name="connectTimeoutSeconds"
+                  min={PROVIDER_TIMEOUT_LIMITS.connectTimeoutMs.minMs / 1_000}
+                  max={PROVIDER_TIMEOUT_LIMITS.connectTimeoutMs.maxMs / 1_000}
+                  step="0.001"
+                  defaultValue={initial?.connectTimeoutMs == null ? "" : initial.connectTimeoutMs / 1_000}
+                  placeholder={String(PROVIDER_TIMEOUT_LIMITS.connectTimeoutMs.defaultMs / 1_000)}
+                />
+                <span className="mt-1 block text-ui-caption text-neutral-500 dark:text-neutral-400">
+                  {t("timeoutRangeHint", {
+                    default: PROVIDER_TIMEOUT_LIMITS.connectTimeoutMs.defaultMs / 1_000,
+                    min: PROVIDER_TIMEOUT_LIMITS.connectTimeoutMs.minMs / 1_000,
+                    max: PROVIDER_TIMEOUT_LIMITS.connectTimeoutMs.maxMs / 1_000,
+                  })}
+                </span>
+              </label>
+              <label className="block">
+                <span className={labelCls}>{t("readTimeoutLabel")}</span>
+                <Input
+                  type="number"
+                  name="readTimeoutSeconds"
+                  min={PROVIDER_TIMEOUT_LIMITS.readTimeoutMs.minMs / 1_000}
+                  max={PROVIDER_TIMEOUT_LIMITS.readTimeoutMs.maxMs / 1_000}
+                  step="0.001"
+                  defaultValue={initial?.readTimeoutMs == null ? "" : initial.readTimeoutMs / 1_000}
+                  placeholder={String(PROVIDER_TIMEOUT_LIMITS.readTimeoutMs.defaultMs / 1_000)}
+                />
+                <span className="mt-1 block text-ui-caption text-neutral-500 dark:text-neutral-400">
+                  {t("timeoutRangeHint", {
+                    default: PROVIDER_TIMEOUT_LIMITS.readTimeoutMs.defaultMs / 1_000,
+                    min: PROVIDER_TIMEOUT_LIMITS.readTimeoutMs.minMs / 1_000,
+                    max: PROVIDER_TIMEOUT_LIMITS.readTimeoutMs.maxMs / 1_000,
+                  })}
+                </span>
+              </label>
+              <label className="block">
+                <span className={labelCls}>{t("streamIdleTimeoutLabel")}</span>
+                <Input
+                  type="number"
+                  name="streamIdleTimeoutSeconds"
+                  min={PROVIDER_TIMEOUT_LIMITS.streamIdleTimeoutMs.minMs / 1_000}
+                  max={PROVIDER_TIMEOUT_LIMITS.streamIdleTimeoutMs.maxMs / 1_000}
+                  step="0.001"
+                  defaultValue={initial?.streamIdleTimeoutMs == null ? "" : initial.streamIdleTimeoutMs / 1_000}
+                  placeholder={String(PROVIDER_TIMEOUT_LIMITS.streamIdleTimeoutMs.defaultMs / 1_000)}
+                />
+                <span className="mt-1 block text-ui-caption text-neutral-500 dark:text-neutral-400">
+                  {t("timeoutRangeHint", {
+                    default: PROVIDER_TIMEOUT_LIMITS.streamIdleTimeoutMs.defaultMs / 1_000,
+                    min: PROVIDER_TIMEOUT_LIMITS.streamIdleTimeoutMs.minMs / 1_000,
+                    max: PROVIDER_TIMEOUT_LIMITS.streamIdleTimeoutMs.maxMs / 1_000,
+                  })}
+                </span>
+              </label>
+            </div>
+          </fieldset>
           <div className="block col-span-2">
             <div className="mb-1.5 flex items-center justify-between">
               <span className="text-ui-caption font-semibold text-neutral-500 dark:text-neutral-400">{t("fieldApiKey")}</span>

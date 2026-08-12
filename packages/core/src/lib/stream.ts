@@ -13,10 +13,14 @@
  */
 import { streamText, generateText, jsonSchema, Output, type ModelMessage, type ToolSet } from "ai";
 import { resolveRoutes, resolveRoutesById } from "@/lib/routing";
-import { markRouteToolsUnsupported } from "@/lib/repositories/route-repository";
-import { buildLanguageModelWithKey } from "@/lib/providers/registry";
+import {
+  markProviderStreamUsageUnsupported,
+  markRouteToolsUnsupported,
+} from "@/lib/repositories/route-repository";
+import { buildLanguageModelWithKey, resolveRouteApiFormat } from "@/lib/providers/registry";
+import { resolveProviderTimeouts } from "@/lib/providers/timeouts";
 import { getChatUA } from "@/lib/system-settings/ua";
-import { recordSuccess, recordFailure } from "@/lib/circuit-breaker";
+import { gatewayBreaker } from "@/lib/circuit-breaker";
 import type { LogUsageParams } from "@/lib/usage";
 import { classifyError } from "@/lib/error-classify";
 import { redactErrorMessage } from "@/lib/redaction";
@@ -30,11 +34,14 @@ import type {
   IRUsage,
   ResolvedRoute,
 } from "@/lib/providers/types";
+import type { ProviderProtocol } from "@/db/types";
 import {
   executeAtomicGateway,
   executeGateway,
   gatewayTelemetry,
+  isStreamOptionsUnsupportedError,
   isToolUnsupportedError,
+  type GatewayAdapterSelection,
   type GatewayAttemptAdapter,
   type GatewayExecutionOutcome,
   type GatewayTelemetryPort,
@@ -46,6 +53,7 @@ export {
   isAbortError,
   isFailoverableError,
   isKeyAuthError,
+  isStreamOptionsUnsupportedError,
   isToolUnsupportedError,
   isRetryableForKey,
 } from "@/lib/gateway-execution";
@@ -55,7 +63,7 @@ export interface StreamChatOptions {
   request: IRRequest;
   /** 标识一次生成(WebChat 传入 message 的 run_id;网关自动生成)。 */
   runId?: string;
-  /** 副任务类型(title/memory/compact);主回复 / 网关请求不传 → null。 */
+  /** 副任务类型(title/memory/compact/web_search);主回复 / 网关请求不传 → null。 */
   taskKind?: string;
   /** 会话级 cache key(chat=conversationId / 网关=apiKeyId);用于注入 prompt 缓存控制,缺省不注入。 */
   cacheKey?: string;
@@ -81,6 +89,10 @@ export interface StreamChatOptions {
   onFinalUsage?: (result: StreamChatFinalUsage) => void;
   /** Agent loop 内部注入共享 execution session；普通调用不传。 */
   telemetry?: GatewayTelemetryPort;
+  /** 对外网关实际入口路径；用于统一 execution telemetry。 */
+  requestPath?: string;
+  /** 首个真实 Provider attempt 前执行的严格门禁。 */
+  onProviderStart?: () => Promise<void>;
 }
 
 interface StreamChatFinalUsage {
@@ -137,6 +149,9 @@ export async function* streamChat(
           commitsResponse:
             event.type === "text-delta"
             || event.type === "reasoning-delta"
+            || event.type === "tool-call-start"
+            || event.type === "tool-call-delta"
+            || event.type === "tool-call-end"
             || event.type === "tool-call",
           firstTokenAt: eventFirstTokenAt,
         };
@@ -150,22 +165,33 @@ export async function* streamChat(
       operation: "chat.stream",
       model: currentRequest.model,
       modelId: opts.modelId,
-      requestPath: ctx.source === "gateway" ? "/v1/chat/completions" : undefined,
+      requestPath: ctx.source === "gateway" ? (opts.requestPath ?? "/v1/chat/completions") : undefined,
       taskKind: opts.taskKind,
       abortSignal: opts.abortSignal,
+      onProviderStart: opts.onProviderStart,
       resolveRoutes: () => opts.modelId
         ? resolveRoutesById(ctx, opts.modelId)
         : resolveRoutes(ctx, currentRequest.model),
       selectAdapter: (route) => currentRequest.tools?.length
         && (!route.supportsTools || route.capabilities?.tools !== true)
         ? null
-        : adapter,
+        : selectChatAdapter(route, currentRequest, adapter),
       isToolUnsupported: currentRequest.tools?.length ? isToolUnsupportedError : undefined,
       onToolUnsupported: currentRequest.tools?.length
         ? (route) => markRouteToolsUnsupported(route.routeId)
         : undefined,
+      isStreamOptionsUnsupported: (route, error) =>
+        route.protocol === "openai-compatible"
+        && resolveRouteApiFormat(route) === "openai-chat"
+        && route.provider.supportsStreamUsage !== false
+        && isStreamOptionsUnsupportedError(error),
+      onStreamOptionsUnsupported: async (route) => {
+        const { id, baseUrl } = route.provider;
+        route.provider.supportsStreamUsage = false;
+        await markProviderStreamUsageUnsupported(id, baseUrl);
+      },
       telemetry: opts.telemetry ?? gatewayTelemetry,
-      breaker: { recordSuccess, recordFailure },
+      breaker: gatewayBreaker,
     });
   };
 
@@ -200,7 +226,10 @@ export async function* streamChat(
       yield {
         type: "error",
         error: outcome.error?.message ?? "生成失败",
-        code: "generation_failed",
+        code: ctx.source === "gateway"
+          ? outcome.error?.code ?? "generation_failed"
+          : "generation_failed",
+        details: ctx.source === "gateway" ? outcome.error?.details : undefined,
       };
     }
   } finally {
@@ -249,6 +278,33 @@ export async function* streamChat(
       }
     }
   }
+}
+
+function selectChatAdapter(
+  route: ResolvedRoute,
+  request: IRRequest,
+  adapter: GatewayAttemptAdapter<StreamEvent, void>,
+): GatewayAdapterSelection<StreamEvent, void> {
+  const developerIndex = request.messages.findIndex((message) => message.role === "developer");
+  if (developerIndex >= 0) {
+    const format = resolveRouteApiFormat(route);
+    const supportsDeveloper = format === "openai-responses"
+      || (format === "openai-chat" && route.protocol === "openai");
+    if (!supportsDeveloper) {
+      const parameter = `messages[${developerIndex}].role`;
+      return {
+        kind: "rejected",
+        error: {
+          code: "request.unsupported_parameter",
+          message: `Unsupported parameter: '${parameter}'.`,
+          phase: "request",
+          httpStatus: 400,
+          details: { parameter },
+        },
+      };
+    }
+  }
+  return { kind: "selected", adapter };
 }
 
 /** 在 AI SDK 边界把 OpenAI 图片与工具消息 IR 转为 ModelMessage。 */
@@ -345,6 +401,26 @@ function toModelTools(tools?: IRToolDef[]): ToolSet | undefined {
   );
 }
 
+function toModelToolChoice(choice: IRRequest["tool_choice"]): unknown {
+  if (!choice || typeof choice === "string") return choice;
+  return { type: "tool", toolName: choice.function.name };
+}
+
+function mergeProviderOptions(
+  ...options: Array<Record<string, unknown> | undefined>
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const option of options) {
+    for (const [provider, value] of Object.entries(option ?? {})) {
+      const previous = result[provider];
+      result[provider] = previous && value && typeof previous === "object" && typeof value === "object"
+        ? { ...previous as Record<string, unknown>, ...value as Record<string, unknown> }
+        : value;
+    }
+  }
+  return result;
+}
+
 /**
  * 把 messages 里的 system 消息抽到顶层 system 参数。
  * 符合 AI SDK v5 推荐用法:system 不应混入 messages(会触发安全告警),
@@ -356,8 +432,8 @@ export function separateSystem(request: IRRequest): {
   system: string | undefined;
   messages: ModelMessage[];
 } {
-  const systemMessages = request.messages.filter((m) => m.role === "system");
-  const dialogueMessages = request.messages.filter((m) => m.role !== "system");
+  const systemMessages = request.messages.filter((m) => m.role === "system" || m.role === "developer");
+  const dialogueMessages = request.messages.filter((m) => m.role !== "system" && m.role !== "developer");
   if (dialogueMessages.length === 0) {
     throw new Error("消息无效:缺少用户消息,无法生成回复");
   }
@@ -386,13 +462,14 @@ async function* streamWithRoute(
   const reasoning = request.reasoning ?? getDefaultReasoningLevel(route.capabilities);
   const model = buildLanguageModelWithKey(route, apiKey, cacheKey, reasoning, userAgent); // 失败则抛出,交由上层故障转移
   const { system, messages } = separateSystem(request);
+  const requestProtocol = requestProtocolForRoute(route);
 
   // 按 protocol 注入 prompt 缓存控制(复刻 pi 兜底策略):
   //  - anthropic:system + 末条消息打 cache_control 断点(上游靠显式断点缓存)
   //  - openai:promptCacheKey(prompt_cache_key)辅助路由命中
   //  - openai-compatible:session affinity header 在 registry 注入,此处不处理
   const wantsCache = !!cacheKey;
-  const isAnthropic = route.protocol === "anthropic";
+  const isAnthropic = requestProtocol === "anthropic";
   const breakpoint = { type: "ephemeral" as const };
   const instructionsParam =
     isAnthropic && system && wantsCache
@@ -404,7 +481,16 @@ async function* streamWithRoute(
           i === messages.length - 1 ? { ...m, providerOptions: { anthropic: { cacheControl: breakpoint } } } : m,
         )
       : messages;
-  const cacheProviderOptions = route.protocol === "openai" && cacheKey ? { openai: { promptCacheKey: cacheKey } } : {};
+  const cacheProviderOptions = requestProtocol === "openai" && cacheKey ? { openai: { promptCacheKey: cacheKey } } : {};
+  const reasoningProviderOptions = requestProtocol === "openai-compatible"
+    ? undefined
+    : buildReasoningProviderOptions(requestProtocol, route.capabilities, reasoning);
+  const structuredProviderOptions = request.response_format && requestProtocol === "anthropic"
+    ? { anthropic: { structuredOutputMode: "outputFormat" } }
+    : undefined;
+  const responsesProviderOptions = resolveRouteApiFormat(route) === "openai-responses"
+    ? { openai: { store: false } }
+    : undefined;
 
   const result = streamText({
     model,
@@ -418,20 +504,33 @@ async function* streamWithRoute(
     topP: request.top_p,
     // 推理级别 + 缓存控制合并到 providerOptions(off/不支持则不传,等价普通对话)。
     // AI SDK SharedV4ProviderOptions 类型摩擦,此处沿用 providerOptions 的 as never 处理。
-    providerOptions: {
-      ...(route.protocol === "openai-compatible"
-        ? undefined
-        : buildReasoningProviderOptions(route.protocol, route.capabilities, reasoning)),
-      ...cacheProviderOptions,
-    } as never,
+    providerOptions: mergeProviderOptions(
+      reasoningProviderOptions,
+      cacheProviderOptions,
+      structuredProviderOptions,
+      responsesProviderOptions,
+    ) as never,
     // IR 使用 OpenAI function tools 数组；AI SDK 7 要求按工具名索引的 ToolSet。
     tools: toModelTools(request.tools),
+    toolChoice: toModelToolChoice(request.tool_choice) as never,
+    output: request.response_format
+      ? Output.object({
+          name: request.response_format.json_schema.name,
+          description: request.response_format.json_schema.description,
+          schema: jsonSchema(request.response_format.json_schema.schema as Parameters<typeof jsonSchema>[0]),
+        }) as never
+      : undefined,
     // 客户端断开时中止上游 fetch,避免继续写已关闭 socket → uncaughtException。
     abortSignal,
+    timeout: {
+      chunkMs: resolveProviderTimeouts(route.provider).streamIdleTimeoutMs,
+    },
   });
 
-  // 用 fullStream 捕获 tool-call 增量(若 tools 存在),否则纯文本。
-  for await (const part of result.stream) {
+  // 优先用 fullStream 捕获 tool-call 增量；stream fallback 兼容旧 adapter/test double。
+  const eventStream = (result as typeof result & { stream?: typeof result.fullStream }).fullStream
+    ?? (result as typeof result & { stream?: typeof result.fullStream }).stream;
+  for await (const part of eventStream) {
     switch (part.type) {
       case "text-delta":
         // 首 token 采样:仅首个非空可见正文记录,reasoning/空 delta 不计入。
@@ -441,6 +540,15 @@ async function* streamWithRoute(
       case "reasoning-delta":
         // 推理增量(如 deepseek-r1/Claude thinking)透传给 UI。
         yield { type: "reasoning-delta", text: part.text };
+        break;
+      case "tool-input-start":
+        yield { type: "tool-call-start", toolCallId: part.id, toolName: part.toolName };
+        break;
+      case "tool-input-delta":
+        yield { type: "tool-call-delta", toolCallId: part.id, delta: part.delta };
+        break;
+      case "tool-input-end":
+        yield { type: "tool-call-end", toolCallId: part.id };
         break;
       case "tool-call":
         yield {
@@ -471,6 +579,22 @@ async function* streamWithRoute(
   yield { type: "finish", finishReason: await result.finishReason, usage: irUsage };
 }
 
+/** 推理与缓存选项跟随 route wire format，不再跟随 Provider 默认连接类型。 */
+function requestProtocolForRoute(route: ResolvedRoute): ProviderProtocol {
+  switch (resolveRouteApiFormat(route)) {
+    case "openai-chat":
+      return route.protocol === "openai-compatible" ? "openai-compatible" : "openai";
+    case "openai-responses":
+      return "openai";
+    case "anthropic-messages":
+      return "anthropic";
+    case "gemini-generate-content":
+      return "gemini";
+    default:
+      return route.protocol;
+  }
+}
+
 // ===========================================================================
 // 非流式生成 —— 副任务专用(标题生成 / 记忆抽取等)
 // ===========================================================================
@@ -491,7 +615,7 @@ export interface GenerateChatOptions extends StreamChatOptions {
 export async function generateChat(opts: GenerateChatOptions): Promise<GenerateChatResult> {
   const { ctx, request, runId = `run_${crypto.randomUUID()}` } = opts;
   const userAgent = opts.userAgent ?? await getChatUA();
-  const adapter: GatewayAttemptAdapter<never, string> = async function* ({ route, apiKey }) {
+  const adapter: GatewayAttemptAdapter<never, string> = async function* ({ route, apiKey, abortSignal }) {
     const model = buildLanguageModelWithKey(route, apiKey, undefined, undefined, userAgent);
     const { system, messages } = separateSystem(request);
     const result = await generateText({
@@ -503,6 +627,7 @@ export async function generateChat(opts: GenerateChatOptions): Promise<GenerateC
       maxOutputTokens: request.max_tokens,
       topP: request.top_p,
       output: opts.output === "json" ? Output.json() : undefined,
+      abortSignal,
     });
     return {
       value: result.text,
@@ -522,12 +647,14 @@ export async function generateChat(opts: GenerateChatOptions): Promise<GenerateC
     model: request.model,
     modelId: opts.modelId,
     taskKind: opts.taskKind,
+    abortSignal: opts.abortSignal,
+    onProviderStart: opts.onProviderStart,
     resolveRoutes: () => opts.modelId
       ? resolveRoutesById(ctx, opts.modelId)
       : resolveRoutes(ctx, request.model),
     selectAdapter: () => adapter,
     telemetry: gatewayTelemetry,
-    breaker: { recordSuccess, recordFailure },
+    breaker: gatewayBreaker,
   });
   if (outcome.status === "success") {
     return { text: outcome.result ?? "", usage: outcome.usage };

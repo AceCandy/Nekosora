@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   startExecution: vi.fn(async () => undefined),
   recordAttempt: vi.fn(async () => undefined),
   finalizeExecution: vi.fn(async () => undefined),
+  markProviderStreamUsageUnsupported: vi.fn(async () => undefined),
 }));
 
 vi.mock("@/lib/usage", async () => {
@@ -31,6 +32,13 @@ vi.mock("@/lib/gateway-execution", async (importOriginal) => {
     },
   };
 });
+vi.mock("@/lib/repositories/route-repository", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/repositories/route-repository")>();
+  return {
+    ...actual,
+    markProviderStreamUsageUnsupported: mocks.markProviderStreamUsageUnsupported,
+  };
+});
 
 import { generateText, streamText } from "ai";
 import { generateChat, streamChat } from "@/lib/stream";
@@ -40,7 +48,12 @@ import {
   type RouteRepository,
 } from "@/lib/repositories/route-repository";
 import { encrypt } from "@/lib/infra/crypto";
-import { resetAllBreakers, snapshotBreakers } from "@/lib/circuit-breaker";
+import {
+  getProviderAvailability,
+  recordFailure,
+  resetAllBreakers,
+  snapshotBreakers,
+} from "@/lib/circuit-breaker";
 
 let encryptedKeys = "";
 
@@ -79,6 +92,7 @@ function makeSingleRouteRepository(): RouteRepository {
         baseUrl: "https://example.com/v1",
         apiKeysEnc: encryptedKeys,
         headersJson: { "x-custom-auth": "HEADER_SECRET" },
+        streamIdleTimeoutMs: 12_345,
         enabled: true,
       },
     }],
@@ -159,6 +173,7 @@ describe("chat generation circuit breaker reporting", () => {
     mocks.startExecution.mockClear();
     mocks.recordAttempt.mockClear();
     mocks.finalizeExecution.mockClear();
+    mocks.markProviderStreamUsageUnsupported.mockClear();
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
   });
@@ -205,6 +220,75 @@ describe("chat generation circuit breaker reporting", () => {
       status: "closed",
       failures: 0,
     });
+  });
+
+  it("half-open 的确定性错误中性释放后可立即重新探测", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_000);
+    for (let i = 0; i < 5; i++) recordFailure("provider-a");
+    now.mockReturnValue(31_000);
+    vi.mocked(generateText).mockRejectedValue(new Error("invalid_request_error"));
+
+    const result = await generateChat({
+      ctx: { userId: "user-a", keyKind: null, source: "chat" },
+      request: {
+        model: "test-model",
+        messages: [{ role: "user", content: "hello" }],
+      },
+      userAgent: "Nekusora-Test",
+    });
+
+    expect(result.error).toBe("invalid_request_error");
+    expect(snapshotBreakers()["provider-a"]).toMatchObject({ status: "open", failures: 5 });
+    expect(getProviderAvailability("provider-a")).toBe("probe_ready");
+  });
+
+  it("generateChat 全熔断时不调用上游并记录 no_healthy_route", async () => {
+    for (let i = 0; i < 5; i++) recordFailure("provider-a");
+
+    const result = await generateChat({
+      ctx: { userId: "user-a", keyKind: null, source: "gateway" },
+      request: {
+        model: "test-model",
+        messages: [{ role: "user", content: "hello" }],
+      },
+      userAgent: "Nekusora-Test",
+    });
+
+    expect(generateText).not.toHaveBeenCalled();
+    expect(result.error).toBe("模型没有健康的可用路由");
+    expect(mocks.recordAttempt).not.toHaveBeenCalled();
+    expect(mocks.finalizeExecution).toHaveBeenCalledWith(expect.objectContaining({
+      outcome: expect.objectContaining({
+        status: "failed",
+        error: expect.objectContaining({
+          code: "routing.no_healthy_route",
+          phase: "routing",
+        }),
+      }),
+    }));
+  });
+
+  it("streamChat 全熔断时不调用上游并输出 no_healthy_route", async () => {
+    for (let i = 0; i < 5; i++) recordFailure("provider-a");
+
+    const events = [];
+    for await (const event of streamChat({
+      ctx: { userId: "user-a", keyKind: null, source: "gateway" },
+      request: {
+        model: "test-model",
+        messages: [{ role: "user", content: "hello" }],
+      },
+      userAgent: "Nekusora-Test",
+    })) {
+      events.push(event);
+    }
+
+    expect(streamText).not.toHaveBeenCalled();
+    expect(events).toEqual([expect.objectContaining({
+      type: "error",
+      code: "routing.no_healthy_route",
+    })]);
+    expect(mocks.recordAttempt).not.toHaveBeenCalled();
   });
 
   it("generateChat 对外结果与尝试日志不包含实际 key/header,分类保持原始状态码", async () => {
@@ -299,6 +383,7 @@ describe("chat generation circuit breaker reporting", () => {
     expect(result.text).toBe('{"memory":[]}');
     expect(generateText).toHaveBeenCalledWith(expect.objectContaining({
       output: { kind: "json-output" },
+      abortSignal: expect.any(AbortSignal),
     }));
   });
 
@@ -345,6 +430,10 @@ describe("chat generation circuit breaker reporting", () => {
       expectedEvent,
       { type: "error", error: "connect ETIMEDOUT", code: "generation_failed" },
     ]);
+    expect(streamText).toHaveBeenCalledWith(expect.objectContaining({
+      abortSignal: expect.any(AbortSignal),
+      timeout: { chunkMs: 12_345 },
+    }));
     expect(mocks.recordAttempt).toHaveBeenCalledTimes(1);
     expect(mocks.finalizeExecution).toHaveBeenCalledWith(expect.objectContaining({
       outcome: expect.objectContaining({ status: "failed" }),
@@ -441,6 +530,69 @@ describe("chat generation circuit breaker reporting", () => {
     expect(snapshotBreakers()["provider-a"]).toMatchObject({
       status: "closed",
       failures: 1,
+    });
+  });
+
+  it("OpenAI-compatible 明确拒绝 stream_options 时自动持久化并同 key 重试", async () => {
+    const repository = makeSingleRouteRepository();
+    setRouteRepository({
+      ...repository,
+      findEnabledRoutes: async (modelId) => {
+        const [entry] = await repository.findEnabledRoutes(modelId);
+        return [{
+          route: { ...entry!.route, apiFormat: "openai-chat" },
+          provider: {
+            ...entry!.provider,
+            protocol: "openai-compatible",
+            supportsStreamUsage: true,
+          },
+        }];
+      },
+    });
+    vi.mocked(streamText)
+      .mockReturnValueOnce({
+        stream: (async function* () {
+          yield {
+            type: "error",
+            error: Object.assign(
+              new Error("invalid_request_error: Unsupported parameter: 'stream_options'."),
+              { statusCode: 400 },
+            ),
+          };
+        })(),
+      } as never)
+      .mockReturnValueOnce(mockStreamResult(
+        [{ type: "text-delta", text: "answer" }],
+        "stop",
+        { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+      ));
+
+    const events = await collectStream();
+
+    expect(streamText).toHaveBeenCalledTimes(2);
+    expect(mocks.markProviderStreamUsageUnsupported)
+      .toHaveBeenCalledWith("provider-a", "https://example.com/v1");
+    expect(events).toEqual([
+      { type: "text-delta", text: "answer" },
+      {
+        type: "finish",
+        finishReason: "stop",
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+      },
+    ]);
+    expect(mocks.recordAttempt).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      status: "failed",
+      error: expect.objectContaining({ code: "stream_options_not_supported" }),
+    }));
+    expect(mocks.recordAttempt).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      status: "success",
+    }));
+    expect(mocks.finalizeExecution).toHaveBeenCalledWith(expect.objectContaining({
+      outcome: expect.objectContaining({ status: "success" }),
+    }));
+    expect(snapshotBreakers()["provider-a"]).toMatchObject({
+      status: "closed",
+      failures: 0,
     });
   });
 

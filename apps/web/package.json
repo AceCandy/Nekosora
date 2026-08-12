@@ -15,6 +15,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:api-key-pg": "tsx --env-file-if-exists=../../.env.local scripts/test-api-key-data-path-pg.ts",
     "check": "pnpm lint && pnpm typecheck",
     "db:generate:pg": "drizzle-kit generate --config=drizzle.pg.config.ts",
     "db:migrate:pg": "drizzle-kit migrate --config=drizzle.pg.config.ts",

@@ -7,6 +7,12 @@ const mocks = vi.hoisted(() => ({
   streamChat: vi.fn(),
   getGatewayUA: vi.fn(),
   loadWebSearchConfig: vi.fn(),
+  consumeRate: vi.fn(),
+  acquireLease: vi.fn(),
+  reserveQuota: vi.fn(),
+  markProviderStarted: vi.fn(),
+  finalizeGovernance: vi.fn(),
+  findModel: vi.fn(),
 }));
 
 vi.mock("@/lib/keys", () => ({
@@ -16,6 +22,14 @@ vi.mock("@/lib/keys", () => ({
 vi.mock("@/lib/stream", () => ({ streamChat: mocks.streamChat }));
 vi.mock("@/lib/system-settings/ua", () => ({ getGatewayUA: mocks.getGatewayUA }));
 vi.mock("@/lib/web-search/registry", () => ({ loadConfig: mocks.loadWebSearchConfig }));
+vi.mock("@/lib/gateway-governance/lifecycle", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/gateway-governance/lifecycle")>(),
+  consumeGatewayGovernanceRate: mocks.consumeRate,
+  acquireGatewayGovernanceLease: mocks.acquireLease,
+}));
+vi.mock("@/lib/repositories/route-repository", () => ({
+  getRouteRepository: () => ({ findEnabledModelByNameForOwner: mocks.findModel }),
+}));
 
 import { POST } from "./route";
 
@@ -45,6 +59,21 @@ describe("POST /v1/chat/completions 流式取消", () => {
       ctx: { userId: "user-1", apiKeyId: "key-1", keyKind: "master", source: "gateway" },
     });
     mocks.getGatewayUA.mockResolvedValue("Nekusora-Test");
+    mocks.consumeRate.mockReset().mockResolvedValue({ version: 1 });
+    mocks.reserveQuota.mockReset().mockResolvedValue(undefined);
+    mocks.markProviderStarted.mockReset().mockResolvedValue(undefined);
+    mocks.finalizeGovernance.mockReset().mockResolvedValue({ settled: true });
+    mocks.acquireLease.mockReset().mockResolvedValue({
+      signal: new AbortController().signal,
+      reserveQuota: mocks.reserveQuota,
+      markProviderStarted: mocks.markProviderStarted,
+      finalize: mocks.finalizeGovernance,
+      getFailure: () => null,
+    });
+    mocks.findModel.mockReset().mockResolvedValue({
+      contextWindow: 32_000,
+      maxOutputTokens: 16_384,
+    });
   });
 
   afterEach(() => {
@@ -118,20 +147,56 @@ describe("POST /v1/chat/completions 流式取消", () => {
     expect(body).toContain("data: [DONE]\n\n");
   });
 
-  it("忽略 WebChat 联网配置且不注入逻辑搜索工具", async () => {
+  it("接受 OpenAI 客户端发送的 stream_options.include_usage", async () => {
+    mocks.streamChat.mockReturnValue((async function* () {
+      yield { type: "finish", finishReason: "stop", usage: {} };
+    })());
+
+    const response = await POST(request({
+      stream_options: { include_usage: true },
+    }));
+    const body = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(mocks.streamChat).toHaveBeenCalledOnce();
+    expect(body).toContain("data: [DONE]\n\n");
+  });
+
+  it("拒绝未知 stream_options 子字段且不触网上游", async () => {
+    const response = await POST(request({
+      stream_options: { include_cost: true },
+    }));
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body).toMatchObject({
+      error: {
+        code: "request.unsupported_parameter",
+        message: "Unsupported parameter: 'stream_options.include_cost'.",
+        param: "stream_options.include_cost",
+      },
+    });
+    expect(mocks.streamChat).not.toHaveBeenCalled();
+  });
+
+  it("拒绝 WebChat 专有联网参数且不触网上游", async () => {
     mocks.streamChat.mockReturnValue((async function* () {
       yield { type: "finish", finishReason: "stop", usage: {} };
     })());
 
     const response = await POST(request({ webSearch: true }));
-    await response.text();
+    const body = await response.json();
 
+    expect(response.status).toBe(400);
+    expect(body).toMatchObject({
+      error: {
+        code: "request.unsupported_parameter",
+        message: "Unsupported parameter: 'webSearch'.",
+        param: "webSearch",
+      },
+    });
     expect(mocks.loadWebSearchConfig).not.toHaveBeenCalled();
-    expect(mocks.streamChat).toHaveBeenCalledWith(expect.objectContaining({
-      request: expect.not.objectContaining({
-        tools: expect.anything(),
-      }),
-    }));
+    expect(mocks.streamChat).not.toHaveBeenCalled();
   });
 
   it("普通异常时保留 SSE server_error 帧", async () => {

@@ -34,6 +34,8 @@ vi.mock("@/lib/gateway-execution", async (importOriginal) => {
 });
 
 import { generateImage } from "ai";
+import { createOpenAI } from "@ai-sdk/openai";
+import { gatewayTelemetry } from "@/lib/gateway-execution";
 import { generateImageViaRoute, RoutingError } from "@/lib/providers/multimodal/image-gen";
 import {
   setRouteRepository,
@@ -74,6 +76,7 @@ interface MockProvider {
   baseUrl: string;
   apiKeysEnc: string;
   headersJson?: Record<string, string>;
+  connectTimeoutMs?: number;
   enabled: boolean;
 }
 
@@ -116,7 +119,7 @@ function makeDefaultData(): MockData {
   const provider: MockProvider = {
     id: "PA", name: "上游A", protocol: "openai",
     baseUrl: "https://a.example.com/v1", apiKeysEnc: ENC_KEY,
-    headersJson: { "x-custom-auth": "HEADER_SECRET" }, enabled: true,
+    headersJson: { "x-custom-auth": "HEADER_SECRET" }, connectTimeoutMs: 1_234, enabled: true,
   };
   const pubModel: MockModel = {
     id: "M_PUB", name: "dalle-pub", ownerUserId: "U_A", visibility: "public",
@@ -179,6 +182,12 @@ describe("generateImageViaRoute (image byId 可见性)", () => {
     expect(result.images[0].base64).toBe("ZmFrZQ==");
     expect(result.providerName).toBe("上游A");
     expect(result.upstreamModel).toBe("dall-e-3");
+    expect(createOpenAI).toHaveBeenCalledWith(expect.objectContaining({
+      fetch: expect.any(Function),
+    }));
+    expect(generateImage).toHaveBeenCalledWith(expect.objectContaining({
+      abortSignal: expect.any(AbortSignal),
+    }));
   });
 
   it("WebChat byId:owner 自己可生成 private 图像模型", async () => {
@@ -209,6 +218,45 @@ describe("generateImageViaRoute (image byId 可见性)", () => {
     const ctx: CallContext = { userId: "U_A", keyKind: null, source: "gateway" };
     const result = await generateImageViaRoute(ctx, "dalle-pub", { prompt: "一只猫" });
     expect(result.images).toHaveLength(1);
+  });
+
+  it("按实际返回张数写入 attempt 和 execution usage", async () => {
+    vi.mocked(generateImage).mockResolvedValueOnce({
+      images: [
+        { base64: "aW1hZ2UtMQ==" },
+        { uint8Array: new Uint8Array([2]) },
+      ],
+    } as never);
+
+    const result = await generateImageViaRoute(
+      { userId: "U_A", keyKind: null, source: "gateway" },
+      "dalle-pub",
+      { prompt: "两张图", n: 3 },
+    );
+
+    expect(result.images).toHaveLength(2);
+    expect(gatewayTelemetry.recordAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({ usage: { imageCount: 2 } }),
+    );
+    expect(gatewayTelemetry.finalizeExecution).toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: expect.objectContaining({ usage: { imageCount: 2 } }) }),
+    );
+  });
+
+  it("把取消信号与 Provider-start 钩子交给执行引擎", async () => {
+    const abortController = new AbortController();
+    const onProviderStart = vi.fn(async () => undefined);
+
+    await generateImageViaRoute(
+      { userId: "U_A", keyKind: null, source: "gateway" },
+      "dalle-pub",
+      { prompt: "一只猫", abortSignal: abortController.signal, onProviderStart },
+    );
+
+    expect(onProviderStart).toHaveBeenCalledOnce();
+    expect(generateImage).toHaveBeenCalledWith(expect.objectContaining({
+      abortSignal: expect.any(AbortSignal),
+    }));
   });
 
   it("byId:模型无 imageGeneration 能力 → capability_not_supported", async () => {

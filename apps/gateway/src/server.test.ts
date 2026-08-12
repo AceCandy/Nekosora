@@ -6,11 +6,14 @@ const readinessMocks = vi.hoisted(() => ({
   getStorage: vi.fn(),
   resolveStorageKind: vi.fn(),
   queueAvailable: vi.fn(),
+  closeDb: vi.fn(),
+  closeQueue: vi.fn(),
 }));
 
 vi.mock("@nekusora/db", async (importOriginal) => ({
   ...await importOriginal<typeof import("@nekusora/db")>(),
   getDb: readinessMocks.getDb,
+  closeDb: readinessMocks.closeDb,
 }));
 vi.mock("@nekusora/core/storage", async (importOriginal) => ({
   ...await importOriginal<typeof import("@nekusora/core/storage")>(),
@@ -20,10 +23,15 @@ vi.mock("@nekusora/core/storage", async (importOriginal) => ({
 vi.mock("@nekusora/queue", async (importOriginal) => ({
   ...await importOriginal<typeof import("@nekusora/queue")>(),
   queueAvailable: readinessMocks.queueAvailable,
+  closeQueue: readinessMocks.closeQueue,
 }));
 
 import { GATEWAY_ROUTES, type GatewayHandlerName } from "@nekusora/contracts/routes";
-import { buildServer, type BuildServerOptions } from "./server";
+import {
+  buildServer,
+  closeGatewayResources,
+  type BuildServerOptions,
+} from "./server";
 
 function withHandler(
   name: GatewayHandlerName,
@@ -54,6 +62,8 @@ describe("Gateway HTTP adapter", () => {
     readinessMocks.getStorage.mockReset().mockResolvedValue({ kind: "local" });
     readinessMocks.resolveStorageKind.mockReset().mockReturnValue(null);
     readinessMocks.queueAvailable.mockReset().mockResolvedValue(true);
+    readinessMocks.closeDb.mockReset().mockResolvedValue(undefined);
+    readinessMocks.closeQueue.mockReset().mockResolvedValue(undefined);
   });
 
   it("注册完整的数据面路由矩阵", async () => {
@@ -61,6 +71,50 @@ describe("Gateway HTTP adapter", () => {
     for (const route of GATEWAY_ROUTES) {
       expect(app.hasRoute({ method: route.method, url: route.path })).toBe(true);
     }
+    await app.close();
+  });
+
+  it.each([
+    [
+      "v1GeminiGenerateContent",
+      "/v1beta/models/publishers/google/models/gemini-2.5-pro:generateContent",
+    ],
+    [
+      "v1GeminiStreamGenerateContent",
+      "/v1beta/models/publishers/google/models/gemini-2.5-pro:streamGenerateContent",
+    ],
+  ] as const)("%s 捕获完整 Gemini model 路径", async (handlerName, url) => {
+    const handler = vi.fn(async (request: Request, params: Readonly<Record<string, string>>) => {
+      expect(params.model).toBe("publishers/google/models/gemini-2.5-pro");
+      expect(await request.json()).toEqual({ contents: [{ parts: [{ text: "hello" }] }] });
+      return Response.json({ ok: true });
+    });
+    const app = withHandler(handlerName, handler);
+
+    const response = await app.inject({
+      method: "POST",
+      url,
+      headers: { "content-type": "application/json" },
+      payload: { contents: [{ parts: [{ text: "hello" }] }] },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(handler).toHaveBeenCalledOnce();
+    await app.close();
+  });
+
+  it("Gemini 未知操作不进入协议 handler", async () => {
+    const handler = vi.fn(async () => Response.json({ ok: true }));
+    const app = withHandler("v1GeminiGenerateContent", handler);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1beta/models/gemini-2.5-pro:unknownOperation",
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(handler).not.toHaveBeenCalled();
     await app.close();
   });
 
@@ -200,6 +254,38 @@ describe("Gateway HTTP adapter", () => {
     expect(response.body).toBe("data: {\"ok\":true}\n\ndata: [DONE]\n\n");
     await app.close();
     expect(closeResources).toHaveBeenCalledOnce();
+  });
+
+  it("等待 reaper 停止后再关闭 queue 与数据库", async () => {
+    const events: string[] = [];
+    let release!: () => void;
+    const stopped = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const reaper = {
+      stop: vi.fn(() => {
+        events.push("reaper");
+        return stopped;
+      }),
+    };
+    readinessMocks.closeQueue.mockImplementation(async () => {
+      events.push("queue");
+    });
+    readinessMocks.closeDb.mockImplementation(async () => {
+      events.push("db");
+    });
+
+    const closing = closeGatewayResources(reaper);
+    await Promise.resolve();
+
+    expect(events).toEqual(["reaper"]);
+    expect(readinessMocks.closeQueue).not.toHaveBeenCalled();
+    expect(readinessMocks.closeDb).not.toHaveBeenCalled();
+
+    release();
+    await closing;
+
+    expect(events).toEqual(["reaper", "queue", "db"]);
   });
 });
 

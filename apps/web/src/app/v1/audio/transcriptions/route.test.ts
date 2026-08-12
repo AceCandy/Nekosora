@@ -7,6 +7,12 @@ const mocks = vi.hoisted(() => ({
   parseFormData: vi.fn(),
   transcribeViaRoute: vi.fn(),
   logUsage: vi.fn(),
+  beginGatewayGovernance: vi.fn(),
+  reserveQuota: vi.fn(),
+  markProviderStarted: vi.fn(),
+  finalize: vi.fn(),
+  measureSttSeconds: vi.fn(),
+  governanceSignal: new AbortController().signal,
 }));
 
 vi.mock("@/lib/keys", () => ({
@@ -26,8 +32,17 @@ vi.mock("@/lib/providers/multimodal/audio-stt", () => ({
   transcribeViaRoute: mocks.transcribeViaRoute,
 }));
 vi.mock("@/lib/usage", () => ({ logUsage: mocks.logUsage }));
+vi.mock("@/lib/gateway-governance/lifecycle", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/gateway-governance/lifecycle")>(),
+  beginGatewayGovernance: mocks.beginGatewayGovernance,
+}));
+vi.mock("@/lib/gateway-governance/metering", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/gateway-governance/metering")>(),
+  measureSttSeconds: mocks.measureSttSeconds,
+}));
 
 import { RequestBodyTooLargeError } from "@/lib/multipart";
+import { RoutingError } from "@/lib/providers/multimodal/audio-stt";
 import {
   MAX_TRANSCRIPTION_BODY_BYTES,
   MAX_TRANSCRIPTION_FILE_BYTES,
@@ -72,6 +87,16 @@ describe("POST /v1/audio/transcriptions", () => {
       upstreamKeyMasked: "sk-***",
     });
     mocks.logUsage.mockReset().mockResolvedValue(undefined);
+    mocks.reserveQuota.mockReset().mockResolvedValue(undefined);
+    mocks.markProviderStarted.mockReset().mockResolvedValue(undefined);
+    mocks.finalize.mockReset().mockResolvedValue({ settled: true });
+    mocks.measureSttSeconds.mockReset().mockResolvedValue(6);
+    mocks.beginGatewayGovernance.mockReset().mockResolvedValue({
+      signal: mocks.governanceSignal,
+      reserveQuota: mocks.reserveQuota,
+      markProviderStarted: mocks.markProviderStarted,
+      finalize: mocks.finalize,
+    });
   });
 
   it("multipart 总体超限时返回本地化 413 且不调用上游", async () => {
@@ -113,20 +138,62 @@ describe("POST /v1/audio/transcriptions", () => {
   });
 
   it("合法音频保持字段透传与转写响应", async () => {
-    const response = await POST(request());
+    const req = request();
+    const response = await POST(req);
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ text: "transcribed" });
+    expect(mocks.beginGatewayGovernance).toHaveBeenCalledWith({
+      identity: { userId: "user-1", apiKeyId: "key-1" },
+      operation: "audio.transcription",
+      requestSignal: req.signal,
+    });
+    expect(mocks.measureSttSeconds).toHaveBeenCalledWith(
+      Buffer.from("audio"),
+      "audio/mpeg",
+    );
+    expect(mocks.reserveQuota).toHaveBeenCalledWith("stt_seconds", 6);
     expect(mocks.transcribeViaRoute).toHaveBeenCalledWith(
       expect.objectContaining({ userId: "user-1" }),
       "whisper-1",
-      {
+      expect.objectContaining({
         audio: Buffer.from("audio"),
         mime: "audio/mpeg",
         language: "zh",
         prompt: "context",
-      },
+        abortSignal: mocks.governanceSignal,
+        onProviderStart: expect.any(Function),
+      }),
     );
+    const options = mocks.transcribeViaRoute.mock.calls[0]?.[2];
+    await options.onProviderStart();
+    expect(mocks.markProviderStarted).toHaveBeenCalledOnce();
+    expect(mocks.finalize).toHaveBeenCalledWith(6);
+  });
+
+  it("无法可靠计量的音频在 Provider 前拒绝", async () => {
+    mocks.measureSttSeconds.mockRejectedValueOnce(new Error("invalid audio"));
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "request.invalid_json" },
+    });
+    expect(mocks.reserveQuota).not.toHaveBeenCalled();
+    expect(mocks.transcribeViaRoute).not.toHaveBeenCalled();
+    expect(mocks.finalize).toHaveBeenCalledWith(undefined);
+  });
+
+  it("无健康路由时保留 routing.no_healthy_route 和 503", async () => {
+    mocks.transcribeViaRoute.mockRejectedValueOnce(new RoutingError("no_healthy_route"));
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      error: { code: "routing.no_healthy_route", type: "server_error" },
+    });
   });
 
   it("异常兜底不会把凭据写入 HTTP、console 或错误日志", async () => {

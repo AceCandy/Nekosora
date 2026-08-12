@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { getTableConfig } from "drizzle-orm/pg-core";
 import {
+  apiKeys,
   conversationShares,
   conversationShareUnlockAttempts,
   conversations,
@@ -10,6 +11,22 @@ import {
   memoryExtractionJobs,
   runs,
 } from "./pg";
+
+describe("API key schema", () => {
+  it("声明 prefix 索引且不再声明父子关系", () => {
+    expect("parentId" in apiKeys).toBe(false);
+
+    const config = getTableConfig(apiKeys);
+    const prefixIndex = config.indexes.find(
+      (candidate) => candidate.config.name === "api_keys_key_prefix_idx",
+    );
+    expect(prefixIndex?.config.columns.map((column) => "name" in column ? column.name : null))
+      .toEqual(["key_prefix"]);
+    expect(config.indexes.some(
+      (candidate) => candidate.config.name === "api_keys_parent_idx",
+    )).toBe(false);
+  });
+});
 
 describe("gateway observability schema", () => {
   it("声明 execution final fact 与唯一 attempt 序号", () => {

@@ -18,7 +18,8 @@
 ## 自检清单
 
 - [ ] 代码遵循项目目录边界(features/shared/lib 分离)
-- [ ] `pnpm typecheck` 通过
+- [ ] `pnpm check` 与 `pnpm test` 通过
+- [ ] 受影响的 Web/Gateway/Worker 应用与 Dockerfile 已构建
 - [ ] 设计遵循「星枢天流」语言(冷调、克制、无 AI 模板痕迹)
 - [ ] 新增依赖是必要的(无更轻量替代)
 - [ ] 已更新相关文档(如涉及 API/配置变更)

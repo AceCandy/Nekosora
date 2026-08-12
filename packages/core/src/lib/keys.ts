@@ -1,13 +1,13 @@
 /**
  * 密钥管理 —— 主 Key(每用户唯一,可调用)与子 Key(多个,受模型绑定约束)。
  *
- * 存储:只存 sha256 hash + 显示用 prefix,明文仅创建时一次性返回。
+ * 存储:只存 sha256 hash + 脱敏预览,明文仅创建时一次性返回。
  * 格式:${SK_PREFIX}${nanoid(SK_RANDOM_LENGTH)},如 sk-abc123...
  *
  * 校验:从 Authorization: Bearer 提取 → sha256 → 按 prefix 候选查回 → 常量时间比对。
  */
 import { customAlphabet } from "nanoid";
-import { and, eq } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { hashSecret, safeEqual, encrypt } from "@/lib/infra/crypto";
 import { getEnvInfo } from "@/lib/infra/env";
@@ -20,7 +20,6 @@ const generateSecret = customAlphabet(alphabet, 48);
 export interface ApiKeyRecord {
   id: string;
   userId: string;
-  parentId: string | null;
   kind: "master" | "sub";
   name: string;
   keyHash: string;
@@ -30,39 +29,72 @@ export interface ApiKeyRecord {
   createdAt: Date;
 }
 
+/** 密钥管理页面可见的最小字段集合。 */
+export interface ApiKeyListItem {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  kind: "master" | "sub";
+  enabled: boolean;
+}
+
 /** 生成一个新的明文 key 字符串。 */
 function generateRawKey(): string {
   const { skPrefix } = getEnvInfo();
   return `${skPrefix}${generateSecret()}`;
 }
 
-/** 从明文 key 提取显示用 prefix(前 8 字符 + …)。 */
-function makePrefix(rawKey: string): string {
+/** 旧记录使用的查询前缀。 */
+function makeLegacyPrefix(rawKey: string): string {
   return rawKey.slice(0, 8) + "…";
 }
 
-/** 创建主 Key(每用户唯一)。如已存在则抛错。返回明文(仅此一次)。 */
+/** 从明文 key 生成前后可辨识的脱敏预览。 */
+function makeKeyPreview(rawKey: string): string {
+  return `${rawKey.slice(0, 8)}****${rawKey.slice(-4)}`;
+}
+
+/** 创建主 Key；已有已撤销记录时原位轮换。返回明文(仅此一次)。 */
 export async function createMasterKey(userId: string, name = "主密钥"): Promise<string> {
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
 
-  // 幂等检查:已有主 key 则抛错。
+  // 每个用户只保留一条主 key 记录，撤销后原位轮换。
   const existing = await db
     .select()
     .from(s.apiKeys)
     .where(eq(s.apiKeys.userId, userId));
-  const hasMaster = existing.some((k: ApiKeyRecord) => k.kind === "master");
-  if (hasMaster) throw new Error("该用户已存在主密钥");
+  const master = existing.find((k: ApiKeyRecord) => k.kind === "master");
+  if (master?.enabled) throw new Error("该用户已存在主密钥");
 
   const rawKey = generateRawKey();
+  if (master) {
+    const updated = await db
+      .update(s.apiKeys)
+      .set({
+        keyHash: hashSecret(rawKey),
+        keyPrefix: makeKeyPreview(rawKey),
+        enabled: true,
+        lastUsedAt: null,
+      })
+      .where(and(
+        eq(s.apiKeys.id, master.id),
+        eq(s.apiKeys.userId, userId),
+        eq(s.apiKeys.kind, "master"),
+        eq(s.apiKeys.enabled, false),
+      ))
+      .returning({ id: s.apiKeys.id });
+    if (updated.length !== 1) throw new Error("该用户已存在主密钥");
+    return rawKey;
+  }
+
   await db.insert(s.apiKeys).values({
     userId,
-    parentId: null,
     kind: "master",
     name,
     keyHash: hashSecret(rawKey),
-    keyPrefix: makePrefix(rawKey),
+    keyPrefix: makeKeyPreview(rawKey),
     enabled: true,
   });
   return rawKey;
@@ -77,33 +109,41 @@ export async function createSubKey(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
 
-  // 找到该用户的主 key 作为 parent。
+  // 子 key 仅在该用户有可用主 key 时创建。
   const keys = await db
     .select()
     .from(s.apiKeys)
     .where(eq(s.apiKeys.userId, userId));
-  const master = keys.find((k: ApiKeyRecord) => k.kind === "master");
-  if (!master) throw new Error("用户尚无主密钥,无法创建子密钥");
+  const hasEnabledMaster = keys.some((k: ApiKeyRecord) => k.kind === "master" && k.enabled);
+  if (!hasEnabledMaster) throw new Error("用户尚无主密钥,无法创建子密钥");
 
   const rawKey = generateRawKey();
   await db.insert(s.apiKeys).values({
     userId,
-    parentId: master.id,
     kind: "sub",
     name,
     keyHash: hashSecret(rawKey),
-    keyPrefix: makePrefix(rawKey),
+    keyPrefix: makeKeyPreview(rawKey),
     enabled: true,
   });
   return rawKey;
 }
 
-/** 列出用户所有密钥(不含明文 hash,仅展示用)。 */
-export async function listKeys(userId: string): Promise<ApiKeyRecord[]> {
+/** 列出用户所有密钥，仅查询页面需要的脱敏字段。 */
+export async function listKeys(userId: string): Promise<ApiKeyListItem[]> {
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
-  return db.select().from(s.apiKeys).where(eq(s.apiKeys.userId, userId));
+  return db
+    .select({
+      id: s.apiKeys.id,
+      name: s.apiKeys.name,
+      keyPrefix: s.apiKeys.keyPrefix,
+      kind: s.apiKeys.kind,
+      enabled: s.apiKeys.enabled,
+    })
+    .from(s.apiKeys)
+    .where(eq(s.apiKeys.userId, userId));
 }
 
 /** 禁用/启用密钥。 */
@@ -133,7 +173,8 @@ export async function verifyKey(rawKey: string): Promise<{
   const s = getSchema() as any;
 
   const keyHash = hashSecret(rawKey);
-  const prefix = makePrefix(rawKey);
+  const legacyPrefix = makeLegacyPrefix(rawKey);
+  const keyPreview = makeKeyPreview(rawKey);
 
   // 按 prefix 缩小候选范围,并在同一次读取中约束 key 与所属用户均可用。
   const candidates = await db
@@ -142,7 +183,10 @@ export async function verifyKey(rawKey: string): Promise<{
     .innerJoin(s.user, eq(s.apiKeys.userId, s.user.id))
     .where(
       and(
-        eq(s.apiKeys.keyPrefix, prefix),
+        or(
+          eq(s.apiKeys.keyPrefix, legacyPrefix),
+          eq(s.apiKeys.keyPrefix, keyPreview),
+        ),
         eq(s.apiKeys.enabled, true),
         eq(s.user.status, "active"),
       ),

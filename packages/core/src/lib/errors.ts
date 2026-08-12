@@ -43,11 +43,13 @@ export const ErrorCode = {
   ROUTING_MODEL_NOT_AVAILABLE: "routing.model_not_available",
   ROUTING_MODEL_NOT_BOUND: "routing.model_not_bound",
   ROUTING_NO_ROUTE: "routing.no_route",
+  ROUTING_NO_HEALTHY_ROUTE: "routing.no_healthy_route",
   ROUTING_CAPABILITY_NOT_SUPPORTED: "routing.capability_not_supported",
 
   // --- 请求校验 (request.*) ---
   REQUEST_INVALID_JSON: "request.invalid_json",
   REQUEST_MISSING_FIELD: "request.missing_field",
+  REQUEST_UNSUPPORTED_PARAMETER: "request.unsupported_parameter",
   REQUEST_PAYLOAD_TOO_LARGE: "request.payload_too_large",
 
   // --- 上游/生成 (gateway.*) ---
@@ -55,6 +57,9 @@ export const ErrorCode = {
   GATEWAY_GENERATION_FAILED: "gateway.generation_failed",
   GATEWAY_ALL_ROUTES_FAILED: "gateway.all_routes_failed",
   GATEWAY_TIMEOUT: "gateway.timeout",
+  GATEWAY_RATE_LIMIT_EXCEEDED: "gateway.rate_limit_exceeded",
+  GATEWAY_CONCURRENCY_LIMIT_EXCEEDED: "gateway.concurrency_limit_exceeded",
+  GATEWAY_QUOTA_EXCEEDED: "gateway.quota_exceeded",
 
   // --- 多模态 (media.*) ---
   MEDIA_IMAGE_GEN_FAILED: "media.image_gen_failed",
@@ -115,6 +120,11 @@ export const ERROR_META: Record<ErrorCodeValue, ErrorMeta> = {
     type: "server_error",
     i18nKey: "errors.routing_no_route",
   },
+  [ErrorCode.ROUTING_NO_HEALTHY_ROUTE]: {
+    status: 503,
+    type: "server_error",
+    i18nKey: "errors.routing_no_healthy_route",
+  },
   [ErrorCode.ROUTING_CAPABILITY_NOT_SUPPORTED]: {
     status: 400,
     type: "invalid_request_error",
@@ -131,6 +141,11 @@ export const ERROR_META: Record<ErrorCodeValue, ErrorMeta> = {
     status: 400,
     type: "invalid_request_error",
     i18nKey: "errors.request_missing_field",
+  },
+  [ErrorCode.REQUEST_UNSUPPORTED_PARAMETER]: {
+    status: 400,
+    type: "invalid_request_error",
+    i18nKey: "errors.request_unsupported_parameter",
   },
   [ErrorCode.REQUEST_PAYLOAD_TOO_LARGE]: {
     status: 413,
@@ -158,6 +173,21 @@ export const ERROR_META: Record<ErrorCodeValue, ErrorMeta> = {
     status: 504,
     type: "server_error",
     i18nKey: "errors.gateway_timeout",
+  },
+  [ErrorCode.GATEWAY_RATE_LIMIT_EXCEEDED]: {
+    status: 429,
+    type: "rate_limit_exceeded",
+    i18nKey: "errors.gateway_rate_limit_exceeded",
+  },
+  [ErrorCode.GATEWAY_CONCURRENCY_LIMIT_EXCEEDED]: {
+    status: 429,
+    type: "rate_limit_exceeded",
+    i18nKey: "errors.gateway_concurrency_limit_exceeded",
+  },
+  [ErrorCode.GATEWAY_QUOTA_EXCEEDED]: {
+    status: 429,
+    type: "rate_limit_exceeded",
+    i18nKey: "errors.gateway_quota_exceeded",
   },
 
   // media.*
@@ -198,6 +228,61 @@ export interface ErrorResponseBody {
     type: ErrorType;
     details?: unknown;
   };
+}
+
+export type GatewayGovernanceLimitErrorCode =
+  | typeof ErrorCode.GATEWAY_RATE_LIMIT_EXCEEDED
+  | typeof ErrorCode.GATEWAY_CONCURRENCY_LIMIT_EXCEEDED
+  | typeof ErrorCode.GATEWAY_QUOTA_EXCEEDED;
+
+export interface GatewayGovernanceLimitErrorInput {
+  reason: "rate" | "concurrency" | "quota";
+  scope: "key" | "user";
+  retryAfterSeconds: number;
+  quotaKind?: string;
+}
+
+export interface GatewayGovernanceLimitErrorDescriptor {
+  code: GatewayGovernanceLimitErrorCode;
+  details: {
+    scope: "key" | "user";
+    resource: string;
+    retryAfterSeconds: number;
+  };
+  headers: Headers;
+}
+
+export function describeGatewayGovernanceLimitError(
+  error: GatewayGovernanceLimitErrorInput,
+): GatewayGovernanceLimitErrorDescriptor {
+  const code = error.reason === "rate"
+    ? ErrorCode.GATEWAY_RATE_LIMIT_EXCEEDED
+    : error.reason === "concurrency"
+      ? ErrorCode.GATEWAY_CONCURRENCY_LIMIT_EXCEEDED
+      : ErrorCode.GATEWAY_QUOTA_EXCEEDED;
+  const retryAfterSeconds = Math.max(1, Math.ceil(error.retryAfterSeconds));
+  return {
+    code,
+    details: {
+      scope: error.scope,
+      resource: error.reason === "quota" ? (error.quotaKind ?? "quota") : error.reason,
+      retryAfterSeconds,
+    },
+    headers: gatewayGovernanceErrorHeaders(code, retryAfterSeconds),
+  };
+}
+
+export function gatewayGovernanceErrorHeaders(
+  code: GatewayGovernanceLimitErrorCode,
+  retryAfterSeconds: number,
+): Headers {
+  if (!Number.isFinite(retryAfterSeconds) || retryAfterSeconds <= 0) {
+    throw new TypeError("retryAfterSeconds must be a finite positive number");
+  }
+  return new Headers({
+    "Retry-After": String(Math.ceil(retryAfterSeconds)),
+    "X-Gateway-Error-Code": code,
+  });
 }
 
 /**
@@ -246,11 +331,12 @@ export function apiError(
   code: ErrorCodeValue,
   details?: unknown,
   messageOverride?: string,
+  headers?: HeadersInit,
 ) {
   const meta = ERROR_META[code];
   return Response.json(
     errorResponse(code, details, messageOverride),
-    { status: meta.status },
+    { status: meta.status, headers },
   );
 }
 
@@ -264,11 +350,13 @@ const ROUTING_CODE_MAP: Record<string, ErrorCodeValue> = {
   model_not_available: ErrorCode.ROUTING_MODEL_NOT_AVAILABLE,
   model_not_bound: ErrorCode.ROUTING_MODEL_NOT_BOUND,
   no_route: ErrorCode.ROUTING_NO_ROUTE,
+  no_healthy_route: ErrorCode.ROUTING_NO_HEALTHY_ROUTE,
   capability_not_supported: ErrorCode.ROUTING_CAPABILITY_NOT_SUPPORTED,
   routing_error: ErrorCode.SERVER_INTERNAL,
 };
 
 export function routingCodeToErrorCode(routingCode: string): ErrorCodeValue {
+  if (routingCode in ERROR_META) return routingCode as ErrorCodeValue;
   return ROUTING_CODE_MAP[routingCode] ?? ErrorCode.SERVER_INTERNAL;
 }
 
@@ -287,9 +375,10 @@ export async function apiErrorLocalized(
   code: ErrorCodeValue,
   req: Request,
   details?: unknown,
+  headers?: HeadersInit,
 ) {
   const { resolveLocale } = await import("@/lib/i18n");
   const locale = resolveLocale(req.headers.get("accept-language"));
   const message = translateError(code, locale);
-  return apiError(code, details, message);
+  return apiError(code, details, message, headers);
 }

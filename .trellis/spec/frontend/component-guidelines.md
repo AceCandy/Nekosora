@@ -105,13 +105,19 @@
 
 浏览器检查必须使用键盘 Tab 使元素命中 `:focus-visible`，并检查截图或实际 ring/outline 颜色；仅搜索 class 名不能证明焦点可见。
 
-### 系统暗色主题
+### 当前固定亮色主题
 
-项目的 Tailwind `dark:` 变体由 `<html>.dark` 驱动。`RootLayout` 必须在首屏根据 `matchMedia("(prefers-color-scheme: dark)")` 同步该 class，并监听系统主题变化；否则所有 `dark:` 与 `.dark ...` raw CSS 都是不可达样式。
+产品当前暂时只支持亮色主题。`RootLayout` 在首屏主动移除 `<html>.dark` 是预期行为，用于清除浏览器或旧版本遗留状态；不得仅因为仓库仍保留 `dark:` class 和暗色 token，就把它判定为主题功能回归或重新接入系统主题。
 
-- `viewport.themeColor` 同时声明亮暗媒体值。
-- 新增主题相关 CSS variable 时，在 `.dark` 中补对应覆盖。
-- 运行态验证必须确认系统媒体变化后 `.dark`、页面背景和至少一个主题变量同时变化。
+```ts
+// 当前产品契约：页面始终以亮色主题启动。
+document.documentElement.classList.remove("dark");
+```
+
+- `viewport.themeColor` 当前只需声明亮色值。
+- 已有 `dark:` 样式和暗色 token 可以保留，暂不要求清理；新增界面必须先保证亮色语义完整，不能依赖暗色分支才能正确显示。
+- 未经明确产品决策，不得恢复 `matchMedia("(prefers-color-scheme: dark)")`、主题切换入口或暗色持久化。
+- 将来若恢复暗色主题，应作为独立任务同步 `RootLayout`、`viewport.themeColor`、设计 token 和浏览器回归；验证至少覆盖首次加载、系统主题变化和持久化状态。
 
 ### Reduced motion 与过渡范围
 
@@ -176,7 +182,61 @@ AI 回复正文由 `shared/components/markdown/Markdown.tsx` 渲染,两条互斥
 - `requestLinkPreview` 只缓存成功结果;非 2xx、解析失败或网络错误必须移除缓存项,允许下一次 hover/probe 重试,不能把瞬时失败固化到页面生命周期。
 - 改 `parseMarkdown` 必须跑 `src/shared/components/markdown/customRenderer.test.ts`;该测试守住「HTML 块内文字不被打散」与「普通 markdown 回归」。
 
-**内联 style 过滤**:`streamdown-html.tsx` 对放行标签调 `sanitizeHTMLStyle`;当前为原样透传(不做属性白名单/危险值拦截/中性色映射),安全兜底依赖 streamdown 内部 rehype-harden。`custom` 路径完全不过滤。
+**内联 style 过滤**:`streamdown-html.tsx` 对放行标签调 `sanitizeHTMLStyle`;当前仅把纯黑/纯白颜色映射为 `currentColor`,其余 style 原样透传(不做属性白名单或危险值拦截),安全兜底依赖 streamdown 内部 rehype-harden。`custom` 路径完全不过滤。
+
+### 受信输出样式与 Artifact 隔离
+
+#### 1. Scope / Trigger
+
+修改输出样式的 Server→Client 投影、custom renderer 提醒或 HTML/SVG artifact 预览时适用。管理员配置与模型生成 artifact 是两条不同信任边界,不得混用同一“已净化”结论。
+
+#### 2. Signatures
+
+```ts
+interface RenderStyle {
+  renderer: "streamdown" | "custom";
+}
+
+function HtmlPreviewFrame(props: { html: string }): React.ReactNode;
+```
+
+#### 3. Contracts
+
+- `renderer` 是输出样式 DTO 的既有字段,管理端 Server Component 传给 Client Component 时不得丢弃。`renderer="custom"` 的列表项持续显示高信任标识,编辑表单就地显示 `role="note"` 的非阻断提醒;不得增加确认勾选、保存拦截或另一套 renderer 判断。
+- 管理员 CSS 原样应用于聊天页和公开分享,配置提示同时说明这两个影响面。CSS 语法、选择器和外连依靠管理员人工管控,不在 UI 层伪造 sanitizer 或启发式规则扫描。
+- custom renderer 原样保留模型 HTML/class/style,脚本或事件属性仍可能在聊天页与公开分享页的应用源执行。这是管理员主动启用后被接受的剩余风险,不是 Streamdown 的净化能力。
+- 模型 fenced block 生成的 HTML/SVG artifact 不属于管理员预审边界,统一通过 `HtmlPreviewFrame` 的 CSP 与 `sandbox="allow-scripts"` 预览,禁止加入 `allow-same-origin`。预览不得提供 Blob/新窗口等脱离 sandbox 的执行入口;复制与下载保留为用户主动操作。
+
+#### 4. Validation / Error Matrix
+
+| 输入/状态 | 行为 |
+|---|---|
+| `renderer="streamdown"` | 不显示 custom 风险提醒,沿用 Streamdown 防护 |
+| `renderer="custom"` | 显示提醒但保存、启停不受阻断 |
+| HTML/SVG artifact | 在 opaque-origin sandbox iframe 中预览 |
+| 非 HTML/SVG artifact | 沿用对应受控组件或源码渲染 |
+
+#### 5. Good / Base / Bad Cases
+
+- Good:custom 样式显示标识和编辑提醒,管理员确认来源可控后保存。
+- Base:普通新建样式沿用数据库默认 `streamdown`,不展示额外确认流程。
+- Bad:将 SVG 写入主 DOM,或把 iframe 内容转成顶层 Blob 文档执行。
+
+#### 6. Tests Required
+
+- 管理列表断言 custom 有标识、streamdown 无标识;编辑表单断言 custom 有 `role="note"` 且提交按钮仍存在。
+- HTML/SVG 两条 artifact 分支断言均渲染 iframe,sandbox 包含 `allow-scripts` 且不含 `allow-same-origin`。
+- 预览断言不再暴露外部打开入口,复制与下载控件仍存在;中英文提醒 key 同步。
+
+#### 7. Wrong vs Correct
+
+```tsx
+// Wrong:模型 SVG 直接进入应用主 DOM。
+<div dangerouslySetInnerHTML={{ __html: artifact.content }} />
+
+// Correct:模型 HTML/SVG 共用 opaque-origin sandbox。
+<HtmlPreviewFrame html={artifact.content} />
+```
 
 ### Streamdown 富媒体交互契约
 

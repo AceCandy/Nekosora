@@ -8,6 +8,8 @@ import ChatComposer, { type ModelOption } from "@/features/chat/components/ChatC
 import { createShare, listConversationShares, revokeShare, type CreateShareInput } from "@/features/chat/actions/share";
 import type { ModelCapabilities } from "@/db/types";
 import { newConversationKey } from "@/features/chat/model/newConversationNavigation";
+import { requireSession } from "@/lib/session";
+import { isWebSearchEnabled } from "@/lib/web-search/registry";
 
 export default async function ChatPage({
   searchParams,
@@ -16,12 +18,14 @@ export default async function ChatPage({
 }) {
   const composerKey = newConversationKey(await searchParams);
   void getTranslations("chat");
-  const [visibleModels, cards, kbs, outputModes, renderStyles] = await Promise.all([
+  const user = await requireSession();
+  const [visibleModels, cards, kbs, outputModes, renderStyles, webSearchAvailable] = await Promise.all([
     getVisibleModels(),
     listMyCards(),
     listKnowledgeBases().catch(() => []),
     listEnabledOutputModes().catch(() => []),
     listEnabledRenderStyles().catch(() => []),
+    isWebSearchEnabled(user.id).catch(() => false),
   ]);
   // getVisibleModels 已返回扁平数组且 private 排序在前,直接映射为 ModelOption[]。
   const models: ModelOption[] = (visibleModels as Record<string, unknown>[]).map((m) => ({
@@ -66,7 +70,7 @@ export default async function ChatPage({
 
   return (
     <div className="flex-1 flex flex-col min-w-0 h-full">
-      <ChatComposer key={composerKey} models={models} cards={cards} knowledgeBases={knowledgeBases} outputModes={modes} renderStyles={styles} createShareAction={handleCreateShare} listSharesAction={handleListShares} revokeShareAction={handleRevokeShare} />
+      <ChatComposer key={composerKey} models={models} cards={cards} knowledgeBases={knowledgeBases} outputModes={modes} renderStyles={styles} initialWebSearch={webSearchAvailable} webSearchAvailable={webSearchAvailable} createShareAction={handleCreateShare} listSharesAction={handleListShares} revokeShareAction={handleRevokeShare} />
     </div>
   );
 }

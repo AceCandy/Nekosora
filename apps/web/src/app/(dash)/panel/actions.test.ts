@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockData = vi.hoisted(() => ({
   models: [] as Record<string, unknown>[],
-  catalogs: [{ id: "catalog-chat", canonicalModelId: "__generic_chat__", aliases: [], enabled: true }],
+  catalogs: [{ id: "catalog-chat", name: "Chat", canonicalModelId: "__generic_chat__", modelType: "chat", aliases: [], enabled: true }],
   providers: [] as Record<string, unknown>[],
   routes: [] as Record<string, unknown>[],
   user: { id: "admin-a", role: "admin" },
@@ -56,7 +56,7 @@ vi.mock("@/lib/infra/db", () => {
         return query;
       },
       then(resolve: (value: unknown[]) => unknown, reject: (reason: unknown) => unknown) {
-        if (fields && Object.values(fields).some((field) => (field as { type?: string }).type === "sql")) {
+        if (fields && Object.values(fields).some((field) => (field as { type?: string } | undefined)?.type === "sql")) {
           const aggregate = Object.fromEntries(
             Object.entries(fields).map(([key, field]) => [
               key,
@@ -90,6 +90,8 @@ vi.mock("@/lib/infra/db", () => {
       sortOrder: "sortOrder",
       createdAt: "createdAt",
       name: "name",
+      displayName: "displayName",
+      catalogId: "catalogId",
     },
     modelCatalog: {
       __table: "modelCatalog",
@@ -97,6 +99,7 @@ vi.mock("@/lib/infra/db", () => {
       enabled: "enabled",
       sortOrder: "sortOrder",
       name: "name",
+      modelType: "modelType",
     },
     providers: {
       __table: "providers",
@@ -113,6 +116,7 @@ vi.mock("@/lib/infra/db", () => {
       modelId: "modelId",
       providerId: "providerId",
       upstreamModelName: "upstreamModelName",
+      apiFormat: "apiFormat",
     },
   };
 
@@ -157,12 +161,19 @@ vi.mock("@/lib/infra/db", () => {
       }),
     }),
     insert: (table?: { __table?: string }) => ({
-      values: async (row: Record<string, unknown>) => {
+      values: (row: Record<string, unknown>) => {
+        let id = "";
         if (table?.__table === "routes") {
-          mockData.routes.push({ id: `route-${mockData.routes.length + 1}`, ...row });
+          id = `route-${mockData.routes.length + 1}`;
+          mockData.routes.push({ id, ...row });
+        } else if (table?.__table === "providers") {
+          id = `provider-${mockData.providers.length + 1}`;
+          mockData.providers.push({ id, ...row });
         } else {
-          mockData.models.push({ id: `model-${mockData.models.length + 1}`, ...row });
+          id = `model-${mockData.models.length + 1}`;
+          mockData.models.push({ id, ...row });
         }
+        return { returning: async () => [{ id }] };
       },
     }),
     transaction: async (callback: (tx: typeof db) => Promise<unknown>) => {
@@ -173,8 +184,8 @@ vi.mock("@/lib/infra/db", () => {
   return { getDb: async () => db, getSchema: () => schema, isPg: false };
 });
 
-import { attachMyProviderModelRoute, createMyModel, createMyRoute, reorderMyModels, updateMyModel, updateMyRoute, checkMyProviderHealth, testMyProviderModel, testMyKeyDirect, getBindableModels } from "./actions";
-import { probeProviderKey } from "@/lib/providers/probe";
+import { attachMyProviderModelRoute, createMyModel, createMyProvider, createMyRoute, reorderMyModels, updateMyModel, updateMyProvider, updateMyRoute, checkMyProviderHealth, testMyProviderModel, testMyKeyDirect, testMyRoute, getBindableModels } from "./actions";
+import { fetchUpstreamModels, probeProviderKey } from "@/lib/providers/probe";
 import { parseKeyBundle, pickWeightedKey } from "@/lib/providers/keys";
 
 beforeEach(() => {
@@ -182,18 +193,80 @@ beforeEach(() => {
   mockData.providers = [];
   mockData.routes = [];
   vi.mocked(probeProviderKey).mockReset();
+  vi.mocked(fetchUpstreamModels).mockReset().mockResolvedValue([]);
   vi.mocked(parseKeyBundle).mockReset();
   mockData.models = [
-    { id: "public-a", name: "public-a", ownerUserId: "admin-a", visibility: "public", sortOrder: 0 },
-    { id: "public-b", name: "public-b", ownerUserId: "admin-a", visibility: "public", sortOrder: 1 },
-    { id: "private-a", name: "private-a", ownerUserId: "admin-a", visibility: "private", sortOrder: 5 },
-    { id: "private-b", name: "private-b", ownerUserId: "user-b", visibility: "private", sortOrder: 2 },
+    { id: "public-a", name: "public-a", ownerUserId: "admin-a", visibility: "public", sortOrder: 0, catalogId: "catalog-chat" },
+    { id: "public-b", name: "public-b", ownerUserId: "admin-a", visibility: "public", sortOrder: 1, catalogId: "catalog-chat" },
+    { id: "private-a", name: "private-a", ownerUserId: "admin-a", visibility: "private", sortOrder: 5, catalogId: "catalog-chat" },
+    { id: "private-b", name: "private-b", ownerUserId: "user-b", visibility: "private", sortOrder: 2, catalogId: "catalog-chat" },
   ];
+});
+
+describe("个人 Provider 超时配置", () => {
+  it("创建时把表单秒值保存为 nullable 毫秒值", async () => {
+    const formData = new FormData();
+    formData.set("name", "Provider A");
+    formData.set("protocol", "openai");
+    formData.set("baseUrl", "https://api.example.com/v1");
+    formData.set("connectTimeoutSeconds", "60");
+    formData.set("readTimeoutSeconds", "900.125");
+    formData.set("streamIdleTimeoutSeconds", "");
+
+    await createMyProvider(formData);
+
+    expect(mockData.providers[0]).toEqual(expect.objectContaining({
+      connectTimeoutMs: 60_000,
+      readTimeoutMs: 900_125,
+      streamIdleTimeoutMs: null,
+    }));
+    expect(fetchUpstreamModels).toHaveBeenCalledWith(expect.objectContaining({
+      connectTimeoutMs: 60_000,
+      readTimeoutMs: 900_125,
+      streamIdleTimeoutMs: null,
+    }));
+  });
+
+  it("无 marker 时保留旧值，有 marker 时更新并清空", async () => {
+    mockData.providers = [{
+      id: "provider-a",
+      ownerUserId: "admin-a",
+      connectTimeoutMs: 2_000,
+      readTimeoutMs: 20_000,
+      streamIdleTimeoutMs: 6_000,
+    }];
+    const legacy = new FormData();
+    legacy.set("name", "Provider A");
+    legacy.set("protocol", "openai");
+    legacy.set("baseUrl", "https://api.example.com/v1");
+    await updateMyProvider("provider-a", legacy);
+    expect(mockData.providers[0]).toEqual(expect.objectContaining({
+      connectTimeoutMs: 2_000,
+      readTimeoutMs: 20_000,
+      streamIdleTimeoutMs: 6_000,
+    }));
+
+    const current = new FormData();
+    current.set("name", "Provider A");
+    current.set("protocol", "openai");
+    current.set("baseUrl", "https://api.example.com/v1");
+    current.set("providerTimeoutsPresent", "1");
+    current.set("connectTimeoutSeconds", "1.5");
+    current.set("readTimeoutSeconds", "");
+    current.set("streamIdleTimeoutSeconds", "5");
+    await updateMyProvider("provider-a", current);
+
+    expect(mockData.providers[0]).toEqual(expect.objectContaining({
+      connectTimeoutMs: 1_500,
+      readTimeoutMs: null,
+      streamIdleTimeoutMs: 5_000,
+    }));
+  });
 });
 
 describe("attachMyProviderModelRoute", () => {
   beforeEach(() => {
-    mockData.providers = [{ id: "provider-a", ownerUserId: "admin-a" }];
+    mockData.providers = [{ id: "provider-a", ownerUserId: "admin-a", protocol: "openai" }];
   });
 
   it("首次绑定创建路由，重复绑定返回 exists 且不重复写入", async () => {
@@ -207,6 +280,7 @@ describe("attachMyProviderModelRoute", () => {
       modelId: "private-a",
       providerId: "provider-a",
       upstreamModelName: "upstream-a",
+      apiFormat: "openai-chat",
     })]);
   });
 
@@ -227,7 +301,7 @@ describe("attachMyProviderModelRoute", () => {
 
 describe("个人路由工具能力", () => {
   beforeEach(() => {
-    mockData.providers = [{ id: "provider-a", ownerUserId: "admin-a" }];
+    mockData.providers = [{ id: "provider-a", ownerUserId: "admin-a", protocol: "openai" }];
   });
 
   it("创建和更新时保存显式工具能力", async () => {
@@ -238,7 +312,10 @@ describe("个人路由工具能力", () => {
     createData.set("supportsTools", "on");
 
     await createMyRoute("private-a", createData);
-    expect(mockData.routes[0]).toEqual(expect.objectContaining({ supportsTools: true }));
+    expect(mockData.routes[0]).toEqual(expect.objectContaining({
+      supportsTools: true,
+      apiFormat: "openai-chat",
+    }));
 
     const updateData = new FormData();
     updateData.set("providerId", "provider-a");
@@ -290,6 +367,57 @@ describe("个人路由工具能力", () => {
 
     expect(mockData.routes[0]).toEqual(expect.objectContaining({ supportsTools: false }));
   });
+
+  it("保存显式格式，更新省略时保持原值", async () => {
+    const createData = new FormData();
+    createData.set("providerId", "provider-a");
+    createData.set("upstreamModelName", "upstream-a");
+    createData.set("apiFormat", "openai-responses");
+    await createMyRoute("private-a", createData);
+
+    const updateData = new FormData();
+    updateData.set("providerId", "provider-a");
+    updateData.set("upstreamModelName", "upstream-b");
+    await updateMyRoute(mockData.routes[0].id as string, updateData);
+
+    expect(mockData.routes[0]).toEqual(expect.objectContaining({ apiFormat: "openai-responses" }));
+  });
+});
+
+describe("testMyRoute", () => {
+  it("按 route apiFormat 探测具体模型", async () => {
+    mockData.providers = [{
+      id: "provider-a",
+      ownerUserId: "admin-a",
+      protocol: "openai-compatible",
+      baseUrl: "https://provider.example/v1",
+      apiKeysEnc: "encrypted",
+      connectTimeoutMs: 2_000,
+      readTimeoutMs: 20_000,
+      streamIdleTimeoutMs: 6_000,
+    }];
+    mockData.routes = [{
+      id: "route-a",
+      ownerUserId: "admin-a",
+      providerId: "provider-a",
+      upstreamModelName: "demo-model",
+      apiFormat: "anthropic-messages",
+    }];
+    vi.mocked(parseKeyBundle).mockReturnValue([{ key: "secret", weight: 1 }]);
+    vi.mocked(pickWeightedKey).mockReturnValue("secret");
+    vi.mocked(probeProviderKey).mockResolvedValue({ ok: true, latencyMs: 1 });
+
+    await expect(testMyRoute("route-a")).resolves.toEqual({ ok: true, latencyMs: 1 });
+    expect(probeProviderKey).toHaveBeenCalledWith(expect.objectContaining({
+      protocol: "openai-compatible",
+      apiFormat: "anthropic-messages",
+      upstreamModelName: "demo-model",
+      apiKey: "secret",
+      connectTimeoutMs: 2_000,
+      readTimeoutMs: 20_000,
+      streamIdleTimeoutMs: 6_000,
+    }));
+  });
 });
 
 describe("reorderMyModels", () => {
@@ -310,14 +438,28 @@ describe("reorderMyModels", () => {
 });
 
 describe("getBindableModels", () => {
-  it("只返回当前用户自己的 enabled 模型", async () => {
+  it("只查询并返回当前用户 enabled 模型的展示字段", async () => {
     mockData.models.forEach((model) => { model.enabled = true; });
+    Object.assign(mockData.models[0], {
+      displayName: "Public A",
+      systemPrompt: "secret system prompt",
+      description: "private description",
+      updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+    });
 
     const result = await getBindableModels();
 
     expect(result.globals).toEqual([]);
     expect(result.byos.map((model) => model.id)).toEqual(["public-a", "public-b", "private-a"]);
     expect(result.byos.some((model) => model.id === "private-b")).toBe(false);
+    expect(result.byos[0]).toEqual({
+      id: "public-a",
+      name: "public-a",
+      displayName: "Public A",
+    });
+    expect(JSON.stringify(result)).not.toContain("systemPrompt");
+    expect(JSON.stringify(result)).not.toContain("description");
+    expect(JSON.stringify(result)).not.toContain("updatedAt");
   });
 });
 
@@ -478,6 +620,7 @@ describe("checkMyProviderHealth", () => {
     mockData.providers = [{
       id: "p-d", ownerUserId: "admin-a", apiKeysEnc: "enc",
       protocol: "openai", baseUrl: "https://d", testModel: "claude-fable-5",
+      connectTimeoutMs: 2_000, readTimeoutMs: 20_000, streamIdleTimeoutMs: 6_000,
       lastNetworkOk: null, lastKeyResults: null,
     }];
     vi.mocked(parseKeyBundle).mockReturnValue([{ key: "k1", weight: 1 }]);
@@ -493,6 +636,13 @@ describe("checkMyProviderHealth", () => {
     expect(r.keyResults[0]).toMatchObject({ index: 0, ok: true });
     expect(mockData.providers[0].lastModelProbeOk).toBe(true);
     expect(vi.mocked(probeProviderKey).mock.calls[1][0]).toMatchObject({ upstreamModelName: "claude-fable-5" });
+    expect(vi.mocked(probeProviderKey).mock.calls).toEqual(expect.arrayContaining([
+      [expect.objectContaining({
+        connectTimeoutMs: 2_000,
+        readTimeoutMs: 20_000,
+        streamIdleTimeoutMs: 6_000,
+      })],
+    ]));
   });
 });
 
@@ -515,6 +665,7 @@ describe("testMyProviderModel", () => {
     mockData.providers = [{
       id: "p-b", ownerUserId: "admin-a", apiKeysEnc: "enc",
       protocol: "openai", baseUrl: "https://b", testModel: "claude-fable-5",
+      connectTimeoutMs: 2_000, readTimeoutMs: 20_000, streamIdleTimeoutMs: 6_000,
     }];
     vi.mocked(parseKeyBundle).mockReturnValue([{ key: "k1", weight: 1 }]);
     vi.mocked(pickWeightedKey).mockReturnValue("k1");
@@ -526,6 +677,9 @@ describe("testMyProviderModel", () => {
     expect(vi.mocked(probeProviderKey)).toHaveBeenCalledWith(expect.objectContaining({
       upstreamModelName: "claude-fable-5",
       apiKey: "k1",
+      connectTimeoutMs: 2_000,
+      readTimeoutMs: 20_000,
+      streamIdleTimeoutMs: 6_000,
     }));
     expect(mockData.providers[0].lastModelProbeOk).toBe(true);
     expect(mockData.providers[0].lastModelProbeError).toBeNull();
@@ -549,6 +703,9 @@ describe("testMyKeyDirect", () => {
     expect(r.ok).toBe(true);
     const callArg = vi.mocked(probeProviderKey).mock.calls[0][0];
     expect(callArg.upstreamModelName).toBeFalsy();
+    expect(callArg).not.toHaveProperty("connectTimeoutMs");
+    expect(callArg).not.toHaveProperty("readTimeoutMs");
+    expect(callArg).not.toHaveProperty("streamIdleTimeoutMs");
   });
 
   it("有 testModel -> 带 upstreamModelName 走深度检测", async () => {

@@ -40,6 +40,7 @@
 | `NEXT_RUNTIME=edge` | Do not load or execute Node initialization |
 | Variable-path import in `instrumentation.ts` | Invalid: Webpack warning and runtime module resolution failure |
 | Node dependency reachable from the shared entrypoint | Invalid: Edge compilation may fail on `fs`, `pg-native`, or other Node modules |
+| Server-side `module factory is not available` after a schema/dependency graph change | Stop Web, remove only the ignored `apps/web/.next` cache, then cold-start and request `/healthz`; browser cache and Service Worker cleanup do not repair the instrumentation module graph |
 | Bootstrap failure | Reject `register()` and block startup |
 
 ### 5. Good / Base / Bad Cases
@@ -52,6 +53,7 @@
 
 - `src/instrumentation.test.ts` asserts Node initialization order, Edge isolation, and bootstrap suppression after validation failure.
 - Cold-start `pnpm dev` and request `/healthz`; startup must have no instrumentation `Critical dependency`, `MODULE_NOT_FOUND`, `fs`, or `pg-native` error.
+- After an instrumentation module-factory failure, verify the regenerated `.next/dev` cache with a second cold start; do not treat a successful production build alone as development-cache validation.
 - `pnpm build` is the production Edge/Node bundling gate; the instrumentation compile stage must not report those errors.
 
 ### 7. Wrong vs Correct

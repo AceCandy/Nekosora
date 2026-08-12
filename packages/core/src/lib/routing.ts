@@ -20,7 +20,10 @@
 import { eq, and, or } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { parseKeyBundle, pickWeightedKey } from "@/lib/providers/keys";
-import { isProviderAllowed } from "@/lib/circuit-breaker";
+import {
+  getProviderAvailability,
+  recordNoHealthyRoute,
+} from "@/lib/circuit-breaker";
 import { getRouteRepository } from "@/lib/repositories/route-repository";
 import type {
   ResolvedRoute,
@@ -47,7 +50,9 @@ function toResolvedProvider(row: any): ResolvedProvider {
     apiKey: pickWeightedKey(keys),
     connectTimeoutMs: row.connectTimeoutMs ?? undefined,
     readTimeoutMs: row.readTimeoutMs ?? undefined,
+    streamIdleTimeoutMs: row.streamIdleTimeoutMs ?? undefined,
     headers: (row.headersJson as Record<string, string>) ?? undefined,
+    supportsStreamUsage: row.supportsStreamUsage ?? null,
   };
 }
 
@@ -143,9 +148,11 @@ async function resolveModelRoutes(
     (row: { route: Record<string, unknown>; provider: Record<string, unknown> }) => ({
       modelName: model.name,
       upstreamModelName: row.route.upstreamModelName as string,
-      // 协议归属 provider,路由不再单独存。
+      apiFormat: row.route.apiFormat as ResolvedRoute["apiFormat"],
+      // Provider protocol 只保留为连接类型；普通聊天 wire format 读取 apiFormat。
       protocol: row.provider.protocol as ResolvedRoute["protocol"],
       provider: toResolvedProvider(row.provider),
+      headers: (row.route.headersJson as Record<string, string>) ?? undefined,
       priority: row.route.priority as number,
       weight: row.route.weight as number,
       source,
@@ -178,16 +185,15 @@ function orderRoutes(routes: ResolvedRoute[]): ResolvedRoute[] {
   return result;
 }
 
-/**
- * 熔断过滤:跳过处于 open 态的 provider 的路由。
- *
- * 若全部路由对应的 provider 都被熔断,降级返回原始全集——
- * 避免单 provider 故障导致整个模型对所有用户 503(雪崩)。
- * 调用方仍会逐条尝试,撞墙的错误由 streamChat 的故障转移处理。
- */
+/** 熔断过滤只读取可用性，探针所有权由 Gateway Engine 获取。 */
 function filterByCircuitBreaker(routes: ResolvedRoute[]): ResolvedRoute[] {
-  const allowed = routes.filter((r) => isProviderAllowed(r.provider.id));
-  return allowed.length > 0 ? allowed : routes;
+  const allowed = routes.filter((route) => {
+    const availability = getProviderAvailability(route.provider.id);
+    return availability === "closed" || availability === "probe_ready";
+  });
+  if (allowed.length > 0) return allowed;
+  recordNoHealthyRoute();
+  throw new RoutingError("no_healthy_route", "模型没有健康的可用路由");
 }
 
 /** 按 weight 做加权随机抽取(无放回),返回打乱后的顺序。 */

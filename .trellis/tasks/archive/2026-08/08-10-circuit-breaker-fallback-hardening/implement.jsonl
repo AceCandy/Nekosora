@@ -1,0 +1,8 @@
+{"file":".trellis/spec/backend/index.md","reason":"Backend package boundaries and pre-development entry point."}
+{"file":".trellis/spec/backend/gateway-routing.md","reason":"Routing order, unified Engine, breaker, failover, Abort, and protocol contracts."}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Stable ErrorCode, HTTP status, i18n, multi-protocol envelope, and redaction contracts."}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"Gateway execution facts, best-effort telemetry, and low-cardinality metric constraints."}
+{"file":".trellis/spec/backend/provider-timeouts.md","reason":"Provider timeout versus caller cancellation classification and breaker behavior."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Trace breaker state through routing, Engine, telemetry, and HTTP/media boundaries."}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Reuse existing error, telemetry, metrics, and Engine owners without parallel mechanisms."}
+{"file":".trellis/tasks/08-10-circuit-breaker-fallback-hardening/research/circuit-breaker-execution-boundary.md","reason":"Verified callers, terminal-path gaps, and the selected permit boundary."}

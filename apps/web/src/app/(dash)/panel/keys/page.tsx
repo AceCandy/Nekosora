@@ -8,8 +8,9 @@ import {
   getBindableModels,
   bindModel,
   unbindBinding,
+  type BindableModels,
 } from "../actions";
-import KeysManager, { type ApiKeyRecord, type BindableModels } from "./KeysManager";
+import KeysManager from "./KeysManager";
 import { Key } from "lucide-react";
 import { PageHeader } from "@/shared/components/PageHeader";
 
@@ -17,14 +18,33 @@ export default async function KeysPage() {
   const t = await getTranslations("panel.keys");
   const tn = await getTranslations("nav");
   const [keys, bindable] = await Promise.all([getMyKeys(), getBindableModels()]);
+  const displayBindable: BindableModels = {
+    globals: bindable.globals.map((model) => ({
+      id: model.id,
+      name: model.name,
+      displayName: model.displayName,
+    })),
+    byos: bindable.byos.map((model) => ({
+      id: model.id,
+      name: model.name,
+      displayName: model.displayName,
+    })),
+  };
 
   // Parallel prefetch of all bindings for subkeys
   const augmentedKeys = await Promise.all(
     keys.map(async (k) => {
+      const displayKey = {
+        id: k.id,
+        kind: k.kind,
+        name: k.name,
+        keyPrefix: k.keyPrefix,
+        enabled: k.enabled,
+      };
       if (k.kind === "sub") {
         const bindings = await getBindings(k.id);
         return {
-          ...k,
+          ...displayKey,
           bindings: bindings.map((b: {
             id: string;
             keyId: string;
@@ -38,7 +58,7 @@ export default async function KeysPage() {
           }))
         };
       }
-      return { ...k, bindings: [] };
+      return { ...displayKey, bindings: [] };
     })
   );
 
@@ -73,8 +93,8 @@ export default async function KeysPage() {
       <PageHeader icon={Key} title={tn("keys")} desc={t("desc")} />
 
       <KeysManager
-        keys={augmentedKeys as ApiKeyRecord[]}
-        bindable={bindable as unknown as BindableModels}
+        keys={augmentedKeys}
+        bindable={displayBindable}
         ensureMasterAction={handleEnsureMaster}
         newSubKeyAction={handleNewSubKey}
         disableKeyAction={handleDisableKey}
@@ -84,4 +104,3 @@ export default async function KeysPage() {
     </div>
   );
 }
-

@@ -17,12 +17,12 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { ModelCapabilities } from "@/db/types";
+import type { ModelCapabilities, RouteApiFormat } from "@/db/types";
 import type { FormDataSerializableAction } from "@/features/providers/types";
 import ModelFormDialog, {
   type ModelInitial,
 } from "@/features/models/ModelFormDialog";
-import RouteFormDialog from "@/features/models/RouteFormDialog";
+import RouteFormDialog, { type RouteProviderOption } from "@/features/models/RouteFormDialog";
 import RouteTestButton, { type RouteTestAction } from "@/features/models/RouteTestButton";
 import ModelSyncChecker, { type SyncStatus } from "@/features/models/ModelSyncChecker";
 import type { FetchModelsAction } from "@/features/models/UpstreamModelPicker";
@@ -43,6 +43,7 @@ export interface ModelItem {
   displayName?: string;
   catalogId: string;
   catalogName: string;
+  modelType: string;
   visibility?: string;
   enabled: boolean;
   systemPrompt?: string | null;
@@ -59,16 +60,14 @@ export interface RouteItem {
   providerId: string;
   providerName: string;
   upstreamModelName: string;
+  apiFormat: RouteApiFormat;
   priority: number;
   weight: number;
   supportsTools: boolean;
   enabled: boolean;
 }
 
-export interface ProviderOption {
-  id: string;
-  name: string;
-}
+export type ProviderOption = RouteProviderOption;
 
 type ModelVisibility = "public" | "private";
 
@@ -179,6 +178,8 @@ export default function ModelsManager({
   const publishing = optimisticModels.find((m) => m.id === publishId) ?? null;
   const routeEditing = routes?.find((r) => r.id === routeEditId) ?? null;
   const routeDeleting = routes?.find((r) => r.id === routeDeleteId) ?? null;
+  const routeAddModel = optimisticModels.find((m) => m.id === routeAddModelId) ?? null;
+  const routeEditingModel = optimisticModels.find((m) => m.id === routeEditing?.modelId) ?? null;
 
   // 列数:基础列(showVisibility ? 5 : 4,对外名/显示名合一 + 去路由数列)+ 拖动手柄列(可拖动时 +1)。空态 / 展开行 colSpan 用此值。
   const colCount = (showVisibility ? 5 : 4) + (reorderable ? 1 : 0);
@@ -377,28 +378,31 @@ export default function ModelsManager({
         />
       )}
 
-      {routeAddModelId && createRouteActions?.[routeAddModelId] && (
+      {routeAddModelId && routeAddModel && createRouteActions?.[routeAddModelId] && (
         <RouteFormDialog
           open={true}
           onClose={() => setRouteAddModelId(null)}
           mode="add"
           action={createRouteActions[routeAddModelId]}
           providers={providers ?? []}
+          modelType={routeAddModel.modelType}
           fetchModelsAction={fetchModelsAction}
-          modelName={optimisticModels.find((m) => m.id === routeAddModelId)?.name}
+          modelName={routeAddModel.name}
         />
       )}
-      {routeEditing && updateRouteActions?.[routeEditing.id] && (
+      {routeEditing && routeEditingModel && updateRouteActions?.[routeEditing.id] && (
         <RouteFormDialog
           open={true}
           onClose={() => setRouteEditId(null)}
           mode="edit"
           action={updateRouteActions[routeEditing.id]}
           providers={providers ?? []}
+          modelType={routeEditingModel.modelType}
           fetchModelsAction={fetchModelsAction}
           initial={{
             providerId: routeEditing.providerId,
             upstreamModelName: routeEditing.upstreamModelName,
+            apiFormat: routeEditing.apiFormat,
             priority: routeEditing.priority,
             weight: routeEditing.weight,
             supportsTools: routeEditing.supportsTools,
@@ -823,11 +827,12 @@ function RouteListPanel({
         </p>
       ) : (
         <div className="rounded-md border border-morning-mist dark:border-deep-space overflow-x-auto bg-nebula-white dark:bg-twilight-obsidian">
-          <table className="w-full min-w-[560px] text-ui-caption text-left">
+          <table className="w-full min-w-[680px] text-ui-caption text-left">
             <thead className="bg-neutral-50 dark:bg-neutral-900 text-neutral-500 dark:text-neutral-400 font-mono text-ui-caption uppercase border-b border-morning-mist dark:border-deep-space">
               <tr>
                 <th className="p-2.5 font-medium">{t("colUpstreamProvider")}</th>
                 <th className="p-2.5 font-medium">{t("colUpstreamModelName")}</th>
+                <th className="p-2.5 font-medium">{t("colProtocol")}</th>
                 <th className="p-2.5 font-medium text-center">{t("colPriority")}</th>
                 <th className="p-2.5 font-medium text-center">{t("colWeight")}</th>
                 <th className="p-2.5 font-medium">{t("colStatus")}</th>
@@ -854,6 +859,9 @@ function RouteListPanel({
                         <Badge variant="danger" title={t("syncLocalOnlyHint")}>{t("syncLocalOnly")}</Badge>
                       )}
                     </span>
+                  </td>
+                  <td className="p-2.5 font-mono text-ui-caption text-neutral-500 dark:text-neutral-400">
+                    {r.apiFormat}
                   </td>
                   <td className="p-2.5 text-center font-mono text-ui-caption font-semibold">{r.priority}</td>
                   <td className="p-2.5 text-center font-mono text-ui-caption font-semibold">{r.weight}</td>

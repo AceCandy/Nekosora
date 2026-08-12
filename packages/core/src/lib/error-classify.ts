@@ -59,9 +59,11 @@ const ERROR_CODE_MAP: Record<string, ClassifiedError> = {
 
   // —— 无可用路由 / 路由错误 / 能力不支持(路由层问题,service_unavailable) ——
   [ErrorCode.ROUTING_NO_ROUTE]: { phase: "routing", category: "service_unavailable" },
+  [ErrorCode.ROUTING_NO_HEALTHY_ROUTE]: { phase: "routing", category: "service_unavailable" },
   [ErrorCode.ROUTING_CAPABILITY_NOT_SUPPORTED]: { phase: "routing", category: "service_unavailable" },
   // SERVER_INTERNAL 是 routing_error 短码的兜底映射目标,但作为 routing_error 短码本身归 routing
   no_route: { phase: "routing", category: "service_unavailable" },
+  no_healthy_route: { phase: "routing", category: "service_unavailable" },
   routing_error: { phase: "routing", category: "service_unavailable" },
   capability_not_supported: { phase: "routing", category: "service_unavailable" },
 

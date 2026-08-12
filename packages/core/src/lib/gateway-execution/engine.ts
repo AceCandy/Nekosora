@@ -1,6 +1,12 @@
 import { orderedWeightedKeys } from "@/lib/providers/keys";
 import { maskKey } from "@/lib/usage";
+import { ErrorCode } from "@/lib/errors";
 import type { ResolvedRoute } from "@/lib/providers/types";
+import {
+  createProviderTimeoutScope,
+  isProviderTimeoutError,
+  resolveProviderTimeouts,
+} from "@/lib/providers/timeouts";
 import {
   classifyGatewayError,
   isAbortError,
@@ -54,6 +60,10 @@ export async function* executeGateway<TEvent, TResult>(
   let firstTokenAt: number | undefined;
   let committed = false;
   let stopExecution = false;
+  let hadUpstreamAttempt = false;
+  let acquiredPermit = false;
+  let providerStartCommitted = options.onProviderStart === undefined;
+  let firstRejection: { error: SafeGatewayError; route: ResolvedRoute } | undefined;
   let activeAttempt: {
     route: ResolvedRoute;
     apiKey: string;
@@ -72,59 +82,182 @@ export async function* executeGateway<TEvent, TResult>(
       return outcome;
     }
 
+    let streamOptionsFallbackUsed = false;
     for (const route of routes) {
       if (options.abortSignal?.aborted) {
         outcome = interruptedOutcome(executionId, snapshotRoute(route), committed);
         return outcome;
       }
 
-      const adapter = options.selectAdapter(route);
-      if (!adapter) {
-        attempt += 1;
-        const now = Date.now();
-        const error: SafeGatewayError = {
-          code: "protocol_not_supported",
-          message: `协议 ${route.protocol} 不支持操作 ${options.operation}`,
-          phase: "routing",
-        };
-        await safeTelemetry(() => options.telemetry.recordAttempt({
-          executionId,
-          attempt,
-          operation: options.operation,
-          route: snapshotRoute(route),
-          status: "rejected",
-          error,
-          latencyMs: 0,
-          startedAt: now,
-          completedAt: now,
-        }));
-        outcome = failedOutcome(executionId, error, committed, snapshotRoute(route));
-        continue;
-      }
-
-      const keys = orderedWeightedKeys(route.provider.keys).slice(
-        0,
-        options.maxKeyAttempts ?? DEFAULT_MAX_KEY_ATTEMPTS,
-      );
-      for (let keyIndex = 0; keyIndex < keys.length; keyIndex += 1) {
-        const apiKey = keys[keyIndex].key;
-        const attemptStartedAt = Date.now();
-        attempt += 1;
-        activeAttempt = { route, apiKey, attempt, startedAt: attemptStartedAt };
-        try {
-          const iterator = adapter({
+      const permit = options.breaker.acquire(route.provider.id);
+      if (!permit) continue;
+      acquiredPermit = true;
+      try {
+        const selection = options.selectAdapter(route);
+        const rejectedError = selection && typeof selection === "object" && "kind" in selection && selection.kind === "rejected"
+          ? selection.error
+          : null;
+        const adapter = selection && typeof selection === "object" && "kind" in selection
+          ? selection.kind === "selected" ? selection.adapter : null
+          : selection;
+        if (!adapter) {
+          attempt += 1;
+          const now = Date.now();
+          const error: SafeGatewayError = rejectedError ?? {
+            code: "protocol_not_supported",
+            message: `协议 ${route.protocol} 不支持操作 ${options.operation}`,
+            phase: "routing",
+          };
+          firstRejection ??= { error, route };
+          await safeTelemetry(() => options.telemetry.recordAttempt({
             executionId,
             attempt,
             operation: options.operation,
-            route,
-            apiKey,
-            abortSignal: options.abortSignal,
-          });
-          let result;
-          while (true) {
-            const next = await nextAdapterOrAbort(iterator, options.abortSignal);
-            if (next === ADAPTER_ABORTED) {
-              const completedAt = Date.now();
+            route: snapshotRoute(route),
+            status: "rejected",
+            error,
+            latencyMs: 0,
+            startedAt: now,
+            completedAt: now,
+          }));
+          outcome = failedOutcome(executionId, error, committed, snapshotRoute(route));
+          continue;
+        }
+
+        const keys = orderedWeightedKeys(route.provider.keys).slice(
+          0,
+          options.maxKeyAttempts ?? DEFAULT_MAX_KEY_ATTEMPTS,
+        ).filter(({ key }) => key.length > 0);
+        for (let keyIndex = 0; keyIndex < keys.length; keyIndex += 1) {
+          const apiKey = keys[keyIndex].key;
+          if (!providerStartCommitted) {
+            try {
+              await options.onProviderStart?.();
+              providerStartCommitted = true;
+            } catch (error) {
+              const classified = classifyGatewayError(error);
+              outcome = isAbortError(error) || options.abortSignal?.aborted
+                ? interruptedOutcome(executionId, snapshotRoute(route), committed)
+                : failedOutcome(
+                    executionId,
+                    {
+                      ...classified,
+                      code: ErrorCode.SERVER_SERVICE_UNAVAILABLE,
+                      phase: "internal",
+                      httpStatus: 503,
+                    },
+                    committed,
+                    snapshotRoute(route),
+                  );
+              return outcome;
+            }
+            if (options.abortSignal?.aborted) {
+              outcome = interruptedOutcome(executionId, snapshotRoute(route), committed);
+              return outcome;
+            }
+          }
+          hadUpstreamAttempt = true;
+          const attemptStartedAt = Date.now();
+          attempt += 1;
+          activeAttempt = { route, apiKey, attempt, startedAt: attemptStartedAt };
+          const timeoutScope = createProviderTimeoutScope(
+            options.abortSignal,
+            resolveProviderTimeouts(route.provider).readTimeoutMs,
+            "read",
+          );
+          try {
+            const iterator = adapter({
+              executionId,
+              attempt,
+              operation: options.operation,
+              route,
+              apiKey,
+              abortSignal: timeoutScope.signal,
+            });
+            let result;
+            while (true) {
+              const next = await nextAdapterOrAbort(iterator, timeoutScope.signal);
+              if (next === ADAPTER_ABORTED) {
+                const reason = timeoutScope.signal.reason;
+                if (isProviderTimeoutError(reason)) {
+                  closeIterator(iterator);
+                  throw reason;
+                }
+                const completedAt = Date.now();
+                await safeTelemetry(() => options.telemetry.recordAttempt({
+                  executionId,
+                  attempt,
+                  operation: options.operation,
+                  route: snapshotRoute(route),
+                  upstreamKeyMasked: maskKey(apiKey) ?? undefined,
+                  status: "interrupted",
+                  latencyMs: completedAt - attemptStartedAt,
+                  firstTokenLatencyMs: activeAttempt?.firstTokenAt !== undefined
+                    ? activeAttempt.firstTokenAt - attemptStartedAt
+                    : undefined,
+                  startedAt: attemptStartedAt,
+                  completedAt,
+                }));
+                outcome = interruptedOutcome(
+                  executionId,
+                  snapshotRoute(route),
+                  committed,
+                  maskKey(apiKey) ?? undefined,
+                );
+                activeAttempt = undefined;
+                closeIterator(iterator);
+                return outcome;
+              }
+              if (next.done) {
+                result = next.value;
+                break;
+              }
+              if (next.value.commitsResponse) {
+                committed = true;
+              }
+              if (next.value.firstTokenAt !== undefined) {
+                firstTokenAt ??= next.value.firstTokenAt;
+                if (activeAttempt) activeAttempt.firstTokenAt ??= next.value.firstTokenAt;
+              }
+              yield next.value.value;
+            }
+            const completedAt = Date.now();
+            const attemptFirstTokenAt = activeAttempt?.firstTokenAt ?? result.firstTokenAt;
+            firstTokenAt ??= attemptFirstTokenAt;
+            await safeTelemetry(() => options.telemetry.recordAttempt({
+              executionId,
+              attempt,
+              operation: options.operation,
+              route: snapshotRoute(route),
+              upstreamKeyMasked: maskKey(apiKey) ?? undefined,
+              status: "success",
+              usage: result.usage,
+              latencyMs: completedAt - attemptStartedAt,
+              firstTokenLatencyMs: attemptFirstTokenAt !== undefined
+                ? attemptFirstTokenAt - attemptStartedAt
+                : undefined,
+              startedAt: attemptStartedAt,
+              completedAt,
+            }));
+            activeAttempt = undefined;
+            permit.recordSuccess();
+            outcome = {
+              executionId,
+              status: "success",
+              result: result.value,
+              usage: result.usage ?? {},
+              route: snapshotRoute(route),
+              upstreamKeyMasked: maskKey(apiKey) ?? undefined,
+              firstTokenAt: attemptFirstTokenAt,
+              committed,
+            };
+            return outcome;
+          } catch (error) {
+            const completedAt = Date.now();
+            const scopeReason = timeoutScope.signal.aborted ? timeoutScope.signal.reason : undefined;
+            const failure = isProviderTimeoutError(scopeReason) ? scopeReason : error;
+            if (!isProviderTimeoutError(failure)
+              && (isAbortError(failure) || options.abortSignal?.aborted)) {
               await safeTelemetry(() => options.telemetry.recordAttempt({
                 executionId,
                 attempt,
@@ -139,138 +272,105 @@ export async function* executeGateway<TEvent, TResult>(
                 startedAt: attemptStartedAt,
                 completedAt,
               }));
+              activeAttempt = undefined;
               outcome = interruptedOutcome(
                 executionId,
                 snapshotRoute(route),
                 committed,
                 maskKey(apiKey) ?? undefined,
               );
-              activeAttempt = undefined;
-              closeIterator(iterator);
               return outcome;
             }
-            if (next.done) {
-              result = next.value;
-              break;
-            }
-            if (next.value.commitsResponse) {
-              committed = true;
-            }
-            if (next.value.firstTokenAt !== undefined) {
-              firstTokenAt ??= next.value.firstTokenAt;
-              if (activeAttempt) activeAttempt.firstTokenAt ??= next.value.firstTokenAt;
-            }
-            yield next.value.value;
-          }
-          const completedAt = Date.now();
-          const attemptFirstTokenAt = activeAttempt?.firstTokenAt ?? result.firstTokenAt;
-          firstTokenAt ??= attemptFirstTokenAt;
-          await safeTelemetry(() => options.telemetry.recordAttempt({
-            executionId,
-            attempt,
-            operation: options.operation,
-            route: snapshotRoute(route),
-            upstreamKeyMasked: maskKey(apiKey) ?? undefined,
-            status: "success",
-            usage: result.usage,
-            latencyMs: completedAt - attemptStartedAt,
-            firstTokenLatencyMs: attemptFirstTokenAt !== undefined
-              ? attemptFirstTokenAt - attemptStartedAt
-              : undefined,
-            startedAt: attemptStartedAt,
-            completedAt,
-          }));
-          activeAttempt = undefined;
-          options.breaker.recordSuccess(route.provider.id);
-          outcome = {
-            executionId,
-            status: "success",
-            result: result.value,
-            usage: result.usage ?? {},
-            route: snapshotRoute(route),
-            upstreamKeyMasked: maskKey(apiKey) ?? undefined,
-            firstTokenAt: attemptFirstTokenAt,
-            committed,
-          };
-          return outcome;
-        } catch (error) {
-          const completedAt = Date.now();
-          if (isAbortError(error) || options.abortSignal?.aborted) {
-            await safeTelemetry(() => options.telemetry.recordAttempt({
+
+            const toolUnsupported = options.isToolUnsupported?.(failure) === true;
+            const streamOptionsUnsupported = !committed
+              && !streamOptionsFallbackUsed
+              && options.isStreamOptionsUnsupported?.(route, failure) === true;
+            const classifiedError = classifyGatewayError(failure, providerSecrets(route, apiKey));
+            const safeError: SafeGatewayError = streamOptionsUnsupported
+              ? { ...classifiedError, code: "stream_options_not_supported", phase: "routing" }
+              : toolUnsupported
+                ? { ...classifiedError, code: "tools_not_supported", phase: "routing" }
+                : classifiedError;
+            const attemptTelemetry: AttemptTelemetry = {
               executionId,
               attempt,
               operation: options.operation,
               route: snapshotRoute(route),
               upstreamKeyMasked: maskKey(apiKey) ?? undefined,
-              status: "interrupted",
+              status: "failed",
+              error: safeError,
               latencyMs: completedAt - attemptStartedAt,
               firstTokenLatencyMs: activeAttempt?.firstTokenAt !== undefined
                 ? activeAttempt.firstTokenAt - attemptStartedAt
                 : undefined,
               startedAt: attemptStartedAt,
               completedAt,
-            }));
+            };
+            await safeTelemetry(() => options.telemetry.recordAttempt(attemptTelemetry));
             activeAttempt = undefined;
-            outcome = interruptedOutcome(
+
+            if (toolUnsupported) {
+              await safeOperation(() => options.onToolUnsupported?.(route));
+            }
+            if (streamOptionsUnsupported) {
+              streamOptionsFallbackUsed = true;
+              await safeOperation(() => options.onStreamOptionsUnsupported?.(route));
+            }
+
+            const failoverable = toolUnsupported
+              || streamOptionsUnsupported
+              || isFailoverableError(failure);
+            if (failoverable && !toolUnsupported && !streamOptionsUnsupported) {
+              permit.recordFailure();
+            }
+            stopExecution = committed || !failoverable;
+            outcome = failedOutcome(
               executionId,
-              snapshotRoute(route),
+              safeError,
               committed,
+              snapshotRoute(route),
               maskKey(apiKey) ?? undefined,
             );
-            return outcome;
+            if (streamOptionsUnsupported) {
+              keys.splice(keyIndex + 1, 0, keys[keyIndex]);
+              continue;
+            }
+            const hasMoreKeys = keyIndex < keys.length - 1;
+            if (!committed && !toolUnsupported && hasMoreKeys && isRetryableForKey(failure)) continue;
+            break;
+          } finally {
+            timeoutScope.dispose();
           }
-
-          const toolUnsupported = options.isToolUnsupported?.(error) === true;
-          const classifiedError = classifyGatewayError(error, providerSecrets(route, apiKey));
-          const safeError: SafeGatewayError = toolUnsupported
-            ? { ...classifiedError, code: "tools_not_supported", phase: "routing" }
-            : classifiedError;
-          const attemptTelemetry: AttemptTelemetry = {
-            executionId,
-            attempt,
-            operation: options.operation,
-            route: snapshotRoute(route),
-            upstreamKeyMasked: maskKey(apiKey) ?? undefined,
-            status: "failed",
-            error: safeError,
-            latencyMs: completedAt - attemptStartedAt,
-            firstTokenLatencyMs: activeAttempt?.firstTokenAt !== undefined
-              ? activeAttempt.firstTokenAt - attemptStartedAt
-              : undefined,
-            startedAt: attemptStartedAt,
-            completedAt,
-          };
-          await safeTelemetry(() => options.telemetry.recordAttempt(attemptTelemetry));
-          activeAttempt = undefined;
-
-          if (toolUnsupported) {
-            await safeOperation(() => options.onToolUnsupported?.(route));
-          }
-
-          const failoverable = toolUnsupported || isFailoverableError(error);
-          if (failoverable && !toolUnsupported) options.breaker.recordFailure(route.provider.id);
-          stopExecution = committed || !failoverable;
-          outcome = failedOutcome(
-            executionId,
-            safeError,
-            committed,
-            snapshotRoute(route),
-            maskKey(apiKey) ?? undefined,
-          );
-          const hasMoreKeys = keyIndex < keys.length - 1;
-          if (!committed && !toolUnsupported && hasMoreKeys && isRetryableForKey(error)) continue;
-          break;
         }
-      }
 
-      if (stopExecution) break;
+        if (stopExecution) break;
+      } finally {
+        permit.release();
+      }
     }
 
-    outcome ??= failedOutcome(executionId, {
-      code: "no_route",
-      message: "没有可用路由",
-      phase: "routing",
-    }, committed);
+    if (!acquiredPermit) {
+      options.breaker.recordNoHealthyRoute();
+      outcome = failedOutcome(executionId, {
+        code: ErrorCode.ROUTING_NO_HEALTHY_ROUTE,
+        message: "没有健康的可用路由",
+        phase: "routing",
+      }, committed);
+    } else if (!hadUpstreamAttempt && firstRejection) {
+      outcome = failedOutcome(
+        executionId,
+        firstRejection.error,
+        committed,
+        snapshotRoute(firstRejection.route),
+      );
+    } else {
+      outcome ??= failedOutcome(executionId, {
+        code: "no_route",
+        message: "没有可用路由",
+        phase: "routing",
+      }, committed);
+    }
     return outcome;
   } finally {
     outcome ??= options.abortSignal?.aborted
@@ -375,6 +475,7 @@ function snapshotRoute(route: import("@/lib/providers/types").ResolvedRoute): Ga
   return {
     modelName: route.modelName,
     upstreamModelName: route.upstreamModelName,
+    apiFormat: route.apiFormat,
     protocol: route.protocol,
     provider: { id: route.provider.id, name: route.provider.name },
     priority: route.priority,

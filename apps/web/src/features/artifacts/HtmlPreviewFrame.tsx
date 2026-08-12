@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useTranslations } from "next-intl";
-import { ExternalLink, PanelRight } from "lucide-react";
+import { PanelRight } from "lucide-react";
 import {
   buildHtmlPreviewDoc,
   isPreviewResizeMessage,
@@ -22,7 +22,7 @@ interface HtmlPreviewFrameProps {
 }
 
 /**
- * HTML Artifact 预览 —— iframe srcDoc + sandbox + 高度自适应。
+ * HTML/SVG Artifact 预览 —— iframe srcDoc + sandbox + 高度自适应。
  *
  * 高度自适应:iframe 内 bridge 脚本通过 postMessage 上报内容高度,
  * 父组件据此设 iframe 高度,但不超过父视口 75%(超出则 iframe 内部滚动)。
@@ -51,14 +51,6 @@ export function HtmlPreviewFrame({ html, title, onOpenPanel, className }: HtmlPr
     return () => window.removeEventListener("message", handleMessage);
   }, [handleMessage]);
 
-  // 新窗口打开:把 srcdoc 写入 blob URL
-  const handleOpenExternal = useCallback(() => {
-    const blob = new Blob([srcDoc], { type: "text/html" });
-    const url = URL.createObjectURL(blob);
-    window.open(url, "_blank", "noopener,noreferrer");
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
-  }, [srcDoc]);
-
   const hasHeader = Boolean(title);
 
   return (
@@ -71,50 +63,28 @@ export function HtmlPreviewFrame({ html, title, onOpenPanel, className }: HtmlPr
       {hasHeader && (
         <div className="flex items-center justify-between px-3 py-1.5 border-b border-morning-mist dark:border-deep-space/60 bg-neutral-50/50 dark:bg-[#0d0f14]/20">
           <span className="text-ui-caption font-mono text-neutral-400 truncate">{title}</span>
-          <div className="flex items-center gap-1 shrink-0">
-            {onOpenPanel && (
-              <button
-                type="button"
-                onClick={onOpenPanel}
-                className="p-1 rounded text-neutral-400 hover:text-sora-blue hover:bg-neutral-100 dark:hover:bg-neutral-900 transition-colors cursor-pointer"
-                title={t("openPanel")}
-                aria-label={t("openPanel")}
-              >
-                <PanelRight className="w-3.5 h-3.5" aria-hidden="true" />
-              </button>
-            )}
+          {onOpenPanel && (
             <button
               type="button"
-              onClick={handleOpenExternal}
-              className="p-1 rounded text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-900 transition-colors cursor-pointer"
-              title={t("openExternal")}
-              aria-label={t("openExternal")}
+              onClick={onOpenPanel}
+              className="p-1 rounded text-neutral-400 hover:text-sora-blue hover:bg-neutral-100 dark:hover:bg-neutral-900 transition-colors cursor-pointer"
+              title={t("openPanel")}
+              aria-label={t("openPanel")}
             >
-              <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />
+              <PanelRight className="w-3.5 h-3.5" aria-hidden="true" />
             </button>
-          </div>
+          )}
         </div>
       )}
-      <div className="relative w-full" style={{ height }}>
+      <div className="w-full" style={{ height }}>
         <iframe
           ref={iframeRef}
           srcDoc={srcDoc}
-          title={title ?? t("htmlPreview")}
+          title={title ?? t("preview")}
           sandbox={HTML_PREVIEW_SANDBOX}
           className="w-full h-full border-0 bg-white"
           loading="lazy"
         />
-        {!hasHeader && (
-          <button
-            type="button"
-            onClick={handleOpenExternal}
-            className="absolute top-2 right-2 p-1.5 rounded-md bg-black/30 text-white opacity-0 hover:opacity-100 transition-opacity focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
-            title={t("openExternal")}
-            aria-label={t("openExternal")}
-          >
-            <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />
-          </button>
-        )}
       </div>
     </div>
   );

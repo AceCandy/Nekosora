@@ -16,11 +16,13 @@ export const errorsZhCN: Record<ErrorCodeValue, string> = {
   "routing.model_not_available": "该模型不可用",
   "routing.model_not_bound": "该模型未绑定到当前密钥",
   "routing.no_route": "该模型没有可用路由",
+  "routing.no_healthy_route": "该模型当前没有健康的可用路由",
   "routing.capability_not_supported": "该模型不支持请求的能力",
 
   // request.*
   "request.invalid_json": "请求体不是合法 JSON",
   "request.missing_field": "缺少必填字段",
+  "request.unsupported_parameter": "不支持的参数",
   "request.payload_too_large": "请求体过大",
 
   // gateway.*
@@ -28,6 +30,9 @@ export const errorsZhCN: Record<ErrorCodeValue, string> = {
   "gateway.generation_failed": "生成失败",
   "gateway.all_routes_failed": "所有路由均调用失败",
   "gateway.timeout": "上游响应超时",
+  "gateway.rate_limit_exceeded": "请求速率已超出限制",
+  "gateway.concurrency_limit_exceeded": "并发请求数已超出限制",
+  "gateway.quota_exceeded": "月度用量额度已耗尽",
 
   // media.*
   "media.image_gen_failed": "图像生成失败",
