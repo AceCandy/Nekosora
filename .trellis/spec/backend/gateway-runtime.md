@@ -68,7 +68,7 @@ HTTP adaptation and process lifecycle; Core owns framework-neutral behavior.
 ### 6. Tests Required
 
 - `apps/gateway/src/server.test.ts`: route matrix, raw JSON/headers, multipart limits, safe localized errors, SSE bytes, readiness matrix, timer cleanup, and resource close.
-- `apps/gateway/src/server.listener.test.ts`: Gateway-without-Web requests and real-socket SSE cancellation.
+- `apps/gateway/src/server.listener.test.ts`: Gateway-without-Web requests and real-socket SSE cancellation. Use a `node:http` client and destroy the response socket after the first chunk; aborting Node's built-in `fetch` signal is not a portable assertion that the TCP socket closed across supported Node versions.
 - Core route suites: API-key/session authorization, OpenAI JSON/SSE, WebChat SSE, file 200/206/302/416, images, knowledge, MCP, and metrics behavior.
 - Production checks: `pnpm build:gateway`, missing-env exit `1`, successful `/healthz` + `/healthz/ready`, clean signal shutdown, and no leftover process or build fixture.
 
@@ -95,4 +95,12 @@ export default defineConfig({
   noExternal: [/^@nekusora\//],
   skipNodeModulesBundle: true,
 });
+```
+
+```typescript
+// Wrong: fetch abort behavior differs between supported Node versions.
+controller.abort();
+
+// Correct: the listener test explicitly closes the real response socket.
+response.once("data", () => response.destroy());
 ```
