@@ -3,7 +3,7 @@
   "name": "ci-artifact-quality-gates",
   "title": "CI 与制品质量门禁",
   "description": "建立 PR 质量检查并覆盖 Web、Gateway、Worker 三类制品构建。",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

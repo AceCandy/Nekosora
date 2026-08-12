@@ -35,6 +35,7 @@
     "./worker/runtime": "./src/lib/worker/runtime.ts"
   },
   "scripts": {
+    "lint": "eslint src --config ../../eslint.config.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

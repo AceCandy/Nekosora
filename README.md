@@ -200,23 +200,30 @@ docker compose --env-file deploy/production.env -f compose.production.yml up -d 
 
 ## 🐳 Docker 部署
 
-预构建镜像由 CI 自动发布(GHCR 每 12h 检查 main 有更新则构建;打 `v*` tag 时同步发 DockerHub):
+预构建镜像按职责拆分为 Web、Gateway、Worker。GHCR 每 12h 检查 main，有更新时发布 `edge`；`v*` tag 发布版本标签并在配置了凭据时同步到 DockerHub：
 
 ```bash
-docker pull ghcr.io/acecandy/nekosora:edge     # 定时构建的最新 main
-docker pull acecandy/nekosora:latest           # 打 v* tag 后的正式版
+docker pull ghcr.io/acecandy/nekusora-web:edge
+docker pull ghcr.io/acecandy/nekusora-gateway:edge
+docker pull ghcr.io/acecandy/nekusora-worker:edge
+
+docker pull acecandy/nekusora-web:latest        # v* tag，可选 DockerHub 同步
+docker pull acecandy/nekusora-gateway:latest
+docker pull acecandy/nekusora-worker:latest
 ```
+
+旧的 `ghcr.io/acecandy/nekusora` 与 `acecandy/nekusora` 镜像地址不再更新。
 
 或本地构建:
 
 ```bash
-docker build -t nekusora .
+docker build -t nekusora-web .
 docker run -p 3000:3000 \
   -e DATABASE_URL=postgresql://user:pass@db:5432/nekusora \
   -e DATA_ENCRYPTION_KEY=$(openssl rand -hex 32) \
   -e BETTER_AUTH_SECRET=$(openssl rand -hex 32) \
   -e SEED_ADMIN_PASSWORD="$SEED_ADMIN_PASSWORD" \
-  nekusora
+  nekusora-web
 ```
 
 PostgreSQL 数据由外部 PG 管理(docker compose 的 pgdata 卷持久化)。
