@@ -1,1 +1,4 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/frontend/index.md", "reason": "Chat 的 Server/Client 边界、质量门槛和消息滚动禁用虚拟化契约"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "服务端列表与客户端本地状态边界，不新增请求状态框架"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "PostgreSQL 查询、迁移、journal/snapshot 与活动 run 投影契约"}
+{"file": ".trellis/tasks/08-10-chat-navigation-client-load/research/current-evidence.md", "reason": "现有会话调用链、索引与客户端加载边界的定位证据"}

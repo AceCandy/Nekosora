@@ -9,6 +9,7 @@ import {
   toggleArchivedConversation,
   deleteConversation,
   getGeneratingStatuses,
+  getConversationNavigationItem,
 } from "@/features/chat/actions/conversations";
 import Sidebar from "@/features/chat/components/Sidebar";
 
@@ -19,7 +20,10 @@ export default async function ImageLayout({ children }: { children: React.ReactN
   const user = await requireSession();
   const t = await getTranslations("chat");
   const tc = await getTranslations("nav");
-  const conversations = await listConversations();
+  const [conversationPage, generatingStatuses] = await Promise.all([
+    listConversations(),
+    getGeneratingStatuses(),
+  ]);
 
   async function handleSignOut() {
     "use server";
@@ -40,20 +44,14 @@ export default async function ImageLayout({ children }: { children: React.ReactN
     await deleteConversation(id);
   }
 
-  const mappedConversations = conversations.map((c: Record<string, unknown>) => ({
-    id: c.id as string,
-    title: c.title as string,
-    pinned: (c.pinned as boolean) ?? false,
-    archived: (c.archived as boolean) ?? false,
-    updatedAt: c.updatedAt instanceof Date ? c.updatedAt.getTime() : Number(c.updatedAt ?? 0),
-  }));
-
   return (
     <div className="flex h-screen overflow-hidden bg-nebula-white text-space-ink dark:bg-twilight-obsidian dark:text-nebula-silver transition-colors duration-200">
       <Sidebar
         userName={user.name}
         userEmail={user.email}
-        conversations={mappedConversations}
+        conversations={conversationPage.items}
+        nextCursor={conversationPage.nextCursor}
+        initialGeneratingIds={generatingStatuses.map(({ id }) => id)}
         newConversationText={t("newConversation")}
         conversationsText={t("conversations")}
         noConversationsText={t("noConversations")}
@@ -79,6 +77,8 @@ export default async function ImageLayout({ children }: { children: React.ReactN
         togglePinnedAction={handleTogglePinned}
         toggleArchivedAction={handleToggleArchived}
         deleteAction={handleDelete}
+        loadConversationsAction={listConversations}
+        getConversationAction={getConversationNavigationItem}
         getGeneratingStatusesAction={getGeneratingStatuses}
       />
       <main className="flex-1 flex flex-col min-w-0">{children}</main>

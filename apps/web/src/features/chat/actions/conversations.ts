@@ -1,11 +1,16 @@
 "use server";
-import { eq, and, or, desc, isNull, asc, sql } from "drizzle-orm";
+import { eq, and, or, desc, isNull, isNotNull, asc, gt, lt, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { requireSession } from "@/lib/session";
 import { getConversationTitleState } from "@/lib/conversation-title/service";
 import type { ReasoningLevel } from "@/db/types";
+import {
+  CONVERSATION_PAGE_SIZE,
+  type ConversationNavigationItem,
+  type ConversationNavigationPage,
+} from "@/features/chat/model/conversationNavigation";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const S = () => getSchema() as any;
@@ -19,6 +24,60 @@ function activeRunExists(s: any) {
       and ${s.runs.status} = 'running'
       and ${s.runs.leaseExpiresAt} > now()
   )`;
+}
+
+const conversationCursorSchema = z.object({
+  rank: z.number().int().min(0).max(2),
+  updatedAt: z.string().datetime({ precision: 6 }),
+  id: z.string().min(1),
+});
+
+type ConversationCursor = z.infer<typeof conversationCursorSchema>;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function conversationRank(s: any) {
+  return sql<number>`case
+    when ${s.conversations.archived} then 2
+    when ${s.conversations.pinned} then 0
+    else 1
+  end`;
+}
+
+function encodeConversationCursor(cursor: ConversationCursor): string {
+  return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
+}
+
+function decodeConversationCursor(cursor: string): ConversationCursor {
+  try {
+    if (cursor.length > 2048) throw new Error("cursor_too_long");
+    return conversationCursorSchema.parse(
+      JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")),
+    );
+  } catch {
+    throw new Error("会话分页游标无效");
+  }
+}
+
+function toConversationNavigationItem(row: {
+  id: string;
+  title: string;
+  pinned: boolean;
+  archived: boolean;
+  generating: boolean;
+  updatedAt: Date | number;
+  sortUpdatedAt: string;
+  rank: number;
+}): ConversationNavigationItem {
+  return {
+    id: row.id,
+    title: row.title,
+    pinned: row.pinned,
+    archived: row.archived,
+    generating: row.generating,
+    updatedAt: row.updatedAt instanceof Date ? row.updatedAt.getTime() : Number(row.updatedAt),
+    sortUpdatedAt: row.sortUpdatedAt,
+    rank: Number(row.rank),
+  };
 }
 
 /**
@@ -103,12 +162,25 @@ export async function getImageModels() {
     }));
 }
 
-/** 列出当前用户的会话(含置顶/归档/更新时间,供前端分组)。 */
-export async function listConversations() {
+/** 按侧栏展示顺序列出当前用户的一页会话。 */
+export async function listConversations(cursor?: string | null): Promise<ConversationNavigationPage> {
   const user = await requireSession();
   const db = await getDb();
   const s = S();
-  return db
+  const rank = conversationRank(s);
+  const decoded = cursor ? decodeConversationCursor(cursor) : null;
+  const cursorWhere = decoded
+    ? or(
+        gt(rank, decoded.rank),
+        and(eq(rank, decoded.rank), lt(s.conversations.updatedAt, sql`${decoded.updatedAt}::timestamptz`)),
+        and(
+          eq(rank, decoded.rank),
+          eq(s.conversations.updatedAt, sql`${decoded.updatedAt}::timestamptz`),
+          lt(s.conversations.id, decoded.id),
+        ),
+      )
+    : undefined;
+  const rows = await db
     .select({
       id: s.conversations.id,
       title: s.conversations.title,
@@ -116,22 +188,79 @@ export async function listConversations() {
       archived: s.conversations.archived,
       generating: activeRunExists(s),
       updatedAt: s.conversations.updatedAt,
+      sortUpdatedAt: sql<string>`to_char(
+        ${s.conversations.updatedAt} at time zone 'UTC',
+        'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
+      )`,
+      rank,
     })
     .from(s.conversations)
-    .where(eq(s.conversations.userId, user.id))
-    .orderBy(desc(s.conversations.updatedAt));
+    .where(and(eq(s.conversations.userId, user.id), cursorWhere))
+    .orderBy(asc(rank), desc(s.conversations.updatedAt), desc(s.conversations.id))
+    .limit(CONVERSATION_PAGE_SIZE + 1);
+
+  const pageRows = rows.slice(0, CONVERSATION_PAGE_SIZE) as Array<
+    Parameters<typeof toConversationNavigationItem>[0]
+  >;
+  const items = pageRows.map(toConversationNavigationItem);
+  const last = pageRows.at(-1);
+  return {
+    items,
+    nextCursor: rows.length > CONVERSATION_PAGE_SIZE && last
+      ? encodeConversationCursor({
+          rank: Number(last.rank),
+          updatedAt: last.sortUpdatedAt,
+          id: last.id,
+        })
+      : null,
+  };
 }
 
-/** 轻量轮询接口:只返回当前用户各会话的 id + generating,供侧栏检测后台会话完成。 */
+/** 按 id 读取当前用户的一条侧栏会话投影，供深链补入首屏窗口。 */
+export async function getConversationNavigationItem(
+  conversationId: string,
+): Promise<ConversationNavigationItem | null> {
+  const id = z.string().min(1).parse(conversationId);
+  const user = await requireSession();
+  const db = await getDb();
+  const s = S();
+  const [row] = await db
+    .select({
+      id: s.conversations.id,
+      title: s.conversations.title,
+      pinned: s.conversations.pinned,
+      archived: s.conversations.archived,
+      generating: activeRunExists(s),
+      updatedAt: s.conversations.updatedAt,
+      sortUpdatedAt: sql<string>`to_char(
+        ${s.conversations.updatedAt} at time zone 'UTC',
+        'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
+      )`,
+      rank: conversationRank(s),
+    })
+    .from(s.conversations)
+    .where(and(eq(s.conversations.id, id), eq(s.conversations.userId, user.id)))
+    .limit(1);
+  return row ? toConversationNavigationItem(row as Parameters<typeof toConversationNavigationItem>[0]) : null;
+}
+
+/** 轻量轮询接口:只返回当前用户仍有效的活动 run。 */
 export async function getGeneratingStatuses() {
   const user = await requireSession();
   const db = await getDb();
   const s = S();
   const rows = await db
-    .select({ id: s.conversations.id, generating: activeRunExists(s) })
-    .from(s.conversations)
-    .where(eq(s.conversations.userId, user.id));
-  return rows as { id: string; generating: boolean }[];
+    .select({ id: s.runs.conversationId })
+    .from(s.runs)
+    .innerJoin(s.conversations, eq(s.runs.conversationId, s.conversations.id))
+    .where(and(
+      eq(s.conversations.userId, user.id),
+      isNotNull(s.runs.conversationId),
+      eq(s.runs.status, "running"),
+      gt(s.runs.leaseExpiresAt, sql`now()`),
+    ))
+    .groupBy(s.runs.conversationId);
+  return (rows as { id: string }[]).map(({ id }) => ({ id, generating: true as const }));
 }
 
 /** 供新会话短轮询的属主隔离标题状态。 */

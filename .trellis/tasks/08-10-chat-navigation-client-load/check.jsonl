@@ -1,1 +1,4 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端 lint、typecheck、测试和交互复核门槛"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "独立检查 Chat Server/Client、移动交互与滚动边界"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "独立检查游标排序、索引匹配和迁移元数据同步"}
+{"file": ".trellis/tasks/08-10-chat-navigation-client-load/research/current-evidence.md", "reason": "对照基线检查实现是否扩大范围或错误拆包"}

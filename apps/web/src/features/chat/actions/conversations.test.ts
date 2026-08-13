@@ -5,11 +5,14 @@ const mocks = vi.hoisted(() => ({
   getDb: vi.fn(),
   getSchema: vi.fn(),
   eq: vi.fn((left: unknown, right: unknown) => ({ op: "eq", left, right })),
-  and: vi.fn(),
-  or: vi.fn(),
+  and: vi.fn((...conditions: unknown[]) => ({ op: "and", conditions })),
+  or: vi.fn((...conditions: unknown[]) => ({ op: "or", conditions })),
   desc: vi.fn((field: unknown) => ({ op: "desc", field })),
+  gt: vi.fn((left: unknown, right: unknown) => ({ op: "gt", left, right })),
+  lt: vi.fn((left: unknown, right: unknown) => ({ op: "lt", left, right })),
   isNull: vi.fn(),
-  asc: vi.fn(),
+  isNotNull: vi.fn(),
+  asc: vi.fn((field: unknown) => ({ op: "asc", field })),
   getConversationTitleState: vi.fn(),
   sql: vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => ({
     op: "sql",
@@ -23,7 +26,10 @@ vi.mock("drizzle-orm", () => ({
   and: mocks.and,
   or: mocks.or,
   desc: mocks.desc,
+  gt: mocks.gt,
+  lt: mocks.lt,
   isNull: mocks.isNull,
+  isNotNull: mocks.isNotNull,
   asc: mocks.asc,
   sql: mocks.sql,
 }));
@@ -38,6 +44,7 @@ vi.mock("@/lib/conversation-title/service", () => ({
 }));
 
 import {
+  getConversationNavigationItem,
   getConversationTitleStateAction,
   getGeneratingStatuses,
   listConversations,
@@ -70,7 +77,10 @@ function queryReturning(rows: Record<string, unknown>[]) {
   const query = {
     from: vi.fn(() => query),
     where: vi.fn(() => query),
-    orderBy: vi.fn(() => Promise.resolve(rows)),
+    innerJoin: vi.fn(() => query),
+    groupBy: vi.fn(() => Promise.resolve(rows)),
+    orderBy: vi.fn(() => query),
+    limit: vi.fn(() => Promise.resolve(rows)),
     then: (
       resolve: (value: Record<string, unknown>[]) => unknown,
       reject: (reason: unknown) => unknown,
@@ -89,8 +99,17 @@ describe("会话 generating 派生", () => {
   it("列表与轮询都从 fresh running runs 派生而不读取 legacy boolean", async () => {
     const projections: Array<Record<string, unknown>> = [];
     const resultSets = [
-      [{ id: "conversation-1", generating: true }],
-      [{ id: "conversation-1", generating: true }],
+      [{
+        id: "conversation-1",
+        title: "会话一",
+        pinned: false,
+        archived: false,
+        generating: true,
+        updatedAt: new Date("2026-08-13T01:00:00.000Z"),
+        sortUpdatedAt: "2026-08-13T01:00:00.000000Z",
+        rank: 1,
+      }],
+      [{ id: "conversation-1" }],
     ];
     const db = {
       select: vi.fn((projection: Record<string, unknown>) => {
@@ -100,18 +119,25 @@ describe("会话 generating 派生", () => {
     };
     mocks.getDb.mockResolvedValue(db);
 
-    await expect(listConversations()).resolves.toEqual([
-      { id: "conversation-1", generating: true },
-    ]);
+    await expect(listConversations()).resolves.toEqual({
+      items: [{
+        id: "conversation-1",
+        title: "会话一",
+        pinned: false,
+        archived: false,
+        generating: true,
+        updatedAt: Date.parse("2026-08-13T01:00:00.000Z"),
+        sortUpdatedAt: "2026-08-13T01:00:00.000000Z",
+        rank: 1,
+      }],
+      nextCursor: null,
+    });
     await expect(getGeneratingStatuses()).resolves.toEqual([
       { id: "conversation-1", generating: true },
     ]);
 
-    const [listGenerating, statusGenerating] = projections.map(
-      (projection) => projection.generating,
-    );
+    const listGenerating = projections[0].generating;
     expect(listGenerating).not.toBe(schema.conversations.generating);
-    expect(statusGenerating).toEqual(listGenerating);
     expect(listGenerating).toEqual(expect.objectContaining({
       op: "sql",
       text: expect.stringMatching(/exists[\s\S]*running[\s\S]*now\(\)/),
@@ -122,6 +148,95 @@ describe("会话 generating 派生", () => {
         schema.runs.leaseExpiresAt,
       ]),
     }));
+    expect(projections[1]).toEqual({ id: schema.runs.conversationId });
+  });
+
+  it("固定取 31 行并用完整最后一行生成下一页游标", async () => {
+    const rows = Array.from({ length: 31 }, (_, index) => ({
+      id: `conversation-${String(31 - index).padStart(2, "0")}`,
+      title: `会话 ${index}`,
+      pinned: false,
+      archived: false,
+      generating: false,
+      updatedAt: new Date(`2026-08-13T00:${String(59 - index).padStart(2, "0")}:00.000Z`),
+      sortUpdatedAt: `2026-08-13T00:${String(59 - index).padStart(2, "0")}:00.000000Z`,
+      rank: 1,
+    }));
+    const query = queryReturning(rows);
+    mocks.getDb.mockResolvedValue({ select: vi.fn(() => query) });
+
+    const first = await listConversations();
+    expect(first.items).toHaveLength(30);
+    expect(first.nextCursor).toEqual(expect.any(String));
+    expect(query.limit).toHaveBeenCalledWith(31);
+    expect(query.orderBy).toHaveBeenCalledWith(
+      expect.objectContaining({ op: "asc" }),
+      expect.objectContaining({ op: "desc", field: schema.conversations.updatedAt }),
+      expect.objectContaining({ op: "desc", field: schema.conversations.id }),
+    );
+
+    const nextQuery = queryReturning([]);
+    mocks.getDb.mockResolvedValue({ select: vi.fn(() => nextQuery) });
+    await listConversations(first.nextCursor);
+    const rankExpression = expect.objectContaining({ op: "sql" });
+    expect(mocks.gt).toHaveBeenCalledWith(rankExpression, 1);
+    expect(mocks.eq).toHaveBeenCalledWith(rankExpression, 1);
+    expect(mocks.lt).toHaveBeenCalledWith(schema.conversations.updatedAt, expect.objectContaining({
+      op: "sql",
+      values: [rows[29].sortUpdatedAt],
+    }));
+    expect(mocks.eq).toHaveBeenCalledWith(schema.conversations.updatedAt, expect.objectContaining({
+      op: "sql",
+      values: [rows[29].sortUpdatedAt],
+    }));
+    expect(mocks.lt).toHaveBeenCalledWith(schema.conversations.id, rows[29].id);
+    expect(mocks.eq).toHaveBeenCalledWith(schema.conversations.userId, "user-1");
+    expect(nextQuery.where).toHaveBeenCalledWith({
+      op: "and",
+      conditions: [
+        { op: "eq", left: schema.conversations.userId, right: "user-1" },
+        {
+          op: "or",
+          conditions: [
+            expect.objectContaining({ op: "gt" }),
+            expect.objectContaining({ op: "and" }),
+            expect.objectContaining({ op: "and" }),
+          ],
+        },
+      ],
+    });
+  });
+
+  it("拒绝无法解析的分页游标", async () => {
+    mocks.getDb.mockResolvedValue({ select: vi.fn() });
+    await expect(listConversations("not-a-cursor")).rejects.toThrow("会话分页游标无效");
+    const invalidDate = Buffer.from(JSON.stringify({
+      rank: 1,
+      updatedAt: "2026-99-99T00:00:00.000000Z",
+      id: "conversation-1",
+    })).toString("base64url");
+    await expect(listConversations(invalidDate)).rejects.toThrow("会话分页游标无效");
+  });
+
+  it("深链补入同时按会话 id 与当前属主隔离", async () => {
+    const row = {
+      id: "conversation-1",
+      title: "会话一",
+      pinned: false,
+      archived: false,
+      generating: false,
+      updatedAt: new Date("2026-08-13T01:00:00.000Z"),
+      sortUpdatedAt: "2026-08-13T01:00:00.000001Z",
+      rank: 1,
+    };
+    mocks.getDb.mockResolvedValue({ select: vi.fn(() => queryReturning([row])) });
+
+    await expect(getConversationNavigationItem("conversation-1")).resolves.toEqual({
+      ...row,
+      updatedAt: row.updatedAt.getTime(),
+    });
+    expect(mocks.eq).toHaveBeenCalledWith(schema.conversations.id, "conversation-1");
+    expect(mocks.eq).toHaveBeenCalledWith(schema.conversations.userId, "user-1");
   });
 });
 

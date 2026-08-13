@@ -6,6 +6,13 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { searchMessages } from "@/features/chat/actions/conversations";
+import {
+  compareConversations,
+  mergeConversationIds,
+  mergeConversations,
+  type ConversationNavigationItem,
+  type ConversationNavigationPage,
+} from "@/features/chat/model/conversationNavigation";
 import ConfirmDialog from "@/shared/ui/ConfirmDialog";
 import Modal from "@/shared/ui/Modal";
 import { Plus, Settings2, LogOut, Menu, X, Search, Pin, Archive, Trash2, ImageIcon, Loader2, PanelLeftClose, PanelLeftOpen, ChevronDown } from "lucide-react";
@@ -15,14 +22,7 @@ import { useChatStreamStore } from "@/features/chat/store/chatStreamStore";
 import { useClickOutside } from "@/shared/lib/useClickOutside";
 import { newConversationHref } from "@/features/chat/model/newConversationNavigation";
 
-interface ConversationItem {
-  id: string;
-  title: string;
-  pinned: boolean;
-  archived: boolean;
-  generating: boolean;
-  updatedAt: number;
-}
+type ConversationItem = ConversationNavigationItem;
 
 /** 全文搜索单条命中结果(按消息粒度)。 */
 interface SearchResult {
@@ -37,6 +37,8 @@ interface SidebarProps {
   userName: string;
   userEmail: string;
   conversations: ConversationItem[];
+  nextCursor: string | null;
+  initialGeneratingIds: string[];
   newConversationText: string;
   conversationsText: string;
   noConversationsText: string;
@@ -62,6 +64,8 @@ interface SidebarProps {
   togglePinnedAction: (id: string) => Promise<void>;
   toggleArchivedAction: (id: string) => Promise<void>;
   deleteAction: (id: string) => Promise<void>;
+  loadConversationsAction: (cursor?: string | null) => Promise<ConversationNavigationPage>;
+  getConversationAction: (id: string) => Promise<ConversationItem | null>;
   /** 轮询各会话 generating 状态,用于检测后台会话完成。 */
   getGeneratingStatusesAction: () => Promise<{ id: string; generating: boolean }[]>;
 }
@@ -112,6 +116,8 @@ export default function Sidebar({
   userName,
   userEmail,
   conversations,
+  nextCursor,
+  initialGeneratingIds,
   newConversationText,
   conversationsText,
   noConversationsText,
@@ -137,6 +143,8 @@ export default function Sidebar({
   togglePinnedAction,
   toggleArchivedAction,
   deleteAction,
+  loadConversationsAction,
+  getConversationAction,
   getGeneratingStatusesAction,
 }: SidebarProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -152,6 +160,15 @@ export default function Sidebar({
   const [searching, setSearching] = useState(false);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [navigation, setNavigation] = useState(() => ({
+    source: conversations,
+    conversations,
+    cursor: nextCursor,
+    loading: false,
+    failed: false,
+    generation: 0,
+  }));
+  const [generatingIds, setGeneratingIds] = useState(() => new Set(initialGeneratingIds));
   const [isPending, startTransition] = useTransition();
   const displayName = userName.trim() || userEmail;
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -159,6 +176,8 @@ export default function Sidebar({
   const newConversationSequenceRef = useRef(0);
   // 当前展开的会话操作菜单容器(触发按钮 + 面板),用于点击外部收起。
   const sessionMenuRef = useRef<HTMLDivElement>(null);
+
+  const loadedConversations = navigation.conversations;
 
   useClickOutside(userMenuRef, () => setUserMenuOpen(false), userMenuOpen);
   // 会话项「更多操作」:侧栏 aside 带 transform,不能用内部 fixed 遮罩;统一走 useClickOutside。
@@ -176,8 +195,64 @@ export default function Sidebar({
   );
   const activeConversationId = useChatStreamStore((s) => s.activeConversationId);
   const optimisticConversation = useChatStreamStore((s) => s.optimisticConversation);
+  const pollingGeneratingIds = mergeConversationIds(initialGeneratingIds, streamingConvIds);
+  const pollingGeneratingKey = JSON.stringify(pollingGeneratingIds);
+  const streamingGeneratingKey = JSON.stringify(mergeConversationIds(streamingConvIds));
+
+  // RSC 传入新的数组 identity 即新导航快照；在当前 render 内切换 generation，
+  // 让随后到达的旧分页响应无法写回。该条件式 props→state 调整不会形成更新循环。
+  if (conversations !== navigation.source) {
+    setNavigation((current) => ({
+      source: conversations,
+      conversations,
+      cursor: nextCursor,
+      loading: false,
+      failed: false,
+      generation: current.generation + 1,
+    }));
+    setGeneratingIds(new Set(pollingGeneratingIds));
+  }
+
   // 高亮优先路由解析(导航后即时正确);replaceState 后 Next pathname 暂未更新时回落到 store 活跃 id。
   const activeConvId = pathConvId ?? activeConversationId;
+  const pathConversationLoaded = pathConvId
+    ? loadedConversations.some(({ id }) => id === pathConvId)
+    : true;
+
+  useEffect(() => {
+    if (!pathConvId || pathConversationLoaded) return;
+    let cancelled = false;
+    void getConversationAction(pathConvId).then((item) => {
+      if (!cancelled && item) {
+        setNavigation((current) => ({
+          ...current,
+          conversations: mergeConversations(current.conversations, [item]),
+        }));
+      }
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [pathConvId, pathConversationLoaded, getConversationAction]);
+
+  const handleLoadMore = async () => {
+    if (!navigation.cursor || navigation.loading) return;
+    const { cursor, generation } = navigation;
+    setNavigation((current) => ({ ...current, loading: true, failed: false }));
+    try {
+      const page = await loadConversationsAction(cursor);
+      setNavigation((current) => current.generation !== generation ? current : {
+        ...current,
+        conversations: mergeConversations(current.conversations, page.items),
+        cursor: page.nextCursor,
+        loading: false,
+      });
+    } catch {
+      setNavigation((current) => current.generation !== generation ? current : {
+        ...current,
+        loading: false,
+        failed: true,
+      });
+    }
+  };
 
   // 后台会话完成蓝点:轮询各会话 generating 状态,记录上一轮「生成中」的集合;
   // 当某会话从「生成中」变为「已完成」且不是当前会话,标记蓝点;点击该会话项清除。
@@ -187,57 +262,66 @@ export default function Sidebar({
     newConversationSequenceRef.current += 1;
     router.push(newConversationHref(`${Date.now()}-${newConversationSequenceRef.current}`));
   };
-  const prevGeneratingRef = useRef<Set<string> | null>(null);
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
-  // 仅当存在后台生成中会话时才轮询(检测其完成 → 蓝点);无任何生成会话时完全静默,
-  // 避免空闲态每 6s 空打 server action。hasGenerating 来自 SSR 会话列表,
-  // 当前会话开始/结束生成时由 useChatRuntime 的 refresh 同步驱动此开关。
-  const hasGenerating = conversations.some((c) => c.generating);
+  // 仅当存在后台生成中会话时才轮询。活动 id 独立于首屏窗口，后页会话也不会漏掉。
+  const hasGenerating = pollingGeneratingIds.length > 0;
   useEffect(() => {
     if (!hasGenerating) {
-      // 无生成中会话:重置基线,不启动轮询
-      prevGeneratingRef.current = null;
+      // 无生成中会话时完全静默，避免空闲态定时请求。
       return;
     }
     let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let previousGenerating = new Set(pollingGeneratingIds);
+    const locallyStreaming = new Set(JSON.parse(streamingGeneratingKey) as string[]);
     const poll = async () => {
+      let shouldContinue = true;
       try {
         const statuses = await getGeneratingStatusesAction();
         if (cancelled) return;
         const nowGenerating = new Set(statuses.filter((s) => s.generating).map((s) => s.id));
-        const prev = prevGeneratingRef.current;
-        if (prev !== null) {
-          // 从「生成中」变为「未生成」且非当前会话 → 标记完成
-          const newlyDone: string[] = [];
-          prev.forEach((id) => {
-            if (!nowGenerating.has(id) && id !== activeConvId) newlyDone.push(id);
+        setGeneratingIds(nowGenerating);
+        setNavigation((current) => ({
+          ...current,
+          conversations: current.conversations.map((item) => ({
+            ...item,
+            generating: nowGenerating.has(item.id),
+          })),
+        }));
+        // 从「生成中」变为「未生成」且非当前会话 → 标记完成
+        const newlyDone: string[] = [];
+        previousGenerating.forEach((id) => {
+          if (!nowGenerating.has(id) && id !== activeConvId) newlyDone.push(id);
+        });
+        if (newlyDone.length > 0) {
+          setCompletedIds((cur) => {
+            const next = new Set(cur);
+            newlyDone.forEach((id) => next.add(id));
+            return next;
           });
-          if (newlyDone.length > 0) {
-            setCompletedIds((cur) => {
-              const next = new Set(cur);
-              newlyDone.forEach((id) => next.add(id));
-              return next;
-            });
-          }
         }
-        prevGeneratingRef.current = nowGenerating;
+        const changed = [...previousGenerating].some((id) => !nowGenerating.has(id));
+        previousGenerating = nowGenerating;
         // 本轮查询反映出生成状态变化(有会话刚完成,或已无任何生成中会话):
         // 刷新 SSR 同步 generating 字段,使 hasGenerating 收敛、轮询自然停止,
         // 并让侧栏转圈及时消失。
-        const changed = prev !== null && [...prev].some((id) => !nowGenerating.has(id));
         if (nowGenerating.size === 0 || changed) router.refresh();
+        shouldContinue = nowGenerating.size > 0 || locallyStreaming.size > 0;
       } catch {
         /* 轮询失败静默,下轮重试 */
+      } finally {
+        if (!cancelled && shouldContinue) timer = setTimeout(poll, 6000);
       }
     };
-    poll();
-    const timer = setInterval(poll, 6000);
+    void poll();
     return () => {
       cancelled = true;
-      clearInterval(timer);
+      if (timer) clearTimeout(timer);
     };
     // activeConvId 进依赖:切换会话时立即重算(避免刚完成的当前会话残留蓝点)
-  }, [hasGenerating, activeConvId, getGeneratingStatusesAction, router]);
+    // 两个 key 都按内容稳定，避免 RSC refresh 只因数组引用变化重建轮询。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasGenerating, pollingGeneratingKey, streamingGeneratingKey, activeConvId, getGeneratingStatusesAction, router]);
 
   // 全文搜索:query 非空时防抖(300ms)调 searchMessages 跨会话搜消息内容
   useEffect(() => {
@@ -296,10 +380,10 @@ export default function Sidebar({
   // 新会话场景跳过 router.refresh(),SSR 不会自动追上,
   // 必须由乐观项 title 接管显示,直到整页刷新(store 重置、SSR 读 DB 最新值)。
   const allConversations = useMemo(() => {
-    if (!optimisticConversation) return conversations;
+    if (!optimisticConversation) return loadedConversations;
     const optTitle = optimisticConversation.title || newConversationText;
-    if (conversations.some((c) => c.id === optimisticConversation.id)) {
-      return conversations.map((c) =>
+    if (loadedConversations.some((c) => c.id === optimisticConversation.id)) {
+      return loadedConversations.map((c) =>
         c.id === optimisticConversation.id ? { ...c, title: optTitle } : c,
       );
     }
@@ -309,12 +393,14 @@ export default function Sidebar({
         title: optTitle,
         pinned: false,
         archived: false,
-        generating: false,
+        generating: generatingIds.has(optimisticConversation.id),
         updatedAt: optimisticConversation.createdAt,
+        sortUpdatedAt: new Date(optimisticConversation.createdAt).toISOString().replace("Z", "000Z"),
+        rank: 1,
       },
-      ...conversations,
-    ];
-  }, [conversations, optimisticConversation, newConversationText]);
+      ...loadedConversations,
+    ].sort(compareConversations);
+  }, [loadedConversations, optimisticConversation, newConversationText, generatingIds]);
 
   // 分组:置顶 / 今天 / 昨天 / 前天 / 周内 / 月内 / 更早 / 归档
   const groups = useMemo(() => {
@@ -579,7 +665,8 @@ export default function Sidebar({
           {sections.length === 0 ? (
             <p className="text-ui-body text-neutral-400 px-3 py-2">{noConversationsText}</p>
           ) : (
-            sections.map((section) => (
+            <>
+            {sections.map((section) => (
               <div key={section.key}>
                 <button type="button" onClick={() => toggleGroup(section.key)} className="touch-target flex w-full items-center gap-2 px-3 py-2 text-ui-caption font-medium text-neutral-450 hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sora-blue dark:text-neutral-500 dark:hover:text-neutral-300" aria-expanded={!collapsedGroups.has(section.key)}>
                   <span>{section.label}</span>
@@ -589,7 +676,20 @@ export default function Sidebar({
                 </button>
                 {!collapsedGroups.has(section.key) && <div className="space-y-0.5">{section.items.map(renderItem)}</div>}
               </div>
-            ))
+            ))}
+            {navigation.cursor && (
+              <button
+                type="button"
+                onClick={() => void handleLoadMore()}
+                disabled={navigation.loading}
+                aria-busy={navigation.loading}
+                className="touch-target flex h-9 w-full items-center justify-center gap-2 rounded-md px-3 text-ui-caption font-medium text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 disabled:cursor-wait disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sora-blue"
+              >
+                {navigation.loading && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
+                {navigation.failed ? tSidebar("loadMoreRetry") : navigation.loading ? tSidebar("loadingMore") : tSidebar("loadMore")}
+              </button>
+            )}
+            </>
           )}
         </div>
 

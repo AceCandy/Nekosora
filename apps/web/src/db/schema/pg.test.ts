@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { getTableConfig } from "drizzle-orm/pg-core";
 import {
@@ -74,6 +75,42 @@ describe("runs schema", () => {
     expect(runs.completedAt.name).toBe("completed_at");
     expect(runs.completedAt.notNull).toBe(false);
     expect(runs.completedAt.getSQLType()).toBe("timestamp with time zone");
+  });
+});
+
+describe("conversation navigation schema", () => {
+  it("声明匹配 user、分组、更新时间与 id 的导航索引", () => {
+    const navigationIndex = getTableConfig(conversations).indexes.find(
+      (candidate) => candidate.config.name === "conversations_navigation_idx",
+    );
+    expect(navigationIndex).toBeDefined();
+    expect(navigationIndex?.config.columns).toHaveLength(4);
+    expect(navigationIndex?.config.columns.map((column) => "name" in column ? column.name : null))
+      .toEqual(["user_id", null, "updated_at", "id"]);
+    expect(navigationIndex?.config.columns.slice(2).every(
+      (column) => "indexConfig" in column && column.indexConfig.order === "desc",
+    ))
+      .toBe(true);
+  });
+
+  it("同步导航索引迁移、journal 与 snapshot", () => {
+    const migration = readFileSync("drizzle/pg/0013_noisy_adam_destine.sql", "utf8");
+    const journal = JSON.parse(readFileSync("drizzle/pg/meta/_journal.json", "utf8")) as {
+      entries: Array<{ idx: number; tag: string }>;
+    };
+    const snapshot = JSON.parse(readFileSync("drizzle/pg/meta/0013_snapshot.json", "utf8")) as {
+      tables: Record<string, { indexes: Record<string, { columns: Array<{ expression: string; asc: boolean }> }> }>;
+    };
+
+    expect(migration).toMatch(/CREATE INDEX "conversations_navigation_idx"[\s\S]*"user_id"[\s\S]*case when "archived"[\s\S]*"updated_at" DESC[\s\S]*"id" DESC/);
+    expect(journal.entries.at(-1)).toMatchObject({ idx: 13, tag: "0013_noisy_adam_destine" });
+    expect(snapshot.tables["public.conversations"].indexes.conversations_navigation_idx.columns)
+      .toMatchObject([
+        { expression: "user_id", asc: true },
+        { asc: true },
+        { expression: "updated_at", asc: false },
+        { expression: "id", asc: false },
+      ]);
   });
 });
 

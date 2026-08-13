@@ -356,7 +356,15 @@ export const conversations = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("conversations_user_idx").on(t.userId)],
+  (t) => [
+    index("conversations_user_idx").on(t.userId),
+    index("conversations_navigation_idx").on(
+      t.userId,
+      sql`(case when ${t.archived} then 2 when ${t.pinned} then 0 else 1 end)`,
+      t.updatedAt.desc(),
+      t.id.desc(),
+    ),
+  ],
 );
 
 /** 会话标题任务 outbox；业务完成前保留，供 worker 周期重投。 */

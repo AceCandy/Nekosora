@@ -1,0 +1,1 @@
+CREATE INDEX "conversations_navigation_idx" ON "conversations" USING btree ("user_id",(case when "archived" then 2 when "pinned" then 0 else 1 end),"updated_at" DESC NULLS LAST,"id" DESC NULLS LAST);

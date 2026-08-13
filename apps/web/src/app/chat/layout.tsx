@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/session";
 import { getAuth } from "@/auth";
-import { listConversations, togglePinnedConversation, toggleArchivedConversation, deleteConversation, getGeneratingStatuses } from "@/features/chat/actions/conversations";
+import { listConversations, togglePinnedConversation, toggleArchivedConversation, deleteConversation, getGeneratingStatuses, getConversationNavigationItem } from "@/features/chat/actions/conversations";
 import { listEnabledRenderStyles } from "@/lib/render-styles/service";
 import Sidebar from "@/features/chat/components/Sidebar";
 
@@ -17,7 +17,10 @@ export default async function ChatLayout({ children }: { children: React.ReactNo
   const user = await requireSession();
   const t = await getTranslations("chat");
   const tc = await getTranslations("nav");
-  const conversations = await listConversations();
+  const [conversationPage, generatingStatuses] = await Promise.all([
+    listConversations(),
+    getGeneratingStatuses(),
+  ]);
   // 聚合所有启用输出样式的 CSS,注入聊天页;切换样式时只需改容器 class,无需刷新
   const renderStyles = await listEnabledRenderStyles().catch(() => []);
   const aggregatedStyleCss = (renderStyles as { css: string }[]).map((s) => s.css).join("\n");
@@ -45,21 +48,14 @@ export default async function ChatLayout({ children }: { children: React.ReactNo
   }
 
   // 会话项映射为 Sidebar 所需结构(含置顶/归档/生成中标记/更新时间)
-  const mappedConversations = conversations.map((c: Record<string, unknown>) => ({
-    id: c.id as string,
-    title: c.title as string,
-    pinned: (c.pinned as boolean) ?? false,
-    archived: (c.archived as boolean) ?? false,
-    generating: (c.generating as boolean) ?? false,
-    updatedAt: c.updatedAt instanceof Date ? c.updatedAt.getTime() : Number(c.updatedAt ?? 0),
-  }));
-
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-nebula-white text-space-ink transition-colors duration-200 dark:bg-twilight-obsidian dark:text-nebula-silver md:flex-row">
       <Sidebar
         userName={user.name}
         userEmail={user.email}
-        conversations={mappedConversations}
+        conversations={conversationPage.items}
+        nextCursor={conversationPage.nextCursor}
+        initialGeneratingIds={generatingStatuses.map(({ id }) => id)}
         newConversationText={t("newConversation")}
         conversationsText={t("conversations")}
         noConversationsText={t("noConversations")}
@@ -85,6 +81,8 @@ export default async function ChatLayout({ children }: { children: React.ReactNo
         togglePinnedAction={handleTogglePinned}
         toggleArchivedAction={handleToggleArchived}
         deleteAction={handleDelete}
+        loadConversationsAction={listConversations}
+        getConversationAction={getConversationNavigationItem}
         getGeneratingStatusesAction={getGeneratingStatuses}
       />
       <main className="flex min-h-0 min-w-0 flex-1 flex-col">
