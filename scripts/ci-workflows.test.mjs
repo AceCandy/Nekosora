@@ -22,7 +22,7 @@ function assertActionsPinned(source) {
   }
 }
 
-test("PR and main quality workflow gates all three amd64 images", () => {
+test("PR and main quality workflow gates the unified amd64 image", () => {
   const source = read(".github/workflows/quality.yml");
   const workflow = parse(source);
 
@@ -30,17 +30,15 @@ test("PR and main quality workflow gates all three amd64 images", () => {
   assert.deepEqual(workflow.on.push.branches, ["main"]);
   assert.deepEqual(workflow.permissions, { contents: "read" });
   assert.equal(workflow.jobs.docker.needs, "quality");
-  assert.equal(workflow.jobs.docker.strategy["fail-fast"], false);
-  assert.deepEqual(workflow.jobs.docker.strategy.matrix.include, [
-    { component: "web", file: "Dockerfile", image: "nekusora-web" },
-    { component: "gateway", file: "Dockerfile.gateway", image: "nekusora-gateway" },
-    { component: "worker", file: "Dockerfile.worker", image: "nekusora-worker" },
-  ]);
+  assert.equal(workflow.jobs.docker["timeout-minutes"], 30);
+  assert.equal(workflow.jobs.docker.strategy, undefined);
 
   const build = workflow.jobs.docker.steps.find((step) => step.id === "build");
+  assert.equal(build.with.file, "Dockerfile");
   assert.equal(build.with.platforms, "linux/amd64");
   assert.equal(build.with.push, false);
-  assert.match(build.with["cache-from"], /scope=quality-\$\{\{ matrix\.component \}\}/);
+  assert.equal(build.with.tags, "local/nekusora:ci");
+  assert.match(build.with["cache-from"], /scope=quality-nekusora/);
 
   const qualityCommands = workflow.jobs.quality.steps.map((step) => step.run ?? "").join("\n");
   for (const command of [
@@ -57,29 +55,38 @@ test("PR and main quality workflow gates all three amd64 images", () => {
   assertActionsPinned(source);
 });
 
-test("publish workflow gates GHCR and isolates optional DockerHub sync", () => {
+test("publish workflow builds one image on native runners and isolates DockerHub sync", () => {
   const source = read(".github/workflows/docker-publish.yml");
   const workflow = parse(source);
+  const ghcrBuild = workflow.jobs.ghcr_build;
   const ghcr = workflow.jobs.ghcr_publish;
   const dockerhub = workflow.jobs.dockerhub_sync;
   const qualityCommands = workflow.jobs.quality.steps.map((step) => step.run ?? "").join("\n");
 
   assert.match(qualityCommands, /pnpm quality:workspace/);
 
-  assert.equal(ghcr.needs, "quality");
+  assert.equal(ghcrBuild.needs, "quality");
+  assert.deepEqual(ghcr.needs, ["quality", "ghcr_build"]);
   assert.equal(dockerhub.needs, "ghcr_publish");
   assert.doesNotMatch(dockerhub.if, /always\s*\(/);
   assert.match(dockerhub.if, /github\.event_name\s*==\s*'push'/);
   assert.match(dockerhub.if, /github\.ref_type\s*==\s*'tag'/);
   assert.match(dockerhub.if, /startsWith\(github\.ref_name,\s*'v'\)/);
 
-  assert.deepEqual(ghcr.strategy.matrix.include, [
-    { component: "web", file: "Dockerfile", image: "nekusora-web" },
-    { component: "gateway", file: "Dockerfile.gateway", image: "nekusora-gateway" },
-    { component: "worker", file: "Dockerfile.worker", image: "nekusora-worker" },
+  assert.deepEqual(ghcrBuild.strategy.matrix.include, [
+    { platform: "linux/amd64", runner: "ubuntu-latest", arch: "amd64" },
+    { platform: "linux/arm64", runner: "ubuntu-24.04-arm", arch: "arm64" },
   ]);
-  assert.equal(ghcr.steps.find((step) => step.id === "push").with.platforms, "linux/amd64,linux/arm64");
-  assert.equal(ghcr.steps.find((step) => step.id === "push").with.push, true);
+  assert.equal(ghcrBuild["runs-on"], "${{ matrix.runner }}");
+  assert.equal(ghcrBuild["timeout-minutes"], 30);
+  assert.equal(ghcrBuild.steps.some((step) => String(step.uses ?? "").startsWith("docker/setup-qemu-action@")), false);
+  const platformBuild = ghcrBuild.steps.find((step) => step.id === "push");
+  assert.equal(platformBuild.with.file, "Dockerfile");
+  assert.equal(platformBuild.with.platforms, "${{ matrix.platform }}");
+  assert.match(platformBuild.with.outputs, /push-by-digest=true/);
+  assert.equal(ghcr["timeout-minutes"], 10);
+  assert.match(ghcr.steps.find((step) => step.id === "manifest").run, /imagetools create/);
+  assert.match(ghcr.steps.find((step) => step.id === "manifest").run, /expected two platform digests/);
   assert.equal(ghcr["continue-on-error"], undefined);
 
   const ghcrTags = ghcr.steps.find((step) => step.id === "meta").with.tags.trim().split("\n");
@@ -94,6 +101,10 @@ test("publish workflow gates GHCR and isolates optional DockerHub sync", () => {
 
   const dockerhubTags = dockerhub.steps.find((step) => step.id === "meta").with.tags.trim().split("\n");
   assert.deepEqual(dockerhubTags, ghcrTags.filter((tag) => !tag.startsWith("type=edge")).map((tag) => tag.replace(/,enable=.*$/, "")));
+  assert.equal(dockerhub.strategy, undefined);
+  const dockerhubCopy = dockerhub.steps.find((step) => step.id === "push");
+  assert.match(dockerhubCopy.run, /imagetools create/);
+  assert.match(dockerhubCopy.run, /needs\.ghcr_publish\.outputs\.digest/);
 
   const freshness = workflow.jobs.quality.steps.find((step) => step.id === "freshness").run;
   assert.match(freshness, /actions\/workflows\/docker-publish\.yml\/runs/);
@@ -112,15 +123,62 @@ test("publish workflow gates GHCR and isolates optional DockerHub sync", () => {
   const publishSummaryRun = publishSummary.steps.find((step) => step.run).run;
   assert.match(publishSummaryRun, /Scheduled publish: skipped/);
   assert.match(publishSummaryRun, /DockerHub: not applicable for schedule\/manual publishing/);
-  assert.match(publishSummaryRun, /DockerHub: see component summaries/);
+  assert.match(publishSummaryRun, /DockerHub: see image summary/);
 
   for (const condition of collectValues(workflow, "if")) {
     assert.doesNotMatch(String(condition), /secrets\./, "if expressions must not read secrets directly");
   }
 
   assert.doesNotMatch(source, /ghcr\.io\/\$\{\{ github\.repository \}\}/);
-  assert.doesNotMatch(source, /(?:acecandy\/|\/)(?:nekusora):/);
+  assert.doesNotMatch(source, /nekusora-(?:web|gateway|worker)/);
+  assert.match(source, /ghcr\.io\/\$\{owner\}\/nekusora/);
   assertActionsPinned(source);
+});
+
+test("production compose runs three containers from one image", () => {
+  const dockerfile = read("Dockerfile");
+  const rootManifest = JSON.parse(read("package.json"));
+  const runtimeManifest = JSON.parse(read("deploy/runtime/package.json"));
+  const runtimeLock = read("deploy/runtime/pnpm-lock.yaml");
+  const webManifest = JSON.parse(read("apps/web/package.json"));
+  const compose = load("compose.production.yml");
+  const services = [compose.services.web, compose.services.gateway, compose.services.worker];
+
+  for (const artifact of [
+    "/app/apps/web/.next/standalone /app",
+    "/runtime /app/runtime",
+  ]) assert.match(dockerfile, new RegExp(artifact.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(dockerfile, /pnpm --dir deploy\/runtime fetch --prod --frozen-lockfile --ignore-workspace/);
+  assert.match(dockerfile, /pnpm install --prod --offline --frozen-lockfile/);
+  assert.match(dockerfile, /cp -R \/app\/apps\/gateway\/dist \/runtime\/apps\/gateway\//);
+  assert.match(dockerfile, /cp -R \/app\/apps\/worker\/dist \/runtime\/apps\/worker\//);
+  assert.match(dockerfile, /node --check \/runtime\/apps\/gateway\/dist\/main\.js/);
+  assert.match(dockerfile, /node --check \/runtime\/apps\/worker\/dist\/main\.js/);
+  assert.match(dockerfile, /cd \/runtime\/apps\/gateway && node -e "import\('mem0ai\/oss'\)"/);
+  assert.match(dockerfile, /cd \/runtime\/apps\/worker && node -e "import\('mem0ai\/oss'\)"/);
+  assert.match(dockerfile, /Expected one Next mem0 external alias/);
+  assert.match(dockerfile, /import\(names\[0\] \+ '\/oss'\)/);
+  assert.doesNotMatch(dockerfile, /pnpm .* deploy /);
+
+  assert.equal(runtimeManifest.dependencies["mem0ai"], "3.1.6");
+  assert.equal(runtimeManifest.dependencies["better-sqlite3"], "12.11.1");
+  assert.equal(webManifest.dependencies["better-sqlite3"], "12.11.1");
+  assert.ok(rootManifest.pnpm.onlyBuiltDependencies.includes("better-sqlite3"));
+  assert.match(read("deploy/runtime/.npmrc"), /^auto-install-peers=false\s*$/);
+  assert.doesNotMatch(runtimeLock, /^  (?:next|vitest|vite|pdfjs-dist|esbuild|['"]?@next\/swc)[@:]/m);
+
+  assert.deepEqual(services.map((service) => service.image), [
+    "nekusora:${IMAGE_TAG:-local}",
+    "nekusora:${IMAGE_TAG:-local}",
+    "nekusora:${IMAGE_TAG:-local}",
+  ]);
+  assert.equal(compose.services.web.build.dockerfile, "Dockerfile");
+  assert.equal(compose.services.gateway.build, undefined);
+  assert.equal(compose.services.worker.build, undefined);
+  assert.deepEqual(compose.services.gateway.command, ["node", "dist/main.js"]);
+  assert.deepEqual(compose.services.worker.command, ["node", "dist/main.js"]);
+  assert.equal(compose.services.gateway.working_dir, "/app/runtime/apps/gateway");
+  assert.equal(compose.services.worker.working_dir, "/app/runtime/apps/worker");
 });
 
 test("Dependabot updates pinned GitHub Actions weekly", () => {

@@ -91,10 +91,11 @@ jobs:
           pnpm build:gateway
           pnpm build:worker
 
-  ghcr_publish:
+  ghcr_build:
     needs: quality
     if: needs.quality.outputs.skip != 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: write
@@ -102,23 +103,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - component: web
-            file: Dockerfile
-            image: nekusora-web
-          - component: gateway
-            file: Dockerfile.gateway
-            image: nekusora-gateway
-          - component: worker
-            file: Dockerfile.worker
-            image: nekusora-worker
+          - platform: linux/amd64
+            runner: ubuntu-latest
+            arch: amd64
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            arch: arm64
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ github.event_name == 'schedule' && 'refs/heads/main' || github.ref }}
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
@@ -135,7 +130,68 @@ jobs:
         shell: bash
         run: |
           owner=$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
-          echo "name=ghcr.io/${owner}/${{ matrix.image }}" >> "$GITHUB_OUTPUT"
+          echo "name=ghcr.io/${owner}/nekusora" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push ${{ matrix.arch }} image by digest
+        id: push
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: Dockerfile
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,name=${{ steps.image.outputs.name }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=publish-nekusora-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=publish-nekusora-${{ matrix.arch }}
+
+      - name: Export digest
+        shell: bash
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.push.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: digests-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  ghcr_publish:
+    needs: [quality, ghcr_build]
+    if: needs.quality.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.manifest.outputs.digest }}
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          path: /tmp/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Resolve image name
+        id: image
+        shell: bash
+        run: |
+          owner=$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
+          echo "name=ghcr.io/${owner}/nekusora" >> "$GITHUB_OUTPUT"
 
       - name: Extract image metadata
         id: meta
@@ -150,45 +206,45 @@ jobs:
             type=edge,branch=main,enable=${{ github.ref == 'refs/heads/main' }}
             type=sha,format=short
 
-      - name: Build and push ${{ matrix.component }} image
-        id: push
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
-        with:
-          context: .
-          file: ${{ matrix.file }}
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=publish-${{ matrix.component }}
-          cache-to: type=gha,mode=max,scope=publish-${{ matrix.component }}
-
-      - name: Record GHCR digest
+      - name: Create multi-platform manifest
+        id: manifest
+        shell: bash
+        env:
+          IMAGE_NAME: ${{ steps.image.outputs.name }}
+          METADATA_JSON: ${{ steps.meta.outputs.json }}
         run: |
-          echo "- GHCR ${{ matrix.image }}: \`${{ steps.push.outputs.digest }}\`" >> "$GITHUB_STEP_SUMMARY"
+          mapfile -t tags < <(jq -r '.tags[]' <<< "$METADATA_JSON")
+          mapfile -t digests < <(find /tmp/digests -maxdepth 1 -type f -printf '%f\n' | sort)
+          if [ "${#digests[@]}" -ne 2 ]; then
+            echo "expected two platform digests, found ${#digests[@]}" >&2
+            exit 1
+          fi
+
+          tag_args=()
+          for tag in "${tags[@]}"; do
+            tag_args+=(--tag "$tag")
+          done
+          sources=()
+          for digest in "${digests[@]}"; do
+            sources+=("${IMAGE_NAME}@sha256:${digest}")
+          done
+
+          docker buildx imagetools create "${tag_args[@]}" "${sources[@]}"
+          digest=$(docker buildx imagetools inspect "${tags[0]}" --format '{{json .Manifest.Digest}}' | jq -r .)
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "- GHCR nekusora: \`${digest}\`" >> "$GITHUB_STEP_SUMMARY"
 
   dockerhub_sync:
     needs: ghcr_publish
     if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
+      packages: read
     env:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - component: web
-            file: Dockerfile
-            image: nekusora-web
-          - component: gateway
-            file: Dockerfile.gateway
-            image: nekusora-gateway
-          - component: worker
-            file: Dockerfile.worker
-            image: nekusora-worker
     steps:
       - name: Check DockerHub credentials
         id: credentials
@@ -200,27 +256,25 @@ jobs:
             echo "available=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Checkout
-        id: checkout
-        if: steps.credentials.outputs.available == 'true'
-        continue-on-error: true
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-
-      - name: Set up QEMU
-        id: qemu
-        if: steps.credentials.outputs.available == 'true' && steps.checkout.outcome == 'success'
-        continue-on-error: true
-        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
-
       - name: Set up Docker Buildx
         id: buildx
-        if: steps.credentials.outputs.available == 'true' && steps.qemu.outcome == 'success'
+        if: steps.credentials.outputs.available == 'true'
         continue-on-error: true
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
+      - name: Log in to GHCR
+        id: ghcr_login
+        if: steps.credentials.outputs.available == 'true' && steps.buildx.outcome == 'success'
+        continue-on-error: true
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
       - name: Log in to DockerHub
         id: login
-        if: steps.credentials.outputs.available == 'true' && steps.buildx.outcome == 'success'
+        if: steps.ghcr_login.outcome == 'success'
         continue-on-error: true
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
@@ -234,7 +288,7 @@ jobs:
         continue-on-error: true
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
-          images: docker.io/${{ env.DOCKERHUB_USERNAME }}/${{ matrix.image }}
+          images: docker.io/${{ env.DOCKERHUB_USERNAME }}/nekusora
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -242,20 +296,22 @@ jobs:
             type=raw,value=latest
             type=sha,format=short
 
-      - name: Build and push DockerHub image
+      - name: Copy image to DockerHub
         id: push
         if: steps.meta.outcome == 'success'
         continue-on-error: true
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
-        with:
-          context: .
-          file: ${{ matrix.file }}
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=dockerhub-${{ matrix.component }}
-          cache-to: type=gha,mode=max,scope=dockerhub-${{ matrix.component }}
+        shell: bash
+        env:
+          METADATA_JSON: ${{ steps.meta.outputs.json }}
+        run: |
+          owner=$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
+          source="ghcr.io/${owner}/nekusora@${{ needs.ghcr_publish.outputs.digest }}"
+          mapfile -t tags < <(jq -r '.tags[]' <<< "$METADATA_JSON")
+          tag_args=()
+          for tag in "${tags[@]}"; do
+            tag_args+=(--tag "$tag")
+          done
+          docker buildx imagetools create "${tag_args[@]}" "$source"
 
       - name: Record DockerHub result
         id: summary
@@ -263,11 +319,11 @@ jobs:
         shell: bash
         run: |
           if [ "${{ steps.credentials.outputs.available }}" != "true" ]; then
-            echo "- DockerHub ${{ matrix.image }}: skipped (credentials not configured)" >> "$GITHUB_STEP_SUMMARY"
+            echo "- DockerHub nekusora: skipped (credentials not configured)" >> "$GITHUB_STEP_SUMMARY"
           elif [ "${{ steps.push.outcome }}" = "success" ]; then
-            echo "- DockerHub ${{ matrix.image }}: published" >> "$GITHUB_STEP_SUMMARY"
+            echo "- DockerHub nekusora: published" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "- DockerHub ${{ matrix.image }}: failed (optional sync)" >> "$GITHUB_STEP_SUMMARY"
+            echo "- DockerHub nekusora: failed (optional sync)" >> "$GITHUB_STEP_SUMMARY"
           fi
 
   publish_summary:
@@ -288,5 +344,5 @@ jobs:
           elif [ "${{ github.event_name }}" != "push" ] || [ "${{ github.ref_type }}" != "tag" ]; then
             echo "- DockerHub: not applicable for schedule/manual publishing" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "- DockerHub: see component summaries" >> "$GITHUB_STEP_SUMMARY"
+            echo "- DockerHub: see image summary" >> "$GITHUB_STEP_SUMMARY"
           fi

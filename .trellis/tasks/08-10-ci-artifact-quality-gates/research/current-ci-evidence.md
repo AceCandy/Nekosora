@@ -1,6 +1,8 @@
 # CI 与制品门禁证据
 
-## 当前 Workflow
+> 第 3-27 行记录本任务实施前的仓库快照，用于说明改造依据；当前实现与决策见后续任务文档及所属 spec。
+
+## 变更前 Workflow
 
 - 仓库只有 `.github/workflows/docker-publish.yml`。
 - 触发器只有每 12 小时 schedule、`v*` Tag 和手动触发，没有 PR 或 main push 质量检查。
@@ -10,7 +12,7 @@
 - workflow 没有 concurrency；未使用的 `id-token: write` 扩大了权限。
 - 所有 Action 都使用可变 major tag，没有固定到 commit SHA。
 
-## Workspace 质量覆盖
+## 变更前 Workspace 质量覆盖
 
 - 根 `lint/typecheck/test` 都使用 `pnpm -r --if-present`。
 - `gateway/web/worker` 有 lint、typecheck、test、build。
@@ -19,7 +21,7 @@
 - 所有 workspace 都有 typecheck；根 `build` 只构建 Web，另有 `build:gateway`、`build:worker`。
 - 当前没有 actionlint/yamllint 等仓库内 workflow 语法工具。
 
-## Docker 制品
+## 变更前 Docker 制品
 
 - 三份 Dockerfile 都以仓库根为构建上下文，内部使用冻结 lockfile 安装。
 - 根 `Dockerfile` 构建 Next standalone Web；Gateway/Worker 分别通过 tsup + `pnpm deploy --prod --legacy` 构建独立 Node 镜像。
@@ -28,10 +30,11 @@
 
 ## 已确认决策
 
-- GHCR 与 DockerHub 统一使用三类职责名：`nekusora-web`、`nekusora-gateway`、`nekusora-worker`。
-- 不继续推送旧 `nekusora` Web 镜像兼容别名；README 必须说明迁移。
-- GHCR 三镜像为发布硬条件；DockerHub 仅在 `v*` Tag 且凭据可用时同步，失败写入 job summary 但不阻断 GHCR。
-- PR/main 只构建 `linux/amd64` 三镜像且不推送；发布构建 `linux/amd64,linux/arm64`。
+- 本节原三镜像决策已在 2026-08-12 真实发布验收后被用户明确替代。
+- GHCR 与 DockerHub 统一使用单一 `nekusora` 镜像，Web、Gateway、Worker 仍作为三个独立容器运行。
+- 不继续推送旧 `nekusora-web`、`nekusora-gateway`、`nekusora-worker` 镜像；README 必须说明迁移。
+- GHCR 统一镜像为发布硬条件；DockerHub 仅在 `v*` Tag 且凭据可用时复制同一 manifest，失败写入 job summary 但不阻断 GHCR。
+- PR/main 只构建 `linux/amd64` 统一镜像且不推送；发布在原生 amd64 与 arm64 Runner 分别构建后合并 manifest。
 - Action 固定到完整 commit SHA，并由 Dependabot `github-actions` 周更维护。
 
 ## Action SHA 核验（2026-08-12）

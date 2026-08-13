@@ -36,7 +36,7 @@ Nekusora is a pnpm TypeScript workspace. `apps/web` is the Next.js control plane
 | [Link Preview](./link-preview.md) | 登录态外链元数据、裸图片 MIME 探测、受限图片代理与公网请求边界 | Filled |
 | [File Storage](./file-storage.md) | StorageDriver 全量/Range 读取、私有文件 200/206/302/416 与文本预览有界读取 | Filled |
 | [Dependency Security](./dependency-security.md) | pnpm override 边界、lockfile 审查与原生依赖验证门禁 | Filled |
-| [CI And Container Publishing](./ci-container-publishing.md) | PR/main 质量门禁、三镜像发布、Registry 失败与供应链契约 | Filled |
+| [CI And Container Publishing](./ci-container-publishing.md) | PR/main 质量门禁、统一镜像发布、Registry 失败与供应链契约 | Filled |
 | [MCP Integration](./mcp-integration.md) | MCP client transport 连接超时、取消与资源生命周期 | Filled |
 | [Chat Message References](./chat-message-references.md) | 对话消息引用与聊天动作写操作的会话属主隔离 | Filled |
 | [Chat Message Attachments](./chat-message-attachments.md) | 用户消息图片关联、校验顺序、历史投影与编辑/重试契约 | Filled |

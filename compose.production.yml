@@ -55,7 +55,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: nekusora-web:${IMAGE_TAG:-local}
+    image: nekusora:${IMAGE_TAG:-local}
     restart: unless-stopped
     environment:
       <<: *common-environment
@@ -74,12 +74,11 @@ services:
     networks: [backend, ingress]
 
   gateway:
-    build:
-      context: .
-      dockerfile: Dockerfile.gateway
-    image: nekusora-gateway:${IMAGE_TAG:-local}
+    image: nekusora:${IMAGE_TAG:-local}
     restart: unless-stopped
     stop_grace_period: 35s
+    working_dir: /app/runtime/apps/gateway
+    command: ["node", "dist/main.js"]
     environment:
       <<: [*common-environment, *storage-environment]
       DB_POOL_MAX: ${GATEWAY_DB_POOL_MAX:-10}
@@ -100,12 +99,11 @@ services:
     networks: [backend, ingress]
 
   worker:
-    build:
-      context: .
-      dockerfile: Dockerfile.worker
-    image: nekusora-worker:${IMAGE_TAG:-local}
+    image: nekusora:${IMAGE_TAG:-local}
     restart: unless-stopped
     stop_grace_period: 35s
+    working_dir: /app/runtime/apps/worker
+    command: ["node", "dist/main.js"]
     environment:
       <<: [*common-environment, *storage-environment]
       WORKER_DB_POOL_MAX: ${WORKER_DB_POOL_MAX:-5}

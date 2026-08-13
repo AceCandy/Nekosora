@@ -1,6 +1,7 @@
 # 生产部署
 
 生产编排使用 `compose.production.yml`，只有 `edge-router` 发布端口；Web、Gateway 和 Worker 端口仅在内部网络可见。
+三个应用容器共用同一个 `nekusora` 镜像，通过各自的工作目录和启动命令运行独立进程。
 
 ## 首次启动
 

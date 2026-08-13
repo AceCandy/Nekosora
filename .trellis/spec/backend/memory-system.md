@@ -98,7 +98,7 @@ return memories.map((memory) => ({ ...memory, createdAt: toMemoryDate(memory.cre
 ## Gotcha
 
 - **mem0 工厂（M-2）**：`src/lib/memory/mem0.ts` 的 `getMemory()` 惰性初始化（动态 import `mem0ai/oss` 避 Edge 打包，仿 `getDb`）。配置：vectorStore=pgvector（复用 `DATABASE_URL`，collectionName=`mem0_memories`，1024 维）、embedder=openai（bge-m3 经 `rag.embedding_*` 上游）、llm=langchain（`createNekosoraLLM` 复用统一模型执行核心）。Embedding Provider 只负责向量化，不提供 Mem0 LLM 连接。
-- **Embedding 维度边界**：`mem0ai@3.1.0` 的 pgvector 用 `embeddingModelDims` 建立 `vector(1024)`；不要给 OpenAI-compatible embedder 设置 `embeddingDims`，因为 mem0 会把它翻译成请求字段 `dimensions`，部分固定维度上游会直接返回 400。
+- **Embedding 维度边界**：`mem0ai@3.1.6` 的 pgvector 用 `embeddingModelDims` 建立 `vector(1024)`；不要给 OpenAI-compatible embedder 设置 `embeddingDims`，因为 mem0 会把它翻译成请求字段 `dimensions`，部分固定维度上游会直接返回 400。
 - **AI 抽取默认 project**：mem0 全权抽取不产 scope；AI 抽取统一标 `scope=project`（metadata）。preference/profile 靠用户手动添加。自研三分类 LLM 抽取（prompt/disclosure/confidence/去重）已废弃。
 - **手动 add infer=false**：`addMemory` 传 `infer=false`，直接存原文，不经 mem0 LLM 抽取改写。
 - **M-4：project 过期已重建,诊断/disclosure 废弃**：project 记忆 add 时设 `expirationDate=+7d`（`AddMemoryOptions` 软过滤 + `metadata.expirationDate` 供硬删）；`purgeExpiredProjectMemories` 在 `getMemories` 入口懒硬删（`getAll({showExpired:true})` + filter + delete）。诊断废弃：mem0 `MemoryItem` 不暴露 embedding/lastAccessedAt,重复/陈旧检测不可行（`getMemoryDiagnostics` 已删）。disclosure 废弃：mem0 全权抽取不产 disclosure。M-5 已移除诊断/disclosure UI。
@@ -113,13 +113,14 @@ return memories.map((memory) => ({ ...memory, createdAt: toMemoryDate(memory.cre
 记忆层全面委托 `mem0ai/oss`（OSS 自托管，非 Platform 云版）。为可跟随官方升级，接入须守以下约束：
 
 - **只用 SDK 公开稳定接口**：仅 `Memory` class + 标准 `MemoryConfig`（vectorStore/embedder/llm 三段式）+ 标准 Options（`AddMemoryOptions`/`SearchMemoryOptions`/`GetAllMemoryOptions`）。禁止 monkey-patch、改 SDK 内部、或绕开 SDK 直接读写 `mem0_memories` 表。
-- **禁用未使用的 mem0 history**：构造 `Memory` 时设置 `disableHistory:true`；聊天历史由业务表持久化，项目不调用 `memory.history()`，不得为此引入 `better-sqlite3` 本地历史库。
+- **禁用未使用的 mem0 history**：构造 `Memory` 时设置 `disableHistory:true`；聊天历史由业务表持久化，项目不调用 `memory.history()`。Mem0 3.1.6 发布入口仍顶层静态导入 `better-sqlite3`，所以生产依赖暂时保留它以保证模块可加载，但业务不创建或使用 SQLite history；官方改为延迟加载后再删除该兼容依赖。
 - **表结构交 mem0 自管**：`mem0_memories` 由 mem0 首次 `getMemory()` 自建并维护，业务不定义其 schema、不写迁移。`user_memories` 自建表已于 M-5 drop。
 - **已用方法**：add/search/update/delete/getAll/deleteAll；`Memory` 另有 get/history/reset，业务暂未用（非缺失）。
 - **自定义 metadata 字段**（存 metadata JSON，非 SDK 原生）：`scope`/`source`/`expirationDate`/`priority`；`disclosure` 已废弃（M-4）。search filter 按 `user_id`（原生）+ `scope`（自定义塞 metadata 再 filter）。
-- **升级流程**：① 看 changelog（关注 MemoryConfig/Options 字段名、过期语义、表结构）；② 测试环境验证 add/search/过期；③ 备「清 `mem0_memories` 重建」退路（记忆可由对话重抽，丢失成本低）；④ major 版（如 4.0）手动改 `package.json` + 重点验证配置字段；⑤ caret（`^3.1.0`）内 minor/patch 自动跟进，lockfile 更新仍跑记忆测试。
+- **升级流程**：① 看 changelog（关注 MemoryConfig/Options 字段名、过期语义、表结构）；② 测试环境验证 add/search/过期；③ 备「清 `mem0_memories` 重建」退路（记忆可由对话重抽，丢失成本低）；④ major 版（如 4.0）手动改 `package.json` + 重点验证配置字段；⑤ caret（`^3.1.6`）内 minor/patch 自动跟进，lockfile 更新仍跑记忆测试。
 - **OSS vs Platform**：用 OSS 开源核心（向量+LLM 抽取+去重合并+过期）；Platform 独有的 hosted dashboard / graph memory 不在范围，新特性可能先上 Platform、OSS 跟进滞后。
-- **构建配置（`next.config.ts`）**：mem0ai 是大 bundle，内部动态 import 各 provider SDK（aws/azure/google/qdrant…，均为 peerDep，按需加载）。必须设 `serverExternalPackages: ["mem0ai"]`，构建时不打包其依赖图、运行时按需 require。否则 webpack 解析缺失的 peer provider SDK（如 `@aws-sdk/client-bedrock-runtime`）报 Module not found。我们只用 pgvector（`pg`，已装）+ openai（mem0ai dep 自带），运行时不触发缺失包。
+- **构建配置（`next.config.ts`）**：mem0ai 是大 bundle，内部动态 import 各 provider SDK（aws/azure/google/qdrant…，均为 peerDep，按需加载）。必须设 `serverExternalPackages: ["mem0ai"]`，构建时不打包其依赖图、运行时按需 require。否则 webpack 解析缺失的 peer provider SDK（如 `@aws-sdk/client-bedrock-runtime`）报 Module not found。Web 作为 standalone runtime owner，直接声明 Mem0 3.1.6 入口静态加载的 `better-sqlite3`；其他未配置 provider peer（包括 `natural`、`compromise`）不安装。
+- **运行时依赖边界**：Core 持有 `mem0ai`、`pg` 和 `@langchain/core` 的业务依赖；Gateway/Worker 的 tsup 产物内联 Core 后会从应用工作目录执行 `import("mem0ai/oss")`，因此两个应用也必须直接声明 `mem0ai`。Web 由 Next standalone 追踪 Core 的 server external，并通过 `.next/node_modules/mem0ai-*` alias 解析，无需重复声明。统一镜像让 Gateway/Worker 共享一个 pnpm virtual store；应用直接声明只补解析链接，不复制物理包。
 
 ## Scenario: Mem0 LLM 复用统一模型执行核心
 
