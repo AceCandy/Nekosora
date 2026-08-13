@@ -27,8 +27,10 @@ import type {
 } from "./types";
 
 const schema = {
-  gatewayExecutions: { id: "gatewayExecutions.id" },
+  gatewayExecutions: { id: "gatewayExecutions.id", modelType: "gatewayExecutions.modelType" },
   gatewayAttempts: "gatewayAttempts",
+  models: { id: "models.id", catalogId: "models.catalogId" },
+  modelCatalog: { id: "modelCatalog.id", modelType: "modelCatalog.modelType" },
 };
 
 const initial: StartExecutionTelemetry = {
@@ -69,13 +71,19 @@ const attempt: AttemptTelemetry = {
 
 function createDb() {
   const insertValues = vi.fn().mockResolvedValue(undefined);
-  const updateWhere = vi.fn().mockResolvedValue(undefined);
+  const updateReturning = vi.fn().mockResolvedValue([{ modelType: "chat" }]);
+  const updateWhere = vi.fn(() => ({ returning: updateReturning }));
   const updateSet = vi.fn(() => ({ where: updateWhere }));
+  const selectLimit = vi.fn().mockResolvedValue([{ modelType: "chat" }]);
+  const selectWhere = vi.fn(() => ({ limit: selectLimit }));
+  const selectJoin = vi.fn(() => ({ where: selectWhere }));
+  const selectFrom = vi.fn(() => ({ innerJoin: selectJoin }));
   const db = {
     insert: vi.fn(() => ({ values: insertValues })),
     update: vi.fn(() => ({ set: updateSet })),
+    select: vi.fn(() => ({ from: selectFrom })),
   };
-  return { db, insertValues, updateSet, updateWhere };
+  return { db, insertValues, updateSet, updateWhere, updateReturning };
 }
 
 let db = createDb();
@@ -97,6 +105,7 @@ describe("gateway telemetry repository", () => {
       requestId: "request-1",
       operation: "chat.stream",
       status: "running",
+      modelType: "chat",
       startedAt: new Date(1_000),
     }));
   });
@@ -150,9 +159,13 @@ describe("gateway telemetry repository", () => {
       left: schema.gatewayExecutions.id,
       right: "execution-1",
     });
+    expect(db.updateReturning).toHaveBeenCalledWith({
+      modelType: schema.gatewayExecutions.modelType,
+    });
     expect(mocks.observeGatewayExecution).toHaveBeenCalledWith(expect.objectContaining({
       operation: "chat.stream",
       status: "success",
+      modelType: "chat",
       latencyMs: 50,
     }));
   });

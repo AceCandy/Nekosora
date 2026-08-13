@@ -460,7 +460,7 @@
       "depStorageLocal": "本地磁盘(降级)",
       "depMetrics": "指标端点",
       "depHealth": "健康检查",
-      "providerHealthTitle": "上游服务商健康",
+      "providerHealthTitle": "上游服务商健康（近 90 天）",
       "thCalls": "调用数",
       "thSuccessRate": "成功率",
       "thAvgLatency": "平均延迟",

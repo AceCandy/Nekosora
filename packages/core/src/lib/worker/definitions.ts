@@ -12,12 +12,15 @@ import { processMemoryExtractionJob } from "@/lib/memory/jobs";
 import { recoverMemoryExtractionJobs } from "@/lib/memory/dispatch";
 import { processConversationTitleJob } from "@/lib/conversation-title/service";
 import { recoverConversationTitleJobs } from "@/lib/conversation-title/dispatch";
+import { runGatewayRetention } from "@/lib/gateway-execution/retention";
 import type {
+  RuntimeDefinition,
   RecoveryDefinition,
   WorkerDefinition,
 } from "./runtime";
 
 const RECOVERY_INTERVAL_MS = 60_000;
+const RETENTION_INTERVAL_MS = 60 * 60 * 1_000;
 
 function defineWorker<TDefinition extends QueueDefinition<object>>(
   job: TDefinition,
@@ -32,7 +35,7 @@ function defineWorker<TDefinition extends QueueDefinition<object>>(
 }
 
 /** Worker 的唯一领域装配表；顺序同时决定注册与恢复启动顺序。 */
-export const WORKER_DEFINITIONS: readonly WorkerDefinition[] = Object.freeze([
+export const WORKER_DEFINITIONS: readonly RuntimeDefinition[] = Object.freeze([
   defineWorker(
     FILE_PROCESS_QUEUE,
     ({ fileId }) => processFile(fileId),
@@ -60,4 +63,12 @@ export const WORKER_DEFINITIONS: readonly WorkerDefinition[] = Object.freeze([
       failureMessage: "[conversation-title-recovery] scan failed",
     },
   ),
+  {
+    name: "gateway-retention",
+    recovery: {
+      intervalMs: RETENTION_INTERVAL_MS,
+      run: runGatewayRetention,
+      failureMessage: "[gateway-retention] run failed",
+    },
+  },
 ]);

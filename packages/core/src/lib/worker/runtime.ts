@@ -16,6 +16,13 @@ export interface WorkerDefinition {
   readonly recovery: RecoveryDefinition;
 }
 
+export interface MaintenanceDefinition {
+  readonly name: string;
+  readonly recovery: RecoveryDefinition;
+}
+
+export type RuntimeDefinition = WorkerDefinition | MaintenanceDefinition;
+
 export interface WorkerTimerHandle {
   unref(): void;
 }
@@ -52,14 +59,14 @@ export type WorkerRuntimeState = "starting" | "ready" | "stopping" | "stopped";
 
 export interface CreateWorkerRuntimeOptions {
   readonly queue: Pick<QueueAdapter, "start" | "work" | "stop">;
-  readonly definitions: readonly WorkerDefinition[];
+  readonly definitions: readonly RuntimeDefinition[];
   readonly process: WorkerProcess;
   readonly onStateChange?: (state: WorkerRuntimeState) => void;
   readonly closeResources?: () => Promise<void>;
   readonly logger?: WorkerLogger;
   readonly timers?: WorkerTimers;
   readonly schedulerFactory?: (
-    definition: WorkerDefinition,
+    definition: RuntimeDefinition,
   ) => RecoveryController;
 }
 
@@ -133,11 +140,11 @@ export function createWorkerRuntime(
     timers = DEFAULT_TIMERS,
   } = options;
   const schedulerFactory = options.schedulerFactory
-    ?? ((definition: WorkerDefinition) => (
+    ?? ((definition: RuntimeDefinition) => (
       startRecoveryScheduler(definition.recovery, timers, logger)
     ));
   const schedulers: Array<{
-    definition: WorkerDefinition;
+    definition: RuntimeDefinition;
     controller: RecoveryController;
   }> = [];
   let state: "idle" | "starting" | "running" | "stopping" | "stopped" = "idle";
@@ -161,7 +168,7 @@ export function createWorkerRuntime(
           await scheduler.controller.stop();
         } catch {
           failed = true;
-          logger.error(`[worker] recovery stop failed: ${scheduler.definition.job.name}`);
+          logger.error(`[worker] recovery stop failed: ${definitionName(scheduler.definition)}`);
         }
       }
       try {
@@ -211,6 +218,7 @@ export function createWorkerRuntime(
         await queue.start();
         if (state !== "starting") return;
         for (const definition of definitions) {
+          if (!("job" in definition)) continue;
           await queue.work(definition.job, async (payload) => {
             try {
               const outcome = await definition.handle(payload);
@@ -244,4 +252,8 @@ export function createWorkerRuntime(
   }
 
   return { start, shutdown };
+}
+
+function definitionName(definition: RuntimeDefinition): string {
+  return "job" in definition ? definition.job.name : definition.name;
 }

@@ -10,6 +10,7 @@ import {
   bigint,
   integer,
   numeric,
+  date,
   timestamp,
   jsonb,
   index,
@@ -1054,6 +1055,7 @@ export const gatewayExecutions = pgTable(
     keyKind: text("key_kind"), // "master" | "sub" | null(chat)
     model: text("model").notNull(),
     modelId: text("model_id"),
+    modelType: text("model_type").$type<ModelType>(),
     providerRef: text("provider_ref"),
     providerName: text("provider_name"),
     routeId: text("route_id"),
@@ -1089,6 +1091,7 @@ export const gatewayExecutions = pgTable(
     index("gateway_executions_model_idx").on(t.model),
     index("gateway_executions_request_idx").on(t.requestId),
     index("gateway_executions_status_idx").on(t.status),
+    index("gateway_executions_retention_idx").on(t.status, t.createdAt, t.id),
   ],
 );
 
@@ -1137,12 +1140,20 @@ export const gatewayAttempts = pgTable(
   ],
 );
 
+/** 协调多 Worker 每日最多领取一次 Gateway 日志保留任务。 */
+export const gatewayRetentionState = pgTable("gateway_retention_state", {
+  id: text("id").primaryKey(),
+  lastClaimedDate: date("last_claimed_date").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // ===========================================================================
 // 共享类型(dialect 中立,re-export)
 // ===========================================================================
 
 export type {
   ModelCapabilities,
+  ModelType,
   ContextPolicy,
   TokenUsage,
   ProcessTraceBlock,

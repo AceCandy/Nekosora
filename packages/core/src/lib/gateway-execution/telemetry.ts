@@ -14,6 +14,14 @@ export const gatewayTelemetry: GatewayTelemetryPort = {
       const db = await getDb();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const s = getSchema() as any;
+      const [catalog] = input.modelId
+        ? await db
+            .select({ modelType: s.modelCatalog.modelType })
+            .from(s.models)
+            .innerJoin(s.modelCatalog, eq(s.models.catalogId, s.modelCatalog.id))
+            .where(eq(s.models.id, input.modelId))
+            .limit(1)
+        : [];
       await db.insert(s.gatewayExecutions).values({
         id: input.executionId,
         requestId: input.requestId,
@@ -24,6 +32,7 @@ export const gatewayTelemetry: GatewayTelemetryPort = {
         keyKind: input.ctx.keyKind,
         model: input.model,
         modelId: input.modelId ?? null,
+        modelType: catalog?.modelType ?? null,
         requestPath: input.requestPath ?? null,
         stream: input.stream,
         status: "running",
@@ -52,13 +61,13 @@ export const gatewayTelemetry: GatewayTelemetryPort = {
   },
 
   async finalizeExecution(input) {
-    await bestEffort("finalize execution", async () => {
+    const modelType = await bestEffort("finalize execution", async () => {
       const db = await getDb();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const s = getSchema() as any;
       const route = input.outcome.route;
       const error = input.outcome.error;
-      await db
+      const [updated] = await db
         .update(s.gatewayExecutions)
         .set({
           status: input.outcome.status,
@@ -85,13 +94,16 @@ export const gatewayTelemetry: GatewayTelemetryPort = {
           firstTokenLatencyMs: input.firstTokenLatencyMs ?? null,
           completedAt: new Date(input.completedAt),
         })
-        .where(eq(s.gatewayExecutions.id, input.initial.executionId));
+        .where(eq(s.gatewayExecutions.id, input.initial.executionId))
+        .returning({ modelType: s.gatewayExecutions.modelType });
+      return updated?.modelType ?? null;
     });
     try {
       observeGatewayExecution({
         operation: input.initial.operation,
         source: input.initial.ctx.source,
         status: input.outcome.status,
+        modelType,
         latencyMs: input.latencyMs,
         promptTokens: input.outcome.usage.inputTokens ?? 0,
         completionTokens: input.outcome.usage.outputTokens ?? 0,
@@ -134,10 +146,11 @@ function attemptValues(input: AttemptTelemetry) {
   };
 }
 
-async function bestEffort(label: string, operation: () => Promise<void>): Promise<void> {
+async function bestEffort<T>(label: string, operation: () => Promise<T>): Promise<T | undefined> {
   try {
-    await withBestEffortTimeout(operation);
+    return await withBestEffortTimeout(operation);
   } catch (error) {
     console.error(`[gateway telemetry] ${label} failed:`, redactErrorMessage(error));
+    return undefined;
   }
 }

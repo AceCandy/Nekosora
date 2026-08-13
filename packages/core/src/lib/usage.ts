@@ -117,7 +117,8 @@ async function logUsageInternal(params: LogUsageParams): Promise<void> {
         const { observeRequest } = await import("@/lib/infra/metrics");
         observeRequest({
           source: params.ctx.source,
-          model: params.model,
+          // Legacy usage only records pre-routing boundary failures, before catalog resolution.
+          modelType: null,
           status: params.status,
           latencyMs: params.latencyMs ?? 0,
           promptTokens: params.usage.inputTokens ?? 0,

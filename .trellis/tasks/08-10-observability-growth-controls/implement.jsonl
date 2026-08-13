@@ -1,1 +1,4 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"Gateway execution/attempt facts, metrics, aggregation and privacy contracts"}
+{"file":".trellis/spec/backend/queue-lifecycle.md","reason":"Worker recovery scheduling, failure isolation and shutdown contracts"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"PostgreSQL migration, journal, snapshot and advisory coordination rules"}
+{"file":".trellis/tasks/08-10-observability-growth-controls/research/current-evidence.md","reason":"Verified label, schema, query and scheduler evidence for implementation"}

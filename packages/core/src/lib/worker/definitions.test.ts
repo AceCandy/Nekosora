@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   recoverMemoryExtractionJobs: vi.fn(),
   processConversationTitleJob: vi.fn(),
   recoverConversationTitleJobs: vi.fn(),
+  runGatewayRetention: vi.fn(),
 }));
 
 vi.mock("@/lib/rag/processing-coordinator", () => ({
@@ -27,6 +28,9 @@ vi.mock("@/lib/conversation-title/service", () => ({
 vi.mock("@/lib/conversation-title/dispatch", () => ({
   recoverConversationTitleJobs: mocks.recoverConversationTitleJobs,
 }));
+vi.mock("@/lib/gateway-execution/retention", () => ({
+  runGatewayRetention: mocks.runGatewayRetention,
+}));
 
 import {
   CONVERSATION_TITLE_QUEUE,
@@ -43,26 +47,28 @@ beforeEach(() => {
   mocks.recoverStaleFileProcessing.mockResolvedValue(undefined);
   mocks.recoverMemoryExtractionJobs.mockResolvedValue(undefined);
   mocks.recoverConversationTitleJobs.mockResolvedValue(undefined);
+  mocks.runGatewayRetention.mockResolvedValue(undefined);
 });
 
 describe("worker definitions", () => {
-  it("按 catalog 顺序集中装配三个 handler 与 recovery", () => {
-    expect(WORKER_DEFINITIONS.map((item) => item.job)).toEqual([
+  it("按 catalog 顺序装配三个 handler，并追加 retention maintenance", () => {
+    expect(WORKER_DEFINITIONS.filter((item) => "job" in item).map((item) => item.job)).toEqual([
       FILE_PROCESS_QUEUE,
       MEMORY_EXTRACTION_QUEUE,
       CONVERSATION_TITLE_QUEUE,
     ]);
     expect(WORKER_DEFINITIONS.map((item) => item.recovery.intervalMs))
-      .toEqual([60_000, 60_000, 60_000]);
+      .toEqual([60_000, 60_000, 60_000, 3_600_000]);
     expect(WORKER_DEFINITIONS.map((item) => item.recovery.failureMessage)).toEqual([
       "[file-processing-recovery] scan failed",
       "[memory-extraction-recovery] scan failed",
       "[conversation-title-recovery] scan failed",
+      "[gateway-retention] run failed",
     ]);
   });
 
   it("handler 只投影 catalog payload 并传播 outcome", async () => {
-    const [file, memory, title] = WORKER_DEFINITIONS;
+    const [file, memory, title] = WORKER_DEFINITIONS.filter((item) => "job" in item);
 
     await expect(file!.handle({ fileId: "file-1" })).resolves.toBe("completed");
     await expect(memory!.handle({ id: "memory-1" })).resolves.toBe("completed");
@@ -79,5 +85,6 @@ describe("worker definitions", () => {
     expect(mocks.recoverStaleFileProcessing).toHaveBeenCalledOnce();
     expect(mocks.recoverMemoryExtractionJobs).toHaveBeenCalledOnce();
     expect(mocks.recoverConversationTitleJobs).toHaveBeenCalledOnce();
+    expect(mocks.runGatewayRetention).toHaveBeenCalledOnce();
   });
 });

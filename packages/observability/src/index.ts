@@ -19,19 +19,19 @@ collectDefaultMetrics({ register: registry, prefix: "nekusora_nodejs_" });
 // 业务指标
 // ---------------------------------------------------------------------------
 
-/** 请求计数(按来源 / 模型 / 状态)。 */
+/** 请求计数(按来源 / 模型类型 / 状态)。 */
 export const requestTotal = new Counter({
   name: "nekusora_requests_total",
   help: "Total model requests (chat + gateway)",
-  labelNames: ["source", "model", "status"],
+  labelNames: ["source", "model_type", "status"],
   registers: [registry],
 });
 
-/** Token 消耗(按类型 prompt/completion + 模型)。 */
+/** Token 消耗(按类型 prompt/completion + 模型类型)。 */
 export const tokensTotal = new Counter({
   name: "nekusora_tokens_total",
   help: "Tokens consumed by type",
-  labelNames: ["type", "model"],
+  labelNames: ["type", "model_type"],
   registers: [registry],
 });
 
@@ -39,7 +39,7 @@ export const tokensTotal = new Counter({
 export const requestDurationMs = new Histogram({
   name: "nekusora_request_duration_ms",
   help: "Model request latency in milliseconds",
-  labelNames: ["source", "model", "status"],
+  labelNames: ["source", "model_type", "status"],
   buckets: [100, 300, 500, 1000, 3000, 5000, 10000, 30000, 60000],
   registers: [registry],
 });
@@ -48,7 +48,7 @@ export const requestDurationMs = new Histogram({
 export const gatewayExecutionsTotal = new Counter({
   name: "nekusora_gateway_executions_total",
   help: "Final gateway executions",
-  labelNames: ["operation", "source", "status"],
+  labelNames: ["operation", "source", "status", "model_type"],
   registers: [registry],
 });
 
@@ -70,7 +70,7 @@ export const gatewayCircuitBreakerEventsTotal = new Counter({
 export const gatewayExecutionDurationMs = new Histogram({
   name: "nekusora_gateway_execution_duration_ms",
   help: "Gateway execution latency in milliseconds",
-  labelNames: ["operation", "source", "status"],
+  labelNames: ["operation", "source", "status", "model_type"],
   buckets: [100, 300, 500, 1000, 3000, 5000, 10000, 30000, 60000],
   registers: [registry],
 });
@@ -111,6 +111,88 @@ export const fileUploadsTotal = new Counter({
   registers: [registry],
 });
 
+export const gatewayRetentionClaimsTotal = new Counter({
+  name: "nekusora_gateway_retention_claims_total",
+  help: "Gateway retention daily claim outcomes",
+  labelNames: ["outcome"],
+  registers: [registry],
+});
+
+export const gatewayRetentionRunsTotal = new Counter({
+  name: "nekusora_gateway_retention_runs_total",
+  help: "Gateway retention run outcomes",
+  labelNames: ["outcome"],
+  registers: [registry],
+});
+
+export const gatewayRetentionDeletedTotal = new Counter({
+  name: "nekusora_gateway_retention_deleted_total",
+  help: "Gateway executions deleted by terminal status",
+  labelNames: ["status"],
+  registers: [registry],
+});
+
+export const gatewayRetentionDurationMs = new Histogram({
+  name: "nekusora_gateway_retention_duration_ms",
+  help: "Gateway retention batch duration in milliseconds",
+  buckets: [10, 50, 100, 300, 1000, 3000, 10000, 30000],
+  registers: [registry],
+});
+
+const REQUEST_SOURCES = ["chat", "gateway"] as const;
+const MODEL_TYPES = ["chat", "image", "embedding", "rerank", "audio"] as const;
+const EXECUTION_STATUSES = ["success", "failed", "interrupted"] as const;
+const GATEWAY_OPERATIONS = [
+  "chat.stream",
+  "chat.generate",
+  "image.generate",
+  "audio.speech",
+  "audio.transcription",
+] as const;
+const ATTEMPT_STATUSES = [...EXECUTION_STATUSES, "rejected"] as const;
+const PROVIDER_PROTOCOLS = [
+  "openai",
+  "anthropic",
+  "gemini",
+  "openai-compatible",
+  "openai-images",
+  "openai-audio-stt",
+  "openai-audio-tts",
+] as const;
+const CIRCUIT_BREAKER_EVENTS = [
+  "no_healthy_route",
+  "probe_acquired",
+  "probe_succeeded",
+  "probe_failed",
+  "probe_released",
+] as const;
+const GOVERNANCE_REASONS = ["rate", "concurrency", "quota"] as const;
+const GOVERNANCE_SCOPES = ["key", "user"] as const;
+const GOVERNANCE_OPERATIONS = [
+  ...GATEWAY_OPERATIONS,
+  "mcp.search",
+  "chat.request",
+  "models.list",
+  "mcp.request",
+] as const;
+const QUOTA_KINDS = ["chat_tokens", "image_count", "tts_code_points", "stt_seconds"] as const;
+const GOVERNANCE_FAILURE_STAGES = [
+  "repository",
+  "policy_load",
+  "policy_invalid",
+  "rate",
+  "lease",
+  "quota_reserve",
+  "provider_start",
+  "heartbeat",
+  "finalize",
+  "reaper",
+] as const;
+
+function fixedLabel(value: string | null | undefined, allowed: readonly string[]): string {
+  return value != null && allowed.includes(value) ? value : "unknown";
+}
+
 // ---------------------------------------------------------------------------
 // 便捷封装:在 streamChat / logUsage 处调用,避免散落的 label 拼装
 // ---------------------------------------------------------------------------
@@ -118,37 +200,52 @@ export const fileUploadsTotal = new Counter({
 /** 记录一次请求完成(含状态与延迟)。供 logUsage 调用。 */
 export function observeRequest(params: {
   source: string;
-  model: string;
+  modelType?: string | null;
   status: string;
   latencyMs: number;
   promptTokens: number;
   completionTokens: number;
 }): void {
-  const labels = { source: params.source, model: params.model, status: params.status };
+  const modelType = fixedLabel(params.modelType, MODEL_TYPES);
+  const labels = {
+    source: fixedLabel(params.source, REQUEST_SOURCES),
+    model_type: modelType,
+    status: fixedLabel(params.status, EXECUTION_STATUSES),
+  };
   requestTotal.inc(labels);
   requestDurationMs.observe(labels, params.latencyMs);
-  if (params.promptTokens > 0) tokensTotal.inc({ type: "prompt", model: params.model }, params.promptTokens);
-  if (params.completionTokens > 0) tokensTotal.inc({ type: "completion", model: params.model }, params.completionTokens);
+  if (params.promptTokens > 0) tokensTotal.inc({ type: "prompt", model_type: modelType }, params.promptTokens);
+  if (params.completionTokens > 0) tokensTotal.inc({ type: "completion", model_type: modelType }, params.completionTokens);
 }
 
 export function observeGatewayExecution(params: {
   operation: string;
   source: string;
   status: string;
+  modelType?: string | null;
   latencyMs: number;
   promptTokens: number;
   completionTokens: number;
 }): void {
+  const modelType = fixedLabel(params.modelType, MODEL_TYPES);
   gatewayExecutionsTotal.inc({
-    operation: params.operation,
-    source: params.source,
-    status: params.status,
+    operation: fixedLabel(params.operation, GATEWAY_OPERATIONS),
+    source: fixedLabel(params.source, REQUEST_SOURCES),
+    status: fixedLabel(params.status, EXECUTION_STATUSES),
+    model_type: modelType,
   });
   gatewayExecutionDurationMs.observe({
-    operation: params.operation,
-    source: params.source,
-    status: params.status,
+    operation: fixedLabel(params.operation, GATEWAY_OPERATIONS),
+    source: fixedLabel(params.source, REQUEST_SOURCES),
+    status: fixedLabel(params.status, EXECUTION_STATUSES),
+    model_type: modelType,
   }, params.latencyMs);
+  if (params.promptTokens > 0) {
+    tokensTotal.inc({ type: "prompt", model_type: modelType }, params.promptTokens);
+  }
+  if (params.completionTokens > 0) {
+    tokensTotal.inc({ type: "completion", model_type: modelType }, params.completionTokens);
+  }
 }
 
 export function observeGatewayAttempt(params: {
@@ -156,7 +253,11 @@ export function observeGatewayAttempt(params: {
   status: string;
   protocol: string;
 }): void {
-  gatewayAttemptsTotal.inc(params);
+  gatewayAttemptsTotal.inc({
+    operation: fixedLabel(params.operation, GATEWAY_OPERATIONS),
+    status: fixedLabel(params.status, ATTEMPT_STATUSES),
+    protocol: fixedLabel(params.protocol, PROVIDER_PROTOCOLS),
+  });
 }
 
 export type GatewayCircuitBreakerEvent =
@@ -167,7 +268,9 @@ export type GatewayCircuitBreakerEvent =
   | "probe_released";
 
 export function observeGatewayCircuitBreakerEvent(event: GatewayCircuitBreakerEvent): void {
-  gatewayCircuitBreakerEventsTotal.inc({ event });
+  gatewayCircuitBreakerEventsTotal.inc({
+    event: fixedLabel(event, CIRCUIT_BREAKER_EVENTS),
+  });
 }
 
 export function observeGatewayGovernanceRejection(params: {
@@ -175,7 +278,11 @@ export function observeGatewayGovernanceRejection(params: {
   scope: string;
   operation: string;
 }): void {
-  gatewayGovernanceRejectionsTotal.inc(params);
+  gatewayGovernanceRejectionsTotal.inc({
+    reason: fixedLabel(params.reason, GOVERNANCE_REASONS),
+    scope: fixedLabel(params.scope, GOVERNANCE_SCOPES),
+    operation: fixedLabel(params.operation, GOVERNANCE_OPERATIONS),
+  });
 }
 
 export function observeGatewayGovernanceSettlement(params: {
@@ -183,13 +290,36 @@ export function observeGatewayGovernanceSettlement(params: {
   outcome: "settled" | "overage";
 }): void {
   gatewayGovernanceSettlementsTotal.inc({
-    quota_kind: params.quotaKind,
-    outcome: params.outcome,
+    quota_kind: fixedLabel(params.quotaKind, QUOTA_KINDS),
+    outcome: fixedLabel(params.outcome, ["settled", "overage"]),
   });
 }
 
 export function observeGatewayGovernanceFailure(stage: string): void {
-  gatewayGovernanceFailuresTotal.inc({ stage });
+  gatewayGovernanceFailuresTotal.inc({
+    stage: fixedLabel(stage, GOVERNANCE_FAILURE_STAGES),
+  });
+}
+
+export function observeGatewayRetentionClaim(outcome: string): void {
+  gatewayRetentionClaimsTotal.inc({
+    outcome: fixedLabel(outcome, ["claimed", "skipped", "failed"]),
+  });
+}
+
+export function observeGatewayRetentionRun(params: {
+  outcome: string;
+  deleted: Partial<Record<"success" | "failed" | "interrupted", number>>;
+  durationMs: number;
+}): void {
+  gatewayRetentionRunsTotal.inc({
+    outcome: fixedLabel(params.outcome, ["success", "failed"]),
+  });
+  for (const status of EXECUTION_STATUSES) {
+    const count = params.deleted[status] ?? 0;
+    if (count > 0) gatewayRetentionDeletedTotal.inc({ status }, count);
+  }
+  gatewayRetentionDurationMs.observe(params.durationMs);
 }
 
 /** 进入 streamChat 时 +1(配合 releaseStream 在 finally 调用)。 */

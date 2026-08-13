@@ -34,7 +34,7 @@ export default async function OperationsPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
 
-  // 各 provider 最近成功率(基于全部历史)
+  // 各 provider 近 90 天成功率；providerRef 非空也确保 execution 已 finalize。
   const providerHealth = await db
     .select({
       providerRef: s.gatewayExecutions.providerRef,
@@ -43,7 +43,10 @@ export default async function OperationsPage() {
       avgLatency: sql<number>`coalesce(avg(${s.gatewayExecutions.latencyMs}),0)`,
     })
     .from(s.gatewayExecutions)
-    .where(sql`${s.gatewayExecutions.providerRef} is not null`)
+    .where(sql`
+      ${s.gatewayExecutions.providerRef} is not null
+      and ${s.gatewayExecutions.createdAt} >= statement_timestamp() - interval '90 days'
+    `)
     .groupBy(s.gatewayExecutions.providerRef)
     .orderBy(desc(sql`count(*)`));
 
@@ -91,7 +94,7 @@ export default async function OperationsPage() {
         </div>
       </div>
 
-      {/* Provider 健康(最近成功率) */}
+      {/* Provider 健康(近 90 天) */}
       <div className="space-y-4">
         <h2 className="text-ui-title font-semibold text-neutral-900 dark:text-white">{t("providerHealthTitle")}</h2>
         <div className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] overflow-hidden shadow-none">

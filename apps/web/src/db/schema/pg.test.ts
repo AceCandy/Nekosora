@@ -7,6 +7,7 @@ import {
   conversations,
   gatewayAttempts,
   gatewayExecutions,
+  gatewayRetentionState,
   messageFileObjects,
   memoryExtractionJobs,
   runs,
@@ -33,6 +34,15 @@ describe("gateway observability schema", () => {
     expect(gatewayExecutions.requestId.name).toBe("request_id");
     expect(gatewayExecutions.operation.notNull).toBe(true);
     expect(gatewayExecutions.status.default).toBe("running");
+    expect(gatewayExecutions.modelType.name).toBe("model_type");
+
+    const executionConfig = getTableConfig(gatewayExecutions);
+    const retentionIndex = executionConfig.indexes.find(
+      (candidate) => candidate.config.name === "gateway_executions_retention_idx",
+    );
+    expect(retentionIndex?.config.columns.map((column) => "name" in column ? column.name : null))
+      .toEqual(["status", "created_at", "id"]);
+    expect(gatewayRetentionState.lastClaimedDate.name).toBe("last_claimed_date");
 
     const attemptConfig = getTableConfig(gatewayAttempts);
     const uniqueAttempt = attemptConfig.indexes.find(

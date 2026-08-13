@@ -21,15 +21,15 @@ async function run() {
 
   // 1. observeRequest 应同时记录请求计数、延迟、token 计数
   observeRequest({
-    source: "chat", model: "gpt-4o", status: "success", latencyMs: 1200,
+    source: "chat", modelType: "chat", status: "success", latencyMs: 1200,
     promptTokens: 100, completionTokens: 50,
   });
   observeRequest({
-    source: "gateway", model: "gpt-4o", status: "success", latencyMs: 800,
+    source: "gateway", modelType: "chat", status: "success", latencyMs: 800,
     promptTokens: 200, completionTokens: 80,
   });
   observeRequest({
-    source: "chat", model: "claude", status: "failed", latencyMs: 300,
+    source: "chat", modelType: "chat", status: "failed", latencyMs: 300,
     promptTokens: 0, completionTokens: 0,
   });
   console.log("✓ observeRequest 多次调用通过");
@@ -58,7 +58,7 @@ async function run() {
   assert.ok(out.includes("nekusora_requests_total"), "输出应含 requests_total");
   assert.ok(out.includes("# HELP"), "输出应含 HELP 行");
   assert.ok(out.includes("# TYPE"), "输出应含 TYPE 行");
-  assert.ok(out.includes("gpt-4o"), "输出应含 model label");
+  assert.ok(out.includes('model_type="chat"'), "输出应含固定 model_type label");
   console.log("✓ metricsOutput Prometheus 文本格式通过");
 
   // 4. 验证关键指标名存在(getMetricsAsArray 返回逻辑名,Histogram 不带 _bucket 后缀)

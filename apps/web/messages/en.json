@@ -460,7 +460,7 @@
       "depStorageLocal": "Local disk (fallback)",
       "depMetrics": "Metrics endpoint",
       "depHealth": "Health check",
-      "providerHealthTitle": "Upstream provider health",
+      "providerHealthTitle": "Upstream provider health (last 90 days)",
       "thCalls": "Calls",
       "thSuccessRate": "Success rate",
       "thAvgLatency": "Avg latency",

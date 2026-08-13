@@ -63,7 +63,7 @@ describe("logUsage", () => {
     await logUsage({
       ctx: { userId: "u1", keyKind: null, source: "chat" },
       runId: "run_success",
-      model: "demo",
+      modelType: null,
       usage: { inputTokens: 3, outputTokens: 5 },
       latencyMs: 20,
       status: "success",
@@ -72,7 +72,7 @@ describe("logUsage", () => {
     expect(insert).toHaveBeenCalledWith(schema.gatewayExecutions);
     expect(mocks.observeRequest).toHaveBeenCalledWith({
       source: "chat",
-      model: "demo",
+      modelType: null,
       status: "success",
       latencyMs: 20,
       promptTokens: 3,

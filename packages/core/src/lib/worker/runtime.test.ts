@@ -3,6 +3,7 @@ import type { QueueDefinition } from "@/lib/jobs/catalog";
 import {
   createWorkerRuntime,
   startRecoveryScheduler,
+  type MaintenanceDefinition,
   type WorkerDefinition,
   type WorkerTimers,
 } from "./runtime";
@@ -125,6 +126,38 @@ describe("worker recovery scheduler", () => {
 });
 
 describe("worker runtime", () => {
+  it("maintenance 只启动 recovery，不注册 queue handler", async () => {
+    const worker = definition("file-process");
+    const maintenance: MaintenanceDefinition = {
+      name: "gateway-retention",
+      recovery: {
+        intervalMs: 3_600_000,
+        run: vi.fn().mockResolvedValue(undefined),
+        failureMessage: "[gateway-retention] run failed",
+      },
+    };
+    const queue = {
+      start: vi.fn().mockResolvedValue(undefined),
+      work: vi.fn().mockResolvedValue(undefined),
+      stop: vi.fn().mockResolvedValue(undefined),
+    };
+    const schedulerFactory = vi.fn(() => ({ stop: vi.fn().mockResolvedValue(undefined) }));
+    const runtime = createWorkerRuntime({
+      queue,
+      definitions: [worker, maintenance],
+      process: { on: vi.fn(), exit: vi.fn() },
+      schedulerFactory,
+      logger: { log: vi.fn(), error: vi.fn() },
+    });
+
+    await runtime.start();
+
+    expect(queue.work).toHaveBeenCalledOnce();
+    expect(queue.work).toHaveBeenCalledWith(worker.job, expect.any(Function));
+    expect(schedulerFactory).toHaveBeenCalledTimes(2);
+    expect(schedulerFactory).toHaveBeenLastCalledWith(maintenance);
+  });
+
   it("按定义顺序注册，逆序停止 recovery，重复 signal 只清理并退出一次", async () => {
     const calls: string[] = [];
     const definitions = [
