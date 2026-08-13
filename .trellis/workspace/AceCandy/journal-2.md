@@ -960,3 +960,24 @@ Added protocol-native model discovery, accepted inbound OpenAI stream_options, a
 ### Status
 
 [OK] **Completed**
+
+
+## Session 104: Chat 导航有界加载
+
+**Date**: 2026-08-13
+**Task**: Chat 导航有界加载
+**Branch**: `main`
+
+### Summary
+
+会话侧栏接入 30 条键集分页、深链补入与活动 run 单飞轮询，新增匹配索引和跨层规范；全仓检查、测试及 Web 生产构建通过，登录态浏览器回归缺口已记录。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1d1df69` | (see git log) |
+
+### Status
+
+[OK] **Completed**
