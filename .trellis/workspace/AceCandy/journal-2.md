@@ -918,3 +918,24 @@ Added protocol-native model discovery, accepted inbound OpenAI stream_options, a
 ### Status
 
 [OK] **Completed**
+
+
+## Session 102: 统一生产镜像与运行时瘦身
+
+**Date**: 2026-08-13
+**Task**: 统一生产镜像与运行时瘦身
+**Branch**: `main`
+
+### Summary
+
+统一 Web、Gateway、Worker 发布镜像，改用原生双架构构建；隔离 Gateway/Worker production 依赖图并验证 Mem0 原生依赖，将 amd64 镜像从 1.22 GB 降至约 492 MB。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a238a73` | (see git log) |
+
+### Status
+
+[OK] **Completed**
