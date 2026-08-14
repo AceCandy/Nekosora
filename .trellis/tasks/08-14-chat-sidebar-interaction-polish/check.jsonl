@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/chat-navigation.md","reason":"复核分组分页没有破坏排序、cursor、首屏负载、属主隔离和当前会话补入。"}
+{"file":".trellis/spec/backend/chat-process-trace.md","reason":"复核研究完成时机与 canonical phase、活动工具和首个正文边界一致。"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"复核菜单碰撞、键盘焦点、移动首行、触屏目标、动效和亮色设计契约。"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"复核每组请求状态、超时重试和迟到响应隔离没有引入双重事实来源。"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"执行定向测试、全量检查、浏览器回归和 orphan/临时产物审查。"}

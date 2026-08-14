@@ -45,9 +45,11 @@ vi.mock("@/lib/conversation-title/service", () => ({
 
 import {
   getConversationNavigationItem,
+  getConversationGroupSummary,
   getConversationTitleStateAction,
   getGeneratingStatuses,
   listConversations,
+  listConversationGroup,
   saveConversationComposerState,
 } from "./conversations";
 
@@ -237,6 +239,51 @@ describe("会话 generating 派生", () => {
     });
     expect(mocks.eq).toHaveBeenCalledWith(schema.conversations.id, "conversation-1");
     expect(mocks.eq).toHaveBeenCalledWith(schema.conversations.userId, "user-1");
+  });
+
+  it("按单个分组固定取 21 行并按用户隔离", async () => {
+    const rows = Array.from({ length: 21 }, (_, index) => ({
+      id: `conversation-${index}`,
+      title: `会话 ${index}`,
+      pinned: false,
+      archived: false,
+      generating: false,
+      updatedAt: new Date(`2026-08-14T00:${String(40 - index).padStart(2, "0")}:00.000Z`),
+      sortUpdatedAt: `2026-08-14T00:${String(40 - index).padStart(2, "0")}:00.000000Z`,
+      rank: 1,
+    }));
+    const query = queryReturning(rows);
+    mocks.getDb.mockResolvedValue({ select: vi.fn(() => query) });
+    const boundaries = {
+      todayStart: "2026-08-14T00:00:00.000Z",
+      yesterdayStart: "2026-08-13T00:00:00.000Z",
+      dayBeforeYesterdayStart: "2026-08-12T00:00:00.000Z",
+      sevenDaysAgoStart: "2026-08-07T00:00:00.000Z",
+      thirtyDaysAgoStart: "2026-07-15T00:00:00.000Z",
+    };
+
+    const page = await listConversationGroup("today", boundaries);
+    expect(page.items).toHaveLength(20);
+    expect(page.nextCursor).toEqual(expect.any(String));
+    expect(query.limit).toHaveBeenCalledWith(21);
+    expect(mocks.eq).toHaveBeenCalledWith(schema.conversations.userId, "user-1");
+  });
+
+  it("摘要返回所有分组真实总数并拒绝乱序边界", async () => {
+    const query = queryReturning([{ pinned: "2", today: 3, yesterday: 0 }]);
+    mocks.getDb.mockResolvedValue({ select: vi.fn(() => query) });
+    const boundaries = {
+      todayStart: "2026-08-14T00:00:00.000Z",
+      yesterdayStart: "2026-08-13T00:00:00.000Z",
+      dayBeforeYesterdayStart: "2026-08-12T00:00:00.000Z",
+      sevenDaysAgoStart: "2026-08-07T00:00:00.000Z",
+      thirtyDaysAgoStart: "2026-07-15T00:00:00.000Z",
+    };
+    const summary = await getConversationGroupSummary(boundaries);
+    expect(summary).toHaveLength(8);
+    expect(summary.find(({ key }) => key === "pinned")?.total).toBe(2);
+    expect(summary.find(({ key }) => key === "today")?.total).toBe(3);
+    await expect(getConversationGroupSummary({ ...boundaries, yesterdayStart: boundaries.todayStart })).rejects.toThrow();
   });
 });
 

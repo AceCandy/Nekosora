@@ -10,6 +10,9 @@ import {
   deleteConversation,
   getGeneratingStatuses,
   getConversationNavigationItem,
+  getConversationGroupSummary,
+  listConversationGroup,
+  renameConversation,
 } from "@/features/chat/actions/conversations";
 import Sidebar from "@/features/chat/components/Sidebar";
 
@@ -43,6 +46,10 @@ export default async function ImageLayout({ children }: { children: React.ReactN
     "use server";
     await deleteConversation(id);
   }
+  async function handleRename(id: string, title: string) {
+    "use server";
+    await renameConversation(id, title);
+  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-nebula-white text-space-ink dark:bg-twilight-obsidian dark:text-nebula-silver transition-colors duration-200">
@@ -72,12 +79,16 @@ export default async function ImageLayout({ children }: { children: React.ReactN
         actionArchiveText={t("actionArchive")}
         actionUnarchiveText={t("actionUnarchive")}
         actionDeleteText={t("actionDelete")}
+        actionRenameText={t("actionRename")}
+        renameSaveText={t("renameSave")}
         deleteConfirmText={t("deleteConfirm")}
         signOutAction={handleSignOut}
         togglePinnedAction={handleTogglePinned}
         toggleArchivedAction={handleToggleArchived}
         deleteAction={handleDelete}
-        loadConversationsAction={listConversations}
+        renameAction={handleRename}
+        getGroupSummaryAction={getConversationGroupSummary}
+        loadGroupAction={listConversationGroup}
         getConversationAction={getConversationNavigationItem}
         getGeneratingStatusesAction={getGeneratingStatuses}
       />

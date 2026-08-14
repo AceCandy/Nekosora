@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  conversationGroupFor,
+  createConversationGroupBoundaries,
+  encodeConversationGroupCursor,
   mergeConversationIds,
   mergeConversations,
   type ConversationNavigationItem,
@@ -53,5 +56,35 @@ describe("conversation navigation merge", () => {
       ["server-b", "shared"],
       ["client-a", "shared"],
     )).toEqual(["client-a", "server-b", "shared"]);
+  });
+});
+
+describe("conversation groups", () => {
+  it("按浏览器本地自然日生成跨年边界", () => {
+    const boundaries = createConversationGroupBoundaries(new Date(2026, 0, 1, 12));
+    expect(boundaries.todayStart).toBe(new Date(2026, 0, 1).toISOString());
+    expect(boundaries.yesterdayStart).toBe(new Date(2025, 11, 31).toISOString());
+    expect(boundaries.thirtyDaysAgoStart).toBe(new Date(2025, 11, 2).toISOString());
+  });
+
+  it("置顶和归档优先于互斥时间分组", () => {
+    const boundaries = createConversationGroupBoundaries(new Date(2026, 7, 14, 12));
+    const at = (key: keyof typeof boundaries) => Date.parse(boundaries[key]);
+    expect(conversationGroupFor({ pinned: true, archived: false, updatedAt: 0 }, boundaries)).toBe("pinned");
+    expect(conversationGroupFor({ pinned: true, archived: true, updatedAt: Date.now() }, boundaries)).toBe("archived");
+    expect(conversationGroupFor({ pinned: false, archived: false, updatedAt: at("todayStart") }, boundaries)).toBe("today");
+    expect(conversationGroupFor({ pinned: false, archived: false, updatedAt: at("yesterdayStart") }, boundaries)).toBe("yesterday");
+    expect(conversationGroupFor({ pinned: false, archived: false, updatedAt: at("dayBeforeYesterdayStart") }, boundaries)).toBe("dayBeforeYesterday");
+    expect(conversationGroupFor({ pinned: false, archived: false, updatedAt: at("sevenDaysAgoStart") }, boundaries)).toBe("withinWeek");
+    expect(conversationGroupFor({ pinned: false, archived: false, updatedAt: at("thirtyDaysAgoStart") }, boundaries)).toBe("withinMonth");
+    expect(conversationGroupFor({ pinned: false, archived: false, updatedAt: at("thirtyDaysAgoStart") - 1 }, boundaries)).toBe("earlier");
+  });
+
+  it("生成服务端可验证的组内续页游标", () => {
+    const encoded = encodeConversationGroupCursor(item("conversation-1", 1, 1000));
+    expect(JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"))).toEqual({
+      updatedAt: "1970-01-01T00:00:01.000000Z",
+      id: "conversation-1",
+    });
   });
 });

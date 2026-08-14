@@ -62,6 +62,10 @@ function durationBetween(startedAt?: string, endedAt?: string): number | undefin
 
 export function buildResearchStatus(input: BuildResearchStatusInput): ResearchStatus {
   const processActive = input.phase === "preparing" || input.phase === "processing";
+  const hasActiveWork = input.canonicalSteps.some((step) => step.status === "running")
+    || input.toolCalls?.some((call) => call.status === "calling")
+    || false;
+  const researchActive = processActive || hasActiveWork;
   const researchCompleted = input.phase === "answering" || input.phase === "completed" || Boolean(input.firstContentAt);
   const contextSteps = input.canonicalSteps.filter((step) => CONTEXT_KINDS.has(step.kind));
   const reasoningSteps = input.canonicalSteps.filter((step) => step.kind === "reasoning");
@@ -119,7 +123,7 @@ export function buildResearchStatus(input: BuildResearchStatusInput): ResearchSt
   }
 
   let currentStage: ResearchStage | undefined;
-  if (processActive) {
+  if (researchActive) {
     currentStage = [...steps].reverse().find((step) => step.status === "running")?.type;
     if (!currentStage && input.phase === "processing" && input.sourceCount > 0 && searchStatuses.length > 0) {
       currentStage = "read";
@@ -128,7 +132,7 @@ export function buildResearchStatus(input: BuildResearchStatusInput): ResearchSt
   }
 
   return {
-    status: processActive ? "running" : researchCompleted ? "completed" : "error",
+    status: researchActive ? "running" : researchCompleted ? "completed" : "error",
     currentStage,
     durationMs: durationBetween(input.startedAt, input.firstContentAt ?? input.endedAt),
     sourceCount: input.sourceCount || undefined,

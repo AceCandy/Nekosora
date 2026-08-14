@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/session";
 import { getAuth } from "@/auth";
-import { listConversations, togglePinnedConversation, toggleArchivedConversation, deleteConversation, getGeneratingStatuses, getConversationNavigationItem } from "@/features/chat/actions/conversations";
+import { listConversations, togglePinnedConversation, toggleArchivedConversation, deleteConversation, getGeneratingStatuses, getConversationNavigationItem, getConversationGroupSummary, listConversationGroup, renameConversation } from "@/features/chat/actions/conversations";
 import { listEnabledRenderStyles } from "@/lib/render-styles/service";
 import Sidebar from "@/features/chat/components/Sidebar";
 
@@ -47,6 +47,11 @@ export default async function ChatLayout({ children }: { children: React.ReactNo
     await deleteConversation(id);
   }
 
+  async function handleRename(id: string, title: string) {
+    "use server";
+    await renameConversation(id, title);
+  }
+
   // 会话项映射为 Sidebar 所需结构(含置顶/归档/生成中标记/更新时间)
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-nebula-white text-space-ink transition-colors duration-200 dark:bg-twilight-obsidian dark:text-nebula-silver md:flex-row">
@@ -76,12 +81,16 @@ export default async function ChatLayout({ children }: { children: React.ReactNo
         actionArchiveText={t("actionArchive")}
         actionUnarchiveText={t("actionUnarchive")}
         actionDeleteText={t("actionDelete")}
+        actionRenameText={t("actionRename")}
+        renameSaveText={t("renameSave")}
         deleteConfirmText={t("deleteConfirm")}
         signOutAction={handleSignOut}
         togglePinnedAction={handleTogglePinned}
         toggleArchivedAction={handleToggleArchived}
         deleteAction={handleDelete}
-        loadConversationsAction={listConversations}
+        renameAction={handleRename}
+        getGroupSummaryAction={getConversationGroupSummary}
+        loadGroupAction={listConversationGroup}
         getConversationAction={getConversationNavigationItem}
         getGeneratingStatusesAction={getGeneratingStatuses}
       />

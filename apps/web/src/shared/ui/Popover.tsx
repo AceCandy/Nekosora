@@ -128,6 +128,10 @@ export function Popover({
       const gap = 4;
       let left = align === "right" ? wr.right - pw : wr.left;
       let top = side === "bottom" ? wr.bottom + gap : wr.top - ph - gap;
+      const fitsBelow = wr.bottom + gap + ph <= window.innerHeight - 8;
+      const fitsAbove = wr.top - gap - ph >= 8;
+      if (side === "bottom" && !fitsBelow && fitsAbove) top = wr.top - ph - gap;
+      if (side === "top" && !fitsAbove && fitsBelow) top = wr.bottom + gap;
       left = Math.max(8, Math.min(left, window.innerWidth - pw - 8));
       top = Math.max(8, Math.min(top, window.innerHeight - ph - 8));
       panel.style.left = `${left}px`;

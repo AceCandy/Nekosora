@@ -82,4 +82,17 @@ describe("buildResearchStatus", () => {
     expect(result.durationMs).toBe(1500);
     expect(result.steps.map((step) => step.type)).toEqual(["understand", "search", "read"]);
   });
+
+  it("phase 已进入 answering 但搜索仍调用时保持研究中", () => {
+    const result = buildResearchStatus({
+      phase: "answering",
+      canonicalSteps: [],
+      toolCalls: [{ toolCallId: "search-1", toolName: "web_search", status: "calling" }],
+      sourceCount: 0,
+      hasReasoning: false,
+    });
+
+    expect(result.status).toBe("running");
+    expect(result.currentStage).toBe("search");
+  });
 });

@@ -8,14 +8,21 @@ import { useTranslations } from "next-intl";
 import { searchMessages } from "@/features/chat/actions/conversations";
 import {
   compareConversations,
+  conversationGroupFor,
+  createConversationGroupBoundaries,
+  encodeConversationGroupCursor,
   mergeConversationIds,
   mergeConversations,
+  type ConversationGroupBoundaries,
+  type ConversationGroupKey,
+  type ConversationGroupPage,
+  type ConversationGroupSummary,
   type ConversationNavigationItem,
-  type ConversationNavigationPage,
 } from "@/features/chat/model/conversationNavigation";
 import ConfirmDialog from "@/shared/ui/ConfirmDialog";
 import Modal from "@/shared/ui/Modal";
-import { Plus, Settings2, LogOut, Menu, X, Search, Pin, Archive, Trash2, ImageIcon, Loader2, PanelLeftClose, PanelLeftOpen, ChevronDown } from "lucide-react";
+import Popover from "@/shared/ui/Popover";
+import { Plus, Settings2, LogOut, Menu, X, Search, Pin, Archive, Trash2, ImageIcon, Loader2, PanelLeftClose, PanelLeftOpen, ChevronDown, Pencil } from "lucide-react";
 import { clsx } from "clsx";
 import { useShallow } from "zustand/react/shallow";
 import { useChatStreamStore } from "@/features/chat/store/chatStreamStore";
@@ -59,12 +66,16 @@ interface SidebarProps {
   actionArchiveText: string;
   actionUnarchiveText: string;
   actionDeleteText: string;
+  actionRenameText: string;
+  renameSaveText: string;
   deleteConfirmText: string;
   signOutAction: () => Promise<void>;
   togglePinnedAction: (id: string) => Promise<void>;
   toggleArchivedAction: (id: string) => Promise<void>;
   deleteAction: (id: string) => Promise<void>;
-  loadConversationsAction: (cursor?: string | null) => Promise<ConversationNavigationPage>;
+  renameAction: (id: string, title: string) => Promise<void>;
+  getGroupSummaryAction: (boundaries: ConversationGroupBoundaries) => Promise<ConversationGroupSummary[]>;
+  loadGroupAction: (key: ConversationGroupKey, boundaries: ConversationGroupBoundaries, cursor?: string | null) => Promise<ConversationGroupPage>;
   getConversationAction: (id: string) => Promise<ConversationItem | null>;
   /** 轮询各会话 generating 状态,用于检测后台会话完成。 */
   getGeneratingStatusesAction: () => Promise<{ id: string; generating: boolean }[]>;
@@ -94,24 +105,6 @@ function highlightSnippet(text: string, keyword: string): React.ReactNode {
   return parts;
 }
 
-/** 按更新时间归入近 7 天 / 近 30 天的互斥时间分组。 */
-function dayBucket(ts: number): "today" | "yesterday" | "dayBeforeYesterday" | "withinWeek" | "withinMonth" | "earlier" {
-  const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const boundary = (daysAgo: number) => {
-    const date = new Date(startOfToday);
-    date.setDate(date.getDate() - daysAgo);
-    return date.getTime();
-  };
-  const start = startOfToday.getTime();
-  if (ts >= start) return "today";
-  if (ts >= boundary(1)) return "yesterday";
-  if (ts >= boundary(2)) return "dayBeforeYesterday";
-  if (ts >= boundary(7)) return "withinWeek";
-  if (ts >= boundary(30)) return "withinMonth";
-  return "earlier";
-}
-
 export default function Sidebar({
   userName,
   userEmail,
@@ -138,16 +131,21 @@ export default function Sidebar({
   actionArchiveText,
   actionUnarchiveText,
   actionDeleteText,
+  actionRenameText,
+  renameSaveText,
   deleteConfirmText,
   signOutAction,
   togglePinnedAction,
   toggleArchivedAction,
   deleteAction,
-  loadConversationsAction,
+  renameAction,
+  getGroupSummaryAction,
+  loadGroupAction,
   getConversationAction,
   getGeneratingStatusesAction,
 }: SidebarProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -160,6 +158,14 @@ export default function Sidebar({
   const [searching, setSearching] = useState(false);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [renameTarget, setRenameTarget] = useState<ConversationItem | null>(null);
+  const [renameTitle, setRenameTitle] = useState("");
+  const [renameSaving, setRenameSaving] = useState(false);
+  const [renameError, setRenameError] = useState(false);
+  const [boundaries] = useState(() => createConversationGroupBoundaries());
+  const [groupSummary, setGroupSummary] = useState<ConversationGroupSummary[]>([]);
+  const [summaryVersion, setSummaryVersion] = useState(0);
+  const [groupLoads, setGroupLoads] = useState<Partial<Record<ConversationGroupKey, { loading: boolean; failed: boolean; nextCursor?: string | null }>>>({});
   const [navigation, setNavigation] = useState(() => ({
     source: conversations,
     conversations,
@@ -174,14 +180,22 @@ export default function Sidebar({
   const userMenuRef = useRef<HTMLDivElement>(null);
   const conversationSwitchStartedRef = useRef(false);
   const newConversationSequenceRef = useRef(0);
-  // 当前展开的会话操作菜单容器(触发按钮 + 面板),用于点击外部收起。
-  const sessionMenuRef = useRef<HTMLDivElement>(null);
+  const groupRequestRef = useRef<Partial<Record<ConversationGroupKey, number>>>({});
+  const rowRefs = useRef(new Map<string, HTMLDivElement>());
+  const menuButtonRefs = useRef(new Map<string, HTMLButtonElement>());
+  const pendingLocateRef = useRef<string | null>(null);
 
   const loadedConversations = navigation.conversations;
 
   useClickOutside(userMenuRef, () => setUserMenuOpen(false), userMenuOpen);
-  // 会话项「更多操作」:侧栏 aside 带 transform,不能用内部 fixed 遮罩;统一走 useClickOutside。
-  useClickOutside(sessionMenuRef, () => setMenuOpenId(null), Boolean(menuOpenId));
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 767px)");
+    const sync = () => setIsMobile(media.matches);
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
 
   // 当前路由对应的会话 id(/chat/{id});新对话页 /chat 为 null。
   const pathname = usePathname();
@@ -210,6 +224,7 @@ export default function Sidebar({
       failed: false,
       generation: current.generation + 1,
     }));
+    setGroupLoads({});
     setGeneratingIds(new Set(pollingGeneratingIds));
   }
 
@@ -233,26 +248,13 @@ export default function Sidebar({
     return () => { cancelled = true; };
   }, [pathConvId, pathConversationLoaded, getConversationAction]);
 
-  const handleLoadMore = async () => {
-    if (!navigation.cursor || navigation.loading) return;
-    const { cursor, generation } = navigation;
-    setNavigation((current) => ({ ...current, loading: true, failed: false }));
-    try {
-      const page = await loadConversationsAction(cursor);
-      setNavigation((current) => current.generation !== generation ? current : {
-        ...current,
-        conversations: mergeConversations(current.conversations, page.items),
-        cursor: page.nextCursor,
-        loading: false,
-      });
-    } catch {
-      setNavigation((current) => current.generation !== generation ? current : {
-        ...current,
-        loading: false,
-        failed: true,
-      });
-    }
-  };
+  useEffect(() => {
+    let cancelled = false;
+    void getGroupSummaryAction(boundaries)
+      .then((summary) => { if (!cancelled) setGroupSummary(summary); })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [boundaries, getGroupSummaryAction, summaryVersion]);
 
   // 后台会话完成蓝点:轮询各会话 generating 状态,记录上一轮「生成中」的集合;
   // 当某会话从「生成中」变为「已完成」且不是当前会话,标记蓝点;点击该会话项清除。
@@ -364,14 +366,43 @@ export default function Sidebar({
     if (isPending) return;
     if (fn === deleteAction) conversationSwitchStartedRef.current = false;
     setMenuOpenId(null);
+    requestAnimationFrame(() => menuButtonRefs.current.get(id)?.focus());
     startTransition(async () => {
       try {
+        pendingLocateRef.current = fn === deleteAction ? null : id;
         await fn(id);
+        setSummaryVersion((version) => version + 1);
+        router.refresh();
         if (fn === deleteAction && !conversationSwitchStartedRef.current && window.location.pathname === `/chat/${id}`) router.replace("/chat");
       } catch (err) {
+        pendingLocateRef.current = null;
         console.error("conversation action failed:", err);
       }
     });
+  };
+
+  const submitRename = async () => {
+    const title = renameTitle.trim();
+    if (!renameTarget || !title || renameSaving) return;
+    const target = renameTarget;
+    setRenameSaving(true);
+    setRenameError(false);
+    try {
+      pendingLocateRef.current = target.id;
+      await renameAction(target.id, title);
+      setSummaryVersion((version) => version + 1);
+      setNavigation((current) => ({
+        ...current,
+        conversations: current.conversations.map((item) => item.id === target.id ? { ...item, title } : item),
+      }));
+      setRenameTarget(null);
+      router.refresh();
+    } catch {
+      pendingLocateRef.current = null;
+      setRenameError(true);
+    } finally {
+      setRenameSaving(false);
+    }
   };
 
   // 合并乐观新会话项。SSR 未带上时插入列表头;SSR 已命中同 id 时,用乐观项 title
@@ -404,31 +435,18 @@ export default function Sidebar({
 
   // 分组:置顶 / 今天 / 昨天 / 前天 / 周内 / 月内 / 更早 / 归档
   const groups = useMemo(() => {
-    const pinned: ConversationItem[] = [];
-    const today: ConversationItem[] = [];
-    const yesterday: ConversationItem[] = [];
-    const dayBeforeYesterday: ConversationItem[] = [];
-    const withinWeek: ConversationItem[] = [];
-    const withinMonth: ConversationItem[] = [];
-    const earlier: ConversationItem[] = [];
-    const archived: ConversationItem[] = [];
+    const result: Record<ConversationGroupKey, ConversationItem[]> = {
+      pinned: [], today: [], yesterday: [], dayBeforeYesterday: [],
+      withinWeek: [], withinMonth: [], earlier: [], archived: [],
+    };
     for (const c of allConversations) {
-      if (c.archived) archived.push(c);
-      else if (c.pinned) pinned.push(c);
-      else {
-        const b = dayBucket(c.updatedAt);
-        if (b === "today") today.push(c);
-        else if (b === "yesterday") yesterday.push(c);
-        else if (b === "dayBeforeYesterday") dayBeforeYesterday.push(c);
-        else if (b === "withinWeek") withinWeek.push(c);
-        else if (b === "withinMonth") withinMonth.push(c);
-        else earlier.push(c);
-      }
+      result[conversationGroupFor(c, boundaries)].push(c);
     }
-    return { pinned, today, yesterday, dayBeforeYesterday, withinWeek, withinMonth, earlier, archived };
-  }, [allConversations]);
+    return result;
+  }, [allConversations, boundaries]);
 
-  const sections: { key: string; label: string; items: ConversationItem[] }[] = [
+  const totals = new Map(groupSummary.map(({ key, total }) => [key, total]));
+  const baseSections: { key: ConversationGroupKey; label: string; items: ConversationItem[] }[] = [
     { key: "pinned", label: groupPinnedText, items: groups.pinned },
     { key: "today", label: groupTodayText, items: groups.today },
     { key: "yesterday", label: groupYesterdayText, items: groups.yesterday },
@@ -437,16 +455,66 @@ export default function Sidebar({
     { key: "withinMonth", label: groupWithinMonthText, items: groups.withinMonth },
     { key: "earlier", label: groupEarlierText, items: groups.earlier },
     { key: "archived", label: groupArchivedText, items: groups.archived },
-  ].filter((s) => s.items.length > 0);
+  ];
+  const sections = baseSections.map((section) => ({ ...section, total: totals.get(section.key) ?? section.items.length }))
+    .filter((section) => section.total > 0);
+  const groupHasMore = (section: (typeof sections)[number]) =>
+    section.total > section.items.length && groupLoads[section.key]?.nextCursor !== null;
 
-  const toggleGroup = (key: string) => {
+  const loadGroup = async (key: ConversationGroupKey, items: ConversationItem[]) => {
+    if (groupLoads[key]?.loading) return;
+    const request = (groupRequestRef.current[key] ?? 0) + 1;
+    groupRequestRef.current[key] = request;
+    const knownCursor = groupLoads[key]?.nextCursor;
+    const cursor = knownCursor === undefined && items.length > 0
+      ? encodeConversationGroupCursor(items.at(-1)!)
+      : knownCursor;
+    setGroupLoads((current) => ({ ...current, [key]: { ...current[key], loading: true, failed: false } }));
+    if (!navigator.onLine) {
+      setGroupLoads((current) => ({ ...current, [key]: { ...current[key], loading: false, failed: true } }));
+      return;
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const page = await Promise.race([
+        loadGroupAction(key, boundaries, cursor),
+        new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("timeout")), 10_000); }),
+      ]);
+      if (groupRequestRef.current[key] !== request) return;
+      setNavigation((current) => ({
+        ...current,
+        conversations: mergeConversations(current.conversations, page.items),
+      }));
+      setGroupLoads((current) => ({ ...current, [key]: { loading: false, failed: false, nextCursor: page.nextCursor } }));
+    } catch {
+      if (groupRequestRef.current[key] === request) {
+        setGroupLoads((current) => ({ ...current, [key]: { ...current[key], loading: false, failed: true } }));
+      }
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  };
+
+  const toggleGroup = (key: ConversationGroupKey, items: ConversationItem[], total: number) => {
+    const opening = collapsedGroups.has(key);
     setCollapsedGroups((current) => {
       const next = new Set(current);
       if (next.has(key)) next.delete(key);
       else next.add(key);
       return next;
     });
+    if (opening && total > items.length && groupLoads[key]?.nextCursor !== null) void loadGroup(key, items);
   };
+
+  useEffect(() => {
+    const id = pendingLocateRef.current;
+    if (!id) return;
+    const frame = requestAnimationFrame(() => {
+      rowRefs.current.get(id)?.scrollIntoView({ block: "nearest" });
+      pendingLocateRef.current = null;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [allConversations]);
 
   const openMobileSidebar = () => {
     setCollapsed(false);
@@ -462,7 +530,7 @@ export default function Sidebar({
       if (justCompleted) clearCompleted(c.id);
     };
     return (
-    <div key={c.id} className="group relative">
+    <div key={c.id} ref={(node) => { if (node) rowRefs.current.set(c.id, node); else rowRefs.current.delete(c.id); }} className="group relative">
       {isActive && (
         <span
           className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[2px] rounded-full bg-sora-blue"
@@ -481,29 +549,40 @@ export default function Sidebar({
         )}
       >
         <span className="min-w-0 flex-1 truncate">{c.title}</span>
-        {(c.generating || streamingConvIds.includes(c.id)) && <Loader2 className="ml-auto h-3.5 w-3.5 shrink-0 animate-spin text-sora-blue" aria-label="生成中" />}
+        {(c.generating || streamingConvIds.includes(c.id)) && <span className="relative ml-auto inline-flex h-4 w-4 shrink-0 items-center justify-center" aria-label={tSidebar("generating")}><span className="h-1.5 w-1.5 rounded-full bg-sora-blue" /><Loader2 className="absolute inset-0 h-4 w-4 animate-spin text-sora-blue motion-reduce:animate-none" aria-hidden="true" /></span>}
         {justCompleted && <span className="ml-auto h-2 w-2 shrink-0 rounded-full bg-sora-blue" aria-label="有新回复" />}
       </Link>
-      {/* 仅包住触发按钮 + 面板;点击标题/其它区域都算外部,可收起菜单 */}
-      <div ref={menuOpenId === c.id ? sessionMenuRef : undefined}>
-        <button
+      <div className="absolute right-1 top-1/2 -translate-y-1/2">
+      <Popover
+        open={menuOpenId === c.id}
+        onClose={() => { setMenuOpenId(null); requestAnimationFrame(() => menuButtonRefs.current.get(c.id)?.focus()); }}
+        align="right"
+        panelClassName="w-40"
+        panelZ="z-50"
+        trigger={<button
+          ref={(node) => { if (node) menuButtonRefs.current.set(c.id, node); else menuButtonRefs.current.delete(c.id); }}
           type="button"
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
             setMenuOpenId((cur) => (cur === c.id ? null : c.id));
           }}
-          className="touch-target absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
-          aria-label="更多操作"
+          className={clsx("touch-target p-1 rounded text-neutral-400 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-neutral-200 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:hover:bg-neutral-800", menuOpenId === c.id && "opacity-100")}
+          aria-label={tSidebar("moreActions")}
           aria-haspopup="menu"
           aria-expanded={menuOpenId === c.id}
         >
           <Settings2 className="w-3.5 h-3.5" aria-hidden="true" />
-        </button>
-        {menuOpenId === c.id && (
-          <div className="absolute right-0 top-full z-30 mt-1 w-36 rounded-md border border-morning-mist dark:border-deep-space bg-white dark:bg-space-ink shadow-lg p-1">
+        </button>}
+      >
+          <div role="menu">
+            <button type="button" role="menuitem" onClick={() => { setMenuOpenId(null); setRenameTarget(c); setRenameTitle(c.title); setRenameError(false); }} className="touch-target flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-ui-caption text-neutral-700 hover:bg-neutral-50 dark:text-neutral-300 dark:hover:bg-neutral-900">
+              <Pencil className="h-3 w-3" aria-hidden="true" />
+              <span>{actionRenameText}</span>
+            </button>
             <button
               type="button"
+              role="menuitem"
               onClick={() => runAction(togglePinnedAction, c.id)}
               className="touch-target w-full text-left rounded px-2 py-1.5 text-ui-caption text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900 flex items-center gap-1.5 cursor-pointer"
             >
@@ -512,6 +591,7 @@ export default function Sidebar({
             </button>
             <button
               type="button"
+              role="menuitem"
               onClick={() => runAction(toggleArchivedAction, c.id)}
               className="touch-target w-full text-left rounded px-2 py-1.5 text-ui-caption text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900 flex items-center gap-1.5 cursor-pointer"
             >
@@ -520,6 +600,7 @@ export default function Sidebar({
             </button>
             <button
               type="button"
+              role="menuitem"
               onClick={() => {
                 if (isPending) return;
                 setMenuOpenId(null);
@@ -531,7 +612,7 @@ export default function Sidebar({
               <span>{actionDeleteText}</span>
             </button>
           </div>
-        )}
+      </Popover>
       </div>
     </div>
     );
@@ -539,11 +620,11 @@ export default function Sidebar({
 
   return (
     <>
-      {/* Mobile header */}
-      <header
+      {/* Mobile sidebar trigger occupies ChatHeader's reserved leading space. */}
+      <div
         aria-hidden={isOpen ? true : undefined}
         inert={isOpen ? true : undefined}
-        className="flex h-14 shrink-0 items-center gap-3 border-b border-morning-mist bg-nebula-white px-3 dark:border-deep-space dark:bg-twilight-obsidian md:hidden"
+        className="fixed left-2 top-1.5 z-30 md:hidden"
       >
         <button
           type="button"
@@ -556,14 +637,7 @@ export default function Sidebar({
         >
           <Menu className="h-5 w-5" aria-hidden="true" />
         </button>
-        <Link
-          href="/chat"
-          className="inline-flex shrink-0 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
-          aria-label="Nekusora"
-        >
-          <Image src="/icon.svg" alt="" width={36} height={36} className="brightness-0 dark:invert" priority />
-        </Link>
-      </header>
+      </div>
 
       {/* Backdrop overlay for mobile drawer */}
       {isOpen && (
@@ -577,6 +651,8 @@ export default function Sidebar({
       {/* Actual Sidebar Panel */}
       <aside
         id="chat-sidebar"
+        aria-hidden={isMobile && !isOpen ? true : undefined}
+        inert={isMobile && !isOpen ? true : undefined}
         className={clsx(
           "fixed inset-y-0 left-0 z-50 flex min-h-0 w-[min(18rem,calc(100vw-3rem))] max-w-72 shrink-0 flex-col border-r border-morning-mist bg-nebula-white p-4 transform transition-transform duration-200 ease-out dark:border-deep-space dark:bg-[#090b0e] md:static md:z-40 md:h-screen md:translate-x-0 md:transition-[width,min-width,max-width,transform] md:duration-250 md:ease-in-out",
           collapsed ? "md:w-14 md:min-w-14 md:max-w-14 md:p-2" : "md:w-60 md:min-w-60 md:max-w-60 md:p-3",
@@ -668,27 +744,23 @@ export default function Sidebar({
             <>
             {sections.map((section) => (
               <div key={section.key}>
-                <button type="button" onClick={() => toggleGroup(section.key)} className="touch-target flex w-full items-center gap-2 px-3 py-2 text-ui-caption font-medium text-neutral-450 hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sora-blue dark:text-neutral-500 dark:hover:text-neutral-300" aria-expanded={!collapsedGroups.has(section.key)}>
+                <button type="button" onClick={() => toggleGroup(section.key, section.items, section.total)} className="touch-target flex w-full items-center gap-2 px-3 py-2 text-ui-caption font-medium text-neutral-450 hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sora-blue dark:text-neutral-500 dark:hover:text-neutral-300" aria-expanded={!collapsedGroups.has(section.key)}>
                   <span>{section.label}</span>
                   <span className="h-px min-w-4 flex-1 bg-morning-mist/80 dark:bg-deep-space/70" aria-hidden="true" />
-                  <span className="text-neutral-300 dark:text-neutral-700">{section.items.length}</span>
+                  <span className="text-neutral-300 dark:text-neutral-700">{section.total}</span>
                   <ChevronDown className={clsx("h-3 w-3 transition-transform", collapsedGroups.has(section.key) && "-rotate-90")} aria-hidden="true" />
                 </button>
-                {!collapsedGroups.has(section.key) && <div className="space-y-0.5">{section.items.map(renderItem)}</div>}
+                {!collapsedGroups.has(section.key) && <div className="space-y-0.5">
+                  {section.items.map(renderItem)}
+                  {groupHasMore(section) && (
+                    <button type="button" onClick={() => void loadGroup(section.key, section.items)} disabled={groupLoads[section.key]?.loading} aria-busy={groupLoads[section.key]?.loading} className="touch-target flex h-9 w-full items-center justify-center gap-2 rounded-md px-3 text-ui-caption font-medium text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 disabled:cursor-wait disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sora-blue">
+                      {groupLoads[section.key]?.loading && <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+                      {groupLoads[section.key]?.failed ? tSidebar("loadMoreRetry") : groupLoads[section.key]?.loading ? tSidebar("loadingMore") : tSidebar("loadMore")}
+                    </button>
+                  )}
+                </div>}
               </div>
             ))}
-            {navigation.cursor && (
-              <button
-                type="button"
-                onClick={() => void handleLoadMore()}
-                disabled={navigation.loading}
-                aria-busy={navigation.loading}
-                className="touch-target flex h-9 w-full items-center justify-center gap-2 rounded-md px-3 text-ui-caption font-medium text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 disabled:cursor-wait disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sora-blue"
-              >
-                {navigation.loading && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
-                {navigation.failed ? tSidebar("loadMoreRetry") : navigation.loading ? tSidebar("loadingMore") : tSidebar("loadMore")}
-              </button>
-            )}
             </>
           )}
         </div>
@@ -730,6 +802,17 @@ export default function Sidebar({
           if (deleteTargetId) runAction(deleteAction, deleteTargetId);
         }}
       />
+
+      <Modal open={renameTarget !== null} onClose={() => { if (!renameSaving) setRenameTarget(null); }} title={actionRenameText} dialogClassName="m-auto w-[min(420px,92vw)] rounded-lg border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/40">
+        <form onSubmit={(event) => { event.preventDefault(); void submitRename(); }} className="space-y-4">
+          <input autoFocus value={renameTitle} onChange={(event) => { setRenameTitle(event.target.value); setRenameError(false); }} maxLength={200} aria-label={actionRenameText} aria-invalid={renameError} className="w-full rounded-md border border-morning-mist bg-white px-3 py-2 text-ui-body text-space-ink focus:border-sora-blue focus:outline-none focus:ring-2 focus:ring-sora-blue/20" />
+          {renameError && <p role="alert" className="text-ui-caption text-red-600">{tSidebar("renameFailed")}</p>}
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => setRenameTarget(null)} disabled={renameSaving} className="touch-target rounded-md px-3 py-2 text-ui-body text-neutral-600 hover:bg-neutral-100 disabled:opacity-50">{tCommon("cancel")}</button>
+            <button type="submit" disabled={renameSaving || !renameTitle.trim()} className="touch-target inline-flex items-center gap-2 rounded-md bg-sora-blue px-3 py-2 text-ui-body font-medium text-white hover:bg-sora-blue-hover disabled:opacity-50">{renameSaving && <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />}{renameSaveText}</button>
+          </div>
+        </form>
+      </Modal>
 
       <Modal open={searchOpen} onClose={() => setSearchOpen(false)} title={searchText} dialogClassName="m-auto w-[min(720px,92vw)] rounded-xl border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/40 dark:border-deep-space dark:bg-twilight-obsidian dark:text-nebula-silver">
         <div className="space-y-4">

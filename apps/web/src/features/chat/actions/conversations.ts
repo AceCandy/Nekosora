@@ -7,7 +7,13 @@ import { requireSession } from "@/lib/session";
 import { getConversationTitleState } from "@/lib/conversation-title/service";
 import type { ReasoningLevel } from "@/db/types";
 import {
+  CONVERSATION_GROUP_KEYS,
+  CONVERSATION_GROUP_PAGE_SIZE,
   CONVERSATION_PAGE_SIZE,
+  type ConversationGroupBoundaries,
+  type ConversationGroupKey,
+  type ConversationGroupPage,
+  type ConversationGroupSummary,
   type ConversationNavigationItem,
   type ConversationNavigationPage,
 } from "@/features/chat/model/conversationNavigation";
@@ -31,6 +37,25 @@ const conversationCursorSchema = z.object({
   updatedAt: z.string().datetime({ precision: 6 }),
   id: z.string().min(1),
 });
+
+const conversationGroupBoundariesSchema = z.object({
+  todayStart: z.string().datetime(),
+  yesterdayStart: z.string().datetime(),
+  dayBeforeYesterdayStart: z.string().datetime(),
+  sevenDaysAgoStart: z.string().datetime(),
+  thirtyDaysAgoStart: z.string().datetime(),
+}).refine((value) => {
+  const times = Object.values(value).map(Date.parse);
+  return times.every((time, index) => index === 0 || times[index - 1] > time);
+}, "会话分组时间边界无效");
+
+const conversationGroupKeySchema = z.enum(CONVERSATION_GROUP_KEYS);
+const conversationGroupCursorSchema = z.object({
+  updatedAt: z.string().datetime({ precision: 6 }),
+  id: z.string().min(1),
+});
+
+type ConversationGroupCursor = z.infer<typeof conversationGroupCursorSchema>;
 
 type ConversationCursor = z.infer<typeof conversationCursorSchema>;
 
@@ -58,6 +83,21 @@ function decodeConversationCursor(cursor: string): ConversationCursor {
   }
 }
 
+function decodeConversationGroupCursor(cursor: string): ConversationGroupCursor {
+  try {
+    if (cursor.length > 2048) throw new Error("cursor_too_long");
+    return conversationGroupCursorSchema.parse(
+      JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")),
+    );
+  } catch {
+    throw new Error("会话分组分页游标无效");
+  }
+}
+
+function encodeConversationGroupCursor(cursor: ConversationGroupCursor): string {
+  return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
+}
+
 function toConversationNavigationItem(row: {
   id: string;
   title: string;
@@ -78,6 +118,21 @@ function toConversationNavigationItem(row: {
     sortUpdatedAt: row.sortUpdatedAt,
     rank: Number(row.rank),
   };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function conversationGroupWhere(s: any, key: ConversationGroupKey, boundaries: ConversationGroupBoundaries) {
+  const active = and(eq(s.conversations.archived, false), eq(s.conversations.pinned, false));
+  switch (key) {
+    case "pinned": return and(eq(s.conversations.archived, false), eq(s.conversations.pinned, true));
+    case "archived": return eq(s.conversations.archived, true);
+    case "today": return and(active, sql`${s.conversations.updatedAt} >= ${boundaries.todayStart}::timestamptz`);
+    case "yesterday": return and(active, sql`${s.conversations.updatedAt} >= ${boundaries.yesterdayStart}::timestamptz`, sql`${s.conversations.updatedAt} < ${boundaries.todayStart}::timestamptz`);
+    case "dayBeforeYesterday": return and(active, sql`${s.conversations.updatedAt} >= ${boundaries.dayBeforeYesterdayStart}::timestamptz`, sql`${s.conversations.updatedAt} < ${boundaries.yesterdayStart}::timestamptz`);
+    case "withinWeek": return and(active, sql`${s.conversations.updatedAt} >= ${boundaries.sevenDaysAgoStart}::timestamptz`, sql`${s.conversations.updatedAt} < ${boundaries.dayBeforeYesterdayStart}::timestamptz`);
+    case "withinMonth": return and(active, sql`${s.conversations.updatedAt} >= ${boundaries.thirtyDaysAgoStart}::timestamptz`, sql`${s.conversations.updatedAt} < ${boundaries.sevenDaysAgoStart}::timestamptz`);
+    case "earlier": return and(active, sql`${s.conversations.updatedAt} < ${boundaries.thirtyDaysAgoStart}::timestamptz`);
+  }
 }
 
 /**
@@ -212,6 +267,77 @@ export async function listConversations(cursor?: string | null): Promise<Convers
           updatedAt: last.sortUpdatedAt,
           id: last.id,
         })
+      : null,
+  };
+}
+
+/** 返回各侧栏分组的真实总数，不加载会话正文。 */
+export async function getConversationGroupSummary(
+  input: ConversationGroupBoundaries,
+): Promise<ConversationGroupSummary[]> {
+  const boundaries = conversationGroupBoundariesSchema.parse(input);
+  const user = await requireSession();
+  const db = await getDb();
+  const s = S();
+  const projection = Object.fromEntries(CONVERSATION_GROUP_KEYS.map((key) => [
+    key,
+    sql<number>`count(*) filter (where ${conversationGroupWhere(s, key, boundaries)})`,
+  ]));
+  const [row] = await db
+    .select(projection)
+    .from(s.conversations)
+    .where(eq(s.conversations.userId, user.id));
+  return CONVERSATION_GROUP_KEYS.map((key) => ({ key, total: Number(row?.[key] ?? 0) }));
+}
+
+/** 按单个分组继续读取一页会话。 */
+export async function listConversationGroup(
+  groupInput: ConversationGroupKey,
+  boundariesInput: ConversationGroupBoundaries,
+  cursor?: string | null,
+): Promise<ConversationGroupPage> {
+  const key = conversationGroupKeySchema.parse(groupInput);
+  const boundaries = conversationGroupBoundariesSchema.parse(boundariesInput);
+  const decoded = cursor ? decodeConversationGroupCursor(cursor) : null;
+  const user = await requireSession();
+  const db = await getDb();
+  const s = S();
+  const rank = conversationRank(s);
+  const cursorWhere = decoded
+    ? or(
+        lt(s.conversations.updatedAt, sql`${decoded.updatedAt}::timestamptz`),
+        and(
+          eq(s.conversations.updatedAt, sql`${decoded.updatedAt}::timestamptz`),
+          lt(s.conversations.id, decoded.id),
+        ),
+      )
+    : undefined;
+  const rows = await db
+    .select({
+      id: s.conversations.id,
+      title: s.conversations.title,
+      pinned: s.conversations.pinned,
+      archived: s.conversations.archived,
+      generating: activeRunExists(s),
+      updatedAt: s.conversations.updatedAt,
+      sortUpdatedAt: sql<string>`to_char(${s.conversations.updatedAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+      rank,
+    })
+    .from(s.conversations)
+    .where(and(
+      eq(s.conversations.userId, user.id),
+      conversationGroupWhere(s, key, boundaries),
+      cursorWhere,
+    ))
+    .orderBy(desc(s.conversations.updatedAt), desc(s.conversations.id))
+    .limit(CONVERSATION_GROUP_PAGE_SIZE + 1);
+  const pageRows = rows.slice(0, CONVERSATION_GROUP_PAGE_SIZE) as Array<Parameters<typeof toConversationNavigationItem>[0]>;
+  const last = pageRows.at(-1);
+  return {
+    key,
+    items: pageRows.map(toConversationNavigationItem),
+    nextCursor: rows.length > CONVERSATION_GROUP_PAGE_SIZE && last
+      ? encodeConversationGroupCursor({ updatedAt: last.sortUpdatedAt, id: last.id })
       : null,
   };
 }
@@ -499,15 +625,17 @@ export async function deleteConversation(id: string) {
 
 /** 重命名会话。 */
 export async function renameConversation(id: string, title: string) {
+  const parsedId = z.string().min(1).parse(id);
+  const parsedTitle = z.string().trim().min(1).max(200).parse(title);
   const user = await requireSession();
   const db = await getDb();
   const [conv] = await db
     .select({ userId: S().conversations.userId })
     .from(S().conversations)
-    .where(eq(S().conversations.id, id))
+    .where(eq(S().conversations.id, parsedId))
     .limit(1);
   if (!conv || conv.userId !== user.id) throw new Error("无权操作");
-  await db.update(S().conversations).set({ title, updatedAt: new Date() }).where(eq(S().conversations.id, id));
+  await db.update(S().conversations).set({ title: parsedTitle, updatedAt: new Date() }).where(eq(S().conversations.id, parsedId));
   revalidatePath("/chat", "layout");
 }
 
