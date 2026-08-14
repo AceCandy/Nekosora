@@ -981,3 +981,24 @@ Added protocol-native model discovery, accepted inbound OpenAI stream_options, a
 ### Status
 
 [OK] **Completed**
+
+
+## Session 105: Chat sidebar interaction polish
+
+**Date**: 2026-08-14
+**Task**: Chat sidebar interaction polish
+**Branch**: `main`
+
+### Summary
+
+完成 Chat 侧栏分组加载、会话操作与重排定位、菜单浮层和焦点可见性、移动端标题栏及研究状态修复；补齐回归验证并归档任务。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `cc80cad` | (see git log) |
+
+### Status
+
+[OK] **Completed**
