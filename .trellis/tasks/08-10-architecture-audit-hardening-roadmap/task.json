@@ -26,7 +26,8 @@
     "08-10-api-key-data-path-hardening",
     "08-10-ci-artifact-quality-gates",
     "08-10-observability-growth-controls",
-    "08-10-chat-navigation-client-load"
+    "08-10-chat-navigation-client-load",
+    "08-14-chat-sidebar-interaction-polish"
   ],
   "parent": null,
   "relatedFiles": [],
