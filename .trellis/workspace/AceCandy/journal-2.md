@@ -1002,3 +1002,24 @@ Added protocol-native model discovery, accepted inbound OpenAI stream_options, a
 ### Status
 
 [OK] **Completed**
+
+
+## Session 106: Complete architecture hardening roadmap
+
+**Date**: 2026-08-14
+**Task**: Complete architecture hardening roadmap
+**Branch**: `main`
+
+### Summary
+
+依据用户确认，补齐架构审计加固路线图的最终验收记录，纳入 Chat 侧栏子任务，确认九项子任务均已归档后完成父任务归档。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `058774d` | (see git log) |
+
+### Status
+
+[OK] **Completed**
