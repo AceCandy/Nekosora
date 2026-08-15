@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 106
-- **Last Active**: 2026-08-14
+- **Total Sessions**: 107
+- **Last Active**: 2026-08-15
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~1025 | Active |
+| `journal-2.md` | ~1046 | Active |
 | `journal-1.md` | ~1981 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 107 | 2026-08-15 | Constrain chat memory boundaries | `c7fb2ed` | `main` |
 | 106 | 2026-08-14 | Complete architecture hardening roadmap | `058774d` | `main` |
 | 105 | 2026-08-14 | Chat sidebar interaction polish | `cc80cad` | `main` |
 | 104 | 2026-08-13 | Chat 导航有界加载 | `1d1df69` | `main` |

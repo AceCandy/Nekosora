@@ -1023,3 +1023,24 @@ Added protocol-native model discovery, accepted inbound OpenAI stream_options, a
 ### Status
 
 [OK] **Completed**
+
+
+## Session 107: Constrain chat memory boundaries
+
+**Date**: 2026-08-15
+**Task**: Constrain chat memory boundaries
+**Branch**: `main`
+
+### Summary
+
+修复自动 project 记忆边界：仅抽取用户消息，低信息输入不写入或召回，Mem0 增加保守指令并将召回阈值设为 0.5；补齐回归测试与记忆系统契约。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c7fb2ed` | (see git log) |
+
+### Status
+
+[OK] **Completed**
