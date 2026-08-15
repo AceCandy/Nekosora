@@ -169,6 +169,11 @@ export function renderSyncPlan(plan: SyncPlan): string {
       + reference.operations.map(renderOperation).join(","),
     );
   }
+  for (const addition of plan.additions) {
+    lines.push(
+      `new ${auditIdentifier(addition.canonicalModelId)} ${addition.match.kind}`,
+    );
+  }
   for (const change of plan.changes) {
     lines.push(
       `accepted ${auditIdentifier(change.canonicalModelId)} `
@@ -177,7 +182,8 @@ export function renderSyncPlan(plan: SyncPlan): string {
   }
   lines.push(
     `summary matched=${plan.matched} unchanged=${plan.unchanged} `
-    + `accepted=${plan.changes.length} references=${plan.references.length} `
+    + `additions=${plan.additions.length} accepted=${plan.changes.length} `
+    + `references=${plan.references.length} `
     + `rejected=${plan.rejections.length}`,
   );
   return lines.join("\n");

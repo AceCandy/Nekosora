@@ -46,6 +46,19 @@ describe("model catalog sync CLI policy", () => {
 
   it("dry-run 审计不输出可疑标识或 capability 原始值", () => {
     const plan: SyncPlan = {
+      additions: [{
+        canonicalModelId: "https://secret.example/new-model",
+        name: "ignored",
+        match: {
+          provider: "vendor",
+          modelKey: "new-model",
+          via: "vendor/new-model",
+          kind: "provider-id",
+          authority: "direct",
+        },
+        capabilities: {},
+        enabled: true,
+      }],
       changes: [{
         canonicalModelId: "https://secret.example/model",
         name: "ignored",
@@ -78,6 +91,7 @@ describe("model catalog sync CLI policy", () => {
 
     const output = renderSyncPlan(plan);
     expect(output).toContain("redacted-model");
+    expect(output).toContain("new redacted-model provider-id");
     expect(output).toContain("external-model reasoning:invalid_map_value");
     expect(output).toContain("capability.thinkingLevelMap=set");
     for (const sensitive of ["secret.example", "/private", "Authorization", "Bearer-secret"]) {

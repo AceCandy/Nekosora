@@ -125,6 +125,31 @@ describe("match", () => {
 });
 
 describe("decodePiModelsApi", () => {
+  it("解码新增模型名称和 adaptive thinking 证据", () => {
+    const decoded = decodePiModelsApi({
+      anthropic: {
+        "claude-sonnet-5": {
+          id: "claude-sonnet-5",
+          name: " Claude Sonnet 5 ",
+          compat: { forceAdaptiveThinking: true },
+        },
+        invalidName: { id: "invalidName", name: "   " },
+      },
+    });
+
+    expect(decoded.catalog.anthropic["claude-sonnet-5"]).toMatchObject({
+      name: "Claude Sonnet 5",
+      compat: { forceAdaptiveThinking: true },
+    });
+    expect(decoded.catalog.anthropic.invalidName.name).toBeUndefined();
+    expect(decoded.rejections).toContainEqual({
+      provider: "anthropic",
+      modelKey: "invalidName",
+      scope: "model",
+      code: "invalid_model_name",
+    });
+  });
+
   it("保留 missing/false/true 三态和合法供应商映射值", () => {
     const decoded = decodePiModelsApi({
       openai: {
@@ -203,8 +228,10 @@ describe("decodePiModelsApi", () => {
         brokenModel: null,
         badReasoning: { id: "badReasoning", reasoning: "true" },
         badCompat: { id: "badCompat", compat: [] },
+        nullCompat: { id: "nullCompat", compat: null },
         badFormat: { id: "badFormat", compat: { thinkingFormat: "invented" } },
         badMap: { id: "badMap", thinkingLevelMap: [] },
+        nullMap: { id: "nullMap", thinkingLevelMap: null },
         badInput: { id: "badInput", input: ["text", 1] },
         badContext: { id: "badContext", contextWindow: -1 },
         badMax: { id: "badMax", maxTokens: Number.NaN },
@@ -226,8 +253,10 @@ describe("decodePiModelsApi", () => {
       { provider: "zai", modelKey: "brokenModel", scope: "model", code: "invalid_model" },
       { provider: "zai", modelKey: "badReasoning", scope: "reasoning", code: "invalid_reasoning_boolean" },
       { provider: "zai", modelKey: "badCompat", scope: "reasoning", code: "invalid_compat_object" },
+      { provider: "zai", modelKey: "nullCompat", scope: "reasoning", code: "invalid_compat_object" },
       { provider: "zai", modelKey: "badFormat", scope: "reasoning", code: "invalid_thinking_format" },
       { provider: "zai", modelKey: "badMap", scope: "reasoning", code: "invalid_map_shape" },
+      { provider: "zai", modelKey: "nullMap", scope: "reasoning", code: "invalid_map_shape" },
       { provider: "zai", modelKey: "badInput", scope: "vision", code: "invalid_input" },
       { provider: "zai", modelKey: "badContext", scope: "model", code: "invalid_context_window" },
       { provider: "zai", modelKey: "badMax", scope: "model", code: "invalid_max_tokens" },
@@ -262,6 +291,155 @@ describe("decodePiModelsApi", () => {
 });
 
 describe("planCatalogSync", () => {
+  it("为缺失的 Gemini 3.7 Flash 生成默认启用的新增候选", () => {
+    const plan = planCatalogSync([], {
+      google: {
+        "gemini-3.7-flash": {
+          id: "gemini-3.7-flash",
+          name: "Gemini 3.7 Flash",
+          api: "google-generative-ai",
+          reasoning: true,
+          input: ["text", "image"],
+          contextWindow: 1048576,
+          maxTokens: 65536,
+          thinkingLevelMap: { off: null },
+          compat: { thinkingFormat: "google" },
+        },
+      },
+    });
+
+    expect(plan.additions).toEqual([expect.objectContaining({
+      canonicalModelId: "gemini-3.7-flash",
+      name: "Gemini 3.7 Flash",
+      match: expect.objectContaining({
+        provider: "google",
+        modelKey: "gemini-3.7-flash",
+        authority: "direct",
+      }),
+      capabilities: {
+        tools: true,
+        vision: true,
+        reasoning: true,
+        systemPrompt: true,
+        thinkingFormat: "google",
+        thinkingLevelMap: { off: null },
+      },
+      contextWindow: 1048576,
+      maxOutputTokens: 65536,
+      enabled: true,
+    })]);
+  });
+
+  it("对象 key 与模型 ID 不一致时不把来源标记为 direct 新增", () => {
+    const plan = planCatalogSync([], {
+      google: {
+        alias: {
+          id: "gemini-3.7-flash",
+          name: "Gemini 3.7 Flash",
+        },
+      },
+    });
+
+    expect(plan.additions).toEqual([]);
+  });
+
+  it("已有 canonical 或 alias 占用官方 source 时不重复新增", () => {
+    const payload = {
+      google: {
+        "gemini-3.7-flash": {
+          id: "gemini-3.7-flash",
+          name: "Gemini 3.7 Flash",
+          input: ["text", "image"],
+        },
+      },
+    };
+    const direct = planCatalogSync([row({ canonicalModelId: "gemini-3.7-flash" })], payload);
+    const alias = planCatalogSync([row({
+      canonicalModelId: "gemini-current",
+      aliases: ["google/gemini-3.7-flash"],
+    })], payload);
+
+    expect(direct.additions).toEqual([]);
+    expect(alias.additions).toEqual([]);
+  });
+
+  it("缺少有效名称时拒绝新增", () => {
+    const plan = planCatalogSync([], {
+      google: {
+        "gemini-3.7-flash": { id: "gemini-3.7-flash" },
+      },
+    });
+
+    expect(plan.additions).toEqual([]);
+    expect(plan.rejections).toContainEqual(expect.objectContaining({
+      canonicalModelId: "gemini-3.7-flash",
+      code: "missing_model_name",
+    }));
+  });
+
+  it("reasoning 证据不完整时仍新增基础模型但不伪造推理档位", () => {
+    const plan = planCatalogSync([], {
+      xai: {
+        "grok-4.6": {
+          id: "grok-4.6",
+          name: "Grok 4.6",
+          reasoning: true,
+          input: ["text", "image"],
+        },
+      },
+    });
+
+    expect(plan.additions[0].capabilities).toEqual({
+      tools: true,
+      vision: true,
+      systemPrompt: true,
+    });
+    expect(plan.rejections).toContainEqual(expect.objectContaining({
+      canonicalModelId: "grok-4.6",
+      code: "incomplete_reasoning_bundle",
+    }));
+  });
+
+  it("缺少 thinking format 时省略整个 reasoning bundle", () => {
+    const plan = planCatalogSync([], {
+      google: {
+        "gemini-3.7-flash": {
+          id: "gemini-3.7-flash",
+          name: "Gemini 3.7 Flash",
+          reasoning: true,
+          thinkingLevelMap: { low: "low" },
+        },
+      },
+    });
+
+    expect(plan.additions[0].capabilities).toEqual({ tools: true, systemPrompt: true });
+    expect(plan.rejections).toContainEqual(expect.objectContaining({
+      canonicalModelId: "gemini-3.7-flash",
+      code: "incomplete_reasoning_bundle",
+    }));
+  });
+
+  it("adaptive thinking 证据转换为目录语义", () => {
+    const plan = planCatalogSync([], {
+      anthropic: {
+        "claude-sonnet-5": {
+          id: "claude-sonnet-5",
+          name: "Claude Sonnet 5",
+          reasoning: true,
+          input: ["text", "image"],
+          thinkingLevelMap: { xhigh: "xhigh", max: "max" },
+          compat: { forceAdaptiveThinking: true },
+        },
+      },
+    });
+
+    expect(plan.additions[0].capabilities).toMatchObject({
+      reasoning: true,
+      thinkingFormat: "anthropic-adaptive",
+      thinkingLevelMap: { xhigh: "xhigh", max: "max" },
+    });
+  });
+
   it("direct 匹配可升降 vision 并更新明确存在的窗口字段", () => {
     const plan = planCatalogSync([row({
       canonicalModelId: "gpt-5-chat",
@@ -610,6 +788,22 @@ describe("deterministic plan", () => {
     expect(JSON.stringify(first)).toBe(JSON.stringify(second));
     expect(first.changes.map((change) => change.canonicalModelId)).toEqual(["a-model", "b-model"]);
   });
+
+  it("新增候选按 canonical ID 稳定排序", () => {
+    const plan = planCatalogSync([], {
+      "qwen-token-plan": {
+        "qwen3.8-max": { id: "qwen3.8-max", name: "Qwen 3.8 Max" },
+      },
+      google: {
+        "gemini-3.7-flash": { id: "gemini-3.7-flash", name: "Gemini 3.7 Flash" },
+      },
+    });
+
+    expect(plan.additions.map((addition) => addition.canonicalModelId)).toEqual([
+      "gemini-3.7-flash",
+      "qwen3.8-max",
+    ]);
+  });
 });
 
 describe("web search capabilities", () => {
@@ -717,6 +911,45 @@ describe("passesInvariants", () => {
 });
 
 describe("buildCatalogSyncSql", () => {
+  it("新增候选生成默认启用且幂等的 INSERT", () => {
+    const plan = planCatalogSync([], {
+      google: {
+        "gemini-3.7-flash": {
+          id: "gemini-3.7-flash",
+          name: "Gemini 3.7 Flash",
+          input: ["text", "image"],
+          contextWindow: 1048576,
+          maxTokens: 65536,
+          reasoning: true,
+          thinkingLevelMap: { off: null },
+          compat: { thinkingFormat: "google" },
+        },
+      },
+    });
+
+    const [statement] = buildCatalogSyncSql(plan);
+    expect(statement).toContain('INSERT INTO "model_catalog"');
+    expect(statement).toContain("'gemini-3.7-flash'");
+    expect(statement).toContain("'chat'");
+    expect(statement).toContain("'Gemini 3.7 Flash'");
+    expect(statement).toContain('"context_window"');
+    expect(statement).toContain("1048576");
+    expect(statement).toContain('"max_output_tokens"');
+    expect(statement).toContain("65536");
+    expect(statement).toContain("true");
+    expect(statement).toContain('ON CONFLICT ("canonical_model_id") DO NOTHING');
+  });
+
+  it("新增模型名称按 SQL 字面量转义", () => {
+    const plan = planCatalogSync([], {
+      google: {
+        "gemini-3.7-flash": { id: "gemini-3.7-flash", name: "Gemini's Flash" },
+      },
+    });
+
+    expect(buildCatalogSyncSql(plan)[0]).toContain("'Gemini''s Flash'");
+  });
+
   it("只消费 accepted changes,使用定向 JSONB delete/patch 和幂等谓词", () => {
     const plan = planCatalogSync([
       row({

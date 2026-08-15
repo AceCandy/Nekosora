@@ -470,3 +470,55 @@ describe("route tool capability migration", () => {
     expect(snapshot.tables["public.routes"]?.columns.supports_tools?.default).toBe(true);
   });
 });
+
+describe("mainstream model catalog sync migration", () => {
+  const migrationPath = "drizzle/pg/0015_model_catalog_sync.sql";
+  const journalPath = "drizzle/pg/meta/_journal.json";
+  const previousSnapshotPath = "drizzle/pg/meta/0014_snapshot.json";
+  const snapshotPath = "drizzle/pg/meta/0015_snapshot.json";
+
+  it("只新增四个已核验主流型号并保持幂等", () => {
+    const migration = readFileSync(migrationPath, "utf8");
+    const statements = migration.split("--> statement-breakpoint");
+    expect(migration).toMatch(/source-sha256: [a-f0-9]{64}/);
+    expect(statements).toHaveLength(4);
+    expect([...migration.matchAll(/VALUES \('([^']+)'/g)].map((match) => match[1])).toEqual([
+      "gemini-3.7-flash",
+      "glm-5.3",
+      "grok-4.6",
+      "qwen3.8-max",
+    ]);
+    expect(migration.match(/ON CONFLICT \("canonical_model_id"\) DO NOTHING/g)).toHaveLength(4);
+    expect(migration).not.toContain("glm-5.2-highspeed");
+    const gemini = statements.find((statement) => statement.includes("'gemini-3.7-flash'"));
+    expect(gemini).toContain('"thinkingFormat":"google"');
+    expect(gemini).toContain('"thinkingLevelMap":{"low":"low","medium":"medium","high":"high"}');
+    const grok = statements.find((statement) => statement.includes("'grok-4.6'"));
+    expect(grok).not.toContain('"max_output_tokens"');
+    const qwen = statements.find((statement) => statement.includes("'qwen3.8-max'"));
+    expect(qwen).toContain('{"systemPrompt":true,"tools":true}');
+    expect(qwen).not.toContain('"context_window"');
+    expect(qwen).not.toContain('"max_output_tokens"');
+  });
+
+  it("追加连续 journal 并保持 schema snapshot 不变", () => {
+    const journal = JSON.parse(readFileSync(journalPath, "utf8")) as {
+      entries: Array<{ idx: number; tag: string; when: number; breakpoints: boolean }>;
+    };
+    const previous = JSON.parse(readFileSync(previousSnapshotPath, "utf8")) as Record<string, unknown>;
+    const snapshot = JSON.parse(readFileSync(snapshotPath, "utf8")) as Record<string, unknown>;
+    const entryIndex = journal.entries.findIndex((entry) => entry.idx === 15);
+    expect(journal.entries[entryIndex]).toMatchObject({
+      idx: 15,
+      tag: "0015_model_catalog_sync",
+      breakpoints: true,
+    });
+    expect(journal.entries[entryIndex]?.when).toBeGreaterThan(
+      journal.entries[entryIndex - 1]?.when ?? 0,
+    );
+    expect(snapshot.prevId).toBe(previous.id);
+    const { id: _previousId, prevId: _previousPrevId, ...previousSchema } = previous;
+    const { id: _snapshotId, prevId: _snapshotPrevId, ...snapshotSchema } = snapshot;
+    expect(snapshotSchema).toEqual(previousSchema);
+  });
+});

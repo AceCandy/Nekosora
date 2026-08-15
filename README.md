@@ -119,7 +119,7 @@ docker compose up -d          # 起 PostgreSQL(+ Redis 可选)
 pnpm sync:pi-models
 ```
 
-离线审计或生成迁移时，必须显式指定已审查的本地 JSON snapshot。`--write` 只把 planner 接受的 direct 变更写入下一条 PostgreSQL migration:
+离线审计或生成迁移时，必须显式指定已审查的本地 JSON snapshot。`--write` 会把 planner 接受的已有模型 direct 更新和缺失主流模型新增写入下一条 PostgreSQL migration:
 
 ```bash
 PI_MODELS_FILE=/path/to/pi-models.json pnpm sync:pi-models
@@ -133,7 +133,7 @@ pnpm --filter @nekusora/web exec vitest run src/lib/reasoning.test.ts src/lib/sy
 pnpm db:migrate:pg
 ```
 
-同步器不再支持批量导入缺失模型、混合更新或直接 apply。新增模型须核对官方资料并显式编写迁移；聚合商、区域变体和模糊匹配只出现在审计报告中。
+主流家族及官方 Provider 规则集中在 `packages/core/src/lib/mainstream-models.ts`。新增候选默认启用并具备 tools/system prompt；vision、reasoning 和 token 元数据必须在迁移发布前核对官方资料。同步器不直接 apply，也不创建 Provider、模型实例或路由；聚合商、区域/专项变体和模糊匹配不会自动新增。
 
 ### 调用网关(OpenAI 兼容)
 

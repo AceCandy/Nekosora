@@ -10,6 +10,7 @@
  *   3. 显示 ⇒ 可调,只显示真实拥有的强度档
  */
 import { getSupportedReasoningLevels } from "@/lib/reasoning";
+import { getMainstreamModelFamily } from "@/lib/mainstream-models";
 import type { ModelCapabilities, ThinkingFormat, WebSearchFormat } from "@/db/types";
 
 /** pi 模型条目的最小结构(pi.dev/api/models 子集)。 */
@@ -17,7 +18,11 @@ export interface PiModel {
   id: string;
   name?: string;
   api?: string;
-  compat?: { thinkingFormat?: string; supportsReasoningEffort?: boolean };
+  compat?: {
+    thinkingFormat?: string;
+    supportsReasoningEffort?: boolean;
+    forceAdaptiveThinking?: boolean;
+  };
   reasoning?: boolean;
   thinkingLevelMap?: Record<string, string | null>;
   input?: string[];
@@ -43,6 +48,8 @@ export type SyncRejectionCode =
   | "invalid_provider_models"
   | "invalid_model"
   | "invalid_model_id"
+  | "invalid_model_name"
+  | "missing_model_name"
   | "invalid_reasoning_boolean"
   | "invalid_compat_object"
   | "invalid_map_key"
@@ -54,6 +61,7 @@ export type SyncRejectionCode =
   | "invalid_context_window"
   | "invalid_max_tokens"
   | "invalid_reasoning_bundle"
+  | "incomplete_reasoning_bundle"
   | "incompatible_reasoning_effort"
   | "reasoning_disabled_extras_ignored"
   | "ambiguous_direct_match";
@@ -202,7 +210,18 @@ export interface SyncChange {
   nextCapabilities: ModelCapabilities;
 }
 
+export interface SyncAddition {
+  canonicalModelId: string;
+  name: string;
+  match: MatchEvidence;
+  capabilities: ModelCapabilities;
+  contextWindow?: number;
+  maxOutputTokens?: number;
+  enabled: true;
+}
+
 export interface SyncPlan {
+  additions: SyncAddition[];
   changes: SyncChange[];
   references: SyncChange[];
   rejections: SyncRejection[];
@@ -427,6 +446,16 @@ export function decodePiModelsApi(data: unknown): PiDecodeResult {
             code: "invalid_compat_boolean",
           });
         }
+        if (typeof compatRaw.forceAdaptiveThinking === "boolean") {
+          compat.forceAdaptiveThinking = compatRaw.forceAdaptiveThinking;
+        } else if (compatRaw.forceAdaptiveThinking !== undefined) {
+          rejections.push({
+            provider,
+            modelKey,
+            scope: "reasoning",
+            code: "invalid_compat_boolean",
+          });
+        }
       } else if (compatRaw !== undefined) {
         rejections.push({
           provider,
@@ -495,9 +524,15 @@ export function decodePiModelsApi(data: unknown): PiDecodeResult {
       if (m.maxTokens !== undefined && maxTokens === undefined) {
         rejections.push({ provider, modelKey, scope: "model", code: "invalid_max_tokens" });
       }
+      let name: string | undefined;
+      if (typeof m.name === "string" && m.name.trim().length > 0) {
+        name = m.name.trim();
+      } else if (m.name !== undefined) {
+        rejections.push({ provider, modelKey, scope: "model", code: "invalid_model_name" });
+      }
       bucket[modelKey] = {
-        id: m.id,
-        name: typeof m.name === "string" ? m.name : undefined,
+        id: m.id.trim(),
+        name,
         api: typeof m.api === "string" ? m.api : undefined,
         compat: compat && Object.keys(compat).length > 0 ? compat : undefined,
         reasoning,
@@ -584,9 +619,42 @@ function buildCatalogChangeSql(change: SyncChange): string {
   ].join("\n");
 }
 
-/** SQL 只消费 planner 已接受的 changes;reference/rejection 无法进入写路径。 */
+function buildCatalogAdditionSql(addition: SyncAddition): string {
+  const columns = [
+    "canonical_model_id",
+    "name",
+    "model_type",
+    "capabilities",
+    "enabled",
+  ];
+  const values = [
+    sqlLit(addition.canonicalModelId),
+    sqlLit(addition.name),
+    sqlLit("chat"),
+    `${sqlLit(stableJson(addition.capabilities))}::jsonb`,
+    "true",
+  ];
+  if (addition.contextWindow !== undefined) {
+    columns.push("context_window");
+    values.push(String(addition.contextWindow));
+  }
+  if (addition.maxOutputTokens !== undefined) {
+    columns.push("max_output_tokens");
+    values.push(String(addition.maxOutputTokens));
+  }
+  return [
+    `INSERT INTO "model_catalog" (${columns.map((column) => `"${column}"`).join(", ")})`,
+    `VALUES (${values.join(", ")})`,
+    'ON CONFLICT ("canonical_model_id") DO NOTHING;',
+  ].join("\n");
+}
+
+/** SQL 只消费 planner 已接受的 additions/changes;reference/rejection 无法进入写路径。 */
 export function buildCatalogSyncSql(plan: SyncPlan): string[] {
-  return plan.changes.map(buildCatalogChangeSql);
+  return [
+    ...plan.additions.map(buildCatalogAdditionSql),
+    ...plan.changes.map(buildCatalogChangeSql),
+  ];
 }
 
 const REASONING_CAPABILITY_KEYS: Array<keyof ModelCapabilities> = [
@@ -631,6 +699,67 @@ function validReasoningBundle(capabilities: ModelCapabilities): SyncRejectionCod
     return "invalid_reasoning_bundle";
   }
   return null;
+}
+
+function buildNewCapabilities(
+  pi: PiModel,
+  matchResult: MatchResult,
+  decodeIssues: SyncRejection[],
+): { capabilities: ModelCapabilities; rejections: SyncRejection[] } {
+  const capabilities: ModelCapabilities = { tools: true, systemPrompt: true };
+  const rejections: SyncRejection[] = [];
+  const baseRejection = {
+    provider: matchResult.provider,
+    modelKey: matchResult.modelKey,
+    canonicalModelId: pi.id,
+    scope: "reasoning" as const,
+  };
+
+  if (!decodeIssues.some((issue) => issue.scope === "vision") && pi.input?.includes("image")) {
+    capabilities.vision = true;
+  }
+  const webSearchFormat = webSearchFormatFor(matchResult);
+  if (webSearchFormat) capabilities.webSearchFormat = webSearchFormat;
+
+  if (pi.reasoning !== true) return { capabilities, rejections };
+  if (decodeIssues.some((issue) => issue.scope === "reasoning")) {
+    return { capabilities, rejections };
+  }
+  if (pi.thinkingLevelMap === undefined) {
+    rejections.push({ ...baseRejection, code: "incomplete_reasoning_bundle" });
+    return { capabilities, rejections };
+  }
+
+  const candidate: ModelCapabilities = {
+    ...capabilities,
+    reasoning: true,
+    thinkingLevelMap: pi.thinkingLevelMap,
+  };
+  const piFormat = pi.compat?.forceAdaptiveThinking
+    ? "anthropic-adaptive"
+    : pi.compat?.thinkingFormat;
+  if (!piFormat || AGGREGATOR_FORMATS.has(piFormat)) {
+    rejections.push({ ...baseRejection, code: "incomplete_reasoning_bundle" });
+    return { capabilities, rejections };
+  }
+  candidate.thinkingFormat = piFormat as ThinkingFormat;
+  if (
+    pi.compat?.supportsReasoningEffort
+    && candidate.thinkingFormat
+    && REASONING_EFFORT_FORMATS.has(candidate.thinkingFormat)
+  ) {
+    candidate.reasoningEffort = true;
+  }
+
+  const invalidCode = validReasoningBundle(candidate);
+  if (invalidCode) {
+    rejections.push({ ...baseRejection, code: invalidCode });
+    return { capabilities, rejections };
+  }
+  return {
+    capabilities: canonicalJsonValue(candidate) as ModelCapabilities,
+    rejections,
+  };
 }
 
 function buildReasoningCandidate(
@@ -777,12 +906,18 @@ function buildOperations(
 /** 对现有 catalog 行做确定性对齐计划;reference proposal 永不进入 changes。 */
 export function planCatalogSync(rows: CatalogRow[], payload: unknown): SyncPlan {
   const decoded = decodePiModelsApi(payload);
+  const additions: SyncAddition[] = [];
   const changes: SyncChange[] = [];
   const references: SyncChange[] = [];
   const generic: string[] = [];
   const unmatchedCatalog: string[] = [];
   const plannerRejections: SyncRejection[] = [];
   const canonicalBySource = new Map<string, string[]>();
+  const existingIdentifiers = new Set(rows.flatMap((row) =>
+    [row.canonicalModelId, ...(row.aliases ?? [])]
+      .map((identifier) => identifier.trim().toLowerCase())
+      .filter(Boolean)));
+  const plannedCanonicalIds = new Set(rows.map((row) => row.canonicalModelId.toLowerCase()));
   let matched = 0;
   let unchanged = 0;
 
@@ -835,6 +970,61 @@ export function planCatalogSync(rows: CatalogRow[], payload: unknown): SyncPlan 
     else references.push(syncChange);
   }
 
+  for (const candidate of allCandidates(decoded.catalog)) {
+    if (!getMainstreamModelFamily(candidate.provider, candidate.pi.id)) continue;
+    const canonicalModelId = candidate.pi.id.trim();
+    if (candidate.modelKey !== canonicalModelId) continue;
+    const canonicalKey = canonicalModelId.toLowerCase();
+    const sourceKey = `${candidate.provider}\0${candidate.modelKey}`;
+    if (
+      canonicalBySource.has(sourceKey)
+      || plannedCanonicalIds.has(canonicalKey)
+      || existingIdentifiers.has(canonicalKey)
+      || existingIdentifiers.has(`${candidate.provider}/${candidate.modelKey}`.toLowerCase())
+      || existingIdentifiers.has(`${candidate.provider}/${canonicalModelId}`.toLowerCase())
+    ) continue;
+
+    canonicalBySource.set(sourceKey, [canonicalModelId]);
+    const decodeIssues = decoded.rejections.filter((issue) =>
+      issue.provider === candidate.provider && issue.modelKey === candidate.modelKey);
+    if (!candidate.pi.name) {
+      if (!decodeIssues.some((issue) => issue.code === "invalid_model_name")) {
+        plannerRejections.push({
+          provider: candidate.provider,
+          modelKey: candidate.modelKey,
+          canonicalModelId,
+          scope: "model",
+          code: "missing_model_name",
+        });
+      }
+      continue;
+    }
+
+    const matchResult = candidateResult(candidate, "provider-id", "direct");
+    const proposal = buildNewCapabilities(candidate.pi, matchResult, decodeIssues);
+    plannerRejections.push(...proposal.rejections);
+    additions.push({
+      canonicalModelId,
+      name: candidate.pi.name,
+      match: {
+        provider: candidate.provider,
+        modelKey: candidate.modelKey,
+        via: matchResult.via,
+        kind: matchResult.kind,
+        authority: matchResult.authority,
+      },
+      capabilities: proposal.capabilities,
+      ...(candidate.pi.contextWindow !== undefined
+        ? { contextWindow: candidate.pi.contextWindow }
+        : {}),
+      ...(candidate.pi.maxTokens !== undefined
+        ? { maxOutputTokens: candidate.pi.maxTokens }
+        : {}),
+      enabled: true,
+    });
+    plannedCanonicalIds.add(canonicalKey);
+  }
+
   const decodedRejections = decoded.rejections.flatMap((rejection) => {
     const sourceKey = `${rejection.provider ?? ""}\0${rejection.modelKey ?? ""}`;
     const canonicalIds = canonicalBySource.get(sourceKey);
@@ -844,6 +1034,8 @@ export function planCatalogSync(rows: CatalogRow[], payload: unknown): SyncPlan 
   });
 
   return {
+    additions: additions.sort((left, right) =>
+      left.canonicalModelId.localeCompare(right.canonicalModelId)),
     changes: changes.sort((left, right) => left.canonicalModelId.localeCompare(right.canonicalModelId)),
     references: references.sort((left, right) =>
       left.canonicalModelId.localeCompare(right.canonicalModelId)),

@@ -77,13 +77,15 @@
 
 ### 2. Signatures
 - Planner:`planCatalogSync(rows: CatalogRow[], payload: unknown): SyncPlan`。
-- SQL renderer:`buildCatalogSyncSql(plan: SyncPlan): string[]`，只接受 planner 的 `changes`。
+- SQL renderer:`buildCatalogSyncSql(plan: SyncPlan): string[]`，只接受 planner 的 `additions` 与 `changes`。
 - 匹配证据:`MatchEvidence { provider, modelKey, via, kind, authority }`，其中 `authority` 为 `direct | reference`。
 - reasoning bundle:`reasoning + thinkingFormat + thinkingLevelMap + reasoningEffort`。
 - CLI:`pnpm sync:pi-models` 只审计；`PI_MODELS_FILE=<snapshot> pnpm sync:pi-models -- --write` 生成下一条 migration、journal entry 和 snapshot。
 
 ### 3. Contracts
 - Decoder 保留 `missing / false / true` 三态。非法 model id、compat 形状、map key、非 `string|null` value 和空字符串必须产生稳定 rejection code，不能 cast、过滤或回退后写入。
+- 缺失模型只按 `mainstream-models.ts` 集中维护的家族、官方主 Provider 与专项排除规则进入 `additions`；preview 可收录，聚合商、区域变体、日期快照、`*-latest` 和专项型号不得新增。
+- addition 必须有合法 ID 与非空名称，默认 `enabled=true`、`tools=true`、`systemPrompt=true`；vision 只来自 pi `input`。reasoning bundle 不完整或不合法时仍可新增基础模型，但必须省略整包并产生 rejection。
 - 只有非聚合官方 provider 的精确 `provider/id`，或全目录唯一的官方裸 ID 命中，才是 `direct` proposal。aggregate、variant、path/tail fallback 和多官方来源歧义都只能进入 `references` 审计。
 - `direct` 只表示结构上允许提案，不替代厂商官方资料核对。迁移中每条 accepted change 都必须有官方事实依据。
 - reasoning bundle 原子更新。`reasoning=false` 且 current `reasoning===true` 时删除整个 bundle；候选 bundle 任一不变量失败时完整保留旧 bundle，vision 等独立 capability 仍可单独收敛。
@@ -91,7 +93,7 @@
 - current 未启用 reasoning 时，孤立 `thinkingFormat`/map/effort 不自动清理；记录 `reasoning_disabled_extras_ignored` 并保留现状，避免把缺少明确能力迁移的元数据差异升级为写操作。
 - `fixed` 必须是 `off:null` 且恰好一个非 `off` 档位映射到非空字符串。运行时只显示该唯一档位，compatible/provider request 不伪造控制参数；同步不得用 pi toggle map 覆盖 curated fixed bundle。
 - planner 对行、对象 key、change、reference、rejection 和 unmatched 输出做稳定排序。dry-run、审计与 SQL 共享这一份 plan，CLI 不得重新 match、translate 或 fallback。
-- `--write` 只接受显式本地 snapshot，并在 SQL 中记录 SHA-256；禁止 `--apply`、bulk import、隐式 cache fallback 和 live-source write。失败输出只含稳定 stage/reason，不含 URL、路径、payload、credential、cause 或 stack。
+- `--write` 只接受显式本地 snapshot，并在 SQL 中记录 SHA-256；禁止 `--apply`、策略外 bulk import、隐式 cache fallback 和 live-source write。新增使用 `ON CONFLICT (canonical_model_id) DO NOTHING`，失败输出只含稳定 stage/reason，不含 URL、路径、payload、credential、cause 或 stack。
 - 数据修复只追加 forward migration。SQL 使用定向 JSONB delete/patch 与 `IS DISTINCT FROM`，保留无关字段且仅在真实变化时刷新 `updated_at`；SQL、journal、snapshot 必须一起生成和提交。
 - reasoning 降级的 operation 必须规范化为四个 bundle key 的 delete，即使旧行缺少其中部分 key；这样生成的 migration 对前序允许范围内的稀疏数据仍能收敛到同一结果。
 
@@ -103,6 +105,8 @@
 | direct `reasoning=false`，current reasoning=true | accepted bundle delete | Chat 隐藏档位，stale model state 收敛到 `off`，请求不发送 thinking |
 | reasoning=false 但携带 thinking extras | extras 记审计；若 current 未启用 reasoning 则无 change | 孤立 current 元数据原样保留 |
 | aggregate/tail/path/歧义匹配 | reference only | catalog 不变 |
+| 官方主 Provider 下缺失的主流通用型号 | addition；发布前核对官方资料 | 幂等新增且默认启用 |
+| addition 的 reasoning 证据不完整 | rejection，同时保留基础 addition | 不发布伪造的 reasoning bundle |
 | fixed 不是 `off:null + 唯一开启档` | `invalid_reasoning_bundle` | malformed fixed 防御性隐藏控件 |
 | `--write` 未提供本地 snapshot | `write_requires_snapshot` | 不产生任何迁移产物 |
 | migration 重复执行 | `IS DISTINCT FROM` 不命中 | capability 与 `updated_at` 均不变 |
@@ -115,7 +119,8 @@
 - Bad:看到 reasoning=false + thinkingFormat 就清理一个从未启用 reasoning 的 catalog 行；这缺少明确的能力迁移证据。
 
 ### 6. Tests Required
-- `sync-pi-models.test.ts`:覆盖三态 decoder、非法 map/compat、direct/reference/歧义、双向 capability 变更、reasoning 原子回退、孤立 thinking 审计、fixed 不变量、确定性 plan 和 SQL operation。
+- `mainstream-models.test.ts`:覆盖十个主流家族、官方 Provider、preview 与专项/日期/latest 排除规则。
+- `sync-pi-models.test.ts`:覆盖三态 decoder、非法 map/compat、direct/reference/歧义、additions 去重/排序/缺名、默认能力、reasoning 闸门、fixed 不变量和幂等 INSERT/UPDATE SQL。
 - `sync-pi-models-cli.test.ts`:覆盖参数分隔符、旧 flag 拒绝、snapshot-only write、固定脱敏错误和审计脱敏。
 - `reasoning.test.ts`:覆盖 levels/default/clamp/modelId stale state，以及 reasoning 降级后 compatible/provider 请求不发送 thinking。
 - `model-catalog.test.ts`:断言 migration 目标与精确 JSONB 表达式、source digest、journal idx/time 和 snapshot prevId/schema。
