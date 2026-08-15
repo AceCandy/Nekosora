@@ -70,7 +70,7 @@ export function ChatOutline({ messages, streaming }: ChatOutlineProps) {
     return idx;
   }, [turns, anchorIndex]);
 
-  if (turns.length === 0) return null;
+  if (turns.length <= 2) return null;
 
   const handleJump = (userIndex: number) => {
     scrollToMessage(`msg-${userIndex}`, { behavior: "smooth" });
