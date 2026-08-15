@@ -1086,3 +1086,24 @@ Added protocol-native model discovery, accepted inbound OpenAI stream_options, a
 ### Status
 
 [OK] **Completed**
+
+
+## Session 110: Display disabled provider route status
+
+**Date**: 2026-08-15
+**Task**: Display disabled provider route status
+**Branch**: `main`
+
+### Summary
+
+Show routes as currently unavailable when their provider is disabled in admin and personal model pages.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3b21696` | (see git log) |
+
+### Status
+
+[OK] **Completed**
