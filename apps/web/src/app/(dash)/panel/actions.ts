@@ -493,7 +493,11 @@ export async function getMyModels() {
       .where(eq(S().models.ownerUserId, user.id))
       .orderBy(asc(S().models.sortOrder), asc(S().models.createdAt)),
     db
-      .select({ route: S().routes, providerName: S().providers.name })
+      .select({
+        route: S().routes,
+        providerName: S().providers.name,
+        providerEnabled: S().providers.enabled,
+      })
       .from(S().routes)
       .innerJoin(S().providers, eq(S().routes.providerId, S().providers.id))
       .where(eq(S().routes.ownerUserId, user.id)),

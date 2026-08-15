@@ -59,6 +59,7 @@ export interface RouteItem {
   modelId: string;
   providerId: string;
   providerName: string;
+  providerEnabled: boolean;
   upstreamModelName: string;
   apiFormat: RouteApiFormat;
   priority: number;
@@ -866,7 +867,11 @@ function RouteListPanel({
                   <td className="p-2.5 text-center font-mono text-ui-caption font-semibold">{r.priority}</td>
                   <td className="p-2.5 text-center font-mono text-ui-caption font-semibold">{r.weight}</td>
                   <td className="p-2.5">
-                    <StatusDot enabled={r.enabled} enabledLabel={t("statusEnabled")} disabledLabel={t("statusDisabled")} />
+                    <StatusDot
+                      enabled={r.enabled && r.providerEnabled}
+                      enabledLabel={t("statusEnabled")}
+                      disabledLabel={r.enabled ? t("providerDisabled") : t("statusDisabled")}
+                    />
                   </td>
                   <td className="p-2.5 text-right space-x-1 whitespace-nowrap">
                     {testActions?.[r.id] && (

@@ -850,6 +850,7 @@
     "colStatus": "Status",
     "statusEnabled": "Enabled",
     "statusDisabled": "Disabled",
+    "providerDisabled": "Unavailable (provider disabled)",
     "colActions": "Actions",
     "emptyState": "No models yet. Click the button above to add one.",
     "visibilityPublic": "Public",

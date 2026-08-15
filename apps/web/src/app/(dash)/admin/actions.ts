@@ -557,6 +557,7 @@ export async function listRoutes() {
     .select({
       route: S().routes,
       providerName: S().providers.name,
+      providerEnabled: S().providers.enabled,
     })
     .from(S().routes)
     .innerJoin(S().providers, eq(S().routes.providerId, S().providers.id))

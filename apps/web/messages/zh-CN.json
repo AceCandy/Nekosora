@@ -850,6 +850,7 @@
     "colStatus": "状态",
     "statusEnabled": "已启用",
     "statusDisabled": "已禁用",
+    "providerDisabled": "当前不可用（供应商已禁用）",
     "colActions": "操作",
     "emptyState": "暂无模型，点击右上方按钮添加。",
     "visibilityPublic": "全局公开",

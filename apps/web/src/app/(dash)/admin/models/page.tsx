@@ -55,6 +55,7 @@ export default async function ModelsPage({ searchParams }: { searchParams?: Prom
     modelId: (r.route as Record<string, unknown>).modelId as string,
     providerId: (r.route as Record<string, unknown>).providerId as string,
     providerName: r.providerName as string,
+    providerEnabled: r.providerEnabled as boolean,
     upstreamModelName: (r.route as Record<string, unknown>).upstreamModelName as string,
     apiFormat: (r.route as Record<string, unknown>).apiFormat as RouteApiFormat,
     priority: (r.route as Record<string, unknown>).priority as number,

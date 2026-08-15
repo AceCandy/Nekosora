@@ -64,6 +64,7 @@ export default async function MyModelsPage({ searchParams }: { searchParams?: Pr
         modelId: route.modelId as string,
         providerId: route.providerId as string,
         providerName: rr.providerName as string,
+        providerEnabled: rr.providerEnabled as boolean,
         upstreamModelName: route.upstreamModelName as string,
         apiFormat: route.apiFormat as RouteApiFormat,
         priority: route.priority as number,
