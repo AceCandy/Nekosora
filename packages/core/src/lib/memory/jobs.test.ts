@@ -62,9 +62,37 @@ describe("memory extraction jobs", () => {
       conversationId: "conversation-1",
       messages: [
         { role: "user", content: "hello" },
-        { role: "assistant", content: "world" },
       ],
     }));
+  });
+
+  it("单条有意义用户消息可创建任务", () => {
+    const job = createMemoryExtractionJob({
+      runId: "run-1",
+      userId: "user-1",
+      conversationId: "conversation-1",
+      recentMessages: [{ role: "user", content: "项目使用 PostgreSQL" }],
+    });
+
+    expect(job?.messages).toEqual([
+      { role: "user", content: "项目使用 PostgreSQL" },
+    ]);
+  });
+
+  it("最新用户消息只有数字时不创建任务", () => {
+    const job = createMemoryExtractionJob({
+      runId: "run-1",
+      userId: "user-1",
+      conversationId: "conversation-1",
+      recentMessages: [
+        { role: "user", content: "项目使用 PostgreSQL" },
+        { role: "assistant", content: "好的" },
+        { role: "user", content: "111" },
+        { role: "assistant", content: "会话标题：111" },
+      ],
+    });
+
+    expect(job).toBeNull();
   });
 
   it("job 不存在时明确 no-op", async () => {

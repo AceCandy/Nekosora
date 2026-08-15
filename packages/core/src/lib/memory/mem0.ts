@@ -5,6 +5,13 @@ import { getDb, getSchema } from "@/lib/infra/db";
 import { resolveRoutesById } from "@/lib/routing";
 import { createNekosoraLLM } from "./nekosora-llm";
 
+/** Mem0 抽取的软约束；确定性角色与内容边界由调用方负责。 */
+const MEMORY_EXTRACTION_INSTRUCTIONS = [
+  "仅提取用户明确表达且未来仍有价值的长期信息：稳定偏好、客观事实、持续进行的项目和用户已确认的决定。",
+  "忽略标题、标签、寒暄、澄清请求、一次性请求、工具或搜索输出、助手推测、助手建议及其他仅由助手表达的内容。",
+  "不得把助手消息或模型生成内容归因为用户；没有符合条件的信息时不要创建记忆。",
+].join("\n");
+
 let _memory: Memory | null = null;
 let _initPromise: Promise<Memory> | null = null;
 let _modelFingerprint: string | null = null;
@@ -71,6 +78,7 @@ async function initialize(model: ModelReference): Promise<Memory> {
   if (!emb) throw new Error("mem0 初始化失败:未配置 embedding provider/model(rag.embedding_*)");
   const memory = new Memory({
     disableHistory: true,
+    customInstructions: MEMORY_EXTRACTION_INSTRUCTIONS,
     vectorStore: {
       provider: "pgvector",
       config: { connectionString: process.env.DATABASE_URL, collectionName: "mem0_memories", embeddingModelDims: 1024 },

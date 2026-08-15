@@ -1,5 +1,5 @@
 /**
- * 记忆自动提取 -- 对话流结束后,把最近 N 轮对话交给 mem0 全权抽取 + 合并。
+ * 记忆自动提取 -- 对话流结束后,把最近窗口中的用户消息交给 mem0 全权抽取 + 合并。
  *
  * mem0 全权抽取(infer=true):LLM 从对话产记忆 + 去重 + 合并(mem0 内置)。
  * AI 抽取的记忆统一标 scope=project(对话中多为当前项目);preference/profile 由用户手动添加。
@@ -11,9 +11,17 @@ import type { JobOutcome } from "@/lib/jobs/catalog";
 import { getMemory } from "./mem0";
 import { cacheWrap, cacheSet } from "@/lib/infra/cache";
 import { invalidateMemoryCache, toProjectExpirationDate } from "./service";
+import { isMemoryEligibleText, memorySignalIndex } from "./policy";
 
 const RECENT_TURNS = 6; // 取最近 N 条消息做提取
 const MAX_TURN_LENGTH = 500;
+
+function normalizeMemoryContent(content: unknown): string {
+  const text = typeof content === "string" ? content : String(content ?? "");
+  const signalIndex = memorySignalIndex(text);
+  const start = signalIndex >= MAX_TURN_LENGTH ? signalIndex : 0;
+  return text.slice(start, start + MAX_TURN_LENGTH);
+}
 
 /** Worker 可重试的通用失败，不携带上游或消息详情。 */
 export class MemoryExtractionError extends Error {
@@ -27,12 +35,13 @@ export class MemoryExtractionError extends Error {
 export function normalizeMemoryMessages(
   recentMessages: readonly { role: string; content: unknown }[],
 ): MemoryExtractionMessage[] {
-  return recentMessages.slice(-RECENT_TURNS).map((message) => ({
-    role: message.role === "assistant" ? "assistant" : "user",
-    content: typeof message.content === "string"
-      ? message.content.slice(0, MAX_TURN_LENGTH)
-      : String(message.content ?? "").slice(0, MAX_TURN_LENGTH),
-  }));
+  return recentMessages
+    .slice(-RECENT_TURNS)
+    .filter((message) => message.role === "user")
+    .map((message) => ({
+      role: "user",
+      content: normalizeMemoryContent(message.content),
+    }));
 }
 
 /**
@@ -45,6 +54,12 @@ export async function extractMemories(
   recentMessages: { role: string; content: string }[],
   _model?: string,
 ): Promise<JobOutcome> {
+  const turns = normalizeMemoryMessages(recentMessages);
+  const latestUserMessage = turns.at(-1);
+  if (!latestUserMessage || !isMemoryEligibleText(latestUserMessage.content)) {
+    return "noop";
+  }
+
   // 频率保护:10 分钟内不重复提取
   const recentlyExtracted = await cacheWrap(
     `memextract:${userId}`,
@@ -52,9 +67,6 @@ export async function extractMemories(
     600_000,
   );
   if (recentlyExtracted) return "noop";
-
-  const turns = normalizeMemoryMessages(recentMessages);
-  if (turns.length < 2) return "noop";
 
   let memory: Awaited<ReturnType<typeof getMemory>>;
   try {

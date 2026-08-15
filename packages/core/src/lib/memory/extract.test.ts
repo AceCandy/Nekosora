@@ -16,12 +16,14 @@ const mockData = vi.hoisted(() => ({
   addCalls: [] as unknown[],
   addImpl: null as null | (() => Promise<unknown>),
   getMemoryImpl: null as null | (() => Promise<unknown>),
+  getMemoryCalls: 0,
   cacheStore: new Map<string, unknown>(),
 }));
 
 // mock @/lib/memory/mem0:getMemory 返回受控 memory 实例(add 记录调用)
 vi.mock("@/lib/memory/mem0", () => ({
   getMemory: vi.fn(async () => {
+    mockData.getMemoryCalls += 1;
     if (mockData.getMemoryImpl) return mockData.getMemoryImpl();
     return {
       add: vi.fn(async (messages: unknown, config: unknown) => {
@@ -60,6 +62,7 @@ beforeEach(() => {
   mockData.addCalls = [];
   mockData.addImpl = null;
   mockData.getMemoryImpl = null;
+  mockData.getMemoryCalls = 0;
   mockData.cacheStore.clear();
   vi.restoreAllMocks();
 });
@@ -86,17 +89,40 @@ describe("extractMemories", () => {
     });
     expect(messages).toEqual([
       { role: "user", content: "你好" },
-      { role: "assistant", content: "你好,有什么可以帮你的?" },
     ]);
   });
 
-  it("消息少于 2 条跳过(不调 add)", async () => {
+  it("单条有意义用户消息仍可提取", async () => {
     await expect(extractMemories(
       "u1",
       "conv1",
-      [{ role: "user", content: "only one" }],
-    )).resolves.toBe("noop");
+      [{ role: "user", content: "项目使用 PostgreSQL" }],
+    )).resolves.toBe("completed");
+    expect(mockData.addCalls).toHaveLength(1);
+  });
+
+  it("最新用户消息只有数字时跳过且不初始化 Mem0", async () => {
+    await expect(extractMemories("u1", "conv1", [
+      { role: "user", content: "项目使用 PostgreSQL" },
+      { role: "assistant", content: "好的" },
+      { role: "user", content: "111" },
+      { role: "assistant", content: "会话标题：111" },
+    ])).resolves.toBe("noop");
+
+    expect(mockData.getMemoryCalls).toBe(0);
     expect(mockData.addCalls).toHaveLength(0);
+  });
+
+  it("Unicode 字母位于 500 字之后时仍可提取且快照保持有界", async () => {
+    await expect(extractMemories("u1", "conv1", [
+      { role: "user", content: `${"1".repeat(500)}项目使用 PostgreSQL` },
+    ])).resolves.toBe("completed");
+
+    const { messages } = mockData.addCalls[0] as {
+      messages: { role: string; content: string }[];
+    };
+    expect(messages[0]?.content).toBe("项目使用 PostgreSQL");
+    expect(messages[0]?.content.length).toBeLessThanOrEqual(500);
   });
 
   it("频率保护:10 分钟内不重复提取", async () => {
@@ -141,18 +167,20 @@ describe("extractMemories", () => {
     );
   });
 
-  it("持久化前只保留最后 6 条并规范 role/content 长度", () => {
+  it("持久化前只保留最近窗口中的用户消息并限制长度", () => {
     const normalized = normalizeMemoryMessages([
-      { role: "system", content: "ignored role" },
-      ...Array.from({ length: 6 }, (_, index) => ({
-        role: index % 2 === 0 ? "assistant" : "tool",
-        content: index === 5 ? "x".repeat(600) : String(index),
-      })),
+      { role: "user", content: "窗口外" },
+      { role: "system", content: "system" },
+      { role: "assistant", content: "assistant" },
+      { role: "tool", content: "tool" },
+      { role: "unknown", content: "unknown" },
+      { role: "user", content: "保留" },
+      { role: "user", content: "x".repeat(600) },
     ]);
 
-    expect(normalized).toHaveLength(6);
-    expect(normalized[0]).toEqual({ role: "assistant", content: "0" });
-    expect(normalized[1]).toEqual({ role: "user", content: "1" });
-    expect(normalized[5]?.content).toHaveLength(500);
+    expect(normalized).toHaveLength(2);
+    expect(normalized[0]).toEqual({ role: "user", content: "保留" });
+    expect(normalized[1]?.role).toBe("user");
+    expect(normalized[1]?.content).toHaveLength(500);
   });
 });

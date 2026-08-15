@@ -1,0 +1,2 @@
+{"file":".trellis/spec/backend/memory-system.md","reason":"Review must verify the final behavior preserves documented Mem0 lifecycle, cache, failure, and SDK boundaries."}
+{"file":".trellis/tasks/08-15-constrain-chat-memory-boundaries/research/memory-boundary-practices.md","reason":"Review must distinguish deterministic application gates from probabilistic prompt guidance and avoid unnecessary subsystem expansion."}

@@ -1,0 +1,2 @@
+{"file":".trellis/spec/backend/memory-system.md","reason":"Defines the existing Mem0 extraction, recall, expiration, caching, and compatibility contracts that implementation must preserve."}
+{"file":".trellis/tasks/08-15-constrain-chat-memory-boundaries/research/memory-boundary-practices.md","reason":"Records official Mem0 and peer-project guidance supporting selective writes, role boundaries, and evaluated recall thresholds."}

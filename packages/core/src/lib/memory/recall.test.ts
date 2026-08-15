@@ -21,17 +21,21 @@ interface FakeMemoryItem {
 const mockData = vi.hoisted(() => ({
   searchResults: [] as FakeMemoryItem[],
   shouldThrow: false,
+  getMemoryCalls: 0,
   lastSearch: null as null | { query: string; config: unknown },
 }));
 
 vi.mock("@/lib/memory/mem0", () => ({
-  getMemory: vi.fn(async () => ({
-    search: vi.fn(async (query: string, config: unknown) => {
-      mockData.lastSearch = { query, config };
-      if (mockData.shouldThrow) throw new Error("mem0 down");
-      return { results: mockData.searchResults };
-    }),
-  })),
+  getMemory: vi.fn(async () => {
+    mockData.getMemoryCalls += 1;
+    return {
+      search: vi.fn(async (query: string, config: unknown) => {
+        mockData.lastSearch = { query, config };
+        if (mockData.shouldThrow) throw new Error("mem0 down");
+        return { results: mockData.searchResults };
+      }),
+    };
+  }),
   resetMemoryClient: vi.fn(),
 }));
 
@@ -40,6 +44,7 @@ import { recallMemories } from "./recall";
 beforeEach(() => {
   mockData.searchResults = [];
   mockData.shouldThrow = false;
+  mockData.getMemoryCalls = 0;
   mockData.lastSearch = null;
 });
 
@@ -52,7 +57,11 @@ describe("recallMemories", () => {
 
     expect(mockData.lastSearch).toEqual({
       query: "查询",
-      config: { topK: 5, filters: { user_id: "u1", scope: "project" } },
+      config: {
+        topK: 5,
+        threshold: 0.5,
+        filters: { user_id: "u1", scope: "project" },
+      },
     });
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe("m1");
@@ -87,4 +96,15 @@ describe("recallMemories", () => {
     const result = await recallMemories("u1", "查询");
     expect(result).toEqual([]);
   });
+
+  it.each(["111", "   ", "!?", "😀"])(
+    "低信息查询 %j 不初始化或搜索 Mem0",
+    async (query) => {
+      const result = await recallMemories("u1", query);
+
+      expect(result).toEqual([]);
+      expect(mockData.getMemoryCalls).toBe(0);
+      expect(mockData.lastSearch).toBeNull();
+    },
+  );
 });

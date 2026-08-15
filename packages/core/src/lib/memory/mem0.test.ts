@@ -70,7 +70,11 @@ describe("mem0 model resolution", () => {
     expect(mocks.memoryConfig).toMatchObject({
       disableHistory: true,
       vectorStore: { config: { embeddingModelDims: 1024 } },
+      customInstructions: expect.stringContaining("仅提取用户明确表达"),
     });
+    expect(
+      (mocks.memoryConfig as { customInstructions: string }).customInstructions,
+    ).toContain("不得把助手消息");
     expect(
       (mocks.memoryConfig as { embedder: { config: object } }).embedder.config,
     ).not.toHaveProperty("embeddingDims");

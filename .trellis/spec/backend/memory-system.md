@@ -25,7 +25,8 @@
 ## Scenario: 抽取（`src/lib/memory/extract.ts`）
 
 - 流后异步，10 分钟全局频率保护（`memextract:${userId}` cache）。
-- 把最近 6 轮对话作为 messages 传 `mem0.add(messages, {userId, metadata:{scope:"project", source:"ai"}})`（`infer=true`，mem0 LLM 全权抽取 + 去重 + 合并）。
+- 自动 project 记忆的角色、内容门禁与有界快照遵循下方「Automatic Project Memory Boundary」契约。
+- 合格消息传 `mem0.add(messages, {userId, metadata:{scope:"project", source:"ai"}})`（`infer=true`，mem0 LLM 全权抽取 + 去重 + 合并）。
 - 失败不阻断主对话；领域边界只记录 `client_init` / `memory_add` 有限阶段，禁止记录原始异常、消息、ID 或基础设施信息。
 - 抽取后 `invalidateMemoryCache(userId)` 失效 getMemories 的 60s 缓存。
 
@@ -34,9 +35,78 @@
 ## Scenario: 召回与注入（`recall.ts` + `context-assembler.ts` + `orchestrator.ts`）
 
 - preference / profile：恒定注入（getMemories 过滤 + buildPreferencePrompt/buildProfilePrompt）。
-- project：`recallMemories(userId, query)` = `mem0.search(query, {topK, filters:{user_id, scope:"project"}})`，结果经 `toUserMemory` 转 UserMemory。
+- project：按下方「Automatic Project Memory Boundary」过滤查询，再通过 `mem0.search` 召回并经 `toUserMemory` 转 UserMemory。
 - mem0 不可用时 recallMemories 静默返回空（不阻断对话）。
 - `assembleContext`：preference + profile 恒定 slot；project 召回 slot。
+
+---
+
+## Scenario: Automatic Project Memory Boundary
+
+### 1. Scope / Trigger
+
+修改自动 project 记忆的消息快照、durable job、Worker 抽取、Mem0 初始化或语义召回时适用。目标是阻止低信息输入和助手生成内容被晋升为用户长期意图。
+
+### 2. Signatures
+
+- `isMemoryEligibleText(text: string): boolean`：文本是否包含 Unicode `Letter` 类字符。
+- `normalizeMemoryMessages(recentMessages): MemoryExtractionMessage[]`：从最近 6 条消息生成最多 500 字的 user-only 快照。
+- `createMemoryExtractionJob(input): MemoryExtractionJob | null`。
+- `extractMemories(userId, conversationId, recentMessages, model?): Promise<"completed" | "noop">`。
+- `recallMemories(userId, query, topK=5): Promise<UserMemory[]>`。
+
+### 3. Contracts
+
+- 只接受原始 `role === "user"` 的消息；assistant/system/tool/未知角色不得转换成 user 或进入 `memory.add`。
+- 门禁判定最近窗口中最后一条准确 user 消息。该消息不含 Unicode 字母时，任务创建返回 `null`，Worker 返回 `noop`，召回返回 `[]`；这些返回必须发生在 Mem0 初始化和 10 分钟频率保护之前。
+- 单条合格 user 消息足以创建任务。每条 durable 内容最多 500 字；若首个 Unicode 字母出现在第 500 字之后，从该字母开始截取有界窗口，避免截断改变 eligibility。
+- Mem0 `customInstructions` 仅保留用户明确表达的耐久事实、稳定偏好、持续项目和用户确认的决定，并排除标题、寒暄、澄清、临时请求、工具输出与助手推测。Prompt 是软约束，不能替代确定性角色/内容门禁。
+- 合格召回固定传 `topK:5`、`threshold:0.5` 和 `filters:{user_id, scope:"project"}`。`0.5` 是当前保守初始值，不是 Mem0 通用推荐阈值。
+- preference/profile 手动记忆、7 天 project 过期、失败降级、缓存失效与错误脱敏契约保持不变。
+
+### 4. Validation & Error Matrix
+
+| 输入 / 条件 | 抽取任务 / Worker | 召回 |
+|---|---|---|
+| `111`、纯符号、空白或 emoji | 不建任务 / `noop`，不初始化 Mem0 | `[]`，不初始化 Mem0 |
+| `项目 111` | user-only 有界快照进入 `memory.add` | 按 `threshold:0.5` 搜索 |
+| assistant 输出标题或建议，用户未确认 | assistant 被确定性排除 | 不作为 user 事实来源 |
+| 先有有意义 user，最新 user 为 `111` | 以最新 user 为准，跳过 | 当前 query 为 `111` 时跳过 |
+| 前 500 字无字母，第 501 字起为有意义文本 | 从首个字母开始取最多 500 字并继续抽取 | 原 query 直接判定为合格 |
+| Mem0 初始化或操作失败 | 抽取抛通用可重试错误 | 静默返回 `[]` |
+
+### 5. Good / Base / Bad Cases
+
+- Good：`user:111 -> assistant:会话标题：111` 不创建 project 记忆，也不让助手标题反向成为用户意图。
+- Good：用户明确说「项目使用 PostgreSQL」，即使是唯一一条 user 消息也可进入抽取。
+- Base：有意义 query 使用原 topK/filter，并加显式 `threshold:0.5`。
+- Bad：把非 assistant 的未知角色统一映射为 user；tool/system 内容会被错误归因。
+- Bad：只靠 `customInstructions` 过滤；Mem0 的抽取 LLM 仍可能违反软提示。
+- Bad：在频率保护之后才判断低信息输入；无价值输入会消耗用户的抽取窗口。
+
+### 6. Tests Required
+
+- `extract.test.ts`：断言 user-only payload、单 user 可抽取、最新数字 user 在 Mem0 初始化前 no-op、500 字之后的字母仍保留 eligibility。
+- `jobs.test.ts`：断言 durable snapshot 排除 assistant/system/tool/未知角色，且「早先有意义 + 最新 111」不建任务。
+- `recall.test.ts`：断言数字、空白、符号、emoji 不初始化/搜索 Mem0；合格 query 精确传 `topK:5`、`threshold:0.5` 和 user/scope filters。
+- `mem0.test.ts`：断言顶层 `customInstructions` 同时包含耐久用户事实门槛和禁止助手归因规则。
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong：助手消息和未知角色可能被 Mem0 归因为用户事实。
+const turns = recentMessages.map((message) => ({
+  role: message.role === "assistant" ? "assistant" : "user",
+  content: String(message.content),
+}));
+
+// Correct：只保留准确 user 角色，并在任何 Mem0 副作用前执行共享门禁。
+const turns = normalizeMemoryMessages(recentMessages);
+const latestUserMessage = turns.at(-1);
+if (!latestUserMessage || !isMemoryEligibleText(latestUserMessage.content)) {
+  return "noop";
+}
+```
 
 ---
 

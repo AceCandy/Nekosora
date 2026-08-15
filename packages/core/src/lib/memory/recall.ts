@@ -6,8 +6,10 @@
  */
 import { getMemory } from "./mem0";
 import { toUserMemory, type UserMemory } from "./service";
+import { isMemoryEligibleText } from "./policy";
 
 const DEFAULT_RECALL_TOP_K = 5;
+const RECALL_THRESHOLD = 0.5;
 
 /**
  * 按查询语义召回 project 记忆(mem0 向量检索 + scope 过滤)。
@@ -18,10 +20,13 @@ export async function recallMemories(
   query: string,
   topK = DEFAULT_RECALL_TOP_K,
 ): Promise<UserMemory[]> {
+  if (!isMemoryEligibleText(query)) return [];
+
   try {
     const memory = await getMemory();
     const res = await memory.search(query, {
       topK,
+      threshold: RECALL_THRESHOLD,
       filters: { user_id: userId, scope: "project" },
     });
     return (res.results ?? []).map(toUserMemory);

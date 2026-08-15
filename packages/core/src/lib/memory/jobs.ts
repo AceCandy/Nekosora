@@ -3,6 +3,7 @@ import type { MemoryExtractionMessage } from "@/db/types";
 import { getDb, getSchema } from "@/lib/infra/db";
 import type { JobOutcome } from "@/lib/jobs/catalog";
 import { extractMemories, normalizeMemoryMessages } from "./extract";
+import { isMemoryEligibleText } from "./policy";
 
 export interface MemoryExtractionJob {
   id: string;
@@ -19,12 +20,15 @@ export interface CreateMemoryExtractionJobInput {
   recentMessages: readonly { role: string; content: unknown }[];
 }
 
-/** 为 completion transaction 构造最小 durable intent；不足两条时无需创建。 */
+/** 为 completion transaction 构造最小 durable intent；无合格用户消息时无需创建。 */
 export function createMemoryExtractionJob(
   input: CreateMemoryExtractionJobInput,
 ): MemoryExtractionJob | null {
   const messages = normalizeMemoryMessages(input.recentMessages);
-  if (messages.length < 2) return null;
+  const latestUserMessage = messages.at(-1);
+  if (!latestUserMessage || !isMemoryEligibleText(latestUserMessage.content)) {
+    return null;
+  }
   return {
     id: globalThis.crypto.randomUUID(),
     runId: input.runId,
