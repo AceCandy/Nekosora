@@ -245,7 +245,23 @@ describe("conversation title service", () => {
     expect(generateChat).toHaveBeenCalledWith(expect.objectContaining({
       modelId: "m1",
       taskKind: "title",
-      request: expect.objectContaining({ model: "configured-model" }),
+      request: expect.objectContaining({
+        model: "configured-model",
+        temperature: 0,
+        max_tokens: 64,
+        messages: [
+          {
+            role: "system",
+            content:
+              "你是严格的对话标题生成器。只能依据用户原文生成标题；原文没有可概括的明确语义时必须原样返回，禁止补充、联想或猜测。" +
+              "输出不超过 30 字的纯文本，不要引号、结尾标点或“标题:”前缀。",
+          },
+          {
+            role: "user",
+            content: "这是一个用于测试标题生成的很长问题",
+          },
+        ],
+      }),
     }));
   });
 

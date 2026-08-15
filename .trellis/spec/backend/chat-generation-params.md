@@ -175,3 +175,48 @@ const v = capabilities?.thinkingLevelMap?.[level] ?? DEFAULT_MAP[protocol]?.[lev
 **Correct**:先用 pi 定位兼容语义，再由厂商官方文档确认参数名、取值、输入能力和是否可关闭；只有两者通过 planner 与人工门禁后才写 migration。
 
 **相关**:`AGENTS.md`「模型目录维护」;`src/lib/reasoning.ts` 各 `thinkingFormat` 分支。
+
+---
+
+## Scenario: Background Conversation Title Request Boundary
+
+### 1. Scope / Trigger
+- Scope: Background title jobs that call `generateChat` from `lib/conversation-title/service.ts`.
+- Trigger: Changes to the title prompt, generation parameters, or title model must keep instructions separate from the original user text.
+
+### 2. Signatures
+- `IRRequest.messages` contains one `system` title instruction and one `user` message with at most the first 500 characters of the original text.
+- Title jobs send `temperature:0` and `max_tokens:64` without conversation history or memory.
+
+### 3. Contracts
+- The `system` instruction must require a title based only on the original text. If the text has no clear meaning to summarize, return it unchanged without additions, associations, or guesses.
+- The original user text must be sent only as a separate `user` message and must not be appended to the instruction message.
+- Model output still passes through `sanitizeTitle`; empty output is a generation failure and preserves the fallback.
+
+### 4. Validation & Error Matrix
+- Blank first message -> do not create a title job.
+- Low-information input such as digits or symbols only -> return the input unchanged without inventing meaning.
+- Model error, empty text, or empty sanitized output -> fail the task and preserve the durable job for retry.
+
+### 5. Good / Base / Bad Cases
+- Good: `888` -> `888`.
+- Base: A meaningful question -> generate a related title of at most 30 characters.
+- Bad: Concatenate the instruction and original text in one `user` message, allowing the model to invent meaning for low-information input.
+
+### 6. Tests Required
+- `conversation-title/service.test.ts` asserts message-role order, exact instruction/original-text separation, `temperature:0`, `max_tokens:64`, and the configured model ID.
+- When changing the title prompt or model adapter, run one real-model smoke test with the same complete request and a low-information input.
+
+### 7. Wrong vs Correct
+#### Wrong
+```typescript
+messages: [{ role: "user", content: instruction + rawUserMessage }]
+```
+
+#### Correct
+```typescript
+messages: [
+  { role: "system", content: instruction },
+  { role: "user", content: rawUserMessage },
+]
+```

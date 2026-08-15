@@ -178,15 +178,19 @@ export async function generateConversationTitle(job: ConversationTitleJob): Prom
   }
 
   const target = await resolveTitleModel(job.chatModel, job.chatModelId);
-  const prompt =
-    "请把下面这段用户提问概括成一个简短的对话标题(不超过 " +
-    MAX_TITLE_LEN +
-    " 字,纯文本,不要引号、不要标点结尾、不要\"标题:\"前缀):\n\n" +
-    job.firstUserMessage.slice(0, 500);
   const ctx = { userId: job.userId, keyKind: null as null, source: "chat" as const };
   const request: IRRequest = {
     model: target.name,
-    messages: [{ role: "user", content: prompt }],
+    messages: [
+      {
+        role: "system",
+        content:
+          "你是严格的对话标题生成器。只能依据用户原文生成标题；原文没有可概括的明确语义时必须原样返回，禁止补充、联想或猜测。" +
+          `输出不超过 ${MAX_TITLE_LEN} 字的纯文本，不要引号、结尾标点或“标题:”前缀。`,
+      },
+      { role: "user", content: job.firstUserMessage.slice(0, 500) },
+    ],
+    temperature: 0,
     max_tokens: 64,
   };
 
