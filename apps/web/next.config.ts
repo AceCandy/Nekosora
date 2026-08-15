@@ -23,6 +23,7 @@ const nextConfig: NextConfig = {
   // 避免 webpack 解析缺失的 peer provider SDK(如 @aws-sdk/client-bedrock-runtime)。
   serverExternalPackages: ["mem0ai", "pg"],
   experimental: {
+    reactDebugChannel: false,
     serverActions: { bodySizeLimit: "10mb" },
   },
 };

@@ -209,7 +209,7 @@ export default function Sidebar({
   );
   const activeConversationId = useChatStreamStore((s) => s.activeConversationId);
   const optimisticConversation = useChatStreamStore((s) => s.optimisticConversation);
-  const pollingGeneratingIds = mergeConversationIds(initialGeneratingIds, streamingConvIds);
+  const pollingGeneratingIds = mergeConversationIds(initialGeneratingIds, streamingConvIds, [...generatingIds]);
   const pollingGeneratingKey = JSON.stringify(pollingGeneratingIds);
   const streamingGeneratingKey = JSON.stringify(mergeConversationIds(streamingConvIds));
 
