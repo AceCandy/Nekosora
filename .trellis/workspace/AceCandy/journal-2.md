@@ -1044,3 +1044,24 @@ Added protocol-native model discovery, accepted inbound OpenAI stream_options, a
 ### Status
 
 [OK] **Completed**
+
+
+## Session 108: 修复聊天侧栏生成状态收敛
+
+**Date**: 2026-08-15
+**Task**: 修复聊天侧栏生成状态收敛
+**Branch**: `main`
+
+### Summary
+
+修复新会话生成结束后侧栏仍显示转圈的问题，并关闭 Next.js 开发调试通道以避免 WritableStream 重复关闭报错；Web lint、typecheck 与测试均通过。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d0aedbb` | (see git log) |
+
+### Status
+
+[OK] **Completed**
