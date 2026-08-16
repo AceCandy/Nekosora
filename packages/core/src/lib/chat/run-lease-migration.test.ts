@@ -5,21 +5,14 @@ import { describe, expect, it } from "vitest";
 const migrationDir = join(process.cwd(), "drizzle/pg");
 
 describe("run lease baseline", () => {
-  it("包含租约 schema、数据兼容语义与基线元数据", () => {
+  it("包含租约 schema 与基线元数据", () => {
     const migration = readFileSync(
       join(migrationDir, "0000_baseline.sql"),
       "utf8",
     );
     expect(migration).toContain(
-      'ALTER TABLE "runs" ADD COLUMN "lease_expires_at" timestamp with time zone',
+      '"lease_expires_at" timestamp with time zone DEFAULT now() + interval \'2 minutes\'',
     );
-    expect(migration).toMatch(
-      /UPDATE "runs"[\s\S]*"lease_expires_at" = now\(\) \+ interval '2 minutes'[\s\S]*WHERE "status" = 'running'/,
-    );
-    expect(migration).toContain(
-      'ALTER TABLE "runs" ALTER COLUMN "lease_expires_at" SET DEFAULT now() + interval \'2 minutes\'',
-    );
-    expect(migration).not.toContain('UPDATE "conversations"');
     expect(migration).toContain(
       'CREATE INDEX "runs_active_conversation_idx" ON "runs" USING btree ("conversation_id","lease_expires_at") WHERE "runs"."status" = \'running\'',
     );

@@ -51,7 +51,7 @@ vi.mock("@/lib/gateway-execution", async (importOriginal) => {
   return { ...actual, gatewayTelemetry: telemetry };
 });
 
-import { streamText } from "ai";
+import { generateText, streamText } from "ai";
 import { streamChatWithTools } from "@/lib/stream";
 import {
   resetRouteRepository,
@@ -171,6 +171,7 @@ describe("streamChatWithTools agent loop finish signal", () => {
   beforeEach(() => {
     resetAllBreakers();
     setRouteRepository(makeSingleRouteRepository());
+    vi.mocked(generateText).mockReset();
     vi.mocked(streamText).mockReset();
     callMcpTool.mockReset();
     vi.mocked(markRouteToolsUnsupported).mockReset();
@@ -796,7 +797,7 @@ describe("streamChatWithTools agent loop finish signal", () => {
     }));
   });
 
-  it("工具后的正常轮只有 finish 没有正文时重试一次且不重复执行工具", async () => {
+  it("工具后的正常轮只有 finish 没有正文时回退非流式生成且不重复执行工具", async () => {
     vi.mocked(streamText)
       .mockReturnValueOnce(mockStreamResult(
         [{
@@ -807,11 +808,14 @@ describe("streamChatWithTools agent loop finish signal", () => {
         }],
         "tool-calls",
       ))
-      .mockReturnValueOnce(mockStreamResult([], "stop"))
-      .mockReturnValueOnce(mockStreamResult(
-        [{ type: "text-delta", text: "重试后的最终回答" }],
-        "stop",
-      ));
+      .mockReturnValueOnce(mockStreamResult([], "stop"));
+    vi.mocked(generateText).mockResolvedValue({
+      text: "回退后的最终回答",
+      reasoningText: undefined,
+      toolCalls: [],
+      finishReason: "stop",
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+    } as never);
     callMcpTool.mockResolvedValue({ result: "搜索结果", isError: false });
 
     const events = await collect(streamChatWithTools({
@@ -820,8 +824,9 @@ describe("streamChatWithTools agent loop finish signal", () => {
     }));
 
     expect(callMcpTool).toHaveBeenCalledTimes(1);
-    expect(streamText).toHaveBeenCalledTimes(3);
-    expect(events).toContainEqual({ type: "text-delta", text: "重试后的最终回答" });
+    expect(streamText).toHaveBeenCalledTimes(2);
+    expect(generateText).toHaveBeenCalledOnce();
+    expect(events).toContainEqual({ type: "text-delta", text: "回退后的最终回答" });
     expect(events.filter((event) => event.type === "finish")).toHaveLength(1);
   });
 

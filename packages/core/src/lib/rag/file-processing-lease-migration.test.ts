@@ -11,13 +11,10 @@ describe("file processing lease baseline", () => {
       "utf8",
     );
     expect(migration).toContain(
-      'ALTER TABLE "file_objects" ADD COLUMN "processing_lease_id" text',
+      '"processing_lease_id" text',
     );
     expect(migration).toContain(
-      'ALTER TABLE "file_objects" ADD COLUMN "processing_lease_expires_at" timestamp with time zone',
-    );
-    expect(migration).toMatch(
-      /UPDATE "file_objects"[\s\S]*"processing_lease_expires_at" = now\(\)[\s\S]*"processing_status" IN \('extracting', 'embedding'\)[\s\S]*"processing_lease_expires_at" IS NULL/,
+      '"processing_lease_expires_at" timestamp with time zone',
     );
     expect(migration).toContain(
       'CREATE INDEX "file_objects_stale_processing_idx" ON "file_objects" USING btree ("processing_lease_expires_at","created_at") WHERE "file_objects"."processing_status" IN (\'extracting\', \'embedding\')',

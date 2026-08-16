@@ -8,6 +8,8 @@ const dbSrc = fileURLToPath(new URL("../../packages/db/src/", import.meta.url));
 export default defineConfig({
   oxc: { jsx: { runtime: "automatic" } },
   resolve: {
+    // Core 源码被直接 alias 进 Web 测试；统一依赖实例才能让项目级 vi.mock 生效。
+    dedupe: ["better-auth", "@nekusora/db"],
     alias: [
       { find: "@/auth", replacement: `${coreSrc}auth.ts` },
       { find: "@/lib/session", replacement: `${src}lib/session.ts` },

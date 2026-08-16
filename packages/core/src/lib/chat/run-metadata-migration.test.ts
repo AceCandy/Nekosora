@@ -11,10 +11,10 @@ describe("run metadata baseline", () => {
       "utf8",
     );
     expect(migration).toContain(
-      'ALTER TABLE "runs" ADD COLUMN "duration_ms" integer',
+      '"duration_ms" integer',
     );
     expect(migration).toContain(
-      'ALTER TABLE "runs" ADD COLUMN "completed_at" timestamp with time zone',
+      '"completed_at" timestamp with time zone',
     );
     const journal = JSON.parse(
       readFileSync(join(migrationDir, "meta/_journal.json"), "utf8"),

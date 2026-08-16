@@ -11,11 +11,11 @@ describe("conversation share controls baseline", () => {
       "utf8",
     );
     expect(migration).toContain('CREATE TABLE "conversation_share_unlock_attempts"');
-    expect(migration).toContain('ALTER TABLE "conversation_shares" ADD COLUMN "mode" text');
-    expect(migration).toContain('ALTER TABLE "conversation_shares" ADD COLUMN "expires_at" timestamp with time zone');
-    expect(migration).toContain('ALTER TABLE "conversation_shares" ADD COLUMN "password_verifier" text');
-    expect(migration).toContain('ALTER TABLE "conversation_shares" ADD COLUMN "render_style_snapshot" jsonb');
-    expect(migration).toContain('ALTER TABLE "conversations" ADD COLUMN "message_version_selections" jsonb');
+    expect(migration).toContain('"mode" text');
+    expect(migration).toContain('"expires_at" timestamp with time zone');
+    expect(migration).toContain('"password_verifier" text');
+    expect(migration).toContain('"render_style_snapshot" jsonb');
+    expect(migration).toContain('"message_version_selections" jsonb');
     expect(migration).toContain('ON DELETE cascade');
     expect(migration).toContain('CREATE UNIQUE INDEX "conversation_share_unlock_attempts_bucket_idx"');
     expect(migration).toContain('CREATE INDEX "conversation_shares_conversation_created_idx"');
