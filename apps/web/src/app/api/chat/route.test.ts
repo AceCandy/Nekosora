@@ -312,6 +312,7 @@ describe("POST /api/chat coordinator adapter", () => {
 
     expect(mocks.executeChatCompletion).toHaveBeenCalledWith(expect.objectContaining({
       webSearchEnabled: expected,
+      modelSupportsTools: true,
     }));
   });
 

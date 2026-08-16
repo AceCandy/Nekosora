@@ -649,7 +649,8 @@ export async function POST(req: Request) {
             return {
               request: prepared.irRequest,
               processTrace,
-              webSearchEnabled: effectiveWebSearch && prepared.modelSupportsTools,
+              webSearchEnabled: effectiveWebSearch,
+              modelSupportsTools: prepared.modelSupportsTools,
             };
           },
           emit,

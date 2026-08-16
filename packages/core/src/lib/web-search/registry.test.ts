@@ -20,6 +20,7 @@ vi.mock("drizzle-orm", () => ({
 
 import {
   listWebSearchModelCandidates,
+  listWebSearchQueryModelCandidates,
   parseWebSearchConfig,
   planWebSearchConfigBackfill,
   serializeWebSearchConfig,
@@ -63,13 +64,17 @@ describe("联网搜索配置 V2", () => {
       version: 2 as const,
       providers: [{ id: "exa", type: "exa" as const, name: "Exa", apiKey: "secret", enabled: true }],
       backends: [{ type: "provider" as const, providerId: "exa" }],
+      queryRewriteModelId: "rewrite-model",
     };
     const stored = serializeWebSearchConfig(runtime);
     const dto = toWebSearchConfigDto(runtime);
 
     expect(stored.providers[0].apiKeyCiphertext).toBeTruthy();
     expect(JSON.stringify(stored)).not.toContain("secret");
-    expect(dto.providers[0]).toEqual({ id: "exa", type: "exa", name: "Exa", enabled: true, hasApiKey: true });
+    expect(dto).toMatchObject({
+      queryRewriteModelId: "rewrite-model",
+      providers: [{ id: "exa", type: "exa", name: "Exa", enabled: true, hasApiKey: true }],
+    });
     expect(JSON.stringify(dto)).not.toContain("secret");
     expect(parseWebSearchConfig(stored)).toEqual(runtime);
   });
@@ -194,6 +199,41 @@ describe("联网搜索配置 V2", () => {
     }]);
     expect(mocks.eq).toHaveBeenCalledWith(schema.models.enabled, true);
     expect(mocks.eq).toHaveBeenCalledWith(schema.modelCatalog.enabled, true);
+    expect(mocks.eq).toHaveBeenCalledWith(schema.routes.enabled, true);
+    expect(mocks.eq).toHaveBeenCalledWith(schema.providers.enabled, true);
+    expect(mocks.eq).toHaveBeenCalledWith(schema.models.ownerUserId, "user-1");
+  });
+
+  it("搜索词提炼候选不要求工具或 Hosted Search 能力", async () => {
+    const schema = {
+      models: {
+        id: "models.id",
+        name: "models.name",
+        displayName: "models.displayName",
+        enabled: "models.enabled",
+        visibility: "models.visibility",
+        ownerUserId: "models.ownerUserId",
+      },
+      routes: { modelId: "routes.modelId", providerId: "routes.providerId", enabled: "routes.enabled" },
+      providers: { id: "providers.id", enabled: "providers.enabled" },
+    };
+    const query = {
+      innerJoin: vi.fn(() => query),
+      where: vi.fn(() => Promise.resolve([{
+        id: "rewrite", name: "gemini-3.7-flash", displayName: "Gemini 3.7 Flash",
+      }])),
+    };
+    mocks.getSchema.mockReturnValue(schema);
+    mocks.getDb.mockResolvedValue({
+      select: vi.fn(() => ({ from: vi.fn(() => query) })),
+    });
+
+    await expect(listWebSearchQueryModelCandidates("user-1")).resolves.toEqual([{
+      id: "rewrite",
+      name: "gemini-3.7-flash",
+      displayName: "Gemini 3.7 Flash",
+    }]);
+    expect(mocks.eq).toHaveBeenCalledWith(schema.models.enabled, true);
     expect(mocks.eq).toHaveBeenCalledWith(schema.routes.enabled, true);
     expect(mocks.eq).toHaveBeenCalledWith(schema.providers.enabled, true);
     expect(mocks.eq).toHaveBeenCalledWith(schema.models.ownerUserId, "user-1");

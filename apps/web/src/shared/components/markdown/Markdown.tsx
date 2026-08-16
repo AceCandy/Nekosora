@@ -52,6 +52,7 @@ import {
   parseMarkdown,
   separateBareUrlTrailingText,
   splitStructuredSegments,
+  stripPseudoToolCallBlocks,
 } from "./customRenderer";
 import { resolvePreviewableKind, type PreviewableKind } from "@/lib/artifacts/previewable";
 import { resolveStructuredKind } from "@/lib/artifacts/structured";
@@ -958,7 +959,10 @@ function CustomMarkdownSegment({ children }: { children: string }) {
  * 注:Tailwind 类扫描配置见 globals.css 的 @source 指令。
  */
 function MarkdownImpl({ content, isStreaming, renderer = "streamdown", className, onPreview, renderStyleClass }: MarkdownProps) {
-  const separatedContent = useMemo(() => separateBareUrlTrailingText(content), [content]);
+  const separatedContent = useMemo(
+    () => separateBareUrlTrailingText(stripPseudoToolCallBlocks(content)),
+    [content],
+  );
   const probeCandidates = useMemo(() => (
     isStreaming
       ? []

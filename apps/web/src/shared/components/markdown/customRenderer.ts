@@ -18,6 +18,46 @@ export type StructuredSegment =
   | { type: "code"; language: string; raw: string }
   | { type: "markdown"; text: string };
 
+/** 隐藏模型作为普通正文输出的伪工具调用协议，不将其误当成可执行工具。 */
+export function stripPseudoToolCallBlocks(input: string): string {
+  const output: string[] = [];
+  let markdown: string[] = [];
+  let fence: { char: string; length: number } | null = null;
+
+  const flushMarkdown = () => {
+    if (markdown.length === 0) return;
+    const codeSpans: string[] = [];
+    const protectedText = markdown.join("\n").replace(/(`+)([^\n]*?)\1/g, (value) => {
+      const index = codeSpans.push(value) - 1;
+      return `\u0000CODE${index}\u0000`;
+    });
+    output.push(
+      protectedText
+        .replace(/<tool_call\b[^>]*>[\s\S]*?(?:<\/tool_call\s*>|$)/gi, "")
+        .replace(/\u0000CODE(\d+)\u0000/g, (_, index: string) => codeSpans[Number(index)] ?? ""),
+    );
+    markdown = [];
+  };
+
+  for (const line of input.split("\n")) {
+    const match = line.match(/^ {0,3}(`{3,}|~{3,})/);
+    if (fence) {
+      output.push(line);
+      if (match?.[1][0] === fence.char
+        && match[1].length >= fence.length
+        && line.slice(match[0].length).trim() === "") fence = null;
+    } else if (match) {
+      flushMarkdown();
+      output.push(line);
+      fence = { char: match[1][0], length: match[1].length };
+    } else {
+      markdown.push(line);
+    }
+  }
+  flushMarkdown();
+  return output.join("\n");
+}
+
 /**
  * 将 markdown 文本按结构化代码块切成段。
  * 结构化段交由 React 受控组件渲染,markdown 段仍走 parseMarkdown;

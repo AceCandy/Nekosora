@@ -81,6 +81,18 @@ describe("Markdown", () => {
     expect(html).toContain('data-safety-url="https://example.com/docs"');
   });
 
+  it.each([undefined, "custom" as const])("%s 渲染器隐藏正文中的伪工具调用", (renderer) => {
+    const html = renderToStaticMarkup(createElement(Markdown, {
+      content: "前文\n<tool_call><function=web_search>SECRET_QUERY</function></tool_call>\n后文",
+      renderer,
+    }));
+
+    expect(html).toContain("前文");
+    expect(html).toContain("后文");
+    expect(html).not.toContain("tool_call");
+    expect(html).not.toContain("SECRET_QUERY");
+  });
+
   it("默认渲染器持续解析 HTML 容器内空行后的嵌套标签", () => {
     const html = renderToStaticMarkup(createElement(Markdown, {
       content: [

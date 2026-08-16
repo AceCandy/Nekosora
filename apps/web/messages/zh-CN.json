@@ -362,6 +362,12 @@
     },
     "webSearch": {
       "desc": "配置全局搜索顺序与外接搜索源。聊天只保留一个联网开关，模型需要时按此顺序搜索。",
+      "queryRewriteTitle": "搜索词提炼",
+      "queryRewriteDesc": "无工具能力的模型会先用此模型把用户问题压缩成搜索词。留空则直接使用用户原文。",
+      "queryRewriteModelLabel": "提炼模型",
+      "queryRewriteAuto": "不使用提炼模型",
+      "queryRewriteUnavailable": "已配置模型不可用",
+      "saveQueryRewriteModel": "保存提炼模型",
       "orderTitle": "全局搜索顺序",
       "orderDesc": "拖动调整优先级。不可用的后端会自动跳过。",
       "providersTitle": "外接搜索源",

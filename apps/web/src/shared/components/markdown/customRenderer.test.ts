@@ -8,7 +8,34 @@ import {
   parseMarkdown,
   separateBareUrlTrailingText,
   splitStructuredSegments,
+  stripPseudoToolCallBlocks,
 } from "./customRenderer";
+
+describe("stripPseudoToolCallBlocks", () => {
+  it("隐藏完整伪工具调用并保留前后正文", () => {
+    expect(stripPseudoToolCallBlocks([
+      "前文",
+      "<tool_call><function=web_search>{\"query\":\"test\"}</function></tool_call>",
+      "后文",
+    ].join("\n"))).toBe("前文\n\n后文");
+  });
+
+  it("流式期间隐藏尚未闭合的伪工具调用", () => {
+    expect(stripPseudoToolCallBlocks("前文\n<tool_call><function=web_search>"))
+      .toBe("前文\n");
+  });
+
+  it("保留围栏代码和行内代码中的协议示例", () => {
+    const input = [
+      "`<tool_call>inline</tool_call>`",
+      "```xml",
+      "<tool_call><function=web_search /></tool_call>",
+      "```",
+    ].join("\n");
+
+    expect(stripPseudoToolCallBlocks(input)).toBe(input);
+  });
+});
 
 describe("normalizeHtmlBlockBlankLines", () => {
   it("用不可见注释保留 HTML 容器内的空行", () => {

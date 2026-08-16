@@ -33,8 +33,12 @@ Required environment:
 
 ## 3. Contracts
 
-- WebChat keeps one web toggle. `false` exposes no logical search tool. `true` lets a
-  tool-capable main model decide whether to call `web_search` and which query to use.
+- WebChat keeps one web toggle. `false` performs no search. With `true`, a tool-capable
+  main model decides whether to call `web_search`; a model without tool capability runs
+  one application-side search using the current user message, optionally after a configured
+  query-rewrite model compresses it, then receives the grounded summary as untrusted context
+  before ordinary generation. Missing, unavailable, failed, or empty rewrite output falls back
+  to the original user message.
 - The main model never chooses Tavily, SearXNG, GPT, Claude, Gemini, or Grok directly.
   `searchWeb` resolves the user's ordered list and falls through unavailable or failed entries.
 - Multiple logical `web_search` calls emitted in the same model step run concurrently in stable
@@ -127,7 +131,8 @@ Required environment:
 | --- | --- |
 | Web toggle is off | No logical search tool, search request, or search lifecycle event |
 | Web toggle is on | Inject the request-time `Asia/Shanghai` date; never reuse a date captured at process startup |
-| Catalog supports tools but no enabled route opts in | Do not inject logical search |
+| Catalog supports tools but no enabled route opts in | Run one application-side search when the toggle is on |
+| Main model does not support tools | Do not load MCP or inject tools; run one application-side search when the toggle is on |
 | Main model does not call the tool | Generate normally without a search request |
 | Backend is missing, disabled, invisible, or route-incompatible | Skip it and try the next ordered backend |
 | External backend exceeds its 10-second attempt deadline | Record `timeout`, remember it for this assistant run, and try the next backend while the fallback window remains |
@@ -176,7 +181,8 @@ Required environment:
 - Bad: infer that every model containing `gpt`, `claude`, `gemini`, or `grok` supports search.
 - Bad: assume an `openai-compatible`/2API route supports function tools because its catalog model does.
 - Bad: overwrite an existing assistant's search trace with only the latest continuation run.
-- Bad: pre-search every message when the toggle is on or inject search results into the system prompt.
+- Bad: pre-search tool-capable models, search while the toggle is off, or inject search
+  results into the system prompt.
 - Bad: append only "latest" to the query and claim a hard freshness guarantee, or invent unsupported
   native date-filter fields for a Hosted Search provider.
 - Bad: merge the 60-second fallback window into the Hosted request signal; this turns a backend-start
@@ -206,7 +212,8 @@ Required environment:
 - Public HTTP tests: IPv4/IPv6 private ranges, metadata, DNS rebinding, redirect hops, and valid public hosts.
 - Hosted search tests: all four runtime translators, route mismatch, no citation failure, route/key failover,
   outer `runId` and `toolCallId` linkage.
-- Chat tests: one logical tool, no pre-search, web toggle precedence, SSE event ordering and IDs, backend
+- Chat tests: one logical tool for capable models, one application-side search for models without tools,
+  no MCP injection for models without tools, web toggle precedence, SSE event ordering and IDs, backend
   provenance propagation, per-call success/failure details keyed by `toolCallId`, unsafe historical reason
   rejection, all four generation actions, additive continue trace/citations, history refresh, sibling
   projection, and version replacement.
@@ -219,19 +226,18 @@ Required environment:
 Wrong:
 
 ```ts
-if (webSearch) {
-  const results = await searchWeb(userId, lastUserMessage);
-  system += renderSearchResults(results);
-}
+if (webSearch) system += await searchWeb(userId, lastUserMessage);
 ```
 
 Correct:
 
 ```ts
+if (effectiveWebSearch && !modelCapabilities.tools) {
+  request = appendUntrustedSearchContext(request, await searchWeb(userId, lastUserMessage));
+}
 const webSearchTool = effectiveWebSearch && modelCapabilities.tools
   ? createWebSearchTool(runContext)
   : undefined;
-// The main model calls the single tool only when needed; the server owns backend selection.
 ```
 
 Wrong:

@@ -48,6 +48,7 @@ const v2Schema = z.object({
   version: z.literal(2),
   providers: z.array(providerBaseSchema.extend({ apiKeyCiphertext: z.string().optional() })),
   backends: z.array(backendSchema),
+  queryRewriteModelId: z.string().min(1).optional(),
 });
 
 const cache = new Map<string, { config: WebSearchConfig | null; ts: number }>();
@@ -77,6 +78,7 @@ export function parseWebSearchConfig(value: unknown): WebSearchConfig | null {
         apiKey: apiKeyCiphertext ? decrypt(apiKeyCiphertext) : undefined,
       })),
       backends: dedupeBackends(v2.data.backends),
+      ...(v2.data.queryRewriteModelId ? { queryRewriteModelId: v2.data.queryRewriteModelId } : {}),
     };
   }
 
@@ -102,6 +104,7 @@ export function serializeWebSearchConfig(config: WebSearchConfig): StoredWebSear
       apiKeyCiphertext: apiKey ? encrypt(apiKey) : undefined,
     })),
     backends: dedupeBackends(config.backends),
+    ...(config.queryRewriteModelId ? { queryRewriteModelId: config.queryRewriteModelId } : {}),
   };
 }
 
@@ -138,6 +141,7 @@ export function toWebSearchConfigDto(config: WebSearchConfig): WebSearchConfigDt
       hasApiKey: Boolean(apiKey),
     })),
     backends: structuredClone(config.backends),
+    ...(config.queryRewriteModelId ? { queryRewriteModelId: config.queryRewriteModelId } : {}),
   };
 }
 
@@ -178,6 +182,33 @@ export async function listWebSearchModelCandidates(
   for (const row of rows) {
     const format = row.capabilities?.webSearchFormat;
     if (!row.supportsTools || !format || !isHostedSearchRouteCompatible(format, row.protocol)) continue;
+    candidates.set(row.id, {
+      id: row.id,
+      name: row.name,
+      ...(row.displayName ? { displayName: row.displayName } : {}),
+    });
+  }
+  return Array.from(candidates.values());
+}
+
+/** 列出可用于搜索词提炼的可见、启用模型；不要求模型自身支持工具或 Hosted Search。 */
+export async function listWebSearchQueryModelCandidates(
+  userId: string,
+): Promise<WebSearchModelCandidate[]> {
+  const db = await getDb();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const s = getSchema() as any;
+  const rows = (await db
+    .select({ id: s.models.id, name: s.models.name, displayName: s.models.displayName })
+    .from(s.models)
+    .innerJoin(s.routes, and(eq(s.routes.modelId, s.models.id), eq(s.routes.enabled, true)))
+    .innerJoin(s.providers, and(eq(s.routes.providerId, s.providers.id), eq(s.providers.enabled, true)))
+    .where(and(
+      eq(s.models.enabled, true),
+      or(eq(s.models.visibility, "public"), eq(s.models.ownerUserId, userId)),
+    ))) as Array<{ id: string; name: string; displayName: string | null }>;
+  const candidates = new Map<string, WebSearchModelCandidate>();
+  for (const row of rows) {
     candidates.set(row.id, {
       id: row.id,
       name: row.name,

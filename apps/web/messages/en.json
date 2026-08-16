@@ -362,6 +362,12 @@
     },
     "webSearch": {
       "desc": "Configure the global search order and external providers. Chat keeps one web toggle and searches in this order when needed.",
+      "queryRewriteTitle": "Search query refinement",
+      "queryRewriteDesc": "Models without tool support use this model to compress the user question into a search query. Leave it empty to use the original text.",
+      "queryRewriteModelLabel": "Rewrite model",
+      "queryRewriteAuto": "Do not refine",
+      "queryRewriteUnavailable": "Configured model unavailable",
+      "saveQueryRewriteModel": "Save rewrite model",
       "orderTitle": "Global search order",
       "orderDesc": "Drag to set priority. Unavailable backends are skipped automatically.",
       "providersTitle": "External providers",

@@ -130,18 +130,21 @@ export interface WebSearchConfig {
   version: 2;
   providers: WebSearchProviderConfig[];
   backends: SearchBackend[];
+  queryRewriteModelId?: string;
 }
 
 export interface StoredWebSearchConfig {
   version: 2;
   providers: StoredWebSearchProviderConfig[];
   backends: SearchBackend[];
+  queryRewriteModelId?: string;
 }
 
 export interface WebSearchConfigDto {
   version: 2;
   providers: WebSearchProviderDto[];
   backends: SearchBackend[];
+  queryRewriteModelId?: string;
 }
 
 /** 设置页可选的搜索模型；能力与可执行路由均已由服务端校验。 */

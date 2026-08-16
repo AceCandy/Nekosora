@@ -43,6 +43,7 @@ export interface WebSearchProviderInput {
 interface Props {
   config: WebSearchConfigDto;
   modelCandidates: WebSearchModelCandidate[];
+  queryRewriteModelCandidates: WebSearchModelCandidate[];
   createAction: (input: WebSearchProviderInput) => Promise<void>;
   updateAction: (id: string, input: WebSearchProviderInput) => Promise<void>;
   toggleAction: (id: string, enabled: boolean) => Promise<void>;
@@ -50,6 +51,7 @@ interface Props {
   reorderAction: (backends: SearchBackend[]) => Promise<void>;
   addModelAction: (modelId: string) => Promise<void>;
   removeModelAction: (modelId: string) => Promise<void>;
+  saveQueryRewriteModelAction: (modelId: string) => Promise<void>;
 }
 
 const TYPES: WebSearchProviderType[] = ["tavily", "exa", "bocha", "zhipu", "searxng"];
@@ -57,6 +59,7 @@ const TYPES: WebSearchProviderType[] = ["tavily", "exa", "bocha", "zhipu", "sear
 export default function WebSearchManager({
   config,
   modelCandidates,
+  queryRewriteModelCandidates,
   createAction,
   updateAction,
   toggleAction,
@@ -64,6 +67,7 @@ export default function WebSearchManager({
   reorderAction,
   addModelAction,
   removeModelAction,
+  saveQueryRewriteModelAction,
 }: Props) {
   const t = useTranslations("panel.webSearch");
   const [, startTransition] = useTransition();
@@ -85,6 +89,8 @@ export default function WebSearchManager({
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [selectedModelId, setSelectedModelId] = useState("");
   const [pendingModelId, setPendingModelId] = useState<string | null>(null);
+  const [queryRewriteModelId, setQueryRewriteModelId] = useState(config.queryRewriteModelId ?? "");
+  const [savingQueryRewriteModel, setSavingQueryRewriteModel] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<WebSearchProviderDto | null>(null);
 
   const providerMap = new Map(config.providers.map((provider) => [provider.id, provider]));
@@ -187,8 +193,57 @@ export default function WebSearchManager({
     }
   }
 
+  async function handleSaveQueryRewriteModel() {
+    setSavingQueryRewriteModel(true);
+    try {
+      await saveQueryRewriteModelAction(queryRewriteModelId);
+    } finally {
+      setSavingQueryRewriteModel(false);
+    }
+  }
+
   return (
     <div className="space-y-8">
+      <section className="space-y-3" aria-labelledby="search-query-rewrite-heading">
+        <div>
+          <h2 id="search-query-rewrite-heading" className="text-ui-title font-semibold text-neutral-900 dark:text-neutral-100">
+            {t("queryRewriteTitle")}
+          </h2>
+          <p className="mt-1 text-ui-body text-neutral-600 dark:text-neutral-400">{t("queryRewriteDesc")}</p>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <label className="min-w-0 flex-1 space-y-1" htmlFor="web-search-query-rewrite-model">
+            <span className="text-ui-caption font-medium text-neutral-700 dark:text-neutral-300">
+              {t("queryRewriteModelLabel")}
+            </span>
+            <Select
+              id="web-search-query-rewrite-model"
+              value={queryRewriteModelId}
+              onChange={(event) => setQueryRewriteModelId(event.target.value)}
+              disabled={savingQueryRewriteModel}
+              className="w-full"
+            >
+              <option value="">{t("queryRewriteAuto")}</option>
+              {queryRewriteModelId && !queryRewriteModelCandidates.some((model) => model.id === queryRewriteModelId) && (
+                <option value={queryRewriteModelId}>{t("queryRewriteUnavailable")}</option>
+              )}
+              {queryRewriteModelCandidates.map((model) => (
+                <option key={model.id} value={model.id}>{model.displayName ?? model.name}</option>
+              ))}
+            </Select>
+          </label>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={handleSaveQueryRewriteModel}
+            loading={savingQueryRewriteModel}
+          >
+            {t("saveQueryRewriteModel")}
+          </Button>
+        </div>
+      </section>
+
       <section className="space-y-3" aria-labelledby="search-order-heading">
         <div>
           <h2 id="search-order-heading" className="text-ui-title font-semibold text-neutral-900 dark:text-neutral-100">

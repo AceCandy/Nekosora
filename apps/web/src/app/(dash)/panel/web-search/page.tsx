@@ -5,6 +5,7 @@ import { requireSession } from "@/lib/session";
 import {
   createDefaultWebSearchConfig,
   listWebSearchModelCandidates,
+  listWebSearchQueryModelCandidates,
   loadConfig,
   saveWebSearchConfig,
   toWebSearchConfigDto,
@@ -35,7 +36,10 @@ async function loadCurrentUserConfig() {
 
 export default async function WebSearchPage() {
   const { userId, config } = await loadCurrentUserConfig();
-  const modelCandidates = await listWebSearchModelCandidates(userId);
+  const [modelCandidates, queryRewriteModelCandidates] = await Promise.all([
+    listWebSearchModelCandidates(userId),
+    listWebSearchQueryModelCandidates(userId),
+  ]);
   const t = await getTranslations("panel.webSearch");
   const tn = await getTranslations("nav");
 
@@ -149,12 +153,27 @@ export default async function WebSearchPage() {
     revalidatePath("/panel/web-search");
   }
 
+  async function saveQueryRewriteModel(modelId: string) {
+    "use server";
+    const parsed = z.string().trim().safeParse(modelId);
+    if (!parsed.success) throw new Error("搜索词提炼模型无效");
+    const { userId, config: current } = await loadCurrentUserConfig();
+    const candidates = await listWebSearchQueryModelCandidates(userId);
+    if (parsed.data && !candidates.some((model) => model.id === parsed.data)) {
+      throw new Error("搜索词提炼模型不可用");
+    }
+    current.queryRewriteModelId = parsed.data || undefined;
+    await saveWebSearchConfig(userId, current);
+    revalidatePath("/panel/web-search");
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader icon={Globe} title={tn("webSearch")} desc={t("desc")} />
       <WebSearchManager
         config={toWebSearchConfigDto(config)}
         modelCandidates={modelCandidates}
+        queryRewriteModelCandidates={queryRewriteModelCandidates}
         createAction={createProvider}
         updateAction={updateProvider}
         toggleAction={toggleProvider}
@@ -162,6 +181,7 @@ export default async function WebSearchPage() {
         reorderAction={reorderBackends}
         addModelAction={addModelBackend}
         removeModelAction={removeModelBackend}
+        saveQueryRewriteModelAction={saveQueryRewriteModel}
       />
     </div>
   );
