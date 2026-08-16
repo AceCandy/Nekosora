@@ -1107,3 +1107,24 @@ Show routes as currently unavailable when their provider is disabled in admin an
 ### Status
 
 [OK] **Completed**
+
+
+## Session 111: Web queue producer dispatch
+
+**Date**: 2026-08-17
+**Task**: Web queue producer dispatch
+**Branch**: `main`
+
+### Summary
+
+为 Web Node 进程注入惰性 pg-boss 生产者，保留 Worker 消费与 durable recovery 兜底，并补充依赖、规范和回归测试。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `033bc46` | (see git log) |
+
+### Status
+
+[OK] **Completed**

@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 110
-- **Last Active**: 2026-08-15
+- **Total Sessions**: 111
+- **Last Active**: 2026-08-17
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~1109 | Active |
+| `journal-2.md` | ~1130 | Active |
 | `journal-1.md` | ~1981 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 111 | 2026-08-17 | Web queue producer dispatch | `033bc46` | `main` |
 | 110 | 2026-08-15 | Display disabled provider route status | `3b21696` | `main` |
 | 109 | 2026-08-15 | 自动同步主流目录 | `e3e4836` | `main` |
 | 108 | 2026-08-15 | 修复聊天侧栏生成状态收敛 | `d0aedbb` | `main` |
