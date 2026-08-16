@@ -3,12 +3,16 @@ import type { CallContext } from "@/lib/providers/types";
 import { listWebSearchQueryModelCandidates, loadConfig } from "./registry";
 
 const REWRITE_INPUT_LIMIT = 4_000;
+const REWRITE_CONTEXT_LIMIT = 3_000;
 const REWRITE_OUTPUT_LIMIT = 500;
+const CHAT_TIME_ZONE = "Asia/Shanghai";
+const REFUSAL_QUERY = /^(?:抱歉|对不起|很抱歉|sorry\b|i (?:can(?:not|'t)|am unable)\b)/i;
 
 /** 用用户配置的普通模型把长问题压缩成一条搜索查询；不可用时返回 null 让调用方回退原文。 */
 export async function rewriteSearchQuery(input: {
   userId: string;
   userContent: string;
+  context?: string;
   ctx: CallContext;
   runId: string;
   signal: AbortSignal;
@@ -21,7 +25,16 @@ export async function rewriteSearchQuery(input: {
   const model = (await listWebSearchQueryModelCandidates(input.userId))
     .find((candidate) => candidate.id === modelId);
   if (!model) return null;
+  const currentDate = new Intl.DateTimeFormat("en-CA", {
+    timeZone: CHAT_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
 
+  const rewriteInput = input.context
+    ? `对话上下文（仅用于理解指代，不要直接照抄）：\n${input.context.slice(-REWRITE_CONTEXT_LIMIT)}\n\n当前用户问题：\n${input.userContent.slice(0, REWRITE_INPUT_LIMIT)}`
+    : input.userContent.slice(0, REWRITE_INPUT_LIMIT);
   const result = await generateChat({
     ctx: input.ctx,
     modelId: model.id,
@@ -30,9 +43,9 @@ export async function rewriteSearchQuery(input: {
       messages: [
         {
           role: "system",
-          content: "将用户问题改写为一条适合搜索引擎的查询。保留专有名词、版本号、错误信息和时间范围。只输出查询本身，不要解释、引号或 Markdown。",
+          content: `将用户问题改写为一条适合搜索引擎的查询。当前日期是 ${currentDate}，时区是 ${CHAT_TIME_ZONE}；遇到今天、最新、近期等相对时间时，以此日期补充必要的时间信息。保留专有名词、版本号、错误信息和用户明确给出的时间范围。只输出查询本身，不要回答问题、拒绝请求、解释、添加引号或 Markdown。`,
         },
-        { role: "user", content: input.userContent.slice(0, REWRITE_INPUT_LIMIT) },
+        { role: "user", content: rewriteInput },
       ],
       temperature: 0,
       max_tokens: 128,
@@ -53,5 +66,5 @@ export async function rewriteSearchQuery(input: {
     .replace(/^["'“”‘’]+|["'“”‘’]+$/g, "")
     .trim()
     .slice(0, REWRITE_OUTPUT_LIMIT);
-  return query || null;
+  return query && !REFUSAL_QUERY.test(query) ? query : null;
 }

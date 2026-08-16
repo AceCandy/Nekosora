@@ -37,8 +37,11 @@ Required environment:
   main model decides whether to call `web_search`; a model without tool capability runs
   one application-side search using the current user message, optionally after a configured
   query-rewrite model compresses it, then receives the grounded summary as untrusted context
-  before ordinary generation. Missing, unavailable, failed, or empty rewrite output falls back
-  to the original user message.
+  before ordinary generation. The rewrite request receives the request-time `Asia/Shanghai`
+  date plus at most eight prior text messages bounded to the latest 3,000 characters, so it can
+  resolve relative dates and conversational references without treating history as the current
+  question. Missing, unavailable, failed, empty, or refusal-like rewrite output falls back to
+  the original user message.
 - The main model never chooses Tavily, SearXNG, GPT, Claude, Gemini, or Grok directly.
   `searchWeb` resolves the user's ordered list and falls through unavailable or failed entries.
 - Multiple logical `web_search` calls emitted in the same model step run concurrently in stable
@@ -209,6 +212,8 @@ Required environment:
   parts as well as thrown abort errors.
 - Context tests: search-enabled requests receive the request-time `Asia/Shanghai` date; the value is
   generated per request rather than stored as a fixed prompt constant.
+- Query-rewrite tests: request-time date injection, bounded prior-message context separated from the
+  current question, refusal-output fallback, and plain/Markdown-wrapped query cleanup.
 - Public HTTP tests: IPv4/IPv6 private ranges, metadata, DNS rebinding, redirect hops, and valid public hosts.
 - Hosted search tests: all four runtime translators, route mismatch, no citation failure, route/key failover,
   outer `runId` and `toolCallId` linkage.

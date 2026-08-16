@@ -26,15 +26,20 @@ beforeEach(() => {
 
 describe("rewriteSearchQuery", () => {
   it("使用配置模型并清理纯文本查询输出", async () => {
-    mocks.generateChat.mockResolvedValue({ text: "```text\n最新 Gemini 代理空响应原因\n```" });
+    vi.setSystemTime(new Date("2026-08-15T16:30:00.000Z"));
+    mocks.generateChat.mockResolvedValue({ text: "```text\n2026-08-16 最新 Gemini 代理空响应原因\n```" });
 
-    await expect(rewriteSearchQuery({
-      userId: "user-1",
-      userContent: "为什么网关调用 Gemini 没有响应？",
-      ctx: { userId: "user-1", keyKind: null, source: "chat" },
-      runId: "run-1",
-      signal: new AbortController().signal,
-    })).resolves.toBe("最新 Gemini 代理空响应原因");
+    try {
+      await expect(rewriteSearchQuery({
+        userId: "user-1",
+        userContent: "为什么今天网关调用 Gemini 没有响应？",
+        ctx: { userId: "user-1", keyKind: null, source: "chat" },
+        runId: "run-1",
+        signal: new AbortController().signal,
+      })).resolves.toBe("2026-08-16 最新 Gemini 代理空响应原因");
+    } finally {
+      vi.useRealTimers();
+    }
 
     expect(mocks.generateChat).toHaveBeenCalledWith(expect.objectContaining({
       modelId: "rewrite-1",
@@ -43,6 +48,49 @@ describe("rewriteSearchQuery", () => {
         model: "rewrite-model",
         temperature: 0,
         max_tokens: 128,
+        messages: [
+          expect.objectContaining({
+            role: "system",
+            content: expect.stringContaining("当前日期是 2026-08-16，时区是 Asia/Shanghai"),
+          }),
+          expect.objectContaining({ role: "user" }),
+        ],
+      }),
+    }));
+  });
+
+  it("拒答式输出回退到原始用户问题", async () => {
+    mocks.generateChat.mockResolvedValue({ text: "抱歉，我无法按照这个时间告诉你其他家的新模型。" });
+
+    await expect(rewriteSearchQuery({
+      userId: "user-1",
+      userContent: "按照今天的时间告诉我其他家的新模型",
+      ctx: { userId: "user-1", keyKind: null, source: "chat" },
+      runId: "run-1",
+      signal: new AbortController().signal,
+    })).resolves.toBeNull();
+  });
+
+  it("把历史上下文和当前问题分开交给提炼模型", async () => {
+    mocks.generateChat.mockResolvedValue({ text: "Gemini 3.2 最新发布" });
+
+    await rewriteSearchQuery({
+      userId: "user-1",
+      userContent: "那其他厂商呢？",
+      context: "user: 介绍一下最近的 Gemini 新模型\nassistant: Gemini 3.2 已发布。",
+      ctx: { userId: "user-1", keyKind: null, source: "chat" },
+      runId: "run-1",
+      signal: new AbortController().signal,
+    });
+
+    expect(mocks.generateChat).toHaveBeenCalledWith(expect.objectContaining({
+      request: expect.objectContaining({
+        messages: expect.arrayContaining([
+          expect.objectContaining({
+            role: "user",
+            content: expect.stringMatching(/对话上下文[\s\S]*当前用户问题：\n那其他厂商呢？/),
+          }),
+        ]),
       }),
     }));
   });

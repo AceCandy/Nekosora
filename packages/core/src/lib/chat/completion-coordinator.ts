@@ -400,10 +400,24 @@ export async function executeChatCompletion(
 
 async function prefetchWebSearch(input: ExecuteChatCompletionInput): Promise<void> {
   let query = input.userContent.trim().slice(0, 500);
+  const context = input.request.messages
+    .slice(0, -1)
+    .flatMap((message) => {
+      if (typeof message.content === "string") return [`${message.role}: ${message.content}`];
+      const text = message.content
+        .filter((part) => part.type === "text" && part.text)
+        .map((part) => part.text)
+        .join(" ");
+      return text ? [`${message.role}: ${text}`] : [];
+    })
+    .slice(-8)
+    .join("\n")
+    .slice(-3_000);
   try {
     query = (await rewriteSearchQuery({
       userId: input.userId,
       userContent: input.userContent,
+      context: context || undefined,
       ctx: input.ctx,
       runId: input.runId,
       signal: input.signal,
