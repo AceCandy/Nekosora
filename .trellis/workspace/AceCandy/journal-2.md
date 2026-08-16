@@ -1128,3 +1128,25 @@ Show routes as currently unavailable when their provider is disabled in admin an
 ### Status
 
 [OK] **Completed**
+
+
+## Session 112: Search context and full-suite repair
+
+**Date**: 2026-08-17
+**Task**: Search context and full-suite repair
+**Branch**: `main`
+
+### Summary
+
+为无工具模型的搜索词提炼加入当天日期与历史上下文，并修复 Better Auth mock 解析、空流回退和 baseline 迁移测试，使全量检查、测试与三端构建通过。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `849faa2` | (see git log) |
+| `4cb5f58` | (see git log) |
+
+### Status
+
+[OK] **Completed**
