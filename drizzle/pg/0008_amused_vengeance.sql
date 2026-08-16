@@ -1,1 +1,0 @@
-ALTER TABLE "providers" ADD COLUMN "supports_stream_usage" boolean;

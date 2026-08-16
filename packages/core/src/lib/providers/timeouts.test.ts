@@ -11,6 +11,7 @@ import {
 describe("provider timeout policy", () => {
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllEnvs();
     vi.restoreAllMocks();
   });
 
@@ -148,5 +149,44 @@ describe("provider timeout policy", () => {
     expect(receivedSignal?.aborted).toBe(false);
     caller.abort();
     expect(receivedSignal?.aborted).toBe(true);
+  });
+
+  it("debug 模式只记录脱敏上游请求与响应摘要", async () => {
+    vi.stubEnv("GATEWAY_DEBUG_REQUESTS", "true");
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(
+      `data: ${JSON.stringify({ choices: [{ delta: { content: "secret response" } }] })}\n\ndata: [DONE]\n\n`,
+      {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      },
+    ));
+    const providerFetch = createProviderFetch();
+
+    await providerFetch("https://example.test/v1/models/demo:streamGenerateContent?key=secret-key", {
+      method: "POST",
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: "secret prompt" }] }],
+        generationConfig: {
+          maxOutputTokens: 1024,
+          thinkingConfig: { thinkingLevel: "LOW", includeThoughts: true },
+        },
+      }),
+    });
+
+    const output = info.mock.calls.flat().join(" ");
+    expect(output).toContain("[gateway:debug] upstream-request");
+    expect(output).toContain('"path":"/v1/models/demo:streamGenerateContent"');
+    expect(output).toContain('"contentsCount":1');
+    expect(output).toContain('"contentRoles":{"user":1}');
+    expect(output).toContain('"thinkingLevel":"LOW"');
+    expect(output).toContain('"status":200');
+    expect(output).not.toContain("secret-key");
+    expect(output).not.toContain("secret prompt");
+    await vi.waitFor(() => expect(info).toHaveBeenCalledWith(
+      "[gateway:debug] upstream-body",
+      expect.stringContaining('"topLevelKeys":["choices"]'),
+    ));
+    expect(info.mock.calls.flat().join(" ")).not.toContain("secret response");
   });
 });

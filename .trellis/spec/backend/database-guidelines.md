@@ -181,6 +181,7 @@ if (job) void dispatchConversationTitleJob(job.id);
 - 旧账本的 `id` 只用于条件更新/删除，不代表 canonical 迁移顺序；验证完整历史时按唯一 `created_at` 排序后逐项匹配已知 hash，兼容历史重定时造成的插入顺序差异。
 - PG baseline enum 用 `DO ... EXCEPTION WHEN duplicate_object` 幂等。
 - 全部 PG 表/enum 存在但 `drizzle.__drizzle_migrations` 为空 → 启动补基线记录后继续。
+- `PG_BASELINE_TABLES` 与 `PG_BASELINE_TYPES` 必须覆盖当前 `0000_snapshot.json` 的完整表和 enum 集合；squash 时同步更新，禁止保留已删除对象或遗漏后续新增对象。
 - 只有 enum 残留 → 继续幂等建表。
 - 部分表存在 → throw 明确的 partial-schema 错误(不猜测)。
 - 历史 journal 时间漂移只允许协调“相同 SQL hash 已按旧时间登记”的单一安全场景：前序 canonical 时间完整、目标时间未占用、没有后续或未知记录；`0000` 的历史 hash 只能通过代码中的显式白名单兼容。
@@ -196,6 +197,7 @@ if (job) void dispatchConversationTitleJob(job.id);
 - 相同 hash 位于旧时间且完整连续前缀可证明 → 条件修正 `created_at`，再由官方 migrator 执行尾部迁移。
 - 前序缺失、后续提前登记、未知记录、重复 id/hash/时间或目标时间冲突 → 不 UPDATE、不调用 migrator。
 - 开发期 squash 后完整旧 hash 集合匹配 → 精确更新首条为新基线 hash/time、删除其余旧记录并校验各自 `rowCount`；任一 hash 缺失/未知、时间重复或行数异常 → 整个事务回滚并阻断启动。
+- 单基线必须保留新库启动所需的目录数据；schema-only 生成物缺少 `model_catalog` 数据时，须附带受审目录快照及 SHA-256，不能依赖已有数据库内容。
 - 条件 UPDATE 未命中或无明确 `rowCount` → 视为并发变化，回滚并阻断启动。
 - advisory lock 获取/释放失败 → 阻断启动；无法确认解锁时销毁连接。
 - 全表存在无 Drizzle 记录 → 补基线记录后 migrate 继续。
@@ -212,6 +214,7 @@ if (job) void dispatchConversationTitleJob(job.id);
 - Bad: 只提交 `0000_*.sql`,忽略 `meta/**`。
 - Bad: 把 partial schema 标记为已迁移。
 - Bad: 只按表名判断 schema 完整，忽略关键列缺失后补写基线迁移记录。
+- Bad: squash 后沿用旧的 baseline 表/enum 清单，导致完整 schema 被拒绝或缺表 schema 被收养。
 - Bad: 为整理编号、文件名或时间线而改写已发布 journal 的 `when/tag/idx`。
 - Bad: 因为产品未上线就假定测试库可丢弃，压缩 journal 后让已有完整账本变成未知记录。
 - Bad: 在 Pool 上先拿 advisory lock，再调用可能切换连接的 migrator。
@@ -220,7 +223,8 @@ if (job) void dispatchConversationTitleJob(job.id);
 - PG 迁移单测:complete-existing-schema adoption + partial-table/critical-column rejection
   (见 `src/lib/infra/db/bootstrap.test.ts`)。
 - 协调单测:安全重定时、连续前缀/空账本、journal 与 ledger 重复、断层、未知记录、baseline 白名单、UPDATE `rowCount`。
-- squash 账本单测:两个已知旧 baseline hash、完整旧链成功、`id`/时间顺序不同、任一 hash 不匹配、仅旧 baseline、UPDATE/DELETE `rowCount` 异常。
+- squash 账本单测:已知旧 baseline hash、完整旧链成功、`id`/时间顺序不同、任一 hash 不匹配、仅旧 baseline、UPDATE/DELETE `rowCount` 异常。
+- squash 产物测试:journal 仅一条、root snapshot 与当前 schema 等价、模型目录快照存在且来源 hash 合法。
 - 连接生命周期单测:锁获取失败、migrate 失败、unlock 返回 false/抛错，断言 unlock 与 `release(destroy)`。
 - 断言点:`insert/update drizzle.__drizzle_migrations`、表锁与 advisory lock 顺序、错误路径不调用 migrator。
 - 真实启动验证:启动日志只协调目标 hash，尾部迁移新增账本记录，目标 schema 对象存在，健康检查通过，调试服务关闭。

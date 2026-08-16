@@ -158,8 +158,8 @@ while a concrete OpenAI-compatible/2API route does not preserve tool-call events
 ### 2. Signatures
 
 - Database: `routes.supports_tools boolean NOT NULL DEFAULT true` for new rows. Migration
-  `0005_stale_rick_jones.sql` keeps the historical column default/rows at `false`, while
-  `0006_daily_wonder_man.sql` changes only the future default; it does not backfill rows.
+  The squashed `0000_baseline.sql` sets the fresh-database default to `true`; existing
+  pre-squash databases retain their historical row values when their ledger is compacted.
 - Runtime: `ResolvedRoute.supportsTools?: boolean`.
 - Effective capability: `model_catalog.capabilities.tools === true && route.supportsTools === true`.
 - Route form: `supportsToolsPresent=true` means the checkbox was rendered; a checked

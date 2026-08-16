@@ -108,39 +108,37 @@ export async function runMigrations(db: unknown): Promise<void> {
 
 const PG_BASELINE_TYPES = [
   "api_key_kind",
+  "gateway_governance_operation",
+  "gateway_quota_kind",
   "message_status",
   "model_visibility",
   "provider_protocol",
+  "route_api_format",
 ] as const;
 
-// 合并为单基线前的 0000 存在两个已执行版本；仅完整旧迁移链可使用这些 hash。
+// 仅完整匹配本次预发布迁移链时，才允许无损归并现有账本。
 const PG_PRE_SQUASH_BASELINE_HASHES = new Set([
-  "0f852461b32b9e206d15e4229ea861c7143efe9b220e341d3bcb0dcee8f6511c",
-  "de7459d7adc1a1cbe515d04f99bfd6a5434082d6d7439d5d85dff08cbed12601",
+  "3fec68fc777efd40898da6d0bc06fd658a8f0b7ebd8fe9cba8f3949424f5c252",
 ]);
 
-/** 合并前 0000-0019 的 canonical hash，用于证明旧账本已完整执行。 */
+/** 合并前 0000-0015 的 canonical hash，用于证明旧账本已完整执行。 */
 const PG_PRE_SQUASH_MIGRATION_HASHES = [
-  "de7459d7adc1a1cbe515d04f99bfd6a5434082d6d7439d5d85dff08cbed12601",
-  "9b6f59ad1abfbce5040cddedec2177ad961d1062f3b68f9c41dd987fa2a19299",
-  "67deb42fc6262bb3d5fe0df5733859269f8f196ea074deee0b2600181940bd54",
-  "f6dc7f2caeb794d43e32b553f835f573f6623b345963ee5c56a45b34b09a836c",
-  "0a36293bea556f6afe2e146ea5c4eb322a508f872c37d6efca4794941eab3fe0",
-  "302456d54626d85edea481d16001d471d81db680e823bfbe084a1ebee5f7ef8b",
-  "756216e54ab122f03cdfbba9a86468755948258c7db66dc1e155ee056ef2c751",
-  "a52e52f02839c9eaa4d7018c7a13b37d00b8f1211e5ce6c0f8ad09cfec25d512",
-  "dac9a2e8729110274d50e6ae367fe4b26e1982183c8bf9735aa0d8576892a24f",
-  "e4d04b5ee2a24ed11c7bb513aac3d838b3a6f7dcbb90e1ed9a12a0c2a8d97469",
-  "4cc2f0c7ca7a9203cdecf52efb64176d3273bd7afc07aca22df5a190b11dd280",
-  "81ad1c9234b0ac5993b96658e2d7bfe4a2e1cd61852e237bc4b1e31546f55bc1",
-  "e85eeb79b677dbe060e625a71913fab5dac965437b5e9ed341473313803add3b",
-  "a4ae7889201b55f76aecf1431b54f7cff64cf9b2a8ea6fc643fbb8a00b5ed173",
-  "450ac08e5d3c41458c3643c9101e15c4be95d8fa39ac46669dc644705d2f017f",
-  "401e2ba3ee6c1757e972c218f0d87e5afd07bb077a518bfb9b8ea8b6cbf116e5",
-  "18bc0460adaeeae9462db2388681cabc1c972ade43f30a5cb42b483e85c5f773",
-  "7846c8a42746047eda8f2630202134892abf62a37ca6547c7b5f388f74b11b98",
-  "4fca4ff501801f3cc7df8c8e82e362182666bae8a1f11121b8016abcc3c3a52d",
-  "66dffda6f13f95f24b6b53016919f6699a8dc72203c86d53e2394ea738629b3d",
+  "3fec68fc777efd40898da6d0bc06fd658a8f0b7ebd8fe9cba8f3949424f5c252",
+  "f12dd70266b6ceed7aaa682f1007984e253fd9682b73b1c1a446165fe790a158",
+  "8a5e3b1c0b7b93319ef2ce17f0444379735a1f88eb87b031ef37b7485e7fc2ea",
+  "11822ee2598955603dac2afb72148542dd33d2fd8126872d0663d26cbb5655be",
+  "b09659d07d49d91a034f902965771d263b70c2d6196f7c6464acd4eb75f8bb2c",
+  "e418a6c0e4c67ea0392fb3291e909c79b5b43d25defef4152f744178f0884863",
+  "85feece5022887c83d202dee31ebc2ef10ede80f8350e313fd3c76ad7e3ba163",
+  "ee029092d549358b511669c2805024b89435c159d9be25e813fcf90939bce3ed",
+  "493ef64e2419c54d8b88680956244232bc7f080d713ac3d54afa461ab1ba3d00",
+  "3df3c6dae51c3ce6bceed319134332b43d40c80b386b8b3d1c9b8338f01eedbc",
+  "0a5a8d441b339aeaa6ab580d3b73935922b6c840cf4df63f90d7caf8d7aeaaf2",
+  "92b0e218fb7a2d7b7f9f2af612c1d061b1550f781fa1cdbfbad8526954a80567",
+  "b215370eecea0e4c0aaf8b6147750b2aca9d559d8d8f03dedd7b9c30551f4975",
+  "37c25fbb9ee852721b1a068a97abf7196fcd1c17526f035a40794dd78b1c22db",
+  "2a7be65eff84ae31a0f62d77615318665c80b6d9a149df87f036e9ad4ebd663a",
+  "181e5a0921b270020da8780a76481eea7c17873317d9877952ef1f52ed8810e1",
 ] as const;
 
 const PG_MIGRATION_LOCK_SQL =
@@ -155,15 +153,27 @@ const PG_BASELINE_TABLES = [
   "context_snapshots",
   "conversation_projects",
   "conversation_shares",
+  "conversation_share_unlock_attempts",
+  "conversation_title_jobs",
   "conversations",
   "file_chunks",
   "file_objects",
+  "gateway_attempts",
+  "gateway_executions",
+  "gateway_governance_leases",
+  "gateway_governance_subjects",
+  "gateway_quota_windows",
+  "gateway_retention_state",
   "image_jobs",
   "instruction_cards",
   "key_model_bindings",
   "knowledge_bases",
   "mcp_servers",
+  "memory_extraction_jobs",
+  "message_feedback",
+  "message_file_objects",
   "messages",
+  "model_catalog",
   "output_modes",
   "prompt_templates",
   "render_styles",
@@ -171,7 +181,6 @@ const PG_BASELINE_TABLES = [
   "session",
   "system_settings",
   "tool_calls",
-  "usage_logs",
   "user",
   "models",
   "providers",
@@ -300,6 +309,8 @@ async function withPgMigrationLock<T>(
     } finally {
       try {
         if (lockAcquired) {
+          // 咨询锁是会话级的；即使解锁成功也不复用迁移连接，杜绝锁状态泄漏。
+          destroyClient = true;
           const [result] = await pgRows<{ unlocked: boolean }>(
             migrationDb,
             PG_MIGRATION_UNLOCK_SQL,
@@ -309,7 +320,6 @@ async function withPgMigrationLock<T>(
           }
         }
       } catch (error) {
-        destroyClient = true;
         throw error;
       }
     }
@@ -356,7 +366,7 @@ interface PgMigrationReconciliation {
 }
 
 /**
- * 开发期将 0000-0019 合并为单基线后，完整旧账本可安全收敛为新基线记录。
+ * 开发期将 0000-0015 合并为单基线后，完整旧账本可安全收敛为新基线记录。
  * 只有全部旧 hash 按顺序匹配时才改写；部分迁移或未知记录交给后续严格校验阻断。
  */
 async function compactPreSquashPgMigrationLedgerIfNeeded(

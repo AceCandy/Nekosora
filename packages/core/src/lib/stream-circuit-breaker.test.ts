@@ -181,6 +181,7 @@ describe("chat generation circuit breaker reporting", () => {
   afterEach(() => {
     resetRouteRepository();
     resetAllBreakers();
+    vi.unstubAllEnvs();
     vi.restoreAllMocks();
   });
 
@@ -491,6 +492,81 @@ describe("chat generation circuit breaker reporting", () => {
     expect(mocks.finalizeExecution).toHaveBeenCalledWith(expect.objectContaining({
       firstTokenLatencyMs: 300,
     }));
+  });
+
+  it("上游空流时回退非流式生成", async () => {
+    vi.mocked(streamText).mockReturnValue(mockStreamResult([], "other", {}));
+    vi.mocked(generateText).mockResolvedValue({
+      text: "OK",
+      reasoningText: undefined,
+      toolCalls: [],
+      finishReason: "stop",
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+    } as never);
+
+    const events = await collectStream();
+
+    expect(generateText).toHaveBeenCalledOnce();
+    expect(events).toEqual([
+      { type: "text-delta", text: "OK" },
+      {
+        type: "finish",
+        finishReason: "stop",
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+      },
+    ]);
+  });
+
+  it("内容过滤的空响应不做非流式重试", async () => {
+    vi.mocked(streamText).mockReturnValue(mockStreamResult([], "content-filter", {}));
+
+    const events = await collectStream();
+
+    expect(generateText).not.toHaveBeenCalled();
+    expect(events).toEqual([{
+      type: "finish",
+      finishReason: "content-filter",
+      usage: {},
+    }]);
+  });
+
+  it("debug 模式只记录脱敏响应事件摘要", async () => {
+    vi.stubEnv("GATEWAY_DEBUG_REQUESTS", "true");
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    vi.mocked(streamText).mockReturnValue(mockStreamResult(
+      [],
+      "stop",
+      { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    ));
+    vi.mocked(generateText).mockResolvedValue({
+      text: "fallback",
+      reasoningText: undefined,
+      toolCalls: [],
+      finishReason: "stop",
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+    } as never);
+
+    const events = [];
+    for await (const event of streamChat({
+      ctx: { userId: "user-a", keyKind: null, source: "gateway" },
+      request: {
+        model: "test-model",
+        messages: [{ role: "user", content: "secret prompt" }],
+      },
+      userAgent: "Nekusora-Test",
+    })) {
+      events.push(event);
+    }
+
+    expect(events).toEqual([
+      { type: "text-delta", text: "fallback" },
+      expect.objectContaining({ type: "finish" }),
+    ]);
+    expect(info).toHaveBeenCalledWith(
+      "[gateway:debug] response",
+      expect.stringContaining('"eventCounts":{"text-delta":1,"finish":1}'),
+    );
+    expect(info.mock.calls.flat().join(" ")).not.toContain("secret prompt");
   });
 
   it("首路由未输出即失败时仍转移到下一路由", async () => {

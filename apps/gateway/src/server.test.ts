@@ -135,6 +135,84 @@ describe("Gateway HTTP adapter", () => {
     await app.close();
   });
 
+  it("显式开启时只记录脱敏请求摘要", async () => {
+    vi.stubEnv("GATEWAY_DEBUG_REQUESTS", "true");
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const app = withHandler("v1ChatCompletions", async () => Response.json({ ok: true }));
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/chat/completions",
+        headers: {
+          authorization: "Bearer sk-sensitive",
+          "content-type": "application/json",
+        },
+        payload: {
+          model: "gemini-3.7-flash",
+          messages: [
+            { role: "system", content: "secret-system-prompt" },
+            { role: "user", content: "secret-user-message" },
+            { role: "secret-role", content: "invalid-role-message" },
+          ],
+          stream: true,
+          temperature: 0.7,
+          top_p: 0.9,
+          max_tokens: 4096,
+          reasoning_effort: "low",
+          stream_options: { include_usage: true },
+          tools: [{ type: "function", function: { name: "secret-tool" } }],
+          custom_secret: "secret-extra-field",
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(info).toHaveBeenCalledOnce();
+      expect(info).toHaveBeenCalledWith(
+        "[gateway:debug] request",
+        expect.stringContaining('"model":"gemini-3.7-flash"'),
+      );
+      const summary = JSON.parse(String(info.mock.calls[0][1]));
+      expect(summary).toMatchObject({
+        messageCount: 3,
+        messageRoles: { system: 1, user: 1, unknown: 1 },
+        toolsCount: 1,
+      });
+      const output = info.mock.calls.flat().join(" ");
+      expect(output).not.toContain("sk-sensitive");
+      expect(output).not.toContain("secret-system-prompt");
+      expect(output).not.toContain("secret-user-message");
+      expect(output).not.toContain("secret-role");
+      expect(output).not.toContain("invalid-role-message");
+      expect(output).not.toContain("secret-tool");
+      expect(output).not.toContain("secret-extra-field");
+    } finally {
+      await app.close();
+      info.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("默认不记录请求摘要", async () => {
+    vi.stubEnv("GATEWAY_DEBUG_REQUESTS", "false");
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const app = withHandler("v1ChatCompletions", async () => Response.json({ ok: true }));
+
+    try {
+      await app.inject({
+        method: "POST",
+        url: "/v1/chat/completions",
+        headers: { "content-type": "application/json" },
+        payload: { model: "gemini-3.7-flash", messages: [] },
+      });
+      expect(info).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+      info.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("把 multipart 请求转换为标准 FormData", async () => {
     const app = withHandler("v1AudioTranscriptions", async (request) => {
       const form = await request.formData();

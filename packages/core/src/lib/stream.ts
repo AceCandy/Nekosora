@@ -118,6 +118,7 @@ export async function* streamChat(
   let outcome: GatewayExecutionOutcome<void> | undefined;
   let executionRequest = request;
   let toolsFallbackAttempted = false;
+  const debugEventCounts: Partial<Record<StreamEvent["type"], number>> = {};
 
   const createExecution = (currentRequest: IRRequest) => {
     const adapter: GatewayAttemptAdapter<StreamEvent, void> = async function* ({
@@ -217,6 +218,7 @@ export async function* streamChat(
           outcome = currentOutcome;
           break;
         }
+        debugEventCounts[next.value.type] = (debugEventCounts[next.value.type] ?? 0) + 1;
         yield next.value;
       }
       if (outcome) break;
@@ -243,6 +245,20 @@ export async function* streamChat(
       }
     }
     releaseStream();
+    if (ctx.source === "gateway" && process.env.GATEWAY_DEBUG_REQUESTS === "true") {
+      console.info("[gateway:debug] response", JSON.stringify({
+        model: request.model,
+        status: outcome?.status ?? (opts.abortSignal?.aborted ? "interrupted" : "failed"),
+        committed: outcome?.committed ?? false,
+        hasVisibleText: outcome?.firstTokenAt !== undefined,
+        eventCounts: debugEventCounts,
+        usage: outcome?.usage ?? {},
+        provider: outcome?.route?.provider.name,
+        protocol: outcome?.route?.protocol,
+        apiFormat: outcome?.route?.apiFormat,
+        upstreamModel: outcome?.route?.upstreamModelName,
+      }));
+    }
     if (opts.suppressFinalUsageLog) {
       const finalStatus = outcome?.status ?? (opts.abortSignal?.aborted ? "interrupted" : "failed");
       try {
@@ -492,7 +508,7 @@ async function* streamWithRoute(
     ? { openai: { store: false } }
     : undefined;
 
-  const result = streamText({
+  const generationOptions = {
     model,
     // 禁用 AI SDK 自动重试(默认 2 次):429/quota 不被重试放大 TPM,5xx 不加重上游压力;
     // 故障转移由上层 streamChat 的多 key + 多路由 + 熔断接管。
@@ -522,6 +538,9 @@ async function* streamWithRoute(
       : undefined,
     // 客户端断开时中止上游 fetch,避免继续写已关闭 socket → uncaughtException。
     abortSignal,
+  };
+  const result = streamText({
+    ...generationOptions,
     timeout: {
       chunkMs: resolveProviderTimeouts(route.provider).streamIdleTimeoutMs,
     },
@@ -530,27 +549,34 @@ async function* streamWithRoute(
   // 优先用 fullStream 捕获 tool-call 增量；stream fallback 兼容旧 adapter/test double。
   const eventStream = (result as typeof result & { stream?: typeof result.fullStream }).fullStream
     ?? (result as typeof result & { stream?: typeof result.fullStream }).stream;
+  let hadOutput = false;
   for await (const part of eventStream) {
     switch (part.type) {
       case "text-delta":
+        if (part.text.length > 0) hadOutput = true;
         // 首 token 采样:仅首个非空可见正文记录,reasoning/空 delta 不计入。
         if (part.text.length > 0 && timing.firstTokenAt === undefined) timing.firstTokenAt = Date.now();
         yield { type: "text-delta", text: part.text };
         break;
       case "reasoning-delta":
+        if (part.text.length > 0) hadOutput = true;
         // 推理增量(如 deepseek-r1/Claude thinking)透传给 UI。
         yield { type: "reasoning-delta", text: part.text };
         break;
       case "tool-input-start":
+        hadOutput = true;
         yield { type: "tool-call-start", toolCallId: part.id, toolName: part.toolName };
         break;
       case "tool-input-delta":
+        hadOutput = true;
         yield { type: "tool-call-delta", toolCallId: part.id, delta: part.delta };
         break;
       case "tool-input-end":
+        hadOutput = true;
         yield { type: "tool-call-end", toolCallId: part.id };
         break;
       case "tool-call":
+        hadOutput = true;
         yield {
           type: "tool-call",
           toolCallId: part.toolCallId,
@@ -569,6 +595,37 @@ async function* streamWithRoute(
   }
 
   const finalUsage = await result.usage;
+  const finishReason = await result.finishReason;
+  if (!hadOutput && (finishReason === "stop" || finishReason === "other")) {
+    const fallback = await generateText(generationOptions);
+    if (fallback.reasoningText) {
+      yield { type: "reasoning-delta", text: fallback.reasoningText };
+    }
+    if (fallback.text) {
+      if (timing.firstTokenAt === undefined) timing.firstTokenAt = Date.now();
+      yield { type: "text-delta", text: fallback.text };
+    }
+    for (const toolCall of fallback.toolCalls) {
+      yield {
+        type: "tool-call",
+        toolCallId: toolCall.toolCallId,
+        toolName: toolCall.toolName,
+        args: toolCall.input,
+      };
+    }
+    yield {
+      type: "finish",
+      finishReason: fallback.finishReason,
+      usage: {
+        inputTokens: fallback.usage.inputTokens,
+        outputTokens: fallback.usage.outputTokens,
+        totalTokens: fallback.usage.totalTokens,
+        reasoningTokens: fallback.usage.outputTokenDetails?.reasoningTokens,
+        cachedInputTokens: fallback.usage.inputTokenDetails?.cacheReadTokens,
+      },
+    };
+    return;
+  }
   const irUsage: IRUsage = {
     inputTokens: finalUsage.inputTokens,
     outputTokens: finalUsage.outputTokens,
@@ -576,7 +633,7 @@ async function* streamWithRoute(
     reasoningTokens: finalUsage.outputTokenDetails?.reasoningTokens,
     cachedInputTokens: finalUsage.inputTokenDetails?.cacheReadTokens,
   };
-  yield { type: "finish", finishReason: await result.finishReason, usage: irUsage };
+  yield { type: "finish", finishReason, usage: irUsage };
 }
 
 /** 推理与缓存选项跟随 route wire format，不再跟随 Provider 默认连接类型。 */

@@ -116,6 +116,73 @@ async function toFetchRequest(request: FastifyRequest, signal: AbortSignal): Pro
   });
 }
 
+function debugRequestSummary(request: FastifyRequest, handler: GatewayHandlerName) {
+  if (process.env.GATEWAY_DEBUG_REQUESTS !== "true") return;
+
+  let body: Record<string, unknown> | undefined;
+  if (Buffer.isBuffer(request.body)) {
+    try {
+      const parsed = JSON.parse(request.body.toString("utf8"));
+      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+        body = parsed as Record<string, unknown>;
+      }
+    } catch {
+      // 非法 JSON 由 Core 返回正式错误；debug 日志只记录字节数。
+    }
+  }
+
+  const summary: Record<string, unknown> = {
+    method: request.method,
+    path: request.routeOptions.url,
+    handler,
+    bodyBytes: Buffer.isBuffer(request.body) ? request.body.byteLength : undefined,
+  };
+  if (body) {
+    for (const key of [
+      "model",
+      "stream",
+      "temperature",
+      "top_p",
+      "max_tokens",
+      "max_completion_tokens",
+      "reasoning_effort",
+      "n",
+    ]) {
+      const value = body[key];
+      if (["string", "number", "boolean"].includes(typeof value)) summary[key] = value;
+    }
+
+    const messages = Array.isArray(body.messages) ? body.messages : undefined;
+    if (messages) {
+      const roles: Record<string, number> = {};
+      for (const item of messages) {
+        if (typeof item !== "object" || item === null || Array.isArray(item)) continue;
+        const inputRole = (item as Record<string, unknown>).role;
+        const role = typeof inputRole === "string"
+          && ["system", "developer", "user", "assistant", "tool"].includes(inputRole)
+          ? inputRole
+          : "unknown";
+        roles[role] = (roles[role] ?? 0) + 1;
+      }
+      summary.messageCount = messages.length;
+      summary.messageRoles = roles;
+    }
+    summary.toolsCount = Array.isArray(body.tools) ? body.tools.length : 0;
+    const streamOptions = body.stream_options;
+    if (typeof streamOptions === "object" && streamOptions !== null && !Array.isArray(streamOptions)) {
+      const includeUsage = (streamOptions as Record<string, unknown>).include_usage;
+      if (typeof includeUsage === "boolean") summary.streamIncludeUsage = includeUsage;
+    }
+    const responseFormat = body.response_format;
+    if (typeof responseFormat === "object" && responseFormat !== null && !Array.isArray(responseFormat)) {
+      const type = (responseFormat as Record<string, unknown>).type;
+      if (typeof type === "string") summary.responseFormat = type;
+    }
+  }
+
+  console.info("[gateway:debug] request", JSON.stringify(summary));
+}
+
 function sendFetchResponse(reply: FastifyReply, response: Response): FastifyReply {
   reply.code(response.status);
   for (const [name, value] of response.headers) reply.header(name, value);
@@ -246,6 +313,7 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
         }
 
         const fetchRequest = await toFetchRequest(request, abortController.signal);
+        debugRequestSummary(request, handlerName);
         const response = await handlers[handlerName](fetchRequest, params);
         return sendFetchResponse(reply, response);
       },

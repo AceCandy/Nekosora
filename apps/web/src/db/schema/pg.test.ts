@@ -93,17 +93,17 @@ describe("conversation navigation schema", () => {
       .toBe(true);
   });
 
-  it("同步导航索引迁移、journal 与 snapshot", () => {
-    const migration = readFileSync("drizzle/pg/0013_noisy_adam_destine.sql", "utf8");
+  it("同步导航索引基线 SQL 与 snapshot", () => {
+    const migration = readFileSync("drizzle/pg/0000_baseline.sql", "utf8");
     const journal = JSON.parse(readFileSync("drizzle/pg/meta/_journal.json", "utf8")) as {
       entries: Array<{ idx: number; tag: string }>;
     };
-    const snapshot = JSON.parse(readFileSync("drizzle/pg/meta/0013_snapshot.json", "utf8")) as {
+    const snapshot = JSON.parse(readFileSync("drizzle/pg/meta/0000_snapshot.json", "utf8")) as {
       tables: Record<string, { indexes: Record<string, { columns: Array<{ expression: string; asc: boolean }> }> }>;
     };
 
     expect(migration).toMatch(/CREATE INDEX "conversations_navigation_idx"[\s\S]*"user_id"[\s\S]*case when "archived"[\s\S]*"updated_at" DESC[\s\S]*"id" DESC/);
-    expect(journal.entries.at(-1)).toMatchObject({ idx: 13, tag: "0013_noisy_adam_destine" });
+    expect(journal.entries).toEqual([expect.objectContaining({ idx: 0, tag: "0000_baseline" })]);
     expect(snapshot.tables["public.conversations"].indexes.conversations_navigation_idx.columns)
       .toMatchObject([
         { expression: "user_id", asc: true },

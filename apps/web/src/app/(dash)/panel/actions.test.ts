@@ -6,6 +6,7 @@ const mockData = vi.hoisted(() => ({
   providers: [] as Record<string, unknown>[],
   routes: [] as Record<string, unknown>[],
   user: { id: "admin-a", role: "admin" },
+  orderBy: vi.fn(),
 }));
 
 vi.mock("drizzle-orm", () => ({
@@ -52,7 +53,8 @@ vi.mock("@/lib/infra/db", () => {
       limit(count: number) {
         return makeQuery(rows.slice(0, count), fields);
       },
-      orderBy() {
+      orderBy(...orders: unknown[]) {
+        mockData.orderBy(...orders);
         return query;
       },
       then(resolve: (value: unknown[]) => unknown, reject: (reason: unknown) => unknown) {
@@ -192,6 +194,7 @@ beforeEach(() => {
   mockData.user = { id: "admin-a", role: "admin" };
   mockData.providers = [];
   mockData.routes = [];
+  mockData.orderBy.mockReset();
   vi.mocked(probeProviderKey).mockReset();
   vi.mocked(fetchUpstreamModels).mockReset().mockResolvedValue([]);
   vi.mocked(parseKeyBundle).mockReset();
@@ -450,6 +453,10 @@ describe("getBindableModels", () => {
     const result = await getBindableModels();
 
     expect(result.globals).toEqual([]);
+    expect(mockData.orderBy).toHaveBeenCalledWith(
+      { type: "asc", col: "sortOrder" },
+      { type: "asc", col: "createdAt" },
+    );
     expect(result.byos.map((model) => model.id)).toEqual(["public-a", "public-b", "private-a"]);
     expect(result.byos.some((model) => model.id === "private-b")).toBe(false);
     expect(result.byos[0]).toEqual({

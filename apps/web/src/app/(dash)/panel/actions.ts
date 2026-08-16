@@ -794,7 +794,8 @@ export async function getBindableModels(): Promise<BindableModels> {
       displayName: S().models.displayName,
     })
     .from(S().models)
-    .where(and(eq(S().models.ownerUserId, user.id), eq(S().models.enabled, true)));
+    .where(and(eq(S().models.ownerUserId, user.id), eq(S().models.enabled, true)))
+    .orderBy(asc(S().models.sortOrder), asc(S().models.createdAt));
   return {
     globals: [],
     byos,

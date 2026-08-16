@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { existsSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import {
   findCatalogMatch,
   normalizeCatalogModelId,
@@ -141,8 +142,16 @@ describe("rankSimilarModels", () => {
 });
 
 describe("current mainstream catalog seed", () => {
-  // squash 后模型目录数据基线统一在 0000_baseline.sql(原 0016-0019 已合并)
   const pgBaseline = readFileSync("drizzle/pg/0000_baseline.sql", "utf8");
+  const catalogJson = pgBaseline.match(/\$model_catalog\$(.*)\$model_catalog\$/s)?.[1];
+  const catalogRows = JSON.parse(catalogJson ?? "[]") as Array<{
+    canonical_model_id: string;
+    capabilities: Record<string, unknown>;
+  }>;
+  const catalogLine = (modelId: string): string | undefined => {
+    const row = catalogRows.find((candidate) => candidate.canonical_model_id === modelId);
+    return row ? JSON.stringify(row) : undefined;
+  };
   const requiredModels = [
     "claude-sonnet-5",
     "claude-opus-4-8",
@@ -159,20 +168,18 @@ describe("current mainstream catalog seed", () => {
   ];
 
   it.each(requiredModels)("seeds %s in pg catalog", (modelId) => {
-    expect(pgBaseline).toContain(`'${modelId}'`);
+    expect(catalogLine(modelId)).toBeDefined();
   });
 
   it("keeps Composer fixed and GLM model-driven", () => {
-    expect(pgBaseline).toContain('"thinkingFormat":"fixed"');
-    expect(pgBaseline).toContain('"thinkingFormat":"zai"');
+    expect(catalogLine("composer-2.5")).toContain('"thinkingFormat":"fixed"');
+    expect(catalogLine("glm-5.2")).toContain('"thinkingFormat":"zai"');
   });
 
   it("maps Gemini 3 named thinking levels in pg", () => {
-    for (const migration of [pgBaseline]) {
-      expect(migration).toContain('"minimal":"MINIMAL"');
-      expect(migration).toContain('"high":"HIGH"');
-      expect(migration).toContain("gemini-3.5-flash");
-    }
+    const line = catalogLine("gemini-3.5-flash");
+    expect(line).toContain('"minimal":"MINIMAL"');
+    expect(line).toContain('"high":"HIGH"');
   });
 
   it("distinguishes effort-capable and toggle-only compatible models", () => {
@@ -186,7 +193,7 @@ describe("current mainstream catalog seed", () => {
   it("exposes only real GLM 5.2 reasoning levels (low/medium must be null)", () => {
     // glm-5.2 上游 reasoning_effort 只区分 high/max;low/medium 必须为 null,
     // 否则 Chat 会显示「低/中」假档位(都塌缩成 high)。
-    const glmLine = pgBaseline.split("\n").find((l) => l.includes("'catalog-glm-5-2'"));
+    const glmLine = catalogLine("glm-5.2");
     expect(glmLine).toBeDefined();
     expect(glmLine).toContain('"low":null');
     expect(glmLine).toContain('"medium":null');
@@ -197,8 +204,8 @@ describe("current mainstream catalog seed", () => {
   it("exposes MiMo as a deepseek off/high toggle (pi-aligned)", () => {
     // 小米官方 MiMo 走 OpenAI 兼容端点,思考由 thinking:{type} 控制(pi: thinkingFormat=deepseek)。
     // 原配置缺 thinkingFormat,applyReasoningToCompatibleBody 早返回,off 不发 disabled → "关闭不生效"。
-    for (const id of ["catalog-mimo-v2-5", "catalog-mimo-v2-5-pro"]) {
-      const line = pgBaseline.split("\n").find((l) => l.includes(`'${id}'`));
+    for (const id of ["mimo-v2.5", "mimo-v2.5-pro"]) {
+      const line = catalogLine(id);
       expect(line).toBeDefined();
       expect(line).toContain('"thinkingFormat":"deepseek"');
       expect(line).toContain('"low":null');
@@ -210,8 +217,8 @@ describe("current mainstream catalog seed", () => {
   it("exposes zai GLM toggle-only models as off/high (pi: no reasoning effort)", () => {
     // pi 明确 glm-4.7/5-turbo/5.1/5v-turbo 均为 supportsReasoningEffort:false,即 toggle-only
     // (只发 thinking.type)。缺 map 会显示 5 档假档位,统一收敛为 off/high(glm-5.2 除外,它支持 high/max)。
-    for (const id of ["catalog-glm-4-7", "catalog-glm-5-turbo", "catalog-glm-5-1", "catalog-glm-5v-turbo"]) {
-      const line = pgBaseline.split("\n").find((l) => l.includes(`'${id}'`));
+    for (const id of ["glm-4.7", "glm-5-turbo", "glm-5.1", "glm-5v-turbo"]) {
+      const line = catalogLine(id);
       expect(line).toBeDefined();
       expect(line).toContain('"thinkingFormat":"zai"');
       expect(line).toContain('"low":null');
@@ -221,8 +228,8 @@ describe("current mainstream catalog seed", () => {
 
   it("uses qwen format for DashScope Qwen3 toggle models", () => {
     // qwen3(阿里 DashScope)用顶层 enable_thinking 控制思考开关(toggle-only,可关闭)。
-    for (const id of ["catalog-qwen3-235b-a22b", "catalog-qwen3-32b"]) {
-      const line = pgBaseline.split("\n").find((l) => l.includes(`'${id}'`));
+    for (const id of ["qwen3-235b-a22b", "qwen3-32b"]) {
+      const line = catalogLine(id);
       expect(line).toBeDefined();
       expect(line).toContain('"thinkingFormat":"qwen"');
       expect(line).toContain('"low":null');
@@ -232,7 +239,7 @@ describe("current mainstream catalog seed", () => {
   it("uses openai reasoning_effort for StepFun (no disable, 3 levels)", () => {
     // StepFun step-3.7-flash 官方 Chat Completion API 用 reasoning_effort(low/medium/high),
     // 不支持 enable_thinking 也不支持关闭思考(推理模型默认总思考)→ off:null,只显示三档。
-    const line = pgBaseline.split("\n").find((l) => l.includes("'catalog-step-3-7-flash'"));
+    const line = catalogLine("step-3.7-flash");
     expect(line).toBeDefined();
     expect(line).toContain('"thinkingFormat":"openai"');
     expect(line).toContain('"reasoningEffort":true');
@@ -242,283 +249,44 @@ describe("current mainstream catalog seed", () => {
   });
 
   it("seeds current Agnes Flash models with verified capabilities", () => {
-    for (const migration of [pgBaseline]) {
-      expect(migration).toContain("'agnes-1.5-flash'");
-      expect(migration).toContain("'agnes-2.0-flash'");
-      expect(migration).toContain('"thinkingFormat":"agnes"');
-      expect(migration).toContain('"high":"2048"');
-      expect(migration).toContain("524288");
-      expect(migration).toContain("65536");
-    }
+    const agnes15 = catalogLine("agnes-1.5-flash");
+    const agnes20 = catalogLine("agnes-2.0-flash");
+    expect(agnes15).toBeDefined();
+    expect(agnes20).toContain('"thinkingFormat":"agnes"');
+    expect(agnes20).toContain('"high":"2048"');
+    expect(agnes20).toContain("524288");
+    expect(agnes20).toContain("65536");
   });
 });
 
-describe("Kimi fixed reasoning baseline", () => {
-  const baseline = readFileSync("drizzle/pg/0000_baseline.sql", "utf8");
-  const migration = baseline
-    .split("-- Squashed from 0011_fix_kimi_fixed_reasoning.sql")[1]
-    ?.split("-- Squashed from 0012_add_run_lease.sql")[0] ?? "";
+describe("model catalog baseline migration", () => {
+  const migration = readFileSync("drizzle/pg/0000_baseline.sql", "utf8");
   const journal = JSON.parse(readFileSync("drizzle/pg/meta/_journal.json", "utf8")) as {
-    entries: Array<{ idx: number; tag: string; when: number; breakpoints: boolean }>;
+    entries: Array<{ idx: number; tag: string; breakpoints: boolean }>;
   };
-  const currentSnapshot = JSON.parse(readFileSync("drizzle/pg/meta/0000_snapshot.json", "utf8")) as {
+  const snapshot = JSON.parse(readFileSync("drizzle/pg/meta/0000_snapshot.json", "utf8")) as {
     id: string;
     prevId: string;
-    [key: string]: unknown;
+    tables: Record<string, unknown>;
   };
 
-  it("repairs both Kimi K2.7 rows while preserving unrelated capabilities", () => {
-    expect(migration).toContain('UPDATE "model_catalog"');
-    expect(migration).toContain('"capabilities" = "capabilities" ||');
-    expect(migration).toContain('"updated_at" = now()');
-
-    const patchMatch = migration.match(/\|\|\s*'(\{[^\n]+\})'::jsonb/);
-    expect(patchMatch).not.toBeNull();
-    const capabilityPatch = JSON.parse(patchMatch?.[1] ?? "{}") as Record<string, unknown>;
-    const expectedPatch = {
-      thinkingFormat: "fixed",
-      thinkingLevelMap: {
-        off: null,
-        minimal: null,
-        low: null,
-        medium: null,
-        high: "default",
-        xhigh: null,
-        max: null,
-      },
-    };
-    expect(capabilityPatch).toEqual(expectedPatch);
-    expect({ tools: true, vision: true, ...capabilityPatch })
-      .toEqual({ tools: true, vision: true, ...expectedPatch });
-
-    const targetMatch = migration.match(/WHERE\s+"canonical_model_id"\s+IN\s*\(([\s\S]*?)\);/);
-    expect(targetMatch).not.toBeNull();
-    const targetIds = [...(targetMatch?.[1] ?? "").matchAll(/'([^']+)'/g)]
-      .map((match) => match[1]);
-    expect(targetIds).toEqual(["kimi-k2.7-code", "kimi-k2.7-code-highspeed"]);
-  });
-
-  it("keeps the baseline journal entry and root snapshot", () => {
-    expect(journal.entries).toEqual(expect.arrayContaining([expect.objectContaining({
+  it("keeps one baseline with the reviewed catalog seed", () => {
+    expect(journal.entries).toEqual([{
       idx: 0,
+      version: "7",
+      when: expect.any(Number),
       tag: "0000_baseline",
       breakpoints: true,
-    })]));
-    expect(currentSnapshot.id).toBeTypeOf("string");
-    expect(currentSnapshot.prevId).toBe("00000000-0000-0000-0000-000000000000");
-  });
-});
-
-describe("model catalog capability sync migration", () => {
-  const migrationPath = "drizzle/pg/0003_model_catalog_sync.sql";
-  const journalPath = "drizzle/pg/meta/_journal.json";
-  const previousSnapshotPath = "drizzle/pg/meta/0002_snapshot.json";
-  const snapshotPath = "drizzle/pg/meta/0003_snapshot.json";
-
-  it("生成 SQL、journal 和 snapshot 三件套", () => {
-    expect(existsSync(migrationPath)).toBe(true);
-    expect(existsSync(snapshotPath)).toBe(true);
-  });
-
-  it("只定向修正 GLM 视觉与 Kimi reasoning bundle", () => {
-    const migration = readFileSync(migrationPath, "utf8");
-    const statements = migration.split("--> statement-breakpoint");
-    expect(statements).toHaveLength(2);
-    expect(migration).toMatch(/source-sha256: [a-f0-9]{64}/);
-    expect(migration).not.toContain("INSERT INTO");
-
-    const targets = [...migration.matchAll(/WHERE "canonical_model_id" = '([^']+)'/g)]
-      .map((match) => match[1]);
-    expect(targets).toEqual(["glm-5.2", "kimi-k2"]);
-
-    const glm = statements.find((statement) => statement.includes("'glm-5.2'"));
-    expect(glm).toMatch(
-      /SET\s+"capabilities" = \("capabilities" - 'vision'\),\s+"updated_at" = now\(\)\s+WHERE/,
-    );
-    expect(glm).toContain('"capabilities" IS DISTINCT FROM');
-
-    const kimi = statements.find((statement) => statement.includes("'kimi-k2'"));
-    expect(kimi).toMatch(
-      /SET\s+"capabilities" = \(\(\(\("capabilities" - 'reasoning'\) - 'reasoningEffort'\) - 'thinkingFormat'\) - 'thinkingLevelMap'\),\s+"updated_at" = now\(\)\s+WHERE/,
-    );
-    expect(migration.match(/"updated_at" = now\(\)/g)).toHaveLength(2);
-  });
-
-  it("追加严格递增 journal 并保持 schema snapshot 不变", () => {
-    const journal = JSON.parse(readFileSync(journalPath, "utf8")) as {
-      entries: Array<{ idx: number; tag: string; when: number; breakpoints: boolean }>;
-    };
-    const previous = JSON.parse(readFileSync(previousSnapshotPath, "utf8")) as Record<string, unknown>;
-    const snapshot = JSON.parse(readFileSync(snapshotPath, "utf8")) as Record<string, unknown>;
-    const entryIndex = journal.entries.findIndex((entry) => entry.idx === 3);
-    expect(journal.entries[entryIndex]).toMatchObject({
-      idx: 3,
-      tag: "0003_model_catalog_sync",
-      breakpoints: true,
-    });
-    expect(journal.entries[entryIndex]?.when).toBeGreaterThan(
-      journal.entries[entryIndex - 1]?.when ?? 0,
-    );
-    expect(snapshot.prevId).toBe(previous.id);
-    const { id: _previousId, prevId: _previousPrevId, ...previousSchema } = previous;
-    const { id: _snapshotId, prevId: _snapshotPrevId, ...snapshotSchema } = snapshot;
-    expect(snapshotSchema).toEqual(previousSchema);
-  });
-});
-
-describe("model catalog web search migration", () => {
-  const migrationPath = "drizzle/pg/0004_model_catalog_web_search.sql";
-  const journalPath = "drizzle/pg/meta/_journal.json";
-  const previousSnapshotPath = "drizzle/pg/meta/0003_snapshot.json";
-  const snapshotPath = "drizzle/pg/meta/0004_snapshot.json";
-
-  it("只为已核验模型写入明确的原生搜索格式", () => {
-    const migration = readFileSync(migrationPath, "utf8");
-    expect(migration.split("--> statement-breakpoint")).toHaveLength(4);
-    expect(migration).not.toContain("INSERT INTO");
-    expect(migration).toContain('{"webSearchFormat":"openai"}');
-    expect(migration).toContain('{"webSearchFormat":"anthropic"}');
-    expect(migration).toContain('{"webSearchFormat":"google"}');
-    expect(migration).toContain('{"webSearchFormat":"xai"}');
-    expect(migration).toContain("'grok-4.5'");
-    expect(migration).not.toContain("'grok-4.3'");
-  });
-
-  it("追加 journal 并保持 schema snapshot 不变", () => {
-    const journal = JSON.parse(readFileSync(journalPath, "utf8")) as {
-      entries: Array<{ idx: number; tag: string; when: number; breakpoints: boolean }>;
-    };
-    const previous = JSON.parse(readFileSync(previousSnapshotPath, "utf8")) as Record<string, unknown>;
-    const snapshot = JSON.parse(readFileSync(snapshotPath, "utf8")) as Record<string, unknown>;
-    const entryIndex = journal.entries.findIndex((entry) => entry.idx === 4);
-    expect(journal.entries[entryIndex]).toMatchObject({
-      idx: 4,
-      tag: "0004_model_catalog_web_search",
-      breakpoints: true,
-    });
-    expect(journal.entries[entryIndex]?.when).toBeGreaterThan(
-      journal.entries[entryIndex - 1]?.when ?? 0,
-    );
-    expect(snapshot.prevId).toBe(previous.id);
-    const { id: _previousId, prevId: _previousPrevId, ...previousSchema } = previous;
-    const { id: _snapshotId, prevId: _snapshotPrevId, ...snapshotSchema } = snapshot;
-    expect(snapshotSchema).toEqual(previousSchema);
-  });
-});
-
-describe("route tool capability migration", () => {
-  const migrationPath = "drizzle/pg/0005_stale_rick_jones.sql";
-  const defaultMigrationPath = "drizzle/pg/0006_daily_wonder_man.sql";
-  const journalPath = "drizzle/pg/meta/_journal.json";
-  const previousSnapshotPath = "drizzle/pg/meta/0004_snapshot.json";
-  const snapshotPath = "drizzle/pg/meta/0005_snapshot.json";
-  const defaultSnapshotPath = "drizzle/pg/meta/0006_snapshot.json";
-
-  it("旧路由默认不声明工具调用能力", () => {
-    expect(readFileSync(migrationPath, "utf8")).toContain(
-      'ALTER TABLE "routes" ADD COLUMN "supports_tools" boolean DEFAULT false NOT NULL',
-    );
-  });
-
-  it("同步 journal 与 schema snapshot", () => {
-    const journal = JSON.parse(readFileSync(journalPath, "utf8")) as {
-      entries: Array<{ idx: number; tag: string; when: number; breakpoints: boolean }>;
-    };
-    const previous = JSON.parse(readFileSync(previousSnapshotPath, "utf8")) as {
-      id: string;
-    };
-    const snapshot = JSON.parse(readFileSync(snapshotPath, "utf8")) as {
-      prevId: string;
-      tables: Record<string, { columns: Record<string, unknown> }>;
-    };
-
-    expect(journal.entries.find((entry) => entry.idx === 5)).toMatchObject({
-      idx: 5,
-      tag: "0005_stale_rick_jones",
-      breakpoints: true,
-    });
-    expect(snapshot.prevId).toBe(previous.id);
-    expect(snapshot.tables["public.routes"]?.columns.supports_tools).toMatchObject({
-      type: "boolean",
-      notNull: true,
-      default: false,
-    });
-  });
-
-  it("仅把新路由默认改为支持工具，不回填既有关闭路由", () => {
-    const migration = readFileSync(defaultMigrationPath, "utf8");
-    expect(migration.trim()).toBe(
-      'ALTER TABLE "routes" ALTER COLUMN "supports_tools" SET DEFAULT true;',
-    );
-    expect(migration).not.toMatch(/UPDATE\s+"routes"/i);
-
-    const journal = JSON.parse(readFileSync(journalPath, "utf8")) as {
-      entries: Array<{ idx: number; tag: string; when: number; breakpoints: boolean }>;
-    };
-    const previous = JSON.parse(readFileSync(snapshotPath, "utf8")) as { id: string };
-    const snapshot = JSON.parse(readFileSync(defaultSnapshotPath, "utf8")) as {
-      prevId: string;
-      tables: Record<string, { columns: Record<string, { default?: unknown }> }>;
-    };
-
-    expect(journal.entries.find((entry) => entry.tag === "0006_daily_wonder_man")).toMatchObject({
-      idx: 6,
-      tag: "0006_daily_wonder_man",
-      breakpoints: true,
-    });
-    expect(snapshot.prevId).toBe(previous.id);
-    expect(snapshot.tables["public.routes"]?.columns.supports_tools?.default).toBe(true);
-  });
-});
-
-describe("mainstream model catalog sync migration", () => {
-  const migrationPath = "drizzle/pg/0015_model_catalog_sync.sql";
-  const journalPath = "drizzle/pg/meta/_journal.json";
-  const previousSnapshotPath = "drizzle/pg/meta/0014_snapshot.json";
-  const snapshotPath = "drizzle/pg/meta/0015_snapshot.json";
-
-  it("只新增四个已核验主流型号并保持幂等", () => {
-    const migration = readFileSync(migrationPath, "utf8");
-    const statements = migration.split("--> statement-breakpoint");
-    expect(migration).toMatch(/source-sha256: [a-f0-9]{64}/);
-    expect(statements).toHaveLength(4);
-    expect([...migration.matchAll(/VALUES \('([^']+)'/g)].map((match) => match[1])).toEqual([
-      "gemini-3.7-flash",
-      "glm-5.3",
-      "grok-4.6",
-      "qwen3.8-max",
-    ]);
-    expect(migration.match(/ON CONFLICT \("canonical_model_id"\) DO NOTHING/g)).toHaveLength(4);
-    expect(migration).not.toContain("glm-5.2-highspeed");
-    const gemini = statements.find((statement) => statement.includes("'gemini-3.7-flash'"));
-    expect(gemini).toContain('"thinkingFormat":"google"');
-    expect(gemini).toContain('"thinkingLevelMap":{"low":"low","medium":"medium","high":"high"}');
-    const grok = statements.find((statement) => statement.includes("'grok-4.6'"));
-    expect(grok).not.toContain('"max_output_tokens"');
-    const qwen = statements.find((statement) => statement.includes("'qwen3.8-max'"));
-    expect(qwen).toContain('{"systemPrompt":true,"tools":true}');
-    expect(qwen).not.toContain('"context_window"');
-    expect(qwen).not.toContain('"max_output_tokens"');
-  });
-
-  it("追加连续 journal 并保持 schema snapshot 不变", () => {
-    const journal = JSON.parse(readFileSync(journalPath, "utf8")) as {
-      entries: Array<{ idx: number; tag: string; when: number; breakpoints: boolean }>;
-    };
-    const previous = JSON.parse(readFileSync(previousSnapshotPath, "utf8")) as Record<string, unknown>;
-    const snapshot = JSON.parse(readFileSync(snapshotPath, "utf8")) as Record<string, unknown>;
-    const entryIndex = journal.entries.findIndex((entry) => entry.idx === 15);
-    expect(journal.entries[entryIndex]).toMatchObject({
-      idx: 15,
-      tag: "0015_model_catalog_sync",
-      breakpoints: true,
-    });
-    expect(journal.entries[entryIndex]?.when).toBeGreaterThan(
-      journal.entries[entryIndex - 1]?.when ?? 0,
-    );
-    expect(snapshot.prevId).toBe(previous.id);
-    const { id: _previousId, prevId: _previousPrevId, ...previousSchema } = previous;
-    const { id: _snapshotId, prevId: _snapshotPrevId, ...snapshotSchema } = snapshot;
-    expect(snapshotSchema).toEqual(previousSchema);
+    }]);
+    expect(snapshot.id).toBeTypeOf("string");
+    expect(snapshot.prevId).toBe("00000000-0000-0000-0000-000000000000");
+    expect(snapshot.tables).toHaveProperty("public.model_catalog");
+    const catalogJson = migration.match(/\$model_catalog\$(.*)\$model_catalog\$/s)?.[1] ?? "";
+    const sourceHash = migration.match(/source-sha256: ([a-f0-9]{64})/)?.[1];
+    expect(createHash("sha256").update(catalogJson).digest("hex")).toBe(sourceHash);
+    expect(migration).toContain("jsonb_populate_recordset");
+    for (const modelId of ["gemini-3.7-flash", "glm-5.3", "grok-4.6", "qwen3.8-max"]) {
+      expect(migration).toContain(`\"canonical_model_id\":\"${modelId}\"`);
+    }
   });
 });

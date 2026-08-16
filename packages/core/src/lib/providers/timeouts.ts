@@ -135,6 +135,72 @@ export function createProviderTimeoutScope(
   };
 }
 
+async function debugProviderResponseBody(response: Response, path: string): Promise<void> {
+  const reader = response.body?.getReader();
+  if (!reader) return;
+  const chunks: Uint8Array[] = [];
+  let bodyBytes = 0;
+  let truncated = false;
+  while (bodyBytes < 65_536) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const remaining = 65_536 - bodyBytes;
+    chunks.push(value.subarray(0, remaining));
+    bodyBytes += Math.min(value.byteLength, remaining);
+    if (value.byteLength > remaining) truncated = true;
+  }
+  if (bodyBytes >= 65_536) {
+    truncated = true;
+    await reader.cancel();
+  }
+
+  const text = new TextDecoder().decode(Buffer.concat(chunks));
+  const data = text.split(/\r?\n/)
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice(5).trim());
+  const topLevelKeys = new Set<string>();
+  const partKeys = new Set<string>();
+  let jsonEventCount = 0;
+  let doneMarkerCount = 0;
+  for (const item of data) {
+    if (item === "[DONE]") {
+      doneMarkerCount += 1;
+      continue;
+    }
+    try {
+      const parsed = JSON.parse(item) as Record<string, unknown>;
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) continue;
+      jsonEventCount += 1;
+      Object.keys(parsed).forEach((key) => topLevelKeys.add(key));
+      const candidates = Array.isArray(parsed.candidates) ? parsed.candidates : [];
+      for (const candidate of candidates) {
+        if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) continue;
+        const content = (candidate as Record<string, unknown>).content;
+        if (!content || typeof content !== "object" || Array.isArray(content)) continue;
+        const parts = (content as Record<string, unknown>).parts;
+        if (!Array.isArray(parts)) continue;
+        for (const part of parts) {
+          if (part && typeof part === "object" && !Array.isArray(part)) {
+            Object.keys(part).forEach((key) => partKeys.add(key));
+          }
+        }
+      }
+    } catch {
+      // 非 JSON data 事件只计入总数。
+    }
+  }
+  console.info("[gateway:debug] upstream-body", JSON.stringify({
+    path,
+    bodyBytes,
+    truncated,
+    dataEventCount: data.length,
+    jsonEventCount,
+    doneMarkerCount,
+    topLevelKeys: [...topLevelKeys].sort(),
+    partKeys: [...partKeys].sort(),
+  }));
+}
+
 export function createProviderFetch(options: {
   connectTimeoutMs?: number | null;
   userAgent?: string;
@@ -156,13 +222,76 @@ export function createProviderFetch(options: {
       ? new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined))
       : undefined;
     headers?.set("user-agent", options.userAgent ?? "");
+    const debug = process.env.GATEWAY_DEBUG_REQUESTS === "true";
+
+    if (debug) {
+      const url = input instanceof Request ? input.url : String(input);
+      const body = init?.body;
+      const summary: Record<string, unknown> = {
+        method: init?.method ?? (input instanceof Request ? input.method : "GET"),
+        path: new URL(url).pathname,
+        bodyBytes: typeof body === "string" ? new TextEncoder().encode(body).byteLength : undefined,
+      };
+      if (typeof body === "string") {
+        try {
+          const parsed = JSON.parse(body) as Record<string, unknown>;
+          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+            summary.bodyKeys = Object.keys(parsed).sort();
+            for (const key of ["messages", "contents", "tools"]) {
+              if (Array.isArray(parsed[key])) summary[`${key}Count`] = parsed[key].length;
+            }
+            if (Array.isArray(parsed.contents)) {
+              const roles: Record<string, number> = {};
+              for (const content of parsed.contents) {
+                if (!content || typeof content !== "object" || Array.isArray(content)) continue;
+                const role = (content as Record<string, unknown>).role;
+                const safeRole = role === "user" || role === "model" ? role : "unknown";
+                roles[safeRole] = (roles[safeRole] ?? 0) + 1;
+              }
+              summary.contentRoles = roles;
+            }
+            if (parsed.generationConfig && typeof parsed.generationConfig === "object") {
+              const config = parsed.generationConfig as Record<string, unknown>;
+              summary.generationConfigKeys = Object.keys(config).sort();
+              for (const key of ["maxOutputTokens", "temperature", "topP"]) {
+                if (typeof config[key] === "number") summary[key] = config[key];
+              }
+              if (config.thinkingConfig && typeof config.thinkingConfig === "object") {
+                const thinking = config.thinkingConfig as Record<string, unknown>;
+                summary.thinkingConfigKeys = Object.keys(thinking).sort();
+                for (const key of ["thinkingBudget", "thinkingLevel", "includeThoughts"]) {
+                  if (["number", "string", "boolean"].includes(typeof thinking[key])) {
+                    summary[key] = thinking[key];
+                  }
+                }
+              }
+            }
+            summary.hasSystemInstruction = parsed.systemInstruction !== undefined;
+          }
+        } catch {
+          // 非 JSON 上游请求只记录字节数。
+        }
+      }
+      console.info("[gateway:debug] upstream-request", JSON.stringify(summary));
+    }
 
     try {
-      return await globalThis.fetch(input, {
+      const response = await globalThis.fetch(input, {
         ...init,
         ...(headers ? { headers } : {}),
         signal,
       });
+      if (debug) {
+        const url = input instanceof Request ? input.url : String(input);
+        const path = new URL(url).pathname;
+        console.info("[gateway:debug] upstream-response", JSON.stringify({
+          path,
+          status: response.status,
+          contentType: response.headers.get("content-type"),
+        }));
+        void debugProviderResponseBody(response.clone(), path).catch(() => undefined);
+      }
+      return response;
     } catch (error) {
       if (signal.aborted && signal.reason !== undefined) throw signal.reason;
       throw error;

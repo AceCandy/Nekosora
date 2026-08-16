@@ -60,6 +60,7 @@ services:
     environment:
       <<: *common-environment
       DB_POOL_MAX: ${WEB_DB_POOL_MAX:-5}
+      GATEWAY_DEBUG_REQUESTS: ${GATEWAY_DEBUG_REQUESTS:-false}
     depends_on:
       postgres:
         condition: service_healthy
@@ -83,6 +84,7 @@ services:
       <<: [*common-environment, *storage-environment]
       DB_POOL_MAX: ${GATEWAY_DB_POOL_MAX:-10}
       METRICS_ENABLED: ${METRICS_ENABLED:-true}
+      GATEWAY_DEBUG_REQUESTS: ${GATEWAY_DEBUG_REQUESTS:-false}
     volumes:
       - uploads:/app/uploads
     depends_on:
