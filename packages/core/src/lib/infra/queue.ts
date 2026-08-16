@@ -9,7 +9,7 @@ export function configureQueueProvider(provider: QueueProvider): void {
   queueProvider = provider;
 }
 
-/** 获取当前进程的队列；Web 未配置时由调用方执行既有降级路径。 */
+/** 获取当前进程的队列；未配置时由调用方执行既有降级路径。 */
 export function getQueue(): Promise<QueueAdapter> {
   if (!queueProvider) {
     return Promise.reject(new Error("当前进程未配置队列驱动"));

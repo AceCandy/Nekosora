@@ -3,6 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   installGlobalErrorGuards: vi.fn(),
   validateEnv: vi.fn(),
+  configureQueueProvider: vi.fn(),
+  loadQueueModule: vi.fn(),
+  getQueue: vi.fn(),
   bootstrapDatabase: vi.fn(),
 }));
 
@@ -10,6 +13,13 @@ vi.mock("@/lib/infra/process-guards", () => ({
   installGlobalErrorGuards: mocks.installGlobalErrorGuards,
 }));
 vi.mock("@/lib/infra/env", () => ({ validateEnv: mocks.validateEnv }));
+vi.mock("@/lib/infra/queue", () => ({
+  configureQueueProvider: mocks.configureQueueProvider,
+}));
+vi.mock("@nekusora/queue", () => {
+  mocks.loadQueueModule();
+  return { getQueue: mocks.getQueue };
+});
 vi.mock("@/lib/infra/db/bootstrap", () => ({
   bootstrapDatabase: mocks.bootstrapDatabase,
 }));
@@ -31,17 +41,33 @@ describe("instrumentation", () => {
     else process.env.NEXT_RUNTIME = originalNextRuntime;
   });
 
-  it("Node 启动先安装守卫和校验环境，再初始化数据库", async () => {
+  it("Node 启动先安装守卫和校验环境，再注入队列生产者并初始化数据库", async () => {
     const calls: string[] = [];
     mocks.installGlobalErrorGuards.mockImplementation(() => calls.push("guards"));
     mocks.validateEnv.mockImplementation(() => calls.push("validate"));
+    mocks.configureQueueProvider.mockImplementation(() => calls.push("queue"));
     mocks.bootstrapDatabase.mockImplementation(async () => {
       calls.push("bootstrap");
     });
 
     await register();
 
-    expect(calls).toEqual(["guards", "validate", "bootstrap"]);
+    expect(calls).toEqual(["guards", "validate", "queue", "bootstrap"]);
+  });
+
+  it("队列驱动只在生产者首次取队列时加载", async () => {
+    const queue = { send: vi.fn() };
+    mocks.getQueue.mockResolvedValue(queue);
+
+    await register();
+
+    const provider = mocks.configureQueueProvider.mock.calls[0]?.[0];
+    expect(provider).toBeTypeOf("function");
+    expect(mocks.loadQueueModule).not.toHaveBeenCalled();
+    expect(mocks.getQueue).not.toHaveBeenCalled();
+    await expect(provider()).resolves.toBe(queue);
+    expect(mocks.loadQueueModule).toHaveBeenCalledOnce();
+    expect(mocks.getQueue).toHaveBeenCalledOnce();
   });
 
   it("Edge runtime 不加载 Node 初始化模块", async () => {
@@ -51,6 +77,9 @@ describe("instrumentation", () => {
 
     expect(mocks.installGlobalErrorGuards).not.toHaveBeenCalled();
     expect(mocks.validateEnv).not.toHaveBeenCalled();
+    expect(mocks.configureQueueProvider).not.toHaveBeenCalled();
+    expect(mocks.loadQueueModule).not.toHaveBeenCalled();
+    expect(mocks.getQueue).not.toHaveBeenCalled();
     expect(mocks.bootstrapDatabase).not.toHaveBeenCalled();
   });
 
@@ -63,6 +92,7 @@ describe("instrumentation", () => {
     await expect(register()).rejects.toBe(validationError);
 
     expect(mocks.installGlobalErrorGuards).toHaveBeenCalledOnce();
+    expect(mocks.configureQueueProvider).not.toHaveBeenCalled();
     expect(mocks.bootstrapDatabase).not.toHaveBeenCalled();
   });
 });

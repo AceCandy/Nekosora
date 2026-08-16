@@ -1,5 +1,5 @@
 /**
- * Node server 启动初始化:安装进程守卫、校验环境并完成数据库 bootstrap。
+ * Node server 启动初始化:安装进程守卫、校验环境、注入队列生产者并完成数据库 bootstrap。
  * DB 连接、迁移或管理员初始化失败时应阻断启动;pgvector 初始化失败由 bootstrap 自行降级。
  */
 export async function registerNodeInstrumentation(): Promise<void> {
@@ -9,10 +9,16 @@ export async function registerNodeInstrumentation(): Promise<void> {
   const { validateEnv } = await import("@/lib/infra/env");
   validateEnv();
 
+  const { configureQueueProvider } = await import("@/lib/infra/queue");
+  configureQueueProvider(async () => {
+    const { getQueue } = await import("@nekusora/queue");
+    return getQueue();
+  });
+
   const hasRedis = !!process.env.REDIS_URL;
   console.log(
     `[instrumentation] Nekusora 启动 | DB=pg | Redis=${hasRedis ? "on" : "off(memory)"} | ` +
-      `Queue=需运行 pnpm worker`,
+      `Queue=producer | Worker=需独立运行`,
   );
 
   const { bootstrapDatabase } = await import("@/lib/infra/db/bootstrap");

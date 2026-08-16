@@ -25,9 +25,9 @@ Apply this contract when changing `packages/queue`, Gateway/Web producers, queue
 
 ### 3. Contracts
 
-- `packages/queue/src/index.ts` loads `pg-boss` with the literal dynamic import `import("pg-boss")`. Variable-path imports are forbidden. Only Gateway and Worker depend on this adapter package; Web and Core dependency graphs must not contain it.
+- `packages/queue/src/index.ts` loads `pg-boss` with the literal dynamic import `import("pg-boss")`. Variable-path imports are forbidden. Gateway, Web, and Worker depend on this adapter package; Core remains driver-neutral and must not depend on it.
 - `@nekusora/contracts/queue` is the only queue-name, payload, retry-message, policy, and driver-neutral adapter type source. The three current definitions use `retryLimit=2`, `retryDelay=0`, `retryBackoff=false`, and `expireInSeconds=900`; `createQueue` and `send` receive mutable copies because pg-boss mutates option objects.
-- Core exposes a process-local Queue provider. Gateway and Worker call `configureQueueProvider(getQueue)` during startup; Web never configures the provider. Upload preserves its synchronous fallback when acquisition fails. Title/memory dispatch must acquire the provider before claiming a due durable row so an absent Web provider cannot postpone Worker recovery by 15 minutes.
+- Core exposes a process-local Queue provider. Gateway and Worker inject `getQueue` during startup; Web injects a lazy provider from Node instrumentation so browser and Edge bundles never load the driver. Web and Gateway only call `send()`; only Worker registers `work()`. Upload preserves its synchronous fallback when acquisition fails. Title/memory dispatch must acquire the provider before claiming a due durable row so a producer failure cannot postpone Worker recovery by 15 minutes.
 - The adapter is process-local singleton API, but each pg-boss instance is a replaceable generation. Constructor/start/stop failure and normal stop poison and discard that generation; a later call constructs a new instance.
 - Start, stop, and same-name queue creation are single-flight within one generation. A start/send/work arriving during stop waits for the old generation to close, starts a new generation, and never registers work against the old identity.
 - Admission is synchronous after startup: verify current generation identity/state, then add the operation promise to that generation. Stop first changes state to `stopping`, rejects old-generation admission, waits accepted operations, then calls `boss.stop({ close: true, graceful: true, wait: true, timeout: 30000 })`.
@@ -38,7 +38,7 @@ Apply this contract when changing `packages/queue`, Gateway/Web producers, queue
 - Retried handlers must be idempotent or use conditional writes. `conversation-title` re-reads the current title and only updates `新会话` or the job's fallback, so a retry cannot overwrite a manual title.
 - pg-boss `error` events log only `[queue] pg-boss error`. Worker/recovery lifecycle logs contain only stable stage, definition name, and `JobOutcome`; never log payload, entity id, raw error, URL, header, credential, cause, or stack.
 - The generic worker runtime owns registration order, immediate/60-second/unref/single-flight recovery scheduling, reverse rollback, and SIGINT/SIGTERM shutdown. Shutdown during startup waits for startup to converge before cleanup; repeated signals reuse one Promise and call `exit` once.
-- `queueAvailable()` awaits real pg-boss startup. Gateway readiness requires both DB and queue checks. Web readiness checks only Web-owned dependencies and does not initialize Queue. Worker readiness is 503 during startup and shutdown, and 200 only after queue registration/recovery startup completes; liveness remains 200 during drain.
+- `queueAvailable()` awaits real pg-boss startup. Gateway readiness requires both DB and queue checks. Web readiness checks only Web-owned dependencies and does not eagerly initialize Queue; its first send starts the producer lazily. Worker readiness is 503 during startup and shutdown, and 200 only after queue registration/recovery startup completes; liveness remains 200 during drain.
 - Queue readiness means that this process can initialize the queue backend. It does not prove that the independent worker is alive or consuming jobs.
 - Worker shutdown marks unready, stops recovery in reverse order, drains Queue, closes DB and the health listener, then exits once. In its container, `LOCAL_STORAGE_DIR=/app/uploads` must match the declared shared volume; relative defaults from another process working directory are forbidden.
 
@@ -60,7 +60,8 @@ Apply this contract when changing `packages/queue`, Gateway/Web producers, queue
 | Worker service catches a recoverable failure and returns | False success | Job is permanently acknowledged; forbidden |
 | Gateway DB and queue startup succeed | Queue `{ available: true }` | Gateway HTTP 200 `ready` |
 | Gateway queue false/error/timeout | Preserve queue diagnostic | Gateway HTTP 503 `unready` |
-| Web has no Queue provider | Do not claim title/memory durable rows; upload uses existing fallback | Web readiness remains based on Web-owned DB |
+| Web producer send succeeds | Claim the due durable row and enqueue immediately | Worker recovery remains a fallback |
+| Web producer acquisition/send fails | Do not claim before acquisition; claimed rows become due again after the lease | Web request completes through the existing async/fallback path |
 | Worker startup / running / shutdown | Health state `starting / ready / stopping` | Readiness `503 / 200 / 503`; liveness stays 200 until listener close |
 | Worker local storage path differs from mounted volume | Invalid deployment | Refuse the mismatch in review; set `/app/uploads` explicitly |
 | Worker is offline but queue backend is writable | Jobs remain durable in pg-boss | Readiness does not infer worker liveness |
@@ -68,7 +69,7 @@ Apply this contract when changing `packages/queue`, Gateway/Web producers, queue
 ### 5. Good / Base / Bad Cases
 
 - Good: Gateway can cold-start a generation, create `memory-extract` from the shared contract definition, and send before Worker has registered `work()`.
-- Good: Web title/memory dispatch fails before DB claim, leaving the durable row due for Worker's immediate scan.
+- Good: Web title/memory dispatch sends immediately while the durable row remains the source for Worker recovery after producer failure.
 - Good: stop times out after pg-boss moves WIP to retry/failed; the adapter still rejects and worker exits non-zero instead of reporting a clean drain.
 - Good: title generation throws internally; the callback exposes only `CONVERSATION_TITLE_QUEUE.retryMessage`, while a missing/stale/manual-renamed job returns `noop`.
 - Base: a started worker registers all catalog definitions, then starts all generic recovery schedulers.
@@ -87,10 +88,10 @@ Apply this contract when changing `packages/queue`, Gateway/Web producers, queue
 - Execute the callback passed to pg-boss. `completed/noop` resolve; any other result or throw becomes a new catalog-safe error, stops the current batch, and contains no raw payload, URL, header, credential, cause, or stack.
 - Runtime tests cover registration-before-recovery, immediate/60-second/unref/single-flight scheduler behavior, stop waiting for active scans, every startup rollback point, cleanup-failure isolation, shutdown during startup, and repeated cross-signal shutdown with exactly one exit.
 - Run the isolated real PostgreSQL harness to prove clean drain completes the job and 30-second timeout leaves the job `retry`/`failed`, then force-drop the random temporary database in `finally`.
-- Gateway readiness route tests cover healthy DB+queue, queue false, reject, timeout, and DB failure; assert HTTP status and `checks.queue` shape. Web readiness tests assert Queue is absent from checks. Worker health tests assert `503 -> 200 -> 503` readiness and drain-time liveness.
+- Gateway readiness route tests cover healthy DB+queue, queue false, reject, timeout, and DB failure; assert HTTP status and `checks.queue` shape. Web instrumentation tests prove Node injects a lazy producer while Edge does not load it; Web readiness remains independent of Queue. Worker health tests assert `503 -> 200 -> 503` readiness and drain-time liveness.
 - Upload regression proves acquisition/send failures still call `processFile` fallback exactly once and return the existing success response.
 - Provider regressions prove missing provider rejection occurs before title/memory DB claim. Runtime tests assert resource close follows Queue drain and repeated signals still exit once.
-- Run `pnpm build`, `pnpm build:gateway`, `pnpm build:worker`, and inspect `pnpm --filter @nekusora/web list --depth Infinity`; Web output/graph must omit the Queue adapter and `pg-boss`.
+- Run `pnpm build`, `pnpm build:gateway`, and `pnpm build:worker`; verify the Web standalone output contains the lazily loaded Queue adapter and `pg-boss`, while client and Edge bundles do not.
 
 ### 7. Wrong vs Correct
 
