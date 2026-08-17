@@ -1171,3 +1171,24 @@ Show routes as currently unavailable when their provider is disabled in admin an
 ### Status
 
 [OK] **Completed**
+
+
+## Session 114: 拒绝搜索词推断年份
+
+**Date**: 2026-08-17
+**Task**: 拒绝搜索词推断年份
+**Branch**: `main`
+
+### Summary
+
+为应用侧搜索词改写增加无来源年份校验；模型擅自加入用户或有界上下文未出现的 19xx/20xx 年份时放弃改写并复用原问题，同时保留明确年份。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2070cf3` | (see git log) |
+
+### Status
+
+[OK] **Completed**

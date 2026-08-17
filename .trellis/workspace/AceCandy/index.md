@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 113
+- **Total Sessions**: 114
 - **Last Active**: 2026-08-17
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~1173 | Active |
+| `journal-2.md` | ~1194 | Active |
 | `journal-1.md` | ~1981 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 114 | 2026-08-17 | 拒绝搜索词推断年份 | `2070cf3` | `main` |
 | 113 | 2026-08-17 | 动态时间上下文与搜索时间约束 | `80fc4ba` | `main` |
 | 112 | 2026-08-17 | Search context and full-suite repair | `849faa2`, `4cb5f58` | `main` |
 | 111 | 2026-08-17 | Web queue producer dispatch | `033bc46` | `main` |
