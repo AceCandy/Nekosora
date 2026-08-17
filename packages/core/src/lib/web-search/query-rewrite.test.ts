@@ -27,7 +27,7 @@ beforeEach(() => {
 describe("rewriteSearchQuery", () => {
   it("使用配置模型并清理纯文本查询输出", async () => {
     vi.setSystemTime(new Date("2026-08-15T16:30:00.000Z"));
-    mocks.generateChat.mockResolvedValue({ text: "```text\n2026-08-16 最新 Gemini 代理空响应原因\n```" });
+    mocks.generateChat.mockResolvedValue({ text: "```text\n最新 Gemini 代理空响应原因\n```" });
 
     try {
       await expect(rewriteSearchQuery({
@@ -36,7 +36,7 @@ describe("rewriteSearchQuery", () => {
         ctx: { userId: "user-1", keyKind: null, source: "chat" },
         runId: "run-1",
         signal: new AbortController().signal,
-      })).resolves.toBe("2026-08-16 最新 Gemini 代理空响应原因");
+      })).resolves.toBe("最新 Gemini 代理空响应原因");
     } finally {
       vi.useRealTimers();
     }
@@ -59,6 +59,41 @@ describe("rewriteSearchQuery", () => {
     }));
     expect(mocks.generateChat.mock.calls[0]?.[0].request.messages[0].content)
       .toContain("禁止根据“最近/最新”自行添加用户未指定的历史年份或宽泛年份范围");
+    expect(mocks.generateChat.mock.calls[0]?.[0].request.messages[0].content)
+      .toContain("保留相对时间原意，不要转换成具体年份或时间范围");
+  });
+
+  it("模型擅自添加来源中不存在的年份时回退", async () => {
+    mocks.generateChat.mockResolvedValue({ text: "DeepSeek 模型最新价格 2025" });
+
+    await expect(rewriteSearchQuery({
+      userId: "user-1",
+      userContent: "看下 DeepSeek 模型最新的价格",
+      ctx: { userId: "user-1", keyKind: null, source: "chat" },
+      runId: "run-1",
+      signal: new AbortController().signal,
+    })).resolves.toBeNull();
+  });
+
+  it("用户问题或上下文明确给出的年份可以保留", async () => {
+    mocks.generateChat.mockResolvedValue({ text: "DeepSeek 2025 模型价格" });
+
+    await expect(rewriteSearchQuery({
+      userId: "user-1",
+      userContent: "DeepSeek 2025 年的模型价格",
+      ctx: { userId: "user-1", keyKind: null, source: "chat" },
+      runId: "run-1",
+      signal: new AbortController().signal,
+    })).resolves.toBe("DeepSeek 2025 模型价格");
+
+    await expect(rewriteSearchQuery({
+      userId: "user-1",
+      userContent: "那时的模型价格呢？",
+      context: "user: 看一下 DeepSeek 2025 年的情况",
+      ctx: { userId: "user-1", keyKind: null, source: "chat" },
+      runId: "run-2",
+      signal: new AbortController().signal,
+    })).resolves.toBe("DeepSeek 2025 模型价格");
   });
 
   it("拒答式输出回退到原始用户问题", async () => {

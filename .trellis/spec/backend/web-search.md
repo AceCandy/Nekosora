@@ -40,8 +40,9 @@ Required environment:
   before ordinary generation. The rewrite request receives the request-time `Asia/Shanghai`
   date and time plus at most eight prior text messages bounded to the latest 3,000 characters, so it can
   resolve relative dates and conversational references without treating history as the current
-  question. Missing, unavailable, failed, empty, or refusal-like rewrite output falls back to
-  the original user message.
+  question. A rewritten query containing a `19xx`/`20xx` year absent from both bounded inputs is
+  rejected rather than edited in place. Missing, unavailable, failed, empty, refusal-like, or
+  ungrounded-year rewrite output falls back to the original user message.
 - The main model never chooses Tavily, SearXNG, GPT, Claude, Gemini, or Grok directly.
   `searchWeb` resolves the user's ordered list and falls through unavailable or failed entries.
 - Multiple logical `web_search` calls emitted in the same model step run concurrently in stable
@@ -146,6 +147,7 @@ Required environment:
 | The 60-second fallback window expires before another backend starts | Stop the chain and return the accumulated attempts; never interrupt an active Hosted stream solely for this reason |
 | Result has no grounded summary or no valid citation | Treat as failed and fall through |
 | Query is invalid | Return `invalid_search_query` plus `请检查 query、freshness 或日期范围组合`; do not call a backend |
+| Query rewrite adds a `19xx`/`20xx` year absent from the bounded user question and context | Reject the whole rewrite and let application-side search use the original user question |
 | Freshness and explicit dates are combined | Return `invalid_search_query` plus `freshness 不能与 dateAfter/dateBefore 同时使用`; do not call a backend |
 | Only one explicit date is supplied or dates are invalid/reversed | Return `invalid_search_query` plus the generic corrective hint before any network request |
 | External Provider cannot enforce the requested range | Record an `unsupported` attempt and continue without calling it |
@@ -212,8 +214,9 @@ Required environment:
   parts as well as thrown abort errors.
 - Context tests: all chat requests receive the request-time `Asia/Shanghai` date and time; the values are
   generated per request rather than stored as fixed prompt constants or conversation state.
-- Query-rewrite tests: request-time date/time injection, no inferred year ranges, bounded prior-message
-  context separated from the current question, refusal-output fallback, and plain/Markdown-wrapped query cleanup.
+- Query-rewrite tests: request-time date/time injection, ungrounded-year rejection, explicit user/context
+  year preservation, bounded prior-message context separated from the current question, refusal-output
+  fallback, and plain/Markdown-wrapped query cleanup.
 - Public HTTP tests: IPv4/IPv6 private ranges, metadata, DNS rebinding, redirect hops, and valid public hosts.
 - Hosted search tests: all four runtime translators, route mismatch, no citation failure, route/key failover,
   outer `runId` and `toolCallId` linkage.
