@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   startRunStrict: vi.fn(),
@@ -134,6 +134,10 @@ beforeEach(() => {
   }));
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe("executeChatCompletion", () => {
   it("严格启动后发准备轨迹，并在首个非空正文前切到 answering", async () => {
     mocks.streamChat.mockReturnValue(events(
@@ -218,6 +222,8 @@ describe("executeChatCompletion", () => {
   });
 
   it("联网开启时只注入逻辑搜索工具并持久化搜索追踪", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-30T23:30:00.000Z"));
     const requestedTimeRange = {
       preset: "week" as const,
       startDate: "2026-07-24",
@@ -272,7 +278,7 @@ describe("executeChatCompletion", () => {
         definition: expect.objectContaining({
           function: expect.objectContaining({
             name: "web_search",
-            description: expect.stringContaining("不要同时传 freshness 与 dateAfter/dateBefore"),
+            description: expect.stringMatching(/未指定历史年份或范围.*不要同时传 freshness 与 dateAfter\/dateBefore/),
             parameters: expect.objectContaining({
               properties: expect.objectContaining({
                 freshness: expect.objectContaining({
@@ -291,7 +297,11 @@ describe("executeChatCompletion", () => {
       runId: "run-1",
       toolCallId: "search-1",
       currentModelId: "model-id-1",
-      timeRange: expect.objectContaining({ preset: "week" }),
+      timeRange: {
+        preset: "week",
+        startDate: "2026-07-24",
+        endDate: "2026-07-30",
+      },
     }));
     expect(emitted.map((event) => (event as { type: string }).type)).toEqual([
       "started",

@@ -43,10 +43,24 @@ export function buildHostedSearchPrompt(
   now = new Date(),
   timeRange?: SearchTimeRange,
 ): string {
-  const currentDate = now.toISOString().slice(0, 10);
+  const dateFormatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const timeFormatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Shanghai",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  const currentDate = dateFormatter.format(now);
+  const currentTime = timeFormatter.format(now);
   return [
     "请使用联网搜索核实下面的问题。",
-    `当前日期（UTC）：${currentDate}。若问题涉及“最新、近期、截至目前”等时效性，请优先检索并引用发布日期或更新时间更近的来源，核对来源日期后再下结论；无法确认时效时要明确说明。`,
+    `当前日期：${currentDate}，当前时间：${currentTime}（Asia/Shanghai）。若问题涉及“最新、近期、截至目前”等时效性，请优先检索并引用发布日期或更新时间更近的来源，核对来源日期后再下结论；无法确认时效时要明确说明。`,
     ...(timeRange
       ? [`检索时间范围（UTC，含首尾日期）：${timeRange.startDate} 至 ${timeRange.endDate}。请优先引用发布日期或更新时间在此范围内的来源；范围外信息仅可作为必要背景并明确说明。`]
       : []),

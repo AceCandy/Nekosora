@@ -247,7 +247,7 @@ describe("prepareChatContext 降级日志", () => {
     }));
   });
 
-  it("联网搜索启用时动态注入当前日期上下文", async () => {
+  it("每轮聊天都注入上海时区的动态日期时间上下文", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-03T16:30:00.000Z"));
     const createFrom = () => ({
@@ -299,7 +299,6 @@ describe("prepareChatContext 降级日志", () => {
       model: "model-a",
       messages: [{ role: "user", content: "今天的 AI 新闻" }],
       branchLeafPublicId: "message-1",
-      webSearchEnabled: true,
       db,
       schema,
     });
@@ -307,6 +306,9 @@ describe("prepareChatContext 降级日志", () => {
     expect("error" in result).toBe(false);
     expect(mocks.assembleContext).toHaveBeenCalledWith(expect.objectContaining({
       templateSystemPrompt: expect.stringContaining("当前日期：2026-08-04"),
+    }));
+    expect(mocks.assembleContext).toHaveBeenCalledWith(expect.objectContaining({
+      templateSystemPrompt: expect.stringContaining("当前时间：00:30:00"),
     }));
     expect(mocks.assembleContext).toHaveBeenCalledWith(expect.objectContaining({
       templateSystemPrompt: expect.stringContaining("当前时区：Asia/Shanghai"),
@@ -324,7 +326,6 @@ describe("prepareChatContext 降级日志", () => {
       model: "model-a",
       messages: [{ role: "user", content: "今天的 AI 新闻" }],
       branchLeafPublicId: "message-1",
-      webSearchEnabled: true,
       db,
       schema,
     });

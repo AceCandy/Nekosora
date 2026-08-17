@@ -25,12 +25,22 @@ export async function rewriteSearchQuery(input: {
   const model = (await listWebSearchQueryModelCandidates(input.userId))
     .find((candidate) => candidate.id === modelId);
   if (!model) return null;
-  const currentDate = new Intl.DateTimeFormat("en-CA", {
+  const dateFormatter = new Intl.DateTimeFormat("en-CA", {
     timeZone: CHAT_TIME_ZONE,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).format(new Date());
+  });
+  const timeFormatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone: CHAT_TIME_ZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  const now = new Date();
+  const currentDate = dateFormatter.format(now);
+  const currentTime = timeFormatter.format(now);
 
   const rewriteInput = input.context
     ? `对话上下文（仅用于理解指代，不要直接照抄）：\n${input.context.slice(-REWRITE_CONTEXT_LIMIT)}\n\n当前用户问题：\n${input.userContent.slice(0, REWRITE_INPUT_LIMIT)}`
@@ -43,7 +53,7 @@ export async function rewriteSearchQuery(input: {
       messages: [
         {
           role: "system",
-          content: `将用户问题改写为一条适合搜索引擎的查询。当前日期是 ${currentDate}，时区是 ${CHAT_TIME_ZONE}；遇到今天、最新、近期等相对时间时，以此日期补充必要的时间信息。保留专有名词、版本号、错误信息和用户明确给出的时间范围。只输出查询本身，不要回答问题、拒绝请求、解释、添加引号或 Markdown。`,
+          content: `将用户问题改写为一条适合搜索引擎的查询。当前日期是 ${currentDate}，当前时间是 ${currentTime}，时区是 ${CHAT_TIME_ZONE}。遇到今天、最新、近期等相对时间时，以此时间为准；“最新”对应最近一周，“最近/近期”对应最近一个月，“今天”可保留当天日期。禁止根据“最近/最新”自行添加用户未指定的历史年份或宽泛年份范围。保留专有名词、版本号、错误信息和用户明确给出的时间范围。只输出查询本身，不要回答问题、拒绝请求、解释、添加引号或 Markdown。`,
         },
         { role: "user", content: rewriteInput },
       ],

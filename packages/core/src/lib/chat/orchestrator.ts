@@ -85,7 +85,7 @@ export interface PrepareContextInput {
   visionValidated?: boolean;
   /** 挂载的知识库 ID。 */
   knowledgeBaseIds?: string[];
-  /** 本轮是否启用联网搜索；仅启用时注入动态日期上下文，避免普通聊天破坏 prompt cache。 */
+  /** 本轮是否启用联网搜索。 */
   webSearchEnabled?: boolean;
   /** Prompt 模板 ID + 变量。 */
   templateId?: string;
@@ -120,7 +120,7 @@ export async function prepareChatContext(
   const {
     userId, conversationId, conv, userContent, model, modelId, messages, branchLeafPublicId,
     fileIds: bodyFileIds, messageAttachments = [], visionValidated = false,
-    knowledgeBaseIds, webSearchEnabled = false,
+    knowledgeBaseIds,
     templateId, templateVars, instructionCardIds,
     db, schema: s,
   } = input;
@@ -374,7 +374,7 @@ export async function prepareChatContext(
   }
 
   // 合并 system 来源(output_mode + template + card)
-  const currentDatePrompt = webSearchEnabled ? buildCurrentDatePrompt() : null;
+  const currentDatePrompt = buildCurrentDatePrompt();
   const extraSystemParts = [
     currentDatePrompt,
     outputModePrompt,
@@ -557,18 +557,28 @@ export async function resolveModelGenerationSettings(args: {
 const CHAT_TIME_ZONE = "Asia/Shanghai";
 
 function buildCurrentDatePrompt(now = new Date()): string {
-  const currentDate = new Intl.DateTimeFormat("en-CA", {
+  const dateFormatter = new Intl.DateTimeFormat("en-CA", {
     timeZone: CHAT_TIME_ZONE,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).format(now);
+  });
+  const timeFormatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone: CHAT_TIME_ZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  const currentDate = dateFormatter.format(now);
+  const currentTime = timeFormatter.format(now);
   return [
     "[当前日期上下文]",
     `当前日期：${currentDate}`,
+    `当前时间：${currentTime}`,
     `当前时区：${CHAT_TIME_ZONE}`,
-    "用户提到“今天、最近、本周、本月、最新、截至目前”等相对时间时，以此日期为准。",
-    "调用 web_search 时，优先使用 freshness；只有用户明确给出起止日期时才使用 dateAfter/dateBefore。",
+    "用户提到相对时间时，以此日期和时间为准；不要自行补充用户未指定的历史年份或宽泛年份范围。",
+    "调用 web_search 时，“最新”优先使用 freshness=week，“最近/近期”优先使用 freshness=month；用户明确说“今天”时可用当天的 dateAfter/dateBefore。",
     "freshness 与 dateAfter/dateBefore 不能同时使用。",
   ].join("\n");
 }

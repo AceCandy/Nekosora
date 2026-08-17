@@ -51,12 +51,14 @@ describe("rewriteSearchQuery", () => {
         messages: [
           expect.objectContaining({
             role: "system",
-            content: expect.stringContaining("当前日期是 2026-08-16，时区是 Asia/Shanghai"),
+            content: expect.stringContaining("当前日期是 2026-08-16，当前时间是 00:30:00，时区是 Asia/Shanghai"),
           }),
           expect.objectContaining({ role: "user" }),
         ],
       }),
     }));
+    expect(mocks.generateChat.mock.calls[0]?.[0].request.messages[0].content)
+      .toContain("禁止根据“最近/最新”自行添加用户未指定的历史年份或宽泛年份范围");
   });
 
   it("拒答式输出回退到原始用户问题", async () => {

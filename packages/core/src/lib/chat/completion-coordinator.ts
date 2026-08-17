@@ -530,7 +530,7 @@ const webSearchToolDefinition: IRToolDef = {
   type: "function",
   function: {
     name: "web_search",
-    description: "搜索互联网以核实需要最新或外部信息的问题，并返回带来源的结果。时间范围只能二选一：使用 freshness，或同时使用 dateAfter/dateBefore；不要同时传 freshness 与 dateAfter/dateBefore。",
+    description: "搜索互联网以核实需要最新或外部信息的问题，并返回带来源的结果。“最新”优先使用 freshness=week，“最近/近期”优先使用 freshness=month；用户明确说“今天”时可用当天的 dateAfter/dateBefore。未指定历史年份或范围时，不要在 query 中自行添加往年或宽泛年份。时间范围只能二选一：使用 freshness，或同时使用 dateAfter/dateBefore；不要同时传 freshness 与 dateAfter/dateBefore。",
     parameters: {
       type: "object",
       properties: {
@@ -538,7 +538,7 @@ const webSearchToolDefinition: IRToolDef = {
         freshness: {
           type: "string",
           enum: ["week", "month"],
-          description: "相对时间范围：最新或最新新闻使用 week；近期信息使用 month；普通查询省略。不能与 dateAfter/dateBefore 同时使用。",
+          description: "相对时间范围：最新使用 week；最近/近期使用 month；普通查询省略。用户说今天时改用当天 dateAfter/dateBefore。不能与 dateAfter/dateBefore 同时使用。",
         },
         dateAfter: {
           type: "string",

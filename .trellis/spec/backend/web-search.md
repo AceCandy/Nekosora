@@ -38,7 +38,7 @@ Required environment:
   one application-side search using the current user message, optionally after a configured
   query-rewrite model compresses it, then receives the grounded summary as untrusted context
   before ordinary generation. The rewrite request receives the request-time `Asia/Shanghai`
-  date plus at most eight prior text messages bounded to the latest 3,000 characters, so it can
+  date and time plus at most eight prior text messages bounded to the latest 3,000 characters, so it can
   resolve relative dates and conversational references without treating history as the current
   question. Missing, unavailable, failed, empty, or refusal-like rewrite output falls back to
   the original user message.
@@ -64,17 +64,17 @@ Required environment:
 - Hosted search is a nested request that receives no MCP tools and no logical `web_search`.
   It must return a non-empty grounded summary and at least one validated citation. The outer
   main model remains the only final-answer generator.
-- Hosted search prompts include the current UTC date and instruct the nested model to prefer
-  recent sources and verify publication/update dates for time-sensitive questions. When a requested
+- Hosted search prompts include the current `Asia/Shanghai` date and time and instruct the nested model
+  to prefer recent sources and verify publication/update dates for time-sensitive questions. When a requested
   time range cannot be expressed by the native hosted tool, the prompt includes the inclusive UTC
   start/end dates as a best-effort search and source-selection constraint.
 - The outer model expresses time intent through structured tool arguments: use `week` for latest/current
-  news, `month` for recent information, explicit dates for a user-supplied range, and omit all time
-  fields for ordinary queries. The server never guesses freshness from localized query keywords.
-- When the effective WebChat search toggle is on, `prepareChatContext` injects the current
-  `Asia/Shanghai` calendar date at request time so the outer model can resolve relative expressions
-  before choosing tool arguments. The date must never be hard-coded. Ordinary chats with search off
-  keep the stable system prompt so this dynamic slot does not invalidate their prompt cache.
+  news, `month` for recent information, the current date for an explicit "today" request, explicit dates
+  for a user-supplied range, and omit all time fields for ordinary queries. It must not add inferred past
+  years or broad year ranges to the query. The server never guesses freshness from localized query keywords.
+- `prepareChatContext` injects the current `Asia/Shanghai` date and time on every WebChat request so the
+  outer model can resolve relative expressions before answering or choosing tool arguments. Each request
+  reads the clock again; the value is never hard-coded, cached, or stored in conversation state.
 - Time-constrained execution is capability-aware. Tavily and Exa support week/month/custom ranges; Exa
   maps the inclusive UTC boundaries to `startPublishedDate` at `T00:00:00.000Z` and
   `endPublishedDate` at `T23:59:59.999Z`. Google
@@ -133,7 +133,7 @@ Required environment:
 | Condition | Result |
 | --- | --- |
 | Web toggle is off | No logical search tool, search request, or search lifecycle event |
-| Web toggle is on | Inject the request-time `Asia/Shanghai` date; never reuse a date captured at process startup |
+| Every WebChat request | Inject the request-time `Asia/Shanghai` date and time; never reuse a value captured by an earlier request |
 | Catalog supports tools but no enabled route opts in | Run one application-side search when the toggle is on |
 | Main model does not support tools | Do not load MCP or inject tools; run one application-side search when the toggle is on |
 | Main model does not call the tool | Generate normally without a search request |
@@ -210,10 +210,10 @@ Required environment:
   calls while retaining the selected route's readable identity. Hosted tests must cover no first progress,
   idle after progress, repeated progress resets, successful completion past 60 seconds, and SDK `abort`
   parts as well as thrown abort errors.
-- Context tests: search-enabled requests receive the request-time `Asia/Shanghai` date; the value is
-  generated per request rather than stored as a fixed prompt constant.
-- Query-rewrite tests: request-time date injection, bounded prior-message context separated from the
-  current question, refusal-output fallback, and plain/Markdown-wrapped query cleanup.
+- Context tests: all chat requests receive the request-time `Asia/Shanghai` date and time; the values are
+  generated per request rather than stored as fixed prompt constants or conversation state.
+- Query-rewrite tests: request-time date/time injection, no inferred year ranges, bounded prior-message
+  context separated from the current question, refusal-output fallback, and plain/Markdown-wrapped query cleanup.
 - Public HTTP tests: IPv4/IPv6 private ranges, metadata, DNS rebinding, redirect hops, and valid public hosts.
 - Hosted search tests: all four runtime translators, route mismatch, no citation failure, route/key failover,
   outer `runId` and `toolCallId` linkage.

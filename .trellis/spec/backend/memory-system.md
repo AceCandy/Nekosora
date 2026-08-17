@@ -26,7 +26,7 @@
 
 - 流后异步，10 分钟全局频率保护（`memextract:${userId}` cache）。
 - 自动 project 记忆的角色、内容门禁与有界快照遵循下方「Automatic Project Memory Boundary」契约。
-- 合格消息传 `mem0.add(messages, {userId, metadata:{scope:"project", source:"ai"}})`（`infer=true`，mem0 LLM 全权抽取 + 去重 + 合并）。
+- 合格消息传 `mem0.add(messages, {userId, metadata:{scope:"project", source:"ai"}})`（`infer=true`，mem0 LLM 全权执行 ADD-only 抽取，不更新、删除或合并旧记忆；写入阶段按提取文本的精确哈希去重。抽取 LLM 会参考语义召回的旧记忆避免重复事实，但这不是确定性语义去重）。
 - 失败不阻断主对话；领域边界只记录 `client_init` / `memory_add` 有限阶段，禁止记录原始异常、消息、ID 或基础设施信息。
 - 抽取后 `invalidateMemoryCache(userId)` 失效 getMemories 的 60s 缓存。
 
@@ -188,7 +188,7 @@ return memories.map((memory) => ({ ...memory, createdAt: toMemoryDate(memory.cre
 - **已用方法**：add/search/update/delete/getAll/deleteAll；`Memory` 另有 get/history/reset，业务暂未用（非缺失）。
 - **自定义 metadata 字段**（存 metadata JSON，非 SDK 原生）：`scope`/`source`/`expirationDate`/`priority`；`disclosure` 已废弃（M-4）。search filter 按 `user_id`（原生）+ `scope`（自定义塞 metadata 再 filter）。
 - **升级流程**：① 看 changelog（关注 MemoryConfig/Options 字段名、过期语义、表结构）；② 测试环境验证 add/search/过期；③ 备「清 `mem0_memories` 重建」退路（记忆可由对话重抽，丢失成本低）；④ major 版（如 4.0）手动改 `package.json` + 重点验证配置字段；⑤ caret（`^3.1.6`）内 minor/patch 自动跟进，lockfile 更新仍跑记忆测试。
-- **OSS vs Platform**：用 OSS 开源核心（向量+LLM 抽取+去重合并+过期）；Platform 独有的 hosted dashboard / graph memory 不在范围，新特性可能先上 Platform、OSS 跟进滞后。
+- **OSS vs Platform**：用 OSS 开源核心（向量+ADD-only LLM 抽取+写入阶段精确文本哈希去重+过期）；Platform 独有的 hosted dashboard / graph memory 不在范围，新特性可能先上 Platform、OSS 跟进滞后。
 - **构建配置（`next.config.ts`）**：mem0ai 是大 bundle，内部动态 import 各 provider SDK（aws/azure/google/qdrant…，均为 peerDep，按需加载）。必须设 `serverExternalPackages: ["mem0ai"]`，构建时不打包其依赖图、运行时按需 require。否则 webpack 解析缺失的 peer provider SDK（如 `@aws-sdk/client-bedrock-runtime`）报 Module not found。Web 作为 standalone runtime owner，直接声明 Mem0 3.1.6 入口静态加载的 `better-sqlite3`；其他未配置 provider peer（包括 `natural`、`compromise`）不安装。
 - **运行时依赖边界**：Core 持有 `mem0ai`、`pg` 和 `@langchain/core` 的业务依赖；Gateway/Worker 的 tsup 产物内联 Core 后会从应用工作目录执行 `import("mem0ai/oss")`，因此两个应用也必须直接声明 `mem0ai`。Web 由 Next standalone 追踪 Core 的 server external，并通过 `.next/node_modules/mem0ai-*` alias 解析，无需重复声明。统一镜像让 Gateway/Worker 共享一个 pnpm virtual store；应用直接声明只补解析链接，不复制物理包。
 
