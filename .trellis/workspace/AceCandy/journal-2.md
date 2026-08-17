@@ -1150,3 +1150,24 @@ Show routes as currently unavailable when their provider is disabled in admin an
 ### Status
 
 [OK] **Completed**
+
+
+## Session 113: 动态时间上下文与搜索时间约束
+
+**Date**: 2026-08-17
+**Task**: 动态时间上下文与搜索时间约束
+**Branch**: `main`
+
+### Summary
+
+为每轮 WebChat 动态注入上海日期时间，收紧搜索词与 web_search 相对时间规则，统一 Hosted Search 当前时刻提示，并按 mem0 3.1.6 修正 ADD-only 记忆规范。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `80fc4ba` | (see git log) |
+
+### Status
+
+[OK] **Completed**
