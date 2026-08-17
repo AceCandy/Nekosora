@@ -1,0 +1,2 @@
+{"file":".trellis/spec/backend/web-search.md","reason":"核对主聊天、搜索词重写、逻辑工具、Hosted Search 与 UTC 时间范围契约"}
+{"file":".trellis/spec/backend/memory-system.md","reason":"核对 mem0 3.1.6 ADD-only 抽取与去重行为说明"}
