@@ -236,6 +236,24 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
                 />
                 <button
                   type="button"
+                  onClick={() => {
+                    setNoteDraft(row.note);
+                    setNoteDialog(i);
+                  }}
+                  disabled={noKey}
+                  className={clsx(
+                    "absolute left-3 top-0 z-10 inline-flex max-w-[calc(100%_-_4rem)] -translate-y-1/2 items-center bg-white px-1 text-ui-caption leading-4 transition-colors dark:bg-space-ink",
+                    row.note
+                      ? "font-medium text-neutral-600 hover:text-sora-blue dark:text-neutral-300 dark:hover:text-sora-blue"
+                      : "text-neutral-400 hover:text-sora-blue dark:text-neutral-500 dark:hover:text-sora-blue",
+                  )}
+                  title={row.note || t("keyNoteTitle")}
+                  aria-label={t("keyNoteTitle")}
+                >
+                  {row.note ? <span className="truncate">{row.note}</span> : <MessageSquareText size={13} />}
+                </button>
+                <button
+                  type="button"
                   onClick={() => toggleReveal(i)}
                   className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-250 p-0.5 rounded transition-colors"
                   aria-label={revealed[i] ? t("hideKeyAria") : t("showKeyAria")}
@@ -258,24 +276,6 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
                   className="!w-[4.25rem] font-mono text-ui-caption"
                 />
               </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="xs"
-                onClick={() => {
-                  setNoteDraft(row.note);
-                  setNoteDialog(i);
-                }}
-                disabled={noKey}
-                className={clsx(
-                  "shrink-0",
-                  row.note ? "text-sora-blue hover:text-sora-blue-hover" : "text-neutral-400 hover:text-neutral-600",
-                )}
-                title={row.note || t("keyNoteTitle")}
-                aria-label={t("keyNoteTitle")}
-              >
-                <MessageSquareText size={14} />
-              </Button>
               <Button
                 type="button"
                 variant="ghost"
