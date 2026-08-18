@@ -63,6 +63,7 @@ export default async function ProvidersPage() {
     keys: revealKeyBundle(p.apiKeysEnc as string).map((k) => ({
       key: k.key,
       weight: String(k.weight),
+      note: k.note ?? "",
     })),
     health: {
       healthy: (p.lastHealthyKeyCount as number | null) ?? null,

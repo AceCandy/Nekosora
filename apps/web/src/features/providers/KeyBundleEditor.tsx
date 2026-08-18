@@ -12,6 +12,7 @@ import type { ProbeResult } from "@/lib/providers/probe";
 export interface EditorRow {
   key: string;
   weight: string;
+  note: string;
 }
 
 /** 保存前查重暴露给父表单的句柄。 */
@@ -60,7 +61,7 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
     const [rows, setRows] = useState<EditorRow[]>(
       initialRows && initialRows.length > 0
         ? initialRows
-        : [{ key: "", weight: "1" }]
+        : [{ key: "", weight: "1", note: "" }]
     );
     const [revealed, setRevealed] = useState<boolean[]>(
       () => rows.map(() => false)
@@ -90,7 +91,7 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
 
     const addRow = () => {
       clearDuplicate();
-      setRows((r) => [...r, { key: "", weight: "1" }]);
+      setRows((r) => [...r, { key: "", weight: "1", note: "" }]);
       setRevealed((v) => [...v, false]);
       setTestStates((s) => [...s, "idle"]);
     };
@@ -100,7 +101,7 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
       setRevealed((v) => (v.length <= 1 ? v : v.filter((_, idx) => idx !== i)));
       setTestStates((s) => (s.length <= 1 ? s : s.filter((_, idx) => idx !== i)));
     };
-    const update = (i: number, field: "key" | "weight", val: string) => {
+    const update = (i: number, field: "key" | "weight" | "note", val: string) => {
       setRows((r) => r.map((row, idx) => (idx === i ? { ...row, [field]: val } : row)));
       // key 改动后,该行既有结果失效,并清掉残留的重复高亮。
       if (field === "key") {
@@ -112,7 +113,7 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
       setRevealed((v) => v.map((on, idx) => (idx === i ? !on : on)));
 
     // 批量设置:弹窗预填当前所有行(key,weight),用户可编辑/追加。
-    // 确定时按行解析「key」或「key,权重」(权重省略/非法 -> 1),整体去重(同 key 保留首次含其权重),
+    // 确定时按行解析「key」或「key,权重,备注」(权重省略/非法 -> 1),整体去重(同 key 保留首次),
     // 整体替换 rows(与"保存后整体更新"语义一致)。
     const commitBatch = () => {
       const seen = new Set<string>();
@@ -123,17 +124,21 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
         const commaIdx = line.indexOf(",");
         let key: string;
         let weight: string;
+        let note = "";
         if (commaIdx === -1) {
           key = line;
           weight = "1";
         } else {
           key = line.slice(0, commaIdx).trim();
-          const wStr = line.slice(commaIdx + 1).trim();
+          const rest = line.slice(commaIdx + 1);
+          const secondCommaIdx = rest.indexOf(",");
+          const wStr = (secondCommaIdx === -1 ? rest : rest.slice(0, secondCommaIdx)).trim();
+          note = secondCommaIdx === -1 ? "" : rest.slice(secondCommaIdx + 1).trim();
           weight = wStr && Number.isFinite(Number(wStr)) && Number(wStr) >= 0 ? wStr : "1";
         }
         if (!key || seen.has(key)) continue;
         seen.add(key);
-        result.push({ key, weight });
+        result.push({ key, weight, note });
       }
       if (result.length > 0) {
         clearDuplicate();
@@ -169,7 +174,7 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
           return false;
         },
         openBatch: () => {
-          setBatchText(rows.map((r) => `${r.key},${r.weight}`).join("\n"));
+          setBatchText(rows.map((r) => `${r.key},${r.weight}${r.note ? `,${r.note}` : ""}`).join("\n"));
           setBatchOpen(true);
         },
       }),
@@ -224,27 +229,38 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
                 isDup && "ring-2 ring-red-500/70 bg-red-500/[0.07]",
               )}
             >
-              <div className="relative flex-1">
+              <div className="flex-1 space-y-1.5">
+                <div className="relative">
+                  <Input
+                    name="keys[].key"
+                    type={revealed[i] ? "text" : "password"}
+                    required={requireKeys}
+                    disabled={noKey}
+                    value={row.key}
+                    onChange={(e) => update(i, "key", e.target.value)}
+                    className="pr-9 font-mono text-ui-caption"
+                    placeholder={t("keyPlaceholder", { index: i + 1 })}
+                    autoComplete="off"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => toggleReveal(i)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-250 p-0.5 rounded transition-colors"
+                    aria-label={revealed[i] ? t("hideKeyAria") : t("showKeyAria")}
+                    title={revealed[i] ? t("hideKey") : t("showKey")}
+                  >
+                    {revealed[i] ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
                 <Input
-                  name="keys[].key"
-                  type={revealed[i] ? "text" : "password"}
-                  required={requireKeys}
+                  name="keys[].note"
+                  value={row.note}
+                  onChange={(e) => update(i, "note", e.target.value)}
                   disabled={noKey}
-                  value={row.key}
-                  onChange={(e) => update(i, "key", e.target.value)}
-                  className="pr-9 font-mono text-ui-caption"
-                  placeholder={t("keyPlaceholder", { index: i + 1 })}
-                  autoComplete="off"
+                  placeholder={t("keyNotePlaceholder")}
+                  aria-label={t("keyNoteLabel")}
+                  className="text-ui-caption"
                 />
-                <button
-                  type="button"
-                  onClick={() => toggleReveal(i)}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-250 p-0.5 rounded transition-colors"
-                  aria-label={revealed[i] ? t("hideKeyAria") : t("showKeyAria")}
-                  title={revealed[i] ? t("hideKey") : t("showKey")}
-                >
-                  {revealed[i] ? <EyeOff size={15} /> : <Eye size={15} />}
-                </button>
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
                 <span className="text-ui-caption font-semibold text-neutral-500 dark:text-neutral-400">{t("weight")}</span>
@@ -328,6 +344,7 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
           open={testDialog !== null}
           onClose={() => setTestDialog(null)}
           title={t("testKeyDialogTitle")}
+          dialogClassName="m-auto w-[min(480px,92vw)] rounded-lg border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/40 dark:border-deep-space dark:bg-twilight-obsidian dark:text-nebula-silver"
         >
           <div className="space-y-3">
             <label className="block">

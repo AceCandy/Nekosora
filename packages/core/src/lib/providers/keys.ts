@@ -3,12 +3,12 @@
  *
  * 同一个 Provider 可能持有多个 api key(同一个上游地址的不同 key),每个 key 可配权重。
  * 所有 provider(global / BYO)的加密密钥列都存成"加密后的 bundle JSON",格式:
- *   { keys: [{ key: string, weight: number }] }
+ *   { keys: [{ key: string, weight: number, note?: string }] }
  *
  * 历史格式(向后兼容,parseKeyBundle 自动识别):
  *   1. 裸字符串:BYO 旧数据,decrypt 后非 JSON → 视作单个 key,weight=1。
  *   2. { keys: string[] }:全局旧数据 → 全部 weight=1。
- *   3. { keys: [{ key, weight }] }:新格式。
+ *   3. { keys: [{ key, weight, note? }] }:当前格式。
  *
  * 选择策略:按 weight 加权随机(无状态,无需跨 worker 共享计数)。
  * 失败转移:调用方(stream.ts)在同一 provider 内换 key 重试,见 orderedWeightedKeys。
@@ -19,12 +19,15 @@ import { decrypt, encrypt } from "@/lib/infra/crypto";
 export interface WeightedKey {
   key: string;
   weight: number;
+  /** 仅供配置页识别密钥用途，不参与路由与日志。 */
+  note?: string;
 }
 
 /** 历史 bundle 形状(解析用,松散校验)。 */
 interface LegacyKeyEntry {
   key?: string;
   weight?: number;
+  note?: string;
 }
 interface LegacyBundle {
   keys?: (string | LegacyKeyEntry)[];
@@ -60,7 +63,8 @@ export function parseKeyBundle(encBundle: string): WeightedKey[] {
 function normalizeEntry(entry: string | LegacyKeyEntry): WeightedKey {
   if (typeof entry === "string") return { key: entry, weight: 1 };
   const weight = typeof entry.weight === "number" && entry.weight >= 0 ? entry.weight : 1;
-  return { key: String(entry.key ?? ""), weight };
+  const note = typeof entry.note === "string" ? entry.note.trim() : "";
+  return { key: String(entry.key ?? ""), weight, ...(note && { note }) };
 }
 
 /** 把明文加权 key 列表加密成可入库的 bundle 字符串。 */

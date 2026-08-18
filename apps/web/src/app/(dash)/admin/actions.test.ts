@@ -172,6 +172,7 @@ import {
   updateProvider,
   updateRoute,
 } from "./actions";
+import { encryptKeyBundle } from "@/lib/providers/keys";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -248,6 +249,22 @@ describe("updateProvider", () => {
 });
 
 describe("createProvider", () => {
+  it("把每条密钥备注随加密 bundle 保存", async () => {
+    const formData = new FormData();
+    formData.set("name", "Provider B");
+    formData.set("protocol", "openai");
+    formData.set("baseUrl", "https://api.example.com/v1");
+    formData.append("keys[].key", " key-a ");
+    formData.append("keys[].weight", "2");
+    formData.append("keys[].note", " Primary ");
+
+    await createProvider(formData);
+
+    expect(encryptKeyBundle).toHaveBeenCalledWith([
+      { key: "key-a", weight: 2, note: "Primary" },
+    ]);
+  });
+
   it("创建时把表单秒值保存为 nullable 毫秒值", async () => {
     const formData = new FormData();
     formData.set("name", "Provider B");

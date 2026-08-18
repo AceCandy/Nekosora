@@ -28,13 +28,14 @@ import { pickDisplayName } from "@/lib/model-catalog";
 const S = () => getSchema() as any;
 
 /**
- * 从 FormData 收集多 key + 权重。
- * 约定字段名:`keys[].key` / `keys[].weight`(也可用 `key` + `weight` 单值,兼容旧表单)。
+ * 从 FormData 收集多 key、权重与备注。
+ * 约定字段名:`keys[].key` / `keys[].weight` / `keys[].note`(也兼容旧单 key 表单)。
  * 过滤空 key;weight 缺省/非法 → 1。
  */
 function collectKeys(formData: FormData): WeightedKey[] {
   const keys = formData.getAll("keys[].key").map((k) => String(k));
   const weights = formData.getAll("keys[].weight").map((w) => Number(String(w)));
+  const notes = formData.getAll("keys[].note").map((note) => String(note).trim());
   // 兼容:仅提供了单个 `apiKey` 字段(单 key 场景)
   if (keys.length === 0) {
     const single = String(formData.get("apiKey") ?? "");
@@ -45,6 +46,7 @@ function collectKeys(formData: FormData): WeightedKey[] {
     .map((key, i) => ({
       key: key.trim(),
       weight: Number.isFinite(weights[i]) && (weights[i] ?? 1) >= 0 ? weights[i] : 1,
+      ...(notes[i] && { note: notes[i] }),
     }))
     .filter((k) => k.key.length > 0);
 }

@@ -165,12 +165,14 @@ export async function createMyProvider(formData: FormData) {
   // 收集多 key(与 admin 一致),允许为空(无 key provider,如 OVH 免费层)。
   const rawKeys = formData.getAll("keys[].key").map((k) => String(k));
   const rawWeights = formData.getAll("keys[].weight").map((w) => Number(String(w)));
+  const rawNotes = formData.getAll("keys[].note").map((note) => String(note).trim());
   let keys: WeightedKey[];
   if (rawKeys.length > 0) {
     keys = rawKeys
       .map((key, i) => ({
         key: key.trim(),
         weight: Number.isFinite(rawWeights[i]) && (rawWeights[i] ?? 1) >= 0 ? rawWeights[i] : 1,
+        ...(rawNotes[i] && { note: rawNotes[i] }),
       }))
       .filter((k) => k.key.length > 0);
   } else {
@@ -443,10 +445,12 @@ export async function updateMyProvider(id: string, formData: FormData) {
   const db = await getDb();
   const rawKeys = formData.getAll("keys[].key").map((k) => String(k));
   const rawWeights = formData.getAll("keys[].weight").map((w) => Number(String(w)));
+  const rawNotes = formData.getAll("keys[].note").map((note) => String(note).trim());
   const keys: WeightedKey[] = rawKeys
     .map((key, i) => ({
       key: key.trim(),
       weight: Number.isFinite(rawWeights[i]) && (rawWeights[i] ?? 1) >= 0 ? rawWeights[i] : 1,
+      ...(rawNotes[i] && { note: rawNotes[i] }),
     }))
     .filter((k) => k.key.length > 0);
 
