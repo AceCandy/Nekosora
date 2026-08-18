@@ -180,6 +180,14 @@ function ChatMessageItemContent({
   const visibleRunMetadata = runMetadata && status !== "interrupted" && hasRunMetadata(runMetadata)
     ? runMetadata
     : undefined;
+  const hasProcessTrace = Boolean(
+    processTrace?.runs.at(-1)?.steps.length
+      || processRuntime
+      || reasoning
+      || toolCalls?.length
+      || searchResults?.length
+      || (isStreaming && isLast),
+  );
 
   // 用户消息编辑态
   const [editing, setEditing] = useState(false);
@@ -539,7 +547,7 @@ function ChatMessageItemContent({
                       />
                     </ErrorBoundary>
                   )}
-                  {error && <p className="mt-2 text-ui-caption leading-5 text-red-600 dark:text-red-400">{error}</p>}
+                  {error && !hasProcessTrace && <p className="mt-2 text-ui-caption italic leading-5 text-red-600 dark:text-red-400">{error}</p>}
                 </>
               );
             })() : null}

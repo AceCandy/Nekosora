@@ -158,6 +158,7 @@ export function MessageProcessTrace({
       : t("researchFailed");
   const errorMessage = content.match(/(?:^|\n\n)(\[错误\][\s\S]*)$/)?.[1];
   const hasError = Boolean(errorMessage);
+  const cleanErrorMessage = errorMessage?.replace(/^\[错误\]\s*/, "");
   const summaryParts = [terminalTitle];
   if (research.sourceCount) summaryParts.push(t("researchSourceCount", { count: research.sourceCount }));
   if (!hasError && research.status !== "error" && research.durationMs !== undefined) {
@@ -166,7 +167,7 @@ export function MessageProcessTrace({
   const currentQuery = research.currentStage === "search" ? research.query : undefined;
   const runningWarning = research.status === "running" && research.partialSourceFailure;
   const summaryText = hasError || research.status === "error"
-    ? errorMessage ?? terminalTitle
+    ? `${terminalTitle}${cleanErrorMessage ? ` · ${cleanErrorMessage}` : ""}`
     : research.status === "running"
     ? runningWarning
       ? t("researchPartialFailure")
@@ -195,7 +196,7 @@ export function MessageProcessTrace({
                 className={clsx(
                   "block truncate text-ui-body font-medium",
                   research.status === "running" && !runningWarning && "research-status-shimmer",
-                  (hasError || research.status === "error") && "text-red-600 dark:text-red-400",
+                  (hasError || research.status === "error") && "text-red-600 italic dark:text-red-400",
                 )}
                 aria-live="polite"
               >
