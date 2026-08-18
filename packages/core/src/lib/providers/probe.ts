@@ -43,6 +43,8 @@ export interface ProbeResult {
   errorKind?: "auth" | "network" | "unknown";
   mode?: "non-stream" | "stream";
   nonStreamError?: string;
+  /** 深度模型测试返回的文本(成功时,用于配置页回显)。 */
+  responseText?: string;
 }
 
 /** 拉取到的上游模型条目(统一为 OpenAI 风格的 id)。 */
@@ -254,7 +256,7 @@ async function probeModelAvailability(opts: {
       ? { openai: { store: false } }
       : undefined;
     try {
-      await generateText({
+      const generated = await generateText({
         model,
         prompt: "hi",
         maxOutputTokens: 1,
@@ -262,7 +264,7 @@ async function probeModelAvailability(opts: {
         providerOptions,
         abortSignal: timeoutScope.signal,
       });
-      return { ok: true, latencyMs: Date.now() - startedAt, mode: "non-stream" };
+      return { ok: true, latencyMs: Date.now() - startedAt, mode: "non-stream", responseText: generated.text };
     } catch (err) {
       const failure = preserveProbeTimeoutReason(err, timeoutScope.signal);
       const msg = redactErrorMessage(failure, secrets);
@@ -292,6 +294,7 @@ async function probeModelAvailability(opts: {
           latencyMs: Date.now() - startedAt,
           mode: "stream",
           nonStreamError: msg,
+          responseText: await result.text,
         };
       } catch (streamErr) {
         const failure = preserveProbeTimeoutReason(streamErr, timeoutScope.signal);

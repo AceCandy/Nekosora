@@ -399,6 +399,7 @@ export default function ProviderFormDialog({
               protocol={protocol}
               baseUrl={baseUrl}
               testModel={testModel}
+              upstreamModels={upstreamModels}
               testAction={testAction}
             />
           </div>

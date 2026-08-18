@@ -46,6 +46,8 @@ interface KeyBundleEditorProps {
   baseUrl?: string;
   /** 检测模型(测试用):传入则逐 key 测试走深度检测(带 model 极小生成)。 */
   testModel?: string;
+  /** 已拉取的上游模型列表,供单 key 测试弹窗选择。 */
+  upstreamModels?: string[];
   /** 逐 key 测试 action(可选,传入则启用测试按钮)。 */
   testAction?: TestKeyAction;
 }
@@ -53,7 +55,7 @@ interface KeyBundleEditorProps {
 type TestState = "idle" | "pending" | { result: ProbeResult };
 
 const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
-  function KeyBundleEditor({ requireKeys = true, initialRows, noKey = false, protocol, baseUrl, testModel, testAction }, ref) {
+  function KeyBundleEditor({ requireKeys = true, initialRows, noKey = false, protocol, baseUrl, testModel, upstreamModels = [], testAction }, ref) {
     const t = useTranslations("providers");
     const [rows, setRows] = useState<EditorRow[]>(
       initialRows && initialRows.length > 0
@@ -65,6 +67,8 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
     );
     // 每行各自的测试状态(按行索引)。null = 未测/idle。
     const [testStates, setTestStates] = useState<TestState[]>(() => rows.map(() => "idle"));
+    const [testDialog, setTestDialog] = useState<number | null>(null);
+    const [selectedModel, setSelectedModel] = useState(testModel ?? "");
 
     // 批量设置弹窗。
     const [batchOpen, setBatchOpen] = useState(false);
@@ -173,13 +177,13 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
     );
 
     // 测试单行:用当前协议+接口地址+该行 key 明文发探测请求。
-    const testOne = async (i: number) => {
+    const testOne = async (i: number, model = testModel) => {
       if (!testAction || !protocol || !baseUrl) return;
       const apiKey = rows[i]?.key.trim();
       if (!apiKey) return;
       setTestStates((s) => s.map((st, idx) => (idx === i ? "pending" : st)));
       try {
-        const result = await testAction({ protocol, baseUrl, apiKey, testModel });
+        const result = await testAction({ protocol, baseUrl, apiKey, testModel: model || undefined });
         setTestStates((s) => s.map((st, idx) => (idx === i ? { result } : st)));
       } catch (e) {
         setTestStates((s) =>
@@ -260,7 +264,10 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
                   type="button"
                   variant="ghost"
                   size="xs"
-                  onClick={() => testOne(i)}
+                  onClick={() => {
+                    setSelectedModel(testModel ?? "");
+                    setTestDialog(i);
+                  }}
                   loading={st === "pending"}
                   disabled={noKey || !row.key.trim()}
                   className="shrink-0 text-sora-blue hover:text-sora-blue-hover"
@@ -316,6 +323,59 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
             {t("duplicateKeyHint", { dup: duplicateInfo.dup + 1, first: duplicateInfo.first + 1 })}
           </p>
         )}
+
+        <Modal
+          open={testDialog !== null}
+          onClose={() => setTestDialog(null)}
+          title={t("testKeyDialogTitle")}
+        >
+          <div className="space-y-3">
+            <label className="block">
+              <span className="text-ui-caption font-semibold text-neutral-500 dark:text-neutral-400">
+                {t("testKeyModelLabel")}
+              </span>
+              <Input
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value)}
+                placeholder={t("testModelPlaceholder")}
+                autoFocus
+              />
+              {upstreamModels.length > 0 && (
+                <div className="mt-2 max-h-36 overflow-auto border-y border-morning-mist dark:border-deep-space py-1">
+                  {upstreamModels.map((model) => (
+                    <button
+                      key={model}
+                      type="button"
+                      onClick={() => setSelectedModel(model)}
+                      className="block w-full truncate px-2 py-1.5 text-left font-mono text-ui-caption text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800/60"
+                    >
+                      {model}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </label>
+            {testDialog !== null && testStates[testDialog] !== "idle" && testStates[testDialog] !== "pending" && (
+              <ResultDetail result={testStates[testDialog].result} />
+            )}
+            <div className="flex justify-end gap-2.5 pt-1">
+              <Button variant="secondary" size="sm" onClick={() => setTestDialog(null)}>{t("cancel")}</Button>
+              <Button
+                variant="contrast"
+                size="sm"
+                loading={testDialog !== null && testStates[testDialog] === "pending"}
+                disabled={!selectedModel.trim() || testDialog === null}
+                onClick={async () => {
+                  if (testDialog === null) return;
+                  await testOne(testDialog, selectedModel.trim());
+                }}
+              >
+                <ShieldCheck size={14} />
+                <span>{t("testKeySubmit")}</span>
+              </Button>
+            </div>
+          </div>
+        </Modal>
 
         <p className="text-ui-caption text-neutral-400 dark:text-neutral-500 leading-normal flex items-start gap-1">
           <span className="text-sora-blue shrink-0">※</span>
@@ -389,5 +449,18 @@ function ResultBadge({ result }: { result: ProbeResult }) {
     <Badge variant="warning" className="shrink-0" title={result.error}>
       {t("keyUnknownError")}
     </Badge>
+  );
+}
+
+function ResultDetail({ result }: { result: ProbeResult }) {
+  const t = useTranslations("providers");
+  return (
+    <div className="rounded-md border border-morning-mist dark:border-deep-space p-3 text-ui-caption space-y-1">
+      <div className={result.ok ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}>
+        {result.ok ? t("keyValid") : result.error ?? t("keyUnknownError")}
+        {result.latencyMs != null ? ` · ${result.latencyMs}ms` : ""}
+      </div>
+      {result.responseText && <pre className="max-h-32 overflow-auto whitespace-pre-wrap text-neutral-600 dark:text-neutral-300">{result.responseText}</pre>}
+    </div>
   );
 }

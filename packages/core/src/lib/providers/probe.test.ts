@@ -257,7 +257,7 @@ describe("probeProviderKey gemini /models 无效 key 识别", () => {
 describe("probeProviderKey 模型深度探测脱敏", () => {
   it("具体 route 探测保留 route apiFormat，不按 provider protocol 猜测", async () => {
     vi.useFakeTimers();
-    vi.mocked(generateText).mockResolvedValue({} as never);
+    vi.mocked(generateText).mockResolvedValue({ text: "hello" } as never);
 
     const result = await probeProviderKey({
       ...baseOpts,
@@ -270,6 +270,7 @@ describe("probeProviderKey 模型深度探测脱敏", () => {
     });
 
     expect(result.ok).toBe(true);
+    expect(result.responseText).toBe("hello");
     expect(mocks.buildLanguageModelWithKey).toHaveBeenCalledWith(
       expect.objectContaining({
         protocol: "openai-compatible",
