@@ -36,7 +36,7 @@ import { setMessageFeedback } from "@/features/chat/actions/feedback";
 
 import { copyToClipboard } from "@/shared/lib/clipboard";
 import { formatDateTimeLocal } from "@/shared/lib/format";
-import { ASSISTANT_MESSAGE_CLASS, USER_MESSAGE_BUBBLE_CLASS } from "@/features/chat/components/messagePresentation";
+import { ASSISTANT_MESSAGE_CLASS, splitChatError, USER_MESSAGE_BUBBLE_CLASS } from "@/features/chat/components/messagePresentation";
 import { useClickOutside } from "@/shared/lib/useClickOutside";
 import { MessageImageAttachments } from "@/features/chat/components/MessageImageAttachments";
 import { RunMetadataFields } from "@/features/chat/components/RunMetadataFields";
@@ -524,17 +524,25 @@ function ChatMessageItemContent({
               isStreaming={isStreaming}
               isLast={isLast}
             />
-            {content ? (
-              <ErrorBoundary name="message-markdown" rawContent={content}>
-                <Markdown
-                  content={content}
-                  isStreaming={isStreaming && isLast}
-                  renderer={renderStyleRenderer}
-                  renderStyleClass={renderStyleClass}
-                  onPreview={onOpenArtifact}
-                />
-              </ErrorBoundary>
-            ) : null}
+            {content ? (() => {
+              const { body, error } = splitChatError(content);
+              return (
+                <>
+                  {body && (
+                    <ErrorBoundary name="message-markdown" rawContent={body}>
+                      <Markdown
+                        content={body}
+                        isStreaming={isStreaming && isLast}
+                        renderer={renderStyleRenderer}
+                        renderStyleClass={renderStyleClass}
+                        onPreview={onOpenArtifact}
+                      />
+                    </ErrorBoundary>
+                  )}
+                  {error && <p className="mt-2 text-ui-caption leading-5 text-red-600 dark:text-red-400">{error}</p>}
+                </>
+              );
+            })() : null}
           </div>)
         )}
 

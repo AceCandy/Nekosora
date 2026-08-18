@@ -5,7 +5,7 @@ import { ErrorBoundary } from "@/shared/components/ErrorBoundary";
 import { Markdown } from "@/shared/components/markdown/Markdown";
 import type { MessageRunMetadata } from "@/features/chat/model/types";
 import { RunMetadataFields } from "./RunMetadataFields";
-import { ASSISTANT_MESSAGE_CLASS, USER_MESSAGE_BUBBLE_CLASS } from "./messagePresentation";
+import { ASSISTANT_MESSAGE_CLASS, splitChatError, USER_MESSAGE_BUBBLE_CLASS } from "./messagePresentation";
 
 interface ReadonlyChatMessageProps {
   role: string;
@@ -30,14 +30,24 @@ export function ReadonlyChatMessage({ role, content, renderStyleClass, renderer,
   return (
     <div className="group/shared-message">
       <div className={clsx(ASSISTANT_MESSAGE_CLASS, renderStyleClass && `rs-${renderStyleClass}`)}>
-        <ErrorBoundary name="shared-message-markdown" rawContent={content}>
-          <Markdown
-            content={content}
-            isStreaming={false}
-            renderer={renderer}
-            renderStyleClass={renderStyleClass}
-          />
-        </ErrorBoundary>
+        {(() => {
+          const { body, error } = splitChatError(content);
+          return (
+            <>
+              {body && (
+                <ErrorBoundary name="shared-message-markdown" rawContent={body}>
+                  <Markdown
+                    content={body}
+                    isStreaming={false}
+                    renderer={renderer}
+                    renderStyleClass={renderStyleClass}
+                  />
+                </ErrorBoundary>
+              )}
+              {error && <p className="mt-2 text-ui-caption leading-5 text-red-600 dark:text-red-400">{error}</p>}
+            </>
+          );
+        })()}
       </div>
       {runMetadata && (
         <RunMetadataFields

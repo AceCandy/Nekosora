@@ -156,14 +156,18 @@ export function MessageProcessTrace({
     : phase === "interrupted"
       ? t("researchInterrupted")
       : t("researchFailed");
+  const errorMessage = content.match(/(?:^|\n\n)(\[错误\][\s\S]*)$/)?.[1];
+  const hasError = Boolean(errorMessage);
   const summaryParts = [terminalTitle];
   if (research.sourceCount) summaryParts.push(t("researchSourceCount", { count: research.sourceCount }));
-  if (research.durationMs !== undefined) {
+  if (!hasError && research.status !== "error" && research.durationMs !== undefined) {
     summaryParts.push(t("researchDuration", { seconds: formatDuration(research.durationMs) }));
   }
   const currentQuery = research.currentStage === "search" ? research.query : undefined;
   const runningWarning = research.status === "running" && research.partialSourceFailure;
-  const summaryText = research.status === "running"
+  const summaryText = hasError || research.status === "error"
+    ? errorMessage ?? terminalTitle
+    : research.status === "running"
     ? runningWarning
       ? t("researchPartialFailure")
       : t(RUNNING_STAGE_I18N[runningStage])
@@ -191,6 +195,7 @@ export function MessageProcessTrace({
                 className={clsx(
                   "block truncate text-ui-body font-medium",
                   research.status === "running" && !runningWarning && "research-status-shimmer",
+                  (hasError || research.status === "error") && "text-red-600 dark:text-red-400",
                 )}
                 aria-live="polite"
               >

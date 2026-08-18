@@ -378,13 +378,15 @@ export default function ProvidersManager({
     set.add(r.upstreamModelName);
   }
 
-  // 检测模型悬浮窗:已配路由模型绿底在前,其余灰底在后。
+  // 检测模型悬浮窗:已配路由模型绿底在前,未配模型中 free 优先,各组均按名称升序。
   const renderModelsList = (p: ProviderItem) => {
     const configured = configuredByProvider.get(p.id);
     const models = modelsFor(p);
-    const listed = models.filter((m) => configured?.has(m));
-    const rest = models.filter((m) => !configured?.has(m));
-    return [...listed, ...rest].map((m) => {
+    const sorted = [...models].sort((a, b) => {
+      const group = (model: string) => configured?.has(model) ? 0 : model.toLowerCase().includes("free") ? 1 : 2;
+      return group(a) - group(b) || a.toLowerCase().localeCompare(b.toLowerCase()) || a.localeCompare(b);
+    });
+    return sorted.map((m) => {
       const feedback = routeFeedback[routeFeedbackKey(p.id, m.trim())];
       return (
         <button
@@ -704,6 +706,10 @@ export default function ProvidersManager({
           open={true}
           upstreamModelName={modelMatch.upstreamModelName}
           candidates={modelMatch.candidates}
+          allModels={modelCandidates.map((candidate) => ({
+            ...candidate,
+            routeExists: hasRoute(candidate.id, modelMatch.providerId, modelMatch.upstreamModelName),
+          }))}
           pendingModelId={pendingModelId}
           feedback={modelMatchFeedback}
           onClose={() => {

@@ -1061,6 +1061,7 @@
     "modelMatchTitle": "Choose an existing model",
     "modelMatchDescription": "No exact match was found for upstream model \"{name}\". Choose an existing model to add the route, or create a new model.",
     "modelMatchEmpty": "No reliable similar models were found. You can create a new model instead.",
+    "modelMatchManualSelect": "Choose manually",
     "modelMatchCreate": "Create model",
     "modelRouteCanAdd": "Can add",
     "modelRouteExists": "Exists",

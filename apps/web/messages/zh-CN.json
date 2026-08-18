@@ -1061,6 +1061,7 @@
     "modelMatchTitle": "选择已有模型",
     "modelMatchDescription": "未找到与上游模型“{name}”完全匹配的模型。请选择一个已有模型添加路由，或新建模型。",
     "modelMatchEmpty": "没有找到可靠的相似模型，可以直接新建模型。",
+    "modelMatchManualSelect": "手动选择",
     "modelMatchCreate": "新建模型",
     "modelRouteCanAdd": "可添加",
     "modelRouteExists": "已存在",

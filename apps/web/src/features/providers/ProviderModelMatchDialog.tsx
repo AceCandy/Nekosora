@@ -1,6 +1,7 @@
 "use client";
 
-import { AlertCircle, CheckCircle2, GitBranchPlus, Loader2, Plus } from "lucide-react";
+import { AlertCircle, CheckCircle2, GitBranchPlus, List, Loader2, Plus } from "lucide-react";
+import { useState } from "react";
 import { useTranslations } from "next-intl";
 import type { ProviderModelCandidate } from "@/features/providers/types";
 import Modal from "@/shared/ui/Modal";
@@ -19,6 +20,7 @@ interface ProviderModelMatchDialogProps {
   open: boolean;
   upstreamModelName: string;
   candidates: ProviderModelMatchCandidate[];
+  allModels: ProviderModelMatchCandidate[];
   pendingModelId: string | null;
   feedback: ProviderModelMatchFeedback | null;
   onClose: () => void;
@@ -31,6 +33,7 @@ export default function ProviderModelMatchDialog({
   open,
   upstreamModelName,
   candidates,
+  allModels,
   pendingModelId,
   feedback,
   onClose,
@@ -38,6 +41,8 @@ export default function ProviderModelMatchDialog({
   onCreate,
 }: ProviderModelMatchDialogProps) {
   const t = useTranslations("providers");
+  const [manualSelectOpen, setManualSelectOpen] = useState(false);
+  const visibleCandidates = manualSelectOpen ? allModels : candidates;
   const feedbackText = feedback
     ? t(
         feedback.status === "created"
@@ -61,9 +66,9 @@ export default function ProviderModelMatchDialog({
           {t("modelMatchDescription", { name: upstreamModelName })}
         </p>
 
-        {candidates.length > 0 ? (
+        {visibleCandidates.length > 0 ? (
           <div className="max-h-72 overflow-y-auto rounded-md border border-morning-mist dark:border-deep-space divide-y divide-neutral-200 dark:divide-neutral-800">
-            {candidates.map((candidate) => {
+            {visibleCandidates.map((candidate) => {
               const pending = pendingModelId === candidate.id;
               return (
                 <button
@@ -124,7 +129,14 @@ export default function ProviderModelMatchDialog({
         )}
 
         <div className="flex justify-end gap-2">
-          <Button variant="secondary" onClick={onClose}>{t("cancel")}</Button>
+          <Button
+            variant="secondary"
+            onClick={() => setManualSelectOpen(true)}
+            disabled={pendingModelId !== null || manualSelectOpen}
+          >
+            <List className="h-4 w-4" aria-hidden="true" />
+            {t("modelMatchManualSelect")}
+          </Button>
           <Button variant="primary" onClick={onCreate} disabled={pendingModelId !== null}>
             <Plus className="h-4 w-4" aria-hidden="true" />
             {t("modelMatchCreate")}

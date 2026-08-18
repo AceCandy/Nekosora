@@ -3,3 +3,9 @@ export const USER_MESSAGE_BUBBLE_CLASS =
 
 export const ASSISTANT_MESSAGE_CLASS =
   "text-neutral-800 dark:text-neutral-200 text-ui-reading leading-7";
+
+export function splitChatError(content: string): { body: string; error: string | null } {
+  const match = content.match(/(?:^|\n\n)(\[错误\][\s\S]*)$/);
+  if (!match) return { body: content, error: null };
+  return { body: content.slice(0, match.index).trimEnd(), error: match[1] };
+}

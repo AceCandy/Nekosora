@@ -142,6 +142,9 @@ export async function executeChatCompletion(
   const latch = (status: RunTerminalStatus) => {
     if (!terminal.status) terminal.status = status;
   };
+  const appendErrorText = (error: string) => {
+    assistantText += `${assistantText ? "\n\n" : ""}[错误] ${error}`;
+  };
 
   try {
     if (input.signal.aborted) {
@@ -274,6 +277,7 @@ export async function executeChatCompletion(
         } else if (event.type === "error") {
           latch("failed");
           errorEmitted = true;
+          appendErrorText(event.error);
           await input.emit(event);
           await settleIterator(iterator);
           break;
@@ -283,6 +287,7 @@ export async function executeChatCompletion(
           latch("interrupted");
           if (!input.signal.aborted) {
             errorEmitted = true;
+            appendErrorText("生成未正常完成");
             await input.emit({ type: "error", error: "生成未正常完成" });
           }
         }
@@ -295,9 +300,11 @@ export async function executeChatCompletion(
       latch("failed");
       if (!errorEmitted) {
         errorEmitted = true;
+        const message = redactErrorMessage(error, [], "内部错误");
+        appendErrorText(message);
         await input.emit({
           type: "error",
-          error: redactErrorMessage(error, [], "内部错误"),
+          error: message,
         });
       }
     }
