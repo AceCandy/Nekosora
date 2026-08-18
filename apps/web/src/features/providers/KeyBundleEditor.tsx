@@ -1,11 +1,11 @@
 "use client";
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Eye, EyeOff, Plus, Trash2, ShieldCheck } from "lucide-react";
+import { Eye, EyeOff, MessageSquareText, Plus, Trash2, ShieldCheck } from "lucide-react";
 import { clsx } from "clsx";
 import Input from "@/shared/ui/Input";
+import Select from "@/shared/ui/Select";
 import { Button } from "@/shared/ui/Button";
-import Badge from "@/shared/ui/Badge";
 import Modal from "@/shared/ui/Modal";
 import type { ProbeResult } from "@/lib/providers/probe";
 
@@ -23,7 +23,7 @@ export interface KeyBundleEditorHandle {
    * 无重复:返回 false(放行原保存流程)。
    */
   validateDuplicates: () => boolean;
-  /** 打开批量设置弹窗:预填当前所有行(key,weight),交由用户编辑/追加后整体替换。 */
+  /** 打开批量设置弹窗:预填当前所有行(key,weight,note),交由用户编辑/追加后整体替换。 */
   openBatch: () => void;
 }
 
@@ -70,6 +70,8 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
     const [testStates, setTestStates] = useState<TestState[]>(() => rows.map(() => "idle"));
     const [testDialog, setTestDialog] = useState<number | null>(null);
     const [selectedModel, setSelectedModel] = useState(testModel ?? "");
+    const [noteDialog, setNoteDialog] = useState<number | null>(null);
+    const [noteDraft, setNoteDraft] = useState("");
 
     // 批量设置弹窗。
     const [batchOpen, setBatchOpen] = useState(false);
@@ -201,22 +203,13 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
       }
     };
 
-    // 全部测试:依次对每个非空 key 探测(串行,避免并发冲击上游)。
-    const testAll = async () => {
-      if (!testAction || !protocol || !baseUrl) return;
-      for (let i = 0; i < rows.length; i++) {
-        const apiKey = rows[i]?.key.trim();
-        if (!apiKey) continue;
-        await testOne(i);
-      }
-    };
-
     const canTest = !!testAction && !!protocol && !!baseUrl;
+    const firstTestableKey = rows.findIndex((row) => row.key.trim());
+    const testing = testStates.includes("pending");
 
     return (
       <div className="mt-1 space-y-2.5">
         {rows.map((row, i) => {
-          const st = testStates[i];
           const isDup = duplicateInfo?.dup === i;
           return (
             <div
@@ -229,39 +222,29 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
                 isDup && "ring-2 ring-red-500/70 bg-red-500/[0.07]",
               )}
             >
-              <div className="flex-1 space-y-1.5">
-                <div className="relative">
-                  <Input
-                    name="keys[].key"
-                    type={revealed[i] ? "text" : "password"}
-                    required={requireKeys}
-                    disabled={noKey}
-                    value={row.key}
-                    onChange={(e) => update(i, "key", e.target.value)}
-                    className="pr-9 font-mono text-ui-caption"
-                    placeholder={t("keyPlaceholder", { index: i + 1 })}
-                    autoComplete="off"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => toggleReveal(i)}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-250 p-0.5 rounded transition-colors"
-                    aria-label={revealed[i] ? t("hideKeyAria") : t("showKeyAria")}
-                    title={revealed[i] ? t("hideKey") : t("showKey")}
-                  >
-                    {revealed[i] ? <EyeOff size={15} /> : <Eye size={15} />}
-                  </button>
-                </div>
+              <div className="relative flex-1">
                 <Input
-                  name="keys[].note"
-                  value={row.note}
-                  onChange={(e) => update(i, "note", e.target.value)}
+                  name="keys[].key"
+                  type={revealed[i] ? "text" : "password"}
+                  required={requireKeys}
                   disabled={noKey}
-                  placeholder={t("keyNotePlaceholder")}
-                  aria-label={t("keyNoteLabel")}
-                  className="text-ui-caption"
+                  value={row.key}
+                  onChange={(e) => update(i, "key", e.target.value)}
+                  className="pr-9 font-mono text-ui-caption"
+                  placeholder={t("keyPlaceholder", { index: i + 1 })}
+                  autoComplete="off"
                 />
+                <button
+                  type="button"
+                  onClick={() => toggleReveal(i)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-250 p-0.5 rounded transition-colors"
+                  aria-label={revealed[i] ? t("hideKeyAria") : t("showKeyAria")}
+                  title={revealed[i] ? t("hideKey") : t("showKey")}
+                >
+                  {revealed[i] ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
               </div>
+              <input type="hidden" name="keys[].note" value={row.note} />
               <div className="flex items-center gap-1.5 shrink-0">
                 <span className="text-ui-caption font-semibold text-neutral-500 dark:text-neutral-400">{t("weight")}</span>
                 <Input
@@ -272,26 +255,27 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
                   disabled={noKey}
                   value={row.weight}
                   onChange={(e) => update(i, "weight", e.target.value)}
-                  className="w-16 font-mono text-ui-caption"
+                  className="!w-[4.25rem] font-mono text-ui-caption"
                 />
               </div>
-              {canTest && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="xs"
-                  onClick={() => {
-                    setSelectedModel(testModel ?? "");
-                    setTestDialog(i);
-                  }}
-                  loading={st === "pending"}
-                  disabled={noKey || !row.key.trim()}
-                  className="shrink-0 text-sora-blue hover:text-sora-blue-hover"
-                  title={t("testKeyTitle")}
-                >
-                  <ShieldCheck size={14} />
-                </Button>
-              )}
+              <Button
+                type="button"
+                variant="ghost"
+                size="xs"
+                onClick={() => {
+                  setNoteDraft(row.note);
+                  setNoteDialog(i);
+                }}
+                disabled={noKey}
+                className={clsx(
+                  "shrink-0",
+                  row.note ? "text-sora-blue hover:text-sora-blue-hover" : "text-neutral-400 hover:text-neutral-600",
+                )}
+                title={row.note || t("keyNoteTitle")}
+                aria-label={t("keyNoteTitle")}
+              >
+                <MessageSquareText size={14} />
+              </Button>
               <Button
                 type="button"
                 variant="ghost"
@@ -304,7 +288,6 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
               >
                 <Trash2 size={16} />
               </Button>
-              {st !== "idle" && st !== "pending" && <ResultBadge result={st.result} />}
             </div>
           );
         })}
@@ -319,17 +302,20 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
             <Plus size={14} />
             <span>{t("addApiKey")}</span>
           </button>
-          {canTest && rows.length > 1 && (
+          {canTest && firstTestableKey >= 0 && (
             <Button
               type="button"
               variant="ghost"
               size="xs"
-              onClick={testAll}
+              onClick={() => {
+                setSelectedModel(testModel ?? "");
+                setTestDialog(firstTestableKey);
+              }}
               disabled={noKey}
               className="text-sora-blue hover:text-sora-blue-hover"
             >
               <ShieldCheck size={14} />
-              <span>{t("testAllKeys")}</span>
+              <span>{t("testKeys")}</span>
             </Button>
           )}
         </div>
@@ -347,6 +333,23 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
           dialogClassName="m-auto w-[min(480px,92vw)] rounded-lg border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/40 dark:border-deep-space dark:bg-twilight-obsidian dark:text-nebula-silver"
         >
           <div className="space-y-3">
+            <label className="block">
+              <span className="text-ui-caption font-semibold text-neutral-500 dark:text-neutral-400">
+                {t("testKeySelectLabel")}
+              </span>
+              <Select
+                value={testDialog ?? ""}
+                onChange={(event) => setTestDialog(Number(event.target.value))}
+                disabled={testing}
+                className="mt-1 w-full"
+              >
+                {rows.map((row, index) => row.key.trim() && (
+                  <option key={index} value={index}>
+                    {t("testKeyOption", { index: index + 1 })}{row.note ? ` · ${row.note}` : ""}
+                  </option>
+                ))}
+              </Select>
+            </label>
             <label className="block">
               <span className="text-ui-caption font-semibold text-neutral-500 dark:text-neutral-400">
                 {t("testKeyModelLabel")}
@@ -380,8 +383,8 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
               <Button
                 variant="contrast"
                 size="sm"
-                loading={testDialog !== null && testStates[testDialog] === "pending"}
-                disabled={!selectedModel.trim() || testDialog === null}
+                loading={testing}
+                disabled={testing || !selectedModel.trim() || testDialog === null}
                 onClick={async () => {
                   if (testDialog === null) return;
                   await testOne(testDialog, selectedModel.trim());
@@ -389,6 +392,38 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
               >
                 <ShieldCheck size={14} />
                 <span>{t("testKeySubmit")}</span>
+              </Button>
+            </div>
+          </div>
+        </Modal>
+
+        <Modal
+          open={noteDialog !== null}
+          onClose={() => setNoteDialog(null)}
+          title={t("keyNoteDialogTitle")}
+          dialogClassName="m-auto w-[min(400px,92vw)] rounded-lg border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/40 dark:border-deep-space dark:bg-twilight-obsidian dark:text-nebula-silver"
+        >
+          <div className="space-y-3">
+            <textarea
+              value={noteDraft}
+              onChange={(event) => setNoteDraft(event.target.value)}
+              rows={3}
+              autoFocus
+              placeholder={t("keyNotePlaceholder")}
+              className="w-full resize-y rounded-md border border-morning-mist bg-white px-3 py-2 text-ui-body text-space-ink placeholder:text-neutral-600 focus:border-sora-blue focus:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:border-deep-space dark:bg-space-ink dark:text-nebula-silver dark:placeholder:text-neutral-400"
+            />
+            <div className="flex justify-end gap-2.5">
+              <Button variant="secondary" size="sm" onClick={() => setNoteDialog(null)}>{t("cancel")}</Button>
+              <Button
+                variant="contrast"
+                size="sm"
+                onClick={() => {
+                  if (noteDialog === null) return;
+                  update(noteDialog, "note", noteDraft.trim());
+                  setNoteDialog(null);
+                }}
+              >
+                {t("save")}
               </Button>
             </div>
           </div>
@@ -437,37 +472,6 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
 );
 
 export default KeyBundleEditor;
-
-/** 单行测试结果徽章(与行绑定,明确是哪个 key 的结果)。 */
-function ResultBadge({ result }: { result: ProbeResult }) {
-  const t = useTranslations("providers");
-  if (result.ok) {
-    return (
-      <Badge variant="success" className="shrink-0" title={result.error}>
-        {t("keyValid")}{result.latencyMs != null ? ` ${result.latencyMs}ms` : ""}
-      </Badge>
-    );
-  }
-  if (result.errorKind === "auth") {
-    return (
-      <Badge variant="danger" className="shrink-0" title={result.error}>
-        {t("keyInvalid")}
-      </Badge>
-    );
-  }
-  if (result.errorKind === "network") {
-    return (
-      <Badge variant="warning" className="shrink-0" title={result.error}>
-        {t("keyNetworkError")}
-      </Badge>
-    );
-  }
-  return (
-    <Badge variant="warning" className="shrink-0" title={result.error}>
-      {t("keyUnknownError")}
-    </Badge>
-  );
-}
 
 function ResultDetail({ result }: { result: ProbeResult }) {
   const t = useTranslations("providers");
