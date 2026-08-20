@@ -1192,3 +1192,24 @@ Show routes as currently unavailable when their provider is disabled in admin an
 ### Status
 
 [OK] **Completed**
+
+
+## Session 115: 优化 Chat 输出样式切换
+
+**Date**: 2026-08-20
+**Task**: 优化 Chat 输出样式切换
+**Branch**: `main`
+
+### Summary
+
+将输出样式 CSS 与 renderer 按可见优先渐进切换，并用消息级视口锚点保持超长会话位置；补充快速切换、用户滚动抢占和样式边界测试。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `481a063` | (see git log) |
+
+### Status
+
+[OK] **Completed**
