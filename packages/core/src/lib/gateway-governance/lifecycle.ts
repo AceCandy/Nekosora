@@ -281,7 +281,7 @@ export async function consumeGatewayGovernanceRate(input: {
 
 export function startGatewayGovernanceReaper(input: {
   repository: GatewayGovernanceRepository;
-  onFailure?: (error: GovernanceStateError) => void;
+  onFailure?: (diagnosticCode: string) => void;
   intervalMs?: number;
   batchSize?: number;
 }): GovernanceReaperController {
@@ -303,7 +303,7 @@ export function startGatewayGovernanceReaper(input: {
           }
         } catch (error) {
           recordGovernanceFailure("reaper");
-          input.onFailure?.(toGovernanceStateError(error));
+          input.onFailure?.(safeInfrastructureErrorCode(error));
         }
       })().finally(() => {
         inFlight = null;
@@ -324,6 +324,21 @@ export function startGatewayGovernanceReaper(input: {
       await inFlight;
     },
   };
+}
+
+/** 仅暴露低敏基础设施错误码，避免 SQL、参数和连接信息进入日志。 */
+function safeInfrastructureErrorCode(error: unknown): string {
+  let current = error;
+  for (let depth = 0; depth < 3 && current && typeof current === "object"; depth++) {
+    const code = "code" in current ? current.code : undefined;
+    if (
+      typeof code === "string"
+      && (/^[A-Z0-9]{5}$/.test(code)
+        || ["ECONNREFUSED", "ECONNRESET", "ENOTFOUND", "EPIPE", "ETIMEDOUT"].includes(code))
+    ) return code;
+    current = "cause" in current ? current.cause : undefined;
+  }
+  return "unknown";
 }
 
 function toGovernanceStateError(error: unknown): GovernanceStateError {

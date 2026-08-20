@@ -246,6 +246,29 @@ describe("gateway governance lifecycle", () => {
     await vi.advanceTimersByTimeAsync(30);
     expect(repository.reapExpiredOne).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    ["40P01", "40P01"],
+    ["SECRET_DATA", "unknown"],
+  ])("reports bounded diagnostic code %s as %s", async (code, expected) => {
+    vi.useFakeTimers();
+    const onFailure = vi.fn();
+    const databaseError = Object.assign(new Error("postgres://secret"), { code });
+    const repository = repositoryMock({
+      reapExpiredOne: vi.fn().mockRejectedValue(
+        Object.assign(new Error("query and params"), { cause: databaseError }),
+      ),
+    });
+    const controller = startGatewayGovernanceReaper({
+      repository,
+      onFailure,
+      intervalMs: 10,
+    });
+
+    await vi.advanceTimersByTimeAsync(10);
+    expect(onFailure).toHaveBeenCalledWith(expected);
+    await controller.stop();
+  });
 });
 
 const lease: GovernanceLease = {

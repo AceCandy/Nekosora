@@ -22,7 +22,7 @@ async function main(): Promise<void> {
 
   const reaper = startGatewayGovernanceReaper({
     repository: await createGatewayGovernanceRepository(),
-    onFailure: () => console.error("[gateway] 治理租约回收失败"),
+    onFailure: (code) => console.error(`[gateway] 治理租约回收失败 code=${code}`),
   });
   governanceReaper = reaper;
   server = buildServer({
