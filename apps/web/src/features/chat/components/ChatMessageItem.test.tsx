@@ -1,6 +1,11 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
+const capturedMarkdownProps = vi.hoisted(() => [] as Array<{
+  renderer?: "streamdown" | "custom";
+  renderStyleClass?: string | null;
+}>);
+
 vi.mock("next-intl", () => ({
   useLocale: () => "en",
   useTranslations: () => (key: string) => key,
@@ -11,7 +16,10 @@ vi.mock("@/features/chat/actions/feedback", () => ({
 }));
 
 vi.mock("@/shared/components/markdown/Markdown", () => ({
-  Markdown: () => null,
+  Markdown: (props: (typeof capturedMarkdownProps)[number]) => {
+    capturedMarkdownProps.push(props);
+    return null;
+  },
 }));
 
 vi.mock("@/shared/lib/useClickOutside", () => ({
@@ -51,6 +59,43 @@ function renderAssistantMessage(metadata: MessageRunMetadata) {
     />,
   );
 }
+
+describe("ChatMessageItem render style", () => {
+  it("forwards renderer and only maps the paper flag to Markdown's legacy style prop", () => {
+    capturedMarkdownProps.length = 0;
+    const paperHtml = renderToStaticMarkup(
+      <ChatMessageItem
+        message={{ role: "assistant", content: "Answer", publicId: "assistant-paper" }}
+        isLast
+        isStreaming={false}
+        model="model-a"
+        renderStyleClass="paper"
+        renderStyleRenderer="custom"
+        isPaper
+        onRegenerate={() => undefined}
+        onOpenArtifact={() => undefined}
+      />,
+    );
+    const defaultHtml = renderToStaticMarkup(
+      <ChatMessageItem
+        message={{ role: "assistant", content: "Answer", publicId: "assistant-default" }}
+        isLast
+        isStreaming={false}
+        model="model-a"
+        renderStyleRenderer="streamdown"
+        onRegenerate={() => undefined}
+        onOpenArtifact={() => undefined}
+      />,
+    );
+
+    expect(capturedMarkdownProps).toEqual([
+      expect.objectContaining({ renderer: "custom", renderStyleClass: "paper" }),
+      expect.objectContaining({ renderer: "streamdown", renderStyleClass: null }),
+    ]);
+    expect(paperHtml).toContain("rs-paper");
+    expect(defaultHtml).not.toContain("rs-paper");
+  });
+});
 
 describe("MessageRunMetadataDisplay", () => {
   it("按固定顺序展示可用字段并保留真实零值", () => {

@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useDeferredValue } from "react";
 import Image from "next/image";
 import { useTranslations } from "next-intl";
 import { AlertCircle, Cpu, RefreshCw } from "lucide-react";
@@ -270,8 +270,7 @@ export default function ChatComposer({
   const activeRenderStyle = renderStyleId
     ? renderStyles.find((s) => s.id === renderStyleId) ?? null
     : null;
-  const activeRenderStyleClass = activeRenderStyle?.cssClass ?? null;
-  const activeRenderStyleRenderer = activeRenderStyle?.renderer;
+  const deferredRenderStyle = useDeferredValue(activeRenderStyle);
 
   // ===== 选择回调：同步更新权威快照，由 coordinator 顺序持久化 =====
   const handleRenderStyleChange = (id: string) => {
@@ -373,8 +372,9 @@ export default function ChatComposer({
           conversationId={activeConvId}
           bottomInset={composerHeight + 16}
           model={model}
-          renderStyleClass={activeRenderStyleClass}
-          renderStyleRenderer={activeRenderStyleRenderer}
+          renderStyleClass={deferredRenderStyle?.cssClass ?? null}
+          renderStyleRenderer={deferredRenderStyle?.renderer}
+          isPaper={deferredRenderStyle?.cssClass === "paper"}
           onRegenerate={handleRegenerate}
           onEdit={handleEditAndResend}
           onSwitchVersion={runtime.switchVersion}

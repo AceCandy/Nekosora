@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReasoningLevel } from "@/db/types";
 import type { ComposerSelectionState, ComposerTransition } from "@/features/chat/model/composerState";
-import type { ModelOption } from "@/features/chat/model/types";
+import type { ModelOption, RenderStyleOption } from "@/features/chat/model/types";
 
 const mocks = vi.hoisted(() => ({
   adoptConversation: vi.fn(),
@@ -33,6 +33,9 @@ interface CapturedInputBoxProps {
 
 interface CapturedMessageListProps {
   onAsk?: (text: string) => void;
+  renderStyleClass?: string | null;
+  renderStyleRenderer?: "streamdown" | "custom";
+  isPaper?: boolean;
 }
 
 interface CapturedHeaderProps {
@@ -173,12 +176,17 @@ function collectElements(node: React.ReactNode): React.ReactElement<Record<strin
   return [node, ...React.Children.toArray(node.props.children as React.ReactNode).flatMap(collectElements)];
 }
 
-function renderComposer(conversationId?: string, webSearchAvailable = false): string {
+function renderComposer(
+  conversationId?: string,
+  webSearchAvailable = false,
+  renderStyles?: RenderStyleOption[],
+): string {
   return renderToStaticMarkup(
     <ChatComposer
       models={models}
       conversationId={conversationId}
       webSearchAvailable={webSearchAvailable}
+      renderStyles={renderStyles}
       createShareAction={async () => { throw new Error("unused"); }}
       listSharesAction={async () => []}
       revokeShareAction={async () => undefined}
@@ -221,6 +229,19 @@ describe("ChatComposer coordinator integration", () => {
 
     expect(mocks.handleUpload).toHaveBeenCalledWith(files);
     expect(capturedToolbar?.webSearchAvailable).toBe(true);
+  });
+
+  it("passes one coherent render style snapshot to the message list", () => {
+    renderComposer("conversation-a", false, [{
+      id: "style-initial",
+      name: "Paper",
+      cssClass: "paper",
+      renderer: "custom",
+    }]);
+
+    expect(capturedMessageList?.renderStyleClass).toBe("paper");
+    expect(capturedMessageList?.renderStyleRenderer).toBe("custom");
+    expect(capturedMessageList?.isPaper).toBe(true);
   });
 
   it("routes every selection control through domain transitions", () => {

@@ -113,10 +113,12 @@ interface ChatMessageItemProps {
   isLast: boolean;
   isStreaming: boolean;
   model: string;
-  /** 当前会话选用的输出样式 cssClass(null 表示默认渲染)。容器会套上 rs-{cssClass} 作为 CSS 作用域。 */
+  /** 当前消息渐进应用的输出样式 cssClass；仅 assistant 接收。 */
   renderStyleClass?: string | null;
   /** 当前会话选用样式的渲染器类型(custom=流式结束后用内置解析器重渲;默认 streamdown)。 */
   renderStyleRenderer?: "streamdown" | "custom";
+  /** 是否使用内置纸面样式（影响代码块表现）。 */
+  isPaper?: boolean;
   onRegenerate: (publicId: string, model: string) => void;
   onOpenArtifact: (a: Artifact) => void;
   /** 编辑用户消息后重发(publicId 为被编辑 user 消息的稳定标识)。 */
@@ -149,6 +151,7 @@ function ChatMessageItemContent({
   model,
   renderStyleClass,
   renderStyleRenderer,
+  isPaper,
   onRegenerate,
   onOpenArtifact,
   onEdit,
@@ -550,7 +553,7 @@ function ChatMessageItemContent({
                         content={body}
                         isStreaming={isStreaming && isLast}
                         renderer={renderStyleRenderer}
-                        renderStyleClass={renderStyleClass}
+                        renderStyleClass={isPaper ? "paper" : null}
                         onPreview={onOpenArtifact}
                       />
                     </ErrorBoundary>

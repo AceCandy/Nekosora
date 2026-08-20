@@ -9,10 +9,15 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactNode,
   type RefObject,
 } from "react";
 import { useTranslations } from "next-intl";
-import { MessageScroller, useMessageScroller } from "@shadcn/react/message-scroller";
+import {
+  MessageScroller,
+  useMessageScroller,
+  useMessageScrollerVisibility,
+} from "@shadcn/react/message-scroller";
 import { ChevronDown, Copy, Reply, MessagesSquare, Volume2, Square } from "lucide-react";
 import { clsx } from "clsx";
 import { ChatMessageItem } from "@/features/chat/components/ChatMessageItem";
@@ -30,6 +35,16 @@ import {
   resolveChatScrollEntry,
   type ChatScrollMemoryEntry,
 } from "@/features/chat/model/chatScrollMemory";
+import {
+  applyRenderStyleBatch,
+  resolveRenderStyle,
+  resolveViewportAnchorDelta,
+  sameRenderStyle,
+  settleRenderStyleRollout,
+  startRenderStyleRollout,
+  type RenderStyleRollout,
+  type RenderStyleSemantics,
+} from "@/features/chat/model/progressiveRenderStyle";
 
 interface ChatMessageListProps {
   messages: ChatMessage[];
@@ -43,6 +58,8 @@ interface ChatMessageListProps {
   /** 当前会话选用的输出样式 cssClass（null=默认渲染）。 */
   renderStyleClass?: string | null;
   renderStyleRenderer?: "streamdown" | "custom";
+  /** 是否使用内置纸面样式（仅影响 assistant 的代码块表现）。 */
+  isPaper?: boolean;
   onRegenerate: (publicId: string, model: string) => void;
   onEdit?: (publicId: string, newContent: string, attachmentFileIds: string[], model: string) => void;
   onSwitchVersion?: (publicId: string, direction: "prev" | "next") => void;
@@ -66,6 +83,9 @@ const SELECTION_SPEECH_ID = "selection";
 
 /** 锚定 user 消息到中上部时的顶部留白,与 message-scroller 的 scrollPreviousItemPeek 默认值对齐。 */
 const ANCHOR_SCROLL_MARGIN = 64;
+
+/** 每帧只切少量历史回复，避免一次提交重建整段 custom/streamdown DOM。 */
+const RENDER_STYLE_BATCH_SIZE = 4;
 
 /**
  * 跨会话滚动位置记忆:按 conversationId 缓存 scrollTop 与是否在底部。模块级(非 ref)
@@ -172,6 +192,200 @@ function ScrollAnchor({
   return null;
 }
 
+interface ProgressiveRenderStyleProps {
+  messages: ChatMessage[];
+  conversationId?: string;
+  cssClass?: string | null;
+  renderer?: "streamdown" | "custom";
+  isPaper?: boolean;
+  viewportRef: RefObject<HTMLDivElement | null>;
+  children: (resolve: (index: number) => RenderStyleSemantics) => ReactNode;
+}
+
+interface RenderStyleViewportAnchor {
+  generation: number;
+  messageId: string;
+  scrollTop: number;
+  viewportTop: number;
+}
+
+/** 在 MessageScroller.Provider 内按可见优先、屏外分批推进 renderer。 */
+function ProgressiveRenderStyle({
+  messages,
+  conversationId,
+  cssClass,
+  renderer,
+  isPaper,
+  viewportRef,
+  children,
+}: ProgressiveRenderStyleProps) {
+  const { visibleMessageIds } = useMessageScrollerVisibility();
+  const target = useMemo<RenderStyleSemantics>(
+    () => ({ cssClass, renderer, isPaper }),
+    [cssClass, renderer, isPaper],
+  );
+  const [rollout, setRollout] = useState<RenderStyleRollout>(() => ({
+    conversationId,
+    target,
+    applied: null,
+    generation: 0,
+  }));
+  const messagesRef = useRef(messages);
+  const visibleIdsRef = useRef(visibleMessageIds);
+  const previousTargetRef = useRef(target);
+  const previousConversationIdRef = useRef(conversationId);
+  const generationRef = useRef(0);
+  const rolloutActiveRef = useRef(false);
+  const viewportAnchorRef = useRef<RenderStyleViewportAnchor | null>(null);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+  useEffect(() => {
+    visibleIdsRef.current = visibleMessageIds;
+  }, [visibleMessageIds]);
+
+  const captureViewportAnchor = useCallback((generation: number) => {
+    const viewport = viewportRef.current;
+    if (!viewport || captureChatScrollMemory(viewport).atEnd) {
+      viewportAnchorRef.current = null;
+      return;
+    }
+    const viewportRect = viewport.getBoundingClientRect();
+    const isVisible = (element: HTMLElement) => {
+      const rect = element.getBoundingClientRect();
+      return rect.bottom > viewportRect.top && rect.top < viewportRect.bottom;
+    };
+    const visibleElement = visibleIdsRef.current
+      .map((messageId) => viewport.querySelector<HTMLElement>(`[data-message-id="${messageId}"]`))
+      .find((element): element is HTMLElement => !!element && isVisible(element));
+    const element = visibleElement ?? Array.from(
+      viewport.querySelectorAll<HTMLElement>("[data-message-id]"),
+    ).find(isVisible);
+    const messageId = element?.dataset.messageId;
+    if (!element || !messageId) {
+      viewportAnchorRef.current = null;
+      return;
+    }
+    viewportAnchorRef.current = {
+      generation,
+      messageId,
+      scrollTop: viewport.scrollTop,
+      viewportTop: element.getBoundingClientRect().top - viewportRect.top,
+    };
+  }, [viewportRef]);
+
+  useLayoutEffect(() => {
+    const anchor = viewportAnchorRef.current;
+    const viewport = viewportRef.current;
+    if (!anchor || !viewport || anchor.generation !== rollout.generation) return;
+    const element = viewport.querySelector<HTMLElement>(
+      `[data-message-id="${anchor.messageId}"]`,
+    );
+    if (!element) {
+      viewportAnchorRef.current = null;
+      return;
+    }
+    const currentViewportTop = element.getBoundingClientRect().top
+      - viewport.getBoundingClientRect().top;
+    const delta = resolveViewportAnchorDelta(
+      anchor.viewportTop,
+      currentViewportTop,
+      anchor.scrollTop,
+      viewport.scrollTop,
+    );
+    if (delta) viewport.scrollTop += delta;
+    if (!rollout.applied) {
+      rolloutActiveRef.current = false;
+      viewportAnchorRef.current = null;
+    }
+  }, [rollout, viewportRef]);
+
+  useEffect(() => {
+    const conversationChanged = previousConversationIdRef.current !== conversationId;
+    previousConversationIdRef.current = conversationId;
+
+    if (conversationChanged) {
+      previousTargetRef.current = target;
+      generationRef.current += 1;
+      rolloutActiveRef.current = false;
+      viewportAnchorRef.current = null;
+      setRollout({
+        conversationId,
+        target,
+        applied: null,
+        generation: generationRef.current,
+      });
+      return;
+    }
+    if (sameRenderStyle(previousTargetRef.current, target)) return;
+    previousTargetRef.current = target;
+
+    const generation = ++generationRef.current;
+    rolloutActiveRef.current = true;
+    const currentMessages = messagesRef.current;
+    const visibleIndices = new Set(
+      visibleIdsRef.current
+        .map((id) => Number(id.slice(4)))
+        .filter((index) => Number.isInteger(index) && currentMessages[index]?.role === "assistant"),
+    );
+    const pending = currentMessages
+      .map((message, index) => message.role === "assistant" ? index : -1)
+      .filter((index) => index >= 0 && !visibleIndices.has(index))
+      .reverse();
+
+    captureViewportAnchor(generation);
+    setRollout((previous) => startRenderStyleRollout(
+      previous,
+      target,
+      currentMessages,
+      visibleIndices,
+      generation,
+      conversationId,
+    ));
+
+    let frame = 0;
+    let cursor = 0;
+    const flush = () => {
+      const batch = pending.slice(cursor, cursor + RENDER_STYLE_BATCH_SIZE);
+      cursor += batch.length;
+      captureViewportAnchor(generation);
+      setRollout((previous) => applyRenderStyleBatch(previous, batch, generation));
+      if (cursor < pending.length) {
+        frame = requestAnimationFrame(flush);
+      } else {
+        setRollout((previous) => settleRenderStyleRollout(previous, generation));
+      }
+    };
+    if (pending.length > 0) {
+      frame = requestAnimationFrame(flush);
+    } else {
+      setRollout((previous) => settleRenderStyleRollout(previous, generation));
+    }
+    return () => cancelAnimationFrame(frame);
+  }, [captureViewportAnchor, conversationId, target]);
+
+  useEffect(() => {
+    if (!rolloutActiveRef.current) return;
+    const visibleIndices = visibleMessageIds
+      .map((id) => Number(id.slice(4)))
+      .filter((index) => Number.isInteger(index) && messagesRef.current[index]?.role === "assistant");
+    captureViewportAnchor(generationRef.current);
+    setRollout((previous) => applyRenderStyleBatch(
+      previous,
+      visibleIndices,
+      generationRef.current,
+    ));
+  }, [captureViewportAnchor, visibleMessageIds]);
+
+  const resolve = useCallback(
+    (index: number) => rollout.conversationId === conversationId
+      ? resolveRenderStyle(rollout, index)
+      : target,
+    [conversationId, rollout, target],
+  );
+  return children(resolve);
+}
+
 /**
  * 消息列表段 —— 基于 @shadcn/react/message-scroller 原语的滚动容器 + 消息渲染 + 对话大纲 + 回到最新。
  *
@@ -189,6 +403,7 @@ export function ChatMessageList({
   model,
   renderStyleClass,
   renderStyleRenderer,
+  isPaper,
   onRegenerate,
   onEdit,
   onSwitchVersion,
@@ -318,43 +533,58 @@ export function ChatMessageList({
           style={{ paddingBottom: bottomInset ?? 8 }}
           preserveScrollOnPrepend
         >
-          <MessageScroller.Content className="mx-auto flex w-full max-w-[75ch] flex-col">
-            {messages.map((m, i) => (
-              // scrollAnchor 标在 user 消息:新轮锚定到该 user 消息(中上部),回复在其下方生长
-              <MessageScroller.Item
-                key={i}
-                messageId={`msg-${i}`}
-                scrollAnchor={m.role === "user"}
-                className="py-4"
-              >
-                <MessageTimeSeparator
-                  createdAt={m.createdAt}
-                  previousCreatedAt={messages[i - 1]?.createdAt}
-                  isFirst={i === 0}
-                />
-                <ErrorBoundary name="message">
-                  <ChatMessageItem
-                    domId={`msg-${i}`}
-                    message={m}
-                    isLast={i === messages.length - 1}
-                    isStreaming={streaming}
-                    model={model}
-                    renderStyleClass={renderStyleClass}
-                    renderStyleRenderer={renderStyleRenderer}
-                    onRegenerate={handleRegenerate}
-                    onEdit={handleEdit}
-                    onSwitchVersion={onSwitchVersion}
-                    onOpenArtifact={onOpenArtifact}
-                    onRequestDelete={handleRequestDelete}
-                    conversationStreaming={streaming}
-                    onContinue={onContinue}
-                    onFeedbackChange={onFeedbackChange}
-                    models={models}
-                  />
-                </ErrorBoundary>
-              </MessageScroller.Item>
-            ))}
-          </MessageScroller.Content>
+          <ProgressiveRenderStyle
+            messages={messages}
+            conversationId={conversationId}
+            cssClass={renderStyleClass}
+            renderer={renderStyleRenderer}
+            isPaper={isPaper}
+            viewportRef={viewportRef}
+          >
+            {(resolveStyle) => (
+              <MessageScroller.Content className="mx-auto flex w-full max-w-[75ch] flex-col">
+                {messages.map((m, i) => {
+                  const style = resolveStyle(i);
+                  return (
+                    // scrollAnchor 标在 user 消息:新轮锚定到该 user 消息(中上部),回复在其下方生长
+                    <MessageScroller.Item
+                      key={i}
+                      messageId={`msg-${i}`}
+                      scrollAnchor={m.role === "user"}
+                      className="py-4"
+                    >
+                      <MessageTimeSeparator
+                        createdAt={m.createdAt}
+                        previousCreatedAt={messages[i - 1]?.createdAt}
+                        isFirst={i === 0}
+                      />
+                      <ErrorBoundary name="message">
+                        <ChatMessageItem
+                          domId={`msg-${i}`}
+                          message={m}
+                          isLast={i === messages.length - 1}
+                          isStreaming={streaming}
+                          model={model}
+                          renderStyleClass={m.role === "assistant" ? style.cssClass : undefined}
+                          renderStyleRenderer={m.role === "assistant" ? style.renderer : undefined}
+                          isPaper={m.role === "assistant" ? style.isPaper : undefined}
+                          onRegenerate={handleRegenerate}
+                          onEdit={handleEdit}
+                          onSwitchVersion={onSwitchVersion}
+                          onOpenArtifact={onOpenArtifact}
+                          onRequestDelete={handleRequestDelete}
+                          conversationStreaming={streaming}
+                          onContinue={onContinue}
+                          onFeedbackChange={onFeedbackChange}
+                          models={models}
+                        />
+                      </ErrorBoundary>
+                    </MessageScroller.Item>
+                  );
+                })}
+              </MessageScroller.Content>
+            )}
+          </ProgressiveRenderStyle>
         </MessageScroller.Viewport>
 
         {/* 流式状态对屏幕阅读器的播报(视觉隐藏) */}

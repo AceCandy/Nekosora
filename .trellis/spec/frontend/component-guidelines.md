@@ -169,6 +169,43 @@ AI 回复正文由 `shared/components/markdown/Markdown.tsx` 渲染,两条互斥
 - **streamdown**(默认 + 流式中):`<Streamdown>` 封装,内置 GFM/KaTeX/Mermaid/Shiki 高亮与 rehype-harden 防 XSS。流式时 `mode="streaming"` 对未闭合块容错。
 - **custom**(静态 + 选中「输出样式」时):流式结束后用 `customRenderer.ts` 的 `parseMarkdown` 重渲,原样保留 AI 的 HTML/class/style(不过滤),支持 `.takeaway`/`.card-grid` 等高级组件 class。
 
+### 输出样式切换的渲染边界
+
+Chat 输出样式的 cssClass、renderer 与 `paper` 代码块语义必须作为同一份
+`RenderStyleSemantics` 渐进应用。`.rs-{cssClass}` 保持在既有 assistant 正文容器，
+不要挂到整段历史的 `MessageScroller.Content`：祖先 class 改变会让浏览器同步重算全部
+后代样式，即使 React Markdown 已 memo，超长会话仍会冻结。user 消息的三个 props 必须
+保持 `undefined`。
+
+```tsx
+// Wrong:祖先 class 一次性让整段历史做 style/layout。
+<MessageScroller.Content className={cssClass && `rs-${cssClass}`} />
+
+// Correct:每条 assistant 的 CSS 与 renderer 使用同一批次结果。
+<ChatMessageItem
+  renderStyleClass={message.role === "assistant" ? style.cssClass : undefined}
+  renderStyleRenderer={message.role === "assistant" ? style.renderer : undefined}
+  isPaper={message.role === "assistant" ? style.isPaper : undefined}
+/>
+```
+
+工具栏使用即时选择状态；消息正文若使用 `useDeferredValue`，cssClass、renderer 与
+`isPaper` 必须从同一个延迟样式对象派生，不能分别延迟。测试至少断言 user 不收到样式
+props、assistant 的 class/renderer/paper 来自同一批次。
+
+输出样式互切时，历史 assistant 不得在同一帧全部更换 CSS 或 Markdown 树。复用
+`useMessageScrollerVisibility()`：当前可视 assistant 首批切换，屏幕外 assistant 通过
+`requestAnimationFrame` 小批量收敛。每轮切换必须带 generation，新的选择使旧批次的
+apply/settle 失效；初次打开或切换会话直接使用会话目标样式，不执行渐进换肤。新增消息
+直接使用最新目标样式。
+
+样式高度变化不能按旧 `scrollTop` 恢复。历史中段以首个可见 MessageScroller Item 及其
+相对 viewport 顶部的偏移作为逻辑锚点：每批更新前记录 `viewportTop`，`useLayoutEffect`
+中只补偿更新后的 top 差值。该补偿是“业务层不手写滚动控制器”的唯一窄例外，算法与
+MessageScroller 的 prepend 保位一致；位于底部时必须跳过，继续由原语 autoScroll 跟随。
+锚点候选必须再次以 DOM 几何确认和视口相交，不能只信任可能滞后的 visibility 状态；锚点
+还需记录捕获时的 `scrollTop`，提交前若它已变化则放弃本批补偿，让用户操作或原语滚动优先。
+
 **可执行契约(改 `parseMarkdown` 必须维持)**:
 
 - 默认/流式 Streamdown 路径必须先调用 `normalizeHtmlBlockBlankLines`:CommonMark 会在空行结束 `<div>` 等 raw HTML block,使后续缩进标签退化为代码块。规范化只在可承载块内容的 HTML 容器内用不可见注释占住空行,不得改写代码围栏、容器外 Markdown 或 custom 最终渲染；深度扫描必须忽略 HTML 注释、属性字符串和 raw-text 标签中的伪标签。对应回归测试位于 `Markdown.test.ts` 与 `customRenderer.test.ts`。
