@@ -56,18 +56,18 @@ export function HtmlPreviewFrame({ html, title, onOpenPanel, className }: HtmlPr
   return (
     <div
       className={
-        "rounded-md border border-morning-mist dark:border-deep-space/80 overflow-hidden bg-white " +
+        "rounded-md border border-morning-mist  overflow-hidden bg-white " +
         (className ?? "")
       }
     >
       {hasHeader && (
-        <div className="flex items-center justify-between px-3 py-1.5 border-b border-morning-mist dark:border-deep-space/60 bg-neutral-50/50 dark:bg-[#0d0f14]/20">
-          <span className="text-ui-caption font-mono text-neutral-400 truncate">{title}</span>
+        <div className="flex items-center justify-between px-3 py-1.5 border-b border-morning-mist  bg-neutral-50/50 ">
+          <span className="text-ui-caption font-mono text-ink-tertiary truncate">{title}</span>
           {onOpenPanel && (
             <button
               type="button"
               onClick={onOpenPanel}
-              className="p-1 rounded text-neutral-400 hover:text-sora-blue hover:bg-neutral-100 dark:hover:bg-neutral-900 transition-colors cursor-pointer"
+              className="p-1 rounded text-ink-tertiary hover:text-sora-blue hover:bg-neutral-100  transition-colors cursor-pointer"
               title={t("openPanel")}
               aria-label={t("openPanel")}
             >

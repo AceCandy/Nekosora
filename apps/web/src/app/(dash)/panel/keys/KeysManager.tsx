@@ -135,23 +135,23 @@ export default function KeysManager({
         {/* New Raw Key Warning box (Amber) */}
         {newRawKey && (
           <div className="rounded-lg border border-amber-500/30 bg-amber-500/[0.04] p-4 space-y-3 animate-in fade-in duration-200">
-            <div className="flex items-start gap-2.5 text-amber-600 dark:text-amber-400">
+            <div className="flex items-start gap-2.5 text-warning ">
               <ShieldAlert className="w-5 h-5 mt-0.5 shrink-0" />
               <div>
                 <h3 className="text-ui-body font-semibold">{t("saveSubkeyPrompt")}</h3>
-                <p className="text-ui-caption text-amber-600/85 dark:text-amber-400/80 mt-0.5">
+                <p className="text-ui-caption text-warning/85  mt-0.5">
                   {t("subkeyWarning", { name: newRawKey.name })}
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 bg-white dark:bg-[#0f121a] border border-amber-500/20 rounded px-3 py-2">
-              <code className="text-ui-caption font-mono select-all break-all flex-1 text-neutral-800 dark:text-neutral-200">
+            <div className="flex items-center gap-2 bg-white  border border-amber-500/20 rounded px-3 py-2">
+              <code className="text-ui-caption font-mono select-all break-all flex-1 text-neutral-800 ">
                 {newRawKey.key}
               </code>
               <button
                 onClick={handleCopyRaw}
-                className="p-1 rounded text-amber-600 hover:bg-amber-500/10 transition-colors"
+                className="p-1 rounded text-warning hover:bg-amber-500/10 transition-colors"
                 title={t("copyKey")}
               >
                 {copiedRaw ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
@@ -171,11 +171,11 @@ export default function KeysManager({
 
         {/* Master Key Section */}
         <div className="space-y-3">
-          <h2 className="text-ui-body font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">{t("masterKey")}</h2>
+          <h2 className="text-ui-body font-semibold text-neutral-500 ">{t("masterKey")}</h2>
           {master ? (
-            <div className="rounded-lg border border-morning-mist dark:border-deep-space bg-nebula-white dark:bg-twilight-obsidian p-4 flex items-center justify-between transition-colors duration-150">
+            <div className="rounded-lg border border-morning-mist  bg-nebula-white  p-4 flex items-center justify-between transition-colors duration-150">
               <div className="space-y-1.5 max-w-[75%]">
-                <div className="flex items-center gap-1.5 font-mono text-ui-body font-semibold text-neutral-800 dark:text-neutral-200">
+                <div className="flex items-center gap-1.5 font-mono text-ui-body font-semibold text-neutral-800 ">
                   <Key className="w-4 h-4 text-sora-blue shrink-0" />
                   <span>{displayKeyPreview(master.keyPrefix)}</span>
                 </div>
@@ -187,7 +187,7 @@ export default function KeysManager({
                 variant="ghost"
                 size="sm"
                 onClick={() => handleDisableKey(master.id)}
-                className="text-red-500 hover:text-red-650 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20"
+                className="text-danger hover:text-danger-hover  hover:bg-red-50 "
               >
                 {t("revoke")}
               </Button>
@@ -206,13 +206,14 @@ export default function KeysManager({
 
         {/* Sub Keys Section */}
         <div className="space-y-3">
-          <h2 className="text-ui-body font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">{t("subKeys")}</h2>
+          <h2 className="text-ui-body font-semibold text-neutral-500 ">{t("subKeys")}</h2>
 
           {/* Create Subkey Inline Form */}
           <form onSubmit={handleCreateSubKey} className="flex gap-2">
             <Input
               type="text"
               required
+              aria-label={t("subkeyNamePlaceholder")}
               value={subKeyNameInput}
               onChange={(e) => setSubKeyNameInput(e.target.value)}
               placeholder={t("subkeyNamePlaceholder")}
@@ -229,9 +230,9 @@ export default function KeysManager({
           </form>
 
           {/* Subkeys list */}
-          <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1">
+          <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1" role="listbox" aria-label={t("subKeys")}>
             {subKeys.length === 0 ? (
-              <p className="text-ui-caption text-neutral-400 py-6 text-center border border-dashed border-neutral-200 dark:border-neutral-800 rounded-lg">
+              <p className="text-ui-caption text-neutral-400 py-6 text-center border border-dashed border-neutral-200  rounded-lg">
                 {t("emptySubkeys")}
               </p>
             ) : (
@@ -240,17 +241,28 @@ export default function KeysManager({
                 return (
                   <div
                     key={sk.id}
+                    role="option"
+                    aria-selected={isActive}
+                    tabIndex={0}
                     onClick={() => setSelectedSubKeyId(sk.id)}
+                    onKeyDown={(e) => {
+                      if (e.target !== e.currentTarget) return;
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setSelectedSubKeyId(sk.id);
+                      }
+                    }}
                     className={clsx(
                       "cursor-pointer rounded-lg border p-3.5 flex items-center justify-between transition-[background-color,border-color,box-shadow] duration-150 group",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue focus-visible:ring-offset-1",
                       isActive
-                        ? "bg-sora-blue/[0.03] border-sora-blue/40 text-neutral-900 dark:text-white"
-                        : "bg-nebula-white dark:bg-[#0d0f14] border-morning-mist dark:border-deep-space text-neutral-700 dark:text-neutral-300 hover:border-neutral-300 dark:hover:border-neutral-700"
+                        ? "bg-sora-blue/[0.03] border-sora-blue/40 text-neutral-900 "
+                        : "bg-nebula-white  border-morning-mist  text-neutral-700  hover:border-neutral-300 "
                     )}
                   >
                     <div className="space-y-1">
                       <div className="font-semibold text-ui-body">{sk.name}</div>
-                      <div className="flex items-center gap-1 font-mono text-ui-caption text-neutral-400 dark:text-neutral-500">
+                      <div className="flex items-center gap-1 font-mono text-ui-caption text-neutral-400 ">
                         <span>{displayKeyPreview(sk.keyPrefix)}</span>
                       </div>
                     </div>
@@ -261,7 +273,7 @@ export default function KeysManager({
                         e.stopPropagation();
                         handleDisableKey(sk.id);
                       }}
-                      className="text-red-500 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-red-50 dark:hover:bg-red-950/20 hover:text-red-650"
+                      className="text-danger opacity-0 group-hover:opacity-100 focus:opacity-100 [@media(pointer:coarse)]:opacity-100 hover:bg-red-50  hover:text-danger-hover"
                     >
                       {t("disable")}
                     </Button>
@@ -276,21 +288,21 @@ export default function KeysManager({
       {/* Right Column (6 lg cols) - Detailed Panel */}
       <div className="lg:col-span-6">
         {!selectedSubKey ? (
-          <div className="rounded-xl border-2 border-dashed border-neutral-200 dark:border-neutral-800 p-12 text-center flex flex-col items-center justify-center min-h-[300px]">
-            <Key className="w-10 h-10 text-neutral-300 dark:text-neutral-700 mb-3" />
-            <h3 className="text-ui-body font-semibold text-neutral-500 dark:text-neutral-400">{t("noSubkeySelected")}</h3>
+          <div className="rounded-xl border-2 border-dashed border-neutral-200  p-12 text-center flex flex-col items-center justify-center min-h-[300px]">
+            <Key className="w-10 h-10 text-neutral-300  mb-3" />
+            <h3 className="text-ui-body font-semibold text-neutral-500 ">{t("noSubkeySelected")}</h3>
             <p className="text-ui-caption text-neutral-400 mt-1 max-w-[240px]">
               {t("noSubkeySelectedDesc")}
             </p>
           </div>
         ) : (
-          <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#0d0f14] p-6 space-y-6 transition-colors duration-150 animate-in fade-in duration-200">
+          <div className="rounded-lg border border-neutral-200  bg-white  p-6 space-y-6 transition-colors duration-150 animate-in fade-in duration-200">
             {/* Panel Header */}
-            <div className="border-b border-neutral-100 dark:border-neutral-800 pb-4">
-              <div className="text-ui-caption font-medium text-neutral-400 uppercase tracking-wider mb-1">{t("bindingManagement")}</div>
-              <h3 className="text-ui-title font-bold text-neutral-800 dark:text-white flex items-center gap-2">
+            <div className="border-b border-neutral-100  pb-4">
+              <div className="text-ui-caption font-medium text-neutral-400 mb-1">{t("bindingManagement")}</div>
+              <h3 className="text-ui-title font-bold text-neutral-800  flex items-center gap-2">
                 <span>{selectedSubKey.name}</span>
-                <span className="font-mono text-ui-caption text-neutral-400 dark:text-neutral-500 bg-neutral-50 dark:bg-[#0f121a] px-2 py-0.5 rounded border border-neutral-200/50 dark:border-neutral-800/50">
+                <span className="font-mono text-ui-caption text-neutral-400  bg-neutral-50  px-2 py-0.5 rounded border border-neutral-200/50 ">
                   {displayKeyPreview(selectedSubKey.keyPrefix)}
                 </span>
               </h3>
@@ -298,9 +310,9 @@ export default function KeysManager({
 
             {/* Bindings List */}
             <div className="space-y-3">
-              <div className="text-ui-caption font-semibold text-neutral-400 uppercase tracking-wider">{t("boundModels", { count: selectedSubKey.bindings.length })}</div>
+              <div className="text-ui-caption font-semibold text-neutral-400">{t("boundModels", { count: selectedSubKey.bindings.length })}</div>
 
-              <div className="flex flex-wrap gap-2 min-h-[50px] p-4 rounded-lg bg-neutral-50 dark:bg-[#0f121a]/50 border border-neutral-100 dark:border-neutral-900">
+              <div className="flex flex-wrap gap-2 min-h-[50px] p-4 rounded-lg bg-neutral-50  border border-neutral-100 ">
                 {selectedSubKey.bindings.length === 0 ? (
                   <span className="text-ui-caption text-neutral-400">{t("noBindings")}</span>
                 ) : (
@@ -319,7 +331,7 @@ export default function KeysManager({
                         <span className="font-medium">{modelName}</span>
                         <button
                           onClick={() => handleUnbind(b.id)}
-                          className="text-neutral-400 hover:text-red-500 p-0.5 rounded-full transition-colors ml-1"
+                          className="text-neutral-500 hover:text-danger p-0.5 rounded-full transition-colors ml-1"
                           title={t("unbind")}
                         >
                           <X className="w-3.5 h-3.5" />
@@ -333,7 +345,7 @@ export default function KeysManager({
 
             {/* Bind New Model Form */}
             <form onSubmit={handleBindModel} className="space-y-3 pt-2">
-              <div className="text-ui-caption font-semibold text-neutral-400 uppercase tracking-wider">{t("bindNewModel")}</div>
+              <div className="text-ui-caption font-semibold text-neutral-400">{t("bindNewModel")}</div>
 
               <div className="flex gap-2">
                 <Select

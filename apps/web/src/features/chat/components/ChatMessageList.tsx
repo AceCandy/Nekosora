@@ -211,28 +211,51 @@ export function ChatMessageList({
   // 重新生成是原地替换 assistant,不触发 scrollAnchor;记下目标 user 的 domId(带 nonce),交给
   // ScrollAnchor(Provider 内)在该轮 assistant 被清空后锚定到中上部,并接管独立的「到底跟随」。
   const [regenTarget, setRegenTarget] = useState<string | null>(null);
-  const handleRegenerate = (publicId: string, model: string) => {
-    // 被重新生成的是 assistant,向前找最近一条 user 消息,标记为锚定目标(nonce 保证同轮反复触发)
-    const aIdx = messages.findIndex((m) => m.publicId === publicId);
-    let uIdx = -1;
-    for (let i = aIdx; i >= 0; i--) {
-      if (messages[i].role === "user") { uIdx = i; break; }
-    }
-    if (uIdx >= 0) setRegenTarget(`msg-${uIdx}#${Date.now()}`);
-    onRegenerate?.(publicId, model);
-  };
-  const handleEdit = (
-    publicId: string,
-    newContent: string,
-    attachmentFileIds: string[],
-    model: string,
-  ) => {
-    // 编辑的是 user 消息,直接锚定它到中上部(同重新生成机制);editAndResend 会截断到该 user
-    // 并追加空 assistant,ScrollAnchor 据此锚定 + 接管到底跟随。
-    const uIdx = messages.findIndex((m) => m.publicId === publicId);
-    if (uIdx >= 0) setRegenTarget(`msg-${uIdx}#${Date.now()}`);
-    onEdit?.(publicId, newContent, attachmentFileIds, model);
-  };
+  // messages 在流式期间每帧变化,用 ref 持有(effect 同步,事件时必为最新)使回调引用稳定——
+  // 否则 ChatMessageItem 的 React.memo 会被逐帧击穿,整棵消息列表每个 rAF 帧都在重渲染。
+  const messagesRef = useRef(messages);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  // 流式状态播报:屏幕阅读器经 aria-live 获知生成开始/完成,仅在状态翻转时更新文本。
+  const [srAnnouncement, setSrAnnouncement] = useState("");
+  const prevStreamingRef = useRef(streaming);
+  useEffect(() => {
+    if (prevStreamingRef.current === streaming) return;
+    prevStreamingRef.current = streaming;
+    setSrAnnouncement(streaming ? t("generating") : t("generationDone"));
+  }, [streaming, t]);
+  const handleRegenerate = useCallback(
+    (publicId: string, model: string) => {
+      // 被重新生成的是 assistant,向前找最近一条 user 消息,标记为锚定目标(nonce 保证同轮反复触发)
+      const msgs = messagesRef.current;
+      const aIdx = msgs.findIndex((m) => m.publicId === publicId);
+      let uIdx = -1;
+      for (let i = aIdx; i >= 0; i--) {
+        if (msgs[i].role === "user") { uIdx = i; break; }
+      }
+      if (uIdx >= 0) setRegenTarget(`msg-${uIdx}#${Date.now()}`);
+      onRegenerate?.(publicId, model);
+    },
+    [onRegenerate],
+  );
+  const handleEdit = useCallback(
+    (
+      publicId: string,
+      newContent: string,
+      attachmentFileIds: string[],
+      model: string,
+    ) => {
+      // 编辑的是 user 消息,直接锚定它到中上部(同重新生成机制);editAndResend 会截断到该 user
+      // 并追加空 assistant,ScrollAnchor 据此锚定 + 接管到底跟随。
+      const uIdx = messagesRef.current.findIndex((m) => m.publicId === publicId);
+      if (uIdx >= 0) setRegenTarget(`msg-${uIdx}#${Date.now()}`);
+      onEdit?.(publicId, newContent, attachmentFileIds, model);
+    },
+    [onEdit],
+  );
+  const handleRequestDelete = useCallback((pid: string) => setPendingDelete(pid), []);
   // 视口 ref:供选区检测判断选区是否落在消息区内
   const viewportRef = useRef<HTMLDivElement>(null);
   const scrollPositionRestorerRef = useRef<ScrollPositionRestorerHandle>(null);
@@ -295,7 +318,7 @@ export function ChatMessageList({
           style={{ paddingBottom: bottomInset ?? 8 }}
           preserveScrollOnPrepend
         >
-          <MessageScroller.Content className="mx-auto flex w-full max-w-3xl flex-col">
+          <MessageScroller.Content className="mx-auto flex w-full max-w-[75ch] flex-col">
             {messages.map((m, i) => (
               // scrollAnchor 标在 user 消息:新轮锚定到该 user 消息(中上部),回复在其下方生长
               <MessageScroller.Item
@@ -322,7 +345,7 @@ export function ChatMessageList({
                     onEdit={handleEdit}
                     onSwitchVersion={onSwitchVersion}
                     onOpenArtifact={onOpenArtifact}
-                    onRequestDelete={(pid) => setPendingDelete(pid)}
+                    onRequestDelete={handleRequestDelete}
                     conversationStreaming={streaming}
                     onContinue={onContinue}
                     onFeedbackChange={onFeedbackChange}
@@ -334,9 +357,14 @@ export function ChatMessageList({
           </MessageScroller.Content>
         </MessageScroller.Viewport>
 
+        {/* 流式状态对屏幕阅读器的播报(视觉隐藏) */}
+        <div aria-live="polite" role="status" className="sr-only">
+          {srAnnouncement}
+        </div>
+
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 top-0 z-10 h-12 bg-gradient-to-b from-nebula-white via-nebula-white/70 to-transparent dark:from-twilight-obsidian dark:via-twilight-obsidian/70"
+          className="pointer-events-none absolute inset-x-0 top-0 z-10 h-12 bg-gradient-to-b from-nebula-white via-nebula-white/70 to-transparent  "
         />
 
         {/* 对话大纲:贴消息区右边缘(滚动条左侧),hover 整列弹出完整轮次列表。
@@ -365,7 +393,7 @@ export function ChatMessageList({
         {/* 选中文本浮工具栏:复制 / 引用插入输入框 / 追问 */}
         {selection && (
           <div
-            className="fixed z-50 flex items-center gap-0.5 rounded-lg border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink px-1 py-0.5 shadow-md animate-in fade-in duration-100"
+            className="fixed z-50 flex items-center gap-0.5 rounded-lg border border-morning-mist  bg-white  px-1 py-0.5 shadow-md animate-in fade-in duration-100"
             style={{
               top: Math.max(8, selection.top - 38),
               left: Math.max(8, Math.min(selection.left - 100, (typeof window !== "undefined" ? window.innerWidth : 9999) - 210)),
@@ -379,7 +407,7 @@ export function ChatMessageList({
                 setSelection(null);
                 window.getSelection()?.removeAllRanges();
               }}
-              className="inline-flex items-center gap-1 rounded px-2 py-1 text-ui-caption font-semibold text-neutral-500 hover:text-neutral-800 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-900 cursor-pointer"
+              className="inline-flex items-center gap-1 rounded px-2 py-1 text-ui-caption font-semibold text-neutral-500 hover:text-neutral-800  hover:bg-neutral-100  cursor-pointer"
               title={t("copy")}
             >
               <Copy className="w-3 h-3" aria-hidden="true" />{t("copy")}
@@ -401,7 +429,7 @@ export function ChatMessageList({
                 "inline-flex items-center gap-1 rounded px-2 py-1 text-ui-caption font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed",
                 isSelectionSpeaking
                   ? "text-sora-blue"
-                  : "text-neutral-500 hover:text-neutral-800 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-900",
+                  : "text-neutral-500 hover:text-neutral-800  hover:bg-neutral-100 ",
               )}
               title={!ttsSupported ? t("readAloudUnsupported") : isSelectionSpeaking ? t("stopReading") : t("readAloud")}
             >
@@ -417,7 +445,7 @@ export function ChatMessageList({
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => { onQuote(selection.text); setSelection(null); window.getSelection()?.removeAllRanges(); }}
-                className="inline-flex items-center gap-1 rounded px-2 py-1 text-ui-caption font-semibold text-neutral-500 hover:text-neutral-800 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-900 cursor-pointer"
+                className="inline-flex items-center gap-1 rounded px-2 py-1 text-ui-caption font-semibold text-neutral-500 hover:text-neutral-800  hover:bg-neutral-100  cursor-pointer"
                 title={t("quote")}
               >
                 <Reply className="w-3 h-3" aria-hidden="true" />{t("quote")}
@@ -441,7 +469,7 @@ export function ChatMessageList({
         <MessageScroller.Button
           direction="end"
           style={{ bottom: (bottomInset ?? 8) + 8 }}
-          className="touch-target absolute left-1/2 -translate-x-1/2 z-20 inline-flex items-center gap-1.5 rounded-full border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink px-3 py-1.5 text-ui-caption font-semibold text-neutral-600 dark:text-neutral-300 shadow-sm hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-[background-color,opacity,transform] duration-300 ease-out data-[active=false]:pointer-events-none data-[active=false]:opacity-0 data-[active=false]:translate-y-4 data-[active=false]:scale-95 data-[active=true]:opacity-100 data-[active=true]:translate-y-0 data-[active=true]:scale-100"
+          className="touch-target absolute left-1/2 -translate-x-1/2 z-20 inline-flex items-center gap-1.5 rounded-full border border-morning-mist  bg-white  px-3 py-1.5 text-ui-caption font-semibold text-neutral-600  shadow-sm hover:bg-neutral-50  transition-[background-color,opacity,transform] duration-300 ease-out data-[active=false]:pointer-events-none data-[active=false]:opacity-0 data-[active=false]:translate-y-4 data-[active=false]:scale-95 data-[active=true]:opacity-100 data-[active=true]:translate-y-0 data-[active=true]:scale-100"
         >
           <ChevronDown className="w-3.5 h-3.5 animate-[scroll-hint_1.6s_ease-in-out_infinite]" aria-hidden="true" />
           <span>{t("scrollToLatest")}</span>

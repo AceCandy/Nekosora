@@ -44,7 +44,7 @@ export function ReadonlyChatMessage({ role, content, renderStyleClass, renderer,
                   />
                 </ErrorBoundary>
               )}
-              {error && <p className="mt-2 text-ui-caption leading-5 text-red-600 dark:text-red-400">{error}</p>}
+              {error && <p className="mt-2 text-ui-caption leading-5 text-danger ">{error}</p>}
             </>
           );
         })()}

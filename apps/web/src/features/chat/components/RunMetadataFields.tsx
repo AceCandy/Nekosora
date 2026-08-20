@@ -40,7 +40,7 @@ export function RunMetadataFields({ metadata, className }: RunMetadataFieldsProp
   return (
     <dl
       className={clsx(
-        "flex min-w-0 max-w-full flex-wrap items-center gap-x-2 gap-y-0.5 text-ui-micro text-space-ink/50 dark:text-nebula-silver/50",
+        "flex min-w-0 max-w-full flex-wrap items-center gap-x-2 gap-y-0.5 text-ui-micro text-ink-tertiary ",
         className,
       )}
     >
@@ -51,7 +51,7 @@ export function RunMetadataFields({ metadata, className }: RunMetadataFieldsProp
             <span>{t("responseModel")}</span>
           </dt>
           <dd
-            className="min-w-0 max-w-[min(18rem,60vw)] truncate text-space-ink/55 dark:text-nebula-silver/55"
+            className="min-w-0 max-w-[min(18rem,60vw)] truncate text-ink-tertiary "
             title={model}
           >
             {model}
@@ -65,7 +65,7 @@ export function RunMetadataFields({ metadata, className }: RunMetadataFieldsProp
               <Icon className="size-2.5" aria-hidden="true" />
               <span>{label}</span>
             </dt>
-            <dd className="font-mono tabular-nums text-space-ink/55 dark:text-nebula-silver/55">
+            <dd className="font-mono tabular-nums text-ink-tertiary ">
               {value.toLocaleString(locale)}
             </dd>
           </div>
@@ -77,7 +77,7 @@ export function RunMetadataFields({ metadata, className }: RunMetadataFieldsProp
             <Clock3 className="size-2.5" aria-hidden="true" />
             <span>{t("responseDuration")}</span>
           </dt>
-          <dd className="font-mono tabular-nums text-space-ink/55 dark:text-nebula-silver/55">
+          <dd className="font-mono tabular-nums text-ink-tertiary ">
             {formatDuration(metadata.durationMs)}
           </dd>
         </div>

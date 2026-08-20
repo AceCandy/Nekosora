@@ -36,9 +36,9 @@ interface ModelFormDialogProps {
   catalog: ModelCatalogOption[];
 }
 
-const labelCls = "block text-ui-caption font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-1";
+const labelCls = "block text-ui-caption font-semibold text-neutral-500  mb-1";
 const inputCls =
-  "mt-1 w-full rounded-md border border-morning-mist dark:border-deep-space px-3.5 py-2 text-ui-body bg-white dark:bg-[#0f121a] focus:outline-none focus:border-sora-blue dark:focus:border-sora-blue focus-visible:ring-2 focus-visible:ring-sora-blue/20 transition-colors duration-150 text-space-ink dark:text-nebula-silver";
+  "mt-1 w-full rounded-md border border-morning-mist  px-3.5 py-2 text-ui-body bg-white  focus:outline-none focus:border-sora-blue  focus-visible:ring-2 focus-visible:ring-sora-blue/20 transition-colors duration-150 text-space-ink ";
 
 export default function ModelFormDialog({
   open,
@@ -165,7 +165,7 @@ export default function ModelFormDialog({
                     disabled={!previewCatalog}
                     onClick={() => setPreviewOpen(true)}
                     title={t("catalogPreview")}
-                    className="mt-1 inline-flex shrink-0 items-center gap-1 rounded-md border border-neutral-200 dark:border-neutral-800 px-2.5 py-2 text-ui-caption font-medium text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800/50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    className="mt-1 inline-flex shrink-0 items-center gap-1 rounded-md border border-neutral-200  px-2.5 py-2 text-ui-caption font-medium text-neutral-600  hover:bg-neutral-50  disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                   >
                     <Eye className="h-3.5 w-3.5" />
                     {t("catalogPreview")}
@@ -176,7 +176,7 @@ export default function ModelFormDialog({
               </Popover>
             </div>
             {formError && (
-              <p className="mt-1.5 text-ui-caption leading-normal text-red-600 dark:text-red-400">
+              <p className="mt-1.5 text-ui-caption leading-normal text-danger ">
                 {formError === "duplicate" ? t("modelAlreadyExists") : t("catalogMatchFailedHint")}
               </p>
             )}
@@ -205,7 +205,7 @@ export default function ModelFormDialog({
             name="systemPrompt"
             rows={3}
             defaultValue={ini?.systemPrompt ?? ""}
-            className="mt-1 w-full rounded-md border border-morning-mist dark:border-deep-space px-3.5 py-2 text-ui-body bg-white dark:bg-[#0f121a] focus:outline-none focus:border-sora-blue dark:focus:border-sora-blue focus-visible:ring-2 focus-visible:ring-sora-blue/20 transition-colors duration-150 resize-none text-space-ink dark:text-nebula-silver"
+            className="mt-1 w-full rounded-md border border-morning-mist  px-3.5 py-2 text-ui-body bg-white  focus:outline-none focus:border-sora-blue  focus-visible:ring-2 focus-visible:ring-sora-blue/20 transition-colors duration-150 resize-none text-space-ink "
             placeholder={t("systemPromptPlaceholder")}
           />
         </label>
@@ -221,7 +221,7 @@ export default function ModelFormDialog({
           />
         </label>
 
-        <div className="flex justify-end gap-2.5 pt-3 border-t border-neutral-100 dark:border-neutral-800/80">
+        <div className="flex justify-end gap-2.5 pt-3 border-t border-neutral-100 ">
           <Button
             type="button"
             variant="secondary"

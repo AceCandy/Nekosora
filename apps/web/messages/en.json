@@ -84,6 +84,10 @@
   },
   "chat": {
     "welcomeTitle": "Nekusora",
+    "welcomeSubtitle": "The astral skyline — start your first conversation",
+    "suggestExplain": "Explain “context window” in simple terms",
+    "suggestWrite": "Draft a polite leave-request email",
+    "suggestCode": "Write a Fibonacci function in Python",
     "renderFailed": "This content failed to render",
     "retry": "Retry",
     "composerSyncFailed": "Composer settings are not synced",
@@ -169,6 +173,7 @@
     "renameFailed": "Rename failed. Try again.",
     "moreActions": "More actions",
     "generating": "Generating",
+    "generationDone": "Response generated",
     "deleteConfirm": "Delete this conversation? This cannot be undone.",
     "totalTokens": "{count} tokens total",
     "processTrace": "Research process",

@@ -1,6 +1,7 @@
 "use client";
 import { useRef, useState } from "react";
 import UpstreamModelPicker, { type FetchModelsAction } from "@/features/models/UpstreamModelPicker";
+import { Button } from "@/shared/ui/Button";
 
 /** embedding 模型名启发式:上游 /models 不返回模型类型,只能靠名称识别 embedding 类。 */
 const EMBEDDING_NAME_RE = /embed/i;
@@ -44,17 +45,17 @@ export default function EmbeddingConfigForm({
   return (
     <form
       action={action}
-      className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] p-5 space-y-3"
+      className="rounded-lg border border-neutral-200 bg-white   p-5 space-y-3"
     >
-      <h3 className="text-ui-body font-bold text-neutral-800 dark:text-white">{labels.embeddingTitle}</h3>
+      <h3 className="text-ui-body font-bold text-neutral-800 ">{labels.embeddingTitle}</h3>
 
-      <div className="space-y-1">
-        <label className="text-ui-caption font-medium text-neutral-500">{labels.embeddingProvider}</label>
+      <label className="block space-y-1">
+        <span className="text-ui-caption font-medium text-neutral-500">{labels.embeddingProvider}</span>
         <select
           name="provider_id"
           value={providerId}
           onChange={(e) => setProviderId(e.target.value)}
-          className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-3 py-2 text-ui-body focus:outline-none focus:border-sora-blue cursor-pointer"
+          className="w-full rounded-md border border-neutral-200  bg-transparent px-3 py-2 text-ui-body focus:outline-none focus:border-sora-blue cursor-pointer"
         >
           <option value="">{labels.selectProvider}</option>
           {providers.map((p) => (
@@ -63,18 +64,19 @@ export default function EmbeddingConfigForm({
             </option>
           ))}
         </select>
-      </div>
+      </label>
 
       <div className="space-y-1">
-        <label className="text-ui-caption font-medium text-neutral-500">{labels.embeddingModel}</label>
+        <span className="text-ui-caption font-medium text-neutral-500">{labels.embeddingModel}</span>
         <div className="flex items-center gap-2">
           <input
             ref={modelInputRef}
             name="model"
+            aria-label={labels.embeddingModel}
             value={model}
             onChange={(e) => setModel(e.target.value)}
             placeholder="bge-m3"
-            className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-3 py-2 text-ui-body font-mono focus:outline-none focus:border-sora-blue"
+            className="w-full rounded-md border border-neutral-200  bg-transparent px-3 py-2 text-ui-body font-mono focus:outline-none focus:border-sora-blue"
           />
           <UpstreamModelPicker
             fetchAction={fetchAction}
@@ -86,12 +88,13 @@ export default function EmbeddingConfigForm({
         <p className="text-ui-caption text-neutral-400">{labels.embeddingHint}</p>
       </div>
 
-      <button
+      <Button
         type="submit"
-        className="rounded-md bg-sora-blue hover:bg-sora-blue-hover text-white px-4 py-2 text-ui-body font-semibold cursor-pointer"
+        variant="primary"
+        className="px-4 py-2 font-semibold"
       >
         {labels.save}
-      </button>
+      </Button>
     </form>
   );
 }

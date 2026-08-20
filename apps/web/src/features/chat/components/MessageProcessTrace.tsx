@@ -69,12 +69,12 @@ function TimelineIcon({ status }: { status: ResearchStepStatus }) {
     return <Sparkles className="size-4 text-sora-blue motion-safe:animate-pulse" aria-hidden="true" />;
   }
   if (status === "warning") {
-    return <AlertTriangle className="size-4 text-amber-600 dark:text-amber-400" aria-hidden="true" />;
+    return <AlertTriangle className="size-4 text-warning " aria-hidden="true" />;
   }
   if (status === "error") {
-    return <AlertCircle className="size-4 text-red-600 dark:text-red-400" aria-hidden="true" />;
+    return <AlertCircle className="size-4 text-danger " aria-hidden="true" />;
   }
-  return <Check className="size-4 text-green-600 dark:text-green-400" aria-hidden="true" />;
+  return <Check className="size-4 text-success " aria-hidden="true" />;
 }
 
 export function MessageProcessTrace({
@@ -175,7 +175,7 @@ export function MessageProcessTrace({
     : summaryParts.join(" · ");
 
   return (
-    <div className="mb-3 text-space-ink dark:text-nebula-silver">
+    <div className="mb-3 text-space-ink ">
       <Popover
         open={expanded}
         onClose={() => setExpanded(false)}
@@ -188,7 +188,7 @@ export function MessageProcessTrace({
             aria-expanded={expanded}
             aria-controls={panelId}
             onClick={() => setExpanded((value) => !value)}
-            className="touch-target inline-flex min-h-11 max-w-full min-w-0 items-center gap-3 rounded-md border-0 bg-transparent px-1.5 py-2 text-left transition-colors duration-150 hover:bg-nebula-silver/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:hover:bg-deep-space/25"
+            className="touch-target inline-flex min-h-11 max-w-full min-w-0 items-center gap-3 rounded-md border-0 bg-transparent px-1.5 py-2 text-left transition-colors duration-150 hover:bg-nebula-silver/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue "
           >
             <span className="min-w-0">
               <span
@@ -196,28 +196,28 @@ export function MessageProcessTrace({
                 className={clsx(
                   "block truncate text-ui-body font-medium",
                   research.status === "running" && !runningWarning && "research-status-shimmer",
-                  (hasError || research.status === "error") && "text-red-600 italic dark:text-red-400",
+                  (hasError || research.status === "error") && "text-danger italic ",
                 )}
                 aria-live="polite"
               >
                 {summaryText}
               </span>
               {research.status === "running" && !runningWarning && currentQuery && (
-                <span className="mt-0.5 block truncate text-ui-caption text-space-ink/60 dark:text-nebula-silver/60">
+                <span className="mt-0.5 block truncate text-ui-caption text-space-ink/60 ">
                   {currentQuery}
                 </span>
               )}
               {research.status === "running" && runningStage === "read" && !runningWarning && (
-                <span className="mt-0.5 block text-ui-caption text-space-ink/60 dark:text-nebula-silver/60">
+                <span className="mt-0.5 block text-ui-caption text-space-ink/60 ">
                   {t("researchReadingReliableSources")}
                 </span>
               )}
               {runningWarning && research.sourceCount ? (
-                <span className="mt-0.5 block text-ui-caption text-space-ink/60 dark:text-nebula-silver/60">
+                <span className="mt-0.5 block text-ui-caption text-space-ink/60 ">
                   {t("researchContinueWithSources", { count: research.sourceCount })}
                 </span>
               ) : research.status === "running" && research.sourceCount && (
-                <span className="mt-0.5 block text-ui-caption text-space-ink/55 dark:text-nebula-silver/55">
+                <span className="mt-0.5 block text-ui-caption text-ink-tertiary ">
                   {t("researchReadCount", { count: research.sourceCount })}
                 </span>
               )}
@@ -229,7 +229,7 @@ export function MessageProcessTrace({
           id={panelId}
           role="region"
           aria-label={t("processTrace")}
-          className="animate-in fade-in slide-in-from-top-1 p-2.5 text-space-ink duration-200 motion-reduce:animate-none dark:text-nebula-silver"
+          className="animate-in fade-in slide-in-from-top-1 p-2.5 text-space-ink duration-200 motion-reduce:animate-none "
         >
           <ol className="space-y-2.5">
             {research.steps.map((step, index) => (
@@ -238,22 +238,22 @@ export function MessageProcessTrace({
                 className="relative grid min-w-0 grid-cols-[16px_1fr] gap-2.5 text-ui-caption animate-in fade-in slide-in-from-bottom-1 duration-200 motion-reduce:animate-none"
               >
                 {index < research.steps.length - 1 && (
-                  <span className="absolute left-[7px] top-5 h-[calc(100%+2px)] w-px bg-morning-mist dark:bg-deep-space" aria-hidden="true" />
+                  <span className="absolute left-[7px] top-5 h-[calc(100%+2px)] w-px bg-morning-mist " aria-hidden="true" />
                 )}
                 <TimelineIcon status={step.status} />
                 <span className="min-w-0 pb-0.5">
-                  <span className="block font-medium text-space-ink/75 dark:text-nebula-silver/75">
+                  <span className="block font-medium text-space-ink/75 ">
                     {step.type === "read" && research.sourceCount
                       ? t("researchStepRead", { count: research.sourceCount })
                       : t(STEP_I18N[step.type])}
                   </span>
                   {step.type === "search" && step.query && (
-                    <span className="mt-0.5 block break-words text-space-ink/50 dark:text-nebula-silver/50">
+                    <span className="mt-0.5 block break-words text-ink-tertiary ">
                       {step.query}
                     </span>
                   )}
                   {step.type === "search" && research.partialSourceFailure && research.sourceCount && (
-                    <span className="mt-0.5 block text-amber-700 dark:text-amber-300">
+                    <span className="mt-0.5 block text-amber-700 ">
                       {t("researchPartialSources", { count: research.sourceCount })}
                     </span>
                   )}
@@ -263,10 +263,10 @@ export function MessageProcessTrace({
           </ol>
 
           {searchResults && searchResults.length > 0 && (
-            <details className="group/sources mt-3 border-t border-morning-mist/60 pt-1 dark:border-deep-space/60">
-              <summary className="touch-target flex min-h-9 cursor-pointer list-none items-center justify-between gap-3 rounded-md px-1.5 py-1 text-ui-caption font-medium text-space-ink/70 transition-colors duration-150 hover:text-space-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:text-nebula-silver/70 dark:hover:text-nebula-silver">
+            <details className="group/sources mt-3 border-t border-morning-mist/60 pt-1 ">
+              <summary className="touch-target flex min-h-9 cursor-pointer list-none items-center justify-between gap-3 rounded-md px-1.5 py-1 text-ui-caption font-medium text-space-ink/70 transition-colors duration-150 hover:text-space-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue  ">
                 <span>{t("researchViewSources", { count: searchResults.length })}</span>
-                <span className="flex items-center gap-1 text-space-ink/45 dark:text-nebula-silver/45">
+                <span className="flex items-center gap-1 text-ink-tertiary ">
                   <ChevronDown className="size-4 transition-transform duration-200 group-open/sources:rotate-180 motion-reduce:transition-none" aria-hidden="true" />
                 </span>
               </summary>
@@ -277,22 +277,22 @@ export function MessageProcessTrace({
                     href={result.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="group/source flex min-h-12 min-w-0 items-center justify-between gap-3 rounded-md px-2 py-1.5 text-ui-caption transition-colors duration-150 hover:bg-nebula-silver/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:hover:bg-deep-space/40"
+                    className="group/source flex min-h-12 min-w-0 items-center justify-between gap-3 rounded-md px-2 py-1.5 text-ui-caption transition-colors duration-150 hover:bg-nebula-silver/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue "
                   >
                     <span className="min-w-0">
-                      <span className="block truncate font-medium text-space-ink/80 dark:text-nebula-silver/80">
+                      <span className="block truncate font-medium text-space-ink/80 ">
                         {result.title || sourceHostname(result.url)}
                       </span>
-                      <span className="block truncate text-space-ink/50 dark:text-nebula-silver/50">
+                      <span className="block truncate text-ink-tertiary ">
                         {sourceHostname(result.url)}
                       </span>
                       {result.snippet && (
-                        <span className="block truncate text-space-ink/45 dark:text-nebula-silver/45">
+                        <span className="block truncate text-ink-tertiary ">
                           {result.snippet}
                         </span>
                       )}
                     </span>
-                    <ExternalLink className="size-3.5 shrink-0 text-space-ink/35 transition-colors group-hover/source:text-sora-blue dark:text-nebula-silver/35" aria-hidden="true" />
+                    <ExternalLink className="size-3.5 shrink-0 text-space-ink/35 transition-colors group-hover/source:text-sora-blue " aria-hidden="true" />
                   </a>
                 ))}
               </div>

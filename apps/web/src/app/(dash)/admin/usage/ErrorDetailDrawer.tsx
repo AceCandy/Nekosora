@@ -77,7 +77,7 @@ export function ErrorDetailDrawer({ row, attempts, open, onClose }: ErrorDetailD
   const rows = [...baseRows, ...extraRows];
 
   return (
-    <Modal open={open} onClose={onClose} title={t("errors.detailTitle")} dialogClassName="m-auto w-[min(640px,92vw)] rounded-lg border border-morning-mist bg-nebula-white p-0 text-space-ink shadow-xl backdrop:bg-black/40 dark:border-deep-space dark:bg-twilight-obsidian dark:text-nebula-silver">
+    <Modal open={open} onClose={onClose} title={t("errors.detailTitle")} dialogClassName="m-auto w-[min(640px,92vw)] rounded-lg border border-morning-mist bg-nebula-white p-0 text-space-ink shadow-xl backdrop:bg-black/40   ">
       <div className="space-y-4">
         {/* 分类徽标 */}
         <div className="flex items-center gap-2">
@@ -94,24 +94,24 @@ export function ErrorDetailDrawer({ row, attempts, open, onClose }: ErrorDetailD
         {/* 重试链:同 requestId 的全部尝试(attempt 升序),当前行高亮 */}
         {attempts && attempts.length > 1 && (
           <div className="space-y-1.5">
-            <div className="text-ui-caption uppercase tracking-wider text-neutral-400 dark:text-neutral-500 font-semibold">
+            <div className="text-ui-caption text-neutral-400  font-semibold">
               {t("errors.detailRetryChain")}
             </div>
-            <div className="rounded-md border border-morning-mist dark:border-deep-space bg-neutral-50/60 dark:bg-neutral-900/30 px-3 py-2 space-y-1 text-ui-caption font-mono">
+            <div className="rounded-md border border-morning-mist  bg-neutral-50/60  px-3 py-2 space-y-1 text-ui-caption font-mono">
               {attempts.map((a) => (
                 <div
                   key={a.id}
                   className={clsx(
                     "flex items-center gap-2",
-                    a.id === row.id ? "text-sora-blue font-semibold" : "text-neutral-600 dark:text-neutral-400",
+                    a.id === row.id ? "text-sora-blue font-semibold" : "text-neutral-600 ",
                   )}
                 >
                   <span className="shrink-0 w-6">{a.attempt != null ? `#${a.attempt}` : "·"}</span>
-                  <span className="shrink-0 inline-flex items-center justify-center rounded bg-neutral-200/70 dark:bg-neutral-700/50 px-1.5 py-0.5 text-ui-caption text-neutral-600 dark:text-neutral-300">
+                  <span className="shrink-0 inline-flex items-center justify-center rounded bg-neutral-200/70  px-1.5 py-0.5 text-ui-caption text-neutral-600 ">
                     {a.httpStatus ?? "-"}
                   </span>
                   <span className="truncate">{a.upstreamKeyMasked ?? a.providerName ?? "-"}</span>
-                  <span className="ml-auto truncate text-neutral-400 dark:text-neutral-500">{a.errorCode}</span>
+                  <span className="ml-auto truncate text-neutral-400 ">{a.errorCode}</span>
                 </div>
               ))}
             </div>
@@ -121,10 +121,10 @@ export function ErrorDetailDrawer({ row, attempts, open, onClose }: ErrorDetailD
         <dl className="grid grid-cols-3 gap-x-4 gap-y-3 text-ui-caption">
           {rows.map((r) => (
             <div key={r.label} className="contents">
-              <dt className="text-neutral-400 dark:text-neutral-500 uppercase tracking-wider font-semibold text-ui-caption self-center">
+              <dt className="text-neutral-400  font-semibold text-ui-caption self-center">
                 {r.label}
               </dt>
-              <dd className="col-span-2 font-mono text-neutral-800 dark:text-neutral-200 break-all">{r.value}</dd>
+              <dd className="col-span-2 font-mono text-neutral-800  break-all">{r.value}</dd>
             </div>
           ))}
         </dl>
@@ -132,10 +132,10 @@ export function ErrorDetailDrawer({ row, attempts, open, onClose }: ErrorDetailD
         {/* errorMessage 长文块 */}
         {row.errorMessage && (
           <div className="space-y-1.5">
-            <div className="text-ui-caption uppercase tracking-wider text-neutral-400 dark:text-neutral-500 font-semibold">
+            <div className="text-ui-caption text-neutral-400  font-semibold">
               {t("errors.detailErrorMessage")}
             </div>
-            <pre className="whitespace-pre-wrap break-all rounded-md border border-morning-mist dark:border-deep-space bg-neutral-50/60 dark:bg-neutral-900/30 px-3 py-2 text-ui-caption text-neutral-700 dark:text-neutral-300 font-mono">
+            <pre className="whitespace-pre-wrap break-all rounded-md border border-morning-mist  bg-neutral-50/60  px-3 py-2 text-ui-caption text-neutral-700  font-mono">
               {row.errorMessage}
             </pre>
           </div>

@@ -15,7 +15,7 @@ export function StatusDot({ className, enabled, label, enabledLabel, disabledLab
     <span
       className={clsx(
         "inline-flex items-center gap-1.5 text-ui-caption font-semibold select-none",
-        enabled ? "text-green-600 dark:text-green-500" : "text-neutral-400 dark:text-neutral-500",
+        enabled ? "text-success " : "text-neutral-400 ",
         className
       )}
       {...props}
@@ -23,7 +23,7 @@ export function StatusDot({ className, enabled, label, enabledLabel, disabledLab
       <span
         className={clsx(
           "w-1.5 h-1.5 rounded-full transition-[background-color,box-shadow,opacity] duration-150",
-          enabled ? "bg-green-600 dark:bg-green-500" : "bg-neutral-400 dark:bg-neutral-500"
+          enabled ? "bg-green-600 " : "bg-neutral-400 "
         )}
       />
       {label ?? (enabled ? (enabledLabel ?? "已启用") : (disabledLabel ?? "已禁用"))}

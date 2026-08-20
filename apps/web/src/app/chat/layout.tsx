@@ -54,7 +54,7 @@ export default async function ChatLayout({ children }: { children: React.ReactNo
 
   // 会话项映射为 Sidebar 所需结构(含置顶/归档/生成中标记/更新时间)
   return (
-    <div className="flex h-[100dvh] flex-col overflow-hidden bg-nebula-white text-space-ink transition-colors duration-200 dark:bg-twilight-obsidian dark:text-nebula-silver md:flex-row">
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-nebula-white text-space-ink transition-colors duration-200   md:flex-row">
       <Sidebar
         userName={user.name}
         userEmail={user.email}

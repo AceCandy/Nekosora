@@ -41,7 +41,7 @@ interface UsageFilterBarProps {
 }
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
-  return <span className="text-ui-caption text-neutral-400 dark:text-neutral-500">{children}</span>;
+  return <span className="text-ui-caption text-neutral-400 ">{children}</span>;
 }
 
 export function UsageFilterBar({ variant, values, labels, basePath, tab }: UsageFilterBarProps) {
@@ -93,14 +93,14 @@ export function UsageFilterBar({ variant, values, labels, basePath, tab }: Usage
   ];
 
   return (
-    <div className="space-y-2.5 rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] p-3 shadow-none">
+    <div className="space-y-2.5 rounded-lg border border-neutral-200 bg-white   p-3 shadow-none">
       {/* 第一排:时间范围(独占一行) */}
       <div className="flex flex-wrap items-end gap-3">
         <DateRangePicker range={values.range} start={values.start} end={values.end} onChange={onTimeChange} />
         <button
           type="button"
           onClick={() => router.refresh()}
-          className="ml-auto inline-flex items-center gap-1 px-2 py-1 rounded text-ui-caption border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#12141a] text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 transition-colors"
+          className="ml-auto inline-flex items-center gap-1 px-2 py-1 rounded text-ui-caption border border-neutral-200  bg-white  text-neutral-500 hover:text-neutral-700  transition-colors"
         >
           <RefreshCw className="size-3" />
           {t("filters.refresh")}

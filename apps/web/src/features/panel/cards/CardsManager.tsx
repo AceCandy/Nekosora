@@ -115,18 +115,18 @@ function CardItem({
     private: "scopePrivate",
   };
   const scopeStyle: Record<CardScope, string> = {
-    builtin: "bg-neutral-100 dark:bg-neutral-800 text-neutral-500",
+    builtin: "bg-neutral-100  text-neutral-500",
     shared: "bg-sora-blue/[0.04] text-sora-blue",
-    private: "bg-neku-amber/[0.04] text-neku-amber",
+    private: "bg-neku-amber/[0.04] text-warning",
   };
   const isMine = card.scope !== "builtin";
 
   return (
-    <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 p-4 hover:border-neutral-300 dark:hover:border-neutral-700 transition-colors">
+    <div className="rounded-lg border border-neutral-200  p-4 hover:border-neutral-300  transition-colors">
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <h3 className="text-ui-body font-semibold text-neutral-800 dark:text-neutral-200 truncate">
+            <h3 className="text-ui-body font-semibold text-neutral-800  truncate">
               {card.title}
             </h3>
             <span className={clsx("text-ui-caption px-1.5 py-0.5 rounded font-medium", scopeStyle[card.scope])}>
@@ -137,10 +137,10 @@ function CardItem({
         </div>
         {isMine && (
           <div className="flex items-center gap-1 shrink-0">
-            <button type="button" onClick={onEdit} className="touch-target inline-flex items-center justify-center p-1 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300" title={t("editButton")} aria-label={t("editButton")}>
+            <button type="button" onClick={onEdit} className="touch-target inline-flex items-center justify-center p-1 text-neutral-400 hover:text-neutral-600 " title={t("editButton")} aria-label={t("editButton")}>
               <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
             </button>
-            <button type="button" onClick={onDelete} className="touch-target inline-flex items-center justify-center p-1 text-neutral-400 hover:text-red-500" title={t("deleteButton")} aria-label={t("deleteButton")}>
+            <button type="button" onClick={onDelete} className="touch-target inline-flex items-center justify-center p-1 text-neutral-500 hover:text-danger" title={t("deleteButton")} aria-label={t("deleteButton")}>
               <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
             </button>
           </div>
@@ -149,7 +149,7 @@ function CardItem({
       {card.description && (
         <p className="text-ui-caption text-neutral-500 mb-2 line-clamp-2">{card.description}</p>
       )}
-      <pre className="text-ui-caption text-neutral-600 dark:text-neutral-400 bg-neutral-50 dark:bg-neutral-900/50 rounded p-2 max-h-24 overflow-auto whitespace-pre-wrap break-words font-mono">
+      <pre className="text-ui-caption text-neutral-600  bg-neutral-50  rounded p-2 max-h-24 overflow-auto whitespace-pre-wrap break-words font-mono">
         {card.markdown.slice(0, 200)}
         {card.markdown.length > 200 && "\n…"}
       </pre>
@@ -211,29 +211,29 @@ function CardEditor({
   };
 
   return (
-    <Modal open onClose={onClose} title={title} dialogClassName="m-auto w-[min(640px,92vw)] rounded-lg border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/40 dark:border-deep-space dark:bg-twilight-obsidian dark:text-nebula-silver" bodyClassName="p-0">
+    <Modal open onClose={onClose} title={title} dialogClassName="m-auto w-[min(640px,92vw)] rounded-lg border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/40   " bodyClassName="p-0">
       <div className="p-5 space-y-3 max-h-[80vh] overflow-y-auto">
         {readOnly && (
-          <p className="text-ui-caption text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 rounded p-2">
+          <p className="text-ui-caption text-warning  bg-amber-50  rounded p-2">
             {t("builtinReadonly")}
           </p>
         )}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-ui-caption font-semibold text-neutral-600 dark:text-neutral-400 mb-1 block">
+            <label className="text-ui-caption font-semibold text-neutral-600  mb-1 block">
               {t("trigger")}
             </label>
             <Input value={trigger} onChange={(e) => setTrigger(e.target.value)} disabled={readOnly} placeholder={t("triggerPlaceholder")} />
           </div>
           <div>
-            <label className="text-ui-caption font-semibold text-neutral-600 dark:text-neutral-400 mb-1 block">
+            <label className="text-ui-caption font-semibold text-neutral-600  mb-1 block">
               {t("scope")}
             </label>
             <select
               value={scope}
               onChange={(e) => setScope(e.target.value as Exclude<CardScope, "builtin">)}
               disabled={readOnly}
-              className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 px-3 py-2 text-ui-body disabled:opacity-50"
+              className="w-full rounded-md border border-neutral-200  bg-white  px-3 py-2 text-ui-body disabled:opacity-50"
             >
               <option value="private">{t("scopePrivate")}</option>
               <option value="shared">{t("scopeShared")}</option>
@@ -241,19 +241,19 @@ function CardEditor({
           </div>
         </div>
         <div>
-          <label className="text-ui-caption font-semibold text-neutral-600 dark:text-neutral-400 mb-1 block">
+          <label className="text-ui-caption font-semibold text-neutral-600  mb-1 block">
             {t("cardTitle")}
           </label>
           <Input value={cardTitle} onChange={(e) => setCardTitle(e.target.value)} disabled={readOnly} placeholder={t("titlePlaceholder")} />
         </div>
         <div>
-          <label className="text-ui-caption font-semibold text-neutral-600 dark:text-neutral-400 mb-1 block">
+          <label className="text-ui-caption font-semibold text-neutral-600  mb-1 block">
             {t("description")}
           </label>
           <Input value={description} onChange={(e) => setDescription(e.target.value)} disabled={readOnly} placeholder={t("descPlaceholder")} />
         </div>
         <div>
-          <label className="text-ui-caption font-semibold text-neutral-600 dark:text-neutral-400 mb-1 block">
+          <label className="text-ui-caption font-semibold text-neutral-600  mb-1 block">
             {t("content")}
           </label>
           <textarea
@@ -261,14 +261,14 @@ function CardEditor({
             onChange={(e) => setMarkdown(e.target.value)}
             disabled={readOnly}
             rows={10}
-            className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 px-3 py-2 text-ui-caption font-mono resize-y disabled:opacity-50"
+            className="w-full rounded-md border border-neutral-200  bg-white  px-3 py-2 text-ui-caption font-mono resize-y disabled:opacity-50"
             placeholder={t("contentPlaceholder")}
           />
           <div className="text-ui-caption text-neutral-400 mt-0.5 text-right">{markdown.length} / 10000</div>
         </div>
-        {error && <p className="text-ui-caption text-red-500">{error}</p>}
+        {error && <p className="text-ui-caption text-danger">{error}</p>}
       </div>
-      <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-neutral-200 dark:border-neutral-800">
+      <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-neutral-200 ">
         <Button variant="ghost" onClick={onClose}>{tc("cancel")}</Button>
         <Button onClick={handleSave} disabled={saving || readOnly}>
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}

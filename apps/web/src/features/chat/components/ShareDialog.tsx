@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
-import { Check, ChevronDown, CircleAlert, Copy, Link2, Loader2, LockKeyhole, Trash2 } from "lucide-react";
+import { Check, ChevronDown, CircleAlert, Copy, Link2, LockKeyhole, Trash2 } from "lucide-react";
 import type {
   ConversationShareListItem,
   CreateShareInput,
@@ -10,6 +10,7 @@ import type {
 import { copyToClipboard } from "@/shared/lib/clipboard";
 import ConfirmDialog from "@/shared/ui/ConfirmDialog";
 import Modal from "@/shared/ui/Modal";
+import { Button } from "@/shared/ui/Button";
 import { Popover } from "@/shared/ui/Popover";
 
 interface ShareDialogProps {
@@ -220,10 +221,10 @@ export default function ShareDialog(props: ShareDialogProps) {
 
   return (
     <>
-      <Modal open={open} onClose={requestClose} ariaLabel={t("configureTitle")} dialogClassName="m-auto w-[min(500px,94vw)] max-w-[94vw] max-h-[90vh] rounded-lg border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/40 dark:border-deep-space dark:bg-twilight-obsidian dark:text-nebula-silver" bodyClassName="max-h-[90vh] overflow-y-auto p-0">
-        <div className="flex border-b border-morning-mist px-4 dark:border-deep-space" role="tablist">
+      <Modal open={open} onClose={requestClose} ariaLabel={t("configureTitle")} dialogClassName="m-auto w-[min(500px,94vw)] max-w-[94vw] max-h-[90vh] rounded-lg border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/40   " bodyClassName="max-h-[90vh] overflow-y-auto p-0">
+        <div className="flex border-b border-morning-mist px-4 " role="tablist">
           {(["create", "existing"] as const).map((item) => (
-            <button key={item} type="button" role="tab" aria-selected={tab === item} onClick={() => setTab(item)} className={`h-11 border-b-2 px-3 text-ui-body font-medium ${tab === item ? "border-sora-blue text-sora-blue" : "border-transparent text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200"}`}>
+            <button key={item} type="button" role="tab" aria-selected={tab === item} onClick={() => setTab(item)} className={`h-11 border-b-2 px-3 text-ui-body font-medium ${tab === item ? "border-sora-blue text-sora-blue" : "border-transparent text-neutral-500 hover:text-neutral-800 "}`}>
               {item === "create" ? t("createTab") : t("existingTab", { count: shares.length })}
             </button>
           ))}
@@ -234,15 +235,15 @@ export default function ShareDialog(props: ShareDialogProps) {
             <fieldset className="space-y-2">
               <div className="flex items-center gap-3">
                 <legend className="w-20 shrink-0 text-ui-body font-medium">{t("mode")}</legend>
-                <div className="grid min-w-0 flex-1 grid-cols-2 rounded-lg bg-neutral-100 p-1 dark:bg-neutral-900">
+                <div className="grid min-w-0 flex-1 grid-cols-2 rounded-lg bg-neutral-100 p-1 ">
                 {(["snapshot", "live"] as const).map((item) => (
-                  <button key={item} type="button" onClick={() => setMode(item)} className={`h-9 rounded-md text-ui-body font-medium transition-colors ${mode === item ? "bg-white text-space-ink dark:bg-neutral-800 dark:text-white" : "text-neutral-500"}`}>
+                  <button key={item} type="button" onClick={() => setMode(item)} className={`h-9 rounded-md text-ui-body font-medium transition-colors ${mode === item ? "bg-white text-space-ink  " : "text-neutral-500"}`}>
                     {t(item)}
                   </button>
                 ))}
                 </div>
               </div>
-              {mode === "live" && <p className="text-ui-caption leading-5 text-amber-700 dark:text-amber-300">{t("liveWarning")}</p>}
+              {mode === "live" && <p className="text-ui-caption leading-5 text-amber-700 ">{t("liveWarning")}</p>}
             </fieldset>
 
             <div className="flex items-center gap-3">
@@ -256,7 +257,7 @@ export default function ShareDialog(props: ShareDialogProps) {
                 panelZ="z-50"
                 trigger={(
                   <>
-                    <button type="button" onClick={() => setExpirationOpen((value) => !value)} aria-expanded={expirationOpen} className="flex h-10 min-w-0 flex-1 items-center justify-between gap-2 rounded-lg border border-morning-mist bg-white px-3 text-ui-body font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:border-deep-space dark:bg-neutral-950">
+                    <button type="button" onClick={() => setExpirationOpen((value) => !value)} aria-expanded={expirationOpen} className="flex h-10 min-w-0 flex-1 items-center justify-between gap-2 rounded-lg border border-morning-mist bg-white px-3 text-ui-body font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue  ">
                       <span className="truncate">{expirationLabel}</span>
                       <ChevronDown className="h-4 w-4 shrink-0 text-neutral-400" />
                     </button>
@@ -265,7 +266,7 @@ export default function ShareDialog(props: ShareDialogProps) {
                 )}
               >
                 {(["1", "7", "30", "forever", "custom"] as const).map((choice) => (
-                  <button key={choice} type="button" onClick={() => selectExpiration(choice)} className={`flex w-full items-center gap-2 rounded px-2 py-2 text-left text-ui-body transition-colors hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:hover:bg-neutral-900 ${expiration === choice ? "text-sora-blue" : "text-neutral-700 dark:text-neutral-300"}`}>
+                  <button key={choice} type="button" onClick={() => selectExpiration(choice)} className={`flex w-full items-center gap-2 rounded px-2 py-2 text-left text-ui-body transition-colors hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue  ${expiration === choice ? "text-sora-blue" : "text-neutral-700 "}`}>
                     <span className="w-4 shrink-0" aria-hidden="true">{expiration === choice ? "✓" : ""}</span>
                     {t(choice === "1" ? "oneDay" : choice === "7" ? "sevenDays" : choice === "30" ? "thirtyDays" : choice === "forever" ? "forever" : "custom")}
                   </button>
@@ -275,19 +276,19 @@ export default function ShareDialog(props: ShareDialogProps) {
 
             <div className="flex min-h-10 items-center gap-3">
               <label className="flex shrink-0 cursor-pointer items-center gap-2 text-ui-body font-medium"><input type="checkbox" checked={passwordEnabled} onChange={(event) => { setPasswordEnabled(event.target.checked); if (!event.target.checked) setPassword(""); }} className="h-4 w-4 accent-sora-blue" />{t("passwordProtection")}</label>
-              {passwordEnabled && <input type="password" minLength={8} maxLength={128} value={password} onChange={(event) => setPassword(event.target.value)} placeholder={t("passwordPlaceholder")} autoComplete="new-password" className="h-10 min-w-0 flex-1 rounded-lg border border-morning-mist bg-white px-3 text-ui-body placeholder:text-neutral-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:border-deep-space dark:bg-neutral-950" />}
+              {passwordEnabled && <input type="password" minLength={8} maxLength={128} value={password} onChange={(event) => setPassword(event.target.value)} placeholder={t("passwordPlaceholder")} autoComplete="new-password" className="h-10 min-w-0 flex-1 rounded-lg border border-morning-mist bg-white px-3 text-ui-body placeholder:text-neutral-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue  " />}
             </div>
 
-            {createdUrl && <div className="flex items-center gap-2 rounded-lg bg-neutral-50 p-2 dark:bg-neutral-900"><input readOnly value={createdUrl} aria-label={t("shareLink")} className="min-w-0 flex-1 bg-transparent px-2 text-ui-caption" /><button type="button" onClick={() => void copy(createdUrl)} className="touch-target inline-flex h-9 w-9 items-center justify-center rounded-md hover:bg-neutral-200 dark:hover:bg-neutral-800" aria-label={copiedUrl === createdUrl ? t("copied") : failedUrl === createdUrl ? t("copyFailed") : t("copyLink")} title={copiedUrl === createdUrl ? t("copied") : failedUrl === createdUrl ? t("copyFailed") : t("copyLink")}>{copiedUrl === createdUrl ? <Check className="h-4 w-4 text-green-600" /> : failedUrl === createdUrl ? <CircleAlert className="h-4 w-4 text-red-600 dark:text-red-400" /> : <Copy className="h-4 w-4" />}</button></div>}
-            {error && <p role="alert" className="text-ui-caption text-red-600 dark:text-red-400">{error}</p>}
-            <div className="flex justify-end gap-2"><button type="button" onClick={requestClose} className="h-10 rounded-md px-4 text-ui-body font-medium text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-900">{t("cancel")}</button><button type="button" onClick={create} disabled={!canSubmit || isPending} className="inline-flex h-10 items-center gap-2 rounded-md bg-sora-blue px-4 text-ui-body font-medium text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50">{isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}{t("createLink")}</button></div>
+            {createdUrl && <div className="flex items-center gap-2 rounded-lg bg-neutral-50 p-2 "><input readOnly value={createdUrl} aria-label={t("shareLink")} className="min-w-0 flex-1 bg-transparent px-2 text-ui-caption" /><button type="button" onClick={() => void copy(createdUrl)} className="touch-target inline-flex h-9 w-9 items-center justify-center rounded-md hover:bg-neutral-200 " aria-label={copiedUrl === createdUrl ? t("copied") : failedUrl === createdUrl ? t("copyFailed") : t("copyLink")} title={copiedUrl === createdUrl ? t("copied") : failedUrl === createdUrl ? t("copyFailed") : t("copyLink")}>{copiedUrl === createdUrl ? <Check className="h-4 w-4 text-success" /> : failedUrl === createdUrl ? <CircleAlert className="h-4 w-4 text-danger " /> : <Copy className="h-4 w-4" />}</button></div>}
+            {error && <p role="alert" className="text-ui-caption text-danger ">{error}</p>}
+            <div className="flex justify-end gap-2"><button type="button" onClick={requestClose} className="h-10 rounded-md px-4 text-ui-body font-medium text-neutral-600 hover:bg-neutral-100  ">{t("cancel")}</button><Button variant="primary" loading={isPending} disabled={!canSubmit} onClick={create} className="h-10">{!isPending && <Link2 className="h-4 w-4" aria-hidden="true" />}{t("createLink")}</Button></div>
           </div>
         ) : (
           <div className="p-4">
             {shares.length === 0 ? (
               <p className="py-8 text-center text-ui-body text-neutral-500">{t("noShares")}</p>
             ) : (
-              <div className="divide-y divide-morning-mist dark:divide-deep-space">
+              <div className="divide-y divide-morning-mist ">
                 {shares.map((share) => {
                   const sharePath = `/share/${share.shareId}`;
                   const copied = copiedUrl?.endsWith(sharePath) ?? false;
@@ -298,22 +299,22 @@ export default function ShareDialog(props: ShareDialogProps) {
                         <div className="flex items-center gap-2 text-ui-body font-medium">
                           <span>{t(share.mode === "live" ? "live" : "snapshot")}</span>
                           {share.hasPassword && <LockKeyhole className="h-3.5 w-3.5 text-neutral-400" />}
-                          <span className={`text-ui-caption ${share.status === "active" ? "text-green-600 dark:text-green-400" : "text-neutral-400"}`}>{t(share.status)}</span>
+                          <span className={`text-ui-caption ${share.status === "active" ? "text-success " : "text-neutral-400"}`}>{t(share.status)}</span>
                         </div>
                         <p className="mt-1 text-ui-caption text-neutral-500">
                           {new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(share.createdAt))} · {share.expiresAt ? t("expiresOn", { date: new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(share.expiresAt)) }) : t("forever")}
                         </p>
                       </div>
-                      <button type="button" onClick={() => void copy(`${window.location.origin}${sharePath}`)} className="touch-target inline-flex h-9 w-9 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-900" aria-label={copied ? t("copied") : failed ? t("copyFailed") : t("copyLink")} title={copied ? t("copied") : failed ? t("copyFailed") : t("copyLink")}>
-                        {copied ? <Check className="h-4 w-4 text-green-600" /> : failed ? <CircleAlert className="h-4 w-4 text-red-600 dark:text-red-400" /> : <Copy className="h-4 w-4" />}
+                      <button type="button" onClick={() => void copy(`${window.location.origin}${sharePath}`)} className="touch-target inline-flex h-9 w-9 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 " aria-label={copied ? t("copied") : failed ? t("copyFailed") : t("copyLink")} title={copied ? t("copied") : failed ? t("copyFailed") : t("copyLink")}>
+                        {copied ? <Check className="h-4 w-4 text-success" /> : failed ? <CircleAlert className="h-4 w-4 text-danger " /> : <Copy className="h-4 w-4" />}
                       </button>
-                      {share.status === "active" && <button type="button" onClick={() => setRevokeId(share.shareId)} className="touch-target inline-flex h-9 w-9 items-center justify-center rounded-md text-neutral-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30" aria-label={t("revoke")}><Trash2 className="h-4 w-4" /></button>}
+                      {share.status === "active" && <button type="button" onClick={() => setRevokeId(share.shareId)} className="touch-target inline-flex h-9 w-9 items-center justify-center rounded-md text-neutral-500 hover:bg-red-50 hover:text-danger-hover " aria-label={t("revoke")}><Trash2 className="h-4 w-4" /></button>}
                     </div>
                   );
                 })}
               </div>
             )}
-            {error && <p role="alert" className="mt-3 text-ui-caption text-red-600 dark:text-red-400">{error}</p>}
+            {error && <p role="alert" className="mt-3 text-ui-caption text-danger ">{error}</p>}
           </div>
         )}
       </Modal>

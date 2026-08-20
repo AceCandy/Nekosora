@@ -91,11 +91,11 @@ export function UsageLogsTable({
     <div className="space-y-3">
       <UsageFilterBar variant={variant} values={filterValues} labels={labels} basePath={basePath} tab={tab} />
 
-      <div className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] overflow-hidden shadow-none">
+      <div className="rounded-lg border border-neutral-200 bg-white   overflow-hidden shadow-none">
         <div className="overflow-x-auto">
           <table className="w-full text-ui-caption border-collapse">
             <thead>
-              <tr className="bg-neutral-50/70 border-b border-neutral-200 text-neutral-500 dark:bg-neutral-900/50 dark:border-neutral-800 dark:text-neutral-400 uppercase tracking-wider font-semibold">
+              <tr className="bg-neutral-50/70 border-b border-neutral-200 text-neutral-500    uppercase tracking-wider font-semibold">
                 <th className="text-left px-4 py-3">{t("thCreatedAt")}</th>
                 {variant === "admin" && <th className="text-left px-4 py-3">{t("thUser")}</th>}
                 <th className="text-left px-4 py-3">{t("thSource")}</th>
@@ -105,10 +105,10 @@ export function UsageLogsTable({
                 <th className="text-right px-4 py-3">{t("thDuration")}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
+            <tbody className="divide-y divide-neutral-100 ">
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={variant === "admin" ? 7 : 6} className="px-4 py-10 text-center text-neutral-400 dark:text-neutral-500">
+                  <td colSpan={variant === "admin" ? 7 : 6} className="px-4 py-10 text-center text-ink-tertiary ">
                     {t("emptyLogs")}
                   </td>
                 </tr>
@@ -117,19 +117,19 @@ export function UsageLogsTable({
                 const totalTokens = r.promptTokens + r.completionTokens + r.cacheReadTokens;
                 const taskKindMessageKey = r.taskKind ? getTaskKindMessageKey(r.taskKind) : null;
                 return (
-                  <tr key={r.id} className="hover:bg-neutral-50/30 dark:hover:bg-neutral-900/10 transition-colors duration-150">
-                    <td className="px-4 py-3 font-mono text-neutral-500 dark:text-neutral-400 whitespace-nowrap">
+                  <tr key={r.id} className="hover:bg-neutral-50/30  transition-colors duration-150">
+                    <td className="px-4 py-3 font-mono text-neutral-500  whitespace-nowrap">
                       {formatDateTimeLocal(r.createdAt)}
                     </td>
                     {variant === "admin" && (
                       <td className="px-4 py-3 max-w-[160px]">
-                        <div className="font-medium text-neutral-700 dark:text-neutral-300 truncate">{r.userName ?? "-"}</div>
+                        <div className="font-medium text-neutral-700  truncate">{r.userName ?? "-"}</div>
                         {r.userEmail && (
-                          <div className="font-mono text-ui-caption text-neutral-400 dark:text-neutral-500 truncate">{r.userEmail}</div>
+                          <div className="font-mono text-ui-caption text-ink-tertiary  truncate">{r.userEmail}</div>
                         )}
                       </td>
                     )}
-                    <td className="px-4 py-3 font-mono text-neutral-700 dark:text-neutral-300">
+                    <td className="px-4 py-3 font-mono text-neutral-700 ">
                       <span className="inline-flex items-center gap-1.5">
                         {t(`sources.${r.source}` as const)}
                         {r.taskKind && (
@@ -142,34 +142,34 @@ export function UsageLogsTable({
                     {/* 执行链路列:服务商 · 请求模型(↳上游模型) · 脱敏上游key */}
                     <td className="px-4 py-3 max-w-[240px]">
                       <div className="space-y-0.5">
-                        <div className="text-neutral-700 dark:text-neutral-300 truncate">{r.providerName ?? r.providerRef ?? "-"}</div>
-                        <div className="font-mono text-neutral-900 dark:text-white truncate">
+                        <div className="text-neutral-700  truncate">{r.providerName ?? r.providerRef ?? "-"}</div>
+                        <div className="font-mono text-neutral-900  truncate">
                           {r.model}
                           {r.upstreamModel && r.upstreamModel !== r.model && (
-                            <span className="block text-ui-caption text-neutral-400 dark:text-neutral-500 truncate">↳ {r.upstreamModel}</span>
+                            <span className="block text-ui-caption text-ink-tertiary  truncate">↳ {r.upstreamModel}</span>
                           )}
                         </div>
                         {r.upstreamKeyMasked && (
-                          <div className="font-mono text-ui-caption text-neutral-400 dark:text-neutral-500 truncate">{r.upstreamKeyMasked}</div>
+                          <div className="font-mono text-ui-caption text-ink-tertiary  truncate">{r.upstreamKeyMasked}</div>
                         )}
                       </div>
                     </td>
                     {/* Key:对外密钥(apiKeyName);上游key 已移到执行链路列 */}
-                    <td className="px-4 py-3 font-mono text-neutral-700 dark:text-neutral-300 truncate max-w-[160px]">
+                    <td className="px-4 py-3 font-mono text-neutral-700  truncate max-w-[160px]">
                       {r.apiKeyName ?? "-"}
                     </td>
                     {/* Token 合并列:输入↓ 输出↑ / 缓存读取 + hover 明细 */}
                     <td className="px-4 py-3 text-right">
                       <div className="inline-flex items-center gap-1.5">
                         <div className="space-y-0.5 font-mono">
-                          <div className="text-neutral-800 dark:text-neutral-200">
+                          <div className="text-neutral-800 ">
                             {r.promptTokens.toLocaleString()}
-                            <span className="text-neutral-400 mx-0.5">↓</span>
+                            <span className="text-ink-tertiary mx-0.5">↓</span>
                             {r.completionTokens.toLocaleString()}
-                            <span className="text-neutral-400 mx-0.5">↑</span>
+                            <span className="text-ink-tertiary mx-0.5">↑</span>
                           </div>
                           {r.cacheReadTokens > 0 && (
-                            <div className="text-ui-caption text-neutral-400 dark:text-neutral-500">
+                            <div className="text-ui-caption text-ink-tertiary ">
                               {t("thCacheRead")}: {r.cacheReadTokens.toLocaleString()}
                             </div>
                           )}
@@ -181,24 +181,24 @@ export function UsageLogsTable({
                           side="top"
                           align="right"
                           panelClassName="w-44 p-2.5"
-                          trigger={<Info className="size-3.5 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 cursor-help" />}
+                          trigger={<Info className="size-3.5 text-ink-tertiary hover:text-neutral-600  cursor-help" />}
                         >
                           <div className="space-y-1 text-ui-caption font-mono">
                             <div className="flex justify-between gap-3">
                               <span className="text-neutral-500">{t("thInput")}</span>
-                              <span className="text-neutral-800 dark:text-neutral-200">{r.promptTokens.toLocaleString()}</span>
+                              <span className="text-neutral-800 ">{r.promptTokens.toLocaleString()}</span>
                             </div>
                             <div className="flex justify-between gap-3">
                               <span className="text-neutral-500">{t("thOutput")}</span>
-                              <span className="text-neutral-800 dark:text-neutral-200">{r.completionTokens.toLocaleString()}</span>
+                              <span className="text-neutral-800 ">{r.completionTokens.toLocaleString()}</span>
                             </div>
                             <div className="flex justify-between gap-3">
                               <span className="text-neutral-500">{t("thCacheRead")}</span>
                               <span className="text-neutral-500">{r.cacheReadTokens.toLocaleString()}</span>
                             </div>
-                            <div className="flex justify-between gap-3 border-t border-neutral-100 dark:border-neutral-800 pt-1">
+                            <div className="flex justify-between gap-3 border-t border-neutral-100  pt-1">
                               <span className="text-neutral-500">{t("tokenTotal")}</span>
-                              <span className="text-neutral-900 dark:text-white font-semibold">{totalTokens.toLocaleString()}</span>
+                              <span className="text-neutral-900  font-semibold">{totalTokens.toLocaleString()}</span>
                             </div>
                           </div>
                         </Popover>
@@ -206,8 +206,8 @@ export function UsageLogsTable({
                     </td>
                     {/* 耗时合并列:总耗时 / TTFT */}
                     <td className="px-4 py-3 text-right font-mono">
-                      <div className="text-neutral-800 dark:text-neutral-200">{formatDuration(r.latencyMs)}</div>
-                      <div className="text-ui-caption text-neutral-400 dark:text-neutral-500">{formatDuration(r.firstTokenLatencyMs)}</div>
+                      <div className="text-neutral-800 ">{formatDuration(r.latencyMs)}</div>
+                      <div className="text-ui-caption text-ink-tertiary ">{formatDuration(r.firstTokenLatencyMs)}</div>
                     </td>
                   </tr>
                 );

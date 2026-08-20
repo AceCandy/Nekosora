@@ -133,11 +133,11 @@ export function ErrorLogsTable({
     <div className="space-y-3">
       <ErrorFilterBar variant={variant} values={filterValues} labels={labels} basePath={basePath} />
 
-      <div className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] overflow-hidden shadow-none">
+      <div className="rounded-lg border border-neutral-200 bg-white   overflow-hidden shadow-none">
         <div className="overflow-x-auto">
           <table className="w-full text-ui-caption border-collapse">
             <thead>
-              <tr className="bg-neutral-50/70 border-b border-neutral-200 text-neutral-500 dark:bg-neutral-900/50 dark:border-neutral-800 dark:text-neutral-400 uppercase tracking-wider font-semibold">
+              <tr className="bg-neutral-50/70 border-b border-neutral-200 text-neutral-500    uppercase tracking-wider font-semibold">
                 <th className="text-left px-4 py-3">{t("thCreatedAt")}</th>
                 {variant === "admin" && <th className="text-left px-4 py-3">{t("thUser")}</th>}
                 <th className="text-left px-4 py-3">{t("thSource")}</th>
@@ -149,10 +149,10 @@ export function ErrorLogsTable({
                 <th className="text-right px-4 py-3">{t("thLatency")}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
+            <tbody className="divide-y divide-neutral-100 ">
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={variant === "admin" ? 9 : 8} className="px-4 py-10 text-center text-neutral-400 dark:text-neutral-500">
+                  <td colSpan={variant === "admin" ? 9 : 8} className="px-4 py-10 text-center text-neutral-400 ">
                     {t("errors.empty")}
                   </td>
                 </tr>
@@ -165,24 +165,33 @@ export function ErrorLogsTable({
                 return (
                   <tr
                     key={r.id}
+                    tabIndex={0}
+                    aria-label={t("errors.viewDetail")}
                     className={clsx(
-                      "hover:bg-neutral-50/30 dark:hover:bg-neutral-900/10 transition-colors duration-150 cursor-pointer",
-                      isRetry && "bg-neutral-50/40 dark:bg-neutral-900/15",
+                      "hover:bg-neutral-50/30  transition-colors duration-150 cursor-pointer",
+                      "focus-visible:outline-none focus-visible:bg-sora-blue/[0.06] focus-visible:shadow-[inset_2px_0_0_0_var(--color-sora-blue)]",
+                      isRetry && "bg-neutral-50/40 ",
                     )}
                     onClick={() => setSelectedId(r.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setSelectedId(r.id);
+                      }
+                    }}
                   >
-                    <td className="px-4 py-3 font-mono text-neutral-500 dark:text-neutral-400 whitespace-nowrap">
+                    <td className="px-4 py-3 font-mono text-neutral-500  whitespace-nowrap">
                       {formatDateTimeLocal(r.createdAt)}
                     </td>
                     {variant === "admin" && (
                       <td className="px-4 py-3 max-w-[160px]">
-                        <div className="font-medium text-neutral-700 dark:text-neutral-300 truncate">{r.userName ?? "-"}</div>
+                        <div className="font-medium text-neutral-700  truncate">{r.userName ?? "-"}</div>
                         {r.userEmail && (
-                          <div className="font-mono text-ui-caption text-neutral-400 dark:text-neutral-500 truncate">{r.userEmail}</div>
+                          <div className="font-mono text-ui-caption text-neutral-400  truncate">{r.userEmail}</div>
                         )}
                       </td>
                     )}
-                    <td className="px-4 py-3 font-mono text-neutral-700 dark:text-neutral-300">
+                    <td className="px-4 py-3 font-mono text-neutral-700 ">
                       <span className="inline-flex items-center gap-1.5">
                         {t(`sources.${r.source}` as const)}
                         {r.taskKind && (
@@ -202,23 +211,23 @@ export function ErrorLogsTable({
                             </span>
                           )}
                           {isRetry && (
-                            <span className="shrink-0 text-neutral-400 dark:text-neutral-500 text-ui-caption">↳</span>
+                            <span className="shrink-0 text-neutral-400  text-ui-caption">↳</span>
                           )}
-                          <span className="truncate text-neutral-700 dark:text-neutral-300">{r.providerName ?? r.providerRef ?? "-"}</span>
+                          <span className="truncate text-neutral-700 ">{r.providerName ?? r.providerRef ?? "-"}</span>
                         </div>
-                        <div className="font-mono text-neutral-900 dark:text-white truncate">
+                        <div className="font-mono text-neutral-900  truncate">
                           {r.model}
                           {r.upstreamModel && r.upstreamModel !== r.model && (
-                            <span className="block text-ui-caption text-neutral-400 dark:text-neutral-500 truncate">↳ {r.upstreamModel}</span>
+                            <span className="block text-ui-caption text-neutral-400  truncate">↳ {r.upstreamModel}</span>
                           )}
                         </div>
                         {r.upstreamKeyMasked && (
-                          <div className="font-mono text-ui-caption text-neutral-400 dark:text-neutral-500 truncate">{r.upstreamKeyMasked}</div>
+                          <div className="font-mono text-ui-caption text-neutral-400  truncate">{r.upstreamKeyMasked}</div>
                         )}
                       </div>
                     </td>
                     {/* Key:对外密钥(apiKeyName) */}
-                    <td className="px-4 py-3 font-mono text-neutral-700 dark:text-neutral-300 truncate max-w-[160px]">
+                    <td className="px-4 py-3 font-mono text-neutral-700  truncate max-w-[160px]">
                       {r.apiKeyName ?? "-"}
                     </td>
                     <td className="px-4 py-3">
@@ -227,7 +236,7 @@ export function ErrorLogsTable({
                           {t(`errors.phases.${r.errorPhase}` as const)}
                         </Badge>
                       ) : (
-                        <span className="text-neutral-400 dark:text-neutral-600">-</span>
+                        <span className="text-neutral-400 ">-</span>
                       )}
                     </td>
                     <td className="px-4 py-3">
@@ -240,7 +249,7 @@ export function ErrorLogsTable({
                         {r.httpStatus ?? "-"}
                       </Badge>
                     </td>
-                    <td className="px-4 py-3 text-right font-mono text-neutral-500 dark:text-neutral-400">
+                    <td className="px-4 py-3 text-right font-mono text-neutral-500 ">
                       {formatDuration(r.latencyMs)}
                     </td>
                   </tr>

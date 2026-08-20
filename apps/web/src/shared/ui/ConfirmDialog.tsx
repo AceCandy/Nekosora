@@ -42,7 +42,7 @@ export default function ConfirmDialog({
 }: ConfirmDialogProps) {
   const confirmCls = danger
     ? "bg-red-600 text-white hover:bg-red-700"
-    : "bg-neutral-900 text-white hover:bg-neutral-700 dark:bg-white dark:text-black";
+    : "bg-neutral-900 text-white hover:bg-neutral-700  ";
 
   const handleConfirm = () => {
     if (onConfirm) onConfirm();
@@ -52,12 +52,12 @@ export default function ConfirmDialog({
   return (
     <Modal open={open} onClose={onClose} title={title} ariaLabel={title}>
       <div className="space-y-4">
-        <div className="text-ui-body text-neutral-600 dark:text-neutral-300">{message}</div>
+        <div className="text-ui-body text-neutral-600 ">{message}</div>
         <div className="flex justify-end gap-2">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-neutral-300 px-4 py-2 text-ui-body hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+            className="rounded-md border border-neutral-300 px-4 py-2 text-ui-body hover:bg-neutral-100  "
           >
             {cancelLabel}
           </button>

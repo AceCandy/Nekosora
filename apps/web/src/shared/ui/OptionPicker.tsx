@@ -68,7 +68,7 @@ function OptionList({
 }) {
   const requestClose = usePopoverClose();
   return (
-    <>
+    <div role="listbox" aria-label={ariaLabel} aria-multiselectable={mode === "multi" || undefined}>
       {options.map((opt) => {
         const isSelected = selectedIds.includes(opt.id);
         const handleClick = () => {
@@ -83,13 +83,15 @@ function OptionList({
           <button
             key={opt.id}
             type="button"
+            role="option"
+            aria-selected={isSelected}
             onClick={handleClick}
             aria-label={ariaLabel ? `${ariaLabel}: ${opt.label}` : opt.label}
             className={clsx(
               "w-full text-left rounded px-2 py-1.5 text-ui-caption transition-colors flex items-start gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue",
               isSelected
                 ? "bg-sora-blue/[0.06] text-sora-blue"
-                : "text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900",
+                : "text-neutral-700  hover:bg-neutral-50 ",
             )}
           >
             <span className={clsx("mt-0.5 shrink-0", isSelected ? "opacity-100" : "opacity-30")} aria-hidden="true">
@@ -105,17 +107,17 @@ function OptionList({
               ) : (
                 <>
                   <span className="font-semibold block truncate">{opt.label}</span>
-                  {opt.badge && <span className="text-ui-caption text-neutral-400 font-mono">{opt.badge}</span>}
+                  {opt.badge && <span className="text-ui-caption text-ink-tertiary font-mono">{opt.badge}</span>}
                 </>
               )}
               {opt.description && (
-                <span className="text-ui-caption text-neutral-400 block truncate">{opt.description}</span>
+                <span className="text-ui-caption text-ink-tertiary block truncate">{opt.description}</span>
               )}
             </span>
           </button>
         );
       })}
-    </>
+    </div>
   );
 }
 

@@ -23,7 +23,7 @@ export function SkeletonBlock({ kind }: { kind?: StructuredKind }) {
   const shape = kind === "metric" ? "h-20 w-48" : kind === "callout" ? "h-16 w-full" : "h-64 w-full";
   return (
     <div
-      className={clsx("my-2 animate-pulse rounded-lg bg-morning-mist/60 dark:bg-deep-space/40", shape)}
+      className={clsx("my-2 animate-pulse rounded-lg bg-morning-mist/60 ", shape)}
       role="status"
       aria-label="加载中"
     />
@@ -89,11 +89,11 @@ export function StructuredInlineView({
   if (result.ok) {
     return (
       <div className="group relative">
-        <div className="absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded-md bg-white/80 dark:bg-space-ink/80 px-1 py-1 backdrop-blur-sm opacity-0 transition-opacity group-hover:opacity-100 [@media(pointer:coarse)]:opacity-100">
+        <div className="absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded-md bg-white border border-morning-mist px-1 py-1 opacity-0 transition-opacity group-hover:opacity-100 [@media(pointer:coarse)]:opacity-100">
           <button
             type="button"
             onClick={handleCopy}
-            className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-950/5 hover:text-neutral-800 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-white focus-visible:outline focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
+            className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-950/5 hover:text-neutral-800    focus-visible:outline focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
             title={copied ? t("copied") : t("copy")}
             aria-label={copied ? t("copied") : t("copy")}
           >
@@ -113,13 +113,13 @@ export function StructuredInlineView({
   return (
     <div className="relative">
       <span
-        className="absolute left-2 top-2 z-10 inline-flex items-center gap-1 rounded-md bg-rose-50 dark:bg-rose-950/40 px-1.5 py-0.5 text-ui-caption font-medium text-rose-600 dark:text-rose-400"
+        className="absolute left-2 top-2 z-10 inline-flex items-center gap-1 rounded-md bg-rose-50  px-1.5 py-0.5 text-ui-caption font-medium text-rose-600 "
         title={t("structuredParseFailed")}
       >
         <AlertTriangle className="w-3 h-3" aria-hidden="true" />
         {t("structuredParseFailed")}
       </span>
-      <pre className="overflow-x-auto rounded-lg bg-neutral-50 dark:bg-deep-space/60 p-3 text-ui-caption leading-relaxed text-neutral-700 dark:text-neutral-300">
+      <pre className="overflow-x-auto rounded-lg bg-neutral-50  p-3 text-ui-caption leading-relaxed text-neutral-700 ">
         <code>{raw}</code>
       </pre>
     </div>

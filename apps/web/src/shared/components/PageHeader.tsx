@@ -16,11 +16,11 @@ interface PageHeaderProps {
 export function PageHeader({ icon: Icon, title, desc }: PageHeaderProps) {
   return (
     <div>
-      <h1 className="flex items-center gap-2 text-ui-subheading font-bold text-neutral-900 dark:text-white">
+      <h1 className="flex items-center gap-2 text-ui-subheading font-bold text-neutral-900 ">
         <Icon className="h-5 w-5 text-sora-blue" />
         <span>{title}</span>
       </h1>
-      {desc ? <p className="mt-1 text-ui-body text-neutral-500 dark:text-neutral-400">{desc}</p> : null}
+      {desc ? <p className="mt-1 text-ui-body text-neutral-500 ">{desc}</p> : null}
     </div>
   );
 }

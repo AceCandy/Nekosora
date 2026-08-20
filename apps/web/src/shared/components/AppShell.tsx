@@ -52,7 +52,7 @@ export default function AppShell({
   children,
 }: AppShellProps) {
   return (
-    <div className="flex h-dvh flex-col bg-[#fcfdff] text-[#0f121a] transition-colors duration-200 dark:bg-[#0d0f14] dark:text-[#f1f3f7] md:flex-row">
+    <div className="flex h-dvh flex-col bg-nebula-white text-space-ink transition-colors duration-200   md:flex-row">
       <DashSidebar
         user={user}
         groups={groups}

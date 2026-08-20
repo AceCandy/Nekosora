@@ -43,19 +43,19 @@ export function CollapsibleStats({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <div className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] shadow-none">
+    <div className="rounded-lg border border-neutral-200 bg-white   shadow-none">
       <button
         type="button"
         onClick={toggle}
         aria-expanded={!collapsed}
-        className="flex items-center justify-between w-full px-4 py-2.5 text-left hover:bg-neutral-50/60 dark:hover:bg-neutral-900/20 transition-colors"
+        className="flex items-center justify-between w-full px-4 py-2.5 text-left hover:bg-neutral-50/60  transition-colors"
       >
-        <span className="text-ui-caption font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+        <span className="text-ui-caption font-semibold text-neutral-500 ">
           {t("statsOverview")}
         </span>
         <ChevronDown className={clsx("size-4 text-neutral-400 transition-transform duration-200", !collapsed && "rotate-180")} />
       </button>
-      {!collapsed && <div className="border-t border-neutral-100 dark:border-neutral-800 p-5">{children}</div>}
+      {!collapsed && <div className="border-t border-neutral-100  p-5">{children}</div>}
     </div>
   );
 }

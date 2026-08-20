@@ -63,6 +63,7 @@ vi.mock("@/shared/lib/clipboard", () => ({
 import ShareDialog from "./ShareDialog";
 import ConfirmDialog from "@/shared/ui/ConfirmDialog";
 import Modal from "@/shared/ui/Modal";
+import { Button } from "@/shared/ui/Button";
 
 interface TestElementProps {
   children?: ReactNode;
@@ -100,6 +101,11 @@ function elementText(node: ReactNode): string {
   if (Array.isArray(node)) return node.map(elementText).join("");
   if (!isValidElement<TestElementProps>(node)) return "";
   return elementText(node.props.children);
+}
+
+// createLink 按钮经 shared/ui/Button 渲染,浅遍历下 type 是组件而非 "button"。
+function isCreateButton(element: ReactElement<TestElementProps>): boolean {
+  return (element.type === "button" || element.type === Button) && elementText(element) === "createLink";
 }
 
 async function flushTransitions() {
@@ -161,7 +167,7 @@ describe("ShareDialog", () => {
   it("creates without a render style and copies both share link buttons", async () => {
     let root = render();
     const createButton = collectElements(root).find((element) =>
-      element.type === "button" && elementText(element) === "createLink");
+      isCreateButton(element));
 
     createButton?.props.onClick?.();
     await flushTransitions();
@@ -201,7 +207,7 @@ describe("ShareDialog", () => {
   it("shows an accessible failure state when copying fails", async () => {
     let root = render();
     const createButton = collectElements(root).find((element) =>
-      element.type === "button" && elementText(element) === "createLink");
+      isCreateButton(element));
     createButton?.props.onClick?.();
     await flushTransitions();
 
@@ -262,7 +268,7 @@ describe("ShareDialog", () => {
     elements = collectElements(root);
     expect(elements.some((element) => element.type === "button" && elementText(element).startsWith("deadline:"))).toBe(true);
 
-    elements.find((element) => element.type === "button" && elementText(element) === "createLink")?.props.onClick?.();
+    elements.find((element) => isCreateButton(element))?.props.onClick?.();
     await flushTransitions();
     expect(createShareAction).toHaveBeenCalledWith(expect.objectContaining({
       expiration: { kind: "custom", value: new Date(futureValue).toISOString() },
@@ -279,12 +285,12 @@ describe("ShareDialog", () => {
     elements = collectElements(root);
     const passwordInput = elements.find((element) => element.type === "input" && element.props.type === "password");
     expect(passwordInput).toBeDefined();
-    expect(elements.find((element) => element.type === "button" && elementText(element) === "createLink")?.props.disabled).toBe(true);
+    expect(elements.find((element) => isCreateButton(element))?.props.disabled).toBe(true);
     passwordInput?.props.onChange?.({ target: { value: "12345678", checked: false } });
 
     root = render();
     elements = collectElements(root);
-    expect(elements.find((element) => element.type === "button" && elementText(element) === "createLink")?.props.disabled).toBe(false);
+    expect(elements.find((element) => isCreateButton(element))?.props.disabled).toBe(false);
     elements.find((element) => element.type === Modal)?.props.onClose?.();
 
     root = render();
@@ -316,7 +322,7 @@ describe("ShareDialog", () => {
     let root = render();
     collectElements(root).find((element) => element.type === "button" && elementText(element) === "live")?.props.onClick?.();
     root = render();
-    collectElements(root).find((element) => element.type === "button" && elementText(element) === "createLink")?.props.onClick?.();
+    collectElements(root).find((element) => isCreateButton(element))?.props.onClick?.();
     await flushTransitions();
 
     root = render();

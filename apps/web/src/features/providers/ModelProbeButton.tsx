@@ -46,7 +46,7 @@ export default function ModelProbeButton({
         type="button"
         disabled
         title={t("deepProbeNoTestModel")}
-        className="inline-flex items-center justify-center rounded p-1 text-neutral-300 dark:text-neutral-600 cursor-not-allowed"
+        className="inline-flex items-center justify-center rounded p-1 text-neutral-300  cursor-not-allowed"
       >
         <Zap className="w-3.5 h-3.5" />
       </button>
@@ -64,10 +64,10 @@ export default function ModelProbeButton({
   );
 
   const color = display?.ok
-    ? "text-emerald-500 hover:text-emerald-600 dark:text-emerald-400 dark:hover:text-emerald-300"
+    ? "text-success hover:text-success  "
     : display && !display.ok
-      ? "text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300"
-      : "text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-200";
+      ? "text-danger hover:text-danger-hover  "
+      : "text-neutral-400 hover:text-neutral-700  ";
 
   // 通过 -> hover 提示重测;失败 -> hover 显示错误 + 重测;未测 -> 提示检测。
   const title = display

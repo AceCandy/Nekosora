@@ -137,15 +137,15 @@ export default async function ModelConfigSection({
   return (
     <div className="space-y-6 max-w-3xl">
       <div>
-        <h2 className="text-ui-title font-semibold text-neutral-900 dark:text-white">{labels.title}</h2>
+        <h2 className="text-ui-title font-semibold text-neutral-900 ">{labels.title}</h2>
         <p className="mt-1 text-ui-body text-neutral-500">{labels.desc}</p>
       </div>
 
       {/* Embedding 配置 */}
       {providers.length === 0 ? (
-        <div className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] p-5 space-y-3">
-          <h3 className="text-ui-body font-bold text-neutral-800 dark:text-white">{labels.embeddingTitle}</h3>
-          <p className="text-ui-caption text-amber-600 dark:text-amber-400">{labels.noProviders}</p>
+        <div className="rounded-lg border border-neutral-200 bg-white   p-5 space-y-3">
+          <h3 className="text-ui-body font-bold text-neutral-800 ">{labels.embeddingTitle}</h3>
+          <p className="text-ui-caption text-warning ">{labels.noProviders}</p>
         </div>
       ) : (
         <EmbeddingConfigForm

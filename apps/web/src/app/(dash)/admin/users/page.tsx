@@ -15,11 +15,11 @@ export default async function UsersPage() {
     <div className="space-y-6">
       <PageHeader icon={Users} title={tn("users")} desc={t("desc")} />
 
-      <div className="rounded-lg border border-morning-mist bg-nebula-white dark:border-deep-space dark:bg-twilight-obsidian overflow-hidden shadow-none">
+      <div className="rounded-lg border border-morning-mist bg-nebula-white   overflow-hidden shadow-none">
         <div className="overflow-x-auto">
           <table className="w-full text-ui-body border-collapse">
             <thead>
-              <tr className="bg-neutral-50/70 border-b border-morning-mist text-neutral-500 dark:bg-neutral-900/50 dark:border-deep-space dark:text-neutral-400 text-ui-caption uppercase tracking-wider font-semibold">
+              <tr className="bg-neutral-50/70 border-b border-morning-mist text-neutral-500    text-ui-caption uppercase tracking-wider font-semibold">
                 <th className="text-left px-5 py-3 font-semibold">{t("thEmail")}</th>
                 <th className="text-left px-5 py-3 font-semibold">{t("thName")}</th>
                 <th className="text-left px-5 py-3 font-semibold">{t("thRole")}</th>
@@ -27,10 +27,10 @@ export default async function UsersPage() {
                 <th className="text-right px-5 py-3 font-semibold">{t("thActions")}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-neutral-100 dark:divide-deep-space">
+            <tbody className="divide-y divide-neutral-100 ">
               {users.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-5 py-10 text-center text-neutral-400 dark:text-neutral-500">
+                  <td colSpan={5} className="px-5 py-10 text-center text-neutral-400 ">
                     {t("empty")}
                   </td>
                 </tr>
@@ -38,12 +38,12 @@ export default async function UsersPage() {
               {users.map((u: Record<string, unknown>) => (
                 <tr 
                   key={u.id as string} 
-                  className="hover:bg-neutral-50/30 dark:hover:bg-neutral-900/10 transition-colors duration-150"
+                  className="hover:bg-neutral-50/30  transition-colors duration-150"
                 >
-                  <td className="px-5 py-3.5 font-medium text-neutral-900 dark:text-white font-mono text-ui-caption">
+                  <td className="px-5 py-3.5 font-medium text-neutral-900  font-mono text-ui-caption">
                     {u.email as string}
                   </td>
-                  <td className="px-5 py-3.5 text-neutral-700 dark:text-neutral-300">
+                  <td className="px-5 py-3.5 text-neutral-700 ">
                     {u.name as string}
                   </td>
                   <td className="px-5 py-3.5">
@@ -71,7 +71,7 @@ export default async function UsersPage() {
                         </Button>
                       </form>
                     ) : (
-                      <span className="text-ui-caption text-neutral-400 dark:text-neutral-600 select-none">-</span>
+                      <span className="text-ui-caption text-neutral-400  select-none">-</span>
                     )}
                   </td>
                 </tr>
@@ -80,7 +80,7 @@ export default async function UsersPage() {
           </table>
         </div>
       </div>
-      <div className="rounded-lg border border-neutral-100 bg-neutral-50/50 p-4 text-ui-caption text-neutral-500 dark:border-neutral-800 dark:bg-neutral-950/20 dark:text-neutral-500 leading-relaxed">
+      <div className="rounded-lg border border-neutral-100 bg-neutral-50/50 p-4 text-ui-caption text-neutral-500    leading-relaxed">
         {t("footerNote")}
       </div>
     </div>

@@ -105,11 +105,11 @@ export function ChatInputBox({
 
   return (
     <div
-      className="relative rounded-2xl border border-morning-mist bg-white shadow-sm transition-[border-color] duration-200 ease-out focus-within:border-sora-blue motion-reduce:transition-none dark:border-deep-space dark:bg-space-ink dark:focus-within:border-sora-blue"
+      className="relative rounded-2xl border border-morning-mist bg-white transition-[border-color] duration-200 ease-out focus-within:border-sora-blue motion-reduce:transition-none   "
     >
       {/* 斜杠命令 popover:贴整个输入框上方,避免覆盖附件。 */}
       {slashMatches.length > 0 && (
-        <div className="absolute bottom-full left-0 mb-2 z-40 w-72 max-h-60 overflow-y-auto rounded-lg border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink py-1 shadow-md">
+        <div className="absolute bottom-full left-0 mb-2 z-40 w-72 max-h-60 overflow-y-auto rounded-lg border border-morning-mist  bg-white  py-1 shadow-md">
           {slashMatches.map((c, i) => (
             <button
               key={c.id}
@@ -120,11 +120,11 @@ export function ChatInputBox({
                 "flex items-center gap-2 w-full text-left px-3 py-1.5 text-ui-caption transition-colors cursor-pointer",
                 i === slashIndex
                   ? "bg-sora-blue/[0.06] text-sora-blue"
-                  : "text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900",
+                  : "text-neutral-600  hover:bg-neutral-50 ",
               )}
             >
               <span className="font-mono font-semibold shrink-0">/{c.trigger}</span>
-              <span className="truncate text-neutral-500 dark:text-neutral-400">{c.title}</span>
+              <span className="truncate text-neutral-500 ">{c.title}</span>
             </button>
           ))}
         </div>
@@ -133,7 +133,7 @@ export function ChatInputBox({
       {topContent}
 
       <div
-        className="relative transition-[height] duration-200 ease-out motion-reduce:transition-none"
+        className="relative"
         style={{ height: `${layout.height}px` }}
       >
         <div
@@ -216,7 +216,7 @@ export function ChatInputBox({
           placeholder={t("placeholder")}
           rows={1}
           className={clsx(
-            "scrollbar-hidden block h-full w-full resize-none overflow-y-auto border-0 bg-transparent py-3 text-ui-reading leading-6 text-neutral-800 outline-none transition-[padding] duration-200 ease-out placeholder-neutral-400 focus:ring-0 focus-visible:outline-none focus-visible:ring-0 motion-reduce:transition-none dark:text-neutral-200",
+            "scrollbar-hidden block h-full w-full resize-none overflow-y-auto border-0 bg-transparent py-3 text-ui-reading leading-6 text-neutral-800 outline-none placeholder-ink-tertiary focus:ring-0 focus-visible:outline-none focus-visible:ring-0",
             layout.multiline ? "px-3 pb-12" : "pl-12 pr-40 sm:pr-72",
           )}
           disabled={disabled}
@@ -232,7 +232,7 @@ export function ChatInputBox({
             <button
               type="button"
               onClick={onStop}
-              className="group touch-target pointer-events-auto inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-transparent text-red-500 transition-[background-color,color,transform] duration-200 ease-out hover:-translate-y-px hover:bg-red-500/10 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 active:translate-y-0 active:scale-95 motion-reduce:transition-none motion-reduce:hover:transform-none dark:text-red-400 dark:hover:bg-red-400/10 dark:hover:text-red-300"
+              className="group touch-target pointer-events-auto inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-transparent text-danger transition-[background-color,color,transform] duration-200 ease-out hover:-translate-y-px hover:bg-red-500/10 hover:text-danger-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 active:translate-y-0 active:scale-95 motion-reduce:transition-none motion-reduce:hover:transform-none   "
               title={t("stopGeneration")}
               aria-label={t("stopGeneration")}
             >
@@ -246,8 +246,8 @@ export function ChatInputBox({
               className={clsx(
                 "group touch-target pointer-events-auto inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-transparent transition-[background-color,color,transform] duration-200 ease-out hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue active:translate-y-0 active:scale-95 motion-reduce:transition-none motion-reduce:hover:transform-none",
                 canSend
-                  ? "cursor-pointer text-sora-blue hover:bg-sora-blue/[0.08] hover:text-sora-blue-hover dark:hover:bg-sora-blue/[0.12]"
-                  : "cursor-default text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800",
+                  ? "cursor-pointer text-sora-blue hover:bg-sora-blue/[0.08] hover:text-sora-blue-hover "
+                  : "cursor-default text-neutral-600 hover:bg-neutral-100  ",
               )}
               title={canSend ? t("send") : t("voicePlaceholder")}
               aria-label={canSend ? t("send") : t("voicePlaceholder")}

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { useTranslations } from "next-intl";
 import { clsx } from "clsx";
 import {
@@ -54,7 +54,7 @@ interface SidebarNavProps {
 /**
  * 共享侧栏导航(client component)。
  *
- * 渲染分组小标题(可选)+ 导航链接,并支持数字快捷键(1 起始,跨分组连续编号)。
+ * 渲染分组小标题(可选)+ 导航链接,并支持 Alt+数字快捷键(1 起始,跨分组连续编号)。
  * 合并了原 panel/SidebarNav 与 admin/AdminSidebarNav 的实现,差异由 groups 数据与
  * matchMode 驱动,不再各自硬编码 navItems。
  */
@@ -71,8 +71,11 @@ export default function SidebarNav({ groups, matchMode = "exact", collapsed = fa
   const hotkeyByHref = new Map<string, number>();
   flatItems.forEach((item, i) => hotkeyByHref.set(item.href, i + 1));
 
+  // Alt+数字快捷键(WCAG 2.1.4:单字符快捷键必须带修饰键,避免误触)。
+  // 用 e.code(DigitN)而非 e.key 判定——macOS 下 Option+数字会产生特殊字符(¡™£),e.key 不再是数字。
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (!e.altKey || e.ctrlKey || e.metaKey) return;
       const activeEl = document.activeElement;
       const isInput =
         activeEl &&
@@ -82,9 +85,9 @@ export default function SidebarNav({ groups, matchMode = "exact", collapsed = fa
           activeEl.getAttribute("contenteditable") === "true");
       if (isInput) return;
 
-      const num = parseInt(e.key, 10);
-      if (Number.isNaN(num) || num < 1) return;
-      const target = flatItems[num - 1];
+      const m = /^Digit([1-9])$/.exec(e.code);
+      if (!m) return;
+      const target = flatItems[Number(m[1]) - 1];
       if (target) {
         e.preventDefault();
         router.push(target.href);
@@ -95,12 +98,19 @@ export default function SidebarNav({ groups, matchMode = "exact", collapsed = fa
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [flatItems, router]);
 
+  // macOS 显示 ⌥,其余显示 Alt+。useSyncExternalStore 双快照保证 SSR(非 Mac)与客户端 hydration 一致。
+  const isMac = useSyncExternalStore(
+    () => () => {},
+    () => /Mac/i.test(navigator.platform),
+    () => false,
+  );
+
   return (
     <nav className={clsx("space-y-4", collapsed && "space-y-2")}>
       {groups.map((group, groupIdx) => (
         <div key={group.titleKey ?? groupIdx} className="space-y-1">
           {group.titleKey && !collapsed && (
-            <div className="px-3 pb-1 text-ui-caption font-medium uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
+            <div className="px-3 pb-1 text-ui-caption font-medium text-neutral-400 ">
               {t(group.titleKey)}
             </div>
           )}
@@ -121,15 +131,15 @@ export default function SidebarNav({ groups, matchMode = "exact", collapsed = fa
                   "touch-target group/nav flex items-center rounded-md text-ui-body font-medium transition-[background-color,color,padding] duration-150 ease-out",
                   collapsed ? "justify-center p-2" : "gap-2 px-3 py-2",
                   isActive
-                    ? "bg-sora-blue/8 text-sora-blue dark:bg-sora-blue/10"
-                    : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-50 dark:text-neutral-400 dark:hover:text-neutral-100 dark:hover:bg-neutral-900/50",
+                    ? "bg-sora-blue/8 text-sora-blue "
+                    : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-50   ",
                 )}
               >
                 <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
                 {!collapsed && <span className="flex-1 truncate">{t(item.labelKey)}</span>}
                 {!collapsed && (
-                  <span className="hidden border border-neutral-200 px-1.5 py-0.5 font-mono text-ui-caption text-neutral-400 opacity-0 transition-opacity group-hover/nav:opacity-100 dark:border-neutral-800 dark:text-neutral-500 sm:inline-block">
-                    {hotkey}
+                  <span className="hidden border border-neutral-200 px-1.5 py-0.5 font-mono text-ui-caption text-neutral-400 opacity-0 transition-opacity group-hover/nav:opacity-100   sm:inline-block">
+                    {isMac ? "⌥" : "Alt+"}{hotkey}
                   </span>
                 )}
               </Link>

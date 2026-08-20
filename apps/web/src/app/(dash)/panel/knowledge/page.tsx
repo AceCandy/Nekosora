@@ -9,6 +9,7 @@ import {
   attachFileToKnowledgeBase,
 } from "@/lib/knowledge-base/service";
 import { Library, Trash2 } from "lucide-react";
+import { Button } from "@/shared/ui/Button";
 import KnowledgeDebug from "./KnowledgeDebug";
 import { PageHeader } from "@/shared/components/PageHeader";
 
@@ -53,39 +54,39 @@ export default async function KnowledgePage() {
       <PageHeader icon={Library} title={tn("knowledge")} desc={t("desc")} />
 
       {/* 新建知识库 */}
-      <form action={handleCreate} className="rounded-lg border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#0d0f14] p-4 space-y-3">
-        <div className="text-ui-caption font-semibold uppercase tracking-wider text-neutral-400">{t("createTitle")}</div>
+      <form action={handleCreate} className="rounded-lg border border-neutral-200  bg-white  p-4 space-y-3">
+        <div className="text-ui-caption font-semibold text-neutral-400">{t("createTitle")}</div>
         <input
           name="name"
           placeholder={t("namePlaceholder")}
           required
-          className="touch-target w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-3 py-2 text-ui-body focus:outline-none focus:border-sora-blue"
+          className="touch-target w-full rounded-md border border-neutral-200  bg-transparent px-3 py-2 text-ui-body focus:outline-none focus:border-sora-blue"
         />
         <input
           name="description"
           placeholder={t("descPlaceholder")}
-          className="touch-target w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-3 py-2 text-ui-body focus:outline-none focus:border-sora-blue"
+          className="touch-target w-full rounded-md border border-neutral-200  bg-transparent px-3 py-2 text-ui-body focus:outline-none focus:border-sora-blue"
         />
-        <button type="submit" className="touch-target rounded-md bg-sora-blue hover:bg-sora-blue-hover text-white px-4 py-2 text-ui-body font-semibold cursor-pointer">
+        <Button type="submit" variant="primary" className="px-4 py-2 font-semibold">
           {t("createBtn")}
-        </button>
+        </Button>
       </form>
 
       {/* 知识库列表 */}
       <div className="space-y-3">
         {kbs.length === 0 ? (
-          <p className="text-ui-caption text-neutral-400 py-8 text-center border border-dashed border-neutral-200 dark:border-neutral-800 rounded-lg">{t("empty")}</p>
+          <p className="text-ui-caption text-neutral-400 py-8 text-center border border-dashed border-neutral-200  rounded-lg">{t("empty")}</p>
         ) : (
           kbs.map((kb) => (
-            <div key={kb.id} className="rounded-lg border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#0d0f14] p-4 space-y-3">
+            <div key={kb.id} className="rounded-lg border border-neutral-200  bg-white  p-4 space-y-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="font-semibold text-ui-body text-neutral-900 dark:text-white">{kb.name}</div>
+                  <div className="font-semibold text-ui-body text-neutral-900 ">{kb.name}</div>
                   {kb.description && <div className="text-ui-caption text-neutral-500 mt-0.5">{kb.description}</div>}
                   <div className="text-ui-caption text-neutral-400 mt-1 font-mono">{kb.fileCount} {t("files")}</div>
                 </div>
                 <form action={handleDelete.bind(null, kb.id)}>
-                  <button type="submit" className="touch-target inline-flex items-center justify-center p-1.5 rounded text-neutral-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors cursor-pointer" aria-label={t("delete")}>
+                  <button type="submit" className="touch-target inline-flex items-center justify-center p-1.5 rounded text-neutral-500 hover:text-danger hover:bg-red-50  transition-colors cursor-pointer" aria-label={t("delete")}>
                     <Trash2 className="w-4 h-4" aria-hidden="true" />
                   </button>
                 </form>
@@ -94,13 +95,13 @@ export default async function KnowledgePage() {
               {freeFiles.length > 0 && (
                 <form action={handleAttach} className="flex items-center gap-2">
                   <input type="hidden" name="kbId" value={kb.id} />
-                  <select name="fileId" className="touch-target flex-1 rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-2 py-1.5 text-ui-caption focus:outline-none focus:border-sora-blue cursor-pointer">
+                  <select name="fileId" className="touch-target flex-1 rounded-md border border-neutral-200  bg-transparent px-2 py-1.5 text-ui-caption focus:outline-none focus:border-sora-blue cursor-pointer">
                     <option value="">{t("selectFile")}</option>
                     {freeFiles.map((f: { id: string; filename: string }) => (
                       <option key={f.id} value={f.id}>{f.filename}</option>
                     ))}
                   </select>
-                  <button type="submit" className="touch-target rounded-md border border-neutral-200 dark:border-neutral-800 px-3 py-1.5 text-ui-caption font-semibold hover:bg-neutral-50 dark:hover:bg-neutral-900 cursor-pointer">
+                  <button type="submit" className="touch-target rounded-md border border-neutral-200  px-3 py-1.5 text-ui-caption font-semibold hover:bg-neutral-50  cursor-pointer">
                     {t("attach")}
                   </button>
                 </form>

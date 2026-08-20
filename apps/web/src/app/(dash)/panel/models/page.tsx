@@ -121,7 +121,7 @@ export default async function MyModelsPage({ searchParams }: { searchParams?: Pr
     <div className="space-y-8">
       <PageHeader icon={Boxes} title={tn("models")} desc={t("desc")} />
       {providers.length === 0 ? (
-        <p className="text-ui-body text-amber-600">{t("needProvider")}</p>
+        <p className="text-ui-body text-warning">{t("needProvider")}</p>
       ) : (
         <ModelsManager
           isAdmin={isAdmin}

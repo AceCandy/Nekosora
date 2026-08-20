@@ -59,7 +59,7 @@ export default function ProviderHealthButton({
         size={iconOnly ? "xs" : "sm"}
         disabled={pending}
         onClick={onCheck}
-        className="text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-100"
+        className="text-neutral-500 hover:text-neutral-800  "
         title={t("healthCheckTitle")}
       >
         {pending ? (
@@ -73,7 +73,7 @@ export default function ProviderHealthButton({
         <>
           {display.networkOk === false && (
             <span
-              className="text-ui-caption font-medium text-red-500 dark:text-red-400"
+              className="text-ui-caption font-medium text-danger "
               title={t("networkDown")}
             >
               {t("networkDown")}
@@ -134,15 +134,15 @@ function HealthBadge({
             key={r.index}
             className="px-2 py-1 text-ui-caption flex items-center justify-between gap-2"
           >
-            <span className="text-neutral-500 dark:text-neutral-400 font-mono">
+            <span className="text-neutral-500  font-mono">
               {t("keyResultTitle", { index: r.index })}
             </span>
             <span
               className={clsx(
                 "font-medium",
                 r.ok
-                  ? "text-emerald-600 dark:text-emerald-400"
-                  : "text-red-500 dark:text-red-400",
+                  ? "text-success "
+                  : "text-danger ",
               )}
               title={r.error}
             >

@@ -211,9 +211,9 @@ export default function ModelsManager({
   function renderTable(groupModels: ModelItem[], visibility?: ModelVisibility) {
     const tableReorderable = Boolean(visibility ? groupedReorderAction : reorderAction);
     const table = (
-      <div className="rounded-lg border border-morning-mist dark:border-deep-space bg-nebula-white dark:bg-twilight-obsidian overflow-x-auto transition-colors duration-150">
+      <div className="rounded-lg border border-morning-mist  bg-nebula-white  overflow-x-auto transition-colors duration-150">
         <table className="w-full min-w-[680px] text-ui-body border-collapse text-left">
-          <thead className="bg-neutral-50/70 dark:bg-neutral-900/50 border-b border-morning-mist dark:border-deep-space text-neutral-500 dark:text-neutral-400 font-mono text-ui-caption uppercase">
+          <thead className="bg-neutral-50/70  border-b border-morning-mist  text-neutral-500  font-mono text-ui-caption uppercase">
             <tr>
               {reorderable && <th className="p-3.5 w-8" />}
               <th className="p-3.5 font-medium">{t("colExternalName")}</th>
@@ -223,7 +223,7 @@ export default function ModelsManager({
               <th className="p-3.5 font-medium text-right">{t("colActions")}</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800/60">
+          <tbody className="divide-y divide-neutral-200 ">
             {groupModels.length === 0 ? (
               <tr>
                 <td colSpan={colCount} className="p-10 text-center text-ui-caption text-neutral-500">
@@ -267,7 +267,7 @@ export default function ModelsManager({
                 const expanded = expandedModel === m.id;
                 return (
                   <Fragment key={m.id}>
-                    <tr className="hover:bg-neutral-50/50 dark:hover:bg-neutral-900/10 transition-colors duration-150">
+                    <tr className="hover:bg-neutral-50/50  transition-colors duration-150">
                       <ModelRowCells
                         model={m}
                         catalogOption={catalog.find((opt) => opt.id === m.catalogId)}
@@ -317,7 +317,7 @@ export default function ModelsManager({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <span className="text-ui-caption font-mono text-neutral-500 uppercase tracking-wider">
+        <span className="text-ui-caption font-mono text-neutral-500">
           {t("configuredCount", { count: optimisticModels.length })}
         </span>
         <Button
@@ -334,13 +334,13 @@ export default function ModelsManager({
       {groupedReorderable ? (
         <div className="space-y-6">
           <section className="space-y-2">
-            <h2 className="text-ui-body font-semibold text-neutral-800 dark:text-neutral-200">
+            <h2 className="text-ui-body font-semibold text-neutral-800 ">
               {t("privateGroup")}
             </h2>
             {renderTable(optimisticModels.filter((model) => model.visibility !== "public"), "private")}
           </section>
           <section className="space-y-2">
-            <h2 className="text-ui-body font-semibold text-neutral-800 dark:text-neutral-200">
+            <h2 className="text-ui-body font-semibold text-neutral-800 ">
               {t("publicGroup")}
             </h2>
             {renderTable(optimisticModels.filter((model) => model.visibility === "public"), "public")}
@@ -417,8 +417,8 @@ export default function ModelsManager({
           onClose={() => setDeleteId(null)}
           title={t("deleteModelTitle")}
           message={
-            <div className="flex gap-3 text-ui-body text-neutral-600 dark:text-neutral-400 mt-2">
-              <ShieldAlert className="w-5 h-5 text-red-500 shrink-0" />
+            <div className="flex gap-3 text-ui-body text-neutral-600  mt-2">
+              <ShieldAlert className="w-5 h-5 text-danger shrink-0" />
               <div>
                 {t("deleteModelConfirm", { name: deleting.name })}
                 <p className="text-ui-caption text-neutral-500 mt-1 leading-normal">
@@ -451,8 +451,8 @@ export default function ModelsManager({
           onClose={() => setRouteDeleteId(null)}
           title={t("deleteRouteTitle")}
           message={
-            <div className="flex gap-3 text-ui-body text-neutral-600 dark:text-neutral-400 mt-2">
-              <ShieldAlert className="w-5 h-5 text-red-500 shrink-0" />
+            <div className="flex gap-3 text-ui-body text-neutral-600  mt-2">
+              <ShieldAlert className="w-5 h-5 text-danger shrink-0" />
               <div>
                 {t("deleteRouteConfirm", { name: routeDeleting.providerName })}
                 <p className="text-ui-caption text-neutral-500 mt-1 leading-normal font-mono">
@@ -501,11 +501,11 @@ function ModelRowCells({
     <>
       <td className="p-3.5">
         <div className="flex flex-col gap-0.5 min-w-0">
-          <span className="font-mono text-ui-caption font-semibold text-neutral-800 dark:text-neutral-200 max-w-[16rem] truncate" title={model.name}>
+          <span className="font-mono text-ui-caption font-semibold text-neutral-800  max-w-[16rem] truncate" title={model.name}>
             {model.name}
           </span>
           {model.displayName && model.displayName !== model.name ? (
-            <span className="text-ui-caption text-neutral-500 dark:text-neutral-400 max-w-[16rem] truncate" title={model.displayName}>
+            <span className="text-ui-caption text-neutral-500  max-w-[16rem] truncate" title={model.displayName}>
               {model.displayName}
             </span>
           ) : null}
@@ -526,17 +526,17 @@ function ModelRowCells({
             <CatalogDetailCard catalog={catalogOption} />
           </Popover>
         ) : (
-          <span className="text-neutral-500 dark:text-neutral-400">{model.catalogName}</span>
+          <span className="text-neutral-500 ">{model.catalogName}</span>
         )}
       </td>
       {hasVisibility && (
         <td className="p-3.5 text-ui-caption">
           {visibilityAction ? (
             model.visibility === "public" ? (
-              <form action={visibilityAction.makePrivate} className="inline-flex rounded-md border border-morning-mist dark:border-deep-space overflow-hidden" aria-label={t("visibilityLabel")}>
+              <form action={visibilityAction.makePrivate} className="inline-flex rounded-md border border-morning-mist  overflow-hidden" aria-label={t("visibilityLabel")}>
                 <button
                   type="submit"
-                  className="px-2.5 py-1.5 text-ui-caption font-medium text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sora-blue"
+                  className="px-2.5 py-1.5 text-ui-caption font-medium text-neutral-500 hover:bg-neutral-100   focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sora-blue"
                   title={t("makePrivate")}
                 >
                   {t("visibilityPrivate")}
@@ -546,14 +546,14 @@ function ModelRowCells({
                 </span>
               </form>
             ) : (
-              <div role="group" className="inline-flex rounded-md border border-morning-mist dark:border-deep-space overflow-hidden" aria-label={t("visibilityLabel")}>
-                <span className="px-2.5 py-1.5 text-ui-caption font-semibold bg-neutral-800 text-white dark:bg-neutral-100 dark:text-neutral-900" aria-current="true">
+              <div role="group" className="inline-flex rounded-md border border-morning-mist  overflow-hidden" aria-label={t("visibilityLabel")}>
+                <span className="px-2.5 py-1.5 text-ui-caption font-semibold bg-neutral-800 text-white  " aria-current="true">
                   {t("visibilityPrivate")}
                 </span>
                 <button
                   type="button"
                   onClick={onPublish}
-                  className="px-2.5 py-1.5 text-ui-caption font-medium text-neutral-500 hover:bg-sora-blue/10 hover:text-sora-blue dark:text-neutral-400 dark:hover:bg-sora-blue/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sora-blue"
+                  className="px-2.5 py-1.5 text-ui-caption font-medium text-neutral-500 hover:bg-sora-blue/10 hover:text-sora-blue   focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sora-blue"
                   title={t("publishModel")}
                 >
                   {t("visibilityPublic")}
@@ -577,7 +577,7 @@ function ModelRowCells({
             title={model.enabled ? t("disable") : t("enable")}
             className={clsx(
               "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue/40",
-              model.enabled ? "bg-green-600 dark:bg-green-500" : "bg-neutral-300 dark:bg-neutral-600"
+              model.enabled ? "bg-green-600 " : "bg-neutral-300 "
             )}
           >
             <span
@@ -596,8 +596,8 @@ function ModelRowCells({
           onClick={onToggleExpand}
           className={clsx(
             expanded
-              ? "text-neutral-800 dark:text-white bg-neutral-100 dark:bg-neutral-800"
-              : "text-sora-blue hover:bg-sora-blue/10 dark:hover:bg-sora-blue/10"
+              ? "text-neutral-800  bg-neutral-100 "
+              : "text-sora-blue hover:bg-sora-blue/10 "
           )}
           title={t("configureRoutes")}
         >
@@ -609,7 +609,7 @@ function ModelRowCells({
           variant="ghost"
           size="sm"
           onClick={onEdit}
-          className="text-neutral-750 hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-white"
+          className="text-neutral-700 hover:text-neutral-900  "
           title={t("edit")}
         >
           <Edit2 className="w-3.5 h-3.5" />
@@ -619,7 +619,7 @@ function ModelRowCells({
           variant="ghost"
           size="sm"
           onClick={onDelete}
-          className="text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 hover:text-red-650"
+          className="text-danger hover:bg-red-50  hover:text-danger-hover"
           title={t("delete")}
         >
           <Trash2 className="w-3.5 h-3.5" />
@@ -651,8 +651,8 @@ function RouteExpandRow({
   fetchModelsAction?: FetchModelsAction;
 }) {
   return (
-    <tr className="bg-neutral-50/40 dark:bg-neutral-900/10">
-      <td colSpan={colSpan} className="p-4 border-t border-neutral-100 dark:border-neutral-800/60">
+    <tr className="bg-neutral-50/40 ">
+      <td colSpan={colSpan} className="p-4 border-t border-neutral-100 ">
         <RouteListPanel
           routes={routes}
           onAdd={onAdd}
@@ -727,13 +727,13 @@ function SortableModelRow({
       <tr
         ref={setNodeRef}
         style={style}
-        className="hover:bg-neutral-50/50 dark:hover:bg-neutral-900/10 transition-colors duration-150"
+        className="hover:bg-neutral-50/50  transition-colors duration-150"
       >
         <td className="p-3.5 text-center align-middle">
           <button
             type="button"
             aria-label={t("dragHandle")}
-            className="cursor-grab active:cursor-grabbing inline-flex items-center justify-center text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
+            className="cursor-grab active:cursor-grabbing inline-flex items-center justify-center text-neutral-500 hover:text-neutral-700  "
             {...attributes}
             {...listeners}
           >
@@ -796,10 +796,10 @@ function RouteListPanel({
   // 路由级同步状态:routeId → synced/local-only/unknown。空表示未检查。
   const [syncMap, setSyncMap] = useState<Record<string, SyncStatus>>({});
   return (
-    <div className="space-y-3 p-4 rounded-lg bg-neutral-50/50 dark:bg-neutral-950/20 border border-neutral-200/65 dark:border-neutral-800/80">
+    <div className="space-y-3 p-4 rounded-lg bg-neutral-50/50  border border-neutral-200/65 ">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-ui-caption font-medium text-neutral-500 dark:text-neutral-400">
+          <span className="text-ui-caption font-medium text-neutral-500 ">
             {t("routePanelHint")}
           </span>
           {fetchModelsAction && routes.length > 0 && (
@@ -823,13 +823,13 @@ function RouteListPanel({
       </div>
 
       {routes.length === 0 ? (
-        <p className="text-ui-caption text-neutral-500 py-3 text-center border border-dashed border-neutral-200 dark:border-neutral-800 rounded">
+        <p className="text-ui-caption text-neutral-500 py-3 text-center border border-dashed border-neutral-200  rounded">
           {t("noRoutesHint")}
         </p>
       ) : (
-        <div className="rounded-md border border-morning-mist dark:border-deep-space overflow-x-auto bg-nebula-white dark:bg-twilight-obsidian">
+        <div className="rounded-md border border-morning-mist  overflow-x-auto bg-nebula-white ">
           <table className="w-full min-w-[680px] text-ui-caption text-left">
-            <thead className="bg-neutral-50 dark:bg-neutral-900 text-neutral-500 dark:text-neutral-400 font-mono text-ui-caption uppercase border-b border-morning-mist dark:border-deep-space">
+            <thead className="bg-neutral-50  text-neutral-500  font-mono text-ui-caption uppercase border-b border-morning-mist ">
               <tr>
                 <th className="p-2.5 font-medium">{t("colUpstreamProvider")}</th>
                 <th className="p-2.5 font-medium">{t("colUpstreamModelName")}</th>
@@ -840,14 +840,14 @@ function RouteListPanel({
                 <th className="p-2.5 font-medium text-right">{t("colActions")}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800/60">
+            <tbody className="divide-y divide-neutral-200 ">
               {routes.map((r) => (
                 <tr
                   key={r.id}
-                  className="hover:bg-neutral-50/50 dark:hover:bg-neutral-900/10 transition-colors"
+                  className="hover:bg-neutral-50/50  transition-colors"
                 >
-                  <td className="p-2.5 font-medium text-neutral-850 dark:text-neutral-200">{r.providerName}</td>
-                  <td className="p-2.5 font-mono text-ui-caption text-neutral-500 dark:text-neutral-400">
+                  <td className="p-2.5 font-medium text-neutral-800 ">{r.providerName}</td>
+                  <td className="p-2.5 font-mono text-ui-caption text-neutral-500 ">
                     <span className="inline-flex items-center gap-1.5">
                       {r.upstreamModelName}
                       {r.supportsTools && (
@@ -861,7 +861,7 @@ function RouteListPanel({
                       )}
                     </span>
                   </td>
-                  <td className="p-2.5 font-mono text-ui-caption text-neutral-500 dark:text-neutral-400">
+                  <td className="p-2.5 font-mono text-ui-caption text-neutral-500 ">
                     {r.apiFormat}
                   </td>
                   <td className="p-2.5 text-center font-mono text-ui-caption font-semibold">{r.priority}</td>
@@ -881,7 +881,7 @@ function RouteListPanel({
                       variant="ghost"
                       size="xs"
                       onClick={() => onEdit(r.id)}
-                      className="text-neutral-750 hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-white"
+                      className="text-neutral-700 hover:text-neutral-900  "
                     >
                       <Edit2 className="w-3 h-3" />
                       <span>{t("edit")}</span>
@@ -894,8 +894,8 @@ function RouteListPanel({
                           size="xs"
                           className={clsx(
                             r.enabled
-                              ? "text-amber-600 dark:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/20"
-                              : "text-green-600 dark:text-green-500 hover:bg-green-50 dark:hover:bg-green-950/20"
+                              ? "text-warning  hover:bg-amber-50 "
+                              : "text-success  hover:bg-green-50 "
                           )}
                         >
                           {r.enabled ? (
@@ -916,7 +916,7 @@ function RouteListPanel({
                       variant="ghost"
                       size="xs"
                       onClick={() => onDelete(r.id)}
-                      className="text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 hover:text-red-650"
+                      className="text-danger hover:bg-red-50  hover:text-danger-hover"
                     >
                       {t("delete")}
                     </Button>

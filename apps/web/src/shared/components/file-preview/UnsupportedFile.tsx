@@ -25,16 +25,16 @@ export default function UnsupportedFile({
   const t = useTranslations("filePreview");
   return (
     <div className="flex flex-col items-center justify-center gap-3 p-8 text-center">
-      <FileWarning className="w-10 h-10 text-neutral-300 dark:text-neutral-700" />
+      <FileWarning className="w-10 h-10 text-neutral-300 " />
       <div className="space-y-1">
-        <p className="text-ui-body font-semibold text-neutral-700 dark:text-neutral-300 break-all">
+        <p className="text-ui-body font-semibold text-neutral-700  break-all">
           {filename}
         </p>
         {reason && (
-          <p className="text-ui-caption text-neutral-400 dark:text-neutral-500">{reason}</p>
+          <p className="text-ui-caption text-neutral-400 ">{reason}</p>
         )}
         {mime && (
-          <p className="text-ui-caption font-mono text-neutral-400 dark:text-neutral-600">
+          <p className="text-ui-caption font-mono text-neutral-400 ">
             {mime}
           </p>
         )}
@@ -42,7 +42,7 @@ export default function UnsupportedFile({
       <a
         href={url}
         download={filename}
-        className="inline-flex items-center gap-1.5 rounded-md border border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-900 px-3 py-1.5 text-ui-caption font-semibold text-neutral-600 dark:text-neutral-300 transition-colors"
+        className="inline-flex items-center gap-1.5 rounded-md border border-neutral-200  hover:bg-neutral-50  px-3 py-1.5 text-ui-caption font-semibold text-neutral-600  transition-colors"
       >
         <Download className="w-3.5 h-3.5" />
         <span>{t("downloadFile")}</span>

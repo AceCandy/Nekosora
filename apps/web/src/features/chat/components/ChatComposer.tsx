@@ -1,10 +1,11 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
 import { useTranslations } from "next-intl";
 import { AlertCircle, Cpu, RefreshCw } from "lucide-react";
 import { clsx } from "clsx";
-import { ArtifactPanel, type Artifact } from "@/features/artifacts/ArtifactPanel";
+import dynamic from "next/dynamic";
+import type { Artifact } from "@/features/artifacts/ArtifactPanel";
 import FilePreviewModal, { type PreviewableFile } from "@/shared/components/file-preview/FilePreviewModal";
 import { useChatRuntime } from "@/features/chat/hooks/useChatRuntime";
 import { useChatAttachments } from "@/features/chat/hooks/useChatAttachments";
@@ -25,6 +26,11 @@ import {
 } from "@/features/chat/model/composerState";
 
 export type { ChatMessage, ModelOption, CardOption, KnowledgeBaseOption, OutputModeOption, RenderStyleOption } from "@/features/chat/model/types";
+
+// Artifact 面板是低频功能且携带语法高亮/mermaid 等重依赖,按需加载,不进聊天首包。
+const ArtifactPanel = dynamic(() =>
+  import("@/features/artifacts/ArtifactPanel").then((m) => m.ArtifactPanel),
+);
 
 interface ChatComposerProps {
   models: ModelOption[];
@@ -180,6 +186,28 @@ export default function ChatComposer({
       setActiveConvId(newConversationId);
     },
   });
+  // 以下回调依赖的 runtime 方法均为 useMemo 稳定引用;models 为会话级 props(低频变化)。
+  // 保持回调引用稳定,否则流式期间 runtime.messages 每帧更新会让整棵消息列表的
+  // ChatMessageItem memo 被不稳定 props 击穿,逐帧重渲染。
+  const { regenerate, editAndResend, continueGeneration } = runtime;
+  const handleRegenerate = useCallback(
+    (publicId: string, modelId: string) => {
+      const name = models.find((m) => m.modelId === modelId)?.name ?? modelId;
+      regenerate(publicId, name, modelId);
+    },
+    [models, regenerate],
+  );
+  const handleEditAndResend = useCallback(
+    (publicId: string, newContent: string, attachmentFileIds: string[], modelId: string) => {
+      const name = models.find((m) => m.modelId === modelId)?.name ?? modelId;
+      editAndResend(publicId, newContent, attachmentFileIds, name, modelId);
+    },
+    [models, editAndResend],
+  );
+  const handleContinue = useCallback(
+    (id: string) => continueGeneration(id, modelName, model),
+    [continueGeneration, modelName, model],
+  );
   const sendWithCurrentSnapshot = (
     text: string,
     lifecycle?: { onAccepted?: () => void; onRejected?: (message: string) => void },
@@ -276,9 +304,9 @@ export default function ChatComposer({
     return (
       <div className="flex-1 flex items-center justify-center text-neutral-400 p-8">
         <div className="text-center space-y-2 max-w-sm">
-          <Cpu className="w-8 h-8 mx-auto text-neutral-300 dark:text-neutral-700 animate-pulse" aria-hidden="true" />
+          <Cpu className="w-8 h-8 mx-auto text-neutral-300 " aria-hidden="true" />
           <h3 className="text-ui-body font-semibold">{t("noModels")}</h3>
-          <p className="text-ui-caption text-neutral-450 dark:text-neutral-500 leading-relaxed">
+          <p className="text-ui-caption text-ink-tertiary  leading-relaxed">
             {t("noModelsDesc")}
           </p>
         </div>
@@ -327,9 +355,9 @@ export default function ChatComposer({
   const canShare = !runtime.streaming && runtime.messages.length > 0 && runtime.messages.every((message) => message.publicId);
 
   return (
-    <div className="flex-1 flex h-full bg-nebula-white dark:bg-twilight-obsidian transition-colors duration-250">
+    <div className="flex-1 flex h-full bg-nebula-white  transition-colors duration-250">
       {/* 主区:消息 + 输入(可被 artifact 面板挤压) */}
-      <div className={clsx("relative flex flex-col h-full min-w-0 flex-1", activeArtifact && "lg:flex-[3] lg:border-r lg:border-morning-mist lg:dark:border-deep-space/80")}>
+      <div className={clsx("relative flex flex-col h-full min-w-0 flex-1", activeArtifact && "lg:flex-[3] lg:border-r lg:border-morning-mist ")}>
         <ChatHeader
           title={conversationTitle}
           renderStyleMenu={<RenderStyleMenu {...toolbarProps} />}
@@ -347,18 +375,12 @@ export default function ChatComposer({
           model={model}
           renderStyleClass={activeRenderStyleClass}
           renderStyleRenderer={activeRenderStyleRenderer}
-          onRegenerate={(publicId, modelId) => {
-            const name = models.find((m) => m.modelId === modelId)?.name ?? modelId;
-            runtime.regenerate(publicId, name, modelId);
-          }}
-          onEdit={(publicId, newContent, attachmentFileIds, modelId) => {
-            const name = models.find((m) => m.modelId === modelId)?.name ?? modelId;
-            runtime.editAndResend(publicId, newContent, attachmentFileIds, name, modelId);
-          }}
+          onRegenerate={handleRegenerate}
+          onEdit={handleEditAndResend}
           onSwitchVersion={runtime.switchVersion}
           onOpenArtifact={setActiveArtifact}
           onDelete={runtime.deleteMessage}
-          onContinue={(id) => runtime.continueGeneration(id, modelName, model)}
+          onContinue={handleContinue}
           onFeedbackChange={runtime.setMessageFeedbackLocal}
           models={models}
           onQuote={handleSelectionQuote}
@@ -375,15 +397,30 @@ export default function ChatComposer({
           <div
             ref={composerRef}
             className={clsx(
-              "pointer-events-auto mx-auto w-[calc(100%_-_2rem)] max-w-3xl space-y-2",
+              "pointer-events-auto mx-auto w-[calc(100%_-_2rem)] max-w-[75ch] space-y-2 pb-[env(safe-area-inset-bottom)]",
               !isEmptyConversation && "mb-4",
             )}
           >
             {isEmptyConversation && (
-              <h1 className="mb-6 flex items-center justify-center gap-2 text-center text-ui-heading font-semibold text-space-ink dark:text-nebula-silver">
-                <Image src="/icon.svg" alt="" width={56} height={56} className="brightness-0 dark:invert" priority />
-                {t("welcomeTitle")}
-              </h1>
+              <>
+                {/* 双晖光晕:欢迎区氛围底色(天空蓝+琥珀金,极低透明度径向渐变),仅首屏空会话渲染 */}
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute left-1/2 top-1/2 -z-10 h-[26rem] w-[min(46rem,92vw)] -translate-x-1/2 -translate-y-1/2"
+                  style={{
+                    background:
+                      "radial-gradient(42% 52% at 30% 34%, color-mix(in oklab, var(--color-sora-blue) 7%, transparent), transparent 100%)," +
+                      "radial-gradient(38% 48% at 72% 68%, color-mix(in oklab, var(--color-neku-amber) 6%, transparent), transparent 100%)",
+                  }}
+                />
+                <div className="mb-8 flex flex-col items-center text-center">
+                  <Image src="/icon.svg" alt="" width={72} height={72} className="brightness-0" priority />
+                  <h1 className="mt-5 text-ui-display font-semibold tracking-[-0.02em] text-space-ink [text-wrap:balance]">
+                    {t("welcomeTitle")}
+                  </h1>
+                  <p className="mt-2 text-ui-reading text-ink-secondary">{t("welcomeSubtitle")}</p>
+                </div>
+              </>
             )}
             <ChatInputBox
               value={input}
@@ -400,19 +437,19 @@ export default function ChatComposer({
                 <>
                   <ChatToolbar {...toolbarProps} />
                   {sendError && (
-                    <p role="alert" className="flex items-center gap-1.5 px-3 pb-1 text-ui-caption text-red-600 dark:text-red-400">
+                    <p role="alert" className="flex items-center gap-1.5 px-3 pb-1 text-ui-caption text-danger ">
                       <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                       <span>{sendError}</span>
                     </p>
                   )}
                   {composer.syncStatus === "error" && (
-                    <div role="alert" className="flex items-center gap-1.5 px-3 pb-1 text-ui-caption text-red-600 dark:text-red-400">
+                    <div role="alert" className="flex items-center gap-1.5 px-3 pb-1 text-ui-caption text-danger ">
                       <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                       <span className="min-w-0 flex-1">{t("composerSyncFailed")}</span>
                       <button
                         type="button"
                         onClick={composer.retry}
-                        className="touch-target inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 font-medium transition-colors duration-150 hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:hover:bg-red-950/30"
+                        className="touch-target inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 font-medium transition-colors duration-150 hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue "
                       >
                         <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
                         <span>{t("retry")}</span>
@@ -424,12 +461,27 @@ export default function ChatComposer({
               leadingControl={<ComposerPlusMenu {...toolbarProps} />}
               trailingControl={<ModelControlMenu {...toolbarProps} />}
             />
+            {/* 建议提示词:空会话的教学式入口,点击填充输入框(不直接发送,交给用户确认) */}
+            {isEmptyConversation && (
+              <div className="flex flex-wrap items-center justify-center gap-2 pt-3">
+                {(["suggestExplain", "suggestWrite", "suggestCode"] as const).map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setInput(t(key))}
+                    className="rounded-full border border-morning-mist bg-white px-3.5 py-1.5 text-ui-caption text-ink-secondary transition-colors hover:border-sora-blue/40 hover:bg-sora-blue/[0.04] hover:text-sora-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
+                  >
+                    {t(key)}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
-      {/* Artifact 面板(右侧,可关闭) */}
+      {/* Artifact 面板:桌面右侧并排(可关闭);小屏改为全屏覆盖,避免功能静默失效 */}
       {activeArtifact && (
-        <div className="hidden lg:flex lg:flex-[2] h-full">
+        <div className="fixed inset-0 z-40 flex h-full bg-nebula-white lg:static lg:z-auto lg:flex-[2]">
           <ArtifactPanel
             artifact={activeArtifact}
             onClose={() => setActiveArtifact(null)}

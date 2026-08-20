@@ -324,7 +324,7 @@ function inlineMarkdown(str: string): string {
       if (!safeSrc) return protect(escapeHtml(alt));
       const escapedSrc = escapeHtmlAttribute(safeSrc);
       return protect(
-        `<img src="${escapeHtmlAttribute(getProxiedMarkdownImageUrl(safeSrc))}" alt="${escapeHtmlAttribute(alt)}" data-markdown-image-url="${escapedSrc}" role="button" tabindex="0" loading="lazy" decoding="async" class="my-2 block max-w-full cursor-zoom-in rounded-lg border border-morning-mist outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:border-deep-space/80" />`,
+        `<img src="${escapeHtmlAttribute(getProxiedMarkdownImageUrl(safeSrc))}" alt="${escapeHtmlAttribute(alt)}" data-markdown-image-url="${escapedSrc}" role="button" tabindex="0" loading="lazy" decoding="async" class="my-2 block max-w-full cursor-zoom-in rounded-lg border border-morning-mist outline-none focus-visible:ring-2 focus-visible:ring-sora-blue " />`,
       );
     })
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label: string, href: string) => {

@@ -52,7 +52,7 @@ export default async function ImageLayout({ children }: { children: React.ReactN
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-nebula-white text-space-ink dark:bg-twilight-obsidian dark:text-nebula-silver transition-colors duration-200">
+    <div className="flex h-screen overflow-hidden bg-nebula-white text-space-ink   transition-colors duration-200">
       <Sidebar
         userName={user.name}
         userEmail={user.email}

@@ -32,6 +32,9 @@ export const jetbrainsMono = localFont({
  * Noto Sans SC（简体中文）—— subset 常用字 + CJK 全范围 + 标点符号。
  * 用于 Inter 不覆盖的中文字符回退。
  * 400 Regular / 500 Medium / 600 SemiBold
+ *
+ * 单字重近 1.9MB,三字重共 ~5.6MB。默认 preload 会让三个字重在首屏并发抢带宽,
+ * 故关闭 preload:首屏中文先以系统中文字体(display:swap)渲染,字体按需加载后自动升级。
  */
 export const notoSansSC = localFont({
   src: [
@@ -41,4 +44,5 @@ export const notoSansSC = localFont({
   ],
   variable: "--font-cjk",
   display: "swap",
+  preload: false,
 });

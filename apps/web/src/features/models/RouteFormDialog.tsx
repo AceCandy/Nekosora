@@ -43,7 +43,7 @@ interface RouteFormDialogProps {
 }
 
 const inputCls =
-  "mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-ui-body dark:border-neutral-700 dark:bg-neutral-900";
+  "mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-ui-body  ";
 
 /**
  * 路由(模型 → Provider)新增/编辑弹窗。
@@ -246,13 +246,13 @@ export default function RouteFormDialog({
           <button
             type="button"
             onClick={handleClose}
-            className="rounded-md border border-neutral-300 px-4 py-2 text-ui-body hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+            className="rounded-md border border-neutral-300 px-4 py-2 text-ui-body hover:bg-neutral-100  "
           >
             {t("cancel")}
           </button>
           <button
             type="submit"
-            className="rounded-md bg-neutral-900 px-4 py-2 text-ui-body font-medium text-white hover:bg-neutral-700 dark:bg-white dark:text-black"
+            className="rounded-md bg-neutral-900 px-4 py-2 text-ui-body font-medium text-white hover:bg-neutral-700  "
           >
             {isEdit ? t("save") : t("create")}
           </button>

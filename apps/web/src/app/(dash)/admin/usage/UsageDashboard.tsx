@@ -12,10 +12,10 @@ import type { TimeSeriesPoint, ModelRow, SourceRow } from "./UsageCharts";
 
 function MetricCard({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] p-4 shadow-none">
-      <div className="text-ui-caption uppercase tracking-wider text-neutral-400 dark:text-neutral-500 font-semibold">{label}</div>
-      <div className="mt-1.5 text-ui-subheading font-bold font-mono text-neutral-900 dark:text-white">{value}</div>
-      {hint && <div className="mt-0.5 text-ui-caption text-neutral-400 dark:text-neutral-500">{hint}</div>}
+    <div className="rounded-lg border border-neutral-200 bg-white   p-4 shadow-none">
+      <div className="text-ui-caption text-neutral-400  font-semibold">{label}</div>
+      <div className="mt-1.5 text-ui-subheading font-bold font-mono text-neutral-900 ">{value}</div>
+      {hint && <div className="mt-0.5 text-ui-caption text-neutral-400 ">{hint}</div>}
     </div>
   );
 }
@@ -41,8 +41,8 @@ export function UsageDashboard({
 
       {/* 图表网格 */}
       <div className="space-y-4">
-        <div className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] p-5 shadow-none">
-          <h3 className="text-ui-body font-semibold text-neutral-700 dark:text-neutral-200 mb-4">{t("chartTokensTrend")}</h3>
+        <div className="rounded-lg border border-neutral-200 bg-white   p-5 shadow-none">
+          <h3 className="text-ui-body font-semibold text-neutral-700  mb-4">{t("chartTokensTrend")}</h3>
           {series.length === 0 ? (
             <div className="h-[260px] flex items-center justify-center text-ui-caption text-neutral-400">{t("chartEmptyRange")}</div>
           ) : (
@@ -51,16 +51,16 @@ export function UsageDashboard({
         </div>
 
         <div className="grid md:grid-cols-2 gap-4">
-          <div className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] p-5 shadow-none">
-            <h3 className="text-ui-body font-semibold text-neutral-700 dark:text-neutral-200 mb-4">{t("chartModelTokens")}</h3>
+          <div className="rounded-lg border border-neutral-200 bg-white   p-5 shadow-none">
+            <h3 className="text-ui-body font-semibold text-neutral-700  mb-4">{t("chartModelTokens")}</h3>
             {byModel.length === 0 ? (
               <div className="h-[260px] flex items-center justify-center text-ui-caption text-neutral-400">{t("chartEmpty")}</div>
             ) : (
               <ModelTokensChart data={byModel} />
             )}
           </div>
-          <div className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] p-5 shadow-none">
-            <h3 className="text-ui-body font-semibold text-neutral-700 dark:text-neutral-200 mb-4">{t("chartCallsDistribution")}</h3>
+          <div className="rounded-lg border border-neutral-200 bg-white   p-5 shadow-none">
+            <h3 className="text-ui-body font-semibold text-neutral-700  mb-4">{t("chartCallsDistribution")}</h3>
             {byModel.length === 0 ? (
               <div className="h-[260px] flex items-center justify-center text-ui-caption text-neutral-400">{t("chartEmpty")}</div>
             ) : (
@@ -69,8 +69,8 @@ export function UsageDashboard({
           </div>
         </div>
 
-        <div className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] p-5 shadow-none">
-          <h3 className="text-ui-body font-semibold text-neutral-700 dark:text-neutral-200 mb-4">{t("chartSourceDistribution")}</h3>
+        <div className="rounded-lg border border-neutral-200 bg-white   p-5 shadow-none">
+          <h3 className="text-ui-body font-semibold text-neutral-700  mb-4">{t("chartSourceDistribution")}</h3>
           {bySource.length === 0 ? (
             <div className="h-[180px] flex items-center justify-center text-ui-caption text-neutral-400">{t("chartEmpty")}</div>
           ) : (

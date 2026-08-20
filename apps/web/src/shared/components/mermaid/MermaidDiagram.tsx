@@ -7,8 +7,7 @@ import { useTranslations } from "next-intl";
 /** 与全局正文一致的字体栈,让图内文字融入排版。 */
 const FONT_STACK = `ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
 
-// 冷调品牌配色,对齐「暮色微澜黑与星云纯白」:蓝灰为主、不用暖色。
-// 亮/暗两套,跟随系统主题切换重渲。
+// 冷调品牌配色,对齐「星云纯白」单亮色体系:蓝灰为主、不用暖色。
 const LIGHT_VARS = {
   primaryColor: "#eef4fc",
   primaryBorderColor: "#9bbde8",
@@ -20,25 +19,14 @@ const LIGHT_VARS = {
   lineColor: "#7d93b4",
   textColor: "#28384f",
 };
-const DARK_VARS = {
-  primaryColor: "#22324a",
-  primaryBorderColor: "#3f5a86",
-  primaryTextColor: "#dfe8f5",
-  secondaryColor: "#2c2444",
-  secondaryBorderColor: "#4a3f72",
-  tertiaryColor: "#1e3340",
-  tertiaryBorderColor: "#2f6473",
-  lineColor: "#8aa0c4",
-  textColor: "#dfe8f5",
-};
 
 /**
  * Mermaid 图渲染器:动态载入 mermaid,异步 render 成 SVG。
  *
  * 被右侧 Artifact 面板与消息正文内联 mermaid 块共用(避免两处重复维护)。
- * theme="base" + 冷调 themeVariables + look="neo"(圆角现代观感);
- * 跟随系统明暗在两套配色间切换,主题变化时重渲。content 非法(如被转义的坏语法)
- * 时显示渲染失败提示,而非抛错崩溃。id 需调用方保证唯一,避免 mermaid DOM 节点 id 冲突。
+ * theme="base" + 冷调 themeVariables + look="neo"(圆角现代观感)。
+ * content 非法(如被转义的坏语法)时显示渲染失败提示,而非抛错崩溃。
+ * id 需调用方保证唯一,避免 mermaid DOM 节点 id 冲突。
  */
 export interface MermaidDiagramProps {
   id: string;
@@ -53,18 +41,6 @@ export function MermaidDiagram({ id, content, className, preserveContentScale = 
   const containerRef = useRef<HTMLDivElement>(null);
   const [svg, setSvg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isDark, setIsDark] = useState(() =>
-    typeof document !== "undefined" ? document.documentElement.classList.contains("dark") : false,
-  );
-
-  // 监听主题切换,用对应配色重渲。
-  useEffect(() => {
-    const el = document.documentElement;
-    const sync = () => setIsDark(el.classList.contains("dark"));
-    const obs = new MutationObserver(sync);
-    obs.observe(el, { attributes: true, attributeFilter: ["class"] });
-    return () => obs.disconnect();
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -79,7 +55,7 @@ export function MermaidDiagram({ id, content, className, preserveContentScale = 
           look: "neo",
           theme: "base",
           themeVariables: {
-            ...(isDark ? DARK_VARS : LIGHT_VARS),
+            ...LIGHT_VARS,
             fontFamily: FONT_STACK,
             fontSize: "14px",
           },
@@ -92,7 +68,7 @@ export function MermaidDiagram({ id, content, className, preserveContentScale = 
       }
     })();
     return () => { cancelled = true; };
-  }, [id, content, isDark]);
+  }, [id, content]);
 
   useLayoutEffect(() => {
     if (!preserveContentScale || !svg) return;
@@ -109,7 +85,7 @@ export function MermaidDiagram({ id, content, className, preserveContentScale = 
     element.style.setProperty("flex-shrink", "0", "important");
   }, [preserveContentScale, svg]);
 
-  if (error) return <div className="text-ui-caption text-neutral-450 dark:text-neutral-500 p-3">{t("mermaidFailed")} {error}</div>;
-  if (!svg) return <div className="text-ui-caption text-neutral-450 dark:text-neutral-500 animate-pulse">{t("rendering")}</div>;
+  if (error) return <div className="text-ui-caption text-ink-tertiary  p-3">{t("mermaidFailed")} {error}</div>;
+  if (!svg) return <div className="text-ui-caption text-ink-tertiary  animate-pulse">{t("rendering")}</div>;
   return <div ref={containerRef} className={clsx("flex items-center justify-center min-h-full", className)} dangerouslySetInnerHTML={{ __html: svg }} />;
 }

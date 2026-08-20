@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Button } from "@/shared/ui/Button";
 
 interface BackgroundModelOption {
   id: string;
@@ -37,9 +38,9 @@ export default function BackgroundModelConfigForm({
   return (
     <form
       action={action}
-      className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] p-5 space-y-3"
+      className="rounded-lg border border-neutral-200 bg-white   p-5 space-y-3"
     >
-      <h3 className="text-ui-body font-bold text-neutral-800 dark:text-white">{title}</h3>
+      <h3 className="text-ui-body font-bold text-neutral-800 ">{title}</h3>
       <div className="space-y-1">
         <label htmlFor={id} className="text-ui-caption font-medium text-neutral-500">
           {modelLabel}
@@ -49,7 +50,7 @@ export default function BackgroundModelConfigForm({
           name="model_id"
           value={modelId}
           onChange={(event) => setModelId(event.target.value)}
-          className="w-full rounded-md border border-neutral-200 bg-transparent px-3 py-2 text-ui-body dark:border-neutral-800"
+          className="w-full rounded-md border border-neutral-200 bg-transparent px-3 py-2 text-ui-body "
         >
           <option value="">{autoLabel}</option>
           {models.map((model) => (
@@ -60,12 +61,13 @@ export default function BackgroundModelConfigForm({
         </select>
         <p className="text-ui-caption text-neutral-400">{hint}</p>
       </div>
-      <button
+      <Button
         type="submit"
-        className="rounded-md bg-sora-blue hover:bg-sora-blue-hover text-white px-4 py-2 text-ui-body font-semibold cursor-pointer"
+        variant="primary"
+        className="px-4 py-2 font-semibold"
       >
         {saveLabel}
-      </button>
+      </Button>
     </form>
   );
 }

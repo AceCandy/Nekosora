@@ -41,8 +41,8 @@ export function MessageImageAttachments({
               className={clsx(
                 "group/image relative min-w-0 overflow-hidden rounded-lg",
                 single
-                  ? failed && "aspect-[4/3] bg-black/5 dark:bg-white/5"
-                  : "aspect-square bg-black/5 dark:bg-white/5",
+                  ? failed && "aspect-[4/3] bg-black/5 "
+                  : "aspect-square bg-black/5 ",
               )}
             >
               <button
@@ -55,7 +55,7 @@ export function MessageImageAttachments({
                 aria-label={`${t("attachPreview")}: ${attachment.filename}`}
               >
                 {failed ? (
-                  <span className="flex h-full w-full flex-col items-center justify-center gap-1.5 px-3 text-center text-ui-caption text-neutral-500 dark:text-neutral-400">
+                  <span className="flex h-full w-full flex-col items-center justify-center gap-1.5 px-3 text-center text-ui-caption text-neutral-500 ">
                     <ImageOff className="h-5 w-5" aria-hidden="true" />
                     <span>{t("attachmentLoadFailed")}</span>
                   </span>

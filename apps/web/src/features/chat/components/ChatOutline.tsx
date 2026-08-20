@@ -51,6 +51,8 @@ export function ChatOutline({ messages, streaming }: ChatOutlineProps) {
   const scrubIdxRef = useRef<number | null>(null);
   const navRef = useRef<HTMLElement>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 圆点右缘到视口右侧放不下面板(16rem+页边距)时,桌面也改为向左弹出(同手机的覆盖式)。
+  const [flipLeft, setFlipLeft] = useState(false);
 
   // currentAnchorId 形如 "msg-N":解析出 msg index,用于高亮当前所在轮次
   const anchorIndex = (() => {
@@ -76,8 +78,15 @@ export function ChatOutline({ messages, streaming }: ChatOutlineProps) {
     scrollToMessage(`msg-${userIndex}`, { behavior: "smooth" });
   };
 
+  const decideFlip = () => {
+    const nav = navRef.current;
+    if (!nav) return;
+    setFlipLeft(window.innerWidth - nav.getBoundingClientRect().right < 280);
+  };
+
   const onEnter = () => {
     if (closeTimer.current) clearTimeout(closeTimer.current);
+    decideFlip();
     setOpen(true);
   };
   const onLeave = () => {
@@ -113,7 +122,8 @@ export function ChatOutline({ messages, streaming }: ChatOutlineProps) {
   };
 
   return (
-    // 桌面将入口锚定在正文最大宽度右缘,面板向右填满剩余空间;手机保留紧凑浮层。
+    // 桌面将入口锚定在正文最大宽度右缘,面板向右填满剩余空间;右侧空间不足(窗口过窄)
+    // 时 decideFlip 把面板改为向左弹出;手机保留紧凑浮层。
     <div
       className="absolute top-1/2 right-0 z-10 flex -translate-y-1/2 items-center lg:left-[calc(50%_+_24rem)] lg:right-3"
       onMouseEnter={onEnter}
@@ -121,7 +131,12 @@ export function ChatOutline({ messages, streaming }: ChatOutlineProps) {
     >
       {/* 完整轮次列表:桌面 hover 或 手机 scrub 时展开;手机拖动时列表项高亮跟随 scrubIdx */}
       {open && (
-        <div className="mr-1 max-h-[60vh] w-64 max-w-[80vw] overflow-y-auto rounded-lg border border-morning-mist bg-white p-2 shadow-lg dark:border-deep-space/80 dark:bg-space-ink lg:order-2 lg:ml-1 lg:mr-0 lg:min-w-0 lg:flex-1 lg:w-auto lg:max-w-none">
+        <div className={clsx(
+          "mr-1 max-h-[60vh] w-64 max-w-[80vw] overflow-y-auto rounded-lg border border-morning-mist bg-white p-2 shadow-lg",
+          flipLeft
+            ? "lg:order-1 lg:absolute lg:right-full lg:top-1/2 lg:mr-1 lg:w-64 lg:max-w-none lg:-translate-y-1/2"
+            : "lg:order-2 lg:ml-1 lg:mr-0 lg:min-w-0 lg:flex-1 lg:w-auto lg:max-w-none",
+        )}>
           <ul className="space-y-0.5">
             {turns.map((turn, i) => (
               <li key={turn.userIndex}>
@@ -131,13 +146,13 @@ export function ChatOutline({ messages, streaming }: ChatOutlineProps) {
                   className={clsx(
                     "w-full truncate whitespace-nowrap rounded-md px-2 py-1.5 text-left text-ui-caption transition-colors",
                     i === scrubIdx
-                      ? "bg-sora-blue/20 text-neutral-800 dark:text-white font-medium"
+                      ? "bg-sora-blue/20 text-neutral-800  font-medium"
                       : i === activeTurnIdx
-                        ? "bg-sora-blue/[0.10] text-neutral-800 dark:text-white font-medium"
-                        : "text-neutral-600 dark:text-neutral-300 hover:bg-sora-blue/[0.06] dark:hover:bg-sora-blue/[0.08]",
+                        ? "bg-sora-blue/[0.10] text-neutral-800  font-medium"
+                        : "text-neutral-600  hover:bg-sora-blue/[0.06] ",
                   )}
                 >
-                  <span className="text-neutral-400 dark:text-neutral-500 mr-1.5 tabular-nums">{i + 1}.</span>
+                  <span className="text-neutral-400  mr-1.5 tabular-nums">{i + 1}.</span>
                   {turn.preview || "(空消息)"}
                 </button>
               </li>
@@ -171,7 +186,7 @@ export function ChatOutline({ messages, streaming }: ChatOutlineProps) {
                     ? "w-2 h-2 bg-sora-blue"
                     : open
                       ? "w-1.5 h-1.5 bg-sora-blue/50"
-                      : "w-1.5 h-1.5 bg-neutral-300 dark:bg-neutral-600",
+                      : "w-1.5 h-1.5 bg-neutral-300 ",
               )}
             />
           );

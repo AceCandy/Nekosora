@@ -114,18 +114,18 @@ export function Combobox({
             disabled={disabled}
             onClick={onTriggerClick}
             className={clsx(
-              "flex w-full items-center justify-between gap-1.5 px-2.5 py-1.5 text-ui-caption rounded-md border bg-white dark:bg-[#12141a]",
-              "border-neutral-200 dark:border-neutral-800 text-neutral-700 dark:text-neutral-300",
-              "hover:border-neutral-300 dark:hover:border-neutral-700 transition-colors",
+              "flex w-full items-center justify-between gap-1.5 px-2.5 py-1.5 text-ui-caption rounded-md border bg-white ",
+              "border-neutral-200  text-neutral-700 ",
+              "hover:border-neutral-300  transition-colors",
               disabled && "opacity-50 cursor-not-allowed",
               triggerClassName,
             )}
             aria-label={ariaLabel}
           >
-            <span className={clsx("truncate", !label && "text-neutral-400")}>{label || placeholder}</span>
+            <span className={clsx("truncate", !label && "text-ink-tertiary")}>{label || placeholder}</span>
             <ChevronDown
               className={clsx(
-                "size-3.5 text-neutral-400 shrink-0 transition-opacity",
+                "size-3.5 text-ink-tertiary shrink-0 transition-opacity",
                 showClear && "group-hover:opacity-0",
               )}
             />
@@ -135,20 +135,20 @@ export function Combobox({
       >
         <div className="p-1.5 space-y-1">
           <div className="relative">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-neutral-400" />
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-ink-tertiary" />
             <input
               autoFocus
               value={q}
               onChange={(e) => onQueryChange(e.target.value)}
               placeholder={searchPlaceholder}
               aria-label={searchPlaceholder}
-              className="w-full pl-6 pr-2 py-1 text-ui-caption rounded border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#12141a] text-neutral-700 dark:text-neutral-300 focus:outline-none focus:ring-1 focus:ring-sora-blue/40"
+              className="w-full pl-6 pr-2 py-1 text-ui-caption rounded border border-neutral-200  bg-white  text-neutral-700  focus:outline-none focus:ring-1 focus:ring-sora-blue/40"
             />
           </div>
           <div className="max-h-56 overflow-y-auto">
-            {loading && <div className="px-2 py-1.5 text-ui-caption text-neutral-400">…</div>}
+            {loading && <div className="px-2 py-1.5 text-ui-caption text-ink-tertiary">…</div>}
             {!loading && options.length === 0 && (
-              <div className="px-2 py-1.5 text-ui-caption text-neutral-400">{emptyText}</div>
+              <div className="px-2 py-1.5 text-ui-caption text-ink-tertiary">{emptyText}</div>
             )}
             {!loading &&
               options.map((o) => (
@@ -160,11 +160,11 @@ export function Combobox({
                     "w-full text-left px-2 py-1.5 text-ui-caption rounded transition-colors",
                     o.id === value
                       ? "bg-sora-blue/[0.06] text-sora-blue"
-                      : "text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900",
+                      : "text-neutral-700  hover:bg-neutral-50 ",
                   )}
                 >
                   <span className="block truncate">{o.label}</span>
-                  {o.sub && <span className="block text-ui-caption text-neutral-400 truncate">{o.sub}</span>}
+                  {o.sub && <span className="block text-ui-caption text-ink-tertiary truncate">{o.sub}</span>}
                 </button>
               ))}
           </div>
@@ -179,7 +179,7 @@ export function Combobox({
             e.stopPropagation();
             onChange("", "");
           }}
-          className="absolute right-2.5 top-1/2 -translate-y-1/2 z-30 flex size-4 items-center justify-center rounded-sm text-neutral-400 opacity-0 transition-opacity hover:bg-neutral-100 hover:text-neutral-700 group-hover:opacity-100 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+          className="absolute right-2.5 top-1/2 -translate-y-1/2 z-30 flex size-4 items-center justify-center rounded-sm text-ink-tertiary opacity-0 transition-opacity hover:bg-neutral-100 hover:text-neutral-700 group-hover:opacity-100 [@media(pointer:coarse)]:opacity-100  "
           aria-label="清除"
         >
           <X className="size-3" />

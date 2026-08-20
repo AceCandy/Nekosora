@@ -4,6 +4,7 @@ import React, {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -11,6 +12,9 @@ import React, {
 import { createPortal } from "react-dom";
 import { clsx } from "clsx";
 import { useClickOutside } from "@/shared/lib/useClickOutside";
+
+// 模块级栈：嵌套 Popover（菜单套浮层）时 Esc 只关最上层。
+const popoverStack: symbol[] = [];
 
 export interface PopoverProps {
   /** 受控显隐状态:click 模式由外部持有;openOnHover 模式可省略(内部 hovered 控制)。 */
@@ -111,6 +115,30 @@ export function Popover({
   // 那层遮罩会整页盖住,体感像「还罩着一个框」,且在 transform 祖先内会失效。
   useClickOutside([wrapperRef, panelRef], close, effectiveOpen && !openOnHover);
 
+  // Esc 关闭 + 焦点返还触发器。嵌套场景(菜单套浮层)用模块级栈保证只有最上层响应。
+  useEffect(() => {
+    if (!effectiveOpen) return;
+    const id = Symbol("popover");
+    popoverStack.push(id);
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (popoverStack[popoverStack.length - 1] !== id) return;
+      e.stopPropagation();
+      close();
+      // 焦点还给触发器,避免 Esc 后焦点丢失到 body。
+      const trigger = wrapperRef.current?.querySelector<HTMLElement>(
+        "button, a[href], input, [tabindex]",
+      );
+      trigger?.focus();
+    };
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown, true);
+      const idx = popoverStack.indexOf(id);
+      if (idx !== -1) popoverStack.splice(idx, 1);
+    };
+  }, [effectiveOpen, close]);
+
   // fixed 定位:面板相对视口,按 align/side 贴齐 trigger(wrapper),并 clamp 到视口内。
   // scroll/resize/面板尺寸变化时重算,使面板跟随 trigger 滚动且不被 overflow 裁剪。
   // 直接写 panel.style(命令式),避免 effect 内 setState 触发级联重渲染。
@@ -173,7 +201,7 @@ export function Popover({
       onMouseLeave={openOnHover ? onLeave : undefined}
       style={{ visibility: "hidden" }}
       className={clsx(
-        "fixed rounded-md border border-morning-mist dark:border-deep-space bg-white dark:bg-space-ink shadow-lg p-1",
+        "fixed rounded-md border border-morning-mist  bg-white  shadow-lg p-1",
         panelZ,
         panelClassName,
       )}

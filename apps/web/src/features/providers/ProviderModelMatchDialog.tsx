@@ -59,15 +59,15 @@ export default function ProviderModelMatchDialog({
       open={open}
       onClose={onClose}
       title={t("modelMatchTitle")}
-      dialogClassName="m-auto w-[min(560px,92vw)] rounded-lg border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/40 dark:border-deep-space dark:bg-twilight-obsidian dark:text-nebula-silver"
+      dialogClassName="m-auto w-[min(560px,92vw)] rounded-lg border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/40   "
     >
       <div className="space-y-4">
-        <p className="text-ui-body leading-6 text-neutral-600 dark:text-neutral-300">
+        <p className="text-ui-body leading-6 text-neutral-600 ">
           {t("modelMatchDescription", { name: upstreamModelName })}
         </p>
 
         {visibleCandidates.length > 0 ? (
-          <div className="max-h-72 overflow-y-auto rounded-md border border-morning-mist dark:border-deep-space divide-y divide-neutral-200 dark:divide-neutral-800">
+          <div className="max-h-72 overflow-y-auto rounded-md border border-morning-mist  divide-y divide-neutral-200 ">
             {visibleCandidates.map((candidate) => {
               const pending = pendingModelId === candidate.id;
               return (
@@ -76,14 +76,14 @@ export default function ProviderModelMatchDialog({
                   type="button"
                   disabled={pendingModelId !== null}
                   onClick={() => onSelect(candidate)}
-                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors duration-150 hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sora-blue disabled:cursor-not-allowed disabled:opacity-60 dark:hover:bg-neutral-900/40"
+                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors duration-150 hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sora-blue disabled:cursor-not-allowed disabled:opacity-60 "
                 >
                   <GitBranchPlus className="h-4 w-4 shrink-0 text-neutral-400" aria-hidden="true" />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate font-mono text-ui-caption font-semibold text-neutral-800 dark:text-neutral-200">
+                    <span className="block truncate font-mono text-ui-caption font-semibold text-neutral-800 ">
                       {candidate.name}
                     </span>
-                    <span className="block truncate text-ui-caption text-neutral-500 dark:text-neutral-400">
+                    <span className="block truncate text-ui-caption text-neutral-500 ">
                       {candidate.displayName && candidate.displayName !== candidate.name
                         ? `${candidate.displayName} · ${candidate.catalogName}`
                         : candidate.catalogName}
@@ -92,11 +92,11 @@ export default function ProviderModelMatchDialog({
                   {pending ? (
                     <Loader2 className="h-4 w-4 shrink-0 animate-spin text-sora-blue" aria-hidden="true" />
                   ) : candidate.routeExists ? (
-                    <span className="shrink-0 text-ui-caption font-medium text-emerald-700 dark:text-emerald-300">
+                    <span className="shrink-0 text-ui-caption font-medium text-emerald-700 ">
                       {t("modelRouteExists")}
                     </span>
                   ) : (
-                    <span className="shrink-0 text-ui-caption text-neutral-500 dark:text-neutral-400">
+                    <span className="shrink-0 text-ui-caption text-neutral-500 ">
                       {t("modelRouteCanAdd")}
                     </span>
                   )}
@@ -105,7 +105,7 @@ export default function ProviderModelMatchDialog({
             })}
           </div>
         ) : (
-          <p className="rounded-md bg-neutral-50 px-3 py-2.5 text-ui-body text-neutral-600 dark:bg-neutral-900/40 dark:text-neutral-300">
+          <p className="rounded-md bg-neutral-50 px-3 py-2.5 text-ui-body text-neutral-600  ">
             {t("modelMatchEmpty")}
           </p>
         )}
@@ -115,8 +115,8 @@ export default function ProviderModelMatchDialog({
             role="status"
             className={`flex items-start gap-2 rounded-md px-3 py-2.5 text-ui-body ${
               feedback?.status === "error"
-                ? "bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300"
-                : "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"
+                ? "bg-red-50 text-red-700  "
+                : "bg-emerald-50 text-emerald-700  "
             }`}
           >
             {feedback?.status === "error" ? (

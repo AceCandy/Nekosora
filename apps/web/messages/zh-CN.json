@@ -84,6 +84,10 @@
   },
   "chat": {
     "welcomeTitle": "Nekusora",
+    "welcomeSubtitle": "星枢天流，从第一段对话开始",
+    "suggestExplain": "用简单的语言解释「上下文窗口」",
+    "suggestWrite": "帮我起草一封礼貌的请假邮件",
+    "suggestCode": "用 Python 写一个斐波那契函数",
     "renderFailed": "该内容渲染失败",
     "retry": "重试",
     "composerSyncFailed": "输入区设置未同步",
@@ -169,6 +173,7 @@
     "renameFailed": "重命名失败，请重试",
     "moreActions": "更多操作",
     "generating": "生成中",
+    "generationDone": "回复生成完成",
     "deleteConfirm": "确定删除此对话？此操作不可撤销。",
     "totalTokens": "累计 {count} tokens",
     "processTrace": "研究过程",

@@ -242,10 +242,10 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
                   }}
                   disabled={noKey}
                   className={clsx(
-                    "absolute left-3 top-0 z-10 inline-flex max-w-[calc(100%_-_4rem)] -translate-y-1/2 items-center bg-white px-1 text-ui-caption leading-4 transition-colors dark:bg-space-ink",
+                    "absolute left-3 top-0 z-10 inline-flex max-w-[calc(100%_-_4rem)] -translate-y-1/2 items-center bg-white px-1 text-ui-caption leading-4 transition-colors ",
                     row.note
-                      ? "font-medium text-neutral-600 hover:text-sora-blue dark:text-neutral-300 dark:hover:text-sora-blue"
-                      : "text-neutral-400 hover:text-sora-blue dark:text-neutral-500 dark:hover:text-sora-blue",
+                      ? "font-medium text-neutral-600 hover:text-sora-blue  "
+                      : "text-neutral-400 hover:text-sora-blue  ",
                   )}
                   title={row.note || t("keyNoteTitle")}
                   aria-label={t("keyNoteTitle")}
@@ -255,7 +255,7 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
                 <button
                   type="button"
                   onClick={() => toggleReveal(i)}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-250 p-0.5 rounded transition-colors"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600  p-0.5 rounded transition-colors"
                   aria-label={revealed[i] ? t("hideKeyAria") : t("showKeyAria")}
                   title={revealed[i] ? t("hideKey") : t("showKey")}
                 >
@@ -264,7 +264,7 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
               </div>
               <input type="hidden" name="keys[].note" value={row.note} />
               <div className="flex items-center gap-1.5 shrink-0">
-                <span className="text-ui-caption font-semibold text-neutral-500 dark:text-neutral-400">{t("weight")}</span>
+                <span className="text-ui-caption font-semibold text-neutral-500 ">{t("weight")}</span>
                 <Input
                   name="keys[].weight"
                   type="number"
@@ -281,7 +281,7 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
                 variant="ghost"
                 size="xs"
                 onClick={() => removeRow(i)}
-                className="shrink-0 p-2 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 disabled:opacity-30 transition-colors"
+                className="shrink-0 p-2 text-danger hover:text-danger-hover hover:bg-red-50  disabled:opacity-30 transition-colors"
                 disabled={noKey || rows.length <= 1}
                 aria-label={t("deleteKeyAria")}
                 title={t("deleteKeyTitle")}
@@ -321,7 +321,7 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
         </div>
 
         {duplicateInfo && (
-          <p className="text-ui-caption text-red-600 dark:text-red-400 leading-normal">
+          <p className="text-ui-caption text-danger  leading-normal">
             {t("duplicateKeyHint", { dup: duplicateInfo.dup + 1, first: duplicateInfo.first + 1 })}
           </p>
         )}
@@ -330,11 +330,11 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
           open={testDialog !== null}
           onClose={() => setTestDialog(null)}
           title={t("testKeyDialogTitle")}
-          dialogClassName="m-auto w-[min(480px,92vw)] rounded-lg border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/40 dark:border-deep-space dark:bg-twilight-obsidian dark:text-nebula-silver"
+          dialogClassName="m-auto w-[min(480px,92vw)] rounded-lg border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/40   "
         >
           <div className="space-y-3">
             <label className="block">
-              <span className="text-ui-caption font-semibold text-neutral-500 dark:text-neutral-400">
+              <span className="text-ui-caption font-semibold text-neutral-500 ">
                 {t("testKeySelectLabel")}
               </span>
               <Select
@@ -351,7 +351,7 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
               </Select>
             </label>
             <label className="block">
-              <span className="text-ui-caption font-semibold text-neutral-500 dark:text-neutral-400">
+              <span className="text-ui-caption font-semibold text-neutral-500 ">
                 {t("testKeyModelLabel")}
               </span>
               <Input
@@ -361,13 +361,13 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
                 autoFocus
               />
               {upstreamModels.length > 0 && (
-                <div className="mt-2 max-h-36 overflow-auto border-y border-morning-mist dark:border-deep-space py-1">
+                <div className="mt-2 max-h-36 overflow-auto border-y border-morning-mist  py-1">
                   {upstreamModels.map((model) => (
                     <button
                       key={model}
                       type="button"
                       onClick={() => setSelectedModel(model)}
-                      className="block w-full truncate px-2 py-1.5 text-left font-mono text-ui-caption text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800/60"
+                      className="block w-full truncate px-2 py-1.5 text-left font-mono text-ui-caption text-neutral-700 hover:bg-neutral-100  "
                     >
                       {model}
                     </button>
@@ -401,7 +401,7 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
           open={noteDialog !== null}
           onClose={() => setNoteDialog(null)}
           title={t("keyNoteDialogTitle")}
-          dialogClassName="m-auto w-[min(400px,92vw)] rounded-lg border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/40 dark:border-deep-space dark:bg-twilight-obsidian dark:text-nebula-silver"
+          dialogClassName="m-auto w-[min(400px,92vw)] rounded-lg border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/40   "
         >
           <div className="space-y-3">
             <textarea
@@ -410,7 +410,7 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
               rows={3}
               autoFocus
               placeholder={t("keyNotePlaceholder")}
-              className="w-full resize-y rounded-md border border-morning-mist bg-white px-3 py-2 text-ui-body text-space-ink placeholder:text-neutral-600 focus:border-sora-blue focus:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:border-deep-space dark:bg-space-ink dark:text-nebula-silver dark:placeholder:text-neutral-400"
+              className="w-full resize-y rounded-md border border-morning-mist bg-white px-3 py-2 text-ui-body text-space-ink placeholder:text-neutral-600 focus:border-sora-blue focus:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue    "
             />
             <div className="flex justify-end gap-2.5">
               <Button variant="secondary" size="sm" onClick={() => setNoteDialog(null)}>{t("cancel")}</Button>
@@ -429,7 +429,7 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
           </div>
         </Modal>
 
-        <p className="text-ui-caption text-neutral-400 dark:text-neutral-500 leading-normal flex items-start gap-1">
+        <p className="text-ui-caption text-neutral-400  leading-normal flex items-start gap-1">
           <span className="text-sora-blue shrink-0">※</span>
           <span>{t("keyHintRequired")}</span>
         </p>
@@ -437,7 +437,7 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
         {/* 批量设置弹窗(嵌套于编辑服务商弹窗;原生 <dialog> 支持叠层展示)。 */}
         <Modal open={batchOpen} onClose={() => setBatchOpen(false)} title={t("batchAddTitle")}>
           <div className="space-y-3">
-            <p className="text-ui-caption text-neutral-500 dark:text-neutral-400 leading-normal">
+            <p className="text-ui-caption text-neutral-500  leading-normal">
               {t("batchAddHint")}
             </p>
             <textarea
@@ -447,7 +447,7 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
               autoFocus
               spellCheck={false}
               placeholder={t("batchAddPlaceholder")}
-              className="mt-1 w-full rounded-md border border-morning-mist dark:border-deep-space px-3.5 py-2 text-ui-caption bg-white dark:bg-[#0f121a] focus:outline-none focus:border-sora-blue dark:focus:border-sora-blue focus-visible:ring-2 focus-visible:ring-sora-blue/20 transition-colors duration-150 resize-y font-mono text-space-ink dark:text-nebula-silver"
+              className="mt-1 w-full rounded-md border border-morning-mist  px-3.5 py-2 text-ui-caption bg-white  focus:outline-none focus:border-sora-blue  focus-visible:ring-2 focus-visible:ring-sora-blue/20 transition-colors duration-150 resize-y font-mono text-space-ink "
             />
             <div className="flex justify-end gap-2.5 pt-1">
               <Button
@@ -476,12 +476,12 @@ export default KeyBundleEditor;
 function ResultDetail({ result }: { result: ProbeResult }) {
   const t = useTranslations("providers");
   return (
-    <div className="rounded-md border border-morning-mist dark:border-deep-space p-3 text-ui-caption space-y-1">
-      <div className={result.ok ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}>
+    <div className="rounded-md border border-morning-mist  p-3 text-ui-caption space-y-1">
+      <div className={result.ok ? "text-success " : "text-danger "}>
         {result.ok ? t("keyValid") : result.error ?? t("keyUnknownError")}
         {result.latencyMs != null ? ` · ${result.latencyMs}ms` : ""}
       </div>
-      {result.responseText && <pre className="max-h-32 overflow-auto whitespace-pre-wrap text-neutral-600 dark:text-neutral-300">{result.responseText}</pre>}
+      {result.responseText && <pre className="max-h-32 overflow-auto whitespace-pre-wrap text-neutral-600 ">{result.responseText}</pre>}
     </div>
   );
 }

@@ -40,7 +40,7 @@ interface ProviderFormDialogProps {
   };
 }
 
-const labelCls = "block text-ui-caption font-semibold text-neutral-500 dark:text-neutral-400 mb-1.5";
+const labelCls = "block text-ui-caption font-semibold text-neutral-500  mb-1.5";
 // 下拉按钮的拉取缓存窗口:5 分钟内不重复请求上游 /models。
 const UPSTREAM_MODELS_STALE_MS = 5 * 60 * 1000;
 
@@ -203,7 +203,7 @@ export default function ProviderFormDialog({
             />
             <div className="mt-1.5 flex items-center justify-between gap-2">
               {modelsUrlPreview ? (
-                <span className="text-ui-caption text-neutral-400 dark:text-neutral-500 font-mono truncate">
+                <span className="text-ui-caption text-neutral-400  font-mono truncate">
                   {t("modelsUrlPreview")}: {modelsUrlPreview}
                 </span>
               ) : (
@@ -249,7 +249,7 @@ export default function ProviderFormDialog({
                         void handleRefreshIfStale();
                       }}
                       title={t("selectModelTitle")}
-                      className="inline-flex shrink-0 items-center justify-center rounded-md border border-morning-mist dark:border-deep-space px-2.5 py-2 text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-100 transition-colors"
+                      className="inline-flex shrink-0 items-center justify-center rounded-md border border-morning-mist  px-2.5 py-2 text-neutral-500 hover:text-neutral-800   transition-colors"
                     >
                       {refreshing ? (
                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -260,7 +260,7 @@ export default function ProviderFormDialog({
                   }
                 >
                   <div className="w-60">
-                    <div className="sticky top-0 z-10 border-b border-morning-mist dark:border-deep-space bg-white dark:bg-space-ink px-1.5 py-1.5">
+                    <div className="sticky top-0 z-10 border-b border-morning-mist  bg-white  px-1.5 py-1.5">
                       <Input
                         value={modelSearch}
                         onChange={(e) => setModelSearch(e.target.value)}
@@ -270,11 +270,11 @@ export default function ProviderFormDialog({
                     </div>
                     <div className="max-h-52 overflow-auto py-1">
                       {refreshing && upstreamModels.length === 0 ? (
-                        <div className="px-3 py-2 text-ui-caption text-neutral-400 dark:text-neutral-500">
+                        <div className="px-3 py-2 text-ui-caption text-neutral-400 ">
                           {t("modelsLoading")}
                         </div>
                       ) : filteredModels.length === 0 ? (
-                        <div className="px-3 py-2 text-ui-caption text-neutral-400 dark:text-neutral-500">
+                        <div className="px-3 py-2 text-ui-caption text-neutral-400 ">
                           {upstreamModels.length === 0 ? t("modelsEmpty") : t("modelSearchNoMatch")}
                         </div>
                       ) : (
@@ -286,7 +286,7 @@ export default function ProviderFormDialog({
                               setTestModel(m);
                               closeModelsPopover();
                             }}
-                            className="block w-full px-3 py-1.5 text-left text-ui-caption font-mono text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800/60 truncate"
+                            className="block w-full px-3 py-1.5 text-left text-ui-caption font-mono text-neutral-700  hover:bg-neutral-100  truncate"
                           >
                             {m}
                           </button>
@@ -299,10 +299,10 @@ export default function ProviderFormDialog({
             </div>
           </label>
           <fieldset className="col-span-2">
-            <legend className="text-ui-caption font-semibold text-neutral-500 dark:text-neutral-400">
+            <legend className="text-ui-caption font-semibold text-neutral-500 ">
               {t("timeoutTitle")}
             </legend>
-            <p className="mt-1 text-ui-caption text-neutral-500 dark:text-neutral-400">
+            <p className="mt-1 text-ui-caption text-neutral-500 ">
               {t("timeoutHint")}
             </p>
             <input type="hidden" name="providerTimeoutsPresent" value="1" />
@@ -318,7 +318,7 @@ export default function ProviderFormDialog({
                   defaultValue={initial?.connectTimeoutMs == null ? "" : initial.connectTimeoutMs / 1_000}
                   placeholder={String(PROVIDER_TIMEOUT_LIMITS.connectTimeoutMs.defaultMs / 1_000)}
                 />
-                <span className="mt-1 block text-ui-caption text-neutral-500 dark:text-neutral-400">
+                <span className="mt-1 block text-ui-caption text-neutral-500 ">
                   {t("timeoutRangeHint", {
                     default: PROVIDER_TIMEOUT_LIMITS.connectTimeoutMs.defaultMs / 1_000,
                     min: PROVIDER_TIMEOUT_LIMITS.connectTimeoutMs.minMs / 1_000,
@@ -337,7 +337,7 @@ export default function ProviderFormDialog({
                   defaultValue={initial?.readTimeoutMs == null ? "" : initial.readTimeoutMs / 1_000}
                   placeholder={String(PROVIDER_TIMEOUT_LIMITS.readTimeoutMs.defaultMs / 1_000)}
                 />
-                <span className="mt-1 block text-ui-caption text-neutral-500 dark:text-neutral-400">
+                <span className="mt-1 block text-ui-caption text-neutral-500 ">
                   {t("timeoutRangeHint", {
                     default: PROVIDER_TIMEOUT_LIMITS.readTimeoutMs.defaultMs / 1_000,
                     min: PROVIDER_TIMEOUT_LIMITS.readTimeoutMs.minMs / 1_000,
@@ -356,7 +356,7 @@ export default function ProviderFormDialog({
                   defaultValue={initial?.streamIdleTimeoutMs == null ? "" : initial.streamIdleTimeoutMs / 1_000}
                   placeholder={String(PROVIDER_TIMEOUT_LIMITS.streamIdleTimeoutMs.defaultMs / 1_000)}
                 />
-                <span className="mt-1 block text-ui-caption text-neutral-500 dark:text-neutral-400">
+                <span className="mt-1 block text-ui-caption text-neutral-500 ">
                   {t("timeoutRangeHint", {
                     default: PROVIDER_TIMEOUT_LIMITS.streamIdleTimeoutMs.defaultMs / 1_000,
                     min: PROVIDER_TIMEOUT_LIMITS.streamIdleTimeoutMs.minMs / 1_000,
@@ -368,7 +368,7 @@ export default function ProviderFormDialog({
           </fieldset>
           <div className="block col-span-2">
             <div className="mb-1.5 flex items-center justify-between">
-              <span className="text-ui-caption font-semibold text-neutral-500 dark:text-neutral-400">{t("fieldApiKey")}</span>
+              <span className="text-ui-caption font-semibold text-neutral-500 ">{t("fieldApiKey")}</span>
               <div className="flex items-center gap-3">
                 <button
                   type="button"
@@ -379,12 +379,12 @@ export default function ProviderFormDialog({
                   <ListPlus size={14} />
                   <span>{t("batchAddKey")}</span>
                 </button>
-                <label className="inline-flex items-center gap-1.5 text-ui-caption font-semibold text-neutral-500 dark:text-neutral-400 cursor-pointer select-none">
+                <label className="inline-flex items-center gap-1.5 text-ui-caption font-semibold text-neutral-500  cursor-pointer select-none">
                   <input
                     type="checkbox"
                     checked={noKey}
                     onChange={(e) => setNoKey(e.target.checked)}
-                    className="h-3.5 w-3.5 rounded border-neutral-300 dark:border-neutral-600 text-sora-blue focus:ring-sora-blue/30 cursor-pointer"
+                    className="h-3.5 w-3.5 rounded border-neutral-300  text-sora-blue focus:ring-sora-blue/30 cursor-pointer"
                   />
                   {t("noKey")}
                 </label>
@@ -405,7 +405,7 @@ export default function ProviderFormDialog({
           </div>
         </div>
 
-        <div className="flex justify-end gap-2.5 pt-4 border-t border-morning-mist dark:border-deep-space">
+        <div className="flex justify-end gap-2.5 pt-4 border-t border-morning-mist ">
           <Button
             variant="secondary"
             size="sm"

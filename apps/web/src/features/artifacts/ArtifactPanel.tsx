@@ -1,10 +1,9 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import dynamic from "next/dynamic";
-import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
-import { prism as lightStyle } from "react-syntax-highlighter/dist/esm/styles/prism";
+import { prism as prismStyle } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { X, Copy, Download, Check } from "lucide-react";
 import { clsx } from "clsx";
 import { HtmlPreviewFrame } from "./HtmlPreviewFrame";
@@ -24,7 +23,7 @@ const SyntaxHighlighter = dynamic(
   () => import("react-syntax-highlighter").then((mod) => mod.Prism),
   {
     ssr: false,
-    loading: () => <pre className="text-ui-caption p-4 animate-pulse text-neutral-400 font-mono">Loading code highlighter...</pre>,
+    loading: () => <pre className="text-ui-caption p-4 animate-pulse text-ink-tertiary font-mono">Loading code highlighter...</pre>,
   }
 );
 
@@ -39,27 +38,6 @@ export function ArtifactPanel({
 }) {
   const t = useTranslations("artifacts");
   const [copied, setCopied] = useState(false);
-  const [isDark, setIsDark] = useState(() => {
-    if (typeof window !== "undefined") {
-      return document.documentElement.classList.contains("dark");
-    }
-    return false;
-  });
-
-  // 监听主题变化，以便动态更新语法高亮配色样式
-  useEffect(() => {
-    const observer = new MutationObserver(() => {
-      setIsDark(document.documentElement.classList.contains("dark"));
-    });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["class"],
-    });
-
-    return () => observer.disconnect();
-  }, []);
-
 
   const handleCopy = useCallback(async () => {
     if (!(await copyToClipboard(artifact.content))) return;
@@ -79,21 +57,21 @@ export function ArtifactPanel({
   }, [artifact]);
 
   return (
-    <div className={clsx("flex flex-col h-full bg-nebula-white dark:bg-twilight-obsidian", className)}>
+    <div className={clsx("flex flex-col h-full bg-nebula-white ", className)}>
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-morning-mist dark:border-deep-space/80 shrink-0">
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-morning-mist  shrink-0">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-ui-caption font-mono uppercase tracking-wider text-neutral-400 dark:text-neutral-500 shrink-0">
+          <span className="text-ui-caption font-mono text-ink-tertiary  shrink-0">
             {artifact.kind}
           </span>
-          <span className="text-ui-caption font-medium text-neutral-700 dark:text-neutral-200 truncate" title={artifact.title}>
+          <span className="text-ui-caption font-medium text-neutral-700  truncate" title={artifact.title}>
             {artifact.title}
           </span>
         </div>
         <div className="flex items-center gap-1 shrink-0">
           <button
             onClick={handleCopy}
-            className="p-1.5 rounded hover:bg-neutral-100 dark:hover:bg-neutral-900 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
+            className="p-1.5 rounded hover:bg-neutral-100  text-ink-tertiary hover:text-neutral-600  transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
             title={t("copy")}
             aria-label={t("copy")}
           >
@@ -101,7 +79,7 @@ export function ArtifactPanel({
           </button>
           <button
             onClick={handleDownload}
-            className="p-1.5 rounded hover:bg-neutral-100 dark:hover:bg-neutral-900 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
+            className="p-1.5 rounded hover:bg-neutral-100  text-ink-tertiary hover:text-neutral-600  transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
             title={t("download")}
             aria-label={t("download")}
           >
@@ -109,7 +87,7 @@ export function ArtifactPanel({
           </button>
           <button
             onClick={onClose}
-            className="p-1.5 rounded hover:bg-neutral-100 dark:hover:bg-neutral-900 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
+            className="p-1.5 rounded hover:bg-neutral-100  text-ink-tertiary hover:text-neutral-600  transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
             title={t("closePanel")}
             aria-label={t("closePanel")}
           >
@@ -127,7 +105,7 @@ export function ArtifactPanel({
         ) : (
           <SyntaxHighlighter
             language={artifact.language || "text"}
-            style={isDark ? oneDark : lightStyle}
+            style={prismStyle}
             customStyle={{
               margin: 0,
               background: "transparent",

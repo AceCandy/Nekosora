@@ -28,10 +28,10 @@ import { rankSimilarModels } from "@/lib/model-catalog";
 
 // 4 种协议各自的彩色块(低饱和填充,与「莫兰迪灰调」管理侧协调);未命中协议回退中性色。
 const PROTOCOL_STYLE: Record<string, { bg: string; text: string }> = {
-  openai: { bg: "bg-emerald-100 dark:bg-emerald-900/40", text: "text-emerald-700 dark:text-emerald-300" },
-  anthropic: { bg: "bg-orange-100 dark:bg-orange-900/40", text: "text-orange-700 dark:text-orange-300" },
-  gemini: { bg: "bg-blue-100 dark:bg-blue-900/40", text: "text-blue-700 dark:text-blue-300" },
-  "openai-compatible": { bg: "bg-slate-200 dark:bg-slate-700/50", text: "text-slate-700 dark:text-slate-200" },
+  openai: { bg: "bg-emerald-100 ", text: "text-emerald-700 " },
+  anthropic: { bg: "bg-orange-100 ", text: "text-orange-700 " },
+  gemini: { bg: "bg-blue-100 ", text: "text-blue-700 " },
+  "openai-compatible": { bg: "bg-slate-200 ", text: "text-slate-700 " },
 };
 
 /** server action 签名:拉取 provider 最新上游模型列表,返回模型 id 列表 + 时间。 */
@@ -398,15 +398,15 @@ export default function ProvidersManager({
           className={clsx(
             "flex w-full items-center gap-2 px-2 py-1 text-left text-ui-caption font-mono hover:bg-sora-blue/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sora-blue disabled:cursor-not-allowed disabled:opacity-60",
             configured?.has(m)
-              ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300"
-              : "bg-neutral-100 dark:bg-neutral-800/60 text-neutral-600 dark:text-neutral-400",
+              ? "bg-emerald-100  text-emerald-700 "
+              : "bg-neutral-100  text-neutral-600 ",
           )}
         >
           <span className="min-w-0 flex-1 truncate">{m}</span>
           {feedback === "pending" ? (
             <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden="true" />
           ) : feedback ? (
-            <span className={clsx("shrink-0 font-sans text-ui-caption font-medium", feedback === "error" && "text-red-600 dark:text-red-300")}>
+            <span className={clsx("shrink-0 font-sans text-ui-caption font-medium", feedback === "error" && "text-danger ")}>
               {t(
                 feedback === "created"
                   ? "modelRouteCreated"
@@ -424,7 +424,7 @@ export default function ProvidersManager({
   return (
     <div className="flex flex-col min-h-0 flex-1 gap-4">
       <div className="flex items-center justify-between shrink-0">
-        <span className="text-ui-caption font-mono text-neutral-400 dark:text-neutral-500 uppercase tracking-wider">
+        <span className="text-ui-caption font-mono text-neutral-400 ">
           {t("configuredCount", { count: providers.length })}
         </span>
         <Button
@@ -474,9 +474,9 @@ export default function ProvidersManager({
         </Select>
       </div>
 
-      <div className="rounded-lg border border-morning-mist dark:border-deep-space bg-nebula-white dark:bg-twilight-obsidian overflow-auto transition-colors duration-150 flex-1 min-h-0">
+      <div className="rounded-lg border border-morning-mist  bg-nebula-white  overflow-auto transition-colors duration-150 flex-1 min-h-0">
         <table className="w-full text-ui-body border-collapse text-left">
-          <thead className="bg-neutral-50 dark:bg-neutral-900 border-b border-morning-mist dark:border-deep-space text-neutral-500 dark:text-neutral-400 font-mono text-ui-caption uppercase sticky top-0 z-10">
+          <thead className="bg-neutral-50  border-b border-morning-mist  text-neutral-500  font-mono text-ui-caption uppercase sticky top-0 z-10">
             <tr>
               <th className="p-3.5 font-medium">{t("colName")}</th>
               <th className="p-3.5 font-medium">{t("colBaseUrl")}</th>
@@ -489,7 +489,7 @@ export default function ProvidersManager({
                       onClick={checkAll}
                       disabled={allPending}
                       title={t("healthCheckAllTitle")}
-                      className="inline-flex items-center justify-center rounded p-0.5 text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="inline-flex items-center justify-center rounded p-0.5 text-neutral-400 hover:text-neutral-700   transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {allPending ? (
                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -505,28 +505,28 @@ export default function ProvidersManager({
               <th className="p-3.5 font-medium text-right">{t("colActions")}</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800/60">
+          <tbody className="divide-y divide-neutral-200 ">
             {filteredProviders.length === 0 ? (
               <tr>
-                <td colSpan={6} className="p-10 text-center text-ui-caption text-neutral-400 dark:text-neutral-500">
+                <td colSpan={6} className="p-10 text-center text-ui-caption text-neutral-400 ">
                   {providers.length === 0 ? t("emptyState") : t("filterNoMatch")}
                 </td>
               </tr>
             ) : (
               filteredProviders.map((p) => {
                 const protocolStyle =
-                  PROTOCOL_STYLE[p.protocol] ?? { bg: "bg-neutral-100 dark:bg-neutral-800/60", text: "text-neutral-600 dark:text-neutral-400" };
+                  PROTOCOL_STYLE[p.protocol] ?? { bg: "bg-neutral-100 ", text: "text-neutral-600 " };
                 return (
                 <tr
                   key={p.id}
-                  className="hover:bg-neutral-50/50 dark:hover:bg-neutral-900/10 transition-colors duration-150"
+                  className="hover:bg-neutral-50/50  transition-colors duration-150"
                 >
-                  <td className="p-3.5 font-semibold text-neutral-800 dark:text-neutral-200">
+                  <td className="p-3.5 font-semibold text-neutral-800 ">
                     {p.name}
                   </td>
                   <td className="p-3.5 max-w-[220px]">
                     <div className="space-y-1.5">
-                      <div className="font-mono text-ui-caption text-neutral-500 dark:text-neutral-400 truncate">
+                      <div className="font-mono text-ui-caption text-neutral-500  truncate">
                         {p.baseUrl}
                       </div>
                       <span className={clsx("inline-flex items-center rounded-md px-1.5 py-0.5 text-ui-caption font-medium", protocolStyle.bg, protocolStyle.text)}>
@@ -550,7 +550,7 @@ export default function ProvidersManager({
                   <td className="p-3.5">
                     <div className="space-y-1.5">
                       <div className="flex items-center gap-1.5">
-                        <div className={clsx("truncate text-ui-caption font-medium max-w-[14rem]", p.testModel ? "text-neutral-700 dark:text-neutral-300" : "text-amber-600 dark:text-amber-400")}>
+                        <div className={clsx("truncate text-ui-caption font-medium max-w-[14rem]", p.testModel ? "text-neutral-700 " : "text-warning ")}>
                           {p.testModel || t("testModelPlaceholder")}
                         </div>
                         {modelProbeActions?.[p.id] && (
@@ -572,7 +572,7 @@ export default function ProvidersManager({
                             align="left"
                             panelClassName="p-0"
                             trigger={
-                              <span className="text-ui-caption text-neutral-400 dark:text-neutral-500 font-mono cursor-default">
+                              <span className="text-ui-caption text-neutral-400  font-mono cursor-default">
                                 {t.rich("modelsCount", {
                                   count: modelsFor(p).length,
                                   num: (chunks: ReactNode) => (
@@ -587,7 +587,7 @@ export default function ProvidersManager({
                             </div>
                           </Popover>
                         ) : (
-                          <span className="text-ui-caption text-neutral-400 dark:text-neutral-500 font-mono">
+                          <span className="text-ui-caption text-neutral-400  font-mono">
                             {t("modelsEmpty")}
                           </span>
                         )}
@@ -597,7 +597,7 @@ export default function ProvidersManager({
                             onClick={() => refreshOne(p.id)}
                             disabled={refreshingIds.has(p.id)}
                             title={t("refreshModelsTitle")}
-                            className="inline-flex items-center justify-center rounded p-1 text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                            className="inline-flex items-center justify-center rounded p-1 text-neutral-400 hover:text-neutral-700   transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
                           >
                             {refreshingIds.has(p.id) ? (
                               <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -619,7 +619,7 @@ export default function ProvidersManager({
                         title={p.enabled ? t("disable") : t("enable")}
                         className={clsx(
                           "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue/40",
-                          p.enabled ? "bg-green-600 dark:bg-green-500" : "bg-neutral-300 dark:bg-neutral-600"
+                          p.enabled ? "bg-green-600 " : "bg-neutral-300 "
                         )}
                       >
                         <span
@@ -636,7 +636,7 @@ export default function ProvidersManager({
                       variant="ghost"
                       size="sm"
                       onClick={() => setEditId(p.id)}
-                      className="text-neutral-750 hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-white"
+                      className="text-neutral-700 hover:text-neutral-900  "
                       title={t("edit")}
                     >
                       <Edit2 className="w-3.5 h-3.5" />
@@ -647,7 +647,7 @@ export default function ProvidersManager({
                       variant="ghost"
                       size="sm"
                       onClick={() => setDeleteId(p.id)}
-                      className="text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 hover:text-red-650"
+                      className="text-danger hover:bg-red-50  hover:text-danger-hover"
                       title={t("delete")}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -728,11 +728,11 @@ export default function ProvidersManager({
           onClose={() => setDeleteId(null)}
           title={t("deleteTitle")}
           message={
-            <div className="flex gap-3 text-ui-body text-neutral-600 dark:text-neutral-400 mt-2">
-              <ShieldAlert className="w-5 h-5 text-red-500 shrink-0" />
+            <div className="flex gap-3 text-ui-body text-neutral-600  mt-2">
+              <ShieldAlert className="w-5 h-5 text-danger shrink-0" />
               <div>
                 {t("deleteConfirm", { name: deleting.name })}
-                <p className="text-ui-caption text-neutral-400 dark:text-neutral-500 mt-1 leading-normal">
+                <p className="text-ui-caption text-neutral-400  mt-1 leading-normal">
                   {t("deleteWarning")}
                 </p>
               </div>

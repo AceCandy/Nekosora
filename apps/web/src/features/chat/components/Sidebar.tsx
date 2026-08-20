@@ -22,6 +22,7 @@ import {
 import ConfirmDialog from "@/shared/ui/ConfirmDialog";
 import Modal from "@/shared/ui/Modal";
 import Popover from "@/shared/ui/Popover";
+import { Button } from "@/shared/ui/Button";
 import { Plus, Settings2, LogOut, Menu, X, Search, Pin, Archive, Trash2, ImageIcon, Loader2, PanelLeftClose, PanelLeftOpen, ChevronDown, Pencil } from "lucide-react";
 import { clsx } from "clsx";
 import { useShallow } from "zustand/react/shallow";
@@ -544,8 +545,8 @@ export default function Sidebar({
         className={clsx(
           "inline-flex min-w-0 max-w-full w-full items-center gap-2 overflow-hidden rounded-md px-3 py-2 pr-8 text-ui-body font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue",
           isActive
-            ? "bg-sora-blue/[0.08] text-neutral-900 dark:text-white font-semibold"
-            : "text-neutral-600 dark:text-neutral-450 hover:text-neutral-900 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-900",
+            ? "bg-sora-blue/[0.08] text-neutral-900  font-semibold"
+            : "text-neutral-600  hover:text-neutral-900  hover:bg-neutral-100 ",
         )}
       >
         <span className="min-w-0 flex-1 truncate">{c.title}</span>
@@ -567,7 +568,7 @@ export default function Sidebar({
             e.stopPropagation();
             setMenuOpenId((cur) => (cur === c.id ? null : c.id));
           }}
-          className={clsx("touch-target p-1 rounded text-neutral-400 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-neutral-200 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:hover:bg-neutral-800", menuOpenId === c.id && "opacity-100")}
+          className={clsx("touch-target p-1 rounded text-neutral-500 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 [@media(pointer:coarse)]:opacity-100 hover:bg-neutral-200 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue ", menuOpenId === c.id && "opacity-100")}
           aria-label={tSidebar("moreActions")}
           aria-haspopup="menu"
           aria-expanded={menuOpenId === c.id}
@@ -576,7 +577,7 @@ export default function Sidebar({
         </button>}
       >
           <div role="menu">
-            <button type="button" role="menuitem" onClick={() => { setMenuOpenId(null); setRenameTarget(c); setRenameTitle(c.title); setRenameError(false); }} className="touch-target flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-ui-caption text-neutral-700 hover:bg-neutral-50 dark:text-neutral-300 dark:hover:bg-neutral-900">
+            <button type="button" role="menuitem" onClick={() => { setMenuOpenId(null); setRenameTarget(c); setRenameTitle(c.title); setRenameError(false); }} className="touch-target flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-ui-caption text-neutral-700 hover:bg-neutral-50  ">
               <Pencil className="h-3 w-3" aria-hidden="true" />
               <span>{actionRenameText}</span>
             </button>
@@ -584,7 +585,7 @@ export default function Sidebar({
               type="button"
               role="menuitem"
               onClick={() => runAction(togglePinnedAction, c.id)}
-              className="touch-target w-full text-left rounded px-2 py-1.5 text-ui-caption text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900 flex items-center gap-1.5 cursor-pointer"
+              className="touch-target w-full text-left rounded px-2 py-1.5 text-ui-caption text-neutral-700  hover:bg-neutral-50  flex items-center gap-1.5 cursor-pointer"
             >
               <Pin className="w-3 h-3" aria-hidden="true" />
               <span>{c.pinned ? actionUnpinText : actionPinText}</span>
@@ -593,7 +594,7 @@ export default function Sidebar({
               type="button"
               role="menuitem"
               onClick={() => runAction(toggleArchivedAction, c.id)}
-              className="touch-target w-full text-left rounded px-2 py-1.5 text-ui-caption text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900 flex items-center gap-1.5 cursor-pointer"
+              className="touch-target w-full text-left rounded px-2 py-1.5 text-ui-caption text-neutral-700  hover:bg-neutral-50  flex items-center gap-1.5 cursor-pointer"
             >
               <Archive className="w-3 h-3" aria-hidden="true" />
               <span>{c.archived ? actionUnarchiveText : actionArchiveText}</span>
@@ -606,7 +607,7 @@ export default function Sidebar({
                 setMenuOpenId(null);
                 setDeleteTargetId(c.id);
               }}
-              className="touch-target w-full text-left rounded px-2 py-1.5 text-ui-caption text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 flex items-center gap-1.5 cursor-pointer"
+              className="touch-target w-full text-left rounded px-2 py-1.5 text-ui-caption text-danger hover:bg-red-50  flex items-center gap-1.5 cursor-pointer"
             >
               <Trash2 className="w-3 h-3" aria-hidden="true" />
               <span>{actionDeleteText}</span>
@@ -629,7 +630,7 @@ export default function Sidebar({
         <button
           type="button"
           onClick={openMobileSidebar}
-          className="touch-target inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:text-neutral-300 dark:hover:bg-neutral-900 dark:hover:text-neutral-100"
+          className="touch-target inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue   "
           aria-controls="chat-sidebar"
           aria-expanded={isOpen}
           aria-label={tNav("openSidebar")}
@@ -654,7 +655,7 @@ export default function Sidebar({
         aria-hidden={isMobile && !isOpen ? true : undefined}
         inert={isMobile && !isOpen ? true : undefined}
         className={clsx(
-          "fixed inset-y-0 left-0 z-50 flex min-h-0 w-[min(18rem,calc(100vw-3rem))] max-w-72 shrink-0 flex-col border-r border-morning-mist bg-nebula-white p-4 transform transition-transform duration-200 ease-out dark:border-deep-space dark:bg-[#090b0e] md:static md:z-40 md:h-screen md:translate-x-0 md:transition-[width,min-width,max-width,transform] md:duration-250 md:ease-in-out",
+          "fixed inset-y-0 left-0 z-50 flex min-h-0 w-[min(18rem,calc(100vw-3rem))] max-w-72 shrink-0 flex-col border-r border-morning-mist bg-nebula-white p-4 transform transition-transform duration-200 ease-out   md:static md:z-40 md:h-screen md:translate-x-0 md:transition-[width,min-width,max-width,transform] md:duration-250 md:ease-in-out",
           collapsed ? "md:w-14 md:min-w-14 md:max-w-14 md:p-2" : "md:w-60 md:min-w-60 md:max-w-60 md:p-3",
           isOpen ? "translate-x-0" : "-translate-x-full"
         )}
@@ -668,19 +669,19 @@ export default function Sidebar({
               className="inline-flex rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
               aria-label="Nekusora"
             >
-              <Image src="/icon.svg" alt="" width={42} height={42} className="brightness-0 dark:invert" priority />
+              <Image src="/icon.svg" alt="" width={42} height={42} className="brightness-0 " priority />
             </Link>
           </div>
           <div className="flex items-center gap-1">
             {!collapsed && (
-              <button type="button" onClick={() => setSearchOpen(true)} className="touch-target inline-flex h-9 w-9 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:hover:bg-neutral-900 dark:hover:text-neutral-100" aria-label={searchText} title={searchText}>
+              <button type="button" onClick={() => setSearchOpen(true)} className="touch-target inline-flex h-9 w-9 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue  " aria-label={searchText} title={searchText}>
                 <Search className="h-[18px] w-[18px]" aria-hidden="true" />
               </button>
             )}
             <button
               type="button"
               onClick={() => setCollapsed((value) => !value)}
-              className="touch-target hidden h-9 w-9 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-neutral-900 dark:hover:text-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue md:inline-flex"
+              className="touch-target hidden h-9 w-9 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900   focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue md:inline-flex"
               aria-label={collapsed ? "展开侧边栏" : "收起侧边栏"}
               title={collapsed ? "展开侧边栏" : "收起侧边栏"}
             >
@@ -689,7 +690,7 @@ export default function Sidebar({
             <button
               type="button"
               onClick={() => setIsOpen(false)}
-              className="touch-target inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:hover:bg-neutral-900 dark:hover:text-neutral-100 md:hidden"
+              className="touch-target inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue   md:hidden"
               aria-label={tNav("closeSidebar")}
               title={tNav("closeSidebar")}
             >
@@ -699,13 +700,13 @@ export default function Sidebar({
         </div>
 
         <nav className={clsx("min-h-0 flex-1 flex-col items-center gap-1.5 pt-3", collapsed ? "hidden md:flex" : "hidden")} aria-label="快捷导航">
-          <button type="button" onClick={handleNewConversation} className="touch-target inline-flex h-9 w-9 items-center justify-center rounded-full bg-neutral-100 text-neutral-800 hover:bg-neutral-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800" aria-label={newConversationText} title={newConversationText}>
+          <button type="button" onClick={handleNewConversation} className="touch-target inline-flex h-9 w-9 items-center justify-center rounded-full bg-neutral-100 text-neutral-800 hover:bg-neutral-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue   " aria-label={newConversationText} title={newConversationText}>
             <Plus className="h-[18px] w-[18px]" aria-hidden="true" />
           </button>
-          <button type="button" onClick={() => setSearchOpen(true)} className="touch-target inline-flex h-9 w-9 items-center justify-center rounded-md text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:text-neutral-300 dark:hover:bg-neutral-900" aria-label={searchText} title={searchText}>
+          <button type="button" onClick={() => setSearchOpen(true)} className="touch-target inline-flex h-9 w-9 items-center justify-center rounded-md text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue  " aria-label={searchText} title={searchText}>
             <Search className="h-[18px] w-[18px]" aria-hidden="true" />
           </button>
-          <Link href="/image" className="touch-target inline-flex h-9 w-9 items-center justify-center rounded-md text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:text-neutral-300 dark:hover:bg-neutral-900" aria-label={imageText} title={imageText}>
+          <Link href="/image" className="touch-target inline-flex h-9 w-9 items-center justify-center rounded-md text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue  " aria-label={imageText} title={imageText}>
             <ImageIcon className="h-[18px] w-[18px]" aria-hidden="true" />
           </Link>
         </nav>
@@ -715,7 +716,7 @@ export default function Sidebar({
           <button
             type="button"
             onClick={handleNewConversation}
-            className="touch-target mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-morning-mist dark:border-deep-space hover:bg-neutral-50 dark:hover:bg-neutral-900 px-3 py-2 text-ui-body font-semibold text-neutral-700 dark:text-neutral-200 transition-[background-color,color,border-color,box-shadow] duration-150 ease-out shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
+            className="touch-target mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-morning-mist  hover:bg-neutral-50  px-3 py-2 text-ui-body font-semibold text-neutral-700  transition-[background-color,color,border-color,box-shadow] duration-150 ease-out shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
           >
             <Plus className="w-4 h-4 text-sora-blue" aria-hidden="true" />
             <span>{newConversationText}</span>
@@ -725,29 +726,29 @@ export default function Sidebar({
         <Link
           href="/image"
           onClick={() => setIsOpen(false)}
-          className="touch-target inline-flex w-full items-center gap-2 rounded-md px-3 py-2 text-ui-body font-medium text-neutral-500 dark:text-neutral-450 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
+          className="touch-target inline-flex w-full items-center gap-2 rounded-md px-3 py-2 text-ui-body font-medium text-neutral-500  hover:text-neutral-800  hover:bg-neutral-50  transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
         >
-          <ImageIcon className="w-3.5 h-3.5 text-neutral-400 dark:text-neutral-500" aria-hidden="true" />
+          <ImageIcon className="w-3.5 h-3.5 text-neutral-400 " aria-hidden="true" />
           <span>{imageText}</span>
         </Link>
 
         {/* Conversations List Label */}
-        <div className="mt-3 px-3 py-1.5 text-ui-caption font-semibold text-neutral-400 dark:text-neutral-500 uppercase tracking-wider shrink-0 select-none">
+        <div className="mt-3 px-3 py-1.5 text-ui-caption font-semibold text-ink-tertiary shrink-0 select-none">
           {conversationsText}
         </div>
 
         {/* Scrollable Conversation List */}
         <div className="scroll-fade-y flex-1 overflow-y-auto -mx-1 px-1 space-y-3">
           {sections.length === 0 ? (
-            <p className="text-ui-body text-neutral-400 px-3 py-2">{noConversationsText}</p>
+            <p className="text-ui-body text-ink-tertiary px-3 py-2">{noConversationsText}</p>
           ) : (
             <>
             {sections.map((section) => (
               <div key={section.key}>
-                <button type="button" onClick={() => toggleGroup(section.key, section.items, section.total)} className="touch-target flex w-full items-center gap-2 px-3 py-2 text-ui-caption font-medium text-neutral-450 hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sora-blue dark:text-neutral-500 dark:hover:text-neutral-300" aria-expanded={!collapsedGroups.has(section.key)}>
+                <button type="button" onClick={() => toggleGroup(section.key, section.items, section.total)} className="touch-target flex w-full items-center gap-2 px-3 py-2 text-ui-caption font-medium text-ink-tertiary hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sora-blue  " aria-expanded={!collapsedGroups.has(section.key)}>
                   <span>{section.label}</span>
-                  <span className="h-px min-w-4 flex-1 bg-morning-mist/80 dark:bg-deep-space/70" aria-hidden="true" />
-                  <span className="text-neutral-300 dark:text-neutral-700">{section.total}</span>
+                  <span className="h-px min-w-4 flex-1 bg-morning-mist/80 " aria-hidden="true" />
+                  <span className="text-ink-tertiary">{section.total}</span>
                   <ChevronDown className={clsx("h-3 w-3 transition-transform", collapsedGroups.has(section.key) && "-rotate-90")} aria-hidden="true" />
                 </button>
                 {!collapsedGroups.has(section.key) && <div className="space-y-0.5">
@@ -768,24 +769,24 @@ export default function Sidebar({
         </div>
 
         {/* Footer user menu */}
-        <div ref={userMenuRef} className="relative pt-3 mt-2 border-t border-morning-mist dark:border-deep-space shrink-0">
+        <div ref={userMenuRef} className="relative pt-3 mt-2 border-t border-morning-mist  shrink-0">
           {userMenuOpen && (
-            <div className={clsx("absolute bottom-full left-0 right-0 z-30 mb-2 rounded-lg border border-morning-mist bg-white p-1 shadow-lg dark:border-deep-space dark:bg-space-ink", collapsed && "md:bottom-0 md:left-full md:right-auto md:mb-0 md:ml-2 md:w-48")}>
-              <Link href="/panel" onClick={() => { setUserMenuOpen(false); setIsOpen(false); }} className="touch-target flex items-center gap-2 rounded-md px-3 py-2 text-ui-body text-neutral-700 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-900">
+            <div className={clsx("absolute bottom-full left-0 right-0 z-30 mb-2 rounded-lg border border-morning-mist bg-white p-1 shadow-lg  ", collapsed && "md:bottom-0 md:left-full md:right-auto md:mb-0 md:ml-2 md:w-48")}>
+              <Link href="/panel" onClick={() => { setUserMenuOpen(false); setIsOpen(false); }} className="touch-target flex items-center gap-2 rounded-md px-3 py-2 text-ui-body text-neutral-700 hover:bg-neutral-100  ">
                 <Settings2 className="h-4 w-4" aria-hidden="true" />
                 {settingsText}
               </Link>
               <form onSubmit={handleSignOut}>
-                <button type="submit" disabled={isPending} className="touch-target flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-ui-body text-red-500 hover:bg-red-50 disabled:opacity-50 dark:hover:bg-red-950/20">
+                <button type="submit" disabled={isPending} className="touch-target flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-ui-body text-danger hover:bg-red-50 disabled:opacity-50 ">
                   <LogOut className="h-4 w-4" aria-hidden="true" />
                   {logoutText}
                 </button>
               </form>
             </div>
           )}
-          <button type="button" onClick={() => setUserMenuOpen((value) => !value)} className={clsx("touch-target flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left hover:bg-neutral-100 dark:hover:bg-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue", collapsed && "md:justify-center")} aria-expanded={userMenuOpen}>
+          <button type="button" onClick={() => setUserMenuOpen((value) => !value)} className={clsx("touch-target flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left hover:bg-neutral-100  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue", collapsed && "md:justify-center")} aria-expanded={userMenuOpen}>
             <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sora-blue/10 text-ui-caption font-semibold text-sora-blue">{displayName.slice(0, 1).toUpperCase()}</span>
-            <span className={clsx("min-w-0 flex-1", collapsed && "md:hidden")}><span className="block truncate text-ui-body font-semibold text-neutral-800 dark:text-neutral-100">{displayName}</span><span className="mt-0.5 block truncate text-ui-caption font-mono text-neutral-450 dark:text-neutral-500">{userEmail}</span></span>
+            <span className={clsx("min-w-0 flex-1", collapsed && "md:hidden")}><span className="block truncate text-ui-body font-semibold text-neutral-800 ">{displayName}</span><span className="mt-0.5 block truncate text-ui-caption font-mono text-ink-tertiary ">{userEmail}</span></span>
             <ChevronDown className={clsx("h-4 w-4 shrink-0 text-neutral-400 transition-transform", userMenuOpen && "rotate-180", collapsed && "md:hidden")} aria-hidden="true" />
           </button>
         </div>
@@ -806,22 +807,22 @@ export default function Sidebar({
       <Modal open={renameTarget !== null} onClose={() => { if (!renameSaving) setRenameTarget(null); }} title={actionRenameText} dialogClassName="m-auto w-[min(420px,92vw)] rounded-lg border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/40">
         <form onSubmit={(event) => { event.preventDefault(); void submitRename(); }} className="space-y-4">
           <input autoFocus value={renameTitle} onChange={(event) => { setRenameTitle(event.target.value); setRenameError(false); }} maxLength={200} aria-label={actionRenameText} aria-invalid={renameError} className="w-full rounded-md border border-morning-mist bg-white px-3 py-2 text-ui-body text-space-ink focus:border-sora-blue focus:outline-none focus:ring-2 focus:ring-sora-blue/20" />
-          {renameError && <p role="alert" className="text-ui-caption text-red-600">{tSidebar("renameFailed")}</p>}
+          {renameError && <p role="alert" className="text-ui-caption text-danger">{tSidebar("renameFailed")}</p>}
           <div className="flex justify-end gap-2">
             <button type="button" onClick={() => setRenameTarget(null)} disabled={renameSaving} className="touch-target rounded-md px-3 py-2 text-ui-body text-neutral-600 hover:bg-neutral-100 disabled:opacity-50">{tCommon("cancel")}</button>
-            <button type="submit" disabled={renameSaving || !renameTitle.trim()} className="touch-target inline-flex items-center gap-2 rounded-md bg-sora-blue px-3 py-2 text-ui-body font-medium text-white hover:bg-sora-blue-hover disabled:opacity-50">{renameSaving && <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />}{renameSaveText}</button>
+            <Button type="submit" variant="primary" loading={renameSaving} disabled={!renameTitle.trim()} className="px-3 py-2">{renameSaveText}</Button>
           </div>
         </form>
       </Modal>
 
-      <Modal open={searchOpen} onClose={() => setSearchOpen(false)} title={searchText} dialogClassName="m-auto w-[min(720px,92vw)] rounded-xl border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/40 dark:border-deep-space dark:bg-twilight-obsidian dark:text-nebula-silver">
+      <Modal open={searchOpen} onClose={() => setSearchOpen(false)} title={searchText} dialogClassName="m-auto w-[min(720px,92vw)] rounded-xl border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/40   ">
         <div className="space-y-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" aria-hidden="true" />
-            <input autoFocus type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={searchText} aria-label={searchText} className="w-full rounded-lg border border-morning-mist bg-white py-3 pl-10 pr-3 text-ui-body text-space-ink outline-none focus:border-sora-blue dark:border-deep-space dark:bg-space-ink dark:text-nebula-silver" />
+            <input autoFocus type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={searchText} aria-label={searchText} className="w-full rounded-lg border border-morning-mist bg-white py-3 pl-10 pr-3 text-ui-body text-space-ink outline-none focus:border-sora-blue   " />
           </div>
           <div className="scroll-fade-y max-h-[min(55vh,460px)] overflow-y-auto">
-            {!query.trim() ? <p className="py-8 text-center text-ui-body text-neutral-400">{searchText}</p> : searching ? <p className="flex items-center justify-center gap-2 py-8 text-ui-body text-neutral-400"><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />{tSidebar("searching")}</p> : searchResults.length === 0 ? <p className="py-8 text-center text-ui-body text-neutral-400">{tSidebar("noSearchResults")}</p> : <div className="space-y-1">{searchResults.map((r) => <Link key={`${r.conversationId}-${r.messagePublicId}-${r.createdAt}`} href={`/chat/${r.conversationId}`} onClick={() => { if (r.conversationId !== activeConvId) conversationSwitchStartedRef.current = true; setSearchOpen(false); }} className="block rounded-lg px-3 py-3 hover:bg-neutral-100 dark:hover:bg-neutral-900"><div className="truncate text-ui-body font-medium">{r.conversationTitle}</div><div className="mt-1 line-clamp-2 text-ui-caption text-neutral-500 dark:text-neutral-400">{highlightSnippet(r.snippet, query.trim())}</div></Link>)}</div>}
+            {!query.trim() ? <p className="py-8 text-center text-ui-body text-ink-tertiary">{searchText}</p> : searching ? <p className="flex items-center justify-center gap-2 py-8 text-ui-body text-ink-tertiary"><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />{tSidebar("searching")}</p> : searchResults.length === 0 ? <p className="py-8 text-center text-ui-body text-ink-tertiary">{tSidebar("noSearchResults")}</p> : <div className="space-y-1">{searchResults.map((r) => <Link key={`${r.conversationId}-${r.messagePublicId}-${r.createdAt}`} href={`/chat/${r.conversationId}`} onClick={() => { if (r.conversationId !== activeConvId) conversationSwitchStartedRef.current = true; setSearchOpen(false); }} className="block rounded-lg px-3 py-3 hover:bg-neutral-100 "><div className="truncate text-ui-body font-medium">{r.conversationTitle}</div><div className="mt-1 line-clamp-2 text-ui-caption text-neutral-500 ">{highlightSnippet(r.snippet, query.trim())}</div></Link>)}</div>}
           </div>
         </div>
       </Modal>

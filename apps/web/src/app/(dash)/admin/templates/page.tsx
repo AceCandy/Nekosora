@@ -30,11 +30,11 @@ export default async function AdminTemplatesPage() {
     <div className="space-y-8">
       <PageHeader icon={FileText} title={tn("globalTemplates")} desc={t("desc")} />
 
-      <div className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#12141a] overflow-hidden shadow-none">
+      <div className="rounded-lg border border-neutral-200 bg-white   overflow-hidden shadow-none">
         <div className="overflow-x-auto">
           <table className="w-full text-ui-body border-collapse">
             <thead>
-              <tr className="bg-neutral-50/70 border-b border-neutral-200 text-neutral-500 dark:bg-neutral-900/50 dark:border-neutral-800 dark:text-neutral-400 text-ui-caption uppercase tracking-wider font-semibold">
+              <tr className="bg-neutral-50/70 border-b border-neutral-200 text-neutral-500    text-ui-caption uppercase tracking-wider font-semibold">
                 <th className="text-left px-5 py-3">{t("thName")}</th>
                 <th className="text-left px-5 py-3">{t("thCategory")}</th>
                 <th className="text-left px-5 py-3">{t("thScope")}</th>
@@ -42,30 +42,30 @@ export default async function AdminTemplatesPage() {
                 <th className="text-right px-5 py-3">{t("thUseCount")}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
+            <tbody className="divide-y divide-neutral-100 ">
               {templates.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-5 py-10 text-center text-neutral-400 dark:text-neutral-500">
+                  <td colSpan={5} className="px-5 py-10 text-center text-neutral-400 ">
                     {t("empty")}
                   </td>
                 </tr>
               )}
               {templates.map((tpl: Record<string, unknown>) => (
-                <tr key={tpl.id as string} className="hover:bg-neutral-50/30 dark:hover:bg-neutral-900/10 transition-colors duration-150">
+                <tr key={tpl.id as string} className="hover:bg-neutral-50/30  transition-colors duration-150">
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-2">
                       <span className="text-ui-reading">{(tpl.icon as string) ?? "📄"}</span>
                       <div>
-                        <div className="font-medium text-neutral-900 dark:text-white text-ui-body">{tpl.name as string}</div>
+                        <div className="font-medium text-neutral-900  text-ui-body">{tpl.name as string}</div>
                         {(tpl.description as string) && (
-                          <div className="text-ui-caption text-neutral-400 dark:text-neutral-500 truncate max-w-[280px]">{tpl.description as string}</div>
+                          <div className="text-ui-caption text-neutral-400  truncate max-w-[280px]">{tpl.description as string}</div>
                         )}
                       </div>
                     </div>
                   </td>
                   <td className="px-5 py-3.5 text-ui-caption text-neutral-500 font-mono">{(tpl.category as string) ?? "-"}</td>
                   <td className="px-5 py-3.5">
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-ui-caption font-medium bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300 border border-neutral-200/50 dark:border-neutral-700/50">
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-ui-caption font-medium bg-neutral-100 text-neutral-600   border border-neutral-200/50 ">
                       {tpl.scope as string}
                     </span>
                   </td>
@@ -73,7 +73,7 @@ export default async function AdminTemplatesPage() {
                     {tpl.isAgent ? (
                       <span className="text-sora-blue text-ui-caption">🤖</span>
                     ) : (
-                      <span className="text-neutral-300 dark:text-neutral-600 text-ui-caption">—</span>
+                      <span className="text-neutral-300  text-ui-caption">—</span>
                     )}
                   </td>
                   <td className="px-5 py-3.5 text-right font-mono text-ui-caption text-neutral-500">

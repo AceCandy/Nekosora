@@ -121,7 +121,7 @@ export function MarkdownLinkSafetyModal({
       message={(
         <div className="space-y-3">
           <p>{t("message")}</p>
-          <p className="break-all rounded-md bg-nebula-silver px-3 py-2 font-mono text-ui-caption text-space-ink dark:bg-deep-space dark:text-nebula-silver">
+          <p className="break-all rounded-md bg-nebula-silver px-3 py-2 font-mono text-ui-caption text-space-ink  ">
             {url}
           </p>
         </div>
@@ -368,7 +368,7 @@ function MarkdownLinkPreviewLayer({ children }: MarkdownLinkPreviewLayerProps) {
           id={tooltipId}
           role="tooltip"
           aria-live="polite"
-          className="fixed z-50 w-[min(24rem,calc(100vw-1rem))] overflow-hidden rounded-lg border border-morning-mist bg-white text-space-ink shadow-md dark:border-deep-space dark:bg-space-ink dark:text-nebula-silver"
+          className="fixed z-50 w-[min(24rem,calc(100vw-1rem))] overflow-hidden rounded-lg border border-morning-mist bg-white text-space-ink shadow-md   "
           style={{ visibility: "hidden" }}
           onPointerEnter={clearCloseTimer}
           onPointerLeave={scheduleClose}
@@ -378,12 +378,12 @@ function MarkdownLinkPreviewLayer({ children }: MarkdownLinkPreviewLayerProps) {
             <img
               src={getLinkPreviewApiUrl("image", preview.imageUrl)}
               alt=""
-              className="h-36 w-full border-b border-morning-mist object-cover dark:border-deep-space"
+              className="h-36 w-full border-b border-morning-mist object-cover "
               onError={(event) => { event.currentTarget.hidden = true; }}
             />
           )}
           <div className="p-3">
-            <div className="flex items-center gap-2 text-ui-caption text-neutral-600 dark:text-neutral-300">
+            <div className="flex items-center gap-2 text-ui-caption text-neutral-600 ">
               {preview?.iconUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -398,15 +398,15 @@ function MarkdownLinkPreviewLayer({ children }: MarkdownLinkPreviewLayerProps) {
               <span className="sr-only">{t("title")}: </span>
               <span className="truncate">{preview?.siteName || previewHost}</span>
             </div>
-            <p className="mt-2 line-clamp-2 text-ui-body font-semibold text-space-ink dark:text-nebula-silver">
+            <p className="mt-2 line-clamp-2 text-ui-body font-semibold text-space-ink ">
               {preview?.title || previewHost}
             </p>
             {preview?.description && (
-              <p className="mt-1 line-clamp-3 text-ui-caption leading-5 text-neutral-600 dark:text-neutral-300">
+              <p className="mt-1 line-clamp-3 text-ui-caption leading-5 text-neutral-600 ">
                 {preview.description}
               </p>
             )}
-            <p className="mt-2 truncate text-ui-caption text-neutral-500 dark:text-neutral-400">
+            <p className="mt-2 truncate text-ui-caption text-neutral-500 ">
               {preview?.url || target.href}
             </p>
           </div>
@@ -636,7 +636,7 @@ function MarkdownCodeBlock({
         </div>
       ) : (
         (canCopy || (canPreview && kind && onPreview)) ? (
-          <div className="absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded-md bg-white/80 dark:bg-space-ink/80 px-1 py-1 backdrop-blur-sm opacity-0 transition-opacity group-hover:opacity-100 [@media(pointer:coarse)]:opacity-100">
+          <div className="absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded-md bg-white border border-morning-mist px-1 py-1 opacity-0 transition-opacity group-hover:opacity-100 [@media(pointer:coarse)]:opacity-100">
             {canPreview && kind && onPreview ? (
               <button
                 type="button"
@@ -649,7 +649,7 @@ function MarkdownCodeBlock({
                     title: inferPreviewTitle(language, code),
                   })
                 }
-                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-950/5 hover:text-neutral-800 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-white focus-visible:outline focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
+                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-950/5 hover:text-neutral-800    focus-visible:outline focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
                 title={t("openPreview")}
                 aria-label={t("openPreview")}
               >
@@ -660,7 +660,7 @@ function MarkdownCodeBlock({
               <button
                 type="button"
                 onClick={handleCopy}
-                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-950/5 hover:text-neutral-800 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-white focus-visible:outline focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
+                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-950/5 hover:text-neutral-800    focus-visible:outline focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
                 title={copied ? t("copied") : t("copy")}
                 aria-label={copied ? t("copied") : t("copy")}
               >
@@ -677,7 +677,7 @@ function MarkdownCodeBlock({
       <div
         ref={bodyWrapRef}
         className={clsx(
-          "transition-[max-height] duration-300 ease-out",
+          "relative transition-[max-height] duration-300 ease-out",
           isCollapsible && "overflow-hidden",
         )}
         style={{
@@ -694,16 +694,25 @@ function MarkdownCodeBlock({
           lineNumbers={false}
           isIncomplete={isStreaming}
         />
+        {/* 折叠态底部渐隐:锚在 bodyWrap 内(bottom-0 精确贴合代码块底缘,不被下方按钮行顶起);
+            paper 终端风深底需融入 pre 底色(--pp-pre-bg 由皮肤 CSS 定义),默认样式融入代码块底色。 */}
+        {isCollapsible && !expanded ? (
+          <div
+            className={clsx(
+              "pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-b from-transparent",
+              isPaper
+                ? "via-[var(--pp-pre-bg)]/70 to-[var(--pp-pre-bg)]"
+                : "via-[var(--color-prose-code-bg)]/70 to-[var(--color-prose-code-bg)]",
+            )}
+          />
+        ) : null}
       </div>
-      {isCollapsible && !expanded ? (
-        <div className="pointer-events-none absolute inset-x-0 bottom-8 h-20 bg-gradient-to-b from-transparent via-[var(--color-prose-code-bg)]/70 to-[var(--color-prose-code-bg)]" />
-      ) : null}
       {isCollapsible ? (
         <div className="flex justify-center">
           <button
             type="button"
             onClick={() => setExpandedCodeHash((value) => value === codeHash ? null : codeHash)}
-            className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-ui-caption font-medium text-neutral-500 hover:bg-neutral-950/5 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-white transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-ui-caption font-medium text-neutral-500 hover:bg-neutral-950/5 hover:text-neutral-800    transition-colors cursor-pointer"
           >
             {expanded ? (
               <ChevronUp className="w-3.5 h-3.5" aria-hidden="true" />
@@ -753,11 +762,11 @@ function MermaidInlineBlock({ code, isStreaming }: { code: string; isStreaming: 
   return (
     <>
     <div className="group relative my-2">
-      <div className="absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded-md bg-white/80 dark:bg-space-ink/80 px-1 py-1 backdrop-blur-sm opacity-0 transition-opacity group-hover:opacity-100 [@media(pointer:coarse)]:opacity-100">
+      <div className="absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded-md bg-white border border-morning-mist px-1 py-1 opacity-0 transition-opacity group-hover:opacity-100 [@media(pointer:coarse)]:opacity-100">
         <button
           type="button"
           onClick={() => setView((v) => (v === "diagram" ? "source" : "diagram"))}
-          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-950/5 hover:text-neutral-800 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-white focus-visible:outline focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
+          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-950/5 hover:text-neutral-800    focus-visible:outline focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
           title={showSource ? t("preview") : t("code")}
           aria-label={showSource ? t("preview") : t("code")}
         >
@@ -770,7 +779,7 @@ function MermaidInlineBlock({ code, isStreaming }: { code: string; isStreaming: 
         <button
           type="button"
           onClick={handleCopy}
-          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-950/5 hover:text-neutral-800 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-white focus-visible:outline focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
+          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-950/5 hover:text-neutral-800    focus-visible:outline focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
           title={copied ? t("copied") : t("copy")}
           aria-label={copied ? t("copied") : t("copy")}
         >
@@ -784,7 +793,7 @@ function MermaidInlineBlock({ code, isStreaming }: { code: string; isStreaming: 
           <button
             type="button"
             onClick={() => setFullscreen(true)}
-            className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-950/5 hover:text-neutral-800 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-white focus-visible:outline focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
+            className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-950/5 hover:text-neutral-800    focus-visible:outline focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
             title={t("fullscreen")}
             aria-label={t("fullscreen")}
           >
@@ -792,9 +801,9 @@ function MermaidInlineBlock({ code, isStreaming }: { code: string; isStreaming: 
           </button>
         )}
       </div>
-      <div className="max-h-[36rem] overflow-auto rounded-lg border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink p-3">
+      <div className="max-h-[36rem] overflow-auto rounded-lg border border-morning-mist  bg-white  p-3">
         {showSource ? (
-          <pre className="text-ui-caption leading-relaxed font-mono text-neutral-700 dark:text-neutral-300 whitespace-pre">
+          <pre className="text-ui-caption leading-relaxed font-mono text-neutral-700  whitespace-pre">
             <code>{code}</code>
           </pre>
         ) : (
@@ -836,17 +845,17 @@ function MermaidViewerModal({ open, onClose, code, id }: { open: boolean; onClos
       open
       onClose={() => { reset(); onClose(); }}
       title={t("mermaidDiagram")}
-      dialogClassName="m-auto w-[min(1100px,94vw)] max-h-[92vh] rounded-lg border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/50 dark:border-deep-space dark:bg-twilight-obsidian dark:text-nebula-silver"
+      dialogClassName="m-auto w-[min(1100px,94vw)] max-h-[92vh] rounded-lg border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/50   "
       bodyClassName="p-0 h-[82vh] overflow-hidden relative"
     >
-      <div className="absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded-md bg-white/80 dark:bg-space-ink/80 px-1 py-1 backdrop-blur-sm">
-        <button type="button" onClick={() => setScale((s) => Math.min(5, +(s + 0.2).toFixed(2)))} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-950/5 hover:text-neutral-800 dark:text-neutral-300 dark:hover:bg-white/10 cursor-pointer" title={t("zoomIn")} aria-label={t("zoomIn")}>
+      <div className="absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded-md bg-white border border-morning-mist px-1 py-1">
+        <button type="button" onClick={() => setScale((s) => Math.min(5, +(s + 0.2).toFixed(2)))} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-950/5 hover:text-neutral-800   cursor-pointer" title={t("zoomIn")} aria-label={t("zoomIn")}>
           <ZoomIn className="w-3.5 h-3.5" aria-hidden="true" />
         </button>
-        <button type="button" onClick={() => setScale((s) => Math.max(0.3, +(s - 0.2).toFixed(2)))} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-950/5 hover:text-neutral-800 dark:text-neutral-300 dark:hover:bg-white/10 cursor-pointer" title={t("zoomOut")} aria-label={t("zoomOut")}>
+        <button type="button" onClick={() => setScale((s) => Math.max(0.3, +(s - 0.2).toFixed(2)))} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-950/5 hover:text-neutral-800   cursor-pointer" title={t("zoomOut")} aria-label={t("zoomOut")}>
           <ZoomOut className="w-3.5 h-3.5" aria-hidden="true" />
         </button>
-        <button type="button" onClick={reset} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-950/5 hover:text-neutral-800 dark:text-neutral-300 dark:hover:bg-white/10 cursor-pointer" title={t("resetView")} aria-label={t("resetView")}>
+        <button type="button" onClick={reset} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-950/5 hover:text-neutral-800   cursor-pointer" title={t("resetView")} aria-label={t("resetView")}>
           <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
         </button>
       </div>

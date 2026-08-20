@@ -86,16 +86,16 @@ export default function Modal({
       }}
       className={
         dialogClassName ??
-        "m-auto w-[min(640px,92vw)] rounded-lg border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/40 dark:border-deep-space dark:bg-twilight-obsidian dark:text-nebula-silver"
+        "m-auto w-[min(640px,92vw)] rounded-lg border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/40   "
       }
     >
       {title !== undefined && (
-        <header className="flex items-center justify-between border-b border-morning-mist px-5 py-3 dark:border-deep-space">
+        <header className="flex items-center justify-between border-b border-morning-mist px-5 py-3 ">
           <h2 className="text-ui-title font-semibold">{title}</h2>
           <button
             type="button"
             onClick={onClose}
-            className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-250 p-1 rounded transition-colors inline-flex items-center justify-center"
+            className="text-neutral-400 hover:text-neutral-600  p-1 rounded transition-colors inline-flex items-center justify-center"
             aria-label="关闭"
           >
             <X className="w-4 h-4" />

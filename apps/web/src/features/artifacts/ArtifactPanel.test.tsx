@@ -12,7 +12,6 @@ vi.mock("next/dynamic", () => ({
 }));
 
 vi.mock("react-syntax-highlighter/dist/esm/styles/prism", () => ({
-  oneDark: {},
   prism: {},
 }));
 

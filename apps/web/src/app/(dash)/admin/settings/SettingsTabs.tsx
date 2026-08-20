@@ -40,8 +40,8 @@ export function SettingsTabs({ current }: SettingsTabsProps) {
             className={clsx(
               "touch-target max-w-full rounded-md border px-4 py-2 text-center text-ui-body font-medium whitespace-normal transition-colors duration-150",
               active
-                ? "bg-sora-blue/8 text-deep-space border-sora-blue/30 dark:bg-sora-blue/10 dark:text-sora-blue"
-                : "bg-nebula-white dark:bg-twilight-obsidian text-neutral-500 border-morning-mist dark:border-deep-space hover:text-neutral-700 dark:hover:text-neutral-300",
+                ? "bg-sora-blue/8 text-deep-space border-sora-blue/30  "
+                : "bg-nebula-white  text-neutral-500 border-morning-mist  hover:text-neutral-700 ",
             )}
           >
             {label}

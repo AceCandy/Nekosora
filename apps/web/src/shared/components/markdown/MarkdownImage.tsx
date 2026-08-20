@@ -54,7 +54,7 @@ function ImageCopyLinkButton({ src, className }: { src: string; className?: stri
       {copyState === "copied" ? (
         <Check className="w-3.5 h-3.5 text-green-500" aria-hidden="true" />
       ) : copyState === "failed" ? (
-        <CircleAlert className="w-3.5 h-3.5 text-red-500" aria-hidden="true" />
+        <CircleAlert className="w-3.5 h-3.5 text-danger" aria-hidden="true" />
       ) : (
         <Copy className="w-3.5 h-3.5" aria-hidden="true" />
       )}
@@ -125,7 +125,7 @@ export function MarkdownImage({
   // 无 src(罕见):退化为失败占位,避免渲染空 img。
   if (!src) {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-md border border-morning-mist dark:border-deep-space/80 bg-neutral-50 dark:bg-neutral-900 px-2 py-1 text-ui-caption text-neutral-500">
+      <span className="inline-flex items-center gap-1.5 rounded-md border border-morning-mist  bg-neutral-50  px-2 py-1 text-ui-caption text-neutral-500">
         <ImageOff className="w-3.5 h-3.5" aria-hidden="true" />
         {alt || t("imageFailed")}
       </span>
@@ -160,26 +160,26 @@ export function MarkdownImage({
           tabIndex={0}
           aria-label={alt || t("imageZoom")}
           className={clsx(
-            "block max-w-full rounded-xl border border-morning-mist dark:border-deep-space/80 cursor-zoom-in transition-opacity",
+            "block max-w-full rounded-xl border border-morning-mist  cursor-zoom-in transition-opacity",
             status === "loaded" ? "opacity-100" : "opacity-0",
             className,
           )}
         />
         {status === "loading" && (
-          <span className="absolute inset-0 rounded-xl bg-neutral-100 dark:bg-neutral-900 animate-pulse" aria-hidden="true" />
+          <span className="absolute inset-0 rounded-xl bg-neutral-100  animate-pulse" aria-hidden="true" />
         )}
         {status === "error" && (
-          <span className="absolute inset-0 flex flex-col items-center justify-center gap-1 rounded-xl border border-morning-mist dark:border-deep-space/80 bg-neutral-50 dark:bg-neutral-900 p-3 text-center text-ui-caption text-neutral-500">
+          <span className="absolute inset-0 flex flex-col items-center justify-center gap-1 rounded-xl border border-morning-mist  bg-neutral-50  p-3 text-center text-ui-caption text-neutral-500">
             <ImageOff className="w-5 h-5" aria-hidden="true" />
             <span className="line-clamp-2">{alt || t("imageFailed")}</span>
           </span>
         )}
         {status === "loaded" && (
-          <span className="absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded-md bg-white/80 dark:bg-space-ink/80 px-1 py-1 backdrop-blur-sm opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 [@media(pointer:coarse)]:opacity-100">
+          <span className="absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded-md bg-white border border-morning-mist px-1 py-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 [@media(pointer:coarse)]:opacity-100">
             <button
               type="button"
               onClick={() => setZoomOpen(true)}
-              className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-950/5 hover:text-neutral-800 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-white focus-visible:outline focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
+              className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-950/5 hover:text-neutral-800    focus-visible:outline focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
               title={t("imageZoom")}
               aria-label={t("imageZoom")}
             >
@@ -187,14 +187,14 @@ export function MarkdownImage({
             </button>
             <ImageCopyLinkButton
               src={originalUrl}
-              className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-950/5 hover:text-neutral-800 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-white focus-visible:outline focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
+              className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-950/5 hover:text-neutral-800    focus-visible:outline focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
             />
             <a
               href={String(imageUrl)}
               download
               target="_blank"
               rel="noreferrer"
-              className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-950/5 hover:text-neutral-800 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-white focus-visible:outline focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
+              className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-950/5 hover:text-neutral-800    focus-visible:outline focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
               title={t("imageDownload")}
               aria-label={t("imageDownload")}
             >

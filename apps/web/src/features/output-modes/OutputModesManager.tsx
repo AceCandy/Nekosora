@@ -85,7 +85,7 @@ export default function OutputModesManager({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <span className="text-ui-caption font-mono text-neutral-400 dark:text-neutral-500 uppercase tracking-wider">
+        <span className="text-ui-caption font-mono text-neutral-400 ">
           {t("configuredCount", { count: optimisticModes.length })}
         </span>
         <Button
@@ -100,9 +100,9 @@ export default function OutputModesManager({
       </div>
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <div className="rounded-lg border border-morning-mist dark:border-deep-space bg-nebula-white dark:bg-twilight-obsidian overflow-hidden transition-colors duration-150">
+        <div className="rounded-lg border border-morning-mist  bg-nebula-white  overflow-hidden transition-colors duration-150">
           <table className="w-full text-ui-body border-collapse text-left">
-            <thead className="bg-neutral-50/70 dark:bg-neutral-900/50 border-b border-morning-mist dark:border-deep-space text-neutral-500 dark:text-neutral-400 font-mono text-ui-caption uppercase">
+            <thead className="bg-neutral-50/70  border-b border-morning-mist  text-neutral-500  font-mono text-ui-caption uppercase">
               <tr>
                 <th className="p-3.5 w-8" />
                 <th className="p-3.5 font-medium">{t("colName")}</th>
@@ -112,10 +112,10 @@ export default function OutputModesManager({
                 <th className="p-3.5 font-medium text-right">{t("colActions")}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800/60">
+            <tbody className="divide-y divide-neutral-200 ">
               {optimisticModes.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-10 text-center text-ui-caption text-neutral-400 dark:text-neutral-500">
+                  <td colSpan={6} className="p-10 text-center text-ui-caption text-neutral-400 ">
                     {t("empty")}
                   </td>
                 </tr>
@@ -163,11 +163,11 @@ export default function OutputModesManager({
           onClose={() => setDeleteId(null)}
           title={t("deleteTitle")}
           message={
-            <div className="flex gap-3 text-ui-body text-neutral-600 dark:text-neutral-400 mt-2">
-              <ShieldAlert className="w-5 h-5 text-red-500 shrink-0" />
+            <div className="flex gap-3 text-ui-body text-neutral-600  mt-2">
+              <ShieldAlert className="w-5 h-5 text-danger shrink-0" />
               <div>
                 {t("deleteConfirm", { name: deleting.name })}
-                <p className="text-ui-caption text-neutral-400 dark:text-neutral-500 mt-1 leading-normal">
+                <p className="text-ui-caption text-neutral-400  mt-1 leading-normal">
                   {t("deleteWarning")}
                 </p>
               </div>
@@ -207,20 +207,20 @@ function SortableOutputModeRow({
     <tr
       ref={setNodeRef}
       style={style}
-      className="hover:bg-neutral-50/50 dark:hover:bg-neutral-900/10 transition-colors duration-150"
+      className="hover:bg-neutral-50/50  transition-colors duration-150"
     >
       <td className="p-3.5 text-center align-middle">
         <button
           type="button"
           aria-label={t("dragHandle")}
-          className="cursor-grab active:cursor-grabbing inline-flex items-center justify-center text-neutral-400 hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300"
+          className="cursor-grab active:cursor-grabbing inline-flex items-center justify-center text-neutral-400 hover:text-neutral-600  "
           {...attributes}
           {...listeners}
         >
           <GripVertical className="w-4 h-4" />
         </button>
       </td>
-      <td className="p-3.5 font-semibold text-neutral-800 dark:text-white">
+      <td className="p-3.5 font-semibold text-neutral-800 ">
         {mode.name}
       </td>
       <td className="p-3.5 font-mono text-ui-caption">
@@ -229,11 +229,11 @@ function SortableOutputModeRow({
             {mode.icon}
           </Badge>
         ) : (
-          <span className="text-neutral-400 dark:text-neutral-600">-</span>
+          <span className="text-neutral-400 ">-</span>
         )}
       </td>
-      <td className="p-3.5 text-ui-caption text-neutral-500 dark:text-neutral-400 max-w-[240px] truncate" title={mode.description ?? ""}>
-        {mode.description || <span className="text-neutral-400 dark:text-neutral-600">-</span>}
+      <td className="p-3.5 text-ui-caption text-neutral-500  max-w-[240px] truncate" title={mode.description ?? ""}>
+        {mode.description || <span className="text-neutral-400 ">-</span>}
       </td>
       <td className="p-3.5">
         <StatusDot enabled={mode.enabled} label={mode.enabled ? undefined : t("disabled")} />
@@ -243,7 +243,7 @@ function SortableOutputModeRow({
           variant="ghost"
           size="sm"
           onClick={() => onEdit(mode.id)}
-          className="text-neutral-750 hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-white"
+          className="text-neutral-700 hover:text-neutral-900  "
           title={t("edit")}
         >
           <Edit2 className="w-3.5 h-3.5" />
@@ -257,8 +257,8 @@ function SortableOutputModeRow({
             size="sm"
             className={clsx(
               mode.enabled
-                ? "text-amber-600 dark:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/20"
-                : "text-green-600 dark:text-green-500 hover:bg-green-50 dark:hover:bg-green-950/20"
+                ? "text-warning  hover:bg-amber-50 "
+                : "text-success  hover:bg-green-50 "
             )}
             title={mode.enabled ? t("disabled") : t("enabled")}
           >
@@ -280,7 +280,7 @@ function SortableOutputModeRow({
           variant="ghost"
           size="sm"
           onClick={() => onDelete(mode.id)}
-          className="text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 hover:text-red-650"
+          className="text-danger hover:bg-red-50  hover:text-danger-hover"
           title={t("delete")}
         >
           <Trash2 className="w-3.5 h-3.5" />

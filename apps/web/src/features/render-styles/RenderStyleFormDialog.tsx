@@ -27,7 +27,7 @@ interface RenderStyleFormDialogProps {
   initial?: Partial<RenderStyle>;
 }
 
-const labelCls = "block text-ui-caption font-semibold text-neutral-550 dark:text-neutral-400 mb-1.5";
+const labelCls = "block text-ui-caption font-semibold text-ink-secondary  mb-1.5";
 
 export default function RenderStyleFormDialog({
   open,
@@ -66,7 +66,7 @@ export default function RenderStyleFormDialog({
             role="note"
             className="flex items-start gap-2.5 rounded-md border border-neku-amber/30 bg-neku-amber/[0.04] p-3"
           >
-            <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-neku-amber" aria-hidden="true" />
+            <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
             <p className="text-ui-body leading-5 text-space-ink">
               {t("customRendererWarning")}
             </p>
@@ -92,7 +92,7 @@ export default function RenderStyleFormDialog({
               placeholder={t("cssClassPlaceholder")}
               className={cssClassReadOnly ? "opacity-60 cursor-not-allowed" : ""}
             />
-            <span className="block text-ui-caption text-neutral-400 dark:text-neutral-500 mt-1 leading-normal">
+            <span className="block text-ui-caption text-neutral-400  mt-1 leading-normal">
               {t("cssClassHint")}
             </span>
           </label>
@@ -105,12 +105,12 @@ export default function RenderStyleFormDialog({
             />
           </label>
           {isEdit && (
-            <label className="flex items-center gap-2 text-ui-body text-neutral-600 dark:text-neutral-400 pt-6 cursor-pointer select-none">
+            <label className="flex items-center gap-2 text-ui-body text-neutral-600  pt-6 cursor-pointer select-none">
               <input
                 name="enabled"
                 type="checkbox"
                 defaultChecked={initial?.enabled ?? true}
-                className="rounded border-morning-mist dark:border-deep-space"
+                className="rounded border-morning-mist "
               />
               <span>{t("fieldEnabled")}</span>
             </label>
@@ -123,15 +123,15 @@ export default function RenderStyleFormDialog({
               rows={8}
               defaultValue={initial?.css ?? ""}
               placeholder={t("cssPlaceholder")}
-              className="w-full rounded-md border border-morning-mist dark:border-deep-space bg-white dark:bg-[#0f121a] px-3 py-2 text-ui-body text-space-ink dark:text-nebula-silver focus:outline-none focus:border-sora-blue dark:focus:border-sora-blue focus-visible:ring-2 focus-visible:ring-sora-blue transition-[background-color,color,border-color,box-shadow] duration-150 font-mono resize-y"
+              className="w-full rounded-md border border-morning-mist  bg-white  px-3 py-2 text-ui-body text-space-ink  focus:outline-none focus:border-sora-blue  focus-visible:ring-2 focus-visible:ring-sora-blue transition-[background-color,color,border-color,box-shadow] duration-150 font-mono resize-y"
             />
-            <span className="block text-ui-caption text-neutral-400 dark:text-neutral-500 mt-1 leading-normal">
+            <span className="block text-ui-caption text-neutral-400  mt-1 leading-normal">
               {t("cssHint")}
             </span>
           </label>
         </div>
 
-        <div className="flex justify-end gap-2.5 pt-4 border-t border-morning-mist dark:border-deep-space">
+        <div className="flex justify-end gap-2.5 pt-4 border-t border-morning-mist ">
           <Button
             variant="secondary"
             size="sm"

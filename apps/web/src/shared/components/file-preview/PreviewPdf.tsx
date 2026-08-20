@@ -113,7 +113,7 @@ export default function PreviewPdf({ url, filename }: PreviewPdfProps) {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-3 py-1.5 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-900/50 shrink-0">
+      <div className="flex items-center justify-between px-3 py-1.5 border-b border-neutral-200  bg-neutral-50/50  shrink-0">
         <span className="text-ui-caption font-mono text-neutral-500 truncate">{filename}</span>
         <span className="text-ui-caption font-mono text-neutral-400">
           {loading ? (
@@ -126,7 +126,7 @@ export default function PreviewPdf({ url, filename }: PreviewPdfProps) {
           )}
         </span>
       </div>
-      <div className="flex-1 overflow-auto bg-neutral-100 dark:bg-neutral-950 p-4">
+      <div className="flex-1 overflow-auto bg-neutral-100  p-4">
         <div ref={containerRef} />
         {loading && (
           <div className="flex items-center justify-center py-12 text-neutral-400">

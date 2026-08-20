@@ -44,7 +44,7 @@ export default function FilePreviewModal({ file, onClose }: FilePreviewModalProp
       open={file !== null}
       onClose={onClose}
       title={file?.filename}
-      dialogClassName="m-auto w-[min(960px,94vw)] max-h-[92vh] rounded-lg border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/40 dark:border-deep-space dark:bg-twilight-obsidian dark:text-nebula-silver"
+      dialogClassName="m-auto w-[min(960px,94vw)] max-h-[92vh] rounded-lg border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/40   "
       bodyClassName="p-0 max-h-[82vh] overflow-hidden"
     >
       {file && (

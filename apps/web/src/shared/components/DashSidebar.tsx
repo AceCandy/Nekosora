@@ -122,13 +122,13 @@ export default function DashSidebar({
       <header
         aria-hidden={mobileOpen ? true : undefined}
         inert={mobileOpen ? true : undefined}
-        className="flex h-14 shrink-0 items-center gap-3 border-b border-morning-mist bg-nebula-white px-3 dark:border-deep-space dark:bg-twilight-obsidian md:hidden"
+        className="flex h-14 shrink-0 items-center gap-3 border-b border-morning-mist bg-nebula-white px-3   md:hidden"
       >
         <button
           ref={mobileTriggerRef}
           type="button"
           onClick={openMobileSidebar}
-          className="touch-target inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:text-neutral-300 dark:hover:bg-neutral-900 dark:hover:text-neutral-100"
+          className="touch-target inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue   "
           aria-controls="dash-sidebar"
           aria-expanded={mobileOpen}
           aria-label={t("openSidebar")}
@@ -138,7 +138,7 @@ export default function DashSidebar({
         </button>
         <Link
           href={brandHref}
-          className="min-w-0 truncate rounded text-ui-reading font-semibold text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:text-white"
+          className="min-w-0 truncate rounded text-ui-reading font-semibold text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue "
         >
           Nekusora
         </Link>
@@ -164,7 +164,7 @@ export default function DashSidebar({
           if (isMobileViewport && (event.target as HTMLElement).closest("a")) setMobileOpen(false);
         }}
         className={clsx(
-          "fixed inset-y-0 left-0 z-50 flex min-h-0 w-[min(18rem,calc(100vw-3rem))] max-w-72 flex-col border-r border-morning-mist bg-nebula-white p-4 transition-transform duration-200 ease-out dark:border-deep-space dark:bg-twilight-obsidian md:static md:z-40 md:translate-x-0 md:transition-[width,min-width,max-width,transform] md:duration-250 md:ease-in-out",
+          "fixed inset-y-0 left-0 z-50 flex min-h-0 w-[min(18rem,calc(100vw-3rem))] max-w-72 flex-col border-r border-morning-mist bg-nebula-white p-4 transition-transform duration-200 ease-out   md:static md:z-40 md:translate-x-0 md:transition-[width,min-width,max-width,transform] md:duration-250 md:ease-in-out",
           mobileOpen ? "translate-x-0" : "-translate-x-full",
           collapsed
             ? "md:w-14 md:min-w-14 md:max-w-14 md:p-2"
@@ -177,7 +177,7 @@ export default function DashSidebar({
               <div className="min-w-0 flex-1">
                 <Link
                   href={brandHref}
-                  className="block truncate rounded text-ui-heading font-bold text-neutral-900 transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:text-white"
+                  className="block truncate rounded text-ui-heading font-bold text-neutral-900 transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue "
                 >
                   Nekusora
                 </Link>
@@ -186,7 +186,7 @@ export default function DashSidebar({
             <button
               type="button"
               onClick={() => setCollapsed((v) => !v)}
-              className="touch-target hidden h-9 w-9 shrink-0 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:hover:bg-neutral-900 dark:hover:text-neutral-100 md:inline-flex"
+              className="touch-target hidden h-9 w-9 shrink-0 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue   md:inline-flex"
               aria-label={collapsed ? t("expandSidebar") : t("collapseSidebar")}
               title={collapsed ? t("expandSidebar") : t("collapseSidebar")}
             >
@@ -200,7 +200,7 @@ export default function DashSidebar({
               ref={mobileCloseRef}
               type="button"
               onClick={() => setMobileOpen(false)}
-              className="touch-target inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:hover:bg-neutral-900 dark:hover:text-neutral-100 md:hidden"
+              className="touch-target inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue   md:hidden"
               aria-label={t("closeSidebar")}
               title={t("closeSidebar")}
             >
@@ -210,11 +210,11 @@ export default function DashSidebar({
           <SidebarNav groups={groups} matchMode={matchMode} collapsed={collapsed} />
         </div>
 
-        <div ref={userMenuRef} className="relative mt-2 shrink-0 border-t border-morning-mist pt-3 dark:border-deep-space">
+        <div ref={userMenuRef} className="relative mt-2 shrink-0 border-t border-morning-mist pt-3 ">
           {userMenuOpen && (
             <div
               className={clsx(
-                "absolute bottom-full left-0 right-0 z-30 mb-2 rounded-lg border border-morning-mist bg-white p-1 shadow-lg dark:border-deep-space dark:bg-space-ink",
+                "absolute bottom-full left-0 right-0 z-30 mb-2 rounded-lg border border-morning-mist bg-white p-1 shadow-lg  ",
                 collapsed && "md:bottom-0 md:left-full md:right-auto md:mb-0 md:ml-2 md:w-48",
               )}
             >
@@ -226,17 +226,17 @@ export default function DashSidebar({
                     setUserMenuOpen(false);
                     setMobileOpen(false);
                   }}
-                  className="touch-target flex items-center gap-2 rounded-md px-3 py-2 text-ui-body text-neutral-700 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-900"
+                  className="touch-target flex items-center gap-2 rounded-md px-3 py-2 text-ui-body text-neutral-700 hover:bg-neutral-100  "
                 >
                   <MessageSquare className="h-4 w-4" aria-hidden="true" />
                   {link.label}
                 </Link>
               ))}
-              <LanguageSwitcher className="touch-target flex w-full rounded-md px-3 py-2 hover:bg-neutral-100 dark:hover:bg-neutral-900" />
+              <LanguageSwitcher className="touch-target flex w-full rounded-md px-3 py-2 hover:bg-neutral-100 " />
               <form action={logoutAction}>
                 <button
                   type="submit"
-                  className="touch-target flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-ui-body text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20"
+                  className="touch-target flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-ui-body text-danger hover:bg-red-50 "
                 >
                   <LogOut className="h-4 w-4" aria-hidden="true" />
                   {t("logout")}
@@ -248,7 +248,7 @@ export default function DashSidebar({
             type="button"
             onClick={() => setUserMenuOpen((open) => !open)}
             className={clsx(
-              "touch-target flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:hover:bg-neutral-900",
+              "touch-target flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue ",
               collapsed && "md:justify-center",
             )}
             aria-expanded={userMenuOpen}
@@ -257,8 +257,8 @@ export default function DashSidebar({
               {displayName.slice(0, 1).toUpperCase()}
             </span>
             <span className={clsx("min-w-0 flex-1", collapsed && "md:hidden")}>
-              <span className="block truncate text-ui-body font-semibold text-neutral-800 dark:text-neutral-100">{displayName}</span>
-              <span className="mt-0.5 block truncate font-mono text-ui-caption text-neutral-450 dark:text-neutral-500">
+              <span className="block truncate text-ui-body font-semibold text-neutral-800 ">{displayName}</span>
+              <span className="mt-0.5 block truncate font-mono text-ui-caption text-ink-tertiary ">
                 {user.email}{brandBadge ? ` (${brandBadge})` : ""}
               </span>
             </span>

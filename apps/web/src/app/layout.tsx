@@ -35,12 +35,8 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
+  viewportFit: "cover",
 };
-
-const themeScript = `
-(() => {
-  document.documentElement.classList.remove("dark");
-})();`;
 
 export default async function RootLayout({
   children,
@@ -54,9 +50,6 @@ export default async function RootLayout({
         suppressHydrationWarning
         className={`${inter.variable} ${jetbrainsMono.variable} ${notoSansSC.variable}`}
       >
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
-      </head>
       <body>
         <NextIntlClientProvider locale={locale} messages={messages}>
           {children}

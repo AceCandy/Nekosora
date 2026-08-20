@@ -9,9 +9,9 @@ export default function ChatLoading() {
   return (
     <div className="flex-1 min-h-0 flex items-center justify-center px-6">
       <div className="w-full max-w-md animate-pulse space-y-2.5">
-        <div className="h-3 w-3/4 rounded bg-morning-mist dark:bg-deep-space/60" />
-        <div className="h-3 w-full rounded bg-morning-mist dark:bg-deep-space/60" />
-        <div className="h-3 w-5/6 rounded bg-morning-mist dark:bg-deep-space/60" />
+        <div className="h-3 w-3/4 rounded bg-morning-mist " />
+        <div className="h-3 w-full rounded bg-morning-mist " />
+        <div className="h-3 w-5/6 rounded bg-morning-mist " />
       </div>
     </div>
   );

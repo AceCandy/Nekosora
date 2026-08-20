@@ -48,7 +48,7 @@ export const MessageTimeSeparator = memo(function MessageTimeSeparator({
   return (
     <time
       dateTime={info.dateTime}
-      className="mb-4 block text-center text-ui-micro text-neutral-500 dark:text-neutral-400"
+      className="mb-4 block text-center text-ui-micro text-neutral-500 "
     >
       {label}
     </time>

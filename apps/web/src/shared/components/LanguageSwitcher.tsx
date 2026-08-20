@@ -39,7 +39,7 @@ export default function LanguageSwitcher({ className }: { className?: string }) 
         onChange={(e) => handleChange(e.target.value as Locale)}
         disabled={isPending}
         aria-label={t("language")}
-        className="appearance-none bg-transparent text-ui-body font-medium text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100 cursor-pointer disabled:opacity-50 pr-1"
+        className="appearance-none bg-transparent text-ui-body font-medium text-neutral-600 hover:text-neutral-900   cursor-pointer disabled:opacity-50 pr-1"
       >
         {LOCALE_OPTIONS.map((opt) => (
           <option key={opt.value} value={opt.value}>

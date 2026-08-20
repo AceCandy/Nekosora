@@ -6,15 +6,40 @@
 @source "../../node_modules/streamdown/dist/*.js";
 
 @theme {
-  --color-sora-blue: oklch(0.60 0.15 250);
-  --color-sora-blue-hover: oklch(0.55 0.16 250);
+  --color-sora-blue: oklch(0.55 0.16 250);
+  --color-sora-blue-hover: oklch(0.48 0.17 250);
   --color-neku-amber: oklch(0.75 0.15 80);
   --color-nebula-white: oklch(0.99 0.003 250);
-  --color-twilight-obsidian: oklch(0.10 0.01 260);
   --color-space-ink: oklch(0.12 0.012 260);
   --color-nebula-silver: oklch(0.96 0.005 250);
   --color-morning-mist: oklch(0.92 0.01 250);
   --color-deep-space: oklch(0.25 0.02 250);
+
+  /* 语义文字层级:次级/三级文字,实测过 WCAG AA(星云纯白底 ≥4.5:1)。
+     信息性文字禁止再用 neutral-400 或半透明墨色(不达标)。 */
+  --color-ink-secondary: oklch(0.46 0.013 250);
+  --color-ink-tertiary: oklch(0.52 0.012 250);
+
+  /* 语义状态色:文字与实心按钮同值达标(白字压色 ≥4.5:1)。amber 系文字一律用 warning,
+     neku-amber 只做大面积装饰底色,不用于文字。 */
+  --color-success: oklch(0.5 0.12 155);
+  --color-danger: oklch(0.577 0.215 27);
+  --color-danger-hover: oklch(0.527 0.195 26);
+  --color-warning: oklch(0.55 0.11 70);
+
+  /* 收编 Tailwind 默认 neutral 色阶:保持各阶亮度不变,注入品牌冷调(hue 250 微量 chroma),
+     使存量 neutral-* 用法自动遵循「星枢天流」冷调中性,视同 token 体系一部分。 */
+  --color-neutral-50: oklch(0.985 0.002 250);
+  --color-neutral-100: oklch(0.967 0.003 250);
+  --color-neutral-200: oklch(0.922 0.004 250);
+  --color-neutral-300: oklch(0.87 0.006 250);
+  --color-neutral-400: oklch(0.708 0.009 250);
+  --color-neutral-500: oklch(0.556 0.011 250);
+  --color-neutral-600: oklch(0.441 0.013 250);
+  --color-neutral-700: oklch(0.371 0.013 250);
+  --color-neutral-800: oklch(0.278 0.012 250);
+  --color-neutral-900: oklch(0.204 0.011 250);
+  --color-neutral-950: oklch(0.145 0.01 250);
 
   /* 结构化图表调色板：冷调蓝系为主 + 琥珀强调，遵循「星枢天流」克制冷调。 */
   --color-chart-1: oklch(0.62 0.15 250);
@@ -30,7 +55,7 @@
   --color-chart-tooltip-text: oklch(0.22 0.012 260);
   
   /* 默认态正文(prose)基线辅助灰:代码块/行内代码/列表标记的背景、边框、文字色。
-     精确等价原字面量(非就近近似),集中在此维护;暗色值由下方 .dark 覆盖。 */
+     精确等价原字面量(非就近近似),集中在此维护。 */
   --color-prose-code-bg: oklch(0.975 0.004 250);
   --color-prose-code-border: oklch(0.92 0.005 250);
   --color-prose-code-header: oklch(0.45 0.01 250);
@@ -61,25 +86,9 @@
   --text-ui-display--line-height: calc(2.25 / 1.875);
 }
 
-@custom-variant dark (&:where(.dark, .dark *));
-
 :root {
   --background: var(--color-nebula-white);
   --foreground: var(--color-space-ink);
-}
-
-/* prose 基线辅助灰的暗色覆盖(marker 明暗同值,无需覆盖)。 */
-.dark {
-  --color-chart-axis: oklch(0.72 0.01 250);
-  --color-chart-grid: oklch(0.32 0.015 250);
-  --color-chart-tooltip-bg: oklch(0.16 0.01 260);
-  --color-chart-tooltip-border: oklch(0.32 0.015 250);
-  --color-chart-tooltip-text: oklch(0.92 0.005 250);
-  --color-prose-code-bg: oklch(0.165 0.008 260);
-  --color-prose-code-border: oklch(0.24 0.01 260);
-  --color-prose-code-header: oklch(0.7 0.01 260);
-  --color-prose-inline-bg: oklch(0.22 0.01 260);
-  --color-prose-inline-text: oklch(0.85 0.015 260);
 }
 
 html,
@@ -154,12 +163,6 @@ body {
 .is-scrolling::-webkit-scrollbar-thumb {
   background: color-mix(in oklch, var(--color-space-ink) 18%, transparent);
 }
-.dark .is-scrolling {
-  scrollbar-color: color-mix(in oklch, var(--color-nebula-silver) 22%, transparent) transparent;
-}
-.dark .is-scrolling::-webkit-scrollbar-thumb {
-  background: color-mix(in oklch, var(--color-nebula-silver) 22%, transparent);
-}
 
 /* 保留滚动能力但永久隐藏滚动条，聊天正文由大纲承担位置导航。 */
 .scrollbar-hidden {
@@ -211,12 +214,6 @@ body {
   animation: research-status-shimmer 2s ease-in-out infinite;
   pointer-events: none;
 }
-.dark .research-status-shimmer {
-  color: color-mix(in oklch, var(--color-nebula-silver) 72%, transparent);
-}
-.dark .research-status-shimmer::after {
-  color: var(--color-nebula-silver);
-}
 
 /*
  * 默认态正文代码块美化。
@@ -242,11 +239,6 @@ body {
   box-shadow: none;
   padding: 0;
 }
-.dark .nekusora-md [data-streamdown="code-block"] {
-  background: transparent;
-  border: 0;
-  box-shadow: none;
-}
 
 /* 头部语言标签条:淡化,左缘与代码对齐(streamdown 标签 span 自带 ml-1 需清零,
    padding-left 与 code padding-left 同值,标签与代码左缘严丝合缝)。 */
@@ -256,9 +248,6 @@ body {
 }
 .nekusora-md [data-streamdown="code-block-header"] span {
   margin-left: 0;
-}
-.dark .nekusora-md [data-streamdown="code-block-header"] {
-  color: var(--color-prose-code-header);
 }
 /* paper:语言标签移到 pre 内右上角(MarkdownCodeBlock 按钮),隐藏上方原生 header。 */
 .rs-paper .nekusora-md [data-streamdown="code-block-header"] {
@@ -274,9 +263,6 @@ body {
   border-radius: 16px;
   padding: 0;
   overflow: hidden;
-}
-.dark .nekusora-md [data-streamdown="code-block-body"] {
-  background: var(--color-prose-code-bg);
 }
 .nekusora-md [data-streamdown="code-block-body"] pre {
   font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
@@ -330,10 +316,6 @@ body {
   font-size: 0.9em;
   font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
-.dark .nekusora-md [data-streamdown="inline-code"] {
-  background: var(--color-prose-inline-bg);
-  color: var(--color-prose-inline-text);
-}
 
 /*
  * 默认态正文排版基线(prose)。
@@ -349,9 +331,6 @@ body {
   line-height: 1.4;
   margin: 1.5em 0 0.6em;
 }
-.dark .nekusora-md :is(h1, h2, h3, h4) {
-  color: var(--color-nebula-silver);
-}
 .nekusora-md h1 { font-size: 1.45em; }
 .nekusora-md h2 { font-size: 1.28em; }
 .nekusora-md h3 { font-size: 1.14em; }
@@ -366,7 +345,6 @@ body {
 .nekusora-md :is(ul, ol) { margin: 0.85em 0; padding-left: 1.5em; }
 .nekusora-md li { margin: 0.3em 0; }
 .nekusora-md li::marker { color: var(--color-prose-marker); }
-.dark .nekusora-md li::marker { color: var(--color-prose-marker); }
 
 .nekusora-md [data-streamdown="blockquote"] {
   margin: 1.1em 0;
@@ -374,19 +352,12 @@ body {
   border-left: 2px solid var(--color-morning-mist);
   color: var(--color-deep-space);
 }
-.dark .nekusora-md [data-streamdown="blockquote"] {
-  border-left-color: var(--color-deep-space);
-  color: var(--color-nebula-silver);
-}
 .nekusora-md [data-streamdown="blockquote"] p { margin: 0.45em 0; }
 
 .nekusora-md [data-streamdown="horizontal-rule"] {
   border: 0;
   border-top: 1px solid var(--color-morning-mist);
   margin: 1.6em 0;
-}
-.dark .nekusora-md [data-streamdown="horizontal-rule"] {
-  border-top-color: var(--color-deep-space);
 }
 
 /* streamdown 把 autolink 渲染成 <button data-streamdown="link"> 而非 <a>,
@@ -406,7 +377,6 @@ body {
   font-weight: 650;
   color: var(--color-space-ink);
 }
-.dark .nekusora-md strong { color: var(--color-nebula-silver); }
 
 /* 表格:对齐结构化 table 视觉。streamdown 在表格区域挂了多层自带 Tailwind 类
    (wrapper 的 bg-sidebar/p-2、内层 overflow div 的 border-border/bg-background、table 的 divide-y),
@@ -418,9 +388,6 @@ body {
   border-radius: 8px;
   overflow: hidden;
   background: transparent;
-}
-.dark .nekusora-md [data-streamdown="table-wrapper"] {
-  border-color: var(--color-deep-space);
 }
 .nekusora-md [data-streamdown="table"] {
   width: 100%;
@@ -437,14 +404,8 @@ body {
   color: var(--color-space-ink);
   word-break: break-word;
 }
-.dark .nekusora-md [data-streamdown="table"] :is(th, td) {
-  color: var(--color-nebula-silver);
-}
 .nekusora-md [data-streamdown="table"] thead tr {
   background: color-mix(in oklch, var(--color-morning-mist) 50%, transparent);
-}
-.dark .nekusora-md [data-streamdown="table"] thead tr {
-  background: color-mix(in oklch, var(--color-deep-space) 40%, transparent);
 }
 .nekusora-md [data-streamdown="table"] th {
   font-weight: 500;
@@ -452,9 +413,6 @@ body {
 }
 .nekusora-md [data-streamdown="table"] tbody td {
   border-top: 1px solid var(--color-morning-mist);
-}
-.dark .nekusora-md [data-streamdown="table"] tbody td {
-  border-top-color: var(--color-deep-space);
 }
 /* streamdown 在 wrapper 内多包一层 overflow 容器(无 data-streamdown 属性),
    自带 border-border/bg-background/rounded-md,是表格内深色实线元凶,清零,

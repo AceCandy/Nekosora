@@ -146,7 +146,7 @@ describe("MessageRunMetadataDisplay", () => {
     expect(html).toContain(`>${formatDateTimeLocal(completedAt)}</time>`);
     expect(html).toContain("font-mono text-ui-body tabular-nums");
     expect(html).toContain("size-2.5");
-    expect(html).toContain("text-space-ink/55 dark:text-nebula-silver/55");
+    expect(html).toContain("text-ink-tertiary ");
     const timeEndIndex = html.indexOf("</time>") + "</time>".length;
     expect(html.slice(timeEndIndex)).toMatch(/^<\/div>/);
     expect(html).toContain(

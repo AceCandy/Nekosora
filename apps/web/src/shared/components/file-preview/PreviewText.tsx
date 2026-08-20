@@ -79,17 +79,17 @@ export default function PreviewText({ url, filename, mime }: PreviewTextProps) {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-3 py-1.5 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-900/50">
+      <div className="flex items-center justify-between px-3 py-1.5 border-b border-neutral-200  bg-neutral-50/50 ">
         <span className="text-ui-caption font-mono text-neutral-500 truncate">{filename}</span>
         {mime && (
           <span className="text-ui-caption font-mono text-neutral-400">{mime}</span>
         )}
       </div>
-      <pre className="flex-1 overflow-auto p-3 text-ui-caption font-mono leading-relaxed text-neutral-700 dark:text-neutral-300 whitespace-pre-wrap break-words">
+      <pre className="flex-1 overflow-auto p-3 text-ui-caption font-mono leading-relaxed text-neutral-700  whitespace-pre-wrap break-words">
         <code>{content}</code>
       </pre>
       {truncated && (
-        <div className="px-3 py-1.5 border-t border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/30 text-ui-caption text-amber-600 dark:text-amber-400">
+        <div className="px-3 py-1.5 border-t border-amber-200  bg-amber-50  text-ui-caption text-warning ">
           {t("fileTooLarge", { kb: Math.round(MAX_TEXT_BYTES / 1024) })}
         </div>
       )}

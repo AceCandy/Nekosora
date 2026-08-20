@@ -20,12 +20,12 @@ import type { PreviewableFile } from "@/shared/components/file-preview/FilePrevi
 import { getSupportedReasoningLevels } from "@/lib/reasoning";
 import { useClickOutside } from "@/shared/lib/useClickOutside";
 
-const MENU_ROW = "flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-ui-caption font-medium text-neutral-700 transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:text-neutral-200 dark:hover:bg-neutral-900";
+const MENU_ROW = "flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-ui-caption font-medium text-neutral-700 transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue  ";
 /** 输入栏内联控件:与发送按钮同高,无多余描边框。 */
 const TOOLBAR_CHIP =
-  "pointer-events-auto inline-flex h-8 max-w-20 items-center gap-1 rounded-full px-2 text-ui-caption font-medium text-neutral-600 transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none dark:text-neutral-300 dark:hover:bg-neutral-800 sm:max-w-52";
+  "pointer-events-auto inline-flex h-8 max-w-20 items-center gap-1 rounded-full px-2 text-ui-caption font-medium text-neutral-600 transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none   sm:max-w-52";
 const TOOLBAR_ICON =
-  "pointer-events-auto inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200";
+  "pointer-events-auto inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none   ";
 
 export interface ChatToolbarProps {
   // 模型选择（单选，必选不可清空，click 展开 + 向上弹出）
@@ -148,8 +148,8 @@ export function ChatToolbar(props: ChatToolbarProps) {
             key={a.id}
             className={clsx(
               "relative flex h-16 w-60 max-w-full min-w-0 items-center rounded-lg p-2 pr-12 transition-colors",
-              a.status === "uploaded" && "bg-neutral-100 dark:bg-white/[0.06]",
-              a.status === "uploading" && "bg-neutral-100 dark:bg-white/[0.06]",
+              a.status === "uploaded" && "bg-neutral-100 ",
+              a.status === "uploading" && "bg-neutral-100 ",
               a.status === "pending" && "bg-neku-amber/[0.06]",
               a.status === "error" && "bg-red-500/[0.06]",
             )}
@@ -165,18 +165,18 @@ export function ChatToolbar(props: ChatToolbarProps) {
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={a.previewUrl} alt="" className="h-11 w-11 shrink-0 rounded-md object-cover" />
               ) : (
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-white text-neutral-500 dark:bg-space-ink dark:text-neutral-400">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-white text-neutral-500  ">
                   <FileIcon className="h-5 w-5" aria-hidden="true" />
                 </span>
               )}
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-ui-body font-medium text-space-ink dark:text-nebula-silver" title={a.filename}>
+                <span className="block truncate text-ui-body font-medium text-space-ink " title={a.filename}>
                   {a.filename}
                 </span>
                 <span className={clsx(
-                  "block truncate text-ui-caption font-normal text-neutral-600 dark:text-neutral-400",
-                  a.status === "pending" && "text-neku-amber dark:text-neku-amber",
-                  a.status === "error" && "text-red-500 dark:text-red-400",
+                  "block truncate text-ui-caption font-normal text-neutral-600 ",
+                  a.status === "pending" && "text-warning ",
+                  a.status === "error" && "text-danger ",
                 )}>
                   {metadata}
                 </span>
@@ -185,7 +185,7 @@ export function ChatToolbar(props: ChatToolbarProps) {
             <button
               type="button"
               onClick={() => onRemoveAttachment(a.id)}
-              className="touch-target absolute right-1.5 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-black/[0.05] hover:text-neutral-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:hover:bg-white/[0.08] dark:hover:text-neutral-200"
+              className="touch-target absolute right-1.5 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-black/[0.05] hover:text-neutral-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue  "
               title={t("attachRemove")}
               aria-label="移除附件"
             >
@@ -218,7 +218,12 @@ export function RenderStyleMenu(props: ChatToolbarProps) {
         <button
           type="button"
           onClick={props.onRenderStylePickerToggle}
-          className="touch-target inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-space-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none dark:text-neutral-300 dark:hover:bg-neutral-900 dark:hover:text-nebula-silver"
+          className={clsx(
+            "touch-target inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none   ",
+            props.renderStyleId
+              ? "text-sora-blue hover:bg-neutral-100"
+              : "text-neutral-600 hover:bg-neutral-100 hover:text-space-ink",
+          )}
           aria-label={t("renderStyle")}
           title={t("renderStyle")}
           aria-haspopup="listbox"
@@ -251,11 +256,11 @@ export function ComposerPlusMenu(props: ChatToolbarProps) {
           event.currentTarget.value = "";
         }}
       />
-      <button type="button" onClick={() => { if (open) close(); else setOpen(true); }} className="inline-flex h-8 w-8 items-center justify-center rounded-full text-neutral-600 transition-colors duration-200 hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none dark:text-neutral-300 dark:hover:bg-neutral-900" aria-label="更多设置" aria-haspopup="menu" aria-expanded={open}>
+      <button type="button" onClick={() => { if (open) close(); else setOpen(true); }} className="inline-flex h-8 w-8 items-center justify-center rounded-full text-neutral-600 transition-colors duration-200 hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none  " aria-label="更多设置" aria-haspopup="menu" aria-expanded={open}>
         <Plus className="h-4.5 w-4.5" aria-hidden="true" />
       </button>
       {open && (
-        <div role="menu" className="absolute bottom-full left-0 z-20 mb-2 w-48 rounded-lg border border-morning-mist bg-white p-1.5 shadow-lg dark:border-deep-space dark:bg-space-ink">
+        <div role="menu" className="absolute bottom-full left-0 z-20 mb-2 w-48 rounded-lg border border-morning-mist bg-white p-1.5 shadow-lg  ">
           <button
             type="button"
             role="menuitem"
@@ -298,7 +303,7 @@ export function ModelControlMenu(props: ChatToolbarProps) {
             <button
               type="button"
               onClick={props.onOutputModePickerToggle}
-              className={clsx(TOOLBAR_ICON, props.outputModeId && "bg-sora-blue/[0.08] text-sora-blue hover:bg-sora-blue/[0.12] hover:text-sora-blue dark:hover:bg-sora-blue/[0.12] dark:hover:text-sora-blue")}
+              className={clsx(TOOLBAR_ICON, props.outputModeId && "bg-sora-blue/[0.08] text-sora-blue hover:bg-sora-blue/[0.12] hover:text-sora-blue  ")}
               aria-label={t("outputMode")}
               title={t("outputMode")}
               aria-haspopup="listbox"
@@ -309,18 +314,18 @@ export function ModelControlMenu(props: ChatToolbarProps) {
           )}
         />
       )}
-      {props.webSearchAvailable && <div className="hidden sm:block">
+      {props.webSearchAvailable && (
         <button
           type="button"
           onClick={props.onWebSearchToggle}
-          className={clsx(TOOLBAR_ICON, props.webSearch && "bg-sora-blue/[0.08] text-sora-blue hover:bg-sora-blue/[0.12] hover:text-sora-blue dark:hover:bg-sora-blue/[0.12] dark:hover:text-sora-blue")}
+          className={clsx(TOOLBAR_ICON, props.webSearch && "bg-sora-blue/[0.08] text-sora-blue hover:bg-sora-blue/[0.12] hover:text-sora-blue  ")}
           aria-pressed={props.webSearch}
           aria-label={t("webSearch")}
           title={t("webSearch")}
         >
           <Globe className="h-4 w-4" aria-hidden="true" />
         </button>
-      </div>}
+      )}
       <ModelConfigPicker
         {...props}
         current={current}
@@ -398,14 +403,14 @@ function ModelConfigPicker(props: ModelConfigPickerProps) {
         <button
           type="button"
           onClick={() => { if (props.modelPickerOpen) close(); else props.onModelPickerToggle(); }}
-          className={clsx(TOOLBAR_CHIP, "cursor-pointer text-neutral-700 dark:text-neutral-200")}
+          className={clsx(TOOLBAR_CHIP, "cursor-pointer text-neutral-700 ")}
           aria-label={t("modelSettings")}
           aria-haspopup="dialog"
           aria-expanded={props.modelPickerOpen}
         >
           <span className="truncate">{props.current?.displayName ?? props.current?.name ?? t("selectModel")}</span>
           {statusLabel && (
-            <span className="hidden shrink-0 text-neutral-400 dark:text-neutral-500 sm:inline">
+            <span className="hidden shrink-0 text-neutral-400  sm:inline">
               · {statusLabel}
             </span>
           )}
@@ -414,7 +419,7 @@ function ModelConfigPicker(props: ModelConfigPickerProps) {
       }
     >
       <div role="dialog" aria-label={t("modelSettings")}>
-        <div className="relative border-b border-morning-mist p-2 dark:border-deep-space/80">
+        <div className="relative border-b border-morning-mist p-2 ">
           <Search className="pointer-events-none absolute left-4 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-400" aria-hidden="true" />
           <input
             type="search"
@@ -422,7 +427,7 @@ function ModelConfigPicker(props: ModelConfigPickerProps) {
             onChange={(event) => setQuery(event.target.value)}
             placeholder={t("modelSearchPlaceholder")}
             aria-label={t("modelSearchPlaceholder")}
-            className="h-8 w-full rounded-md border border-morning-mist bg-nebula-white pl-8 pr-3 text-ui-caption text-space-ink outline-none transition-colors placeholder:text-neutral-500 focus:border-sora-blue focus-visible:ring-2 focus-visible:ring-sora-blue/20 dark:border-deep-space dark:bg-twilight-obsidian dark:text-nebula-silver"
+            className="h-8 w-full rounded-md border border-morning-mist bg-nebula-white pl-8 pr-3 text-ui-caption text-space-ink outline-none transition-colors placeholder:text-neutral-500 focus:border-sora-blue focus-visible:ring-2 focus-visible:ring-sora-blue/20   "
           />
         </div>
 
@@ -443,7 +448,7 @@ function ModelConfigPicker(props: ModelConfigPickerProps) {
                   "touch-target flex min-h-9 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-ui-caption transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue",
                   selected
                     ? "bg-sora-blue/[0.06] font-semibold text-sora-blue"
-                    : "text-neutral-600 hover:bg-neutral-50 dark:text-neutral-300 dark:hover:bg-neutral-900",
+                    : "text-neutral-600 hover:bg-neutral-50  ",
                 )}
               >
                 <Check className={clsx("h-3.5 w-3.5 shrink-0", selected ? "opacity-100" : "opacity-0")} aria-hidden="true" />
@@ -454,32 +459,29 @@ function ModelConfigPicker(props: ModelConfigPickerProps) {
               </button>
             );
           }) : (
-            <div className="px-3 py-8 text-center text-ui-caption text-neutral-500 dark:text-neutral-400">
+            <div className="px-3 py-8 text-center text-ui-caption text-neutral-500 ">
               {t("modelSearchNoMatch")}
             </div>
           )}
         </div>
 
         {reasoningVisible && (
-          <div className="border-t border-morning-mist bg-neutral-50/80 px-2 py-1.5 dark:border-deep-space dark:bg-twilight-obsidian/60">
+          <div className="border-t border-morning-mist bg-neutral-50/80 px-2 py-1.5  ">
             <div className="flex items-center gap-2">
-              <span className="mt-2 inline-flex shrink-0 items-center self-start text-neutral-600 dark:text-neutral-300" title={t("reasoning")}>
+              <span className="mt-2 inline-flex shrink-0 items-center self-start text-neutral-600 " title={t("reasoning")}>
                 <Brain className="h-3.5 w-3.5" aria-hidden="true" />
               </span>
               {fixed && (
-                <span className="ml-auto text-ui-caption text-neutral-500 dark:text-neutral-400">
+                <span className="ml-auto text-ui-caption text-neutral-500 ">
                   {t("reasoningFixedShort")}
                 </span>
               )}
               {!fixed && (
                 <div className="relative h-11 min-w-0 flex-1">
-                  <div className="pointer-events-none absolute inset-x-3 top-3 h-1.5 rounded-full" style={{ background: "linear-gradient(to right, var(--color-nebula-white), var(--color-sora-blue), var(--color-neku-amber))" }}>
+                  <div className="pointer-events-none absolute inset-x-3 top-3 h-1.5 rounded-full bg-morning-mist">
                     <span
-                      className="absolute top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-md dark:border-space-ink"
-                      style={{
-                        left: `${reasoningProgress}%`,
-                        background: "linear-gradient(to bottom, var(--color-nebula-white) 55%, var(--color-neku-amber))",
-                      }}
+                      className="absolute top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full border border-morning-mist bg-white"
+                      style={{ left: `${reasoningProgress}%` }}
                     />
                   </div>
                   <div className="pointer-events-none absolute inset-x-3 bottom-0 h-4">
@@ -490,8 +492,8 @@ function ModelConfigPicker(props: ModelConfigPickerProps) {
                           "absolute top-0 whitespace-nowrap text-ui-micro font-medium",
                           index === 0 ? "text-left" : index === levels.length - 1 ? "-translate-x-full text-right" : "-translate-x-1/2 text-center",
                           index === displayedReasoningIndex
-                            ? "text-space-ink dark:text-nebula-silver"
-                            : "text-neutral-500 dark:text-neutral-400",
+                            ? "text-space-ink "
+                            : "text-neutral-500 ",
                         )}
                         style={{ left: `${(index / (levels.length - 1)) * 100}%` }}
                       >

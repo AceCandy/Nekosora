@@ -206,14 +206,14 @@ export default function WebSearchManager({
     <div className="space-y-8">
       <section className="space-y-3" aria-labelledby="search-query-rewrite-heading">
         <div>
-          <h2 id="search-query-rewrite-heading" className="text-ui-title font-semibold text-neutral-900 dark:text-neutral-100">
+          <h2 id="search-query-rewrite-heading" className="text-ui-title font-semibold text-neutral-900 ">
             {t("queryRewriteTitle")}
           </h2>
-          <p className="mt-1 text-ui-body text-neutral-600 dark:text-neutral-400">{t("queryRewriteDesc")}</p>
+          <p className="mt-1 text-ui-body text-neutral-600 ">{t("queryRewriteDesc")}</p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
           <label className="min-w-0 flex-1 space-y-1" htmlFor="web-search-query-rewrite-model">
-            <span className="text-ui-caption font-medium text-neutral-700 dark:text-neutral-300">
+            <span className="text-ui-caption font-medium text-neutral-700 ">
               {t("queryRewriteModelLabel")}
             </span>
             <Select
@@ -246,10 +246,10 @@ export default function WebSearchManager({
 
       <section className="space-y-3" aria-labelledby="search-order-heading">
         <div>
-          <h2 id="search-order-heading" className="text-ui-title font-semibold text-neutral-900 dark:text-neutral-100">
+          <h2 id="search-order-heading" className="text-ui-title font-semibold text-neutral-900 ">
             {t("orderTitle")}
           </h2>
-          <p className="mt-1 text-ui-body text-neutral-600 dark:text-neutral-400">{t("orderDesc")}</p>
+          <p className="mt-1 text-ui-body text-neutral-600 ">{t("orderDesc")}</p>
         </div>
         <DndContext
           id="web-search-backends-sortable"
@@ -261,7 +261,7 @@ export default function WebSearchManager({
             items={optimisticBackends.map(searchBackendKey)}
             strategy={verticalListSortingStrategy}
           >
-            <div className="divide-y divide-neutral-200 overflow-hidden rounded-lg border border-morning-mist bg-white dark:divide-neutral-800 dark:border-deep-space dark:bg-twilight-obsidian">
+            <div className="divide-y divide-neutral-200 overflow-hidden rounded-lg border border-morning-mist bg-white   ">
               {optimisticBackends.map((backend, index) => (
                 <SortableBackendRow
                   key={searchBackendKey(backend)}
@@ -283,7 +283,7 @@ export default function WebSearchManager({
         </DndContext>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
           <label className="min-w-0 flex-1 space-y-1" htmlFor="web-search-model">
-            <span className="text-ui-caption font-medium text-neutral-700 dark:text-neutral-300">
+            <span className="text-ui-caption font-medium text-neutral-700 ">
               {t("searchModelLabel")}
             </span>
             <Select
@@ -315,30 +315,30 @@ export default function WebSearchManager({
 
       <section className="space-y-4" aria-labelledby="search-providers-heading">
         <div>
-          <h2 id="search-providers-heading" className="text-ui-title font-semibold text-neutral-900 dark:text-neutral-100">
+          <h2 id="search-providers-heading" className="text-ui-title font-semibold text-neutral-900 ">
             {t("providersTitle")}
           </h2>
-          <p className="mt-1 text-ui-body text-neutral-600 dark:text-neutral-400">{t("providersDesc")}</p>
+          <p className="mt-1 text-ui-body text-neutral-600 ">{t("providersDesc")}</p>
         </div>
 
         <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
           <div className="space-y-3 lg:col-span-2">
             {config.providers.length === 0 && (
-              <div className="rounded-lg border border-dashed border-morning-mist p-10 text-center text-ui-body text-neutral-500 dark:border-deep-space dark:text-neutral-400">
+              <div className="rounded-lg border border-dashed border-morning-mist p-10 text-center text-ui-body text-neutral-500  ">
                 {t("empty")}
               </div>
             )}
             {config.providers.map((provider) => (
-              <div key={provider.id} className="rounded-lg border border-morning-mist bg-white p-4 dark:border-deep-space dark:bg-twilight-obsidian">
+              <div key={provider.id} className="rounded-lg border border-morning-mist bg-white p-4  ">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-ui-body font-semibold text-neutral-900 dark:text-neutral-100">{provider.name}</span>
-                      <span className="rounded px-1.5 py-0.5 text-ui-caption font-medium text-neutral-600 bg-neutral-100 dark:bg-neutral-800 dark:text-neutral-300">
+                      <span className="text-ui-body font-semibold text-neutral-900 ">{provider.name}</span>
+                      <span className="rounded px-1.5 py-0.5 text-ui-caption font-medium text-neutral-600 bg-neutral-100  ">
                         {t(`type_${provider.type}`)}
                       </span>
                     </div>
-                    <p className="mt-1 break-all text-ui-caption text-neutral-500 dark:text-neutral-400">
+                    <p className="mt-1 break-all text-ui-caption text-neutral-500 ">
                       {provider.type === "searxng"
                         ? provider.baseUrl
                         : provider.hasApiKey ? t("keyConfigured") : t("keyMissing")}
@@ -349,11 +349,11 @@ export default function WebSearchManager({
                       <Edit2 className="h-3.5 w-3.5" />
                     </Button>
                     <Button size="xs" variant="ghost" onClick={() => setDeleteTarget(provider)} disabled={Boolean(pendingId)} aria-label={t("deleteBtn")} title={t("deleteBtn")}>
-                      <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                      <Trash2 className="h-3.5 w-3.5 text-danger" />
                     </Button>
                   </div>
                 </div>
-                <div className="mt-3 flex justify-end border-t border-neutral-100 pt-3 dark:border-neutral-800">
+                <div className="mt-3 flex justify-end border-t border-neutral-100 pt-3 ">
                   <Button size="xs" variant={provider.enabled ? "secondary" : "ghost"} onClick={() => handleToggle(provider)} disabled={Boolean(pendingId)} loading={pendingId === provider.id}>
                     {provider.enabled ? t("disableBtn") : t("enableBtn")}
                   </Button>
@@ -362,37 +362,37 @@ export default function WebSearchManager({
             ))}
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-3 rounded-lg border border-morning-mist bg-white p-5 dark:border-deep-space dark:bg-twilight-obsidian">
-            <h3 className="flex items-center gap-2 text-ui-body font-semibold text-neutral-900 dark:text-neutral-100">
+          <form onSubmit={handleSubmit} className="space-y-3 rounded-lg border border-morning-mist bg-white p-5  ">
+            <h3 className="flex items-center gap-2 text-ui-body font-semibold text-neutral-900 ">
               {editingId ? <Edit2 className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
               {editingId ? t("editTitle") : t("addTitle")}
             </h3>
             <label className="block space-y-1">
-              <span className="text-ui-caption font-medium text-neutral-700 dark:text-neutral-300">{t("typeLabel")}</span>
+              <span className="text-ui-caption font-medium text-neutral-700 ">{t("typeLabel")}</span>
               <Select value={type} onChange={(event) => setType(event.target.value as WebSearchProviderType)} className="w-full">
                 {TYPES.map((value) => <option key={value} value={value}>{t(`type_${value}`)}</option>)}
               </Select>
-              <span className="block text-ui-caption text-neutral-500 dark:text-neutral-400">{t(`hint_${type}`)}</span>
+              <span className="block text-ui-caption text-neutral-500 ">{t(`hint_${type}`)}</span>
             </label>
             <label className="block space-y-1">
-              <span className="text-ui-caption font-medium text-neutral-700 dark:text-neutral-300">{t("nameLabel")}</span>
+              <span className="text-ui-caption font-medium text-neutral-700 ">{t("nameLabel")}</span>
               <Input value={name} onChange={(event) => setName(event.target.value)} placeholder={t("namePlaceholder")} />
             </label>
             {type !== "searxng" && (
               <label className="block space-y-1">
-                <span className="text-ui-caption font-medium text-neutral-700 dark:text-neutral-300">{t("apiKeyLabel")}</span>
+                <span className="text-ui-caption font-medium text-neutral-700 ">{t("apiKeyLabel")}</span>
                 <Input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder={editingId ? t("apiKeyKeepPlaceholder") : t("apiKeyPlaceholder")} autoComplete="new-password" />
               </label>
             )}
             {type === "zhipu" && (
               <label className="block space-y-1">
-                <span className="text-ui-caption font-medium text-neutral-700 dark:text-neutral-300">{t("modelLabel")}</span>
+                <span className="text-ui-caption font-medium text-neutral-700 ">{t("modelLabel")}</span>
                 <Input value={model} onChange={(event) => setModel(event.target.value)} placeholder={t("modelPlaceholder")} />
               </label>
             )}
             {type === "searxng" && (
               <label className="block space-y-1">
-                <span className="text-ui-caption font-medium text-neutral-700 dark:text-neutral-300">{t("baseUrlLabel")}</span>
+                <span className="text-ui-caption font-medium text-neutral-700 ">{t("baseUrlLabel")}</span>
                 <Input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} placeholder={t("baseUrlPlaceholder")} />
               </label>
             )}
@@ -457,14 +457,14 @@ function SortableBackendRow({
     : backend.type === "model" && !model;
 
   return (
-    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={`flex min-h-12 items-center gap-3 px-3 py-2 ${isDragging ? "z-10 bg-neutral-50 dark:bg-neutral-900" : ""}`}>
-      <button type="button" {...attributes} {...listeners} className="rounded p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:hover:bg-neutral-800 dark:hover:text-neutral-200" aria-label={dragLabel}>
+    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={`flex min-h-12 items-center gap-3 px-3 py-2 ${isDragging ? "z-10 bg-neutral-50 " : ""}`}>
+      <button type="button" {...attributes} {...listeners} className="rounded p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue  " aria-label={dragLabel}>
         <GripVertical className="h-4 w-4" />
       </button>
       <span className="w-5 text-ui-caption tabular-nums text-neutral-400">{index + 1}</span>
       <Search className="h-4 w-4 text-neutral-500" />
-      <span className="min-w-0 flex-1 truncate text-ui-body font-medium text-neutral-800 dark:text-neutral-200">{label}</span>
-      <span className={`text-ui-caption ${unavailable ? "text-amber-700 dark:text-amber-400" : "text-neutral-500 dark:text-neutral-400"}`}>
+      <span className="min-w-0 flex-1 truncate text-ui-body font-medium text-neutral-800 ">{label}</span>
+      <span className={`text-ui-caption ${unavailable ? "text-amber-700 " : "text-neutral-500 "}`}>
         {unavailable ? unavailableLabel : backend.type}
       </span>
       {backend.type === "model" && (

@@ -45,7 +45,7 @@ Managed by Trellis. Edits outside this block are preserved; edits inside may be 
 
 - **设计主线 (Creative North Star)**: 「星枢天流 (The Astral Skyline)」。
 - **风格 register**: `product`（设计服务于任务与效率）。
-- **色彩策略 (Color Strategy)**: 「暮色微澜黑与星云纯白」。背景带有极细微的冷调倾向（天空蓝/紫），绝对不使用公式化的奶油色/暖沙色。
+- **色彩策略 (Color Strategy)**: 「星云纯白」单亮色体系（不提供暗色模式）。背景带有极细微的冷调倾向（天空蓝/紫），绝对不使用公式化的奶油色/暖沙色。
 - **设计原则 (Design Principles)**:
   1. **天空般的开阔与治愈** (聊天界面追求大呼吸感与纯文字排版)。
   2. **温和对话与精密控制的双面平衡** (聊天侧温和治愈，管理网关侧莫兰迪灰调严谨专业)。

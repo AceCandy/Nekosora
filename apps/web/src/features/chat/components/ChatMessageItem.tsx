@@ -99,7 +99,7 @@ export function MessageRunMetadataDisplay({
           id={panelId}
           role="region"
           aria-label={t("responseDetails")}
-          className="hidden min-w-0 max-w-full border-t border-morning-mist/80 pt-2 dark:border-deep-space/80 [@media(pointer:coarse)]:block"
+          className="hidden min-w-0 max-w-full border-t border-morning-mist/80 pt-2  [@media(pointer:coarse)]:block"
         >
           <RunMetadataFields metadata={metadata} className="justify-start" />
         </div>
@@ -401,7 +401,7 @@ function ChatMessageItemContent({
                 if (e.key === "Escape") setEditing(false);
               }}
               rows={Math.min(8, Math.max(2, draft.split("\n").length))}
-              className="w-full rounded-2xl bg-neutral-900 text-white dark:bg-white dark:text-black px-4 py-2.5 text-ui-reading leading-7 resize-none border border-sora-blue/40 focus:outline-none focus:border-sora-blue"
+              className="w-full rounded-2xl bg-neutral-900 text-white   px-4 py-2.5 text-ui-reading leading-7 resize-none border border-sora-blue/40 focus:outline-none focus:border-sora-blue"
               autoFocus
             />
             <MessageImageAttachments
@@ -420,7 +420,7 @@ function ChatMessageItemContent({
                   setDraftAttachments(attachments);
                   setEditing(false);
                 }}
-                className="inline-flex items-center gap-1 text-ui-caption font-semibold text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1 text-ui-caption font-semibold text-neutral-400 hover:text-neutral-600  transition-colors cursor-pointer"
               >
                 <X className="w-3 h-3" aria-hidden="true" />
                 <span>{t("editCancel")}</span>
@@ -468,26 +468,34 @@ function ChatMessageItemContent({
               >
                 {content}
                 {userMsgCanCollapse && !userMsgExpanded ? (
-                  <div className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-b from-transparent to-neutral-900 dark:to-white" />
+                  /* 折叠态:底部渐隐带内嵌居中「展开」按钮。渐变层 pointer-events-none 让气泡其余区域
+                     仍可点击切换;按钮自身恢复指针事件并 stopPropagation,避免与气泡 onClick 双触发。 */
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 flex h-16 items-end justify-center bg-gradient-to-b from-transparent via-neutral-900/80 to-neutral-900 pb-1.5">
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setUserMsgExpanded(true); }}
+                      className="pointer-events-auto flex items-center gap-1 rounded-md px-2 py-0.5 text-ui-caption font-semibold text-white/70 hover:text-white transition-colors cursor-pointer"
+                      aria-expanded={userMsgExpanded}
+                    >
+                      <ChevronDown className="w-3 h-3" aria-hidden="true" />
+                      <span>{t("expandUserMessage")}</span>
+                    </button>
+                  </div>
+                ) : null}
+                {userMsgCanCollapse && userMsgExpanded ? (
+                  <div className="flex justify-center">
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setUserMsgExpanded(false); }}
+                      className="flex items-center gap-1 rounded-md px-2 py-0.5 text-ui-caption font-semibold text-white/70 hover:text-white transition-colors cursor-pointer"
+                      aria-expanded={userMsgExpanded}
+                    >
+                      <ChevronUp className="w-3 h-3" aria-hidden="true" />
+                      <span>{t("collapseUserMessage")}</span>
+                    </button>
+                  </div>
                 ) : null}
               </div>) : null}
-              {content && userMsgCanCollapse ? (
-                <button
-                  type="button"
-                  onClick={() => setUserMsgExpanded((v) => !v)}
-                  className="mt-1 flex w-fit ml-auto items-center gap-1 text-ui-caption font-semibold text-white/70 dark:text-black/60 hover:text-white dark:hover:text-black transition-colors cursor-pointer"
-                  aria-expanded={userMsgExpanded}
-                >
-                  {userMsgExpanded ? (
-                    <ChevronUp className="w-3 h-3" aria-hidden="true" />
-                  ) : (
-                    <ChevronDown className="w-3 h-3" aria-hidden="true" />
-                  )}
-                  <span>
-                    {userMsgExpanded ? t("collapseUserMessage") : t("expandUserMessage")}
-                  </span>
-                </button>
-              ) : null}
               {publicId && onEdit && !isStreaming && !conversationStreaming && (
                 <button
                   type="button"
@@ -496,7 +504,7 @@ function ChatMessageItemContent({
                     setDraftAttachments(attachments);
                     setEditing(true);
                   }}
-                  className="absolute -left-7 top-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
+                  className="absolute -left-7 top-0 opacity-0 group-hover:opacity-100 [@media(pointer:coarse)]:opacity-100 transition-opacity p-1 rounded text-neutral-400 hover:text-neutral-600  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
                   title={t("edit")}
                   aria-label={t("edit")}
                 >
@@ -507,7 +515,7 @@ function ChatMessageItemContent({
                 <button
                   type="button"
                   onClick={() => onRequestDelete?.(publicId)}
-                  className="absolute -left-7 top-7 p-1 rounded opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-red-500 dark:hover:text-red-400 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
+                  className="absolute -left-7 top-7 p-1 rounded opacity-0 group-hover:opacity-100 [@media(pointer:coarse)]:opacity-100 text-neutral-500 hover:text-danger  transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
                   title={t("delete")}
                   aria-label={t("delete")}
                 >
@@ -547,7 +555,7 @@ function ChatMessageItemContent({
                       />
                     </ErrorBoundary>
                   )}
-                  {error && !hasProcessTrace && <p className="mt-2 text-ui-caption italic leading-5 text-red-600 dark:text-red-400">{error}</p>}
+                  {error && !hasProcessTrace && <p className="mt-2 text-ui-caption italic leading-5 text-danger ">{error}</p>}
                 </>
               );
             })() : null}
@@ -558,10 +566,10 @@ function ChatMessageItemContent({
           <div className="flex min-w-0 max-w-full flex-col items-start gap-1 opacity-0 pointer-events-none transition-opacity duration-150 group-hover/message:pointer-events-auto group-hover/message:opacity-100 group-focus-within/message:pointer-events-auto group-focus-within/message:opacity-100 [@media(pointer:coarse)]:pointer-events-auto [@media(pointer:coarse)]:opacity-100 motion-reduce:transition-none">
             <div className="flex min-w-0 max-w-full flex-wrap items-center gap-x-1 gap-y-1">
             {versionInfo && versionInfo.total > 1 && onSwitchVersion && (
-              <div className="inline-flex items-center gap-1 text-ui-caption font-medium text-space-ink/50 dark:text-nebula-silver/50">
+              <div className="inline-flex items-center gap-1 text-ui-caption font-medium text-ink-tertiary ">
                 <button
                   onClick={() => onSwitchVersion(publicId, "prev")}
-                  className="p-0.5 rounded hover:text-space-ink/75 dark:hover:text-nebula-silver/75 hover:bg-nebula-silver/45 dark:hover:bg-deep-space/55 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer disabled:opacity-30"
+                  className="p-0.5 rounded hover:text-space-ink/75  hover:bg-nebula-silver/45  transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer disabled:opacity-30"
                   aria-label={t("prevVersion")}
                   disabled={versionInfo.current <= 1}
                 >
@@ -572,7 +580,7 @@ function ChatMessageItemContent({
                 </span>
                 <button
                   onClick={() => onSwitchVersion(publicId, "next")}
-                  className="p-0.5 rounded hover:text-space-ink/75 dark:hover:text-nebula-silver/75 hover:bg-nebula-silver/45 dark:hover:bg-deep-space/55 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer disabled:opacity-30"
+                  className="p-0.5 rounded hover:text-space-ink/75  hover:bg-nebula-silver/45  transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer disabled:opacity-30"
                   aria-label={t("nextVersion")}
                   disabled={versionInfo.current >= versionInfo.total}
                 >
@@ -583,7 +591,7 @@ function ChatMessageItemContent({
             <button
               onClick={handleCopy}
               disabled={!content}
-              className="touch-target inline-flex h-8 w-8 items-center justify-center rounded-md text-space-ink/50 transition-colors duration-150 hover:bg-nebula-silver/45 hover:text-space-ink/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer disabled:opacity-40 dark:text-nebula-silver/50 dark:hover:bg-deep-space/55 dark:hover:text-nebula-silver/75"
+              className="touch-target inline-flex h-8 w-8 items-center justify-center rounded-md text-ink-tertiary transition-colors duration-150 hover:bg-nebula-silver/45 hover:text-space-ink/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer disabled:opacity-40   "
               title={copied ? t("copied") : t("copy")}
               aria-label={copied ? t("copied") : t("copy")}
             >
@@ -603,7 +611,7 @@ function ChatMessageItemContent({
                   "touch-target inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed",
                   localFeedback?.rating === "up"
                     ? "text-sora-blue bg-sora-blue/10"
-                    : "text-space-ink/50 hover:text-space-ink/75 dark:text-nebula-silver/50 dark:hover:text-nebula-silver/75 hover:bg-nebula-silver/45 dark:hover:bg-deep-space/55",
+                    : "text-ink-tertiary hover:text-space-ink/75   hover:bg-nebula-silver/45 ",
                 )}
                 aria-label={localFeedback?.rating === "up" ? t("feedbackClear") : t("feedbackUp")}
                 title={
@@ -627,8 +635,8 @@ function ChatMessageItemContent({
                 className={clsx(
                   "touch-target inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed",
                   localFeedback?.rating === "down"
-                    ? "text-red-600 dark:text-red-400 bg-red-500/10"
-                    : "text-space-ink/50 hover:text-space-ink/75 dark:text-nebula-silver/50 dark:hover:text-nebula-silver/75 hover:bg-nebula-silver/45 dark:hover:bg-deep-space/55",
+                    ? "text-danger  bg-red-500/10"
+                    : "text-ink-tertiary hover:text-space-ink/75   hover:bg-nebula-silver/45 ",
                 )}
                 aria-label={localFeedback?.rating === "down" ? t("feedbackClear") : t("feedbackDown")}
                 title={
@@ -653,7 +661,7 @@ function ChatMessageItemContent({
                 <button
                   type="button"
                   onClick={() => setReasonMenuOpen((open) => !open)}
-                  className="touch-target inline-flex h-8 w-8 items-center justify-center rounded-md text-space-ink/50 hover:text-space-ink/75 dark:text-nebula-silver/50 dark:hover:text-nebula-silver/75 hover:bg-nebula-silver/45 dark:hover:bg-deep-space/55 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
+                  className="touch-target inline-flex h-8 w-8 items-center justify-center rounded-md text-ink-tertiary hover:text-space-ink/75   hover:bg-nebula-silver/45  transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
                   aria-label={t("feedbackReasons")}
                   title={t("feedbackReasons")}
                   aria-haspopup="menu"
@@ -665,7 +673,7 @@ function ChatMessageItemContent({
               {reasonMenuOpen && (
                 <div
                   role="menu"
-                  className="absolute bottom-full mb-1.5 left-0 z-40 min-w-[9.5rem] rounded-md border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink py-1 transition-opacity duration-150"
+                  className="absolute bottom-full mb-1.5 left-0 z-40 min-w-[9.5rem] rounded-md border border-morning-mist  bg-white  py-1 transition-opacity duration-150"
                 >
                   {FEEDBACK_REASONS.map((reason) => {
                     const selected = localFeedback?.rating === "down" && localFeedback.reason === reason;
@@ -681,7 +689,7 @@ function ChatMessageItemContent({
                           "flex w-full items-center px-3 py-1.5 text-left text-ui-caption transition-colors duration-150 cursor-pointer disabled:opacity-40",
                           selected
                             ? "text-sora-blue font-semibold"
-                            : "text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900",
+                            : "text-neutral-600  hover:bg-neutral-50 ",
                         )}
                       >
                         {t(FEEDBACK_REASON_I18N[reason])}
@@ -698,7 +706,7 @@ function ChatMessageItemContent({
                   if (models.length > 1) setRegenOpen((v) => !v);
                   else onRegenerate(publicId, model);
                 }}
-                className="touch-target inline-flex h-8 w-8 items-center justify-center rounded-md text-space-ink/50 transition-colors duration-150 hover:bg-nebula-silver/45 hover:text-space-ink/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer dark:text-nebula-silver/50 dark:hover:bg-deep-space/55 dark:hover:text-nebula-silver/75"
+                className="touch-target inline-flex h-8 w-8 items-center justify-center rounded-md text-ink-tertiary transition-colors duration-150 hover:bg-nebula-silver/45 hover:text-space-ink/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer   "
                 title={t("regenerate")}
                 aria-label={t("regenerate")}
                 aria-haspopup={models.length > 1 ? "listbox" : undefined}
@@ -707,7 +715,7 @@ function ChatMessageItemContent({
                 <RefreshCw className="size-3.5" aria-hidden="true" />
               </button>
               {regenOpen && models.length > 1 && (
-                <div className="absolute bottom-full mb-2 right-0 z-40 w-48 max-h-60 overflow-y-auto rounded-lg border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink py-1 shadow-md">
+                <div className="absolute bottom-full mb-2 right-0 z-40 w-48 max-h-60 overflow-y-auto rounded-lg border border-morning-mist  bg-white  py-1 shadow-md">
                   {models.map((m) => (
                     <button
                       key={m.modelId}
@@ -720,7 +728,7 @@ function ChatMessageItemContent({
                         "flex items-center gap-1.5 w-full text-left px-3 py-1.5 text-ui-caption cursor-pointer transition-colors",
                         m.modelId === model
                           ? "text-sora-blue font-semibold"
-                          : "text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-900",
+                          : "text-neutral-600  hover:bg-neutral-50 ",
                       )}
                     >
                       <span className="truncate">{m.displayName ?? m.name}</span>
@@ -737,7 +745,7 @@ function ChatMessageItemContent({
               <button
                 type="button"
                 onClick={() => onContinue?.(publicId)}
-                className="inline-flex items-center gap-1 text-ui-caption font-medium text-space-ink/50 hover:text-space-ink/75 dark:text-nebula-silver/50 dark:hover:text-nebula-silver/75 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue rounded cursor-pointer"
+                className="inline-flex items-center gap-1 text-ui-caption font-medium text-ink-tertiary hover:text-space-ink/75   transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue rounded cursor-pointer"
                 aria-label={t("continueGenerating")}
                 title={t("continueGenerating")}
               >
@@ -749,7 +757,7 @@ function ChatMessageItemContent({
               <button
                 type="button"
                 onClick={() => setMetadataExpanded((value) => !value)}
-                className="touch-target hidden h-8 w-8 items-center justify-center rounded-md text-space-ink/50 transition-colors duration-150 hover:bg-nebula-silver/45 hover:text-space-ink/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue dark:text-nebula-silver/50 dark:hover:bg-deep-space/55 dark:hover:text-nebula-silver/75 [@media(pointer:coarse)]:inline-flex"
+                className="touch-target hidden h-8 w-8 items-center justify-center rounded-md text-ink-tertiary transition-colors duration-150 hover:bg-nebula-silver/45 hover:text-space-ink/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue    [@media(pointer:coarse)]:inline-flex"
                 aria-label={t("responseDetails")}
                 title={t("responseDetails")}
                 aria-controls={metadataPanelId}
@@ -762,7 +770,7 @@ function ChatMessageItemContent({
               <time
                 dateTime={visibleRunMetadata.completedAt}
                 title={formatDateTimeLocal(visibleRunMetadata.completedAt)}
-                className="inline-flex h-8 shrink-0 items-center font-mono text-ui-body tabular-nums text-space-ink/50 dark:text-nebula-silver/50"
+                className="inline-flex h-8 shrink-0 items-center font-mono text-ui-body tabular-nums text-ink-tertiary "
               >
                 {formatDateTimeLocal(visibleRunMetadata.completedAt)}
               </time>
@@ -784,14 +792,14 @@ function ChatMessageItemContent({
           onClick={() => setMenuOpen(false)}
         >
           <div
-            className="rounded-xl border border-morning-mist dark:border-deep-space/80 bg-white dark:bg-space-ink p-1.5 min-w-[160px] shadow-lg animate-in fade-in zoom-in-95 duration-150"
+            className="rounded-xl border border-morning-mist  bg-white  p-1.5 min-w-[160px] shadow-lg animate-in fade-in zoom-in-95 duration-150"
             onClick={(e) => e.stopPropagation()}
           >
             {canEdit && (
               <button
                 type="button"
                 onClick={() => { setMenuOpen(false); setDraft(content); setEditing(true); }}
-                className="flex items-center gap-2 w-full px-3 py-2 text-ui-body text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-900 rounded-lg transition-colors cursor-pointer"
+                className="flex items-center gap-2 w-full px-3 py-2 text-ui-body text-neutral-700  hover:bg-neutral-100  rounded-lg transition-colors cursor-pointer"
               >
                 <Pencil className="w-4 h-4" aria-hidden="true" />
                 <span>{t("edit")}</span>
@@ -801,7 +809,7 @@ function ChatMessageItemContent({
               <button
                 type="button"
                 onClick={() => { setMenuOpen(false); if (publicId) onRequestDelete?.(publicId); }}
-                className="flex items-center gap-2 w-full px-3 py-2 text-ui-body text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
+                className="flex items-center gap-2 w-full px-3 py-2 text-ui-body text-danger hover:bg-red-50  rounded-lg transition-colors cursor-pointer"
               >
                 <Trash2 className="w-4 h-4" aria-hidden="true" />
                 <span>{t("delete")}</span>

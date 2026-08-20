@@ -32,9 +32,9 @@ export default function ChatHeader({
   const [dialogOpen, setDialogOpen] = useState(false);
 
   return (
-    <header className="flex h-14 shrink-0 items-center bg-nebula-white pl-14 pr-4 dark:bg-twilight-obsidian md:px-6">
+    <header className="flex h-14 shrink-0 items-center bg-nebula-white pl-14 pr-4  md:px-6">
       <div className="flex min-w-0 flex-1 items-center gap-1">
-        <h1 className="min-w-0 truncate text-ui-reading font-semibold text-space-ink dark:text-nebula-silver" title={title}>
+        <h1 className="min-w-0 truncate text-ui-reading font-semibold text-space-ink " title={title}>
           {title}
         </h1>
         {renderStyleMenu}
@@ -43,7 +43,7 @@ export default function ChatHeader({
         <button
           type="button"
           onClick={() => setDialogOpen(true)}
-          className="touch-target ml-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-space-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none dark:text-neutral-300 dark:hover:bg-neutral-900 dark:hover:text-nebula-silver"
+          className="touch-target ml-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-space-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none   "
           aria-label={t("shareThisConversation")}
           title={t("shareThisConversation")}
         >
