@@ -16,7 +16,7 @@ import { ChatInputBox } from "@/features/chat/components/ChatInputBox";
 import ChatHeader from "@/features/chat/components/ChatHeader";
 import { useChatStreamStore } from "@/features/chat/store/chatStreamStore";
 import { saveConversationComposerState } from "@/features/chat/actions/conversations";
-import type { ChatMessage, ModelOption, CardOption, KnowledgeBaseOption, OutputModeOption, RenderStyleOption } from "@/features/chat/model/types";
+import type { ChatMessage, ModelOption, CardOption, OutputModeOption, RenderStyleOption } from "@/features/chat/model/types";
 import type { ReasoningLevel } from "@/db/types";
 import type { ConversationShareListItem, CreateShareInput } from "@/features/chat/actions/share";
 import {
@@ -25,7 +25,7 @@ import {
   type ComposerSelectionState,
 } from "@/features/chat/model/composerState";
 
-export type { ChatMessage, ModelOption, CardOption, KnowledgeBaseOption, OutputModeOption, RenderStyleOption } from "@/features/chat/model/types";
+export type { ChatMessage, ModelOption, CardOption, OutputModeOption, RenderStyleOption } from "@/features/chat/model/types";
 
 // Artifact 面板是低频功能且携带语法高亮/mermaid 等重依赖,按需加载,不进聊天首包。
 const ArtifactPanel = dynamic(() =>
@@ -36,8 +36,6 @@ interface ChatComposerProps {
   models: ModelOption[];
   /** 可用的指令卡(空数组则不启用斜杠命令)。 */
   cards?: CardOption[];
-  /** 可用的知识库(空数组则不显示选择器)。 */
-  knowledgeBases?: KnowledgeBaseOption[];
   /** 可用的输出模式(空数组则不显示选择器)。 */
   outputModes?: OutputModeOption[];
   /** 当前会话已选的输出模式 ID(undefined=新会话未选)。 */
@@ -54,8 +52,6 @@ interface ChatComposerProps {
   webSearchAvailable?: boolean;
   /** 当前会话已选指令卡(回填)。 */
   initialCardIds?: string[];
-  /** 当前会话已选知识库(回填)。 */
-  initialKbIds?: string[];
   /** 当前会话按模型保存的推理级别。 */
   initialReasoningByModelId?: Record<string, ReasoningLevel>;
   /** 当前会话 ID(切换输出模式时持久化用;新会话无)。 */
@@ -80,7 +76,6 @@ interface ChatComposerProps {
 export default function ChatComposer({
   models,
   cards = [],
-  knowledgeBases = [],
   outputModes = [],
   initialOutputModeId = null,
   renderStyles = [],
@@ -89,7 +84,6 @@ export default function ChatComposer({
   initialWebSearch = false,
   webSearchAvailable = false,
   initialCardIds = [],
-  initialKbIds = [],
   initialReasoningByModelId = {},
   conversationId: initialConvId,
   initialTitle,
@@ -112,7 +106,6 @@ export default function ChatComposer({
     models,
     initialModelName,
     initialCardIds,
-    initialKbIds,
     initialWebSearch,
     initialOutputModeId,
     initialRenderStyleId,
@@ -129,7 +122,6 @@ export default function ChatComposer({
         renderStyleId: snapshot.renderStyleId,
         webSearch: snapshot.webSearch,
         cardIds: snapshot.cardIds,
-        kbIds: snapshot.kbIds,
         reasoningByModelId: snapshot.reasoningByModelId,
       });
     },
@@ -137,7 +129,6 @@ export default function ChatComposer({
   const {
     modelId: model,
     cardIds: selectedCardIds,
-    kbIds: selectedKbIds,
     webSearch,
     outputModeId,
     renderStyleId,
@@ -221,7 +212,6 @@ export default function ChatComposer({
       snapshot.modelId,
       snapshot.cardIds,
       snapshot.webSearch,
-      snapshot.kbIds,
       {
         outputModeId: snapshot.outputModeId,
         renderStyleId: snapshot.renderStyleId,
@@ -294,11 +284,6 @@ export default function ChatComposer({
     composer.dispatch({ type: "toggleCard", id });
   };
 
-  // 知识库 toggle(多选)
-  const handleKbToggle = (id: string) => {
-    composer.dispatch({ type: "toggleKnowledgeBase", id });
-  };
-
   if (models.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center text-neutral-400 p-8">
@@ -327,9 +312,6 @@ export default function ChatComposer({
     cards,
     selectedCardIds,
     onCardToggle: handleCardToggle,
-    knowledgeBases,
-    selectedKbIds,
-    onKbToggle: handleKbToggle,
     outputModes,
     outputModeId,
     outputModePickerOpen,

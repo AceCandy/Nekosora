@@ -57,7 +57,6 @@
     "keys": "API Keys",
     "providers": "Providers",
     "models": "Models",
-    "templates": "Prompt Templates",
     "cards": "Instruction Cards",
     "memory": "Memory",
     "operations": "Operations",
@@ -65,7 +64,6 @@
     "usage": "Gateway Usage",
     "globalProviders": "Global Providers",
     "globalModels": "Models & Routing",
-    "globalTemplates": "Global Templates",
     "sectionMyConfig": "My Config",
     "sectionGlobalManagement": "Global Management",
     "settings": "System Settings",
@@ -77,7 +75,6 @@
     "sidebarNavigation": "Sidebar navigation",
     "myUsage": "Usage",
     "image": "Image",
-    "knowledge": "Knowledge",
     "outputModes": "Output modes",
     "renderStyles": "Render styles",
     "webSearch": "Web Search"
@@ -212,7 +209,6 @@
     "feedbackReasonOutdated": "Outdated",
     "feedbackReasonUnsafe": "Unsafe",
     "feedbackReasonOther": "Other",
-    "knowledgeBase": "Knowledge",
     "outputMode": "Output mode",
     "outputModeDefault": "Default",
     "renderStyle": "Render style",
@@ -284,15 +280,6 @@
       "title": "My Providers",
       "desc": "Add your own upstream providers (base_url + key). Keys are encrypted at rest, callable only by you."
     },
-    "templates": {
-      "title": "Prompt Templates",
-      "desc": "Reusable prompt templates and agents. Pick one to fill variables and start a chat.",
-      "empty": "No templates available",
-      "use": "Use →",
-      "varCount": "{count} variables",
-      "noVars": "No variables",
-      "defaultCategory": "Other"
-    },
     "memory": {
       "configTitle": "Long-term Memory",
       "desc": "User profile and preferences stored across sessions. Automatically injected into context when the model generates replies for a personalized experience.",
@@ -347,23 +334,6 @@
       "titlePlaceholder": "Senior Translator",
       "descPlaceholder": "Chinese-English translation, professional tone",
       "contentPlaceholder": "You are a senior translator. Translate user input between Chinese and English..."
-    },
-    "knowledge": {
-      "desc": "Manage knowledge bases, ingest files, and mount them for retrieval in chat.",
-      "createTitle": "Create knowledge base",
-      "namePlaceholder": "Name",
-      "descPlaceholder": "Description (optional)",
-      "createBtn": "Create",
-      "empty": "No knowledge bases yet",
-      "files": "files",
-      "delete": "Delete",
-      "selectFile": "Select a file to attach…",
-      "attach": "Attach",
-      "debugTitle": "Retrieval debug",
-      "debugPlaceholder": "Test query…",
-      "search": "Search",
-      "debugStatus": "Status",
-      "chunks": "chunks"
     },
     "webSearch": {
       "desc": "Configure the global search order and external providers. Chat keeps one web toggle and searches in this order when needed.",
@@ -561,15 +531,6 @@
     "providers": {
       "title": "Global Providers",
       "desc": "Manage global upstream providers and credentials used by model routing."
-    },
-    "templates": {
-      "title": "Global Prompt Templates",
-      "desc": "View and manage all templates (builtin / shared / private); toggle and delete.",
-      "thName": "Name",
-      "thCategory": "Category",
-      "thScope": "Scope",
-      "thUseCount": "Use count",
-      "empty": "No templates. Run pnpm tsx scripts/seed-templates.ts to seed built-in templates."
     },
     "usage": {
       "title": "Usage Statistics",

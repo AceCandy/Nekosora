@@ -10,7 +10,7 @@
  * 上下文准备由 orchestrator 负责；流式状态机与核心收尾事务由 completion coordinator 负责。
  * route 只保留鉴权、请求准备和取消安全的 SSE 编码。
  */
-import { and, eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { getSessionFromHeaders } from "@/lib/session-request";
@@ -18,7 +18,6 @@ import { writeFallbackTitle } from "@/lib/conversation-title/service";
 import { dispatchConversationTitleJob } from "@/lib/conversation-title/dispatch";
 import { prepareChatContext } from "@/lib/chat/orchestrator";
 import type { CompactionResult } from "@/lib/compact/service";
-import { getFileIdsByKnowledgeBases } from "@/lib/knowledge-base/files";
 import {
   findConversationMessage,
   withConversationMessageWrite,
@@ -96,15 +95,10 @@ export async function POST(req: Request) {
     userPublicId?: string;
     // 续写:在指定 assistant 消息内容末尾继续生成(复用其 publicId,update 同一行)。
     continueFromPublicId?: string;
-    // P2-B:模板 ID + 变量(用户选定模板时传入)。
-    templateId?: string;
-    templateVars?: Record<string, string>;
     // I-12b:指令卡 ID 列表(用户在 chat 勾选的指令卡,渲染为 system 上下文注入)。
     instructionCardIds?: string[];
     // P1-6:联网搜索开关(前端 toggle)。on/off。
     webSearch?: boolean;
-    // P2-10a:挂载的知识库 ID(检索其下文件 chunks)。
-    knowledgeBaseIds?: string[];
     /** WebChat 点击发送时的 Composer 快照；缺省兼容旧客户端并回退会话行。 */
     outputModeId?: unknown;
     reasoning?: unknown;
@@ -407,34 +401,7 @@ export async function POST(req: Request) {
     return Response.json({ error: "用户父消息已失效" }, { status: 409 });
   }
 
-  // 知识库文件属主解析与视觉能力属于 HTTP preflight；流建立后不再返回 4xx。
-  let preparedFileIds = messageAttachments.map((attachment) => attachment.fileId);
-  if (body.knowledgeBaseIds?.length) {
-    const kbFileIds = await getFileIdsByKnowledgeBases(body.knowledgeBaseIds, user.id);
-    preparedFileIds = [...new Set([...preparedFileIds, ...kbFileIds])];
-    const unresolvedIds = kbFileIds.filter(
-      (fileId) => !messageAttachments.some((attachment) => attachment.fileId === fileId),
-    );
-    if (unresolvedIds.length > 0) {
-      const rows = await db
-        .select({ mime: s.fileObjects.mime })
-        .from(s.fileObjects)
-        .where(and(inArray(s.fileObjects.id, unresolvedIds), eq(s.fileObjects.userId, user.id)));
-      if (rows.some((row: { mime?: string }) => row.mime?.startsWith("image/"))) {
-        try {
-          await assertVisionModel(db, s, {
-            userId: user.id,
-            model: body.model,
-            modelId: body.modelId,
-          });
-          visionValidated = true;
-        } catch (error) {
-          if (error instanceof ChatAttachmentError) return attachmentError(error);
-          throw error;
-        }
-      }
-    }
-  }
+  const preparedFileIds = messageAttachments.map((attachment) => attachment.fileId);
 
   const initialTrace: ProcessTrace = {};
   if (continueWebSearchCalls.length > 0) {
@@ -622,8 +589,6 @@ export async function POST(req: Request) {
               messageAttachments,
               visionValidated,
               webSearchEnabled: effectiveWebSearch,
-              templateId: body.templateId,
-              templateVars: body.templateVars,
               instructionCardIds: body.instructionCardIds,
               processRecorder: recorder,
               signal,

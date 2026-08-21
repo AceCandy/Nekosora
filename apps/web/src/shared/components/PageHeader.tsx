@@ -11,7 +11,7 @@ interface PageHeaderProps {
 
 /**
  * 配置页统一页头:图标 + 标题 + 第二行描述。
- * 锚定知识库页标杆样式,所有 (dash) 配置页复用,避免各页标题样式漂移。
+ * 统一所有 (dash) 配置页标题样式,避免各页视觉漂移。
  */
 export function PageHeader({ icon: Icon, title, desc }: PageHeaderProps) {
   return (

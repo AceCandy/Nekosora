@@ -51,7 +51,6 @@ export interface SendOptions {
   modelId: string;
   instructionCardIds?: string[];
   webSearch?: boolean;
-  knowledgeBaseIds?: string[];
   createOptions?: {
     outputModeId?: string | null;
     renderStyleId?: string | null;
@@ -623,7 +622,6 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
           renderStyleId: opts.createOptions?.renderStyleId,
           webSearch: opts.webSearch,
           cardIds: opts.instructionCardIds,
-          kbIds: opts.knowledgeBaseIds,
           reasoningByModelId: opts.createOptions?.reasoningByModelId,
         };
         resolvedConvId = await createConversation(opts.model, createOpts);
@@ -686,7 +684,6 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
           parentPublicId,
           ...(opts.instructionCardIds && opts.instructionCardIds.length > 0 ? { instructionCardIds: opts.instructionCardIds } : {}),
           webSearch: opts.webSearch ?? false,
-          ...(opts.knowledgeBaseIds && opts.knowledgeBaseIds.length > 0 ? { knowledgeBaseIds: opts.knowledgeBaseIds } : {}),
           ...(opts.createOptions?.outputModeId !== undefined
             ? { outputModeId: opts.createOptions.outputModeId }
             : {}),

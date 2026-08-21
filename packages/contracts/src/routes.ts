@@ -25,7 +25,6 @@ export const GATEWAY_ROUTES = [
   { method: "GET", path: "/api/files/:fileId", handler: "apiFile" },
   { method: "GET", path: "/api/images", handler: "apiImages" },
   { method: "POST", path: "/api/images/generate", handler: "apiImageGenerate" },
-  { method: "POST", path: "/api/knowledge/search", handler: "apiKnowledgeSearch" },
   { method: "GET", path: "/metrics", handler: "metrics" },
 ] as const;
 

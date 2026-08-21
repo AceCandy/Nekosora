@@ -535,18 +535,17 @@ await replaceChunksAndComplete(lease, current, terminalPatch, chunks);
 
 ### 1. Scope / Trigger
 
-Apply this contract whenever client-supplied file IDs, knowledge-base IDs, RAG retrieval, or multimodal assembly can reach `file_objects`, `file_chunks`, or `StorageDriver`. IDs from WebChat, debug APIs, and MCP are untrusted even after authentication.
+Apply this contract whenever client-supplied file IDs, RAG retrieval, or multimodal assembly can reach `file_objects`, `file_chunks`, or `StorageDriver`. IDs from WebChat and MCP are untrusted even after authentication.
 
 ### 2. Signatures
 
 - `retrieve(query, fileIds, { userId, ...opts })` requires the authenticated owner id.
-- `getFileIdsByKnowledgeBases(kbIds, userId)` returns only that user's rag-ready files.
 - `BuildContextInput` includes `userId`.
 - `buildMultimodalUserMessage(text, files: ResolvedChatImage[])` accepts only file rows already validated at the chat/RAG boundary.
 
 ### 3. Contracts
 
-- Every DB query that selects files for context, vector candidates, image storage reads, or KB expansion includes `file_objects.user_id = userId`.
+- Every DB query that selects files for context, vector candidates, or image storage reads includes `file_objects.user_id = userId`.
 - `retrieve(..., fileIds=[], { userId })` means all rag-ready files owned by that user, never all rows in the database.
 - Context must derive the IDs sent to retrieve from the owner-filtered file rows, not reuse raw client IDs.
 - WebChat validates owner and conversation membership before persistence, then passes the resolved rows to multimodal assembly without a second file lookup.
@@ -558,14 +557,13 @@ Apply this contract whenever client-supplied file IDs, knowledge-base IDs, RAG r
 | --- | --- |
 | Owned explicit file IDs | Normal vision/full-context/RAG behavior |
 | Mixed owned and foreign IDs | Only owned rows continue |
-| Foreign KB IDs | No foreign file IDs returned |
 | MCP search with empty file IDs | Current user's rag-ready corpus only |
 | Only unauthorized IDs | Empty/skipped result, no storage read |
 
 ### 5. Good / Base / Bad Cases
 
 - Good: a forged foreign image ID is absent from both classification and storage assembly queries.
-- Base: the user's own KB files remain searchable from WebChat, debug search, and MCP.
+- Base: the user's own files remain searchable from WebChat and MCP.
 - Bad: filtering only by primary key lets any authenticated caller read another user's image bytes or chunks when an ID is guessed or leaked.
 
 ### 6. Tests Required
@@ -573,7 +571,6 @@ Apply this contract whenever client-supplied file IDs, knowledge-base IDs, RAG r
 - Retrieve tests cover explicit and empty file ID lists and assert owner + rag-ready SQL conditions.
 - Context tests assert only IDs from owner-filtered rows reach retrieve with the same userId.
 - Multimodal tests assert that only supplied resolved rows reach storage and an empty batch performs no storage calls.
-- KB service tests assert kbIds + owner + rag-ready conditions.
 - Search all call sites and run typecheck so no legacy raw-ID multimodal call remains.
 
 ### 7. Wrong vs Correct

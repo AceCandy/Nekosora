@@ -270,14 +270,14 @@ describe("model catalog baseline migration", () => {
     tables: Record<string, unknown>;
   };
 
-  it("keeps one baseline with the reviewed catalog seed", () => {
-    expect(journal.entries).toEqual([{
+  it("keeps the reviewed catalog seed in the immutable baseline", () => {
+    expect(journal.entries[0]).toEqual({
       idx: 0,
       version: "7",
       when: expect.any(Number),
       tag: "0000_baseline",
       breakpoints: true,
-    }]);
+    });
     expect(snapshot.id).toBeTypeOf("string");
     expect(snapshot.prevId).toBe("00000000-0000-0000-0000-000000000000");
     expect(snapshot.tables).toHaveProperty("public.model_catalog");

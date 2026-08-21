@@ -149,7 +149,7 @@ bootstrap ensure 的内置项(如输出样式 `paper`)若 update 分支每次启
 )}
 ```
 
-指令卡(`/${trigger}`)、知识库(`${fileCount} 文件`)不传 `badgeVariant`,视觉不变。
+指令卡(`/${trigger}`)不传 `badgeVariant`,视觉不变。
 
 ## 参考
 

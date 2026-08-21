@@ -10,9 +10,9 @@ export interface OptionItem {
   id: string;
   label: string;
   description?: string | null;
-  /** 行项右侧的副标签（如指令卡触发词 /foo、知识库文件数）。 */
+  /** 行项右侧的副标签（如指令卡触发词 /foo）。 */
   badge?: string;
-  /** 副标签的有色徽章变体；不传时沿用灰色文字（指令卡/知识库的默认行为）。 */
+  /** 副标签的有色徽章变体；不传时沿用灰色文字。 */
   badgeVariant?: "primary" | "warning" | "success" | "danger" | "neutral";
 }
 

@@ -13,7 +13,6 @@
     "./http/api/file": "./src/http/api/file.ts",
     "./http/api/image-generate": "./src/http/api/image-generate.ts",
     "./http/api/images": "./src/http/api/images.ts",
-    "./http/api/knowledge-search": "./src/http/api/knowledge-search.ts",
     "./http/api/link-preview": "./src/http/api/link-preview.ts",
     "./http/api/upload": "./src/http/api/upload.ts",
     "./http/api/upload-limits": "./src/http/api/upload-limits.ts",

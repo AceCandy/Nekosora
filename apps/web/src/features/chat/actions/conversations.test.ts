@@ -331,7 +331,6 @@ describe("Composer 完整快照 action", () => {
       renderStyleId: "style-a",
       webSearch: true,
       cardIds: ["card-a"],
-      kbIds: ["kb-a"],
       reasoningByModelId: { "model-a": "high", "model-b": "off" },
     });
 
@@ -344,7 +343,6 @@ describe("Composer 完整快照 action", () => {
       webSearch: true,
       composerState: {
         cardIds: ["card-a"],
-        kbIds: ["kb-a"],
         reasoningByModelId: { "model-a": "high", "model-b": "off" },
       },
     });
@@ -357,7 +355,6 @@ describe("Composer 完整快照 action", () => {
       renderStyleId: null,
       webSearch: false,
       cardIds: [],
-      kbIds: [],
       reasoningByModelId: { "model-a": "invalid" },
     } as never)).rejects.toThrow("会话输入区状态无效");
 
@@ -374,7 +371,6 @@ describe("Composer 完整快照 action", () => {
       renderStyleId: null,
       webSearch: false,
       cardIds: [],
-      kbIds: [],
       reasoningByModelId: {},
     })).rejects.toThrow("无权操作");
 

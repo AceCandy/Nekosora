@@ -1,7 +1,6 @@
 import { getTranslations } from "next-intl/server";
 import { getVisibleModels } from "@/features/chat/actions/conversations";
 import { listMyCards } from "@/features/panel/cards/actions";
-import { listKnowledgeBases } from "@/lib/knowledge-base/service";
 import { listEnabledOutputModes } from "@/lib/output-modes/service";
 import { listEnabledRenderStyles } from "@/lib/render-styles/service";
 import ChatComposer, { type ModelOption } from "@/features/chat/components/ChatComposer";
@@ -19,10 +18,9 @@ export default async function ChatPage({
   const composerKey = newConversationKey(await searchParams);
   void getTranslations("chat");
   const user = await requireSession();
-  const [visibleModels, cards, kbs, outputModes, renderStyles, webSearchAvailable] = await Promise.all([
+  const [visibleModels, cards, outputModes, renderStyles, webSearchAvailable] = await Promise.all([
     getVisibleModels(),
     listMyCards(),
-    listKnowledgeBases().catch(() => []),
     listEnabledOutputModes().catch(() => []),
     listEnabledRenderStyles().catch(() => []),
     isWebSearchEnabled(user.id).catch(() => false),
@@ -34,11 +32,6 @@ export default async function ChatPage({
     displayName: (m.displayName as string | undefined) ?? undefined,
     capabilities: (m.capabilities as ModelCapabilities | undefined) ?? undefined,
     source: m.visibility === "public" ? ("global" as const) : ("byo" as const),
-  }));
-  const knowledgeBases = (kbs as { id: string; name: string; fileCount: number }[]).map((kb) => ({
-    id: kb.id,
-    name: kb.name,
-    fileCount: kb.fileCount,
   }));
   const modes = (outputModes as { id: string; name: string; description?: string | null; icon?: string | null }[]).map((m) => ({
     id: m.id,
@@ -70,7 +63,7 @@ export default async function ChatPage({
 
   return (
     <div className="flex-1 flex flex-col min-w-0 h-full">
-      <ChatComposer key={composerKey} models={models} cards={cards} knowledgeBases={knowledgeBases} outputModes={modes} renderStyles={styles} initialWebSearch={webSearchAvailable} webSearchAvailable={webSearchAvailable} createShareAction={handleCreateShare} listSharesAction={handleListShares} revokeShareAction={handleRevokeShare} />
+      <ChatComposer key={composerKey} models={models} cards={cards} outputModes={modes} renderStyles={styles} initialWebSearch={webSearchAvailable} webSearchAvailable={webSearchAvailable} createShareAction={handleCreateShare} listSharesAction={handleListShares} revokeShareAction={handleRevokeShare} />
     </div>
   );
 }

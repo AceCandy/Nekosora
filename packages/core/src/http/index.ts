@@ -24,4 +24,3 @@ export {
 export { GET as apiFile } from "./api/file";
 export { GET as apiImages } from "./api/images";
 export { POST as apiImageGenerate } from "./api/image-generate";
-export { POST as apiKnowledgeSearch } from "./api/knowledge-search";

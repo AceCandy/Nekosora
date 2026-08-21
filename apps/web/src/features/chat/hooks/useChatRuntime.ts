@@ -102,7 +102,6 @@ export function useChatRuntime({
         modelId: string,
         instructionCardIds?: string[],
         webSearch?: boolean,
-        knowledgeBaseIds?: string[],
         createOptions?: {
           outputModeId?: string | null;
           renderStyleId?: string | null;
@@ -111,7 +110,7 @@ export function useChatRuntime({
         },
         lifecycle?: { onAccepted?: () => void; onRejected?: (message: string) => void },
       ) => {
-        const opts: SendOptions = { model: modelName, modelId, instructionCardIds, webSearch, knowledgeBaseIds, createOptions };
+        const opts: SendOptions = { model: modelName, modelId, instructionCardIds, webSearch, createOptions };
         void actions.send(key, text, opts, {
           hasAttachments,
           uploadAttachments,

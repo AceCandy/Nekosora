@@ -3,7 +3,6 @@ import { getVisibleModels, getArtifactsByConversation, getConversationComposerSt
 import { getVisibleBranch } from "@/features/chat/actions/branch";
 import { createShare, listConversationShares, revokeShare, type CreateShareInput } from "@/features/chat/actions/share";
 import { listMyCards } from "@/features/panel/cards/actions";
-import { listKnowledgeBases } from "@/lib/knowledge-base/service";
 import { listEnabledOutputModes } from "@/lib/output-modes/service";
 import { listEnabledRenderStyles } from "@/lib/render-styles/service";
 import ChatComposer, { type ModelOption } from "@/features/chat/components/ChatComposer";
@@ -21,12 +20,11 @@ export default async function ChatConversationPage({
   const { id } = await params;
   void getTranslations("chat"); // 保持命名空间预热,与 chat/page 行为一致
   const user = await requireSession();
-  const [visibleModels, branch, artifactsMap, cards, kbs, outputModes, renderStyles, composerState, webSearchAvailable] = await Promise.all([
+  const [visibleModels, branch, artifactsMap, cards, outputModes, renderStyles, composerState, webSearchAvailable] = await Promise.all([
     getVisibleModels(),
     getVisibleBranch(id).catch(() => ({ messages: [], versionMap: {} })),
     getArtifactsByConversation(id).catch(() => ({})),
     listMyCards(),
-    listKnowledgeBases().catch(() => []),
     listEnabledOutputModes().catch(() => []),
     listEnabledRenderStyles().catch(() => []),
     getConversationComposerState(id).catch(() => ({
@@ -36,7 +34,6 @@ export default async function ChatConversationPage({
       renderStyleId: null,
       webSearch: false,
       cardIds: [],
-      kbIds: [],
       reasoningByModelId: {},
     })),
     isWebSearchEnabled(user.id).catch(() => false),
@@ -81,11 +78,6 @@ export default async function ChatConversationPage({
       | undefined,
   }));
 
-  const knowledgeBases = (kbs as { id: string; name: string; fileCount: number }[]).map((kb) => ({
-    id: kb.id,
-    name: kb.name,
-    fileCount: kb.fileCount,
-  }));
   const modes = (outputModes as { id: string; name: string; description?: string | null; icon?: string | null }[]).map((m) => ({
     id: m.id,
     name: m.name,
@@ -123,7 +115,6 @@ export default async function ChatConversationPage({
           key={id}
           models={models}
           cards={cards}
-          knowledgeBases={knowledgeBases}
           outputModes={modes}
           renderStyles={styles}
           initialTitle={composerState.title}
@@ -133,7 +124,6 @@ export default async function ChatConversationPage({
           initialWebSearch={composerState.webSearch}
           webSearchAvailable={webSearchAvailable}
           initialCardIds={composerState.cardIds}
-          initialKbIds={composerState.kbIds}
           initialReasoningByModelId={composerState.reasoningByModelId}
           conversationId={id}
           createShareAction={handleCreateShare}

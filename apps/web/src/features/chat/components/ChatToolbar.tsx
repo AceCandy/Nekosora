@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Sparkles, Globe, Library, Wand2, Palette, X, File as FileIcon, Brain, ChevronDown, Plus, Search, Check, Paperclip } from "lucide-react";
+import { Sparkles, Globe, Wand2, Palette, X, File as FileIcon, Brain, ChevronDown, Plus, Search, Check, Paperclip } from "lucide-react";
 import { clsx } from "clsx";
 import { OptionPicker, type OptionItem } from "@/shared/ui/OptionPicker";
 import { Popover } from "@/shared/ui/Popover";
@@ -11,7 +11,6 @@ import type { ReasoningLevel } from "@/db/types";
 import type {
   ModelOption,
   CardOption,
-  KnowledgeBaseOption,
   OutputModeOption,
   RenderStyleOption,
 } from "@/features/chat/model/types";
@@ -47,11 +46,6 @@ export interface ChatToolbarProps {
   selectedCardIds: string[];
   onCardToggle: (id: string) => void;
 
-  // 知识库（多选）
-  knowledgeBases: KnowledgeBaseOption[];
-  selectedKbIds: string[];
-  onKbToggle: (id: string) => void;
-
   // 输出模式（单选可清除）
   outputModes: OutputModeOption[];
   outputModeId: string | null;
@@ -86,9 +80,8 @@ export function ChatToolbar(props: ChatToolbarProps) {
   const {
     attached, onRemoveAttachment, onPreviewFile,
     cards, selectedCardIds, onCardToggle,
-    knowledgeBases, selectedKbIds, onKbToggle,
   } = props;
-  if (selectedCardIds.length === 0 && selectedKbIds.length === 0 && attached.length === 0) return null;
+  if (selectedCardIds.length === 0 && attached.length === 0) return null;
 
   return (
     <div className="flex flex-wrap items-center gap-1.5 px-2 pt-2">
@@ -109,20 +102,6 @@ export function ChatToolbar(props: ChatToolbarProps) {
               aria-label="移除指令卡"
             >
               <X className="w-3.5 h-3.5" aria-hidden="true" />
-            </button>
-          </span>
-        );
-      })}
-
-      {selectedKbIds.map((id) => {
-        const kb = knowledgeBases.find((item) => item.id === id);
-        if (!kb) return null;
-        return (
-          <span key={id} className="inline-flex items-center gap-1.5 rounded-full border border-sora-blue/20 bg-sora-blue/[0.04] px-2.5 py-1 text-ui-caption font-medium text-sora-blue">
-            <Library className="h-3.5 w-3.5" aria-hidden="true" />
-            <span className="max-w-[100px] truncate">{kb.name}</span>
-            <button onClick={() => onKbToggle(id)} className="-m-1 rounded-full p-1.5 hover:opacity-75 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sora-blue" title={t("attachRemove")} aria-label="移除知识库">
-              <X className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           </span>
         );

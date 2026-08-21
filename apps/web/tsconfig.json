@@ -41,9 +41,6 @@
       "@/lib/auth-client": [
         "./src/lib/auth-client.ts"
       ],
-      "@/lib/knowledge-base/service": [
-        "./src/lib/knowledge-base/service.ts"
-      ],
       "@/lib/output-modes/service": [
         "./src/lib/output-modes/service.ts"
       ],

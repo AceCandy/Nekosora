@@ -25,7 +25,6 @@ describe("Composer state machine", () => {
       models,
       initialModelName: "provider/model-a",
       initialCardIds: ["card-a"],
-      initialKbIds: ["kb-a"],
       initialWebSearch: true,
       initialOutputModeId: "mode-a",
       initialRenderStyleId: "style-a",
@@ -35,7 +34,6 @@ describe("Composer state machine", () => {
     expect(state).toEqual({
       modelId: "model-a",
       cardIds: ["card-a"],
-      kbIds: ["kb-a"],
       webSearch: true,
       outputModeId: "mode-a",
       renderStyleId: "style-a",
@@ -49,14 +47,12 @@ describe("Composer state machine", () => {
     machine.subscribe(listener);
 
     machine.dispatch({ type: "toggleCard", id: "card-a" });
-    machine.dispatch({ type: "toggleKnowledgeBase", id: "kb-b" });
     machine.dispatch({ type: "toggleCard", id: "card-c" });
 
     expect(machine.getSnapshot()).toMatchObject({
       cardIds: ["card-a", "card-c"],
-      kbIds: ["kb-b"],
     });
-    expect(listener).toHaveBeenCalledTimes(3);
+    expect(listener).toHaveBeenCalledTimes(2);
   });
 
   it("keeps reasoning per model and resolves the selected model snapshot", () => {
@@ -71,7 +67,6 @@ describe("Composer state machine", () => {
       modelId: "model-a",
       modelName: "provider/model-a",
       cardIds: [],
-      kbIds: [],
       webSearch: false,
       outputModeId: null,
       renderStyleId: null,

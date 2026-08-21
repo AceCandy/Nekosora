@@ -58,9 +58,6 @@ const toolbarProps: ChatToolbarProps = {
   cards: [],
   selectedCardIds: [],
   onCardToggle: noop,
-  knowledgeBases: [],
-  selectedKbIds: [],
-  onKbToggle: noop,
   outputModes: [],
   outputModeId: null,
   outputModePickerOpen: false,
@@ -174,7 +171,6 @@ describe("composer controls", () => {
       <ComposerPlusMenu
         {...toolbarProps}
         cards={[{ id: "card-1", title: "指令卡", trigger: "card" }]}
-        knowledgeBases={[{ id: "kb-1", name: "知识库", fileCount: 1 }]}
         outputModes={[{ id: "mode-html", name: "HTML" }]}
       />,
     );
@@ -183,7 +179,6 @@ describe("composer controls", () => {
     expect(html).toContain('type="file"');
     expect(html).toContain('multiple=""');
     expect(html).not.toContain("指令卡");
-    expect(html).not.toContain("知识库");
     expect(html).not.toContain("HTML");
   });
 

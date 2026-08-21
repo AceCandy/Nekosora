@@ -2,7 +2,7 @@
 
 ## 1. Scope / Trigger
 
-Apply this contract when changing WebChat image upload, message persistence, branch history, edit/regenerate behavior, or multimodal assembly. Chat attachments are message-owned image references; knowledge-base files and public conversation sharing are separate contracts.
+Apply this contract when changing WebChat image upload, message persistence, branch history, edit/regenerate behavior, or multimodal assembly. Chat attachments are message-owned image references and remain separate from public conversation sharing.
 
 ## 2. Signatures
 

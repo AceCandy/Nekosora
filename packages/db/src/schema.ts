@@ -348,7 +348,7 @@ export const conversations = pgTable(
     renderStyleId: text("render_style_id"), // 当前会话的输出样式(管理员预设的渲染 CSS)
     messageVersionSelections: jsonb("message_version_selections").$type<MessageVersionSelections>(),
     webSearch: boolean("web_search").notNull().default(false), // 当前会话是否启用联网搜索
-    composerState: jsonb("composer_state").$type<import("./types").ComposerState>(), // 指令卡 / 知识库等数组型会话状态
+    composerState: jsonb("composer_state").$type<import("./types").ComposerState>(), // 输入区会话状态
     pinned: boolean("pinned").notNull().default(false), // 是否置顶
     archived: boolean("archived").notNull().default(false), // 是否归档
     generating: boolean("generating").notNull().default(false), // 遗留回滚兼容列;新 runtime 从有效 run 租约派生,不读写
@@ -664,24 +664,6 @@ export const imageJobs = pgTable(
 );
 
 // ===========================================================================
-// 知识库(多库 RAG)
-// ===========================================================================
-
-export const knowledgeBases = pgTable(
-  "knowledge_bases",
-  {
-    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
-    userId: text("user_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
-    name: text("name").notNull(),
-    description: text("description"),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [index("knowledge_bases_user_idx").on(t.userId)],
-);
-
-// ===========================================================================
 // 文件 / RAG
 // ===========================================================================
 
@@ -695,7 +677,6 @@ export const fileObjects = pgTable(
     conversationId: text("conversation_id").references(() => conversations.id, {
       onDelete: "set null",
     }),
-    knowledgeBaseId: text("knowledge_base_id"),
     filename: text("filename").notNull(),
     mime: text("mime").notNull(),
     storagePath: text("storage_path").notNull(),
@@ -795,35 +776,6 @@ export const contextSnapshots = pgTable("context_snapshots", {
   strategy: text("strategy").notNull(), // "turn_cap" | "token_cap"
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
-
-// ===========================================================================
-// Prompt 模板 / Agent 模板(P2-B)
-// ===========================================================================
-
-export const promptTemplates = pgTable(
-  "prompt_templates",
-  {
-    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
-    userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
-    scope: text("scope").notNull(), // "builtin" | "private" | "shared"
-    name: text("name").notNull(),
-    description: text("description"),
-    category: text("category"),
-    icon: text("icon"),
-    systemPrompt: text("system_prompt"),
-    userTemplate: text("user_template"),
-    variables: jsonb("variables").$type<unknown[]>(),
-    recommendedModel: text("recommended_model"),
-    isAgent: boolean("is_agent").notNull().default(false),
-    agentConfig: jsonb("agent_config").$type<unknown>(),
-    enabled: boolean("enabled").notNull().default(true),
-    sortOrder: integer("sort_order").notNull().default(0),
-    useCount: integer("use_count").notNull().default(0),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [index("prompt_templates_scope_idx").on(t.scope)],
-);
 
 /**
  * 指令卡(instruction_cards)—— DEEIX skill 模式的本地实现。

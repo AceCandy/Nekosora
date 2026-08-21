@@ -14,7 +14,7 @@
 ### 2. Signatures
 - 会话 JSON:`composerState.reasoningByModelId?: Record<string, ReasoningLevel>`；历史 JSON 中遗留的 `temperature` / `topP` / `maxTokens` 允许保留，但不得被 WebChat 读取。
 - IR 中间表示:`IRRequest`(`src/lib/providers/types.ts`)加可选字段(其 `[key:string]:unknown` 兜底已允许透传)。
-- 前端持久化：`saveConversationComposerState(conversationId, snapshot): Promise<void>` 一次保存 `modelName`、`outputModeId`、`renderStyleId`、`webSearch`、`cardIds`、`kbIds` 和 `reasoningByModelId`；不得恢复字段级 Composer action，也不得新增 WebChat 普通生成参数写入。
+- 前端持久化：`saveConversationComposerState(conversationId, snapshot): Promise<void>` 一次保存 `modelName`、`outputModeId`、`renderStyleId`、`webSearch`、`cardIds` 和 `reasoningByModelId`；不得恢复字段级 Composer action，也不得新增 WebChat 普通生成参数写入。
 - 内部 WebChat 请求：`POST /api/chat` 可选接收 `outputModeId?: string | null` 与 `reasoning?: ReasoningLevel`。新 Composer 显式发送点击时的解析值；旧调用可缺省。
 - 后端读取：`app/api/chat/route.ts` 优先读取已校验的请求体 `reasoning`；字段缺省时按 `modelId` 回退 `composerState.reasoningByModelId`，再设置 `irRequest.reasoning`。不得从 `composerState` 覆盖 `temperature`、`top_p` 或 `max_tokens`。
 - SSR 回填：`getConversationComposerState` 返回 reasoning 字段，经 `app/chat/[id]/page.tsx` 的 `initialReasoningByModelId` 初始化 `ComposerStateMachine`；运行时按具体 `modelId` 从 coordinator snapshot 解析。
@@ -45,7 +45,7 @@
 - Base：旧 WebChat 调用缺省 snapshot 字段 → route 从会话行回退，保持兼容。
 - Base:旧会话仍有历史生成参数字段 → 请求不携带这些字段，使用模型默认值。
 - Bad:某级被该模型声明为不支持 → 夹到最近可用档，绝不把无效档位发送给上游。
-- Bad：恢复字段级 reasoning/card/KB action 或并行 JSON 读改写，导致最后可见 Composer 状态被旧请求覆盖。
+- Bad：恢复字段级 reasoning/card action 或并行 JSON 读改写，导致最后可见 Composer 状态被旧请求覆盖。
 
 ### 6. Tests Required
 - 覆盖完整档位、默认选择、最近档夹取、固定推理、Anthropic budget/adaptive、Gemini budget/level 和各 compatible `thinkingFormat`。

@@ -24,7 +24,6 @@ vi.mock("@/lib/trace", () => ({ buildTrace: mocks.buildTrace }));
 import {
   calculateTokenBudgets,
   prepareChatContext,
-  replaceMessageText,
   resolveModelGenerationSettings,
   selectCurrentBranchMessages,
 } from "@/lib/chat/orchestrator";
@@ -146,24 +145,6 @@ describe("selectCurrentBranchMessages", () => {
     expect(selectCurrentBranchMessages([
       { id: "u1", publicId: "pub-u1", parentId: null },
     ], "missing")).toEqual([]);
-  });
-});
-
-describe("replaceMessageText", () => {
-  it("替换文本并保留图片 part", () => {
-    const image = { type: "image_url", image_url: { url: "data:image/png;base64,xx" } };
-    expect(replaceMessageText([
-      { type: "text", text: "old" },
-      image,
-      { type: "text", text: "old-context" },
-    ], "rendered")).toEqual([
-      { type: "text", text: "rendered" },
-      image,
-    ]);
-  });
-
-  it("字符串内容直接替换", () => {
-    expect(replaceMessageText("old", "rendered")).toBe("rendered");
   });
 });
 

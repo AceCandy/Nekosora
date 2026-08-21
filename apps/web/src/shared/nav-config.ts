@@ -9,10 +9,8 @@ export type NavIcon =
   | "Server"
   | "Boxes"
   | "Globe"
-  | "FileText"
   | "CreditCard"
   | "Brain"
-  | "BookOpen"
   | "BarChart3"
   | "Users"
   | "Activity"
@@ -39,17 +37,15 @@ const myConfigGroup: NavGroup = {
     { href: "/panel/providers", labelKey: "providers", icon: "Server" },
     { href: "/panel/models", labelKey: "models", icon: "Boxes" },
     { href: "/panel/web-search", labelKey: "webSearch", icon: "Globe" },
-    { href: "/panel/templates", labelKey: "templates", icon: "FileText" },
     { href: "/panel/cards", labelKey: "cards", icon: "CreditCard" },
     { href: "/panel/memory", labelKey: "memory", icon: "Brain" },
-    { href: "/panel/knowledge", labelKey: "knowledge", icon: "BookOpen" },
     { href: "/panel/usage", labelKey: "myUsage", icon: "BarChart3" },
   ],
 };
 
 /**
  * 全局管理(仅 admin 可见,跳转到 /admin 路由)。
- * 资源项(providers/models/templates/usage)已并入 myConfigGroup(/panel/*),
+ * 资源项(providers/models/usage)已并入 myConfigGroup(/panel/*),
  * 此处仅保留纯系统管理页。
  */
 const globalManagementGroup: NavGroup = {

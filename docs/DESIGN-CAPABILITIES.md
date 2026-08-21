@@ -2,25 +2,24 @@
 
 > **版本**:v1.0 · **日期**:2026-06-19
 > **基线**:本方案所有挂载点均已对照现有代码确认 —— IR(`src/lib/providers/types.ts`)、`streamChat()`(`src/lib/stream.ts`)、四表路由器(`src/lib/routing.ts`)、`CallContext`、`context-assembler` 槽位、`worker`/pg-boss、降级基建、admin server actions、Better Auth + admin 插件。
-> **范围**:P1 现代 AI 工作台标配(MCP / Artifact / 多模态 / 图像语音)+ P2 规模化(对象存储 / Prompt 库 / 运维监控)共 7 项。
+> **范围**:P1 现代 AI 工作台标配(MCP / Artifact / 多模态 / 图像语音)+ P2 规模化(对象存储 / 运维监控)共 6 项。
 
 ---
 
 ## 目录
 
-- [设计总览(7 项能力挂载图)](#设计总览7-项能力挂载图)
+- [设计总览(6 项能力挂载图)](#设计总览6-项能力挂载图)
 - [P1-A — MCP (Model Context Protocol) 双向支持](#p1-a--mcp-model-context-protocol-双向支持)
 - [P1-B — Artifact / Canvas 面板](#p1-b--artifact--canvas-面板)
 - [P1-C — 多模态聊天上传(vision 图片)](#p1-c--多模态聊天上传vision-图片)
 - [P1-D — 图像生成 / 语音端点](#p1-d--图像生成--语音端点)
 - [P2-A — 对象存储适配(StorageDriver 抽象)](#p2-a--对象存储适配storagedriver-抽象)
-- [P2-B — Prompt 库 / Agent 模板](#p2-b--prompt-库--agent-模板)
 - [P2-C — 运维监控(healthz / metrics / 图表)](#p2-c--运维监控healthz--metrics--图表)
 - [汇总:交叉影响、迁移路径、分阶段路线图](#汇总交叉影响迁移路径分阶段路线图)
 
 ---
 
-## 设计总览(7 项能力挂载图)
+## 设计总览(6 项能力挂载图)
 
 ```
                          ┌─────────────────────────────────────────────┐
@@ -45,7 +44,6 @@
   ┌────▼───────────────────────────────────────────────┐
   │  基建层(全部沿用降级模式)                            │
   │   • StorageDriver 抽象 (P2-A) ──► Local/S3/R2/MinIO │
-  │   • prompt_templates 表 + 模板服务 (P2-B)           │
   │   • mcp_servers 表 + MCPRegistry (P1-A)            │
   │   • health/metrics 收集器 (P2-C)                   │
   └────────────────────────────────────────────────────┘
@@ -53,7 +51,7 @@
   WebChat 前端新增:
    • Composer 多模态粘贴 (P1-C)
    • Artifact 右侧面板 (P1-B)
-   • MCP/工具开关 + prompt 选择器 (P1-A, P2-B)
+   • MCP/工具开关 (P1-A)
 ```
 
 ---
@@ -150,7 +148,7 @@ const result = streamText({
 const toolCallsStream = result.toolCalls; // AI SDK v5 异步迭代器
 ```
 
-但工具调用是**多轮**的(模型调工具 → 拿结果 → 继续),所以 streamChat 外层需要包一个 **agent loop**(P2-B 的 Agent 模板会复用它):
+但工具调用是**多轮**的(模型调工具 → 拿结果 → 继续),所以 streamChat 外层需要包一个 **agent loop**:
 
 ```typescript
 // stream.ts 新增:agent 循环封装
@@ -607,113 +605,6 @@ S3_PUBLIC_BASE_URL=""          # 公共产物 URL 前缀;空=不返回公共 URL
 
 ---
 
-## P2-B — Prompt 库 / Agent 模板
-
-### 设计目标
-
-当前 system prompt 散落在 `globalModels.systemPrompt`(模型级)和 `conversationProjects.systemPrompt`(会话级),用户无法保存/复用自定义 prompt。本项做**可分享的 prompt 模板 + 可执行的多步 Agent**。
-
-### 数据模型(新增 2 表)
-
-```typescript
-// prompt_templates —— 可复用的提示词模板
-export const promptTemplates = pgTable("prompt_templates", {
-  id: text("id").primaryKey().default(uuid),
-  userId: text("user_id").references(() => user.id, { onDelete: "cascade" }), // null=官方内置
-  scope: text("scope").notNull(),          // "builtin" | "private" | "shared"
-  name: text("name").notNull(),
-  description: text("description"),
-  category: text("category"),              // "writing" | "coding" | "analysis" | ...
-  icon: text("icon"),
-  systemPrompt: text("system_prompt"),     // 注入到 SlotSystemPrompt
-  userTemplate: text("user_template"),     // 含 {{var}} 占位符的 user 模板
-  variables: text("variables", { mode: "json" }).$type<TemplateVariable[]>(),
-  recommendedModel: text("recommended_model"),
-  isAgent: integer("is_agent", { mode: "boolean" }).notNull().default(false),
-  agentConfig: text("agent_config", { mode: "json" }).$type<AgentConfig>(),  // isAgent=true 时
-  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
-  sortOrder: integer("sort_order").notNull().default(0),
-  useCount: integer("use_count").notNull().default(0),
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(now),
-  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(now),
-});
-
-interface TemplateVariable {
-  name: string;            // "language"
-  label: string;           // "目标语言"
-  type: "text" | "select" | "textarea";
-  required: boolean;
-  default?: string;
-  options?: string[];      // type=select
-}
-
-interface AgentConfig {
-  maxSteps: number;             // agent 循环最大轮数
-  allowedTools: string[];       // 允许的 MCP 工具名("web_search" 等)
-  allowedServers: string[];     // mcp_servers id
-  stopCondition?: string;       // "no_more_tool_calls" | "task_complete_keyword"
-}
-```
-
-### 核心接口
-
-**新建 `src/lib/templates/service.ts`**:
-
-```typescript
-/** 列出用户可见模板(builtin + 自己 private + 他人 shared)。 */
-export async function listTemplates(ctx: CallContext, opts?: { category?: string }): Promise<Template[]>;
-
-/** 渲染模板:把 variables 填入 userTemplate,返回最终 system + 首条 user 消息。 */
-export function renderTemplate(
-  template: PromptTemplate,
-  variables: Record<string, string>,
-): { systemPrompt: string; userMessage: string };
-
-/** 实例化一个 Agent(isAgent=true):返回带 tools + maxSteps 的 IRRequest。 */
-export async function instantiateAgent(
-  ctx: CallContext,
-  templateId: string,
-  variables: Record<string, string>,
-): Promise<{ irRequest: IRRequest; agentConfig: AgentConfig }>;
-```
-
-### 挂载点
-
-**1. `context-assembler.ts`** —— 新增 `SlotTemplate`:
-
-```typescript
-// assembleContext 第 35 行 slots 数组,在 SlotSystemPrompt 之后:
-if (input.templateSystemPrompt) {
-  slots.push(input.templateSystemPrompt);   // 模板 system 覆盖模型默认
-}
-```
-
-**2. P1-A 的 agent loop 复用** —— `streamChatWithTools` 的 `maxSteps` / `tools` 来自 `agentConfig`,这就是 Agent 模板的执行引擎。Prompt 模板(非 agent)走普通 streamChat;Agent 模板走 streamChatWithTools。
-
-**3. 新建会话时选模板**:
-
-```
-/chat 新建会话按钮 → 弹出模板选择器:
-  [空白对话]
-  [📝 翻译助手]  variables: { language }
-  [💻 代码审查]  variables: { language, framework }
-  [🤖 研究助手]  (Agent: 可调 web_search, maxSteps=10)
-```
-
-选定后:`conversation.projectId` 关联(可复用 `conversationProjects`),`userTemplate` 的变量表单动态渲染。
-
-### UI
-
-- `/panel/templates` 用户面板页:CRUD 自己的模板(对标 `/panel/providers` 结构)
-- `/admin/templates` 管理员页:管理 builtin / shared 模板
-- `/chat` 顶部模板选择器 + 变量表单弹层
-
-### 种子数据
-
-内置 5-8 个高质量模板:翻译、代码审查、会议纪要、SQL 生成、研究助手(agent)等。用 seed 脚本插入(`scope="builtin"`, `userId=null`)。
-
----
-
 ## P2-C — 运维监控(healthz / metrics / 图表)
 
 ### 设计目标
@@ -796,21 +687,19 @@ const activeStreams = new Gauge({ name: "nekusora_active_streams",
 
 ### 交叉依赖矩阵
 
-| | P1-A | P1-B | P1-C | P1-D | P2-A | P2-B | P2-C |
-|---|---|---|---|---|---|---|---|
-| **P1-A** | — | | | | | ✓(agent loop) | |
-| **P1-B** | | — | | | | | |
-| **P1-C** | | | — | | ✓(URL 可达) | | |
-| **P1-D** | | ✓ | | ←←← | ✓(url 模式必需) | | |
-| **P2-A** | ✓ | ✓ | ←←← | ←←← | — | | |
-| **P2-B** | ✓(agent) | | | | | — | |
-| **P2-C** | | | | | | | — |
+| | P1-A | P1-B | P1-C | P1-D | P2-A | P2-C |
+|---|---|---|---|---|---|---|
+| **P1-A** | — | | | | | |
+| **P1-B** | | — | | | | |
+| **P1-C** | | | — | | ✓(URL 可达) | |
+| **P1-D** | | ✓ | | ←←← | ✓(url 模式必需) | |
+| **P2-A** | ✓ | ✓ | ←←← | ←←← | — | |
+| **P2-C** | | | | | | — |
 
 **强依赖**:
 
 - P1-D 的 image generation `response_format=url` **必需** P2-A
 - P1-C vision 大图 **推荐** P2-A(否则只能 base64 内联)
-- P2-B Agent 模板 **必需** P1-A 的 agent loop
 - P2-C metrics 复用 P1-A 的 toolCalls 数据(工具调用指标)
 
 ### 数据库迁移影响
@@ -822,7 +711,6 @@ const activeStreams = new Gauge({ name: "nekusora_active_streams",
 | P1-C | — | fileObjects(无改动) | 无 |
 | P1-D | — | ProviderProtocol 枚举扩展 | 低(向后兼容,新值不影响旧路由) |
 | P2-A | — | fileObjects.storagePath 语义 | 低(启动时自动兼容旧路径) |
-| P2-B | prompt_templates | — | 低(纯新增) |
 | P2-C | — | — | 无 |
 
 全部为**增量迁移**,无需停机。schema 改完跑 `pnpm db:generate:pg` + migrate。
@@ -856,11 +744,9 @@ const activeStreams = new Gauge({ name: "nekusora_active_streams",
 **阶段 3(AI 工作台深化)**:
 
 5. **P1-A MCP 双向** —— 最大单项,解锁 agent 能力
-6. **P2-B Prompt 库 / Agent** —— 依赖 P1-A 的 agent loop,完整闭环
-
 **阶段 4(体验)**:
 
-7. **P1-B Artifact 面板** —— 纯前端体验提升,独立可并行
+6. **P1-B Artifact 面板** —— 纯前端体验提升,独立可并行
 
 ### 环境变量增量汇总(最终 .env.example 新增段)
 
@@ -889,6 +775,6 @@ METRICS_PATH="/metrics"
 
 | 决策点 | 选择 | 影响 |
 |---|---|---|
-| 实施顺序 | **基建先行** | P2-A → P2-C → P1-D → P1-C → P1-A → P2-B → P1-B |
+| 实施顺序 | **基建先行** | P2-A → P2-C → P1-D → P1-C → P1-A → P1-B |
 | MCP 方向 | **双向同步** | P1-A Host + Server 端点 `/v1/mcp` 同步交付 |
 | Artifact 触发 | **自动检测代码块** | `extractArtifacts` 基于 ``` 围栏解析,零配置 |

@@ -59,10 +59,6 @@ server {
     include /etc/nginx/snippets/gateway-proxy.conf;
   }
 
-  location = /api/knowledge/search {
-    include /etc/nginx/snippets/gateway-proxy.conf;
-  }
-
   location / {
     include /etc/nginx/snippets/web-proxy.conf;
   }

@@ -141,7 +141,6 @@ describe("chatStreamStore Composer 请求快照", () => {
         modelId: "model-a",
         instructionCardIds: ["card-a"],
         webSearch: true,
-        knowledgeBaseIds: ["kb-a"],
         createOptions: {
           outputModeId: null,
           renderStyleId: "style-a",
@@ -156,7 +155,6 @@ describe("chatStreamStore Composer 请求快照", () => {
       renderStyleId: "style-a",
       webSearch: true,
       cardIds: ["card-a"],
-      kbIds: ["kb-a"],
       reasoningByModelId: { "model-a": "off", "model-b": "high" },
     });
     const fetchMock = vi.mocked(fetch);

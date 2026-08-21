@@ -164,7 +164,6 @@ const models: ModelOption[] = [
 const initialState: ComposerSelectionState = {
   modelId: "model-a",
   cardIds: ["card-initial"],
-  kbIds: ["kb-initial"],
   webSearch: false,
   outputModeId: "mode-initial",
   renderStyleId: "style-initial",
@@ -204,7 +203,6 @@ beforeEach(() => {
   coordinatorState = {
     ...initialState,
     cardIds: [...initialState.cardIds],
-    kbIds: [...initialState.kbIds],
     reasoningByModelId: { ...initialState.reasoningByModelId },
   };
   currentSnapshot = coordinatorState;
@@ -248,7 +246,6 @@ describe("ChatComposer coordinator integration", () => {
     renderComposer("conversation-a");
 
     capturedToolbar?.onCardToggle("card-b");
-    capturedToolbar?.onKbToggle("kb-b");
     capturedToolbar?.onWebSearchToggle();
     capturedToolbar?.onOutputModeToggle("mode-b");
     capturedToolbar?.onRenderStyleToggle("style-b");
@@ -257,7 +254,6 @@ describe("ChatComposer coordinator integration", () => {
 
     expect(mocks.dispatch.mock.calls.map(([transition]) => transition)).toEqual([
       { type: "toggleCard", id: "card-b" },
-      { type: "toggleKnowledgeBase", id: "kb-b" },
       { type: "toggleWebSearch" },
       { type: "selectOutputMode", id: "mode-b" },
       { type: "selectRenderStyle", id: "style-b" },
@@ -271,7 +267,6 @@ describe("ChatComposer coordinator integration", () => {
     currentSnapshot = {
       ...coordinatorState,
       cardIds: ["card-latest"],
-      kbIds: ["kb-latest"],
       webSearch: true,
       outputModeId: null,
       renderStyleId: "style-latest",
@@ -294,7 +289,6 @@ describe("ChatComposer coordinator integration", () => {
       "model-a",
       ["card-latest"],
       true,
-      ["kb-latest"],
       expectedOptions,
       expect.objectContaining({ onAccepted: expect.any(Function), onRejected: expect.any(Function) }),
     );
@@ -305,7 +299,6 @@ describe("ChatComposer coordinator integration", () => {
       "model-a",
       ["card-latest"],
       true,
-      ["kb-latest"],
       expectedOptions,
       undefined,
     );

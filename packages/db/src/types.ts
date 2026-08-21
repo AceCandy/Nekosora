@@ -70,10 +70,9 @@ export interface ContextPolicy {
   compactPreserveRecentTurns?: number;
 }
 
-/** 输入区数组型会话状态(指令卡 / 知识库),存于 conversations.composerState。 */
+/** 输入区会话状态,存于 conversations.composerState。 */
 export interface ComposerState {
   cardIds?: string[];
-  kbIds?: string[];
   /** 当前会话按具体模型保存推理级别;缺省按模型能力选择默认档。 */
   reasoningByModelId?: Record<string, ReasoningLevel>;
 }

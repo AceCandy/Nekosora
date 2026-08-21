@@ -3,7 +3,6 @@ import {
   apiFile,
   apiImageGenerate,
   apiImages,
-  apiKnowledgeSearch,
   apiUpload,
   v1AudioSpeech,
   v1AudioTranscriptions,
@@ -52,6 +51,5 @@ export const gatewayHandlers: Record<GatewayHandlerName, GatewayHandler> = {
   apiFile: (request, params) => apiFile(request, { params: Promise.resolve({ fileId: params.fileId }) }),
   apiImages: (request) => apiImages(request),
   apiImageGenerate: (request) => apiImageGenerate(request),
-  apiKnowledgeSearch: (request) => apiKnowledgeSearch(request),
   metrics: () => getMetrics(),
 };

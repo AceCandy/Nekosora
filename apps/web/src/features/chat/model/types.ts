@@ -102,13 +102,6 @@ export interface CardOption {
   description?: string | null;
 }
 
-/** 知识库选项(供 chat 选择器用)。 */
-export interface KnowledgeBaseOption {
-  id: string;
-  name: string;
-  fileCount: number;
-}
-
 /** 输出模式选项(管理员预设的会话级输出模式)。 */
 export interface OutputModeOption {
   id: string;

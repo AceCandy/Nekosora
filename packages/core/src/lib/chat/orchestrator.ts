@@ -8,20 +8,18 @@
  * 是 route.ts 唯一干净的拆分边界。失败兜底策略与原内联实现逐行对齐。
  *
  * 执行模型:三阶段 —— ① fileIds 合并(前置,vision/RAG 强依赖)
- *   ② 无依赖耗时步 Promise.all 并行(记忆/压缩/output mode/模板/指令卡 + fileIds 链)
+ *   ② 无依赖耗时步 Promise.all 并行(记忆/压缩/output mode/指令卡 + fileIds 链)
  *   ③ assemble 后置(等齐全部)。并行后各步兜底行为与 trace 产出与原串行实现等价。
  */
 import { eq, and, or, inArray, isNull } from "drizzle-orm";
 import type { IRRequest } from "@/lib/providers/types";
 import type { ProcessTrace } from "@/db/types";
-import { getFileIdsByKnowledgeBases } from "@/lib/knowledge-base/files";
 import { buildMultimodalUserMessage } from "@/lib/multimodal/assemble";
 import { buildMessagesWithFileContext } from "@/lib/rag/context";
 import { getMemories } from "@/lib/memory/service";
 import { recallMemories } from "@/lib/memory/recall";
 import { maybeCompact, type CompactionResult } from "@/lib/compact/service";
 import { getOutputMode } from "@/lib/output-modes/read";
-import { getTemplate, renderTemplate, incUseCount as incTplUseCount } from "@/lib/templates/service";
 import { getCardsByIds, renderCardContext, incUseCount as incCardUseCount } from "@/lib/instruction-cards/service";
 import { assembleContext } from "@/lib/context-assembler";
 import { buildTrace } from "@/lib/trace";
@@ -83,13 +81,8 @@ export interface PrepareContextInput {
   messageAttachments?: ResolvedChatImage[];
   /** route 已在消息写入前完成模型视觉能力校验。 */
   visionValidated?: boolean;
-  /** 挂载的知识库 ID。 */
-  knowledgeBaseIds?: string[];
   /** 本轮是否启用联网搜索。 */
   webSearchEnabled?: boolean;
-  /** Prompt 模板 ID + 变量。 */
-  templateId?: string;
-  templateVars?: Record<string, string>;
   /** 指令卡 ID 列表。 */
   instructionCardIds?: string[];
   processRecorder?: Pick<ChatProcessRecorder, "recordStep">;
@@ -120,15 +113,13 @@ export async function prepareChatContext(
   const {
     userId, conversationId, conv, userContent, model, modelId, messages, branchLeafPublicId,
     fileIds: bodyFileIds, messageAttachments = [], visionValidated = false,
-    knowledgeBaseIds,
-    templateId, templateVars, instructionCardIds,
+    instructionCardIds,
     db, schema: s,
   } = input;
   const processRecorder = input.processRecorder;
   const hasFileContext = Boolean(
     messageAttachments.length
-    || bodyFileIds?.length
-    || knowledgeBaseIds?.length,
+    || bodyFileIds?.length,
   );
   if (hasFileContext) {
     await processRecorder?.recordStep({
@@ -145,22 +136,18 @@ export async function prepareChatContext(
   await processRecorder?.recordStep({ id: "prompt", kind: "prompt", status: "running" });
   input.signal?.throwIfAborted();
 
-  // ===== 阶段 1:知识库 fileIds 合并(后续 vision/RAG 链强依赖,先算)=====
-  let fileIds = [...new Set([
+  // ===== 阶段 1:附件 fileIds 合并(后续 vision/RAG 链强依赖,先算)=====
+  const fileIds = [...new Set([
     ...messageAttachments.map((attachment) => attachment.fileId),
     ...(bodyFileIds ?? []),
   ])];
-  if (knowledgeBaseIds && knowledgeBaseIds.length > 0) {
-    const kbFileIds = await getFileIdsByKnowledgeBases(knowledgeBaseIds, userId);
-    fileIds = [...new Set([...fileIds, ...kbFileIds])];
-  }
 
   // ===== 阶段 2:无依赖耗时步并行 =====
-  // 各分支保留原兜底:降级项自带 catch(resolve 降级值);冒泡项(getTemplate/getCardsByIds)
+  // 各分支保留原兜底:降级项自带 catch(resolve 降级值);冒泡项(getCardsByIds)
   // 失败 → Promise.all reject → 与原串行版"中途抛错"语义一致。
   const [
     fileChain, memoryResult, compactionResult,
-    outputModePrompt, templateResult, cardSystemPrompt,
+    outputModePrompt, cardSystemPrompt,
   ] = await Promise.all([
     // 分支 A:fileIds 依赖链(vision 分离 → 能力校验 → multimodal → file_mode → RAG),内部有序
     (async (): Promise<
@@ -331,18 +318,7 @@ export async function prepareChatContext(
       return null;
     })(),
 
-    // 分支 E:Prompt 模板(systemPrompt + userMessage)
-    // userMessage 应用延后到阶段 3(在 vision/RAG 之后),保持原顺序:template 覆盖 vision 的 multimodal。
-    (async (): Promise<{ systemPrompt: string | null; userMessage: string | null }> => {
-      if (!templateId) return { systemPrompt: null, userMessage: null };
-      const tpl = await getTemplate({ userId }, templateId);
-      if (!tpl) return { systemPrompt: null, userMessage: null };
-      const rendered = renderTemplate(tpl, templateVars ?? {});
-      incTplUseCount(tpl.id).catch(() => {}); // 异步计数,不阻塞
-      return { systemPrompt: rendered.systemPrompt ?? null, userMessage: rendered.userMessage ?? null };
-    })(),
-
-    // 分支 F:指令卡
+    // 分支 E:指令卡
     (async (): Promise<string | null> => {
       if (!instructionCardIds || instructionCardIds.length === 0) return null;
       const cards = await getCardsByIds(userId, instructionCardIds);
@@ -357,28 +333,14 @@ export async function prepareChatContext(
   // ===== 阶段 3:后置串行(等齐全部并行结果)=====
   // vision 校验失败 → 提前返回 400(保留原行为)
   if (!fileChain.ok) return { error: fileChain.error };
-  let effectiveMessages = fileChain.effectiveMessages;
+  const effectiveMessages = fileChain.effectiveMessages;
   const ragStatus = fileChain.ragStatus;
 
-  // template 的 userMessage 覆盖最后一条 user 的文本,保留图片 part。
-  if (templateResult.userMessage && effectiveMessages.length > 0) {
-    const lastIdx = effectiveMessages.length - 1;
-    effectiveMessages = [...effectiveMessages];
-    effectiveMessages[lastIdx] = {
-      ...effectiveMessages[lastIdx],
-      content: replaceMessageText(
-        effectiveMessages[lastIdx].content,
-        templateResult.userMessage,
-      ) as IRRequest["messages"][number]["content"],
-    };
-  }
-
-  // 合并 system 来源(output_mode + template + card)
+  // 合并 system 来源(output_mode + card)
   const currentDatePrompt = buildCurrentDatePrompt();
   const extraSystemParts = [
     currentDatePrompt,
     outputModePrompt,
-    templateResult.systemPrompt,
     cardSystemPrompt,
   ].filter(
     (p): p is string => p !== null,
@@ -468,19 +430,6 @@ export function selectCurrentBranchMessages<T extends BranchMessage>(
   }
 
   return branch.reverse();
-}
-
-/** 模板只替换文本 part,避免覆盖同一消息里的图片。 */
-export function replaceMessageText(
-  content: string | unknown[],
-  text: string,
-): string | unknown[] {
-  if (typeof content === "string") return text;
-
-  const nonTextParts = content.filter(
-    (part) => (part as { type?: string } | null)?.type !== "text",
-  );
-  return [{ type: "text", text }, ...nonTextParts];
 }
 
 /**

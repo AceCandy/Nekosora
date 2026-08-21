@@ -103,7 +103,7 @@ describe("conversation navigation schema", () => {
     };
 
     expect(migration).toMatch(/CREATE INDEX "conversations_navigation_idx"[\s\S]*"user_id"[\s\S]*case when "archived"[\s\S]*"updated_at" DESC[\s\S]*"id" DESC/);
-    expect(journal.entries).toEqual([expect.objectContaining({ idx: 0, tag: "0000_baseline" })]);
+    expect(journal.entries[0]).toEqual(expect.objectContaining({ idx: 0, tag: "0000_baseline" }));
     expect(snapshot.tables["public.conversations"].indexes.conversations_navigation_idx.columns)
       .toMatchObject([
         { expression: "user_id", asc: true },

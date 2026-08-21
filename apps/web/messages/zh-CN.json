@@ -57,7 +57,6 @@
     "keys": "密钥管理",
     "providers": "服务商管理",
     "models": "模型管理",
-    "templates": "提示词模板",
     "cards": "指令卡",
     "memory": "长期记忆",
     "operations": "运维监控",
@@ -65,7 +64,6 @@
     "usage": "网关调用用量",
     "globalProviders": "全局服务商",
     "globalModels": "对外模型与路由",
-    "globalTemplates": "全局模板",
     "sectionMyConfig": "我的配置",
     "sectionGlobalManagement": "全局管理",
     "settings": "系统设置",
@@ -77,7 +75,6 @@
     "sidebarNavigation": "侧边栏导航",
     "myUsage": "用量查询",
     "image": "图像",
-    "knowledge": "知识库",
     "outputModes": "输出模式",
     "renderStyles": "输出样式",
     "webSearch": "联网搜索"
@@ -212,7 +209,6 @@
     "feedbackReasonOutdated": "过时",
     "feedbackReasonUnsafe": "不安全",
     "feedbackReasonOther": "其他",
-    "knowledgeBase": "知识库",
     "outputMode": "输出模式",
     "outputModeDefault": "默认",
     "renderStyle": "输出样式",
@@ -284,15 +280,6 @@
       "title": "我的上游服务商",
       "desc": "添加你自己的上游服务商(接口地址 + 密钥)。这里的密钥会加密存储,仅你可调用。"
     },
-    "templates": {
-      "title": "Prompt 模板",
-      "desc": "可复用的提示词模板与智能体。选择模板后可在聊天中填入变量快速启动对话。",
-      "empty": "暂无可用模板",
-      "use": "使用 →",
-      "varCount": "{count} 个变量",
-      "noVars": "无变量",
-      "defaultCategory": "其他"
-    },
     "memory": {
       "configTitle": "长期记忆配置",
       "desc": "跨会话存储的用户画像与系统偏好，模型生成回复时将自动读取该记忆注入上下文，提供更具个性化的治愈伴读体验。",
@@ -347,23 +334,6 @@
       "titlePlaceholder": "资深翻译官",
       "descPlaceholder": "中英互译,保持专业语气",
       "contentPlaceholder": "你是一名资深翻译官。请将用户输入的内容在中文和英文之间互译..."
-    },
-    "knowledge": {
-      "desc": "管理多知识库,上传文件入库,对话时挂载检索。",
-      "createTitle": "新建知识库",
-      "namePlaceholder": "知识库名称",
-      "descPlaceholder": "描述(可选)",
-      "createBtn": "创建",
-      "empty": "还没有知识库",
-      "files": "文件",
-      "delete": "删除",
-      "selectFile": "选择文件加入…",
-      "attach": "加入",
-      "debugTitle": "检索调试",
-      "debugPlaceholder": "输入测试查询…",
-      "search": "检索",
-      "debugStatus": "状态",
-      "chunks": "块"
     },
     "webSearch": {
       "desc": "配置全局搜索顺序与外接搜索源。聊天只保留一个联网开关，模型需要时按此顺序搜索。",
@@ -561,15 +531,6 @@
     "providers": {
       "title": "全局服务商管理",
       "desc": "管理全局上游服务商与凭据,供模型路由调用。"
-    },
-    "templates": {
-      "title": "全局提示词模板",
-      "desc": "查看与管理全部模板(builtin / shared / private),支持启停与删除。",
-      "thName": "名称",
-      "thCategory": "分类",
-      "thScope": "范围",
-      "thUseCount": "使用次数",
-      "empty": "暂无模板。运行 pnpm tsx scripts/seed-templates.ts 初始化内置模板。"
     },
     "usage": {
       "title": "用量统计",

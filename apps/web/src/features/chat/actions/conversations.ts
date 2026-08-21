@@ -395,13 +395,12 @@ export async function getConversationTitleStateAction(conversationId: string) {
   return getConversationTitleState(user.id, conversationId);
 }
 
-/** 新会话首次发送时携带的输入区状态(已选输出模式 / 输出样式 / 联网 / 指令卡 / 知识库)。 */
+/** 新会话首次发送时携带的输入区状态。 */
 export interface CreateConversationOptions {
   outputModeId?: string | null;
   renderStyleId?: string | null;
   webSearch?: boolean;
   cardIds?: string[];
-  kbIds?: string[];
   reasoningByModelId?: Record<string, ReasoningLevel>;
 }
 
@@ -418,8 +417,8 @@ export async function createConversation(modelName?: string, options?: CreateCon
       outputModeId: options?.outputModeId ?? null,
       renderStyleId: options?.renderStyleId ?? null,
       webSearch: options?.webSearch ?? false,
-      composerState: options && (options.cardIds?.length || options.kbIds?.length || options.reasoningByModelId)
-        ? { cardIds: options.cardIds, kbIds: options.kbIds, reasoningByModelId: options.reasoningByModelId }
+      composerState: options && (options.cardIds?.length || options.reasoningByModelId)
+        ? { cardIds: options.cardIds, reasoningByModelId: options.reasoningByModelId }
         : null,
     })
     .returning({ id: S().conversations.id });
@@ -463,7 +462,6 @@ export interface ConversationComposerState {
   renderStyleId: string | null;
   webSearch: boolean;
   cardIds: string[];
-  kbIds: string[];
   reasoningByModelId: Record<string, ReasoningLevel>;
 }
 
@@ -474,7 +472,6 @@ const composerSnapshotSchema = z.object({
   renderStyleId: z.string().min(1).nullable(),
   webSearch: z.boolean(),
   cardIds: z.array(z.string().min(1)),
-  kbIds: z.array(z.string().min(1)),
   reasoningByModelId: z.record(z.string().min(1), reasoningLevelSchema),
 });
 const saveComposerSnapshotSchema = z.object({
@@ -504,7 +501,6 @@ export async function saveConversationComposerState(
       webSearch: snapshot.webSearch,
       composerState: {
         cardIds: snapshot.cardIds,
-        kbIds: snapshot.kbIds,
         reasoningByModelId: snapshot.reasoningByModelId,
       },
     })
@@ -573,7 +569,7 @@ function makeSnippet(text: string, keyword: string): string {
   return (start > 0 ? "…" : "") + text.slice(start, end) + (end < text.length ? "…" : "");
 }
 
-/** 一次性读回会话的输入区状态(模型 / 输出模式 / 输出样式 / 联网 / 指令卡 / 知识库),供 SSR 回填。 */
+/** 一次性读回会话的输入区状态,供 SSR 回填。 */
 export async function getConversationComposerState(
   conversationId: string,
 ): Promise<ConversationComposerState> {
@@ -593,9 +589,9 @@ export async function getConversationComposerState(
     .where(eq(S().conversations.id, conversationId))
     .limit(1);
   if (!conv || conv.userId !== user.id) {
-    return { title: "新会话", modelName: null, outputModeId: null, renderStyleId: null, webSearch: false, cardIds: [], kbIds: [], reasoningByModelId: {} };
+    return { title: "新会话", modelName: null, outputModeId: null, renderStyleId: null, webSearch: false, cardIds: [], reasoningByModelId: {} };
   }
-  const composer = (conv.composerState as { cardIds?: string[]; kbIds?: string[]; reasoningByModelId?: Record<string, ReasoningLevel> } | null) ?? {};
+  const composer = (conv.composerState as { cardIds?: string[]; reasoningByModelId?: Record<string, ReasoningLevel> } | null) ?? {};
   return {
     title: conv.title,
     modelName: (conv.modelName as string | null) ?? null,
@@ -603,7 +599,6 @@ export async function getConversationComposerState(
     renderStyleId: (conv.renderStyleId as string | null) ?? null,
     webSearch: (conv.webSearch as boolean) ?? false,
     cardIds: composer.cardIds ?? [],
-    kbIds: composer.kbIds ?? [],
     reasoningByModelId: composer.reasoningByModelId ?? {},
   };
 }

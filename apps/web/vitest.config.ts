@@ -14,7 +14,6 @@ export default defineConfig({
       { find: "@/auth", replacement: `${coreSrc}auth.ts` },
       { find: "@/lib/session", replacement: `${src}lib/session.ts` },
       { find: "@/lib/auth-client", replacement: `${src}lib/auth-client.ts` },
-      { find: "@/lib/knowledge-base/service", replacement: `${src}lib/knowledge-base/service.ts` },
       { find: "@/lib/output-modes/service", replacement: `${src}lib/output-modes/service.ts` },
       { find: "@/lib/render-styles/service", replacement: `${src}lib/render-styles/service.ts` },
       { find: "@/db/schema/pg", replacement: `${dbSrc}schema.ts` },

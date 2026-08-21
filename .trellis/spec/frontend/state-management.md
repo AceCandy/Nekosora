@@ -69,13 +69,12 @@ const { messages, streaming } = useChatStreamStore(
 
 ## Composer 局部协调状态
 
-Chat Composer 的七类生成选择由 `ComposerStateMachine` 持有一个完整 `ComposerSelectionState`。组件只通过领域 transition 更新；普通发送和选区追问必须在事件发生时调用同步 `getSnapshot()`，不得从多个 render closure 拼装请求参数。
+Chat Composer 的六类生成选择由 `ComposerStateMachine` 持有一个完整 `ComposerSelectionState`。组件只通过领域 transition 更新；普通发送和选区追问必须在事件发生时调用同步 `getSnapshot()`，不得从多个 render closure 拼装请求参数。
 
 ```ts
 interface ComposerSelectionState {
   modelId: string;
   cardIds: string[];
-  kbIds: string[];
   webSearch: boolean;
   outputModeId: string | null;
   renderStyleId: string | null;

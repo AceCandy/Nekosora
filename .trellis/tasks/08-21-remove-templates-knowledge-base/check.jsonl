@@ -1,0 +1,3 @@
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"复核迁移 SQL、journal、snapshot、bootstrap baseline 契约。"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"复核前端删除后的 lint、类型与测试门禁。"}
+{"file":".trellis/spec/backend/chat-generation-params.md","reason":"复核 Composer 与 Chat API 不再读写知识库选择。"}

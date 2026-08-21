@@ -5,7 +5,6 @@ import type { ModelOption } from "./types";
 export interface ComposerSelectionState {
   modelId: string;
   cardIds: string[];
-  kbIds: string[];
   webSearch: boolean;
   outputModeId: string | null;
   renderStyleId: string | null;
@@ -16,7 +15,6 @@ export interface ComposerSelectionInput {
   models: ModelOption[];
   initialModelName?: string | null;
   initialCardIds?: string[];
-  initialKbIds?: string[];
   initialWebSearch?: boolean;
   initialOutputModeId?: string | null;
   initialRenderStyleId?: string | null;
@@ -26,7 +24,6 @@ export interface ComposerSelectionInput {
 export type ComposerTransition =
   | { type: "selectModel"; modelId: string }
   | { type: "toggleCard"; id: string }
-  | { type: "toggleKnowledgeBase"; id: string }
   | { type: "toggleWebSearch" }
   | { type: "selectOutputMode"; id: string | null }
   | { type: "selectRenderStyle"; id: string | null }
@@ -50,7 +47,6 @@ export function createComposerSelectionState(input: ComposerSelectionInput): Com
   return {
     modelId: modelId ?? input.models[0]?.modelId ?? "",
     cardIds: [...(input.initialCardIds ?? [])],
-    kbIds: [...(input.initialKbIds ?? [])],
     webSearch: input.initialWebSearch ?? false,
     outputModeId: input.initialOutputModeId ?? null,
     renderStyleId: input.initialRenderStyleId ?? null,
@@ -69,8 +65,6 @@ export function reduceComposerSelection(
         : { ...state, modelId: transition.modelId };
     case "toggleCard":
       return { ...state, cardIds: toggleId(state.cardIds, transition.id) };
-    case "toggleKnowledgeBase":
-      return { ...state, kbIds: toggleId(state.kbIds, transition.id) };
     case "toggleWebSearch":
       return { ...state, webSearch: !state.webSearch };
     case "selectOutputMode":
@@ -130,7 +124,6 @@ export function composerSelectionsEqual(
 ): boolean {
   return left.modelId === right.modelId
     && sameArray(left.cardIds, right.cardIds)
-    && sameArray(left.kbIds, right.kbIds)
     && left.webSearch === right.webSearch
     && left.outputModeId === right.outputModeId
     && left.renderStyleId === right.renderStyleId
