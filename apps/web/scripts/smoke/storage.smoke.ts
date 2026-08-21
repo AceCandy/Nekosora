@@ -1,6 +1,6 @@
 /**
  * storage.ts 冒烟测试 —— 验证 LocalDriver 的 put/get/delete 往返 +
- * driver 工厂降级(STORAGE_DRIVER 未配 → local;配错 → fallback local)。
+ * driver 工厂选择(STORAGE_DRIVER 未配 → local;显式远端配置错误 → 报错)。
  *
  * 运行:pnpm tsx scripts/smoke/storage.smoke.ts
  *
@@ -30,7 +30,11 @@ async function run() {
   process.env.STORAGE_DRIVER = "r2";
   assert.strictEqual(resolveStorageKind(), "r2");
   process.env.STORAGE_DRIVER = "invalid";
-  assert.strictEqual(resolveStorageKind(), null, "非法值应返回 null");
+  assert.throws(
+    () => resolveStorageKind(),
+    /STORAGE_DRIVER 仅允许 local、s3、r2 或 minio/,
+    "非法值应被拒绝",
+  );
   delete process.env.STORAGE_DRIVER;
   console.log("✓ resolveStorageKind 配置解析通过");
 
@@ -39,16 +43,19 @@ async function run() {
   assert.strictEqual(env.storageDriver, "local", "默认应为 local");
   console.log("✓ getEnvInfo().storageDriver 通过");
 
-  // 3. 缺 S3 凭证时自动 fallback local
+  // 3. 缺 S3 凭证时明确失败,不改写为 local
   process.env.STORAGE_DRIVER = "s3";
-  // 故意不配 S3_BUCKET,触发 buildS3Driver 抛错 → fallback
+  // 故意不配 S3_BUCKET,触发 buildS3Driver 抛错。
   delete process.env.S3_BUCKET;
   __resetStorageForTest();
-  const fallback = await getStorage();
-  assert.strictEqual(fallback.kind, "local", "S3 配置缺失应回退 local");
+  await assert.rejects(
+    () => getStorage(),
+    /S3_BUCKET\/S3_ACCESS_KEY_ID\/S3_SECRET_ACCESS_KEY/,
+    "S3 配置缺失应明确失败",
+  );
   assert.strictEqual(getStorageKind(), "local");
   delete process.env.STORAGE_DRIVER;
-  console.log("✓ S3 配置缺失自动回退 local 通过");
+  console.log("✓ S3 配置缺失明确失败通过");
 
   // 4. LocalDriver put/get/delete 往返(隔离临时目录)
   const tmpRoot = await mkdtemp(join(tmpdir(), "nekusora-storage-"));

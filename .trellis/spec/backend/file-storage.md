@@ -1,5 +1,83 @@
 # File Storage And Range Reading
 
+## Scenario: Explicit Storage Driver Selection
+
+### 1. Scope / Trigger
+
+Apply this contract when changing storage environment validation, driver selection, or
+Gateway storage readiness. An explicitly selected remote backend must never write data
+to local disk after a configuration or construction failure.
+
+### 2. Signatures
+
+- `resolveStorageKind(): "s3" | "r2" | "minio" | null`; `null` means unset or
+  explicit `local`, while an unsupported non-empty value throws.
+- `validateEnv(): EnvInfo` validates `STORAGE_DRIVER` during process startup.
+- `getStorage(): Promise<StorageDriver>` lazily constructs the selected singleton.
+- Remote required variables: `S3_BUCKET`, `S3_ACCESS_KEY_ID`, and
+  `S3_SECRET_ACCESS_KEY`.
+
+### 3. Contracts
+
+- Unset, blank, or explicit `local` selects `LocalDriver` with the existing
+  `LOCAL_STORAGE_DIR` default.
+- `s3`, `r2`, and `minio` require all three trimmed remote variables. Environment
+  validation errors list missing variable names only, never their values.
+- Any other non-empty `STORAGE_DRIVER` is rejected by `validateEnv` and by the storage
+  factory; it is not interpreted as local.
+- Remote configuration, dynamic import, or driver construction failure propagates to
+  the caller. Do not catch it and construct `LocalDriver`.
+- `S3Driver` construction does not perform an object read/write probe. Network errors
+  still surface on the first actual operation; adding startup I/O requires a separate
+  availability and latency contract.
+- No fallback switch exists. Rollback requires reverting the code/configuration, not
+  silently changing the storage location.
+
+### 4. Validation & Error Matrix
+
+| Condition | Result |
+| --- | --- |
+| `STORAGE_DRIVER` unset, blank, or `local` | Construct `LocalDriver` |
+| `s3` / `r2` / `minio` with complete required variables | Construct matching `S3Driver` |
+| Unsupported non-empty driver | Startup/factory error; no driver constructed |
+| Required remote variable missing or whitespace | Error names the variable; no local fallback |
+| Remote module import or constructor throws | Original failure propagates; no local fallback |
+
+### 5. Good / Base / Bad Cases
+
+- Good: an operator selects `r2` but omits the secret; startup fails before any upload
+  can be written to a container-local filesystem.
+- Base: a developer leaves `STORAGE_DRIVER` empty and continues using isolated local
+  storage without S3 credentials.
+- Bad: catch any remote initialization error, log a warning, and return `LocalDriver`;
+  callers report success while data lands in the wrong persistence boundary.
+
+### 6. Tests Required
+
+- `env.test.ts`: local/default, every remote kind, unsupported values, missing-variable
+  matrix, and assertions that errors exclude configured secret/URL values.
+- `storage/index.test.ts`: local and remote construction, unsupported value rejection,
+  missing configuration rejection, and mocked constructor failure without fallback.
+- Keep Local/S3 driver suites and `storage.smoke.ts` green. The smoke must expect an
+  explicit remote misconfiguration to reject.
+- Gateway readiness must report storage construction failures as unready without
+  changing the configured driver.
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong: explicit remote intent is silently replaced with local persistence.
+try {
+  return await buildS3Driver(kind);
+} catch {
+  return buildLocalDriver();
+}
+
+// Correct: local is only the default; remote failures remain failures.
+if (!kind) return buildLocalDriver();
+return buildS3Driver(kind);
+```
+
 ## 1. Scope / Trigger
 
 修改 `StorageDriver`、`/api/files/[fileId]`、文本/媒体预览或对象存储下载流程时，必须保持本契约。目标是让私有文件继续经过属主鉴权，同时支持端到端有界读取，避免客户端截断前先把完整对象加载进内存。

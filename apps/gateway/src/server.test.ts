@@ -55,6 +55,14 @@ function multipartFile(size: number) {
   };
 }
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 describe("Gateway HTTP adapter", () => {
   beforeEach(() => {
     readinessMocks.dbExecute.mockReset().mockResolvedValue(undefined);
@@ -431,22 +439,37 @@ describe("Gateway readiness", () => {
     await app.close();
   });
 
-  it("queue 检查超时时返回 503", async () => {
+  it("queue 检查超时后复用未完成检查，恢复后允许重试", async () => {
     vi.useFakeTimers();
-    readinessMocks.queueAvailable.mockReturnValue(new Promise(() => {}));
+    const gate = deferred<boolean>();
+    readinessMocks.queueAvailable.mockReturnValueOnce(gate.promise).mockResolvedValue(true);
     const app = buildServer({ closeResources: async () => {} });
 
     try {
-      const responsePromise = app.inject({ method: "GET", url: "/healthz/ready" });
+      const firstResponsePromise = app.inject({ method: "GET", url: "/healthz/ready" });
       await vi.advanceTimersByTimeAsync(2_000);
-      const response = await responsePromise;
+      const firstResponse = await firstResponsePromise;
 
-      expect(response.statusCode).toBe(503);
-      expect(response.json()).toMatchObject({
+      expect(firstResponse.statusCode).toBe(503);
+      expect(firstResponse.json()).toMatchObject({
         status: "unready",
         checks: { db: "ok", queue: "timeout" },
       });
+
+      const secondResponsePromise = app.inject({ method: "GET", url: "/healthz/ready" });
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect((await secondResponsePromise).statusCode).toBe(503);
+      expect(readinessMocks.queueAvailable).toHaveBeenCalledOnce();
+
+      gate.resolve(true);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const recovered = await app.inject({ method: "GET", url: "/healthz/ready" });
+      expect(recovered.statusCode).toBe(200);
+      expect(readinessMocks.queueAvailable).toHaveBeenCalledTimes(2);
     } finally {
+      gate.resolve(true);
       vi.useRealTimers();
       await app.close();
     }

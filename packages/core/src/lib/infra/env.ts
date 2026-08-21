@@ -29,6 +29,8 @@ export function getEnvInfo(): EnvInfo {
 export function validateEnv(): EnvInfo {
   const info = getEnvInfo();
   const errors: string[] = [];
+  const rawStorage = (process.env.STORAGE_DRIVER ?? "").toLowerCase().trim();
+  const remoteStorage = rawStorage === "s3" || rawStorage === "r2" || rawStorage === "minio";
 
   // 必填
   if (!process.env.DATA_ENCRYPTION_KEY) {
@@ -41,6 +43,15 @@ export function validateEnv(): EnvInfo {
   }
   if (!process.env.DATABASE_URL) {
     errors.push("DATABASE_URL 未配置(仅支持 PostgreSQL)。");
+  }
+
+  if (rawStorage && rawStorage !== "local" && !remoteStorage) {
+    errors.push("STORAGE_DRIVER 仅允许 local、s3、r2 或 minio。");
+  }
+  if (remoteStorage) {
+    for (const name of ["S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"] as const) {
+      if (!process.env[name]?.trim()) errors.push(`${name} 未配置。`);
+    }
   }
 
   if (errors.length > 0) {

@@ -29,6 +29,23 @@ export async function closeGatewayResources(
 }
 
 type ReadinessCheck = string | { available: boolean } | "error";
+type ReadinessDependency = "db" | "storage" | "queue";
+
+const readinessInFlight: Partial<Record<ReadinessDependency, Promise<ReadinessCheck>>> = {};
+
+function runReadinessCheck(
+  dependency: ReadinessDependency,
+  check: () => Promise<ReadinessCheck>,
+): Promise<ReadinessCheck> {
+  const current = readinessInFlight[dependency];
+  if (current) return current;
+
+  const promise = check().finally(() => {
+    if (readinessInFlight[dependency] === promise) delete readinessInFlight[dependency];
+  });
+  readinessInFlight[dependency] = promise;
+  return promise;
+}
 
 async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | "timeout"> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -46,7 +63,7 @@ async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | "tim
 
 async function checkReadiness() {
   return Promise.all([
-    withTimeout((async (): Promise<ReadinessCheck> => {
+    withTimeout(runReadinessCheck("db", async (): Promise<ReadinessCheck> => {
       try {
         const db = await getDb();
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -55,8 +72,8 @@ async function checkReadiness() {
       } catch {
         return "error";
       }
-    })(), 2_000),
-    withTimeout((async (): Promise<ReadinessCheck> => {
+    }), 2_000),
+    withTimeout(runReadinessCheck("storage", async (): Promise<ReadinessCheck> => {
       try {
         const expected = resolveStorageKind();
         const actual = (await getStorage()).kind;
@@ -64,14 +81,14 @@ async function checkReadiness() {
       } catch {
         return "error";
       }
-    })(), 2_000),
-    withTimeout((async (): Promise<ReadinessCheck> => {
+    }), 2_000),
+    withTimeout(runReadinessCheck("queue", async (): Promise<ReadinessCheck> => {
       try {
         return { available: await queueAvailable() };
       } catch {
         return "error";
       }
-    })(), 2_000),
+    }), 2_000),
   ]);
 }
 

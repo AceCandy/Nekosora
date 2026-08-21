@@ -597,11 +597,12 @@ S3_SECRET_ACCESS_KEY=""
 S3_PUBLIC_BASE_URL=""          # 公共产物 URL 前缀;空=不返回公共 URL
 ```
 
-### 降级
+### 选择与失败行为
 
-- driver 初始化失败(配错 key)→ 自动 fallback LocalDriver + 启动日志 WARN
+- 未配置 `STORAGE_DRIVER` 或显式 `local` → 使用 LocalDriver
+- 显式远端 driver 配置缺失或初始化失败 → 启动/就绪检查报错，不回退 LocalDriver
 - `put` 失败 → 上传端点返回 500,文件记录标 `processingStatus="storage_error"`
-- Local driver 是永远可用的兜底,保证零配置开箱即用(与项目"零依赖本地开发"原则一致)
+- Local driver 保证零配置开箱即用，但不是显式远端配置失败时的兜底
 
 ---
 

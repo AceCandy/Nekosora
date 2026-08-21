@@ -56,11 +56,11 @@ Nekusora(星枢,取自 Neku 猫 / Sora 天空)把两件事揉进了同一个产�
 - **子 Key**(多个):受显式模型绑定约束,可为每个子 key 勾选可用模型
 - **双来源模型**:子 key 可绑定「全局模型」(管理员配) ∪ 「用户 BYO 模型」(用户自配 provider)
 
-### 降级基建(零依赖可启动)
+### 基础设施(本地默认零依赖)
 - **数据库**:PostgreSQL(+pgvector)
 - **缓存**:Redis ↔ 进程内内存 LRU 自动降级
 - **队列**:pg-boss(PostgreSQL)
-- **对象存储**:S3 / R2 / Minio ↔ 本地磁盘自动降级
+- **对象存储**:未配置时使用本地磁盘；显式选择 S3 / R2 / MinIO 后配置错误会阻断启动，不回退本地
 
 ### 管理
 - 管理员后台:Provider / Model / Route / User / Template / 用量统计 / 运维
