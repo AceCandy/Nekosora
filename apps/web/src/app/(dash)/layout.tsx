@@ -29,23 +29,20 @@ export default async function DashLayout({
 
   const user = isAdmin ? await requireAdmin() : await requireSession();
 
-  const t = await getTranslations("panel");
   const ta = await getTranslations("admin.users");
 
   const groups = isAdmin ? adminNavGroups() : panelNavGroups(user.role);
-  const brandHref = "/chat";
+  const chatHref = "/chat";
   const brandBadge = isAdmin ? ta("roleAdmin") : undefined;
   const matchMode = isAdmin ? ("prefix" as const) : ("exact" as const);
-  const footerLinks = [{ href: "/chat", label: t("enterChat") }];
 
   return (
     <AppShell
       user={user}
       groups={groups}
-      brandHref={brandHref}
+      chatHref={chatHref}
       brandBadge={brandBadge}
       matchMode={matchMode}
-      footerLinks={footerLinks}
     >
       {children}
     </AppShell>

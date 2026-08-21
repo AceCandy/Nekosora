@@ -72,6 +72,7 @@
     "closeSidebar": "Close sidebar",
     "expandSidebar": "Expand sidebar",
     "collapseSidebar": "Collapse sidebar",
+    "backToChat": "Back to chat",
     "sidebarNavigation": "Sidebar navigation",
     "myUsage": "Usage",
     "image": "Image",
@@ -234,7 +235,6 @@
   },
   "panel": {
     "title": "Dashboard",
-    "enterChat": "Open Chat →",
     "adminConsole": "Admin",
     "keys": {
       "title": "API Keys & Permissions",

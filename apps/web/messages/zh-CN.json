@@ -72,6 +72,7 @@
     "closeSidebar": "关闭侧边栏",
     "expandSidebar": "展开侧边栏",
     "collapseSidebar": "收起侧边栏",
+    "backToChat": "返回聊天",
     "sidebarNavigation": "侧边栏导航",
     "myUsage": "用量查询",
     "image": "图像",
@@ -234,7 +235,6 @@
   },
   "panel": {
     "title": "控制面板",
-    "enterChat": "进入聊天 →",
     "adminConsole": "管理后台",
     "keys": {
       "title": "API 密钥与权限绑定",

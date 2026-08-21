@@ -4,10 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { clsx } from "clsx";
-import { ChevronDown, Menu, PanelLeftClose, PanelLeftOpen, LogOut, MessageSquare, X } from "lucide-react";
+import { ArrowLeft, ChevronDown, Menu, PanelLeftClose, PanelLeftOpen, LogOut, X } from "lucide-react";
 import type { SessionUser } from "@/lib/session";
 import type { NavGroup } from "@/shared/nav-config";
-import type { FooterLink } from "@/shared/components/AppShell";
 import SidebarNav from "@/shared/components/SidebarNav";
 import LanguageSwitcher from "@/shared/components/LanguageSwitcher";
 import { useClickOutside } from "@/shared/lib/useClickOutside";
@@ -15,10 +14,9 @@ import { useClickOutside } from "@/shared/lib/useClickOutside";
 interface DashSidebarProps {
   user: SessionUser;
   groups: NavGroup[];
-  brandHref: string;
+  chatHref: string;
   brandBadge?: string;
   matchMode?: "exact" | "prefix";
-  footerLinks: FooterLink[];
   /** 登出 server action,由 AppShell(server)定义并透传,避免 client/服务端两套实现。 */
   logoutAction: () => Promise<void>;
 }
@@ -32,10 +30,9 @@ interface DashSidebarProps {
 export default function DashSidebar({
   user,
   groups,
-  brandHref,
+  chatHref,
   brandBadge,
   matchMode = "exact",
-  footerLinks = [],
   logoutAction,
 }: DashSidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
@@ -137,10 +134,11 @@ export default function DashSidebar({
           <Menu className="h-5 w-5" aria-hidden="true" />
         </button>
         <Link
-          href={brandHref}
-          className="min-w-0 truncate rounded text-ui-reading font-semibold text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue "
+          href={chatHref}
+          className="inline-flex min-w-0 items-center gap-2 truncate rounded px-2 py-1 text-ui-body font-medium text-neutral-700 transition-colors hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
         >
-          Nekusora
+          <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden="true" />
+          {t("backToChat")}
         </Link>
       </header>
 
@@ -172,17 +170,19 @@ export default function DashSidebar({
         )}
       >
         <div className="min-h-0 flex-1 space-y-6 overflow-y-auto">
-          <div className={clsx("flex items-center", collapsed ? "justify-center" : "justify-between px-1 py-1")}>
-            {!collapsed && (
-              <div className="min-w-0 flex-1">
-                <Link
-                  href={brandHref}
-                  className="block truncate rounded text-ui-heading font-bold text-neutral-900 transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue "
-                >
-                  Nekusora
-                </Link>
-              </div>
-            )}
+          <div className={clsx("flex items-center", collapsed ? "flex-col gap-1" : "justify-between gap-1 px-1 py-1")}>
+            <Link
+              href={chatHref}
+              className={clsx(
+                "touch-target inline-flex h-9 min-w-0 items-center rounded-md text-ui-body font-medium text-neutral-700 transition-colors hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue",
+                collapsed ? "w-9 justify-center" : "flex-1 gap-2 px-2",
+              )}
+              aria-label={collapsed ? t("backToChat") : undefined}
+              title={collapsed ? t("backToChat") : undefined}
+            >
+              <ArrowLeft className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />
+              <span className={clsx("truncate", collapsed && "md:hidden")}>{t("backToChat")}</span>
+            </Link>
             <button
               type="button"
               onClick={() => setCollapsed((v) => !v)}
@@ -218,20 +218,6 @@ export default function DashSidebar({
                 collapsed && "md:bottom-0 md:left-full md:right-auto md:mb-0 md:ml-2 md:w-48",
               )}
             >
-              {footerLinks.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  onClick={() => {
-                    setUserMenuOpen(false);
-                    setMobileOpen(false);
-                  }}
-                  className="touch-target flex items-center gap-2 rounded-md px-3 py-2 text-ui-body text-neutral-700 hover:bg-neutral-100  "
-                >
-                  <MessageSquare className="h-4 w-4" aria-hidden="true" />
-                  {link.label}
-                </Link>
-              ))}
               <LanguageSwitcher className="touch-target flex w-full rounded-md px-3 py-2 hover:bg-neutral-100 " />
               <form action={logoutAction}>
                 <button
