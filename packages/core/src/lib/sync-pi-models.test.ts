@@ -63,6 +63,16 @@ describe("match", () => {
   it("聚合 provider 不抢占主 provider 命中(opencode 让位 zai)", () => {
     expect(match("glm-5.2", ["zai/glm-5.2"], PI)?.via).toBe("zai/glm-5.2");
   });
+  it("OpenAI 主入口优先于 Codex 专用路由", () => {
+    const catalog = {
+      openai: { o3: pi({ id: "o3", api: "openai-responses" }) },
+      "openai-codex": { o3: pi({ id: "o3", api: "openai-codex-responses" }) },
+    };
+    expect(match("o3", ["openai/o3", "openai-codex/o3"], catalog)).toMatchObject({
+      provider: "openai",
+      authority: "direct",
+    });
+  });
   it("全路径 key 命中(openrouter 的 openai/gpt-oss-120b)", () => {
     const m = match("gpt-oss-120b", ["openai/gpt-oss-120b"], PI);
     expect(m).toMatchObject({
@@ -440,6 +450,62 @@ describe("planCatalogSync", () => {
     });
   });
 
+  it.each([
+    ["openai", "o3", "openai-responses", "openai", { off: null, low: "low" }],
+    ["anthropic", "claude-haiku-4-5", "anthropic-messages", "anthropic", undefined],
+    ["google", "gemini-2.5-pro", "google-generative-ai", "google", undefined],
+  ] as const)("仅对官方原生 %s API 解析推理格式", (
+    provider,
+    modelId,
+    api,
+    thinkingFormat,
+    thinkingLevelMap,
+  ) => {
+    const plan = planCatalogSync([row({
+      canonicalModelId: modelId,
+      aliases: [`${provider}/${modelId}`],
+      capabilities: { tools: true, reasoning: true, thinkingLevelMap: { high: "high" } },
+    })], {
+      [provider]: {
+        [modelId]: {
+          id: modelId,
+          api,
+          reasoning: true,
+          ...(thinkingLevelMap ? { thinkingLevelMap } : {}),
+        },
+      },
+    });
+
+    expect(plan.changes[0].nextCapabilities).toMatchObject({
+      reasoning: true,
+      thinkingFormat,
+    });
+    expect(passesInvariants(plan.changes[0].nextCapabilities)).toBe(true);
+  });
+
+  it("兼容服务即使使用原生 API 名称也不推测格式", () => {
+    const plan = planCatalogSync([row({
+      canonicalModelId: "compatible-o3",
+      aliases: ["vendor/o3"],
+      capabilities: { tools: true },
+    })], {
+      vendor: {
+        o3: {
+          id: "o3",
+          api: "openai-responses",
+          reasoning: true,
+          thinkingLevelMap: { low: "low" },
+        },
+      },
+    });
+
+    expect(plan.changes).toEqual([]);
+    expect(plan.rejections).toContainEqual(expect.objectContaining({
+      canonicalModelId: "compatible-o3",
+      code: "invalid_reasoning_bundle",
+    }));
+  });
+
   it("direct 匹配可升降 vision 并更新明确存在的窗口字段", () => {
     const plan = planCatalogSync([row({
       canonicalModelId: "gpt-5-chat",
@@ -566,6 +632,39 @@ describe("planCatalogSync", () => {
       { target: "capability", action: "delete", key: "thinkingFormat" },
       { target: "capability", action: "delete", key: "thinkingLevelMap" },
     ]);
+  });
+
+  it("缺少格式证据时清理现有非法 reasoning bundle", () => {
+    const plan = planCatalogSync([row({
+      canonicalModelId: "incomplete-reasoning-model",
+      aliases: ["vendor/incomplete-reasoning-model"],
+      capabilities: {
+        tools: true,
+        reasoning: true,
+        reasoningEffort: true,
+        thinkingLevelMap: { high: "high" },
+      },
+    })], {
+      vendor: {
+        "incomplete-reasoning-model": {
+          id: "incomplete-reasoning-model",
+          reasoning: true,
+          thinkingLevelMap: { high: "high" },
+        },
+      },
+    });
+
+    expect(plan.changes[0].nextCapabilities).toEqual({ tools: true });
+    expect(plan.changes[0].operations).toEqual([
+      { target: "capability", action: "delete", key: "reasoning" },
+      { target: "capability", action: "delete", key: "reasoningEffort" },
+      { target: "capability", action: "delete", key: "thinkingFormat" },
+      { target: "capability", action: "delete", key: "thinkingLevelMap" },
+    ]);
+    expect(plan.rejections).toContainEqual(expect.objectContaining({
+      canonicalModelId: "incomplete-reasoning-model",
+      code: "invalid_reasoning_bundle",
+    }));
   });
 
   it("direct reasoning=true 从 false 建立完整合法 bundle", () => {
@@ -868,8 +967,18 @@ describe("passesInvariants", () => {
   it("reasoning=false → 通过(不变量3)", () => {
     expect(passesInvariants(cap({ reasoning: false }))).toBe(true);
   });
-  it("reasoning=true 有档 → 通过(不变量1/2)", () => {
-    expect(passesInvariants(cap({ reasoning: true, thinkingLevelMap: { off: null, high: "high" } }))).toBe(true);
+  it("reasoning=true 有合法格式与档位 → 通过(不变量1/2)", () => {
+    expect(passesInvariants(cap({
+      reasoning: true,
+      thinkingFormat: "openai",
+      thinkingLevelMap: { off: null, high: "high" },
+    }))).toBe(true);
+  });
+  it("reasoning=true 但缺少 thinkingFormat → 拦截", () => {
+    expect(passesInvariants(cap({
+      reasoning: true,
+      thinkingLevelMap: { off: null, high: "high" },
+    }))).toBe(false);
   });
   it("fixed 有多个开启档 → 拦截", () => {
     expect(passesInvariants(cap({
@@ -905,6 +1014,7 @@ describe("passesInvariants", () => {
   it("reasoning=true 但全档被 null → 拦截", () => {
     expect(passesInvariants(cap({
       reasoning: true,
+      thinkingFormat: "openai",
       thinkingLevelMap: { off: null, minimal: null, low: null, medium: null, high: null },
     }))).toBe(false);
   });

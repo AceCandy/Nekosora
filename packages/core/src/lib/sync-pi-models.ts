@@ -119,6 +119,38 @@ const LEGAL_THINKING_FORMATS = new Set<string>([
   "google",
 ]);
 
+interface ThinkingFormatEvidence {
+  format: ThinkingFormat;
+  allowsDefaultLevels: boolean;
+}
+
+function nativeThinkingFormat(provider: string, api?: string): ThinkingFormat | undefined {
+  if (provider === "openai" && (api === "openai-responses" || api === "openai-completions")) {
+    return "openai";
+  }
+  if (provider === "anthropic" && api === "anthropic-messages") return "anthropic";
+  if (provider === "google" && (api === "google-generative-ai" || api === "google-vertex")) {
+    return "google";
+  }
+  return undefined;
+}
+
+function thinkingFormatEvidence(pi: PiModel, provider: string): ThinkingFormatEvidence | undefined {
+  if (pi.compat?.forceAdaptiveThinking) {
+    return { format: "anthropic-adaptive", allowsDefaultLevels: true };
+  }
+  const nativeFormat = nativeThinkingFormat(provider, pi.api);
+  const explicitFormat = pi.compat?.thinkingFormat;
+  if (explicitFormat) {
+    if (AGGREGATOR_FORMATS.has(explicitFormat)) return undefined;
+    return {
+      format: explicitFormat as ThinkingFormat,
+      allowsDefaultLevels: explicitFormat === nativeFormat,
+    };
+  }
+  return nativeFormat ? { format: nativeFormat, allowsDefaultLevels: true } : undefined;
+}
+
 const WEB_SEARCH_MODEL_IDS: Record<WebSearchFormat, ReadonlySet<string>> = {
   openai: new Set([
     "gpt-5.5", "gpt-5.5-pro", "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra",
@@ -158,7 +190,7 @@ function webSearchFormatFor(matchResult: MatchResult): WebSearchFormat | undefin
 }
 // bare 匹配时排除聚合 provider 与区域变体,优先官方主 provider。
 export const AGGREGATOR = new Set([
-  "opencode", "opencode-go", "openrouter", "azure-openai-responses",
+  "opencode", "opencode-go", "openrouter", "openai-codex", "azure-openai-responses",
   "cloudflare-ai-gateway", "github-copilot", "google-vertex", "fireworks",
   "groq", "nvidia", "together", "huggingface", "cerebras",
   "cloudflare-workers-ai", "vercel-ai-gateway", "amazon-bedrock",
@@ -550,6 +582,7 @@ export function decodePiModelsApi(data: unknown): PiDecodeResult {
 /** 闸门:reasoning=true 时刷后必须有可显档;fixed 必须恰好一个。 */
 export function passesInvariants(cap: ModelCapabilities): boolean {
   if (!cap.reasoning) return true;
+  if (!cap.thinkingFormat || !LEGAL_THINKING_FORMATS.has(cap.thinkingFormat)) return false;
   const levels = getSupportedReasoningLevels(cap);
   return cap.thinkingFormat === "fixed"
     ? cap.thinkingLevelMap?.off === null && levels.length === 1
@@ -701,6 +734,20 @@ function validReasoningBundle(capabilities: ModelCapabilities): SyncRejectionCod
   return null;
 }
 
+function finalizeCapabilitiesProposal(
+  next: ModelCapabilities,
+  rejections: SyncRejection[],
+  baseRejection: Omit<SyncRejection, "code">,
+): { next: ModelCapabilities; rejections: SyncRejection[] } {
+  const invalidCode = validReasoningBundle(next);
+  if (!invalidCode) return { next, rejections };
+  clearCapabilities(next, REASONING_CAPABILITY_KEYS);
+  if (!rejections.some((rejection) => rejection.code === invalidCode)) {
+    rejections.push({ ...baseRejection, code: invalidCode });
+  }
+  return { next, rejections };
+}
+
 function buildNewCapabilities(
   pi: PiModel,
   matchResult: MatchResult,
@@ -725,24 +772,17 @@ function buildNewCapabilities(
   if (decodeIssues.some((issue) => issue.scope === "reasoning")) {
     return { capabilities, rejections };
   }
-  if (pi.thinkingLevelMap === undefined) {
+  const formatEvidence = thinkingFormatEvidence(pi, matchResult.provider);
+  if (!formatEvidence || (pi.thinkingLevelMap === undefined && !formatEvidence.allowsDefaultLevels)) {
     rejections.push({ ...baseRejection, code: "incomplete_reasoning_bundle" });
     return { capabilities, rejections };
   }
-
   const candidate: ModelCapabilities = {
     ...capabilities,
     reasoning: true,
-    thinkingLevelMap: pi.thinkingLevelMap,
+    thinkingFormat: formatEvidence.format,
+    ...(pi.thinkingLevelMap ? { thinkingLevelMap: pi.thinkingLevelMap } : {}),
   };
-  const piFormat = pi.compat?.forceAdaptiveThinking
-    ? "anthropic-adaptive"
-    : pi.compat?.thinkingFormat;
-  if (!piFormat || AGGREGATOR_FORMATS.has(piFormat)) {
-    rejections.push({ ...baseRejection, code: "incomplete_reasoning_bundle" });
-    return { capabilities, rejections };
-  }
-  candidate.thinkingFormat = piFormat as ThinkingFormat;
   if (
     pi.compat?.supportsReasoningEffort
     && candidate.thinkingFormat
@@ -765,33 +805,40 @@ function buildNewCapabilities(
 function buildReasoningCandidate(
   current: ModelCapabilities,
   pi: PiModel,
+  matchResult: MatchResult,
 ): ModelCapabilities | null {
   const protectedFormat = current.thinkingFormat && KEEP.has(current.thinkingFormat);
-  const piFormat = pi.compat?.thinkingFormat;
-  const canAdoptPiFormat = !protectedFormat
-    && typeof piFormat === "string"
-    && OVERLAP.has(piFormat)
-    && !AGGREGATOR_FORMATS.has(piFormat);
-  const changesFormat = canAdoptPiFormat && piFormat !== current.thinkingFormat;
+  const formatEvidence = thinkingFormatEvidence(pi, matchResult.provider);
+  const canAdoptPiFormat = !protectedFormat && formatEvidence !== undefined;
+  const changesFormat = canAdoptPiFormat && formatEvidence.format !== current.thinkingFormat;
 
   if (changesFormat) {
     if (
-      pi.thinkingLevelMap === undefined
-      || pi.compat?.supportsReasoningEffort === undefined
+      !formatEvidence.allowsDefaultLevels
+      && (
+        pi.thinkingLevelMap === undefined
+        || (
+          REASONING_EFFORT_FORMATS.has(formatEvidence.format)
+          && pi.compat?.supportsReasoningEffort === undefined
+        )
+      )
     ) {
       return null;
     }
     const candidate: ModelCapabilities = { ...current };
     clearCapabilities(candidate, REASONING_CAPABILITY_KEYS);
     candidate.reasoning = true;
-    candidate.thinkingFormat = piFormat as ThinkingFormat;
-    candidate.thinkingLevelMap = pi.thinkingLevelMap;
-    if (pi.compat.supportsReasoningEffort) candidate.reasoningEffort = true;
+    candidate.thinkingFormat = formatEvidence.format;
+    if (pi.thinkingLevelMap !== undefined) candidate.thinkingLevelMap = pi.thinkingLevelMap;
+    if (
+      pi.compat?.supportsReasoningEffort
+      && REASONING_EFFORT_FORMATS.has(formatEvidence.format)
+    ) candidate.reasoningEffort = true;
     return candidate;
   }
 
   const candidate: ModelCapabilities = { ...current, reasoning: true };
-  if (canAdoptPiFormat) candidate.thinkingFormat = piFormat as ThinkingFormat;
+  if (canAdoptPiFormat) candidate.thinkingFormat = formatEvidence.format;
   if (canAdoptPiFormat && pi.thinkingLevelMap !== undefined) {
     candidate.thinkingLevelMap = pi.thinkingLevelMap;
   }
@@ -834,22 +881,22 @@ function proposeCapabilities(
     ) {
       rejections.push({ ...baseRejection, code: "reasoning_disabled_extras_ignored" });
     }
-    return { next, rejections };
+    return finalizeCapabilitiesProposal(next, rejections, baseRejection);
   }
 
   if (pi.reasoning !== true || decodeIssues.some((issue) => issue.scope === "reasoning")) {
-    return { next, rejections };
+    return finalizeCapabilitiesProposal(next, rejections, baseRejection);
   }
 
-  const candidate = buildReasoningCandidate(current, pi);
+  const candidate = buildReasoningCandidate(current, pi, matchResult);
   if (!candidate) {
     rejections.push({ ...baseRejection, code: "invalid_reasoning_bundle" });
-    return { next, rejections };
+    return finalizeCapabilitiesProposal(next, rejections, baseRejection);
   }
   const invalidCode = validReasoningBundle(candidate);
   if (invalidCode) {
     rejections.push({ ...baseRejection, code: invalidCode });
-    return { next, rejections };
+    return finalizeCapabilitiesProposal(next, rejections, baseRejection);
   }
 
   clearCapabilities(next, REASONING_CAPABILITY_KEYS);
@@ -857,7 +904,7 @@ function proposeCapabilities(
     const value = candidate[key];
     if (value !== undefined) setCapability(next, key, value);
   }
-  return { next, rejections };
+  return finalizeCapabilitiesProposal(next, rejections, baseRejection);
 }
 
 function buildOperations(
@@ -866,7 +913,8 @@ function buildOperations(
   pi: PiModel,
 ): CatalogOperation[] {
   const operations: CatalogOperation[] = [];
-  const forceReasoningDeletes = pi.reasoning === false && row.capabilities?.reasoning === true;
+  const forceReasoningDeletes = row.capabilities?.reasoning === true
+    && nextCapabilities.reasoning !== true;
   const capabilityKeys = [...new Set([
     ...Object.keys(row.capabilities ?? {}),
     ...Object.keys(nextCapabilities),

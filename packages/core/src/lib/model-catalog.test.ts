@@ -7,6 +7,8 @@ import {
   normalizeComparableModelId,
   rankSimilarModels,
 } from "@/lib/model-catalog";
+import { passesInvariants } from "@/lib/sync-pi-models";
+import type { ModelCapabilities } from "@/db/types";
 
 const entries = [
   {
@@ -288,5 +290,84 @@ describe("model catalog baseline migration", () => {
     for (const modelId of ["gemini-3.7-flash", "glm-5.3", "grok-4.6", "qwen3.8-max"]) {
       expect(migration).toContain(`\"canonical_model_id\":\"${modelId}\"`);
     }
+  });
+});
+
+describe("model catalog reasoning migration", () => {
+  const baseline = readFileSync("drizzle/pg/0000_baseline.sql", "utf8");
+  const migration = readFileSync("drizzle/pg/0002_model_catalog_reasoning.sql", "utf8");
+  const rows = JSON.parse(
+    baseline.match(/\$model_catalog\$(.*)\$model_catalog\$/s)?.[1] ?? "[]",
+  ) as Array<{ canonical_model_id: string; capabilities: ModelCapabilities }>;
+  const reviewed = new Map([...migration.matchAll(
+    /^\s+\('([^']+)', '(\{.*\})'::jsonb\),?$/gm,
+  )].map((match) => [match[1], JSON.parse(match[2]) as ModelCapabilities]));
+  const unverifiedBlock = migration.match(
+    /WITH unverified\("canonical_model_id"\) AS \(\n  VALUES\n(.*?)\n\)\nUPDATE/s,
+  )?.[1] ?? "";
+  const unverified = new Set([...unverifiedBlock.matchAll(/^\s+\('([^']+)'\),?$/gm)]
+    .map((match) => match[1]));
+  const reasoningKeys: Array<keyof ModelCapabilities> = [
+    "reasoning", "reasoningEffort", "thinkingFormat", "thinkingLevelMap",
+  ];
+  const withoutReasoning = (capabilities: ModelCapabilities): ModelCapabilities => {
+    const next = { ...capabilities };
+    for (const key of reasoningKeys) delete next[key];
+    return next;
+  };
+  const finalRows = rows.map((row) => {
+    const bundle = reviewed.get(row.canonical_model_id);
+    const capabilities = bundle
+      ? { ...withoutReasoning(row.capabilities), ...bundle }
+      : unverified.has(row.canonical_model_id)
+        && row.capabilities.reasoning === true
+        && !row.capabilities.thinkingFormat
+        ? withoutReasoning(row.capabilities)
+        : row.capabilities;
+    return { ...row, capabilities };
+  });
+
+  it("修复 51 条有证据的目录并降级其余非法 bundle", () => {
+    expect(rows.filter((row) => row.capabilities.reasoning === true
+      && !passesInvariants(row.capabilities))).toHaveLength(271);
+    expect(reviewed).toHaveLength(51);
+    expect(unverified).toHaveLength(220);
+    expect(new Set([...reviewed.keys(), ...unverified])).toEqual(new Set(rows
+      .filter((row) => row.capabilities.reasoning === true && !passesInvariants(row.capabilities))
+      .map((row) => row.canonical_model_id)));
+    expect(finalRows.filter((row) => row.capabilities.reasoning === true
+      && !passesInvariants(row.capabilities))).toEqual([]);
+  });
+
+  it("只修改 reasoning bundle 且 SQL 可重复执行", () => {
+    for (const [index, row] of rows.entries()) {
+      expect(withoutReasoning(finalRows[index].capabilities)).toEqual(
+        withoutReasoning(row.capabilities),
+      );
+    }
+    expect(migration).toContain('"capabilities" IS DISTINCT FROM');
+    expect(migration).toContain('NOT (catalog."capabilities" ? \'thinkingFormat\')');
+  });
+
+  it("保持 Drizzle journal 与 snapshot 链连续", () => {
+    const journal = JSON.parse(readFileSync("drizzle/pg/meta/_journal.json", "utf8")) as {
+      entries: Array<{ idx: number; tag: string }>;
+    };
+    const previous = JSON.parse(readFileSync("drizzle/pg/meta/0001_snapshot.json", "utf8")) as {
+      id: string;
+    };
+    const current = JSON.parse(readFileSync("drizzle/pg/meta/0002_snapshot.json", "utf8")) as {
+      id: string;
+      prevId: string;
+    };
+    expect(journal.entries.at(-1)).toEqual({
+      idx: 2,
+      version: "7",
+      when: expect.any(Number),
+      tag: "0002_model_catalog_reasoning",
+      breakpoints: true,
+    });
+    expect(current.id).not.toBe(previous.id);
+    expect(current.prevId).toBe(previous.id);
   });
 });

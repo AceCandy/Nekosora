@@ -18,7 +18,7 @@ describe("removed template and knowledge features migration", () => {
     const journal = JSON.parse(
       readFileSync(join(migrationDir, "meta/_journal.json"), "utf8"),
     ) as { entries: Array<{ idx: number; tag: string }> };
-    expect(journal.entries.at(-1)).toEqual({
+    expect(journal.entries.find((entry) => entry.idx === 1)).toEqual({
       idx: 1,
       version: "7",
       when: expect.any(Number),

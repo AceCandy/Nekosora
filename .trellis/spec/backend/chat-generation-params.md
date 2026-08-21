@@ -88,20 +88,23 @@
 - addition 必须有合法 ID 与非空名称，默认 `enabled=true`、`tools=true`、`systemPrompt=true`；vision 只来自 pi `input`。reasoning bundle 不完整或不合法时仍可新增基础模型，但必须省略整包并产生 rejection。
 - 只有非聚合官方 provider 的精确 `provider/id`，或全目录唯一的官方裸 ID 命中，才是 `direct` proposal。aggregate、variant、path/tail fallback 和多官方来源歧义都只能进入 `references` 审计。
 - `direct` 只表示结构上允许提案，不替代厂商官方资料核对。迁移中每条 accepted change 都必须有官方事实依据。
-- reasoning bundle 原子更新。`reasoning=false` 且 current `reasoning===true` 时删除整个 bundle；候选 bundle 任一不变量失败时完整保留旧 bundle，vision 等独立 capability 仍可单独收敛。
-- 跨 `thinkingFormat` 变更只有在外部 map 与 `supportsReasoningEffort` 三态都显式存在时才重建整个 bundle；缺任一字段即拒绝并保留旧包。同一 format 的缺失字段才允许按 current 保留。
+- reasoning bundle 原子更新。`reasoning=false` 且 current `reasoning===true` 时删除整个 bundle；候选 bundle 任一不变量失败时，仅当 current bundle 本身合法才保留，current 已非法则删除整包，禁止 planner 输出 `reasoning=true` 但缺少合法 `thinkingFormat` 的最终状态。
+- 推理格式证据优先使用 pi 显式 `forceAdaptiveThinking` / 非聚合 `compat.thinkingFormat`；缺省时仅官方主 Provider 可按原生 API 协议解析：OpenAI Responses/Completions → `openai`、Anthropic Messages → `anthropic`、Google Generative AI/Vertex → `google`。兼容 Provider 即使声明同名 API 也不得推测。
+- 跨 `thinkingFormat` 变更默认要求外部 map，且可发送独立 effort 的兼容格式必须有 `supportsReasoningEffort` 三态；官方原生 API 可使用已有 protocol 默认档位映射，`xhigh/max` 仍只能来自显式 per-model map。同一 format 的缺失字段才允许按合法 current 保留。
 - current 未启用 reasoning 时，孤立 `thinkingFormat`/map/effort 不自动清理；记录 `reasoning_disabled_extras_ignored` 并保留现状，避免把缺少明确能力迁移的元数据差异升级为写操作。
 - `fixed` 必须是 `off:null` 且恰好一个非 `off` 档位映射到非空字符串。运行时只显示该唯一档位，compatible/provider request 不伪造控制参数；同步不得用 pi toggle map 覆盖 curated fixed bundle。
 - planner 对行、对象 key、change、reference、rejection 和 unmatched 输出做稳定排序。dry-run、审计与 SQL 共享这一份 plan，CLI 不得重新 match、translate 或 fallback。
 - `--write` 只接受显式本地 snapshot，并在 SQL 中记录 SHA-256；禁止 `--apply`、策略外 bulk import、隐式 cache fallback 和 live-source write。新增使用 `ON CONFLICT (canonical_model_id) DO NOTHING`，失败输出只含稳定 stage/reason，不含 URL、路径、payload、credential、cause 或 stack。
-- 数据修复只追加 forward migration。SQL 使用定向 JSONB delete/patch 与 `IS DISTINCT FROM`，保留无关字段且仅在真实变化时刷新 `updated_at`；SQL、journal、snapshot 必须一起生成和提交。
+- 数据修复只追加 forward migration。SQL 使用精确 model ID 清单、定向 JSONB delete/patch 与 `IS DISTINCT FROM`，保留无关字段且仅在真实变化时刷新 `updated_at`；受影响 ID、source SHA 与旧 bundle 来源必须可审计，SQL、journal、snapshot 必须一起生成和提交。
 - reasoning 降级的 operation 必须规范化为四个 bundle key 的 delete，即使旧行缺少其中部分 key；这样生成的 migration 对前序允许范围内的稀疏数据仍能收敛到同一结果。
 
 ### 4. Validation & Error Matrix
 | Condition | Planner / CLI result | Runtime / Data result |
 | --- | --- | --- |
 | 外部 map 含未知 key、空串或非法 value | rejection；reasoning bundle 不变 | 继续消费原 catalog |
-| 跨 format proposal 缺 map 或 effort 三态 | `invalid_reasoning_bundle` | 旧 reasoning bundle 原样保留 |
+| 跨 format proposal 缺 map 或 effort 三态 | `invalid_reasoning_bundle` | 旧 bundle 合法则原样保留，旧 bundle 也非法则整包删除 |
+| current `reasoning=true` 但缺少合法 format | `invalid_reasoning_bundle` 并 accepted bundle delete | Chat 隐藏档位，不再依赖运行时 no-op |
+| 官方主 Provider + 已知原生 API | 解析官方 `thinkingFormat`；map 可用 protocol 默认 | 仅显示默认档与显式 per-model `xhigh/max` |
 | direct `reasoning=false`，current reasoning=true | accepted bundle delete | Chat 隐藏档位，stale model state 收敛到 `off`，请求不发送 thinking |
 | reasoning=false 但携带 thinking extras | extras 记审计；若 current 未启用 reasoning 则无 change | 孤立 current 元数据原样保留 |
 | aggregate/tail/path/歧义匹配 | reference only | catalog 不变 |
@@ -113,17 +116,19 @@
 
 ### 5. Good / Base / Bad Cases
 - Good:官方确认模型不再支持 reasoning，planner 生成整包删除；迁移保留 tools/systemPrompt 等无关 key，消费者自动隐藏档位。
+- Good:OpenAI 官方主 Provider 的 `openai-responses` 条目即使没有 `compat.thinkingFormat`，仍可用逐模型 map 安全写入 `thinkingFormat=openai`。
 - Good:Kimi K2.7 的 curated fixed bundle 遇到 pi toggle 元数据时保持不变。
 - Base:generic、未匹配和 reference 模型只出现在审计报告，目录数据不变。
 - Bad:脚本读取 pi 后自行构造 upsert，导致 dry-run 与 SQL 使用两套 match/fallback 逻辑。
 - Bad:看到 reasoning=false + thinkingFormat 就清理一个从未启用 reasoning 的 catalog 行；这缺少明确的能力迁移证据。
+- Bad:按全库条件清理所有缺格式行，会误改迁移审计后新增的自定义目录；数据迁移必须携带已审核的精确 ID 集合。
 
 ### 6. Tests Required
 - `mainstream-models.test.ts`:覆盖十个主流家族、官方 Provider、preview 与专项/日期/latest 排除规则。
-- `sync-pi-models.test.ts`:覆盖三态 decoder、非法 map/compat、direct/reference/歧义、additions 去重/排序/缺名、默认能力、reasoning 闸门、fixed 不变量和幂等 INSERT/UPDATE SQL。
+- `sync-pi-models.test.ts`:覆盖三态 decoder、非法 map/compat、direct/reference/歧义、官方原生 API 与兼容 Provider 边界、additions 去重/排序/缺名、非法旧 bundle 降级、reasoning 闸门、fixed 不变量和幂等 INSERT/UPDATE SQL。
 - `sync-pi-models-cli.test.ts`:覆盖参数分隔符、旧 flag 拒绝、snapshot-only write、固定脱敏错误和审计脱敏。
 - `reasoning.test.ts`:覆盖 levels/default/clamp/modelId stale state，以及 reasoning 降级后 compatible/provider 请求不发送 thinking。
-- `model-catalog.test.ts`:断言 migration 目标与精确 JSONB 表达式、source digest、journal idx/time 和 snapshot prevId/schema。
+- `model-catalog.test.ts`:断言 migration 精确修复/降级 ID 集合、最终 reasoning invariant、无关 capability 不变、source digest、journal idx/time 和 snapshot prevId/schema。
 - 隔离 PostgreSQL:先应用前序迁移，再应用最新 migration 两次；断言行数、外键、无关 capability 与第二次 `updated_at` 不变，最后删除随机测试库。
 
 ### 7. Wrong vs Correct
