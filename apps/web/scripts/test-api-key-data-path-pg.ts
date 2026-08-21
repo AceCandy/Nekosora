@@ -74,7 +74,7 @@ async function main(): Promise<void> {
   const pgModule = "pg";
   const { default: pg } = await import(pgModule);
   const admin = new pg.Client({ connectionString: adminUrl });
-  const migrationsDir = resolve(process.cwd(), "../../drizzle/pg");
+  const migrationsDir = resolve(process.cwd(), "scripts/fixtures/api-key-data-path-pg");
   const upgradeSuffix = databaseName.slice(DATABASE_PREFIX.length);
   const upgradeUserId = `api-key-upgrade-user-${upgradeSuffix}`;
   const upgradeMasterId = `api-key-upgrade-master-${upgradeSuffix}`;
@@ -105,7 +105,7 @@ async function main(): Promise<void> {
       const { drizzle } = await import("drizzle-orm/node-postgres");
       const { migrate } = await import("drizzle-orm/node-postgres/migrator");
       const db = drizzle({ client: migrationPool });
-      migrationPrefixDir = await createMigrationPrefix(migrationsDir, 10);
+      migrationPrefixDir = await createMigrationPrefix(migrationsDir, 0);
       await migrate(db, { migrationsFolder: migrationPrefixDir });
       await migrationPool.query(
         'INSERT INTO "user" ("id", "name", "email") VALUES ($1, $2, $3)',

@@ -17,6 +17,20 @@ concurrency:
 jobs:
   quality:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     permissions:
       actions: read
       contents: read
@@ -83,6 +97,12 @@ jobs:
       - name: Test
         if: steps.freshness.outputs.skip != 'true'
         run: pnpm test
+
+      - name: Test PostgreSQL integrations
+        if: steps.freshness.outputs.skip != 'true'
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+        run: pnpm test:pg
 
       - name: Build applications
         if: steps.freshness.outputs.skip != 'true'

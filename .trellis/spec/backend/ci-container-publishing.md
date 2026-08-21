@@ -15,6 +15,11 @@ published image names, Registry credentials, or deployment documentation.
 - `pnpm lint:workflows`
 - `pnpm check`
 - `pnpm test`
+- `pnpm test:pg`
+- PostgreSQL admin input: `DATABASE_URL`
+- Core isolated database: `nekusora_core_pg_test_<16 lowercase hex>` with
+  `TEST_DATABASE_URL` plus all four `*_PG_TEST_DATABASE` expectation variables
+- API key isolated database: `nekusora_api_key_data_test_<16 lowercase hex>`
 - `pnpm build`, `pnpm build:gateway`, `pnpm build:worker`
 - PR/main Docker target: unified `nekusora`, `linux/amd64`, `push=false`
 - Publish Docker target: unified `nekusora`, native `linux/amd64` and `linux/arm64` builds, `push=true`
@@ -51,6 +56,17 @@ published image names, Registry credentials, or deployment documentation.
   QEMU to run dependency installation for the production image.
 - Workflows do not load `.env.local` or persist Registry, database, or provider
   credentials in logs, outputs, labels, or caches.
+- Both quality jobs provide a healthy `pgvector/pgvector:pg16` service and run
+  `pnpm test:pg` as a separate step after `pnpm test`. Missing or unreachable
+  PostgreSQL must fail the job instead of turning the integration step into skips.
+- PostgreSQL orchestration accepts only `postgres:` / `postgresql:` URLs on
+  `localhost`, `127.0.0.1`, or `::1`. It creates random prefix-guarded databases,
+  migrates them, sets every suite's expected database name, and terminates connections
+  before an exact guarded `DROP DATABASE ... WITH (FORCE)` in `finally`.
+- The latest-schema Core suites share one freshly migrated isolated database. The API
+  key data-path suite stays separate because it applies an audited pre-parent-removal
+  fixture before the historical index/column migration. Do not truncate the current
+  squashed migration journal to emulate that old schema.
 
 ### 4. Validation & Error Matrix
 
@@ -65,6 +81,10 @@ published image names, Registry credentials, or deployment documentation.
 | DockerHub login/copy fails | Image summary says failed; GHCR remains successful |
 | Schedule freshness API/JSON fails | `skip=false`; quality and publish continue |
 | Scheduled main SHA unchanged | Publish is skipped and the summary states why |
+| PostgreSQL service health check fails | Quality fails before `pnpm test:pg` |
+| `DATABASE_URL` is missing, remote, malformed, or unreachable | Orchestrator fails without creating a database |
+| A PG suite, migration, or cleanup fails | `pnpm test:pg` returns non-zero; logs redact full PostgreSQL URLs |
+| A database name does not match its exact random test prefix | Refuse create/drop operations |
 
 ### 5. Good / Base / Bad Cases
 
@@ -73,10 +93,16 @@ published image names, Registry credentials, or deployment documentation.
 - Good: a Tag creates semver/latest/sha tags for one manifest containing both platforms.
 - Base: a manual publish sends sha, and edge only for main, to GHCR; DockerHub is not
   applicable even if the selected ref is a Tag.
+- Good: Core reports four passed test files with no skipped tests, then the API key
+  fixture reports its migration tests, and both random databases are removed.
+- Base: normal `pnpm test` keeps PG files skipped; only the explicit `pnpm test:pg`
+  entrypoint owns database setup and proves they executed.
 - Bad: combine GHCR and DockerHub in one multi-Registry push, because an optional
   Registry outage then changes the mandatory publish result.
 - Bad: put `always()` on DockerHub's job condition; it can bypass a failed dependency.
 - Bad: use `--if-present` as the only evidence that every workspace is covered.
+- Bad: point the API key script at the current migration directory and select an old
+  numeric index; a squashed baseline may already contain the schema change.
 
 ### 6. Tests Required
 
@@ -88,6 +114,11 @@ published image names, Registry credentials, or deployment documentation.
   runners, atomic manifest creation, push behavior, Action SHAs, secret conditions,
   schedule fail-open behavior, image names, Compose commands, isolated runtime lock,
   and Dependabot schedule.
+- `scripts/postgres-tests.test.mjs`: root/Web command wiring, local-only guard, all four
+  Core suite variables/files, cleanup/redaction, and the audited API key fixture journal
+  and SQL transition.
+- Run `pnpm test:pg` against a real `pgvector/pgvector:pg16`; assert four Core files and
+  the API key file pass with no skipped tests, then verify no prefixed database remains.
 - Run `pnpm install --frozen-lockfile`, `pnpm check`, `pnpm test`, all three application
   builds, and the unified amd64 Docker build before merging. Verify the image is no
   larger than 1.5 GB and both runtime entrypoints resolve their declared dependencies.
@@ -109,4 +140,15 @@ dockerhub_sync:
 dockerhub_sync:
   needs: ghcr_publish
   if: github.event_name == 'push' && github.ref_type == 'tag'
+```
+
+```yaml
+# Wrong: PG files remain hidden inside normal Vitest discovery and silently skip.
+- run: pnpm test
+
+# Correct: service health gates a separate, visible integration step.
+- run: pnpm test
+- run: pnpm test:pg
+  env:
+    DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
 ```

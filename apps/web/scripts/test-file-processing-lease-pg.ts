@@ -1,11 +1,11 @@
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 
-const DATABASE_PREFIX = "nekusora_file_lease_test_";
+const DATABASE_PREFIX = "nekusora_core_pg_test_";
 
 function quoteDatabaseName(name: string): string {
   if (!new RegExp(`^${DATABASE_PREFIX}[0-9a-f]{16}$`).test(name)) {
-    throw new Error("拒绝操作非文件租约测试数据库");
+    throw new Error("拒绝操作非 Core PostgreSQL 测试数据库");
   }
   return `"${name}"`;
 }
@@ -36,6 +36,9 @@ async function main(): Promise<void> {
   if (parsedAdminUrl.protocol !== "postgres:" && parsedAdminUrl.protocol !== "postgresql:") {
     throw new Error("DATABASE_URL 不是 PostgreSQL URL");
   }
+  if (!["localhost", "127.0.0.1", "::1"].includes(parsedAdminUrl.hostname)) {
+    throw new Error("Core PostgreSQL 集成测试只允许连接本机数据库");
+  }
 
   const databaseName = `${DATABASE_PREFIX}${randomBytes(8).toString("hex")}`;
   const quotedDatabaseName = quoteDatabaseName(databaseName);
@@ -55,6 +58,9 @@ async function main(): Promise<void> {
       ...process.env,
       DATABASE_URL: testUrl.toString(),
       TEST_DATABASE_URL: testUrl.toString(),
+      GATEWAY_GOVERNANCE_PG_TEST_DATABASE: databaseName,
+      GATEWAY_RETENTION_PG_TEST_DATABASE: databaseName,
+      CHAT_COMPLETION_PG_TEST_DATABASE: databaseName,
       FILE_PROCESSING_PG_TEST_DATABASE: databaseName,
     };
 
@@ -68,7 +74,17 @@ async function main(): Promise<void> {
     } finally {
       await migrationPool.end().catch(() => undefined);
     }
-    await runPnpm(["vitest", "run", "src/lib/rag/process.pg.test.ts"], childEnv);
+    await runPnpm([
+      "--filter",
+      "@nekusora/core",
+      "exec",
+      "vitest",
+      "run",
+      "src/lib/gateway-governance/repository.pg.test.ts",
+      "src/lib/gateway-execution/retention.pg.test.ts",
+      "src/lib/chat/completion.pg.test.ts",
+      "src/lib/rag/process.pg.test.ts",
+    ], childEnv);
   } finally {
     try {
       if (created) {
@@ -87,7 +103,7 @@ async function main(): Promise<void> {
 void main().catch((error) => {
   const message = error instanceof Error
     ? error.message.replace(/postgres(?:ql)?:\/\/\S+/giu, "[REDACTED]")
-    : "PostgreSQL integration test failed";
-  console.error(`[file-processing-pg-test] ${message}`);
+    : "Core PostgreSQL integration test failed";
+  console.error(`[core-pg-test] ${message}`);
   process.exitCode = 1;
 });

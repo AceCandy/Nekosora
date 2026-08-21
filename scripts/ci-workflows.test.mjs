@@ -22,6 +22,18 @@ function assertActionsPinned(source) {
   }
 }
 
+function assertPostgresGate(job) {
+  const service = job.services.postgres;
+  assert.equal(service.image, "pgvector/pgvector:pg16");
+  assert.deepEqual(service.ports, ["5432:5432"]);
+  assert.match(service.options, /pg_isready/);
+
+  const unitTest = job.steps.findIndex((step) => step.run === "pnpm test");
+  const postgresTest = job.steps.findIndex((step) => step.run === "pnpm test:pg");
+  assert.ok(unitTest >= 0 && postgresTest > unitTest);
+  assert.match(job.steps[postgresTest].env.DATABASE_URL, /^postgresql:\/\/[^@]+@127\.0\.0\.1:5432\/postgres$/);
+}
+
 test("PR and main quality workflow gates the unified amd64 image", () => {
   const source = read(".github/workflows/quality.yml");
   const workflow = parse(source);
@@ -47,11 +59,13 @@ test("PR and main quality workflow gates the unified amd64 image", () => {
     "pnpm quality:workspace",
     "pnpm check",
     "pnpm test",
+    "pnpm test:pg",
     "pnpm build",
     "pnpm build:gateway",
     "pnpm build:worker",
   ]) assert.match(qualityCommands, new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 
+  assertPostgresGate(workflow.jobs.quality);
   assertActionsPinned(source);
 });
 
@@ -64,6 +78,7 @@ test("publish workflow builds one image on native runners and isolates DockerHub
   const qualityCommands = workflow.jobs.quality.steps.map((step) => step.run ?? "").join("\n");
 
   assert.match(qualityCommands, /pnpm quality:workspace/);
+  assertPostgresGate(workflow.jobs.quality);
 
   assert.equal(ghcrBuild.needs, "quality");
   assert.deepEqual(ghcr.needs, ["quality", "ghcr_build"]);

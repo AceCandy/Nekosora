@@ -21,6 +21,7 @@
     "lint": "pnpm -r --if-present lint",
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "node --test scripts/*.test.mjs && pnpm -r --if-present test",
+    "test:pg": "pnpm --filter @nekusora/web test:core-pg && pnpm --filter @nekusora/web test:api-key-pg",
     "test:watch": "pnpm --filter @nekusora/web test:watch",
     "check": "pnpm quality:workspace && pnpm lint && pnpm typecheck",
     "db:generate:pg": "pnpm --filter @nekusora/web db:generate:pg",

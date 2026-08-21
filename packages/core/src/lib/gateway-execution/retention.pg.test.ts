@@ -14,7 +14,7 @@ function isIsolatedTestDatabase(): boolean {
   try {
     const databaseName = decodeURIComponent(new URL(databaseUrl).pathname.slice(1));
     return databaseName === expectedDatabase
-      && /^nekusora_gateway_retention_test_[0-9a-f]{16}$/.test(databaseName);
+      && /^nekusora_core_pg_test_[0-9a-f]{16}$/.test(databaseName);
   } catch {
     return false;
   }

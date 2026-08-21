@@ -1,0 +1,20 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1783923353922,
+      "tag": "0000_pre_parent_removal",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1786463416426,
+      "tag": "0001_remove_parent_id",
+      "breakpoints": true
+    }
+  ]
+}

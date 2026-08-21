@@ -49,7 +49,7 @@ describePg("API key data path PostgreSQL migration", () => {
     await pool.end();
   });
 
-  it("upgrades 0010 data without losing API key rows", async () => {
+  it("upgrades pre-parent-removal data without losing API key rows", async () => {
     const keys = await pool!.query<{
       enabled: boolean;
       id: string;
