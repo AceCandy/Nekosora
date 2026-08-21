@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { ImageIcon, Sparkles, Download } from "lucide-react";
 import { clsx } from "clsx";
@@ -31,7 +31,7 @@ export default function ImageStudio({ models }: { models: ImageModel[] }) {
   const t = useTranslations("image");
   // model 状态持有 modelId(配合 byId 路由解析);modelName 反查用于 image_jobs 记录。
   const [model, setModel] = useState(models[0]?.modelId ?? "");
-  const modelName = models.find((m) => m.modelId === model)?.name ?? "";
+  const selectedModel = models.find((item) => item.modelId === model) ?? models[0];
   const [prompt, setPrompt] = useState("");
   const [n, setN] = useState(1);
   const [size, setSize] = useState<string>("1024x1024");
@@ -39,40 +39,37 @@ export default function ImageStudio({ models }: { models: ImageModel[] }) {
   const [error, setError] = useState<string | null>(null);
   const [currentUrls, setCurrentUrls] = useState<string[]>([]);
   const [history, setHistory] = useState<ImageJob[]>([]);
+  const historyRequestRef = useRef<AbortController | null>(null);
 
   const loadHistory = useCallback(async () => {
+    historyRequestRef.current?.abort();
+    const controller = new AbortController();
+    historyRequestRef.current = controller;
     try {
-      const res = await fetch("/api/images");
-      if (res.ok) {
-        const data = (await res.json()) as { jobs: ImageJob[] };
+      const res = await fetch("/api/images", { signal: controller.signal });
+      if (!res.ok) return;
+      const data = (await res.json()) as { jobs: ImageJob[] };
+      if (historyRequestRef.current === controller) {
         setHistory(data.jobs);
       }
     } catch {
       /* ignore */
+    } finally {
+      if (historyRequestRef.current === controller) historyRequestRef.current = null;
     }
   }, []);
 
   // 首次挂载加载历史
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch("/api/images");
-        if (!cancelled && res.ok) {
-          const data = (await res.json()) as { jobs: ImageJob[] };
-          setHistory(data.jobs);
-        }
-      } catch {
-        /* ignore */
-      }
-    })();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadHistory();
     return () => {
-      cancelled = true;
+      historyRequestRef.current?.abort();
     };
-  }, []);
+  }, [loadHistory]);
 
   const handleGenerate = async () => {
-    if (!prompt.trim() || !model || generating) return;
+    if (!prompt.trim() || !selectedModel || generating) return;
     setGenerating(true);
     setError(null);
     setCurrentUrls([]);
@@ -80,12 +77,18 @@ export default function ImageStudio({ models }: { models: ImageModel[] }) {
       const res = await fetch("/api/images/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: modelName, modelId: model, prompt: prompt.trim(), n, size }),
+        body: JSON.stringify({
+          model: selectedModel.name,
+          modelId: selectedModel.modelId,
+          prompt: prompt.trim(),
+          n,
+          size,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "生成失败");
       setCurrentUrls(data.urls ?? []);
-      loadHistory(); // 刷新历史
+      void loadHistory(); // 刷新历史
     } catch (err) {
       setError(err instanceof Error ? err.message : "生成失败");
     } finally {
@@ -111,7 +114,7 @@ export default function ImageStudio({ models }: { models: ImageModel[] }) {
         <label className="block space-y-1.5">
           <span className="text-ui-caption font-semibold text-neutral-600 ">{t("model")}</span>
           <select
-            value={model}
+            value={selectedModel?.modelId ?? ""}
             onChange={(e) => setModel(e.target.value)}
             className="w-full rounded-md border border-morning-mist  bg-white  px-3 py-2 text-ui-body text-neutral-700  focus:outline-none focus:border-sora-blue cursor-pointer"
           >

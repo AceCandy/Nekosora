@@ -148,7 +148,13 @@ document.documentElement.classList.remove("dark");
   ```
 - **可持引用的组件用 `forwardRef` + `displayName`**(见 `Button.tsx`)。
 - **受控浮层**(`Popover`/`OptionPicker`/`Modal`):`open` / `onClose` 由调用方持有,组件本身不存显隐状态;触发器作为 `children` 或 `trigger` 传入。单选/多选用 `mode: "single" | "multi"` 区分。
+- **Modal 可访问名称**:有非空 `title` 时用 `aria-labelledby` 指向可见标题,不得再用 `aria-label` 覆盖;无可见标题时调用方必须传 `ariaLabel`。关闭按钮统一使用 `common.close` 翻译。
 - 组件首行 `"use client"`;props 用具名 `interface`,导出供调用方复用。
+
+### 客户端一次性请求生命周期
+
+- effect 发起的预览/历史请求必须创建 `AbortController`,在 URL 变化或卸载 cleanup 时 abort;`AbortError` 不进入用户错误状态。
+- 同一资源允许刷新时,新请求先取消旧请求,并用当前 controller 身份守卫状态提交,防止不遵守 abort 的旧响应覆盖新结果。请求大小上限等既有边界必须保持不变。
 
 ## Streaming UI 关键
 

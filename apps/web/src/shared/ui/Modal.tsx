@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
+import { useTranslations } from "next-intl";
 import { X } from "lucide-react";
 
 interface ModalProps {
@@ -55,7 +56,10 @@ export default function Modal({
   dialogClassName,
   bodyClassName,
 }: ModalProps) {
+  const t = useTranslations("common");
   const ref = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+  const hasVisibleTitle = Boolean(title);
 
   // 挂载后/打开时调 showModal。由于在 open=false 时返回 null，
   // 仅在 open=true 时 <dialog> 真正被挂载，此时 ref 才有值，调用 showModal()。
@@ -74,7 +78,8 @@ export default function Modal({
   return (
     <dialog
       ref={ref}
-      aria-label={ariaLabel}
+      aria-label={hasVisibleTitle ? undefined : ariaLabel}
+      aria-labelledby={hasVisibleTitle ? titleId : undefined}
       onClose={onClose}
       onCancel={(event) => {
         event.preventDefault();
@@ -91,12 +96,12 @@ export default function Modal({
     >
       {title !== undefined && (
         <header className="flex items-center justify-between border-b border-morning-mist px-5 py-3 ">
-          <h2 className="text-ui-title font-semibold">{title}</h2>
+          <h2 id={hasVisibleTitle ? titleId : undefined} className="text-ui-title font-semibold">{title}</h2>
           <button
             type="button"
             onClick={onClose}
             className="text-neutral-400 hover:text-neutral-600  p-1 rounded transition-colors inline-flex items-center justify-center"
-            aria-label="关闭"
+            aria-label={t("close")}
           >
             <X className="w-4 h-4" />
           </button>

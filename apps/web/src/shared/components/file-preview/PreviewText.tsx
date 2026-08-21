@@ -28,17 +28,20 @@ export default function PreviewText({ url, filename, mime }: PreviewTextProps) {
   const [truncated, setTruncated] = useState(false);
 
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setContent(null);
     setError(null);
     setTruncated(false);
 
     // 多取 1 字节判断是否截断;API/S3 Range 避免先下载完整文件。
-    fetch(url, { headers: { Range: `bytes=0-${MAX_TEXT_BYTES}` } })
+    fetch(url, {
+      headers: { Range: `bytes=0-${MAX_TEXT_BYTES}` },
+      signal: controller.signal,
+    })
       .then(async (res) => {
         if (res.status === 416) {
-          if (!cancelled) setContent("");
+          if (!controller.signal.aborted) setContent("");
           return;
         }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -46,17 +49,18 @@ export default function PreviewText({ url, filename, mime }: PreviewTextProps) {
         const isTruncated = buf.byteLength > MAX_TEXT_BYTES;
         const preview = isTruncated ? buf.slice(0, MAX_TEXT_BYTES) : buf;
         const text = new TextDecoder("utf-8", { fatal: false }).decode(preview);
-        if (!cancelled) {
+        if (!controller.signal.aborted) {
           setTruncated(isTruncated);
           setContent(text);
         }
       })
       .catch((e) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : t("loadingFailed"));
+        if (controller.signal.aborted || (e && typeof e === "object" && "name" in e && e.name === "AbortError")) return;
+        setError(e instanceof Error ? e.message : t("loadingFailed"));
       });
 
     return () => {
-      cancelled = true;
+      controller.abort();
     };
   }, [url, t]);
 
