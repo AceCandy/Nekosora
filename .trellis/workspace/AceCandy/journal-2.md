@@ -1234,3 +1234,28 @@ Show routes as currently unavailable when their provider is disabled in admin an
 ### Status
 
 [OK] **Completed**
+
+
+## Session 117: 修复当前项目技术债
+
+**Date**: 2026-08-21
+**Task**: 修复当前项目技术债
+**Branch**: `main`
+
+### Summary
+
+完成模型目录推理一致性、CI PostgreSQL 集成、存储与 readiness 加固、前端请求与可访问性修复，以及工程依赖清理；全量质量门和三项生产构建通过。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `752ece7` | (see git log) |
+| `3673487` | (see git log) |
+| `23ab242` | (see git log) |
+| `d5d5a9e` | (see git log) |
+| `abdc935` | (see git log) |
+
+### Status
+
+[OK] **Completed**
