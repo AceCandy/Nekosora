@@ -1213,3 +1213,24 @@ Show routes as currently unavailable when their provider is disabled in admin an
 ### Status
 
 [OK] **Completed**
+
+
+## Session 116: Remove prompt templates and knowledge bases
+
+**Date**: 2026-08-21
+**Task**: Remove prompt templates and knowledge bases
+**Branch**: `main`
+
+### Summary
+
+彻底删除提示词模板与知识库的前后端、运行时和数据库能力；保留指令卡、聊天附件、文件级 RAG/MCP，并新增 PostgreSQL 前向迁移与连续性测试。pnpm check、全量 1662 项测试及残留扫描通过。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c573561` | (see git log) |
+
+### Status
+
+[OK] **Completed**

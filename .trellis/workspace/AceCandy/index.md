@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 115
-- **Last Active**: 2026-08-20
+- **Total Sessions**: 116
+- **Last Active**: 2026-08-21
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~1215 | Active |
+| `journal-2.md` | ~1236 | Active |
 | `journal-1.md` | ~1981 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 116 | 2026-08-21 | Remove prompt templates and knowledge bases | `c573561` | `main` |
 | 115 | 2026-08-20 | 优化 Chat 输出样式切换 | `481a063` | `main` |
 | 114 | 2026-08-17 | 拒绝搜索词推断年份 | `2070cf3` | `main` |
 | 113 | 2026-08-17 | 动态时间上下文与搜索时间约束 | `80fc4ba` | `main` |
