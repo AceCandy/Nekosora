@@ -248,7 +248,7 @@ function CardEditor({
         </div>
         <div>
           <label className="text-ui-caption font-semibold text-neutral-600  mb-1 block">
-            {t("description")}
+            {tc("description")}
           </label>
           <Input value={description} onChange={(e) => setDescription(e.target.value)} disabled={readOnly} placeholder={t("descPlaceholder")} />
         </div>
