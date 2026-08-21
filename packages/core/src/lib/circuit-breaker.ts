@@ -216,11 +216,6 @@ export function snapshotBreakers(): Record<
   return out;
 }
 
-/** 重置单个 provider 的熔断器(供运维页手动恢复)。 */
-export function resetBreaker(providerId: string): void {
-  breakers.delete(providerId);
-}
-
 /** 重置全部熔断器(供测试 / 运维重置)。 */
 export function resetAllBreakers(): void {
   breakers.clear();

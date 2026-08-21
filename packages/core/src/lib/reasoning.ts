@@ -206,21 +206,3 @@ export function buildReasoningProviderOptions(
       return undefined;
   }
 }
-
-/** 网关 OpenAI 标准 reasoning_effort → 内部统一级别。无法映射返回 undefined(等价 off)。 */
-export function resolveReasoningLevel(effort: unknown): ReasoningLevel | undefined {
-  if (typeof effort !== "string") return undefined;
-  switch (effort) {
-    case "minimal":
-    case "low":
-    case "medium":
-    case "high":
-    case "xhigh":
-    case "max":
-      return effort;
-    case "none":
-      return "off";
-    default:
-      return undefined;
-  }
-}

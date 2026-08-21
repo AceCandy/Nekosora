@@ -120,18 +120,6 @@ export function orderedWeightedKeys(keys: WeightedKey[]): WeightedKey[] {
 }
 
 /**
- * 统计 bundle 内 key 数量(不解出明文 key,只返回条数)。
- * 用于管理后台列表展示"Key 数"列。解析失败时返回 0。
- */
-export function countKeys(encBundle: string): number {
-  try {
-    return parseKeyBundle(encBundle).length;
-  } catch {
-    return 0;
-  }
-}
-
-/**
  * 解密 bundle 并返回明文 key 列表(含权重)。
  *
  * 用途:编辑表单回显已存的 key(默认以密文点显示,点眼睛看明文)。

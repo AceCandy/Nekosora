@@ -86,8 +86,3 @@ export function extractArtifacts(text: string): ExtractResult {
 
   return { text, artifacts };
 }
-
-/** 判断文本是否含可渲染 artifact(用于决定是否显示面板入口)。 */
-export function hasArtifacts(text: string): boolean {
-  return extractArtifacts(text).artifacts.length > 0;
-}
