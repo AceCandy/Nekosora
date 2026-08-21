@@ -1,0 +1,32 @@
+{
+  "id": "fix-current-tech-debt",
+  "name": "fix-current-tech-debt",
+  "title": "修复当前项目技术债",
+  "description": "",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "AceCandy",
+  "assignee": "AceCandy",
+  "createdAt": "2026-08-21",
+  "completedAt": "2026-08-21",
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "08-21-fix-model-catalog-reasoning",
+    "08-21-enable-ci-postgres-tests",
+    "08-21-harden-storage-readiness",
+    "08-21-fix-frontend-tech-debt",
+    "08-21-cleanup-tooling-dependencies"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

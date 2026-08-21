@@ -1,0 +1,8 @@
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"执行后端 lint、类型检查、测试和构建复核"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"执行前端 lint、类型检查、测试和构建复核"}
+{"file":".trellis/spec/backend/chat-generation-params.md","reason":"复核模型推理目录、迁移和请求翻译"}
+{"file":".trellis/spec/backend/ci-container-publishing.md","reason":"复核工作流与 PostgreSQL CI 配置"}
+{"file":".trellis/spec/backend/file-storage.md","reason":"复核存储失败策略和 readiness 单飞"}
+{"file":".trellis/spec/backend/gateway-runtime.md","reason":"复核网关运行时与 PostgreSQL 测试"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"复核前端可访问性、状态同步和请求取消"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"复核五批改动的跨层一致性与范围边界"}

@@ -1,0 +1,3 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/backend/chat-generation-params.md", "reason": "核验推理档位和请求体行为"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "核验迁移和 snapshot 一致性"}

@@ -1,0 +1,6 @@
+{"file":".trellis/spec/backend/chat-generation-params.md","reason":"核对模型推理目录与请求翻译约束"}
+{"file":".trellis/spec/backend/ci-container-publishing.md","reason":"核对 CI、数据库服务与工作流脚本约束"}
+{"file":".trellis/spec/backend/file-storage.md","reason":"核对远程存储失败策略与 readiness 约束"}
+{"file":".trellis/spec/backend/gateway-runtime.md","reason":"核对网关运行时与数据库测试约束"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"核对 Modal、请求取消和前端组件约束"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"核对五批改动的跨层数据流一致性"}
