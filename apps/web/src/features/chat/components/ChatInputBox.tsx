@@ -2,7 +2,8 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { ArrowUp, AudioLines, Square } from "lucide-react";
+import { AudioLines, Square } from "lucide-react";
+import { AIArrowUpIcon } from "@/shared/components/animated-icons";
 import { clsx } from "clsx";
 import type { CardOption } from "@/features/chat/model/types";
 
@@ -13,7 +14,7 @@ interface ChatInputBoxProps {
   onSend: () => void;
   /** 存在附件时允许空文本发送。 */
   hasAttachments?: boolean;
-  /** 流式中禁用输入，且显示停止按钮。 */
+  /** 流式中（显示停止按钮、关闭斜杠命令；输入框保持可输入，Enter 转为排队）。 */
   disabled: boolean;
   /** 停止生成。 */
   onStop: () => void;
@@ -219,7 +220,6 @@ export function ChatInputBox({
             "scrollbar-hidden block h-full w-full resize-none overflow-y-auto border-0 bg-transparent py-3 text-ui-reading leading-6 text-neutral-800 outline-none placeholder-ink-tertiary focus:ring-0 focus-visible:outline-none focus-visible:ring-0",
             layout.multiline ? "px-3 pb-12" : "pl-12 pr-40 sm:pr-72",
           )}
-          disabled={disabled}
           aria-label="对话输入框"
         />
         </div>
@@ -244,7 +244,7 @@ export function ChatInputBox({
               onClick={canSend ? onSend : undefined}
               aria-disabled={!canSend}
               className={clsx(
-                "group touch-target pointer-events-auto inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-transparent transition-[background-color,color,transform] duration-200 ease-out hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue active:translate-y-0 active:scale-95 motion-reduce:transition-none motion-reduce:hover:transform-none",
+                "ai-trigger group touch-target pointer-events-auto inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-transparent transition-[background-color,color,transform] duration-200 ease-out hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue active:translate-y-0 active:scale-95 motion-reduce:transition-none motion-reduce:hover:transform-none",
                 canSend
                   ? "cursor-pointer text-sora-blue hover:bg-sora-blue/[0.08] hover:text-sora-blue-hover "
                   : "cursor-default text-neutral-600 hover:bg-neutral-100  ",
@@ -253,7 +253,7 @@ export function ChatInputBox({
               aria-label={canSend ? t("send") : t("voicePlaceholder")}
             >
               {canSend ? (
-                <ArrowUp strokeWidth={2.5} className="h-4 w-4 transition-transform duration-200 ease-out group-hover:-translate-y-px motion-reduce:transition-none motion-reduce:group-hover:transform-none" aria-hidden="true" />
+                <AIArrowUpIcon strokeWidth={2.5} className="h-4 w-4" />
               ) : (
                 <AudioLines className="h-4 w-4 transition-transform duration-200 ease-out group-hover:scale-105 motion-reduce:transition-none motion-reduce:group-hover:transform-none" aria-hidden="true" />
               )}

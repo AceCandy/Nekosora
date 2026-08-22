@@ -577,7 +577,7 @@ function ModelRowCells({
             title={model.enabled ? t("disable") : t("enable")}
             className={clsx(
               "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue/40",
-              model.enabled ? "bg-green-600 " : "bg-neutral-300 "
+              model.enabled ? "bg-sora-blue " : "bg-neutral-300 "
             )}
           >
             <span
@@ -894,8 +894,8 @@ function RouteListPanel({
                           size="xs"
                           className={clsx(
                             r.enabled
-                              ? "text-warning  hover:bg-amber-50 "
-                              : "text-success  hover:bg-green-50 "
+                              ? "text-warning  hover:bg-warning/10 "
+                              : "text-success  hover:bg-success/10 "
                           )}
                         >
                           {r.enabled ? (

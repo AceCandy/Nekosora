@@ -92,7 +92,7 @@ export default function ProviderModelMatchDialog({
                   {pending ? (
                     <Loader2 className="h-4 w-4 shrink-0 animate-spin text-sora-blue" aria-hidden="true" />
                   ) : candidate.routeExists ? (
-                    <span className="shrink-0 text-ui-caption font-medium text-emerald-700 ">
+                    <span className="shrink-0 text-ui-caption font-medium text-success ">
                       {t("modelRouteExists")}
                     </span>
                   ) : (
@@ -115,8 +115,8 @@ export default function ProviderModelMatchDialog({
             role="status"
             className={`flex items-start gap-2 rounded-md px-3 py-2.5 text-ui-body ${
               feedback?.status === "error"
-                ? "bg-red-50 text-red-700  "
-                : "bg-emerald-50 text-emerald-700  "
+                ? "bg-danger/[0.06] text-danger  "
+                : "bg-success/10 text-success  "
             }`}
           >
             {feedback?.status === "error" ? (

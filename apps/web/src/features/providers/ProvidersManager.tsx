@@ -26,13 +26,7 @@ import { clsx } from "clsx";
 import { Button } from "@/shared/ui/Button";
 import { rankSimilarModels } from "@/lib/model-catalog";
 
-// 4 种协议各自的彩色块(低饱和填充,与「莫兰迪灰调」管理侧协调);未命中协议回退中性色。
-const PROTOCOL_STYLE: Record<string, { bg: string; text: string }> = {
-  openai: { bg: "bg-emerald-100 ", text: "text-emerald-700 " },
-  anthropic: { bg: "bg-orange-100 ", text: "text-orange-700 " },
-  gemini: { bg: "bg-blue-100 ", text: "text-blue-700 " },
-  "openai-compatible": { bg: "bg-slate-200 ", text: "text-slate-700 " },
-};
+// 协议徽标统一中性莫兰迪灰调(管理侧元数据不使用彩色区分),协议名文字本身即区分。
 
 /** server action 签名:拉取 provider 最新上游模型列表,返回模型 id 列表 + 时间。 */
 export type RefreshAction = (providerId: string) => Promise<{
@@ -398,7 +392,7 @@ export default function ProvidersManager({
           className={clsx(
             "flex w-full items-center gap-2 px-2 py-1 text-left text-ui-caption font-mono hover:bg-sora-blue/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sora-blue disabled:cursor-not-allowed disabled:opacity-60",
             configured?.has(m)
-              ? "bg-emerald-100  text-emerald-700 "
+              ? "bg-success/10  text-success "
               : "bg-neutral-100  text-neutral-600 ",
           )}
         >
@@ -514,8 +508,6 @@ export default function ProvidersManager({
               </tr>
             ) : (
               filteredProviders.map((p) => {
-                const protocolStyle =
-                  PROTOCOL_STYLE[p.protocol] ?? { bg: "bg-neutral-100 ", text: "text-neutral-600 " };
                 return (
                 <tr
                   key={p.id}
@@ -529,7 +521,7 @@ export default function ProvidersManager({
                       <div className="font-mono text-ui-caption text-neutral-500  truncate">
                         {p.baseUrl}
                       </div>
-                      <span className={clsx("inline-flex items-center rounded-md px-1.5 py-0.5 text-ui-caption font-medium", protocolStyle.bg, protocolStyle.text)}>
+                      <span className="inline-flex items-center rounded-md px-1.5 py-0.5 text-ui-caption font-medium bg-neutral-100 text-neutral-600">
                         {p.protocol}
                       </span>
                     </div>
@@ -619,7 +611,7 @@ export default function ProvidersManager({
                         title={p.enabled ? t("disable") : t("enable")}
                         className={clsx(
                           "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue/40",
-                          p.enabled ? "bg-green-600 " : "bg-neutral-300 "
+                          p.enabled ? "bg-sora-blue " : "bg-neutral-300 "
                         )}
                       >
                         <span

@@ -91,7 +91,7 @@ export default function Modal({
       }}
       className={
         dialogClassName ??
-        "m-auto w-[min(640px,92vw)] rounded-lg border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/40   "
+        "modal-pop m-auto w-[min(640px,92vw)] rounded-lg border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/40   "
       }
     >
       {title !== undefined && (

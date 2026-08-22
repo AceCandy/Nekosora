@@ -1,11 +1,13 @@
 "use client";
 import { useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { signIn } from "@/lib/auth-client";
 import Link from "next/link";
 import Input from "@/shared/ui/Input";
 import { Button } from "@/shared/ui/Button";
+import SkyAtmosphere from "@/shared/components/SkyAtmosphere";
 
 /** 登录表单：提交成功后进入聊天首页。 */
 export default function LoginForm() {
@@ -31,19 +33,41 @@ export default function LoginForm() {
   }
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-nebula-white p-6 text-space-ink transition-colors duration-200  ">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,rgba(59,130,246,0.03),transparent_50%)] " />
-
-      <div className="relative z-10 w-full max-w-[400px] space-y-6">
-        <div className="text-center space-y-1">
-          <Link href="/" className="inline-block rounded text-ui-display font-extrabold tracking-tight text-neutral-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue focus-visible:ring-offset-2 focus-visible:ring-offset-nebula-white  ">
-            Nekusora
+    <main className="flex min-h-screen bg-nebula-white text-space-ink">
+      {/* 品牌天幕(仅 md+ 显示):天空氛围层 + 大字品牌宣言,与右侧纯净表单构成「双面平衡」 */}
+      <section className="relative hidden select-none flex-col justify-between overflow-hidden p-10 md:flex md:w-[46%] lg:w-1/2 lg:p-14">
+        <SkyAtmosphere stars={30} seed={20260821} shootingStar />
+        <div className="welcome-rise relative">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-3 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue focus-visible:ring-offset-2 focus-visible:ring-offset-nebula-white"
+          >
+            <Image src="/icon.svg" alt="" width={36} height={36} className="brightness-0" priority />
+            <span className="text-ui-title font-bold tracking-tight text-neutral-950">Nekusora</span>
           </Link>
-          <p className="text-ui-caption font-medium text-neutral-600 ">{t("subtitle")}</p>
         </div>
+        <div className="welcome-rise relative space-y-5" style={{ animationDelay: "140ms" }}>
+          <h1 className="text-ui-facade font-extrabold tracking-[-0.03em] leading-[1.08] text-neutral-950 [text-wrap:balance]">
+            {t("brandTitle")}
+          </h1>
+          <p className="max-w-[36ch] text-ui-reading leading-7 text-ink-secondary">{t("brandDesc")}</p>
+        </div>
+      </section>
 
-        <div className="rounded-lg border border-morning-mist bg-white p-6   shadow-none">
-          <form onSubmit={handleSubmit} className="space-y-4">
+      {/* 表单区:纯白静面,无边框卡片,依靠字重与节奏分层 */}
+      <section className="relative flex flex-1 items-center justify-center p-6">
+        <div className="w-full max-w-[360px]">
+          <div className="welcome-rise mb-10 flex flex-col items-center gap-4 md:hidden">
+            <Image src="/icon.svg" alt="" width={48} height={48} className="brightness-0" priority />
+            <span className="text-ui-title font-bold tracking-tight text-neutral-950">Nekusora</span>
+          </div>
+
+          <div className="welcome-rise" style={{ animationDelay: "140ms" }}>
+            <h2 className="text-ui-heading font-bold tracking-tight text-neutral-950">{t("title")}</h2>
+            <p className="mt-1.5 text-ui-body text-ink-secondary">{t("subtitle")}</p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="welcome-rise mt-8 space-y-5" style={{ animationDelay: "260ms" }}>
             <div className="space-y-1.5">
               <label htmlFor="login-email" className="block text-ui-caption font-semibold text-neutral-600 ">{t("email")}</label>
               <Input
@@ -74,7 +98,7 @@ export default function LoginForm() {
             </div>
 
             {error && (
-              <div id="login-error" role="alert" aria-live="polite" className="rounded-md border border-red-500/10 bg-red-50/50 p-3 text-ui-caption leading-relaxed text-red-700  ">
+              <div id="login-error" role="alert" aria-live="polite" className="rounded-md border border-danger/15 bg-danger/[0.05] p-3 text-ui-caption leading-relaxed text-danger  ">
                 {error}
               </div>
             )}
@@ -88,14 +112,14 @@ export default function LoginForm() {
               {t("submit")}
             </Button>
           </form>
-        </div>
 
-        <div className="text-center">
-          <Link href="/" className="rounded text-ui-caption text-neutral-600 transition-colors hover:text-neutral-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue focus-visible:ring-offset-2 focus-visible:ring-offset-nebula-white   ">
-            ← {t("back")}
-          </Link>
+          <div className="welcome-rise mt-10" style={{ animationDelay: "380ms" }}>
+            <Link href="/" className="rounded text-ui-caption text-neutral-600 transition-colors hover:text-neutral-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue focus-visible:ring-offset-2 focus-visible:ring-offset-nebula-white   ">
+              ← {t("back")}
+            </Link>
+          </div>
         </div>
-      </div>
+      </section>
     </main>
   );
 }

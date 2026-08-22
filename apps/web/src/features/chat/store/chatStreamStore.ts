@@ -68,6 +68,10 @@ interface ChatStreamState {
   /** 建会乐观会话项(临时标题);Sidebar 合并显示,SSR 带真实数据后清。 */
   optimisticConversation: { id: string; title: string; createdAt: number } | null;
 
+  /** 空会话欢迎态:ChatComposer 按 runtime.messages 是否为空同步写入,驱动视口级天幕与侧栏透明化。 */
+  welcomeMode: boolean;
+  setWelcomeMode: (value: boolean) => void;
+
   /** 注入 SSR 初始消息(仅当 store 内尚无该会话数据时)。 */
   hydrate: (key: string, messages: ChatMessage[]) => void;
   /** 清除某会话的运行时数据。 */
@@ -562,6 +566,8 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
   runtimes: {},
   activeConversationId: null,
   optimisticConversation: null,
+  welcomeMode: false,
+  setWelcomeMode: (value) => set({ welcomeMode: value }),
 
   hydrate: (key, messages) => {
     // 进入新对话 runtime 时清掉旧活动会话；已有会话仍可在后台继续流式。

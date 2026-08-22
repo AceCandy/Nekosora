@@ -239,7 +239,7 @@ export function ComposerPlusMenu(props: ChatToolbarProps) {
         <Plus className="h-4.5 w-4.5" aria-hidden="true" />
       </button>
       {open && (
-        <div role="menu" className="absolute bottom-full left-0 z-20 mb-2 w-48 rounded-lg border border-morning-mist bg-white p-1.5 shadow-lg  ">
+        <div role="menu" className="menu-pop absolute bottom-full left-0 z-20 mb-2 w-48 rounded-lg border border-morning-mist bg-white p-1.5 shadow-lg  ">
           <button
             type="button"
             role="menuitem"

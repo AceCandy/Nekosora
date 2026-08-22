@@ -18,10 +18,12 @@ import {
   useMessageScroller,
   useMessageScrollerVisibility,
 } from "@shadcn/react/message-scroller";
-import { ChevronDown, Copy, Reply, MessagesSquare, Volume2, Square } from "lucide-react";
+import { ChevronDown, Reply, MessagesSquare, Volume2, Square } from "lucide-react";
+import { AICopyIcon } from "@/shared/components/animated-icons";
 import { clsx } from "clsx";
 import { ChatMessageItem } from "@/features/chat/components/ChatMessageItem";
 import { ChatOutline } from "@/features/chat/components/ChatOutline";
+import { ChatResponseOutline } from "@/features/chat/components/ChatResponseOutline";
 import { MessageTimeSeparator } from "@/features/chat/components/MessageTimeSeparator";
 import { ErrorBoundary } from "@/shared/components/ErrorBoundary";
 import ConfirmDialog from "@/shared/ui/ConfirmDialog";
@@ -592,14 +594,22 @@ export function ChatMessageList({
           {srAnnouncement}
         </div>
 
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 top-0 z-10 h-12 bg-gradient-to-b from-nebula-white via-nebula-white/70 to-transparent  "
-        />
+        {/* 滚动内容没入头部下方的柔化遮罩:仅非空会话渲染——空会话欢迎态头部透明、
+            背景是天幕渐变,白色遮罩会显成一条亮带接缝 */}
+        {messages.length > 0 && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 top-0 z-10 h-12 bg-gradient-to-b from-nebula-white via-nebula-white/70 to-transparent animate-in fade-in duration-500  "
+          />
+        )}
 
         {/* 对话大纲:贴消息区右边缘(滚动条左侧),hover 整列弹出完整轮次列表。
             高亮/跳转由其内部 useMessageScrollerVisibility/useMessageScroller 承载(在 Provider 内)。 */}
         <ChatOutline messages={messages} streaming={streaming} />
+
+        {/* 回答内标题大纲轨:当前锚定回答含 ≥2 个标题时出现在轮次大纲左侧,
+            hover 展开完整大纲,点击跳转;自身按条件渲染,无标题时为空。 */}
+        <ChatResponseOutline messages={messages} />
 
         <ScrollPositionRestorer ref={scrollPositionRestorerRef} viewportRef={viewportRef} />
 
@@ -637,10 +647,10 @@ export function ChatMessageList({
                 setSelection(null);
                 window.getSelection()?.removeAllRanges();
               }}
-              className="inline-flex items-center gap-1 rounded px-2 py-1 text-ui-caption font-semibold text-neutral-500 hover:text-neutral-800  hover:bg-neutral-100  cursor-pointer"
+              className="ai-trigger inline-flex items-center gap-1 rounded px-2 py-1 text-ui-caption font-semibold text-neutral-500 hover:text-neutral-800  hover:bg-neutral-100  cursor-pointer"
               title={t("copy")}
             >
-              <Copy className="w-3 h-3" aria-hidden="true" />{t("copy")}
+              <AICopyIcon className="w-3 h-3" />{t("copy")}
             </button>
             <button
               type="button"

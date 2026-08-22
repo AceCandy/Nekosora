@@ -201,7 +201,7 @@ export function Popover({
       onMouseLeave={openOnHover ? onLeave : undefined}
       style={{ visibility: "hidden" }}
       className={clsx(
-        "fixed rounded-md border border-morning-mist  bg-white  shadow-lg p-1",
+        "menu-pop fixed rounded-md border border-morning-mist  bg-white  shadow-lg p-1",
         panelZ,
         panelClassName,
       )}

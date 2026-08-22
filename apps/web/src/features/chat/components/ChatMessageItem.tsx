@@ -3,23 +3,25 @@
 import React, { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
-  Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronUp,
-  Copy,
   CornerDownRight,
   Info,
-  Pencil,
-  RefreshCw,
-  Sparkles,
-  ThumbsDown,
-  ThumbsUp,
-  Trash2,
-  X,
 } from "lucide-react";
 import { clsx } from "clsx";
+import {
+  AICheckIcon,
+  AICopyIcon,
+  AIPencilIcon,
+  AIRefreshCwIcon,
+  AISparklesIcon,
+  AIThumbsDownIcon,
+  AIThumbsUpIcon,
+  AITrash2Icon,
+  AIXIcon,
+} from "@/shared/components/animated-icons";
 import { Markdown } from "@/shared/components/markdown/Markdown";
 import { ErrorBoundary } from "@/shared/components/ErrorBoundary";
 import { Badge } from "@/shared/ui/Badge";
@@ -39,7 +41,7 @@ import { formatDateTimeLocal } from "@/shared/lib/format";
 import { ASSISTANT_MESSAGE_CLASS, splitChatError, USER_MESSAGE_BUBBLE_CLASS } from "@/features/chat/components/messagePresentation";
 import { useClickOutside } from "@/shared/lib/useClickOutside";
 import { MessageImageAttachments } from "@/features/chat/components/MessageImageAttachments";
-import { RunMetadataFields } from "@/features/chat/components/RunMetadataFields";
+import { LiveLatencyBadge, RunMetadataFields } from "@/features/chat/components/RunMetadataFields";
 import { MessageProcessTrace } from "@/features/chat/components/MessageProcessTrace";
 
 /** 用户消息超过此行数才折叠(长消息默认收起,避免撑高会话)。 */
@@ -183,6 +185,8 @@ function ChatMessageItemContent({
   const visibleRunMetadata = runMetadata && status !== "interrupted" && hasRunMetadata(runMetadata)
     ? runMetadata
     : undefined;
+  /** 流式计时起点:优先当前运行时;研究完成、正文流式期间 runtime 已清空,退化为最近 run 快照。 */
+  const streamingStartedAt = processRuntime?.startedAt ?? processTrace?.runs.at(-1)?.startedAt;
   const hasProcessTrace = Boolean(
     processTrace?.runs.at(-1)?.steps.length
       || processRuntime
@@ -372,7 +376,7 @@ function ChatMessageItemContent({
   const canShowMenu = canEdit || canDelete;
 
   return (
-    <div id={domId} className={clsx("group/message relative flex animate-in fade-in duration-200 scroll-mt-4", role === "user" ? "justify-end" : "justify-start")}>
+    <div id={domId} className={clsx("group/message relative flex animate-in fade-in slide-in-from-bottom-2 duration-200 motion-reduce:animate-none scroll-mt-4", role === "user" ? "justify-end" : "justify-start")}>
       {role === "assistant" && (
         <div className="absolute inset-y-0 -left-11 hidden w-7 @min-[54rem]:block">
           <button
@@ -381,11 +385,11 @@ function ChatMessageItemContent({
               if (!domId) return;
               document.getElementById(domId)?.scrollIntoView({ behavior: "smooth", block: "start" });
             }}
-            className="sticky top-4 mt-0.5 flex h-7 w-7 items-center justify-center rounded-full border border-sora-blue/10 bg-sora-blue/[0.04] cursor-pointer transition-colors hover:bg-sora-blue/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
+            className="ai-trigger sticky top-4 mt-0.5 flex h-7 w-7 items-center justify-center rounded-full border border-sora-blue/10 bg-sora-blue/[0.04] cursor-pointer transition-colors hover:bg-sora-blue/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
             title={t("scrollToReplyTop")}
             aria-label={t("scrollToReplyTop")}
           >
-            <Sparkles className="w-3.5 h-3.5 text-sora-blue" aria-hidden="true" />
+            <AISparklesIcon className="w-3.5 h-3.5 text-sora-blue" />
           </button>
         </div>
       )}
@@ -423,18 +427,18 @@ function ChatMessageItemContent({
                   setDraftAttachments(attachments);
                   setEditing(false);
                 }}
-                className="inline-flex items-center gap-1 text-ui-caption font-semibold text-neutral-400 hover:text-neutral-600  transition-colors cursor-pointer"
+                className="ai-trigger inline-flex items-center gap-1 text-ui-caption font-semibold text-neutral-400 hover:text-neutral-600  transition-colors cursor-pointer"
               >
-                <X className="w-3 h-3" aria-hidden="true" />
+                <AIXIcon className="w-3 h-3" />
                 <span>{t("editCancel")}</span>
               </button>
               <button
                 type="button"
                 disabled={!canSubmitEdit}
                 onClick={submitEdit}
-                className="inline-flex items-center gap-1 text-ui-caption font-semibold text-sora-blue hover:opacity-80 disabled:opacity-40 transition-opacity cursor-pointer"
+                className="ai-trigger inline-flex items-center gap-1 text-ui-caption font-semibold text-sora-blue hover:opacity-80 disabled:opacity-40 transition-opacity cursor-pointer"
               >
-                <Check className="w-3 h-3" aria-hidden="true" />
+                <AICheckIcon className="w-3 h-3" />
                 <span>{t("editSaveAndResend")}</span>
               </button>
             </div>
@@ -507,22 +511,22 @@ function ChatMessageItemContent({
                     setDraftAttachments(attachments);
                     setEditing(true);
                   }}
-                  className="absolute -left-7 top-0 opacity-0 group-hover:opacity-100 [@media(pointer:coarse)]:opacity-100 transition-opacity p-1 rounded text-neutral-400 hover:text-neutral-600  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
+                  className="ai-trigger absolute -left-7 top-0 opacity-0 group-hover:opacity-100 [@media(pointer:coarse)]:opacity-100 transition-opacity p-1 rounded text-neutral-400 hover:text-neutral-600  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
                   title={t("edit")}
                   aria-label={t("edit")}
                 >
-                  <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
+                  <AIPencilIcon className="w-3.5 h-3.5" />
                 </button>
               )}
               {publicId && onRequestDelete && !conversationStreaming && (
                 <button
                   type="button"
                   onClick={() => onRequestDelete?.(publicId)}
-                  className="absolute -left-7 top-7 p-1 rounded opacity-0 group-hover:opacity-100 [@media(pointer:coarse)]:opacity-100 text-neutral-500 hover:text-danger  transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
+                  className="ai-trigger absolute -left-7 top-7 p-1 rounded opacity-0 group-hover:opacity-100 [@media(pointer:coarse)]:opacity-100 text-neutral-500 hover:text-danger  transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
                   title={t("delete")}
                   aria-label={t("delete")}
                 >
-                  <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                  <AITrash2Icon className="w-3.5 h-3.5" />
                 </button>
               )}
             </div>
@@ -565,6 +569,11 @@ function ChatMessageItemContent({
           </div>)
         )}
 
+        {/* 流式期间的实时耗时徽标:挂在回答下方,流结束后由耗时徽标接替 */}
+        {role === "assistant" && isStreaming && isLast && streamingStartedAt && (
+          <LiveLatencyBadge startedAt={streamingStartedAt} />
+        )}
+
         {role === "assistant" && publicId && !(isStreaming && isLast) && (
           <div className="flex min-w-0 max-w-full flex-col items-start gap-1 opacity-0 pointer-events-none transition-opacity duration-150 group-hover/message:pointer-events-auto group-hover/message:opacity-100 group-focus-within/message:pointer-events-auto group-focus-within/message:opacity-100 [@media(pointer:coarse)]:pointer-events-auto [@media(pointer:coarse)]:opacity-100 motion-reduce:transition-none">
             <div className="flex min-w-0 max-w-full flex-wrap items-center gap-x-1 gap-y-1">
@@ -594,14 +603,14 @@ function ChatMessageItemContent({
             <button
               onClick={handleCopy}
               disabled={!content}
-              className="touch-target inline-flex h-8 w-8 items-center justify-center rounded-md text-ink-tertiary transition-colors duration-150 hover:bg-nebula-silver/45 hover:text-space-ink/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer disabled:opacity-40   "
+              className="ai-trigger touch-target inline-flex h-8 w-8 items-center justify-center rounded-md text-ink-tertiary transition-colors duration-150 hover:bg-nebula-silver/45 hover:text-space-ink/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer disabled:opacity-40   "
               title={copied ? t("copied") : t("copy")}
               aria-label={copied ? t("copied") : t("copy")}
             >
               {copied ? (
-                <Check className="size-3.5 text-sora-blue" aria-hidden="true" />
+                <AICheckIcon className="size-3.5 text-sora-blue" />
               ) : (
-                <Copy className="size-3.5" aria-hidden="true" />
+                <AICopyIcon className="size-3.5" />
               )}
             </button>
             {/* 质量反馈:icon-only 赞/踩,紧邻原因菜单,不改变其它操作语义 */}
@@ -611,7 +620,7 @@ function ChatMessageItemContent({
                 onClick={handleThumbsUp}
                 disabled={feedbackPending}
                 className={clsx(
-                  "touch-target inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed",
+                  "ai-trigger touch-target inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed",
                   localFeedback?.rating === "up"
                     ? "text-sora-blue bg-sora-blue/10"
                     : "text-ink-tertiary hover:text-space-ink/75   hover:bg-nebula-silver/45 ",
@@ -629,14 +638,14 @@ function ChatMessageItemContent({
                 aria-pressed={localFeedback?.rating === "up"}
                 aria-busy={feedbackPending || undefined}
               >
-                <ThumbsUp className="w-3.5 h-3.5" aria-hidden="true" />
+                <AIThumbsUpIcon className="w-3.5 h-3.5" />
               </button>
               <button
                 type="button"
                 onClick={handleThumbsDown}
                 disabled={feedbackPending}
                 className={clsx(
-                  "touch-target inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed",
+                  "ai-trigger touch-target inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed",
                   localFeedback?.rating === "down"
                     ? "text-danger  bg-red-500/10"
                     : "text-ink-tertiary hover:text-space-ink/75   hover:bg-nebula-silver/45 ",
@@ -657,7 +666,7 @@ function ChatMessageItemContent({
                 aria-expanded={localFeedback?.rating === "down" ? undefined : reasonMenuOpen}
                 aria-busy={feedbackPending || undefined}
               >
-                <ThumbsDown className="w-3.5 h-3.5" aria-hidden="true" />
+                <AIThumbsDownIcon className="w-3.5 h-3.5" />
               </button>
               {/* 已踩且菜单关闭:独立入口重开/改选原因,不触碰 rating / DB */}
               {localFeedback?.rating === "down" && !reasonMenuOpen && (
@@ -709,13 +718,13 @@ function ChatMessageItemContent({
                   if (models.length > 1) setRegenOpen((v) => !v);
                   else onRegenerate(publicId, model);
                 }}
-                className="touch-target inline-flex h-8 w-8 items-center justify-center rounded-md text-ink-tertiary transition-colors duration-150 hover:bg-nebula-silver/45 hover:text-space-ink/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer   "
+                className="ai-trigger touch-target inline-flex h-8 w-8 items-center justify-center rounded-md text-ink-tertiary transition-colors duration-150 hover:bg-nebula-silver/45 hover:text-space-ink/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer   "
                 title={t("regenerate")}
                 aria-label={t("regenerate")}
                 aria-haspopup={models.length > 1 ? "listbox" : undefined}
                 aria-expanded={models.length > 1 ? regenOpen : undefined}
               >
-                <RefreshCw className="size-3.5" aria-hidden="true" />
+                <AIRefreshCwIcon className="size-3.5" />
               </button>
               {regenOpen && models.length > 1 && (
                 <div className="absolute bottom-full mb-2 right-0 z-40 w-48 max-h-60 overflow-y-auto rounded-lg border border-morning-mist  bg-white  py-1 shadow-md">
@@ -802,9 +811,9 @@ function ChatMessageItemContent({
               <button
                 type="button"
                 onClick={() => { setMenuOpen(false); setDraft(content); setEditing(true); }}
-                className="flex items-center gap-2 w-full px-3 py-2 text-ui-body text-neutral-700  hover:bg-neutral-100  rounded-lg transition-colors cursor-pointer"
+                className="ai-trigger flex items-center gap-2 w-full px-3 py-2 text-ui-body text-neutral-700  hover:bg-neutral-100  rounded-lg transition-colors cursor-pointer"
               >
-                <Pencil className="w-4 h-4" aria-hidden="true" />
+                <AIPencilIcon className="w-4 h-4" />
                 <span>{t("edit")}</span>
               </button>
             )}
@@ -812,9 +821,9 @@ function ChatMessageItemContent({
               <button
                 type="button"
                 onClick={() => { setMenuOpen(false); if (publicId) onRequestDelete?.(publicId); }}
-                className="flex items-center gap-2 w-full px-3 py-2 text-ui-body text-danger hover:bg-red-50  rounded-lg transition-colors cursor-pointer"
+                className="ai-trigger flex items-center gap-2 w-full px-3 py-2 text-ui-body text-danger hover:bg-red-50  rounded-lg transition-colors cursor-pointer"
               >
-                <Trash2 className="w-4 h-4" aria-hidden="true" />
+                <AITrash2Icon className="w-4 h-4" />
                 <span>{t("delete")}</span>
               </button>
             )}

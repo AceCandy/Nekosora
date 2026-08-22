@@ -92,7 +92,7 @@ components:
 **天空罕有原则 (The Rare Skyline Rule).** 主彩色 Sora Blue 在页面中的出现面积必须控制在 10% 以内。它的稀有度保证了它作为核心行为指引的不可忽视性。
 **莫兰迪中性规则 (The Morandi Neutral Rule).** 在管理控制面板 and 配置页中，所有次级色板均采用莫兰迪中性色（高灰度、低饱和度），严禁直接使用高饱和度的纯色，以确保多数据排布下的严谨性与专业性。
 **单亮色规则 (Light-Only Rule).** 系统为单一亮色主题，不提供暗色模式。禁止新增任何 `dark:` 变体类或 `.dark` 样式块；所有颜色与对比度只需在亮色背景下成立。
-**双晖光晕规则 (The Dual Halo Rule).** 聊天首屏空会话的欢迎区允许一层氛围底色：天空蓝（≤7% 透明度）与琥珀金（≤6% 透明度）的双径向渐变光晕，`pointer-events: none` 且仅此处使用；其余界面仍以星云纯白为底，不得扩散。光晕计入天空罕有原则的 10% 面积预算。
+**双晖光晕规则 (The Dual Halo Rule).** 氛围底色仅允许出现在两处品牌门面：聊天首屏空会话欢迎区与登录页（天空蓝 ≤8% + 琥珀金 ≤6% 双径向渐变光晕，由 `SkyAtmosphere` 组件统一承载，可叠加慢速 `halo-drift` 漂移、`star-twinkle` 星点阵与偶发 `shooting-star` 流星；星点为 1–2px 蓝墨混合色、透明度 ≤0.5）。两处均 `pointer-events: none`；其余界面仍以星云纯白为底，不得扩散。光晕计入天空罕有原则的 10% 面积预算。光晕构图分两档：登录页用 `composition="corner"`（左上蓝晖 + 右下金晖的半幅构图）；聊天欢迎区用 `composition="skyline"`（光晕横贯视口顶部整体消散），全宽门面必须 skyline，避免角落光晕在侧栏/主区间形成色温接缝。
 
 ## 3. Typography
 
@@ -111,6 +111,7 @@ components:
 **Character:** 纯粹、中性且严密对齐。依靠字重的对比和行高的松紧来区分层级，绝不使用夸张的装饰性字体。
 
 ### Hierarchy
+- **Facade** (`text-ui-facade`, `48px / 52px`): 仅限品牌门面（登录页品牌宣言、聊天首屏空会话欢迎区品牌首提）；工作区与管理界面禁止使用。
 - **Display** (`text-ui-display`, `30px / 36px`): 用于关键页面的品牌首提和大标题。
 - **Heading** (`text-ui-heading`, `24px / 32px`): 用于页面主标题和大组标题。
 - **Subheading** (`text-ui-subheading`, `20px / 28px`): 用于后台页面标题和重要分区标题。
@@ -121,11 +122,33 @@ components:
 - **Micro** (`text-ui-micro`, `11px / 16px`): 仅用于时间戳、代码标识和极次要元信息；不得用于正文、表单标签或主要操作。
 
 ### Named Rules
-**克制缩放规则 (Static Scale Rule).** 作为功能性 Product 界面，所有字号大小在不同视口下均使用固定的 rem 比例，绝不使用流式 CSS clamp() 自动缩放，保证开发者调试网关参数时的精确度。
+**克制缩放规则 (Static Scale Rule).** 作为功能性 Product 界面，所有字号大小在不同视口下均使用固定的 rem 比例，绝不使用流式 CSS clamp() 自动缩放，保证开发者调试网关参数时的精确度。唯一例外是 `text-ui-facade`（48px），仅品牌门面（登录页、聊天首屏空会话欢迎区）的品牌首提可用。
 
 **语义字号规则 (Semantic Type Rule).** 产品 UI 必须使用 `text-ui-*` 语义字号，不再直接使用 `text-xs` / `text-sm` / `text-base` 或 `text-[Npx]`。新增小字不得低于 `11px`；若信息重要到需要用户阅读或操作，至少使用 `text-ui-caption`。
 
-## 4. Elevation
+## 4. Motion
+
+星枢天流的动效服务于「天空的呼吸感」，只在品牌门面（登录页、聊天首屏空会话欢迎区）承担氛围表达；工作区与管理界面仅允许状态反馈型过渡（150–250ms 的颜色/位移/透明度），禁止编排式入场。
+
+### Motion Vocabulary
+- **光晕漂移 (Halo Drift)** (`halo-drift`, 18s ease-in-out 往返): 双晖光晕的慢速呼吸（±2% 位移 + 1→1.06 缩放），仅氛围层使用。
+- **星点闪烁 (Star Twinkle)** (`star-twinkle`, 2.8s–6.2s 错峰 infinite): 登录页星点阵的透明度脉动与轻微缩放，逐星以 `--star-duration` / `--star-delay` 定制。
+- **流星 (Shooting Star)** (`shooting-star`, 14s 周期、仅前 1.4s 可见): 偶发的天空记忆点，自左上向右下 18° 划过；仅品牌门面可开启。
+- **面板浮出 (Menu Pop)** (`menu-pop`, 180ms expo 缓出): 下拉菜单、Popover 面板与小号上下文菜单的入场（4px 上浮 + 0.97 缩放 + 淡入），全站状态反馈通用。
+- **弹窗沉降 (Modal Pop)** (`modal-pop`, 200ms): Modal 面板微缩放淡入，`::backdrop` 同步淡入。
+- **消息入场 (Message Enter)** (tw-animate-css `animate-in fade-in slide-in-from-bottom-2 duration-200`): 新消息挂载时淡入 + 轻微上浮；流式更新不重新触发。
+- **输入器归位 (Composer Dock)** (`composer-welcome-lift` 摘除时的 transform 过渡, 500ms expo): 空会话欢迎态输入器居于视觉中心，首条消息发出后滑回底部锚点；作为门面退场编排的一部分，是门面限定规则 250ms 上限的显式例外。
+- **门面入场 (Welcome Rise)** (`welcome-rise`, 0.55s `cubic-bezier(0.22,1,0.36,1)` both): 淡入 + 12px 上浮 + 5px 模糊收敛，配合 0/140/260ms 三拍 `animationDelay`；仅登录页与聊天欢迎区使用。
+- **图标微交互 (Icon Micro-motion)** (`shared/components/animated-icons.tsx` + `.ai-trigger` 触发协议, 0.2–0.5s `cubic-bezier(0.16,1,0.3,1)`): 动作图标在宿主 hover 时的部件级位移/旋转（复制前后框揭开、重新生成旋转 200°、删除桶盖掀起、发送箭头上跃等），用 transition 表达、悬停撤出自动平滑回位；属状态反馈型，工作区与管理界面通用，不限门面。
+- **标题换字 (Animated Title Swap)** (`shared/components/AnimatedText.tsx` + `ai-text-in`/`ai-text-out`, 180ms `cubic-bezier(0.16,1,0.3,1)`): 会话标题等单行短文本变更时，旧文本上滑淡出、新文本自下方淡入，双层共存一拍后离场层卸载；状态反馈型，通用。
+- **列表飞行 (List FLIP)** (Sidebar `useLayoutEffect` + WAAPI `element.animate`, 240ms `cubic-bezier(0.16,1,0.3,1)`): 会话置顶/取消置顶等跨组迁移时，受影响行按渲染前后位移差飞入新位置，位移 <2px 不触发；reduced-motion 直接跳过。状态反馈型（纯位移），通用。
+- **消息排队条 (Message Queue Bar)** (ChatComposer, 入场复用 `menu-pop` 180ms): 流式期间 Enter 把草稿压入队列（输入框保持可输入），流结束自动按序发出；支持取回编辑、插队到队首（同时停止当前生成）、单条移除；不新增动效词。
+
+### Named Rules
+**门面限定规则 (The Facade-Only Rule).** `halo-drift` / `star-twinkle` / `shooting-star` / `welcome-rise` 四个氛围动效只允许出现在品牌门面（登录页、聊天首屏空会话欢迎区，统一由 `SkyAtmosphere` 组件承载）；工作区与管理界面新增动效必须是状态反馈型，且时长 ≤250ms。
+**减弱动效兜底规则 (The Reduced-Motion Rule).** 全部动效必须被 `globals.css` 的 `prefers-reduced-motion` 媒体查询压至 0.01ms（时长与延迟同压），开启减弱动态时界面直接呈现最终状态，不得先隐后现。
+
+## 5. Elevation
 
 星枢天流是一个偏向扁平、轻盈的视觉系统。深度关系主要通过色彩度（纯度差）与极细边框（Border）来区分，不依赖多层阴影堆叠。
 
@@ -138,7 +161,7 @@ components:
 ### Named Rules
 **零影子规则 (The Zero-Shadow Rule).** 除非是在弹出层（Modal）、对话下拉框（Dropdown）以及元素的 hover 交互响应中，否则界面的卡片、输入框及布局容器在静止状态下投影一律为 `none`。
 
-## 5. Components
+## 6. Components
 
 ### Buttons
 - **Shape:** 适度圆角 (6px / `rounded-md`)。
@@ -159,7 +182,7 @@ components:
 ### Navigation
 - **Style:** 顶栏与侧栏采用极其轻薄的分隔线进行视口划分。激活态的菜单项使用 Sora Blue 文字并配合极其柔和的半透明天空蓝底色 (`bg-sora-blue/[0.08]`)；Hover 态使用极微弱的背景灰度变化过渡。
 
-## 6. Do's and Don'ts
+## 7. Do's and Don'ts
 
 ### Do:
 - **Do** 对所有的正文消息段落严格应用 `max-w-[75ch]` 的宽度限制，保持流式对话的可读性。

@@ -559,6 +559,33 @@ export async function searchMessages(keyword: string): Promise<Array<{
   });
 }
 
+/** 搜索预览:hover/聚焦结果项时,拉取该会话最近 4 条消息的纯文本摘要(每条截断 220 字)。 */
+export async function getConversationPreview(conversationId: string): Promise<Array<{
+  role: string;
+  text: string;
+}>> {
+  const user = await requireSession();
+  const db = await getDb();
+  const s = S();
+  const [conv] = await db
+    .select({ userId: s.conversations.userId })
+    .from(s.conversations)
+    .where(eq(s.conversations.id, conversationId))
+    .limit(1);
+  if (!conv || conv.userId !== user.id) return [];
+  const rows = await db
+    .select({ role: s.messages.role, content: s.messages.content })
+    .from(s.messages)
+    .where(and(eq(s.messages.conversationId, conversationId), isNull(s.messages.deletedAt)))
+    .orderBy(desc(s.messages.createdAt))
+    .limit(4);
+  const typed = rows as Array<{ role: string; content: unknown }>;
+  return typed.reverse().map((r) => {
+    const text = typeof r.content === "string" ? r.content : String(r.content ?? "");
+    return { role: r.role, text: text.length > 220 ? `${text.slice(0, 220)}…` : text };
+  });
+}
+
 /** 截取 keyword 前后约 30 字符作为命中片段,首尾用省略号标记截断。 */
 function makeSnippet(text: string, keyword: string): string {
   const lower = text.toLowerCase();

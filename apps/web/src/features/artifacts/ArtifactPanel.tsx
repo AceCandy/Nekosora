@@ -75,7 +75,7 @@ export function ArtifactPanel({
             title={t("copy")}
             aria-label={t("copy")}
           >
-            {copied ? <Check className="w-3.5 h-3.5 text-green-500" aria-hidden="true" /> : <Copy className="w-3.5 h-3.5" aria-hidden="true" />}
+            {copied ? <Check className="w-3.5 h-3.5 text-success" aria-hidden="true" /> : <Copy className="w-3.5 h-3.5" aria-hidden="true" />}
           </button>
           <button
             onClick={handleDownload}

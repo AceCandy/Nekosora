@@ -271,8 +271,8 @@ function SortableRenderStyleRow({
             size="sm"
             className={clsx(
               style.enabled
-                ? "text-warning  hover:bg-amber-50 "
-                : "text-success  hover:bg-green-50 "
+                ? "text-warning  hover:bg-warning/10 "
+                : "text-success  hover:bg-success/10 "
             )}
             title={style.enabled ? t("disable") : t("enable")}
           >

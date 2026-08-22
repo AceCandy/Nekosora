@@ -257,8 +257,8 @@ function SortableOutputModeRow({
             size="sm"
             className={clsx(
               mode.enabled
-                ? "text-warning  hover:bg-amber-50 "
-                : "text-success  hover:bg-green-50 "
+                ? "text-warning  hover:bg-warning/10 "
+                : "text-success  hover:bg-success/10 "
             )}
             title={mode.enabled ? t("disabled") : t("enabled")}
           >

@@ -84,6 +84,9 @@
   --text-ui-heading--line-height: calc(2 / 1.5);
   --text-ui-display: 1.875rem;
   --text-ui-display--line-height: calc(2.25 / 1.875);
+  /* 门面展示字号:仅登录页/聊天欢迎区品牌首提使用(DESIGN.md 克制缩放规则门面例外) */
+  --text-ui-facade: 3rem;
+  --text-ui-facade--line-height: calc(3.25 / 3);
 }
 
 :root {
@@ -129,8 +132,10 @@ body {
   *::after {
     scroll-behavior: auto !important;
     animation-duration: 0.01ms !important;
+    animation-delay: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    transition-delay: 0.01ms !important;
   }
 }
 
@@ -378,6 +383,12 @@ body {
   color: var(--color-space-ink);
 }
 
+/* 标题跳转落点:为「回答内大纲轨」的 scrollIntoView 预留顶部吸附距离,
+   避开消息区顶部 48px 渐隐带,标题不贴边。 */
+.nekusora-md :is(h1, h2, h3) {
+  scroll-margin-top: 4.5rem;
+}
+
 /* 表格:对齐结构化 table 视觉。streamdown 在表格区域挂了多层自带 Tailwind 类
    (wrapper 的 bg-sidebar/p-2、内层 overflow div 的 border-border/bg-background、table 的 divide-y),
    本基线把这些深色线与多余背景统一清零,只保留 morning-mist 浅色圆角外框 + 行间水平线。 */
@@ -438,4 +449,309 @@ body {
   50% {
     transform: translateY(2px);
   }
+}
+
+/*
+ * 星枢天流动效词汇(DESIGN.md §4 Motion):
+ * - halo-drift:光晕慢速呼吸漂移(±2% 位移 + 1→1.06 缩放,18s 往返),仅登录页与聊天欢迎区氛围层。
+ * - star-twinkle:登录页星点闪烁(透明度脉动 + 轻微缩放),--star-duration/--star-delay 逐星错峰。
+ * - welcome-rise:品牌门面入场(淡入 + 12px 上浮 + 5px 模糊收敛,0.55s expo 缓出),
+ *   配合行内 animationDelay 做 0/140/260ms 三拍 stagger;工作区与管理界面禁用编排式入场。
+ * 以上均受全局 prefers-reduced-motion 块兜底(时长与延迟同压至 0.01ms,直接呈现最终状态)。
+ */
+@keyframes halo-drift {
+  from {
+    transform: translate(-2%, -1.5%) scale(1);
+  }
+  to {
+    transform: translate(2%, 1.5%) scale(1.06);
+  }
+}
+.halo-drift {
+  animation: halo-drift 18s ease-in-out infinite alternate;
+}
+
+@keyframes star-twinkle {
+  0%,
+  100% {
+    opacity: 0.15;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.5);
+  }
+}
+.star-twinkle {
+  animation: star-twinkle var(--star-duration, 4s) ease-in-out var(--star-delay, 0s) infinite;
+}
+
+@keyframes welcome-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+    filter: blur(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+.welcome-rise {
+  animation: welcome-rise 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* 流星:偶发的天空记忆点,每 14s 一个周期,仅前 1.4s 可见,沿 18° 自左上向右下划过。 */
+.shooting-star {
+  position: absolute;
+  left: 14%;
+  top: 9%;
+  width: 72px;
+  height: 1.5px;
+  border-radius: 999px;
+  background: linear-gradient(to right, transparent, color-mix(in oklab, var(--color-sora-blue) 65%, transparent));
+  opacity: 0;
+  transform: rotate(18deg);
+  animation: shooting-star 14s linear 2s infinite;
+}
+@keyframes shooting-star {
+  0% {
+    opacity: 0;
+    transform: rotate(18deg) translateX(0);
+  }
+  1.5% {
+    opacity: 0.9;
+  }
+  10% {
+    opacity: 0;
+    transform: rotate(18deg) translateX(min(38vw, 560px));
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(18deg) translateX(min(38vw, 560px));
+  }
+}
+
+/* 空会话欢迎态:输入器以 transform 上提至视觉中心(42%,md 44%),首条消息发出后过渡回底部锚点。
+   vh/dvh 双写做旧浏览器回退;translate 百分比相对输入器自身高度。 */
+.composer-welcome-lift {
+  transform: translateY(calc(50% - 58vh));
+  transform: translateY(calc(50% - 58dvh));
+}
+@media (min-width: 768px) {
+  .composer-welcome-lift {
+    transform: translateY(calc(50% - 56vh));
+    transform: translateY(calc(50% - 56dvh));
+  }
+}
+
+/* 菜单/弹出层面板入场:4px 上浮 + 0.97 缩放 + 淡入,180ms expo 缓出(状态反馈型,工作区可用)。 */
+@keyframes menu-pop {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.menu-pop {
+  animation: menu-pop 0.18s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Modal 入场:面板微缩放淡入,::backdrop 同步淡入,200ms(状态反馈型)。 */
+@keyframes modal-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+.modal-pop {
+  animation: modal-pop 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes modal-backdrop-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.modal-pop::backdrop {
+  animation: modal-backdrop-fade 0.2s ease-out both;
+}
+
+/* 天幕淡入淡出:隐藏侧先 450ms 透明度淡出,再把 visibility 延迟到淡出结束后切换,避免突兀消失;
+   hidden 态暂停内部动画(halo-drift/star-twinkle/shooting-star)以省渲染开销。 */
+.atmosphere-fade {
+  transition: opacity 0.45s ease-out, visibility 0s linear 0s;
+}
+.atmosphere-hidden {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.45s ease-out, visibility 0s linear 0.45s;
+}
+.atmosphere-hidden * {
+  animation-play-state: paused;
+}
+
+/*
+ * 动态图标微交互（shared/components/animated-icons.tsx，DESIGN.md §4 Motion）：
+ * 触发协议 = 最近 `.ai-trigger` 祖先 hover 或图标自身 hover；全部用 transition 表达，
+ * 悬停撤出时自动平滑回位。部件统一 transform-box: fill-box，使 transform-origin 按自身包围盒计算。
+ * 受全局 prefers-reduced-motion 块兜底（时长压至 0.01ms）。
+ */
+[data-ai] .ai-part {
+  transform-box: fill-box;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* copy：前框向左上、后描边向右下各错开 2.5px，形成「揭开」感。 */
+.ai-trigger:hover [data-ai="copy"] .ai-copy-front,
+[data-ai="copy"]:hover .ai-copy-front {
+  transform: translate(-2.5px, -2.5px);
+}
+.ai-trigger:hover [data-ai="copy"] .ai-copy-back,
+[data-ai="copy"]:hover .ai-copy-back {
+  transform: translate(2.5px, 2.5px);
+}
+
+/* check：以笔迹中心为原点轻弹放大。 */
+[data-ai="check"] .ai-check-mark {
+  transform-origin: center;
+}
+.ai-trigger:hover [data-ai="check"] .ai-check-mark,
+[data-ai="check"]:hover .ai-check-mark {
+  transform: scale(1.2);
+}
+
+/* refresh-cw：整图顺旋 200°，稍慢的 0.5s 让回转有「上弦」感。 */
+[data-ai="refresh-cw"] {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.ai-trigger:hover [data-ai="refresh-cw"],
+[data-ai="refresh-cw"]:hover {
+  transform: rotate(200deg);
+}
+
+/* thumbs-up / thumbs-down：指尖方向上挑 / 下压。 */
+[data-ai="thumbs-up"],
+[data-ai="thumbs-down"] {
+  transform-box: fill-box;
+  transform-origin: center bottom;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.ai-trigger:hover [data-ai="thumbs-up"],
+[data-ai="thumbs-up"]:hover {
+  transform: rotate(-10deg) translateY(-1px);
+}
+.ai-trigger:hover [data-ai="thumbs-down"],
+[data-ai="thumbs-down"]:hover {
+  transform: rotate(10deg) translateY(1px);
+}
+
+/* pencil：绕笔尖轻转，像落笔前的点触。 */
+[data-ai="pencil"] {
+  transform-box: fill-box;
+  transform-origin: 15% 85%;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.ai-trigger:hover [data-ai="pencil"],
+[data-ai="pencil"]:hover {
+  transform: rotate(-9deg);
+}
+
+/* trash-2：桶盖（顶线 + 提手）绕左端掀起。 */
+[data-ai="trash-2"] .ai-trash-lid {
+  transform-origin: left center;
+}
+.ai-trigger:hover [data-ai="trash-2"] .ai-trash-lid,
+[data-ai="trash-2"]:hover .ai-trash-lid {
+  transform: translateY(-1px) rotate(-14deg);
+}
+
+/* search：镜片以圆心放大，仿佛对焦。 */
+[data-ai="search"] .ai-search-lens {
+  transform-origin: center;
+}
+.ai-trigger:hover [data-ai="search"] .ai-search-lens,
+[data-ai="search"]:hover .ai-search-lens {
+  transform: scale(1.14);
+}
+
+/* panel-left-close/open：箭头朝动作方向顶出 1.5px。 */
+.ai-trigger:hover [data-ai="panel-left-close"] .ai-panel-chev,
+[data-ai="panel-left-close"]:hover .ai-panel-chev {
+  transform: translateX(-1.5px);
+}
+.ai-trigger:hover [data-ai="panel-left-open"] .ai-panel-chev,
+[data-ai="panel-left-open"]:hover .ai-panel-chev {
+  transform: translateX(1.5px);
+}
+
+/* sparkles：主星旋转并微微绽放。 */
+[data-ai="sparkles"] .ai-sparkles-main {
+  transform-origin: center;
+}
+.ai-trigger:hover [data-ai="sparkles"] .ai-sparkles-main,
+[data-ai="sparkles"]:hover .ai-sparkles-main {
+  transform: rotate(14deg) scale(1.08);
+}
+
+/* x：整图旋转 90°，两线换位成「转回去」的手感。 */
+[data-ai="x"] {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.ai-trigger:hover [data-ai="x"],
+[data-ai="x"]:hover {
+  transform: rotate(90deg);
+}
+
+/* arrow-up（发送）：向上跃起 2px。 */
+[data-ai="arrow-up"] {
+  transform-box: fill-box;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.ai-trigger:hover [data-ai="arrow-up"],
+[data-ai="arrow-up"]:hover {
+  transform: translateY(-2px);
+}
+
+/* AnimatedText:文本替换时旧文本上滑淡出、新文本自下方淡入(180ms expo),
+   用于会话自动重命名等标题换字;受全局 reduced-motion 兜底。 */
+@keyframes ai-text-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.ai-text-in {
+  animation: ai-text-in 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes ai-text-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+.ai-text-out {
+  animation: ai-text-out 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
