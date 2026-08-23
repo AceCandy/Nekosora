@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { clsx } from "clsx";
 import { useMessageScroller, useMessageScrollerVisibility } from "@shadcn/react/message-scroller";
 import type { ChatMessage } from "@/features/chat/model/types";
@@ -41,6 +42,7 @@ interface ChatOutlineProps {
  * 高亮当前轮 / 跳转由 message-scroller 原语承载:本组件须渲染在 MessageScroller.Provider 内。
  */
 export function ChatOutline({ messages, streaming }: ChatOutlineProps) {
+  const t = useTranslations("chat");
   const turns = useMemo(() => buildTurns(messages), [messages]);
   const { currentAnchorId } = useMessageScrollerVisibility();
   const { scrollToMessage } = useMessageScroller();
@@ -53,6 +55,18 @@ export function ChatOutline({ messages, streaming }: ChatOutlineProps) {
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 圆点右缘到视口右侧放不下面板(16rem+页边距)时,桌面也改为向左弹出(同手机的覆盖式)。
   const [flipLeft, setFlipLeft] = useState(false);
+  // 移动端首次出现圆点列时做一次 pulse 轻提示(per-session 一次),暗示这是一组可交互导航
+  const [showHint, setShowHint] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!window.matchMedia("(pointer: coarse)").matches) return;
+    if (sessionStorage.getItem("chat-outline-hinted")) return;
+    sessionStorage.setItem("chat-outline-hinted", "1");
+    // 挪到下一拍:setState 不允许在 effect 体内同步调用;pulse 展示 2.4s 后关闭
+    const on = setTimeout(() => setShowHint(true), 50);
+    const off = setTimeout(() => setShowHint(false), 2450);
+    return () => { clearTimeout(on); clearTimeout(off); };
+  }, []);
 
   // currentAnchorId 形如 "msg-N":解析出 msg index,用于高亮当前所在轮次
   const anchorIndex = (() => {
@@ -128,6 +142,10 @@ export function ChatOutline({ messages, streaming }: ChatOutlineProps) {
       className="absolute top-1/2 right-0 z-10 flex -translate-y-1/2 items-center lg:left-[calc(50%_+_24rem)] lg:right-3"
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
+      onFocusCapture={onEnter}
+      onBlurCapture={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) onLeave();
+      }}
     >
       {/* 完整轮次列表:桌面 hover 或 手机 scrub 时展开;手机拖动时列表项高亮跟随 scrubIdx */}
       {open && (
@@ -161,11 +179,14 @@ export function ChatOutline({ messages, streaming }: ChatOutlineProps) {
         </div>
       )}
 
-      {/* 点状大纲:生成中/拖动/当前轮高亮,桌面 hover 弱高亮 */}
+      {/* 点状大纲:生成中/拖动/当前轮高亮,桌面 hover 弱高亮;圆点是可聚焦按钮,键盘 Tab 进入即展开列表 */}
       <nav
         ref={navRef}
-        className="flex w-6 cursor-pointer touch-none flex-col items-end gap-[5px] pr-2 lg:order-1"
-        aria-label="对话大纲"
+        className={clsx(
+          "group/nav flex w-6 cursor-pointer touch-none flex-col items-end gap-[5px] pr-2 lg:order-1",
+          showHint && "motion-safe:animate-pulse",
+        )}
+        aria-label={t("conversationOutline")}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
@@ -176,10 +197,15 @@ export function ChatOutline({ messages, streaming }: ChatOutlineProps) {
           const isActive = i === activeTurnIdx;
           const isScrub = scrubIdx === i;
           return (
-            <span
+            <button
               key={turn.userIndex}
+              type="button"
+              onClick={() => handleJump(turn.userIndex)}
+              aria-label={t("outlineGoToTurn", { index: i + 1 })}
+              aria-current={isActive ? "true" : undefined}
               className={clsx(
-                "block rounded-full transition-[width,height,background-color,opacity,transform] duration-150",
+                // after 伪元素把 6px 圆点的命中面扩到约 22×12px;hover/focus-within 整列轻微放大作"可交互"预暗示
+                "relative block rounded-full border-0 p-0 transition-[width,height,background-color,opacity,transform] duration-150 after:absolute after:-inset-x-2 after:-inset-y-1.5 after:content-[''] group-hover/nav:scale-110 group-focus-within/nav:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue",
                 isGenerating
                   ? "w-2 h-2 bg-sora-blue animate-pulse"
                   : isScrub || isActive

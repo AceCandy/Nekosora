@@ -5,11 +5,8 @@ import { ReadonlyChatMessage } from "./ReadonlyChatMessage";
 
 const messages = {
   chat: {
-    inputTokens: "Input",
-    cacheReadTokens: "Cache",
-    outputTokens: "Output",
-    responseModel: "Model",
-    responseDuration: "Duration",
+    tokensCompact: "{input, number} → {output, number} tokens",
+    cacheCompact: "cache {count, number}",
   },
 };
 

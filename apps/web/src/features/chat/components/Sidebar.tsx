@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState, useTransition, useEffect, useLayoutEffect, useRef } from "react";
+import React, { useMemo, useState, useTransition, useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -267,11 +267,30 @@ export default function Sidebar({
   // 后台会话完成蓝点:轮询各会话 generating 状态,记录上一轮「生成中」的集合;
   // 当某会话从「生成中」变为「已完成」且不是当前会话,标记蓝点;点击该会话项清除。
   const router = useRouter();
-  const handleNewConversation = () => {
+  const handleNewConversation = useCallback(() => {
     setIsOpen(false);
     newConversationSequenceRef.current += 1;
     router.push(newConversationHref(`${Date.now()}-${newConversationSequenceRef.current}`));
-  };
+  }, [router]);
+
+  // 全局快捷键:⌘K/Ctrl+K 开关会话搜索,⌘⇧O/Ctrl+Shift+O 新建会话。
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
+      const key = event.key.toLowerCase();
+      if (key === "k" && !event.shiftKey) {
+        event.preventDefault();
+        setSearchOpen((open) => !open);
+        return;
+      }
+      if (key === "o" && event.shiftKey) {
+        event.preventDefault();
+        handleNewConversation();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [handleNewConversation]);
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
   // 仅当存在后台生成中会话时才轮询。活动 id 独立于首屏窗口，后页会话也不会漏掉。
   const hasGenerating = pollingGeneratingIds.length > 0;
@@ -348,6 +367,18 @@ export default function Sidebar({
     }, 300);
     return () => { cancelled = true; clearTimeout(timer); };
   }, [query]);
+
+  // 搜索结果按会话分组:后端按消息时间倒序返回,Map 保序使每会话取到最新命中;
+  // 同会话多条命中折叠为一行并显示命中数,避免同标题条目刷屏
+  const groupedResults = useMemo(() => {
+    const map = new Map<string, { result: SearchResult; hitCount: number }>();
+    for (const r of searchResults) {
+      const existing = map.get(r.conversationId);
+      if (existing) existing.hitCount += 1;
+      else map.set(r.conversationId, { result: r, hitCount: 1 });
+    }
+    return [...map.values()];
+  }, [searchResults]);
 
   const loadPreview = (id: string) => {
     const cached = previewCacheRef.current.get(id);
@@ -602,7 +633,7 @@ export default function Sidebar({
       >
         <AnimatedText text={c.title} className="min-w-0 flex-1" />
         {(c.generating || streamingConvIds.includes(c.id)) && <span className="relative ml-auto inline-flex h-4 w-4 shrink-0 items-center justify-center" aria-label={tSidebar("generating")}><span className="h-1.5 w-1.5 rounded-full bg-sora-blue" /><Loader2 className="absolute inset-0 h-4 w-4 animate-spin text-sora-blue motion-reduce:animate-none" aria-hidden="true" /></span>}
-        {justCompleted && <span className="ml-auto h-2 w-2 shrink-0 rounded-full bg-sora-blue" aria-label="有新回复" />}
+        {justCompleted && <span className="ml-auto h-2 w-2 shrink-0 rounded-full bg-sora-blue" aria-label={tSidebar("newReplies")} />}
       </Link>
       <div className="absolute right-1 top-1/2 -translate-y-1/2">
       <Popover
@@ -727,7 +758,7 @@ export default function Sidebar({
           </div>
           <div className="flex items-center gap-1">
             {!collapsed && (
-              <button type="button" onClick={() => setSearchOpen(true)} className="ai-trigger touch-target inline-flex h-9 w-9 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue  " aria-label={searchText} title={searchText}>
+              <button type="button" onClick={() => setSearchOpen(true)} className="ai-trigger touch-target inline-flex h-9 w-9 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue  " aria-label={searchText} title={`${searchText} (⌘K)`}>
                 <AISearchIcon className="h-[18px] w-[18px]" />
               </button>
             )}
@@ -735,8 +766,8 @@ export default function Sidebar({
               type="button"
               onClick={() => setCollapsed((value) => !value)}
               className="ai-trigger touch-target hidden h-9 w-9 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900   focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue md:inline-flex"
-              aria-label={collapsed ? "展开侧边栏" : "收起侧边栏"}
-              title={collapsed ? "展开侧边栏" : "收起侧边栏"}
+              aria-label={collapsed ? tSidebar("expandSidebar") : tSidebar("collapseSidebar")}
+              title={collapsed ? tSidebar("expandSidebar") : tSidebar("collapseSidebar")}
             >
               {collapsed ? <AIPanelLeftOpenIcon className="h-[18px] w-[18px]" /> : <AIPanelLeftCloseIcon className="h-[18px] w-[18px]" />}
             </button>
@@ -753,10 +784,10 @@ export default function Sidebar({
         </div>
 
         <nav className={clsx("min-h-0 flex-1 flex-col items-center gap-1.5 pt-3", collapsed ? "hidden md:flex" : "hidden")} aria-label="快捷导航">
-          <button type="button" onClick={handleNewConversation} className="touch-target inline-flex h-9 w-9 items-center justify-center rounded-full bg-neutral-100 text-neutral-800 hover:bg-neutral-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue   " aria-label={newConversationText} title={newConversationText}>
+          <button type="button" onClick={handleNewConversation} className="touch-target inline-flex h-9 w-9 items-center justify-center rounded-full bg-neutral-100 text-neutral-800 hover:bg-neutral-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue   " aria-label={newConversationText} title={`${newConversationText} (⌘⇧O)`}>
             <Plus className="h-[18px] w-[18px]" aria-hidden="true" />
           </button>
-          <button type="button" onClick={() => setSearchOpen(true)} className="ai-trigger touch-target inline-flex h-9 w-9 items-center justify-center rounded-md text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue  " aria-label={searchText} title={searchText}>
+          <button type="button" onClick={() => setSearchOpen(true)} className="ai-trigger touch-target inline-flex h-9 w-9 items-center justify-center rounded-md text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue  " aria-label={searchText} title={`${searchText} (⌘K)`}>
             <AISearchIcon className="h-[18px] w-[18px]" />
           </button>
           <Link href="/image" className="touch-target inline-flex h-9 w-9 items-center justify-center rounded-md text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue  " aria-label={imageText} title={imageText}>
@@ -769,6 +800,7 @@ export default function Sidebar({
           <button
             type="button"
             onClick={handleNewConversation}
+            title={`${newConversationText} (⌘⇧O)`}
             className="touch-target mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-morning-mist  hover:bg-neutral-50  px-3 py-2 text-ui-body font-semibold text-neutral-700  transition-[background-color,color,border-color,box-shadow] duration-150 ease-out shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
           >
             <Plus className="w-4 h-4 text-sora-blue" aria-hidden="true" />
@@ -859,7 +891,7 @@ export default function Sidebar({
 
       <Modal open={renameTarget !== null} onClose={() => { if (!renameSaving) setRenameTarget(null); }} title={actionRenameText} dialogClassName="m-auto w-[min(420px,92vw)] rounded-lg border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/40">
         <form onSubmit={(event) => { event.preventDefault(); void submitRename(); }} className="space-y-4">
-          <input autoFocus value={renameTitle} onChange={(event) => { setRenameTitle(event.target.value); setRenameError(false); }} maxLength={200} aria-label={actionRenameText} aria-invalid={renameError} className="w-full rounded-md border border-morning-mist bg-white px-3 py-2 text-ui-body text-space-ink focus:border-sora-blue focus:outline-none focus:ring-2 focus:ring-sora-blue/20" />
+          <input autoFocus data-autofocus value={renameTitle} onChange={(event) => { setRenameTitle(event.target.value); setRenameError(false); }} maxLength={200} aria-label={actionRenameText} aria-invalid={renameError} className="w-full rounded-md border border-morning-mist bg-white px-3 py-2 text-ui-body text-space-ink focus:border-sora-blue focus:outline-none focus:ring-2 focus:ring-sora-blue/20" />
           {renameError && <p role="alert" className="text-ui-caption text-danger">{tSidebar("renameFailed")}</p>}
           <div className="flex justify-end gap-2">
             <button type="button" onClick={() => setRenameTarget(null)} disabled={renameSaving} className="touch-target rounded-md px-3 py-2 text-ui-body text-neutral-600 hover:bg-neutral-100 disabled:opacity-50">{tCommon("cancel")}</button>
@@ -872,11 +904,11 @@ export default function Sidebar({
         <div className="space-y-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" aria-hidden="true" />
-            <input autoFocus type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={searchText} aria-label={searchText} className="w-full rounded-lg border border-morning-mist bg-white py-3 pl-10 pr-3 text-ui-body text-space-ink outline-none focus:border-sora-blue   " />
+            <input autoFocus data-autofocus type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={searchText} aria-label={searchText} className="w-full rounded-lg border border-morning-mist bg-white py-3 pl-10 pr-3 text-ui-body text-space-ink outline-none transition-shadow focus:border-sora-blue focus-visible:ring-2 focus-visible:ring-sora-blue/20   " />
           </div>
           <div className="md:flex md:items-stretch md:gap-3">
             <div className="scroll-fade-y max-h-[min(55vh,460px)] min-w-0 flex-1 overflow-y-auto">
-              {!query.trim() ? <p className="py-8 text-center text-ui-body text-ink-tertiary">{searchText}</p> : searching ? <p className="flex items-center justify-center gap-2 py-8 text-ui-body text-ink-tertiary"><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />{tSidebar("searching")}</p> : searchResults.length === 0 ? <p className="py-8 text-center text-ui-body text-ink-tertiary">{tSidebar("noSearchResults")}</p> : <div className="space-y-1">{searchResults.map((r) => <Link key={`${r.conversationId}-${r.messagePublicId}-${r.createdAt}`} href={`/chat/${r.conversationId}`} onClick={() => { if (r.conversationId !== activeConvId) conversationSwitchStartedRef.current = true; setSearchOpen(false); }} onMouseEnter={() => loadPreview(r.conversationId)} onFocus={() => loadPreview(r.conversationId)} className={clsx("group relative block rounded-lg px-3 py-3 transition-colors hover:bg-neutral-100", preview?.id === r.conversationId && "bg-neutral-100 ")}><div className="truncate pr-5 text-ui-body font-medium">{r.conversationTitle}</div><div className="mt-1 line-clamp-2 text-ui-caption text-neutral-500 ">{highlightSnippet(r.snippet, query.trim())}</div><ArrowRight className="absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 translate-x-1 text-neutral-400 opacity-0 transition-[opacity,transform] duration-150 group-hover:translate-x-0 group-hover:opacity-100 motion-reduce:transition-none motion-reduce:group-hover:transform-none" aria-hidden="true" /></Link>)}</div>}
+              {!query.trim() ? <p className="py-8 text-center text-ui-body text-ink-tertiary">{searchText}</p> : searching ? <p className="flex items-center justify-center gap-2 py-8 text-ui-body text-ink-tertiary"><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />{tSidebar("searching")}</p> : searchResults.length === 0 ? <p className="py-8 text-center text-ui-body text-ink-tertiary">{tSidebar("noSearchResults")}</p> : <div className="space-y-1">{groupedResults.map(({ result: r, hitCount }) => <Link key={r.conversationId} href={`/chat/${r.conversationId}`} onClick={() => { if (r.conversationId !== activeConvId) conversationSwitchStartedRef.current = true; setSearchOpen(false); }} onMouseEnter={() => loadPreview(r.conversationId)} onFocus={() => loadPreview(r.conversationId)} className={clsx("group relative block rounded-lg px-3 py-3 transition-colors hover:bg-neutral-100", preview?.id === r.conversationId && "bg-neutral-100 ")}><div className="flex items-center gap-2 pr-5"><span className="truncate text-ui-body font-medium">{r.conversationTitle}</span>{hitCount > 1 && (<span className="shrink-0 rounded-full bg-sora-blue/[0.08] px-1.5 py-0.5 text-ui-micro font-medium text-sora-blue">{tSidebar("searchHitCount", { count: hitCount })}</span>)}</div><div className="mt-1 line-clamp-2 text-ui-caption text-neutral-500 ">{highlightSnippet(r.snippet, query.trim())}</div><ArrowRight className="absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 translate-x-1 text-neutral-400 opacity-0 transition-[opacity,transform] duration-150 group-hover:translate-x-0 group-hover:opacity-100 motion-reduce:transition-none motion-reduce:group-hover:transform-none" aria-hidden="true" /></Link>)}</div>}
             </div>
             {/* 会话预览面板(桌面端):hover/聚焦结果项时展示该会话最近几条消息气泡 */}
             <div className="hidden w-[46%] shrink-0 md:block">

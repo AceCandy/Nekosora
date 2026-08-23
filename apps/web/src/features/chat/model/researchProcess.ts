@@ -13,6 +13,8 @@ export interface ResearchStep {
 
 export interface ResearchStatus {
   status: "running" | "completed" | "error";
+  /** 是否发生过真实研究活动(搜索/推理/非搜索工具);仅 understand/context 的轻量准备不算,用于完成态是否展示研究摘要。 */
+  hasResearchActivity: boolean;
   currentStage?: ResearchStage;
   durationMs?: number;
   sourceCount?: number;
@@ -133,6 +135,13 @@ export function buildResearchStatus(input: BuildResearchStatusInput): ResearchSt
 
   return {
     status: researchActive ? "running" : researchCompleted ? "completed" : "error",
+    hasResearchActivity: Boolean(
+      reasoningSteps.length > 0
+      || input.hasReasoning
+      || nonSearchTools.length > 0
+      || searchStatuses.length > 0
+      || input.sourceCount > 0
+    ),
     currentStage,
     durationMs: durationBetween(input.startedAt, input.firstContentAt ?? input.endedAt),
     sourceCount: input.sourceCount || undefined,

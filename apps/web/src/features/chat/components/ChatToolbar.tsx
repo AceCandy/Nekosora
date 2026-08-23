@@ -99,7 +99,7 @@ export function ChatToolbar(props: ChatToolbarProps) {
               onClick={() => onCardToggle(id)}
               className="hover:opacity-75 p-1.5 -m-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sora-blue rounded-full cursor-pointer"
               title={t("attachRemove")}
-              aria-label="移除指令卡"
+              aria-label={t("attachRemove")}
             >
               <X className="w-3.5 h-3.5" aria-hidden="true" />
             </button>
@@ -166,7 +166,7 @@ export function ChatToolbar(props: ChatToolbarProps) {
               onClick={() => onRemoveAttachment(a.id)}
               className="touch-target absolute right-1.5 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-black/[0.05] hover:text-neutral-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue  "
               title={t("attachRemove")}
-              aria-label="移除附件"
+              aria-label={t("attachRemove")}
             >
               <X className="h-4 w-4" aria-hidden="true" />
             </button>
@@ -235,7 +235,7 @@ export function ComposerPlusMenu(props: ChatToolbarProps) {
           event.currentTarget.value = "";
         }}
       />
-      <button type="button" onClick={() => { if (open) close(); else setOpen(true); }} className="inline-flex h-8 w-8 items-center justify-center rounded-full text-neutral-600 transition-colors duration-200 hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none  " aria-label="更多设置" aria-haspopup="menu" aria-expanded={open}>
+      <button type="button" onClick={() => { if (open) close(); else setOpen(true); }} className="inline-flex h-8 w-8 items-center justify-center rounded-full text-neutral-600 transition-colors duration-200 hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none  " aria-label={t("moreOptions")} aria-haspopup="menu" aria-expanded={open}>
         <Plus className="h-4.5 w-4.5" aria-hidden="true" />
       </button>
       {open && (

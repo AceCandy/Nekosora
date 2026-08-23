@@ -36,3 +36,18 @@ export function formatDateTimeLocal(iso: string): string {
     hour12: false,
   });
 }
+
+/** 分钟级时间呈现:聊天消息等场景秒级是噪音;admin 排障日志请继续用 formatDateTimeLocal。 */
+export function formatDateTimeMinute(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}

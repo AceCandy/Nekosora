@@ -22,6 +22,7 @@ describe("buildResearchStatus", () => {
     expect(result.steps.map((step) => step.type)).toEqual(["understand", "context", "search", "read"]);
     expect(result.query).toBe("latest news");
     expect(result.durationMs).toBe(1600);
+    expect(result.hasResearchActivity).toBe(true);
   });
 
   it("把部分搜索失败收敛为 warning 并保留可用来源", () => {
@@ -94,5 +95,24 @@ describe("buildResearchStatus", () => {
 
     expect(result.status).toBe("running");
     expect(result.currentStage).toBe("search");
+  });
+
+  it("仅 understand/context 的轻量运行不标记研究活动", () => {
+    const result = buildResearchStatus({
+      phase: "completed",
+      canonicalSteps: [
+        { id: "memory", kind: "memory", status: "completed" },
+        { id: "prompt", kind: "prompt", status: "completed" },
+      ],
+      sourceCount: 0,
+      hasReasoning: false,
+      startedAt: "2026-08-08T00:00:00.000Z",
+      firstContentAt: "2026-08-08T00:00:01.200Z",
+      endedAt: "2026-08-08T00:00:02.800Z",
+    });
+
+    expect(result.hasResearchActivity).toBe(false);
+    expect(result.status).toBe("completed");
+    expect(result.steps.map((step) => step.type)).toEqual(["understand", "context"]);
   });
 });

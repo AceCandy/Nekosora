@@ -143,9 +143,11 @@ components:
 - **标题换字 (Animated Title Swap)** (`shared/components/AnimatedText.tsx` + `ai-text-in`/`ai-text-out`, 180ms `cubic-bezier(0.16,1,0.3,1)`): 会话标题等单行短文本变更时，旧文本上滑淡出、新文本自下方淡入，双层共存一拍后离场层卸载；状态反馈型，通用。
 - **列表飞行 (List FLIP)** (Sidebar `useLayoutEffect` + WAAPI `element.animate`, 240ms `cubic-bezier(0.16,1,0.3,1)`): 会话置顶/取消置顶等跨组迁移时，受影响行按渲染前后位移差飞入新位置，位移 <2px 不触发；reduced-motion 直接跳过。状态反馈型（纯位移），通用。
 - **消息排队条 (Message Queue Bar)** (ChatComposer, 入场复用 `menu-pop` 180ms): 流式期间 Enter 把草稿压入队列（输入框保持可输入），流结束自动按序发出；支持取回编辑、插队到队首（同时停止当前生成）、单条移除；不新增动效词。
+- **轨道公转 (Orbit Spin)** (`orbit-spin`, 36s/58s/84s 逐星 linear infinite, 可 reverse): 登录页星图场景（`login/StarChart.tsx`）的卫星沿轨道匀速环游，duration/direction 由行内样式逐星指定；场景另含指针视差——指针偏移写入 `--px`/`--py`，各 SVG 层按 `--depth` 系数 calc 倍增位移、0.7s expo transition 拖尾，reduced-motion 不挂监听。仅品牌门面。
+- **错误抖动 (Error Shake)** (`error-shake`, 0.32s ease-out both): 表单提交失败时错误条水平抖动一拍（±5px 递减收敛），状态反馈型，通用。
 
 ### Named Rules
-**门面限定规则 (The Facade-Only Rule).** `halo-drift` / `star-twinkle` / `shooting-star` / `welcome-rise` 四个氛围动效只允许出现在品牌门面（登录页、聊天首屏空会话欢迎区，统一由 `SkyAtmosphere` 组件承载）；工作区与管理界面新增动效必须是状态反馈型，且时长 ≤250ms。
+**门面限定规则 (The Facade-Only Rule).** `halo-drift` / `star-twinkle` / `shooting-star` / `welcome-rise` / `orbit-spin`（含星图指针视差）五个氛围动效只允许出现在品牌门面（登录页、聊天首屏空会话欢迎区；前者由 `login/StarChart.tsx`、其余由 `SkyAtmosphere` 组件承载）；工作区与管理界面新增动效必须是状态反馈型，且时长 ≤250ms。
 **减弱动效兜底规则 (The Reduced-Motion Rule).** 全部动效必须被 `globals.css` 的 `prefers-reduced-motion` 媒体查询压至 0.01ms（时长与延迟同压），开启减弱动态时界面直接呈现最终状态，不得先隐后现。
 
 ## 5. Elevation

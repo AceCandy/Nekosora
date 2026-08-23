@@ -36,8 +36,8 @@ function makeStars(count: number, seed: number): Star[] {
   return Array.from({ length: count }, () => ({
     left: rng() * 100,
     top: rng() * 58,
-    size: rng() < 0.7 ? 1 : 2,
-    opacity: 0.16 + rng() * 0.3,
+    size: rng() < 0.5 ? 1 : 2,
+    opacity: 0.3 + rng() * 0.2,
     duration: 2.8 + rng() * 3.4,
     delay: rng() * 4,
     twinkle: rng() < 0.6,
@@ -63,13 +63,13 @@ export interface SkyAtmosphereProps {
 export default function SkyAtmosphere({ stars = 24, seed = 20260821, shootingStar = false, composition = "corner", className }: SkyAtmosphereProps) {
   const starList = stars > 0 ? makeStars(stars, seed) : [];
   const wash = composition === "skyline"
-    ? "linear-gradient(to bottom, color-mix(in oklab, var(--color-sora-blue) 6%, transparent), transparent 52%)"
-    : "linear-gradient(to bottom, color-mix(in oklab, var(--color-sora-blue) 5%, transparent), transparent 42%)";
+    ? "linear-gradient(to bottom, color-mix(in oklab, var(--color-sora-blue) 7%, transparent), transparent 52%)"
+    : "linear-gradient(to bottom, color-mix(in oklab, var(--color-sora-blue) 5%, transparent), transparent 46%)";
   const halos = composition === "skyline"
-    ? "radial-gradient(85% 60% at 50% -8%, color-mix(in oklab, var(--color-sora-blue) 7%, transparent), transparent 100%)," +
-      "radial-gradient(48% 40% at 86% 96%, color-mix(in oklab, var(--color-neku-amber) 5%, transparent), transparent 100%)"
-    : "radial-gradient(48% 42% at 24% 12%, color-mix(in oklab, var(--color-sora-blue) 8%, transparent), transparent 100%)," +
-      "radial-gradient(42% 38% at 78% 90%, color-mix(in oklab, var(--color-neku-amber) 6%, transparent), transparent 100%)";
+    ? "radial-gradient(85% 60% at 50% -8%, color-mix(in oklab, var(--color-sora-blue) 8%, transparent), transparent 100%)," +
+      "radial-gradient(48% 40% at 86% 96%, color-mix(in oklab, var(--color-neku-amber) 6%, transparent), transparent 100%)"
+    : "radial-gradient(66% 56% at 22% 10%, color-mix(in oklab, var(--color-sora-blue) 8%, transparent), transparent 100%)," +
+      "radial-gradient(50% 44% at 86% 94%, color-mix(in oklab, var(--color-neku-amber) 6%, transparent), transparent 100%)";
   return (
     <div aria-hidden="true" className={clsx("pointer-events-none absolute inset-0 overflow-hidden", className)}>
       {/* 天幕洗色:顶部极淡天空蓝,向下消散,奠定「天空」基调 */}

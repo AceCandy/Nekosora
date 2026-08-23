@@ -29,15 +29,11 @@ vi.mock("@/shared/lib/useClickOutside", () => ({
 import { ChatMessageItem, MessageRunMetadataDisplay } from "./ChatMessageItem";
 import { MessageProcessTrace } from "./MessageProcessTrace";
 import type { MessageRunMetadata } from "@/features/chat/model/types";
-import { formatDateTimeLocal } from "@/shared/lib/format";
+import { formatDateTimeMinute } from "@/shared/lib/format";
 
-function renderMetadata(metadata: MessageRunMetadata, expanded = false) {
+function renderMetadata(metadata: MessageRunMetadata) {
   return renderToStaticMarkup(
-    <MessageRunMetadataDisplay
-      metadata={metadata}
-      expanded={expanded}
-      panelId="run-metadata-test"
-    />,
+    <MessageRunMetadataDisplay metadata={metadata} />,
   );
 }
 
@@ -98,7 +94,7 @@ describe("ChatMessageItem render style", () => {
 });
 
 describe("MessageRunMetadataDisplay", () => {
-  it("按固定顺序展示可用字段并保留真实零值", () => {
+  it("元数据收敛为单行签名,零值与未知字段省略", () => {
     const model = "model-with-a-very-long-platform-display-name-that-must-not-overflow";
     const html = renderMetadata({
       model,
@@ -112,25 +108,13 @@ describe("MessageRunMetadataDisplay", () => {
       completedAt: "2026-07-25T00:00:02.000Z",
     });
 
-    const labels = [
-      "responseModel",
-      "inputTokens",
-      "cacheReadTokens",
-      "outputTokens",
-      "responseDuration",
-    ];
-    let previousIndex = -1;
-    for (const label of labels) {
-      const index = html.indexOf(label);
-      expect(index).toBeGreaterThan(previousIndex);
-      previousIndex = index;
-    }
-
-    expect(html).toContain("1,234");
-    expect(html).toContain("0ms");
+    // 单行签名:模型 · 耗时 · tokens;缓存为 0 时整段省略
+    expect(html).toContain(`${model} · 0ms · tokensCompact`);
+    expect(html).toContain(`title="${model} · 0ms · tokensCompact"`);
+    expect(html).toContain("truncate");
+    expect(html).toContain("text-ui-micro");
+    expect(html).not.toContain("cacheCompact");
     expect(html).not.toContain("reasoningTokens");
-    expect(html).toContain(`title="${model}"`);
-    expect(html).toContain("max-w-[min(18rem,60vw)] truncate");
     expect(html).not.toContain("completedAt");
   });
 
@@ -140,14 +124,13 @@ describe("MessageRunMetadataDisplay", () => {
       tokenUsage: { completionTokens: 0 },
     });
 
-    expect(html).toContain("responseModel");
-    expect(html).toContain("outputTokens");
-    expect(html).not.toContain("inputTokens");
-    expect(html).not.toContain("cacheReadTokens");
+    // token 段需要输入/输出成双且非全零,单边缺失时整段省略
+    expect(html).toContain(">Model A</p>");
+    expect(html).not.toContain("tokensCompact");
+    expect(html).not.toContain("cacheCompact");
     expect(html).not.toContain("reasoningTokens");
     expect(html).not.toContain("responseDuration");
     expect(html).not.toContain("completedAt");
-    expect(html).toMatch(/outputTokens<\/span><\/dt><dd[^>]*>0<\/dd>/);
     expect(renderMetadata({})).toBe("");
     expect(renderMetadata({ completedAt: "2026-07-25T00:00:02.000Z" })).toBe("");
     expect(renderMetadata({ tokenUsage: { reasoningTokens: 56 } })).toBe("");
@@ -159,18 +142,18 @@ describe("MessageRunMetadataDisplay", () => {
     expect(assistantHtml).not.toContain('aria-label="responseDetails"');
   });
 
-  it("仅在粗指针展开时渲染详情面板", () => {
-    const collapsed = renderMetadata({ model: "Model A" });
-    const expanded = renderMetadata({ model: "Model A" }, true);
+  it("常驻渲染详情签名,不依赖 hover 或粗指针展开", () => {
+    const html = renderMetadata({ model: "Model A" });
 
-    expect(collapsed).toContain("[@media(pointer:coarse)]:hidden");
-    expect(collapsed).not.toContain('role="region"');
-    expect(expanded).toContain('role="region"');
-    expect(expanded).toContain('id="run-metadata-test"');
-    expect(expanded).toContain("[@media(pointer:coarse)]:block");
+    expect(html).toContain('role="group"');
+    expect(html).toContain('aria-label="responseDetails"');
+    expect(html).toContain("Model A");
+    expect(html).not.toContain("[@media(pointer:coarse)]");
+    expect(html).not.toContain('role="region"');
+    expect(html).not.toContain("aria-expanded");
   });
 
-  it("将操作与时间放在详情前，并让两排共同 hover、focus 与粗指针显隐", () => {
+  it("操作与时间保持 hover/focus 显隐,元数据签名常驻可见", () => {
     const completedAt = "2026-07-25T00:00:02.000Z";
     const html = renderAssistantMessage({
       model: "Model A",
@@ -181,17 +164,16 @@ describe("MessageRunMetadataDisplay", () => {
 
     expect(html.indexOf('aria-label="copy"')).toBeLessThan(html.indexOf('aria-label="feedbackUp"'));
     expect(html.indexOf('aria-label="regenerate"')).toBeLessThan(html.indexOf("<time"));
-    expect(html.indexOf("<time")).toBeLessThan(html.indexOf("responseModel"));
+    expect(html.indexOf("<time")).toBeLessThan(html.indexOf("Model A"));
     expect(html).not.toContain("<span>copy</span>");
     expect(html).not.toContain("<span>regenerate</span>");
     expect(html).toMatch(/<button[^>]*title="copy"[^>]*aria-label="copy"[^>]*><svg/);
     expect(html).toMatch(/<button[^>]*title="regenerate"[^>]*aria-label="regenerate"[^>]*><svg/);
     expect(html).not.toContain("completedAt");
     expect(html).toContain(`dateTime="${completedAt}"`);
-    expect(html).toContain(`>${formatDateTimeLocal(completedAt)}</time>`);
+    expect(html).toContain(`>${formatDateTimeMinute(completedAt)}</time>`);
     expect(html).toContain("font-mono text-ui-body tabular-nums");
-    expect(html).toContain("size-2.5");
-    expect(html).toContain("text-ink-tertiary ");
+    expect(html).toContain("text-ink-tertiary");
     const timeEndIndex = html.indexOf("</time>") + "</time>".length;
     expect(html.slice(timeEndIndex)).toMatch(/^<\/div>/);
     expect(html).toContain(
@@ -203,10 +185,12 @@ describe("MessageRunMetadataDisplay", () => {
     expect(html).toContain("group-focus-within/message:opacity-100");
     expect(html).toContain("[@media(pointer:coarse)]:pointer-events-auto");
     expect(html).toContain("[@media(pointer:coarse)]:opacity-100");
-    expect(html).toContain("touch-target hidden h-8 w-8");
-    expect(html).toContain("[@media(pointer:coarse)]:inline-flex");
-    expect(html).toContain('aria-expanded="false"');
-    expect(html).toMatch(/aria-controls="run-metadata-[^"]+"/);
+    // 元数据签名不再藏进 hover/展开层:无 Info 按钮、无粗指针隐藏、无展开面板,且位于动作条之后常驻
+    expect(html).not.toContain('aria-controls="run-metadata-');
+    expect(html).not.toContain("[@media(pointer:coarse)]:hidden");
+    expect(html).not.toContain("[@media(pointer:coarse)]:inline-flex");
+    expect(html).not.toContain('role="region"');
+    expect(html.indexOf('aria-label="responseDetails"')).toBeGreaterThan(html.indexOf("</time>"));
 
     const timeOnlyHtml = renderAssistantMessage({
       completedAt: "2026-07-25T00:00:02.000Z",
@@ -219,7 +203,7 @@ describe("MessageRunMetadataDisplay", () => {
 });
 
 describe("ChatMessageItem research process", () => {
-  it("完成后折叠为研究摘要并隐藏内部实现步骤", () => {
+  it("无研究活动的轻量运行完成后不渲染研究摘要", () => {
     const html = renderToStaticMarkup(
       <MessageProcessTrace
         content="Answer"
@@ -246,7 +230,44 @@ describe("ChatMessageItem research process", () => {
       />,
     );
 
-    expect(html).toContain("researchCompleted · researchDuration");
+    expect(html).toBe("");
+  });
+
+  it("有研究活动的运行完成后折叠为研究摘要并隐藏内部实现步骤", () => {
+    const html = renderToStaticMarkup(
+      <MessageProcessTrace
+        content="Answer"
+        processTrace={{
+          version: 1,
+          runs: [{
+            runId: "run-1",
+            phase: "completed",
+            startedAt: "2026-08-07T00:00:00.000Z",
+            firstContentAt: "2026-08-07T00:00:01.600Z",
+            endedAt: "2026-08-07T00:00:04.200Z",
+            steps: [
+              { id: "memory", kind: "memory", status: "completed" },
+              {
+                id: "prompt",
+                kind: "prompt",
+                status: "completed",
+                data: { fullMessageCount: 2, sentMessageCount: 2, tokenEstimate: 20 },
+              },
+              {
+                id: "search",
+                kind: "web_search",
+                status: "completed",
+                data: { toolCallId: "search-1", citationCount: 2 },
+              },
+            ],
+          }],
+        }}
+        isStreaming={false}
+        isLast
+      />,
+    );
+
+    expect(html).toContain("researchCompleted · researchSourceCount · researchDuration");
     expect(html).not.toContain("<svg");
     expect(html).not.toContain("research-status-shimmer");
     expect(html).toContain('aria-expanded="false"');
@@ -260,7 +281,7 @@ describe("ChatMessageItem research process", () => {
     expect(html).toContain("min-h-11");
   });
 
-  it("运行中只突出当前搜索，详情使用语义步骤且不暴露推理与工具参数", () => {
+  it("运行中主状态与辅助小字同步扫光，详情不暴露推理与工具参数", () => {
     const html = renderToStaticMarkup(
       <MessageProcessTrace
         content=""
@@ -280,7 +301,9 @@ describe("ChatMessageItem research process", () => {
     expect(html).toContain('aria-label="processTrace"');
     expect(html).toContain("researchRunningSearch");
     expect(html).toContain("latest");
-    expect(html).toContain("research-status-shimmer");
+    expect(html.match(/research-status-shimmer/g)).toHaveLength(3);
+    expect(html).toContain('data-shimmer="latest"');
+    expect(html).toContain('data-shimmer="researchReadCount"');
     expect(html).not.toContain("researchDetails");
     expect(html).not.toContain("researchCollapse");
     expect(html).not.toContain("<svg");
@@ -291,6 +314,25 @@ describe("ChatMessageItem research process", () => {
     expect(html).not.toContain("PRIVATE_CHAIN_OF_THOUGHT");
     expect(html).not.toContain("TOOL_SECRET");
     expect(html).not.toContain("tool_call");
+
+    const readingHtml = renderToStaticMarkup(
+      <MessageProcessTrace
+        content=""
+        searchResults={[{ title: "Source", url: "https://www.example.com/report" }]}
+        processRuntime={{
+          runId: "run-reading",
+          lastSeq: 1,
+          phase: "processing",
+          steps: [{ id: "search", kind: "web_search", status: "completed" }],
+          startedAt: "2026-08-08T00:00:00.000Z",
+        }}
+        isStreaming
+        isLast
+      />,
+    );
+
+    expect(readingHtml).toContain("researchRunningRead");
+    expect(readingHtml).toContain('data-shimmer="researchReadingReliableSources"');
   });
 
   it("首个正文 token 前将研究状态收敛为完成", () => {
@@ -324,6 +366,13 @@ describe("ChatMessageItem research process", () => {
           role: "assistant",
           content: "",
           publicId: "assistant-streaming",
+          processRuntime: {
+            runId: "run-streaming",
+            lastSeq: 0,
+            phase: "preparing",
+            steps: [],
+            startedAt: "2026-08-08T00:00:00.000Z",
+          },
         }}
         isLast
         isStreaming
@@ -334,6 +383,7 @@ describe("ChatMessageItem research process", () => {
     );
 
     expect(html).toContain("researchRunningUnderstand");
+    expect(html).not.toContain("responseDuration");
     expect(html).not.toContain("thinking");
     expect(html).not.toContain("animate-spin");
   });

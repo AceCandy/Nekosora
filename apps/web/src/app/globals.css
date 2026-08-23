@@ -216,7 +216,7 @@ body {
   mask-image: linear-gradient(90deg, transparent 38%, black 47%, transparent 56%);
   -webkit-mask-size: 220% 100%;
   mask-size: 220% 100%;
-  animation: research-status-shimmer 2s ease-in-out infinite;
+  animation: research-status-shimmer 4s ease-in-out infinite;
   pointer-events: none;
 }
 
@@ -397,11 +397,13 @@ body {
   padding: 0;
   border: 1px solid var(--color-morning-mist);
   border-radius: 8px;
-  overflow: hidden;
+  /* 窄视口允许横向滚动而不是把列压碎(配合 table min-width);圆角仍由滚动容器裁剪保持 */
+  overflow-x: auto;
   background: transparent;
 }
 .nekusora-md [data-streamdown="table"] {
   width: 100%;
+  min-width: 560px;
   margin: 0;
   border: 0;
   border-collapse: separate;
@@ -455,6 +457,8 @@ body {
  * 星枢天流动效词汇(DESIGN.md §4 Motion):
  * - halo-drift:光晕慢速呼吸漂移(±2% 位移 + 1→1.06 缩放,18s 往返),仅登录页与聊天欢迎区氛围层。
  * - star-twinkle:登录页星点闪烁(透明度脉动 + 轻微缩放),--star-duration/--star-delay 逐星错峰。
+ * - orbit-spin:登录页星图场景的卫星公转(匀速环游,duration/direction 行内逐星指定),仅品牌门面。
+ * - error-shake:表单提交失败时错误条水平抖动一拍(0.32s 递减收敛),状态反馈型,工作区可用。
  * - welcome-rise:品牌门面入场(淡入 + 12px 上浮 + 5px 模糊收敛,0.55s expo 缓出),
  *   配合行内 animationDelay 做 0/140/260ms 三拍 stagger;工作区与管理界面禁用编排式入场。
  * 以上均受全局 prefers-reduced-motion 块兜底(时长与延迟同压至 0.01ms,直接呈现最终状态)。
@@ -474,16 +478,49 @@ body {
 @keyframes star-twinkle {
   0%,
   100% {
-    opacity: 0.15;
+    opacity: 0.25;
     transform: scale(1);
   }
   50% {
-    opacity: 0.7;
-    transform: scale(1.5);
+    opacity: 0.5;
+    transform: scale(1.35);
   }
 }
 .star-twinkle {
   animation: star-twinkle var(--star-duration, 4s) ease-in-out var(--star-delay, 0s) infinite;
+}
+
+/* 轨道公转:卫星沿星图轨道匀速环游,仅登录页星图场景;duration/direction 由行内样式逐星指定。 */
+@keyframes orbit-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.orbit-spin {
+  animation: orbit-spin 48s linear infinite;
+}
+
+/* 表单错误反馈:提交失败时错误条水平抖动一拍(0.32s),幅度递减收敛。 */
+@keyframes error-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-5px);
+  }
+  45% {
+    transform: translateX(5px);
+  }
+  70% {
+    transform: translateX(-3px);
+  }
+  90% {
+    transform: translateX(2px);
+  }
+}
+.error-shake {
+  animation: error-shake 0.32s ease-out both;
 }
 
 @keyframes welcome-rise {

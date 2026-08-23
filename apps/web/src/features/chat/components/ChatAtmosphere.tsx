@@ -13,7 +13,7 @@ export default function ChatAtmosphere() {
   const welcomeMode = useChatStreamStore((s) => s.welcomeMode);
   return (
     <div className={clsx("atmosphere-fade pointer-events-none fixed inset-0 z-0", !welcomeMode && "atmosphere-hidden")}>
-      <SkyAtmosphere stars={18} seed={20260822} shootingStar composition="skyline" />
+      <SkyAtmosphere stars={28} seed={20260822} shootingStar composition="skyline" />
     </div>
   );
 }

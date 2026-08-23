@@ -586,14 +586,26 @@ export async function getConversationPreview(conversationId: string): Promise<Ar
   });
 }
 
-/** 截取 keyword 前后约 30 字符作为命中片段,首尾用省略号标记截断。 */
+/** 剥离 markdown 语法(代码块/表格分隔/标题/行内标记/管道符),避免 snippet 输出 ---|--- 之类残渣。 */
+function stripMarkdownForSnippet(input: string): string {
+  return input
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/^\s*\|?[\s:|-]+\|[\s:|-]*$/gm, " ")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/[*_~`#>|]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** 截取 keyword 前后约 30 字符作为命中片段,首尾用省略号标记截断;片段先做 markdown 清洗。 */
 function makeSnippet(text: string, keyword: string): string {
-  const lower = text.toLowerCase();
+  const plain = stripMarkdownForSnippet(text);
+  const lower = plain.toLowerCase();
   const idx = lower.indexOf(keyword.toLowerCase());
-  if (idx < 0) return text.slice(0, 80);
+  if (idx < 0) return plain.slice(0, 80);
   const start = Math.max(0, idx - 30);
-  const end = Math.min(text.length, idx + keyword.length + 30);
-  return (start > 0 ? "…" : "") + text.slice(start, end) + (end < text.length ? "…" : "");
+  const end = Math.min(plain.length, idx + keyword.length + 30);
+  return (start > 0 ? "…" : "") + plain.slice(start, end) + (end < plain.length ? "…" : "");
 }
 
 /** 一次性读回会话的输入区状态,供 SSR 回填。 */

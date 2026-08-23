@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import enMessages from "../../../../messages/en.json";
 import zhMessages from "../../../../messages/zh-CN.json";
 import { ChatInputBox } from "./ChatInputBox";
+import { getSpeechRecognitionCtor } from "../model/useSpeechInput";
 import {
   ChatToolbar,
   ComposerPlusMenu,
@@ -13,15 +14,19 @@ import {
 } from "./ChatToolbar";
 
 vi.mock("next-intl", () => ({
+  useLocale: () => "zh-CN",
   useTranslations: () => (key: string) => ({
     attachPreview: "预览附件",
     attachRemove: "移除附件",
+    moreOptions: "更多设置",
+    composerInputLabel: "对话输入框",
     attachPending: "待发送",
     attachUploading: "上传中",
     attachError: "上传失败",
     placeholder: "输入消息",
     send: "发送",
-    voicePlaceholder: "语音输入",
+    voiceInputStart: "开始语音输入",
+    voiceInputStop: "停止语音输入",
     uploadAttachment: "上传文件",
     outputMode: "输出模式",
     renderStyle: "输出样式",
@@ -162,6 +167,72 @@ describe("RenderStyleMenu", () => {
     expect(html).toContain('aria-expanded="false"');
     expect(html.match(/<button/g)).toHaveLength(1);
     expect(html).not.toContain("HTML");
+  });
+});
+
+describe("voice input", () => {
+  it("has voice input strings in all locales and dropped the coming-soon placeholder", () => {
+    expect(zhMessages.chat.voiceInputStart).toBe("开始语音输入");
+    expect(zhMessages.chat.voiceInputStop).toBe("停止语音输入");
+    expect(enMessages.chat.voiceInputStart).toBe("Start voice input");
+    expect(enMessages.chat.voiceInputStop).toBe("Stop voice input");
+    expect(zhMessages.chat).not.toHaveProperty("voicePlaceholder");
+    expect(enMessages.chat).not.toHaveProperty("voicePlaceholder");
+  });
+
+  it("detects standard and webkit-prefixed SpeechRecognition constructors", () => {
+    const g = globalThis as { window?: unknown };
+    const original = g.window;
+    try {
+      g.window = {};
+      expect(getSpeechRecognitionCtor()).toBeNull();
+
+      class WebkitCtor {}
+      g.window = { webkitSpeechRecognition: WebkitCtor };
+      expect(getSpeechRecognitionCtor()).toBe(WebkitCtor);
+
+      class StandardCtor {}
+      g.window = { SpeechRecognition: StandardCtor, webkitSpeechRecognition: WebkitCtor };
+      expect(getSpeechRecognitionCtor()).toBe(StandardCtor);
+    } finally {
+      if (original === undefined) delete g.window;
+      else g.window = original;
+    }
+  });
+
+  it("renders a disabled send fallback when speech is unsupported and input is empty", () => {
+    const html = renderToStaticMarkup(
+      <ChatInputBox
+        value=""
+        onChange={noop}
+        onSend={noop}
+        disabled={false}
+        onStop={noop}
+        onPasteFiles={noop}
+        onDropFiles={noop}
+      />,
+    );
+
+    expect(html).toContain('aria-label="发送"');
+    expect(html).toContain('aria-disabled="true"');
+    expect(html).not.toContain('aria-label="开始语音输入"');
+  });
+
+  it("renders an enabled send button once the input has content", () => {
+    const html = renderToStaticMarkup(
+      <ChatInputBox
+        value="你好"
+        onChange={noop}
+        onSend={noop}
+        disabled={false}
+        onStop={noop}
+        onPasteFiles={noop}
+        onDropFiles={noop}
+      />,
+    );
+
+    expect(html).toContain('aria-label="发送"');
+    expect(html).not.toContain('aria-disabled="true"');
   });
 });
 

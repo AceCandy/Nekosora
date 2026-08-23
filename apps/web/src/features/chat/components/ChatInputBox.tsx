@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useTranslations } from "next-intl";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
 import { AudioLines, Square } from "lucide-react";
 import { AIArrowUpIcon } from "@/shared/components/animated-icons";
 import { clsx } from "clsx";
 import type { CardOption } from "@/features/chat/model/types";
+import { useSpeechInput } from "@/features/chat/model/useSpeechInput";
 
 interface ChatInputBoxProps {
   value: string;
@@ -54,7 +55,14 @@ export function ChatInputBox({
   trailingControl,
 }: ChatInputBoxProps) {
   const t = useTranslations("chat");
+  const locale = useLocale();
   const canSend = value.trim().length > 0 || hasAttachments;
+
+  // 语音输入:确认句追加到输入框末尾(自动补空格);不支持时主位回退为禁用 send
+  const appendTranscript = useCallback((text: string) => {
+    onChange(value + (value && !/\s$/.test(value) ? " " : "") + text);
+  }, [value, onChange]);
+  const speech = useSpeechInput({ locale, onTranscript: appendTranscript });
 
   // 斜杠命令:输入以 / 开头(单行,无空格隔断)时弹出指令卡列表,模糊匹配 trigger / title
   const slashActive = !disabled && cards.length > 0 && value.startsWith("/") && !value.includes("\n");
@@ -67,6 +75,20 @@ export function ChatInputBox({
       .slice(0, 6);
   }, [slashActive, slashQuery, cards]);
   const [slashIndex, setSlashIndex] = useState(0);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // 全局快捷键:输入类控件外按 / 聚焦输入框(再按 / 即可触发斜杠命令)。
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.isContentEditable)) return;
+      event.preventDefault();
+      textareaRef.current?.focus();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   // 用单行态的实际可用宽度测量换行，避免控件下沉后宽度变大导致布局反复切换。
   const collapsedMeasureRef = useRef<HTMLDivElement>(null);
@@ -103,6 +125,70 @@ export function ChatInputBox({
     const rest = value.replace(/^\/[^\s]*/, "").trimStart();
     onChange(rest);
   };
+
+  // 主行为位优先级:停止生成 > 停止听写 > 发送 > 语音开始 > 禁用 send(无语音环境兜底)
+  let mainButton: React.ReactNode;
+  if (disabled) {
+    mainButton = (
+      <button
+        type="button"
+        onClick={onStop}
+        className="group touch-target pointer-events-auto inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-transparent text-danger transition-[background-color,color,transform] duration-200 ease-out hover:-translate-y-px hover:bg-red-500/10 hover:text-danger-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 active:translate-y-0 active:scale-95 motion-reduce:transition-none motion-reduce:hover:transform-none   "
+        title={t("stopGeneration")}
+        aria-label={t("stopGeneration")}
+      >
+        <Square strokeWidth={2.5} className="h-4 w-4 transition-transform duration-200 ease-out group-hover:scale-90 motion-reduce:transition-none motion-reduce:group-hover:transform-none" aria-hidden="true" />
+      </button>
+    );
+  } else if (speech.listening) {
+    mainButton = (
+      <button
+        type="button"
+        onClick={speech.stop}
+        className="touch-target pointer-events-auto inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-red-500/[0.08] text-danger motion-safe:animate-pulse focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+        title={t("voiceInputStop")}
+        aria-label={t("voiceInputStop")}
+      >
+        <AudioLines className="h-4 w-4" aria-hidden="true" />
+      </button>
+    );
+  } else if (canSend) {
+    mainButton = (
+      <button
+        type="button"
+        onClick={onSend}
+        className="ai-trigger group touch-target pointer-events-auto inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-transparent text-sora-blue transition-[background-color,color,transform] duration-200 ease-out hover:-translate-y-px hover:bg-sora-blue/[0.08] hover:text-sora-blue-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue active:translate-y-0 active:scale-95 motion-reduce:transition-none motion-reduce:hover:transform-none "
+        title={t("send")}
+        aria-label={t("send")}
+      >
+        <AIArrowUpIcon strokeWidth={2.5} className="h-4 w-4" />
+      </button>
+    );
+  } else if (speech.supported) {
+    mainButton = (
+      <button
+        type="button"
+        onClick={speech.start}
+        className="ai-trigger touch-target pointer-events-auto inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-transparent text-neutral-600 transition-colors duration-200 hover:bg-neutral-100 hover:text-neutral-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none "
+        title={t("voiceInputStart")}
+        aria-label={t("voiceInputStart")}
+      >
+        <AudioLines className="h-4 w-4" aria-hidden="true" />
+      </button>
+    );
+  } else {
+    mainButton = (
+      <button
+        type="button"
+        aria-disabled="true"
+        className="touch-target pointer-events-auto inline-flex h-8 w-8 shrink-0 cursor-default items-center justify-center rounded-full bg-transparent text-neutral-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue "
+        title={t("send")}
+        aria-label={t("send")}
+      >
+        <AIArrowUpIcon strokeWidth={2.5} className="h-4 w-4" />
+      </button>
+    );
+  }
 
   return (
     <div
@@ -153,6 +239,7 @@ export function ChatInputBox({
         </div>
         <div className="relative h-full min-w-0">
         <textarea
+          ref={textareaRef}
           value={value}
           onChange={(e) => {
             onChange(e.target.value);
@@ -220,7 +307,7 @@ export function ChatInputBox({
             "scrollbar-hidden block h-full w-full resize-none overflow-y-auto border-0 bg-transparent py-3 text-ui-reading leading-6 text-neutral-800 outline-none placeholder-ink-tertiary focus:ring-0 focus-visible:outline-none focus-visible:ring-0",
             layout.multiline ? "px-3 pb-12" : "pl-12 pr-40 sm:pr-72",
           )}
-          aria-label="对话输入框"
+          aria-label={t("composerInputLabel")}
         />
         </div>
 
@@ -228,37 +315,7 @@ export function ChatInputBox({
           {leadingControl}
           <div className="flex-1" />
           {trailingControl}
-          {disabled ? (
-            <button
-              type="button"
-              onClick={onStop}
-              className="group touch-target pointer-events-auto inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-transparent text-danger transition-[background-color,color,transform] duration-200 ease-out hover:-translate-y-px hover:bg-red-500/10 hover:text-danger-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 active:translate-y-0 active:scale-95 motion-reduce:transition-none motion-reduce:hover:transform-none   "
-              title={t("stopGeneration")}
-              aria-label={t("stopGeneration")}
-            >
-              <Square strokeWidth={2.5} className="h-4 w-4 transition-transform duration-200 ease-out group-hover:scale-90 motion-reduce:transition-none motion-reduce:group-hover:transform-none" aria-hidden="true" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={canSend ? onSend : undefined}
-              aria-disabled={!canSend}
-              className={clsx(
-                "ai-trigger group touch-target pointer-events-auto inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-transparent transition-[background-color,color,transform] duration-200 ease-out hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue active:translate-y-0 active:scale-95 motion-reduce:transition-none motion-reduce:hover:transform-none",
-                canSend
-                  ? "cursor-pointer text-sora-blue hover:bg-sora-blue/[0.08] hover:text-sora-blue-hover "
-                  : "cursor-default text-neutral-600 hover:bg-neutral-100  ",
-              )}
-              title={canSend ? t("send") : t("voicePlaceholder")}
-              aria-label={canSend ? t("send") : t("voicePlaceholder")}
-            >
-              {canSend ? (
-                <AIArrowUpIcon strokeWidth={2.5} className="h-4 w-4" />
-              ) : (
-                <AudioLines className="h-4 w-4 transition-transform duration-200 ease-out group-hover:scale-105 motion-reduce:transition-none motion-reduce:group-hover:transform-none" aria-hidden="true" />
-              )}
-            </button>
-          )}
+          {mainButton}
         </div>
       </div>
     </div>

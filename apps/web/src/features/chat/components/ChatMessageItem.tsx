@@ -1,14 +1,14 @@
 "use client";
 
-import React, { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
+  ArrowUpToLine,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronUp,
   CornerDownRight,
-  Info,
 } from "lucide-react";
 import { clsx } from "clsx";
 import {
@@ -16,7 +16,6 @@ import {
   AICopyIcon,
   AIPencilIcon,
   AIRefreshCwIcon,
-  AISparklesIcon,
   AIThumbsDownIcon,
   AIThumbsUpIcon,
   AITrash2Icon,
@@ -37,11 +36,11 @@ import { FEEDBACK_REASONS, type FeedbackReason } from "@/features/chat/model/fee
 import { setMessageFeedback } from "@/features/chat/actions/feedback";
 
 import { copyToClipboard } from "@/shared/lib/clipboard";
-import { formatDateTimeLocal } from "@/shared/lib/format";
+import { formatDateTimeLocal, formatDateTimeMinute } from "@/shared/lib/format";
 import { ASSISTANT_MESSAGE_CLASS, splitChatError, USER_MESSAGE_BUBBLE_CLASS } from "@/features/chat/components/messagePresentation";
 import { useClickOutside } from "@/shared/lib/useClickOutside";
 import { MessageImageAttachments } from "@/features/chat/components/MessageImageAttachments";
-import { LiveLatencyBadge, RunMetadataFields } from "@/features/chat/components/RunMetadataFields";
+import { RunMetadataFields } from "@/features/chat/components/RunMetadataFields";
 import { MessageProcessTrace } from "@/features/chat/components/MessageProcessTrace";
 
 /** 用户消息超过此行数才折叠(长消息默认收起,避免撑高会话)。 */
@@ -57,12 +56,6 @@ const FEEDBACK_REASON_I18N: Record<FeedbackReason, string> = {
   other: "feedbackReasonOther",
 };
 
-interface MessageRunMetadataDisplayProps {
-  metadata: MessageRunMetadata;
-  expanded: boolean;
-  panelId: string;
-}
-
 function hasRunDetails(metadata: MessageRunMetadata) {
   return Boolean(
     metadata.model?.trim()
@@ -77,36 +70,24 @@ function hasRunMetadata(metadata: MessageRunMetadata) {
   return hasRunDetails(metadata) || Boolean(metadata.completedAt);
 }
 
-/** assistant 回复底部的低干扰运行元数据入口。 */
+/** assistant 回复底部的常驻低干扰运行元数据签名(模型/耗时/token),全指针类型直接可见。 */
 export function MessageRunMetadataDisplay({
   metadata,
-  expanded,
-  panelId,
-}: MessageRunMetadataDisplayProps) {
+}: {
+  metadata: MessageRunMetadata;
+}) {
   const t = useTranslations("chat");
 
   if (!hasRunDetails(metadata)) return null;
 
   return (
-    <>
-      <div
-        role="group"
-        aria-label={t("responseDetails")}
-        className="min-w-0 max-w-full [@media(pointer:coarse)]:hidden"
-      >
-        <RunMetadataFields metadata={metadata} className="justify-start" />
-      </div>
-      {expanded && (
-        <div
-          id={panelId}
-          role="region"
-          aria-label={t("responseDetails")}
-          className="hidden min-w-0 max-w-full border-t border-morning-mist/80 pt-2  [@media(pointer:coarse)]:block"
-        >
-          <RunMetadataFields metadata={metadata} className="justify-start" />
-        </div>
-      )}
-    </>
+    <div
+      role="group"
+      aria-label={t("responseDetails")}
+      className="min-w-0 max-w-full"
+    >
+      <RunMetadataFields metadata={metadata} className="justify-start" />
+    </div>
   );
 }
 
@@ -166,7 +147,6 @@ function ChatMessageItemContent({
   domId,
 }: ChatMessageItemProps) {
   const t = useTranslations("chat");
-  const metadataPanelId = `run-metadata-${useId()}`;
   const {
     role,
     content,
@@ -185,8 +165,6 @@ function ChatMessageItemContent({
   const visibleRunMetadata = runMetadata && status !== "interrupted" && hasRunMetadata(runMetadata)
     ? runMetadata
     : undefined;
-  /** 流式计时起点:优先当前运行时;研究完成、正文流式期间 runtime 已清空,退化为最近 run 快照。 */
-  const streamingStartedAt = processRuntime?.startedAt ?? processTrace?.runs.at(-1)?.startedAt;
   const hasProcessTrace = Boolean(
     processTrace?.runs.at(-1)?.steps.length
       || processRuntime
@@ -221,8 +199,6 @@ function ChatMessageItemContent({
 
   // 复制按钮反馈
   const [copied, setCopied] = useState(false);
-  // 粗指针设备的回复元数据展开状态
-  const [metadataExpanded, setMetadataExpanded] = useState(false);
 
   // 重新生成换模型选择弹层(仅多模型时启用)
   const [regenOpen, setRegenOpen] = useState(false);
@@ -370,6 +346,23 @@ function ChatMessageItemContent({
     }
   };
 
+  // 回顶触发器只在回复超过一屏时出现:短回复没有滚回顶部的需求,常驻只会混淆语义
+  const messageBodyRef = useRef<HTMLDivElement>(null);
+  const [showScrollTopTrigger, setShowScrollTopTrigger] = useState(false);
+  useEffect(() => {
+    const el = messageBodyRef.current;
+    if (!el || role !== "assistant") return;
+    const update = () => setShowScrollTopTrigger(el.offsetHeight > window.innerHeight);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    window.addEventListener("resize", update);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", update);
+    };
+  }, [role]);
+
   // 是否可弹出操作菜单(移动长按 / 桌面右键):至少有编辑或删除之一可用
   const canEdit = Boolean(publicId && onEdit && !isStreaming && !conversationStreaming);
   const canDelete = Boolean(publicId && onRequestDelete && !conversationStreaming);
@@ -377,7 +370,7 @@ function ChatMessageItemContent({
 
   return (
     <div id={domId} className={clsx("group/message relative flex animate-in fade-in slide-in-from-bottom-2 duration-200 motion-reduce:animate-none scroll-mt-4", role === "user" ? "justify-end" : "justify-start")}>
-      {role === "assistant" && (
+      {role === "assistant" && showScrollTopTrigger && (
         <div className="absolute inset-y-0 -left-11 hidden w-7 @min-[54rem]:block">
           <button
             type="button"
@@ -389,11 +382,11 @@ function ChatMessageItemContent({
             title={t("scrollToReplyTop")}
             aria-label={t("scrollToReplyTop")}
           >
-            <AISparklesIcon className="w-3.5 h-3.5 text-sora-blue" />
+            <ArrowUpToLine className="w-3.5 h-3.5" aria-hidden="true" />
           </button>
         </div>
       )}
-      <div className={clsx("space-y-2", role === "user" ? "flex w-full max-w-[88%] flex-col items-end sm:max-w-[70%]" : "flex-1 min-w-0")}>
+      <div ref={messageBodyRef} className={clsx("space-y-2", role === "user" ? "flex w-full max-w-[88%] flex-col items-end sm:max-w-[70%]" : "flex-1 min-w-0")}>
         {role === "user" ? (
           /* 用户消息: 可编辑文本气泡 */
           (editing ? (<div className="w-full space-y-1.5">
@@ -511,7 +504,7 @@ function ChatMessageItemContent({
                     setDraftAttachments(attachments);
                     setEditing(true);
                   }}
-                  className="ai-trigger absolute -left-7 top-0 opacity-0 group-hover:opacity-100 [@media(pointer:coarse)]:opacity-100 transition-opacity p-1 rounded text-neutral-400 hover:text-neutral-600  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
+                  className="ai-trigger absolute -left-7 top-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 [@media(pointer:coarse)]:opacity-100 transition-opacity p-1 rounded text-neutral-400 hover:text-neutral-600  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
                   title={t("edit")}
                   aria-label={t("edit")}
                 >
@@ -522,7 +515,7 @@ function ChatMessageItemContent({
                 <button
                   type="button"
                   onClick={() => onRequestDelete?.(publicId)}
-                  className="ai-trigger absolute -left-7 top-7 p-1 rounded opacity-0 group-hover:opacity-100 [@media(pointer:coarse)]:opacity-100 text-neutral-500 hover:text-danger  transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
+                  className="ai-trigger absolute -left-7 top-7 p-1 rounded opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 [@media(pointer:coarse)]:opacity-100 text-neutral-500 hover:text-danger  transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue cursor-pointer"
                   title={t("delete")}
                   aria-label={t("delete")}
                 >
@@ -567,11 +560,6 @@ function ChatMessageItemContent({
               );
             })() : null}
           </div>)
-        )}
-
-        {/* 流式期间的实时耗时徽标:挂在回答下方,流结束后由耗时徽标接替 */}
-        {role === "assistant" && isStreaming && isLast && streamingStartedAt && (
-          <LiveLatencyBadge startedAt={streamingStartedAt} />
         )}
 
         {role === "assistant" && publicId && !(isStreaming && isLast) && (
@@ -765,37 +753,22 @@ function ChatMessageItemContent({
                 <span>{t("continueGenerating")}</span>
               </button>
             )}
-            {visibleRunMetadata && hasRunDetails(visibleRunMetadata) && (
-              <button
-                type="button"
-                onClick={() => setMetadataExpanded((value) => !value)}
-                className="touch-target hidden h-8 w-8 items-center justify-center rounded-md text-ink-tertiary transition-colors duration-150 hover:bg-nebula-silver/45 hover:text-space-ink/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue    [@media(pointer:coarse)]:inline-flex"
-                aria-label={t("responseDetails")}
-                title={t("responseDetails")}
-                aria-controls={metadataPanelId}
-                aria-expanded={metadataExpanded}
-              >
-                <Info className="size-3.5" aria-hidden="true" />
-              </button>
-            )}
             {visibleRunMetadata?.completedAt && (
               <time
                 dateTime={visibleRunMetadata.completedAt}
                 title={formatDateTimeLocal(visibleRunMetadata.completedAt)}
                 className="inline-flex h-8 shrink-0 items-center font-mono text-ui-body tabular-nums text-ink-tertiary "
               >
-                {formatDateTimeLocal(visibleRunMetadata.completedAt)}
+                {formatDateTimeMinute(visibleRunMetadata.completedAt)}
               </time>
             )}
             </div>
-            {visibleRunMetadata && (
-              <MessageRunMetadataDisplay
-                metadata={visibleRunMetadata}
-                expanded={metadataExpanded}
-                panelId={metadataPanelId}
-              />
-            )}
           </div>
+        )}
+
+        {/* 常驻运行元数据签名:模型/耗时/token 全端直接可见,不再藏进 hover 动作条或粗指针展开层 */}
+        {role === "assistant" && publicId && !(isStreaming && isLast) && visibleRunMetadata && (
+          <MessageRunMetadataDisplay metadata={visibleRunMetadata} />
         )}
       </div>
       {role === "user" && menuOpen && canShowMenu && (

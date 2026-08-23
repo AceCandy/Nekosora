@@ -148,7 +148,14 @@ export function MessageProcessTrace({
     return () => document.removeEventListener("keydown", closeOnEscape);
   }, [expanded]);
 
+  const errorMessage = content.match(/(?:^|\n\n)(\[错误\][\s\S]*)$/)?.[1];
+  const hasError = Boolean(errorMessage);
+  const cleanErrorMessage = errorMessage?.replace(/^\[错误\]\s*/, "");
+
   if (!hasTrace) return null;
+  // 无搜索/推理/工具的轻量 run 完成后不渲染"研究完成"摘要(未发生研究,标签属虚标);
+  // 真实模型与耗时由常驻元数据签名承接。运行中与出错/中断时仍保留状态行。
+  if (research.status === "completed" && !research.hasResearchActivity && !hasError) return null;
 
   const runningStage = research.currentStage ?? "understand";
   const terminalTitle = research.status === "completed"
@@ -156,9 +163,6 @@ export function MessageProcessTrace({
     : phase === "interrupted"
       ? t("researchInterrupted")
       : t("researchFailed");
-  const errorMessage = content.match(/(?:^|\n\n)(\[错误\][\s\S]*)$/)?.[1];
-  const hasError = Boolean(errorMessage);
-  const cleanErrorMessage = errorMessage?.replace(/^\[错误\]\s*/, "");
   const summaryParts = [terminalTitle];
   if (research.sourceCount) summaryParts.push(t("researchSourceCount", { count: research.sourceCount }));
   if (!hasError && research.status !== "error" && research.durationMs !== undefined) {
@@ -203,12 +207,18 @@ export function MessageProcessTrace({
                 {summaryText}
               </span>
               {research.status === "running" && !runningWarning && currentQuery && (
-                <span className="mt-0.5 block truncate text-ui-caption text-space-ink/60 ">
+                <span
+                  data-shimmer={currentQuery}
+                  className="research-status-shimmer mt-0.5 block truncate text-ui-caption text-space-ink/60 "
+                >
                   {currentQuery}
                 </span>
               )}
               {research.status === "running" && runningStage === "read" && !runningWarning && (
-                <span className="mt-0.5 block text-ui-caption text-space-ink/60 ">
+                <span
+                  data-shimmer={t("researchReadingReliableSources")}
+                  className="research-status-shimmer mt-0.5 block text-ui-caption text-space-ink/60 "
+                >
                   {t("researchReadingReliableSources")}
                 </span>
               )}
@@ -217,7 +227,10 @@ export function MessageProcessTrace({
                   {t("researchContinueWithSources", { count: research.sourceCount })}
                 </span>
               ) : research.status === "running" && research.sourceCount && (
-                <span className="mt-0.5 block text-ui-caption text-ink-tertiary ">
+                <span
+                  data-shimmer={t("researchReadCount", { count: research.sourceCount })}
+                  className="research-status-shimmer mt-0.5 block text-ui-caption text-ink-tertiary "
+                >
                   {t("researchReadCount", { count: research.sourceCount })}
                 </span>
               )}

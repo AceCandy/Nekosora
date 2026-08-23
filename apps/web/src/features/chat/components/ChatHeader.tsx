@@ -41,9 +41,16 @@ export default function ChatHeader({
       transparent ? "bg-transparent" : "bg-nebula-white",
     )}>
       <div className="flex min-w-0 flex-1 items-center gap-1">
-        <h1 className="min-w-0 truncate text-ui-reading font-semibold text-space-ink " title={title}>
-          {title}
-        </h1>
+        {/* 空会话欢迎态已有天幕 h1,此时标题降级为 p,保证一页一个 h1 */}
+        {transparent ? (
+          <p className="min-w-0 truncate text-ui-reading font-semibold text-space-ink " title={title}>
+            {title}
+          </p>
+        ) : (
+          <h1 className="min-w-0 truncate text-ui-reading font-semibold text-space-ink " title={title}>
+            {title}
+          </h1>
+        )}
         {renderStyleMenu}
       </div>
       {conversationId && (

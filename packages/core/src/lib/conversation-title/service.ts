@@ -376,18 +376,35 @@ async function findPublicModelByName(name: string): Promise<ResolvedTitleModel |
   return model ? { id: String(model.id), name: String(model.name) } : null;
 }
 
-/** Fallback 标题：截断首条消息到指定长度，折叠空白。 */
-function truncateFallbackTitle(raw: string): string {
-  const t = raw.trim().replace(/\s+/g, " ");
-  return t.length > FALLBACK_MAX_LEN ? t.slice(0, FALLBACK_MAX_LEN) + "…" : t || DEFAULT_TITLE;
+/**
+ * 边界感知截断:优先回退到最近的句读标点(连同标点保留),其次空格(英文词边界),
+ * 避免"…可提"这类句中残句;边界位置太靠前(<40% 长度)则放弃回退直接硬截。
+ */
+function truncateAtBoundary(t: string, maxLen: number): string {
+  if (t.length <= maxLen) return t;
+  const cut = t.slice(0, maxLen);
+  const minPos = Math.floor(maxLen * 0.4);
+  const punctuation = Math.max(
+    ...["。", "!", "?", "!", "?", ";", ";", "、", ",", ",", ":", ":"].map((p) => cut.lastIndexOf(p)),
+  );
+  if (punctuation >= minPos) return cut.slice(0, punctuation + 1);
+  const space = cut.lastIndexOf(" ");
+  if (space >= minPos) return cut.slice(0, space);
+  return cut;
 }
 
-/** 清洗 LLM 输出为干净标题：去引号/前缀/换行并截断。 */
+/** Fallback 标题：截断首条消息到指定长度，折叠空白；超长时在句读/词边界截断。 */
+function truncateFallbackTitle(raw: string): string {
+  const t = raw.trim().replace(/\s+/g, " ");
+  return t.length > FALLBACK_MAX_LEN ? truncateAtBoundary(t, FALLBACK_MAX_LEN) + "…" : t || DEFAULT_TITLE;
+}
+
+/** 清洗 LLM 输出为干净标题：去引号/前缀/换行并截断；超长时在句读/词边界截断。 */
 function sanitizeTitle(raw: string): string {
   let t = raw.trim();
   t = t.replace(/^["'“”‘’《「]+|["'“”‘’》」]+$/g, "");
   t = t.replace(/^(标题|title)[:：]\s*/i, "");
   t = t.replace(/\s+/g, " ").trim();
-  if (t.length > MAX_TITLE_LEN) t = t.slice(0, MAX_TITLE_LEN);
+  if (t.length > MAX_TITLE_LEN) t = truncateAtBoundary(t, MAX_TITLE_LEN);
   return t;
 }

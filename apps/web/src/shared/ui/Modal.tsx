@@ -67,7 +67,12 @@ export default function Modal({
     const dlg = ref.current;
     if (!dlg) return;
     if (open) {
-      if (!dlg.open) dlg.showModal();
+      if (!dlg.open) {
+        dlg.showModal();
+        // 原生 showModal 会把焦点委派给第一个可聚焦元素(通常是 header 关闭按钮);
+        // React 的 autoFocus 不落 DOM 属性,内容侧用 data-autofocus 声明初始焦点(如搜索框)
+        dlg.querySelector<HTMLElement>("[data-autofocus]")?.focus();
+      }
     } else {
       if (dlg.open) dlg.close();
     }
