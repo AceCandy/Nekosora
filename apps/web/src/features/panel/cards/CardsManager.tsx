@@ -7,6 +7,7 @@ import { clsx } from "clsx";
 import { Button } from "@/shared/ui/Button";
 import Modal from "@/shared/ui/Modal";
 import Input from "@/shared/ui/Input";
+import UnsavedChangesDialog, { useUnsavedChanges } from "@/shared/ui/UnsavedChangesDialog";
 import {
   listMyCards,
   createMyCard,
@@ -193,6 +194,7 @@ function CardEditor({
   const [error, setError] = useState<string | null>(null);
   const t = useTranslations("panel.cards");
   const tc = useTranslations("common");
+  const { contentRef, requestClose, dialogProps } = useUnsavedChanges<HTMLDivElement>(onClose);
 
   const handleSave = async () => {
     setError(null);
@@ -211,8 +213,9 @@ function CardEditor({
   };
 
   return (
-    <Modal open onClose={onClose} title={title} dialogClassName="m-auto w-[min(640px,92vw)] rounded-lg border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/40   " bodyClassName="p-0">
-      <div className="p-5 space-y-3 max-h-[80vh] overflow-y-auto">
+    <>
+      <Modal open onClose={requestClose} title={title} dialogClassName="m-auto w-[min(640px,92vw)] rounded-lg border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/40   " bodyClassName="p-0">
+      <div ref={contentRef} className="p-5 space-y-3 max-h-[80vh] overflow-y-auto">
         {readOnly && (
           <p className="text-ui-caption text-warning  bg-warning/10  rounded p-2">
             {t("builtinReadonly")}
@@ -269,12 +272,14 @@ function CardEditor({
         {error && <p className="text-ui-caption text-danger">{error}</p>}
       </div>
       <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-neutral-200 ">
-        <Button variant="ghost" onClick={onClose}>{tc("cancel")}</Button>
+        <Button variant="ghost" onClick={requestClose}>{tc("cancel")}</Button>
         <Button onClick={handleSave} disabled={saving || readOnly}>
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
           {tc("save")}
         </Button>
       </div>
-    </Modal>
+      </Modal>
+      <UnsavedChangesDialog {...dialogProps} />
+    </>
   );
 }

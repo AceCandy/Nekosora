@@ -37,7 +37,11 @@
     "success": "成功",
     "warning": "警告",
     "info": "提示",
-    "language": "语言"
+    "language": "语言",
+    "unsavedChangesTitle": "放弃未保存的修改？",
+    "unsavedChangesMessage": "当前修改尚未保存，关闭后将会丢失。",
+    "discardChanges": "放弃修改",
+    "continueEditing": "继续编辑"
   },
   "markdown": {
     "linkSafety": {

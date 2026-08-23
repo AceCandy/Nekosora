@@ -7,6 +7,7 @@ import Input from "@/shared/ui/Input";
 import Select from "@/shared/ui/Select";
 import { Button } from "@/shared/ui/Button";
 import Modal from "@/shared/ui/Modal";
+import UnsavedChangesDialog, { useUnsavedChanges } from "@/shared/ui/UnsavedChangesDialog";
 import type { ProbeResult } from "@/lib/providers/probe";
 
 export interface EditorRow {
@@ -76,6 +77,21 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
     // 批量设置弹窗。
     const [batchOpen, setBatchOpen] = useState(false);
     const [batchText, setBatchText] = useState("");
+    const closeNoteDialog = () => setNoteDialog(null);
+    const closeBatchDialog = () => {
+      setBatchText("");
+      setBatchOpen(false);
+    };
+    const {
+      contentRef: noteContentRef,
+      requestClose: requestNoteClose,
+      dialogProps: noteDialogProps,
+    } = useUnsavedChanges<HTMLDivElement>(closeNoteDialog);
+    const {
+      contentRef: batchContentRef,
+      requestClose: requestBatchClose,
+      dialogProps: batchDialogProps,
+    } = useUnsavedChanges<HTMLDivElement>(closeBatchDialog);
 
     // 保存时查重命中:dup=后出现的重复行,first=首次出现的同值行;null=无重复。
     const [duplicateInfo, setDuplicateInfo] = useState<{ dup: number; first: number } | null>(null);
@@ -399,11 +415,11 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
 
         <Modal
           open={noteDialog !== null}
-          onClose={() => setNoteDialog(null)}
+          onClose={requestNoteClose}
           title={t("keyNoteDialogTitle")}
           dialogClassName="m-auto w-[min(400px,92vw)] rounded-lg border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/40   "
         >
-          <div className="space-y-3">
+          <div ref={noteContentRef} className="space-y-3">
             <textarea
               value={noteDraft}
               onChange={(event) => setNoteDraft(event.target.value)}
@@ -413,7 +429,7 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
               className="w-full resize-y rounded-md border border-morning-mist bg-white px-3 py-2 text-ui-body text-space-ink placeholder:text-neutral-600 focus:border-sora-blue focus:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue    "
             />
             <div className="flex justify-end gap-2.5">
-              <Button variant="secondary" size="sm" onClick={() => setNoteDialog(null)}>{t("cancel")}</Button>
+              <Button variant="secondary" size="sm" onClick={requestNoteClose}>{t("cancel")}</Button>
               <Button
                 variant="contrast"
                 size="sm"
@@ -428,6 +444,7 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
             </div>
           </div>
         </Modal>
+        <UnsavedChangesDialog {...noteDialogProps} />
 
         <p className="text-ui-caption text-neutral-400  leading-normal flex items-start gap-1">
           <span className="text-sora-blue shrink-0">※</span>
@@ -435,8 +452,8 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
         </p>
 
         {/* 批量设置弹窗(嵌套于编辑服务商弹窗;原生 <dialog> 支持叠层展示)。 */}
-        <Modal open={batchOpen} onClose={() => setBatchOpen(false)} title={t("batchAddTitle")}>
-          <div className="space-y-3">
+        <Modal open={batchOpen} onClose={requestBatchClose} title={t("batchAddTitle")}>
+          <div ref={batchContentRef} className="space-y-3">
             <p className="text-ui-caption text-neutral-500  leading-normal">
               {t("batchAddHint")}
             </p>
@@ -453,10 +470,7 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => {
-                  setBatchText("");
-                  setBatchOpen(false);
-                }}
+                onClick={requestBatchClose}
               >
                 {t("cancel")}
               </Button>
@@ -466,6 +480,7 @@ const KeyBundleEditor = forwardRef<KeyBundleEditorHandle, KeyBundleEditorProps>(
             </div>
           </div>
         </Modal>
+        <UnsavedChangesDialog {...batchDialogProps} />
       </div>
     );
   },

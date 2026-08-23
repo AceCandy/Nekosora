@@ -37,7 +37,11 @@
     "success": "Success",
     "warning": "Warning",
     "info": "Info",
-    "language": "Language"
+    "language": "Language",
+    "unsavedChangesTitle": "Discard unsaved changes?",
+    "unsavedChangesMessage": "Your changes have not been saved. Closing now will discard them.",
+    "discardChanges": "Discard changes",
+    "continueEditing": "Continue editing"
   },
   "markdown": {
     "linkSafety": {

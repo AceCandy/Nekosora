@@ -4,6 +4,7 @@ import { useTranslations } from "next-intl";
 import Modal from "@/shared/ui/Modal";
 import Input from "@/shared/ui/Input";
 import { Button } from "@/shared/ui/Button";
+import UnsavedChangesDialog, { useUnsavedChanges } from "@/shared/ui/UnsavedChangesDialog";
 import { ShieldAlert } from "lucide-react";
 
 export interface RenderStyle {
@@ -46,14 +47,17 @@ export default function RenderStyleFormDialog({
     onClose();
     setFormKey((k) => k + 1);
   };
+  const { contentRef, requestClose, dialogProps } = useUnsavedChanges<HTMLFormElement>(handleClose);
 
   return (
+    <>
     <Modal
       open={open}
-      onClose={handleClose}
+      onClose={requestClose}
       title={isEdit ? t("editTitle") : t("createTitle")}
     >
       <form
+        ref={contentRef}
         key={formKey}
         action={action}
         onSubmit={() => {
@@ -135,7 +139,7 @@ export default function RenderStyleFormDialog({
           <Button
             variant="secondary"
             size="sm"
-            onClick={handleClose}
+            onClick={requestClose}
           >
             {t("cancel")}
           </Button>
@@ -149,5 +153,7 @@ export default function RenderStyleFormDialog({
         </div>
       </form>
     </Modal>
+    <UnsavedChangesDialog {...dialogProps} />
+    </>
   );
 }

@@ -9,6 +9,7 @@ import type { ModelCatalogOption } from "@/features/models/ModelsManager";
 import CatalogDetailCard from "@/features/models/CatalogDetailCard";
 import { rankCatalogOptions } from "@/features/models/model-catalog-options";
 import Combobox from "@/shared/ui/Combobox";
+import UnsavedChangesDialog, { useUnsavedChanges } from "@/shared/ui/UnsavedChangesDialog";
 import { Eye } from "lucide-react";
 
 export interface ModelInitial {
@@ -70,12 +71,15 @@ export default function ModelFormDialog({
     setExternalModelName(ini?.name ?? "");
     setFormError(null);
   };
+  const { contentRef, requestClose, dialogProps } = useUnsavedChanges<HTMLFormElement>(handleClose);
 
   const title = isEdit ? t("editModel") : t("addModel");
 
   return (
-    <Modal open={open} onClose={handleClose} title={title}>
+    <>
+    <Modal open={open} onClose={requestClose} title={title}>
       <form
+        ref={contentRef}
         key={formKey}
         onSubmit={(e) => {
           e.preventDefault();
@@ -225,7 +229,7 @@ export default function ModelFormDialog({
           <Button
             type="button"
             variant="secondary"
-            onClick={handleClose}
+            onClick={requestClose}
             className="px-4 py-2 text-ui-caption font-semibold"
           >
             {t("cancel")}
@@ -242,5 +246,7 @@ export default function ModelFormDialog({
         </div>
       </form>
     </Modal>
+    <UnsavedChangesDialog {...dialogProps} />
+    </>
   );
 }

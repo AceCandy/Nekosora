@@ -23,6 +23,7 @@ import ConfirmDialog from "@/shared/ui/ConfirmDialog";
 import Modal from "@/shared/ui/Modal";
 import Popover from "@/shared/ui/Popover";
 import { Button } from "@/shared/ui/Button";
+import UnsavedChangesDialog, { useUnsavedChanges } from "@/shared/ui/UnsavedChangesDialog";
 import { Plus, Settings2, LogOut, Menu, Search, Pin, Archive, ImageIcon, Loader2, ChevronDown, ArrowRight } from "lucide-react";
 import { AIPanelLeftCloseIcon, AIPanelLeftOpenIcon, AIPencilIcon, AISearchIcon, AITrash2Icon, AIXIcon } from "@/shared/components/animated-icons";
 import { AnimatedText } from "@/shared/components/AnimatedText";
@@ -169,6 +170,11 @@ export default function Sidebar({
   const [renameTitle, setRenameTitle] = useState("");
   const [renameSaving, setRenameSaving] = useState(false);
   const [renameError, setRenameError] = useState(false);
+  const {
+    contentRef: renameContentRef,
+    requestClose: requestRenameClose,
+    dialogProps: renameDialogProps,
+  } = useUnsavedChanges<HTMLFormElement>(() => setRenameTarget(null));
   const [boundaries] = useState(() => createConversationGroupBoundaries());
   const [groupSummary, setGroupSummary] = useState<ConversationGroupSummary[]>([]);
   const [summaryVersion, setSummaryVersion] = useState(0);
@@ -889,16 +895,17 @@ export default function Sidebar({
         }}
       />
 
-      <Modal open={renameTarget !== null} onClose={() => { if (!renameSaving) setRenameTarget(null); }} title={actionRenameText} dialogClassName="m-auto w-[min(420px,92vw)] rounded-lg border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/40">
-        <form onSubmit={(event) => { event.preventDefault(); void submitRename(); }} className="space-y-4">
+      <Modal open={renameTarget !== null} onClose={() => { if (!renameSaving) requestRenameClose(); }} title={actionRenameText} dialogClassName="m-auto w-[min(420px,92vw)] rounded-lg border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/40">
+        <form ref={renameContentRef} onSubmit={(event) => { event.preventDefault(); void submitRename(); }} className="space-y-4">
           <input autoFocus data-autofocus value={renameTitle} onChange={(event) => { setRenameTitle(event.target.value); setRenameError(false); }} maxLength={200} aria-label={actionRenameText} aria-invalid={renameError} className="w-full rounded-md border border-morning-mist bg-white px-3 py-2 text-ui-body text-space-ink focus:border-sora-blue focus:outline-none focus:ring-2 focus:ring-sora-blue/20" />
           {renameError && <p role="alert" className="text-ui-caption text-danger">{tSidebar("renameFailed")}</p>}
           <div className="flex justify-end gap-2">
-            <button type="button" onClick={() => setRenameTarget(null)} disabled={renameSaving} className="touch-target rounded-md px-3 py-2 text-ui-body text-neutral-600 hover:bg-neutral-100 disabled:opacity-50">{tCommon("cancel")}</button>
+            <button type="button" onClick={requestRenameClose} disabled={renameSaving} className="touch-target rounded-md px-3 py-2 text-ui-body text-neutral-600 hover:bg-neutral-100 disabled:opacity-50">{tCommon("cancel")}</button>
             <Button type="submit" variant="primary" loading={renameSaving} disabled={!renameTitle.trim()} className="px-3 py-2">{renameSaveText}</Button>
           </div>
         </form>
       </Modal>
+      <UnsavedChangesDialog {...renameDialogProps} />
 
       <Modal open={searchOpen} onClose={() => setSearchOpen(false)} title={searchText} dialogClassName="m-auto w-[min(720px,92vw)] rounded-xl border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/40   ">
         <div className="space-y-4">

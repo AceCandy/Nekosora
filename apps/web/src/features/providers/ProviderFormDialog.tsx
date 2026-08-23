@@ -11,6 +11,7 @@ import Input from "@/shared/ui/Input";
 import Select from "@/shared/ui/Select";
 import Popover from "@/shared/ui/Popover";
 import { Button } from "@/shared/ui/Button";
+import UnsavedChangesDialog, { useUnsavedChanges } from "@/shared/ui/UnsavedChangesDialog";
 import { ListPlus, Loader2, ChevronDown } from "lucide-react";
 
 interface ProviderFormDialogProps {
@@ -90,6 +91,7 @@ export default function ProviderFormDialog({
     setModelSearch("");
     setNoKey(isEdit && !initialHasKeys);
   };
+  const { contentRef, requestClose, dialogProps } = useUnsavedChanges<HTMLFormElement>(handleClose);
 
   // 拉取最新上游模型列表(用已保存配置),刷新检测模型的可选列表。
   // 仅在距上次拉取超过缓存窗口(或从未拉取)时才发真实请求,避免频繁点下拉打上游。
@@ -149,12 +151,14 @@ export default function ProviderFormDialog({
   const modelsUrlPreview = baseUrl ? resolveModelsUrl(protocol as ProviderProtocol, baseUrl) : "";
 
   return (
+    <>
     <Modal
       open={open}
-      onClose={handleClose}
+      onClose={requestClose}
       title={isEdit ? t("editTitle") : t("addTitle")}
     >
       <form
+        ref={contentRef}
         key={formKey}
         action={action}
         onSubmit={(e) => {
@@ -409,7 +413,7 @@ export default function ProviderFormDialog({
           <Button
             variant="secondary"
             size="sm"
-            onClick={handleClose}
+            onClick={requestClose}
           >
             {t("cancel")}
           </Button>
@@ -423,5 +427,7 @@ export default function ProviderFormDialog({
         </div>
       </form>
     </Modal>
+    <UnsavedChangesDialog {...dialogProps} />
+    </>
   );
 }

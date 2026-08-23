@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import type { FormDataSerializableAction } from "@/features/providers/types";
 import Modal from "@/shared/ui/Modal";
+import UnsavedChangesDialog, { useUnsavedChanges } from "@/shared/ui/UnsavedChangesDialog";
 import UpstreamModelPicker, { type FetchModelsAction } from "@/features/models/UpstreamModelPicker";
 import {
   ROUTE_API_FORMATS,
@@ -107,6 +108,7 @@ export default function RouteFormDialog({
     onClose();
     setFormKey((k) => k + 1);
   };
+  const { contentRef, requestClose, dialogProps } = useUnsavedChanges<HTMLFormElement>(handleClose);
 
   const selectedProvider = providers.find((provider) => provider.id === providerId);
   const formatOptions = modelType === "chat"
@@ -125,12 +127,14 @@ export default function RouteFormDialog({
   };
 
   return (
+    <>
     <Modal
       open={open}
-      onClose={handleClose}
+      onClose={requestClose}
       title={isEdit ? t("editRoute") : t("addRouteTitle")}
     >
       <form
+        ref={contentRef}
         key={formKey}
         action={action}
         onSubmit={() => setTimeout(handleClose, 0)}
@@ -245,7 +249,7 @@ export default function RouteFormDialog({
         <div className="flex justify-end gap-2 pt-2">
           <button
             type="button"
-            onClick={handleClose}
+            onClick={requestClose}
             className="rounded-md border border-neutral-300 px-4 py-2 text-ui-body hover:bg-neutral-100  "
           >
             {t("cancel")}
@@ -259,5 +263,7 @@ export default function RouteFormDialog({
         </div>
       </form>
     </Modal>
+    <UnsavedChangesDialog {...dialogProps} />
+    </>
   );
 }

@@ -149,6 +149,16 @@ document.documentElement.classList.remove("dark");
 - **可持引用的组件用 `forwardRef` + `displayName`**(见 `Button.tsx`)。
 - **受控浮层**(`Popover`/`OptionPicker`/`Modal`):`open` / `onClose` 由调用方持有,组件本身不存显隐状态;触发器作为 `children` 或 `trigger` 传入。单选/多选用 `mode: "single" | "multi"` 区分。
 - **Modal 可访问名称**:有非空 `title` 时用 `aria-labelledby` 指向可见标题,不得再用 `aria-label` 覆盖;无可见标题时调用方必须传 `ariaLabel`。关闭按钮统一使用 `common.close` 翻译。
+- **持久化表单关闭保护**:可保存的 Modal 表单统一复用 `shared/ui/UnsavedChangesDialog`。`Modal.onClose` 与取消按钮走 `requestClose`,表单或字段容器挂稳定的 `contentRef`;保存成功仍调用原真实关闭函数,避免再弹放弃确认。搜索、预览和即时生效设置不接入。
+  ```tsx
+  const { contentRef, requestClose, dialogProps } = useUnsavedChanges<HTMLFormElement>(handleClose);
+
+  <Modal open={open} onClose={requestClose} title={title}>
+    <form ref={contentRef} onSubmit={save}>...</form>
+  </Modal>
+  <UnsavedChangesDialog {...dialogProps} />
+  ```
+  守卫以内容首次挂载时的 DOM 表单快照为基线,因此同时覆盖受控和非受控字段,也允许用户改回原值后直接关闭。回归测试至少覆盖 clean、dirty、恢复基线、继续编辑、放弃修改,并锁定 Modal 的遮罩、Esc、X 共用 `onClose`。
 - 组件首行 `"use client"`;props 用具名 `interface`,导出供调用方复用。
 
 ### 客户端一次性请求生命周期
