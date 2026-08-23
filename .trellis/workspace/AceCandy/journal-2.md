@@ -1302,3 +1302,26 @@ Refined chat interaction, research status, accessibility, login visuals, and con
 ### Status
 
 [OK] **Completed**
+
+
+## Session 120: 重设计设置控制面
+
+**Date**: 2026-08-24
+**Task**: 重设计设置控制面
+**Branch**: `main`
+
+### Summary
+
+将系统设置重组为四分类控制面，新增服务端唯一活动变更集、跨资源原子发布、不可变 revision 历史、指定发布反向撤销、revision-aware 缓存，以及持久化治理小时聚合与历史回放；补齐表单失败保留、提交反馈、预览和键盘排序。全量单测、lint、typecheck 与 diff 检查通过，真实 PostgreSQL 集成和浏览器验收因环境限制未执行。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8d5df90` | (see git log) |
+| `301c230` | (see git log) |
+| `3dc5f95` | (see git log) |
+
+### Status
+
+[OK] **Completed**
