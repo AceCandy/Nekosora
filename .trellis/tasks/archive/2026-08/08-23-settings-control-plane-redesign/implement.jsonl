@@ -1,0 +1,9 @@
+{"file":".trellis/spec/backend/index.md","reason":"后端规范入口与实施前检查清单。"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"PostgreSQL schema、Drizzle 迁移、journal/snapshot 与数据库约束。"}
+{"file":".trellis/spec/backend/gateway-governance.md","reason":"治理策略、准入事实源、管理员写入边界与治理测试契约。"}
+{"file":".trellis/spec/backend/observability-retention.md","reason":"小时聚合指标、90 天保留和现有维护任务约束。"}
+{"file":".trellis/spec/frontend/index.md","reason":"管理设置页的前端规范入口与质量门。"}
+{"file":".trellis/spec/frontend/directory-structure.md","reason":"设置路由、feature 与领域服务的目录职责。"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"设置分类、Server Action、响应式与无障碍组件约束。"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"服务端状态、草稿表单和 revalidatePath 边界。"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Zod 信任边界、DTO 和可序列化类型约束。"}

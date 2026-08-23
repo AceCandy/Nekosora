@@ -1,0 +1,9 @@
+{"file":".trellis/spec/backend/index.md","reason":"复核后端分层、错误处理与测试总要求。"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"复核 SQL、Drizzle journal/snapshot、不可变约束与迁移测试。"}
+{"file":".trellis/spec/backend/gateway-governance.md","reason":"复核原子保存、429/503 语义、聚合口径和治理安全边界。"}
+{"file":".trellis/spec/backend/observability-retention.md","reason":"复核低基数指标、90 天清理边界、维护 claim 与相关测试。"}
+{"file":".trellis/spec/frontend/index.md","reason":"复核管理页 Server/Client 边界、鉴权与前端质量门。"}
+{"file":".trellis/spec/frontend/directory-structure.md","reason":"复核页面、组件、action 与领域服务职责。"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"复核 URL 分类、表单、焦点、触控目标和响应式行为。"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"复核草稿保存、失败保留输入、刷新和多标签一致性。"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"复核边界校验、DTO 唯一来源和业务类型安全。"}
