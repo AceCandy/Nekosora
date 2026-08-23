@@ -145,7 +145,7 @@ export function ChatInputBox({
       <button
         type="button"
         onClick={speech.stop}
-        className="touch-target pointer-events-auto inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-red-500/[0.08] text-danger motion-safe:animate-pulse focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+        className="touch-target pointer-events-auto inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-sora-blue/[0.08] text-sora-blue motion-safe:animate-pulse focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
         title={t("voiceInputStop")}
         aria-label={t("voiceInputStop")}
       >
