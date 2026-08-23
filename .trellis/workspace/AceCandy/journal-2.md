@@ -1280,3 +1280,25 @@ Refined chat interaction, research status, accessibility, login visuals, and con
 ### Status
 
 [OK] **Completed**
+
+
+## Session 119: 保护弹窗未保存表单
+
+**Date**: 2026-08-23
+**Task**: 保护弹窗未保存表单
+**Branch**: `main`
+
+### Summary
+
+统一保护可保存弹窗表单的未保存修改，补充双语文案、共享守卫、关闭入口测试和项目规范；同时提交语音停止按钮配色调整。lint、typecheck 与全量测试通过。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c608d74` | (see git log) |
+| `0eb2347` | (see git log) |
+
+### Status
+
+[OK] **Completed**
