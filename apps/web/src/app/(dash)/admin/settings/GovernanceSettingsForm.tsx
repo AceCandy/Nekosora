@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { LoaderCircle, Save } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type {
@@ -171,18 +171,15 @@ export default function GovernanceSettingsForm({
                             <span className="sr-only">{t(field.labelKey)} - </span>
                             {t(scope.labelKey)}
                           </label>
-                          <Input
+                          <GovernanceFieldInput
+                            key={`${policyKey}:${name}`}
                             id={name}
                             name={name}
-                            type="number"
-                            inputMode="numeric"
                             min={fieldBounds.min}
                             max={fieldBounds.max}
-                            step={1}
-                            required
-                            defaultValue={policy[scope.key][field.key]}
+                            initialValue={policy[scope.key][field.key]}
                             aria-label={label}
-                            aria-describedby={unitId}
+                            describedBy={unitId}
                             disabled={pending}
                           />
                         </div>
@@ -199,10 +196,10 @@ export default function GovernanceSettingsForm({
       <div className="mt-6 flex flex-col gap-3 border-t border-morning-mist pt-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-h-5 text-ui-body" aria-live="polite">
           {!pending && state.status === "success" && (
-            <p className="text-green-700" role="status">{t("saved")}</p>
+            <p className="text-success" role="status">{t("saved")}</p>
           )}
           {!pending && state.status === "error" && state.error && (
-            <p className="text-red-700" role="alert">{t(state.error)}</p>
+            <p className="text-danger" role="alert">{t(state.error)}</p>
           )}
         </div>
 
@@ -222,5 +219,38 @@ export default function GovernanceSettingsForm({
         </Button>
       </div>
     </form>
+  );
+}
+
+interface GovernanceFieldInputProps {
+  id: string;
+  name: string;
+  min: number;
+  max: number;
+  initialValue: number;
+  "aria-label": string;
+  describedBy: string;
+  disabled: boolean;
+}
+
+/** 受控值可抵抗 React Action 的原生 form reset，失败时保留当前输入。 */
+function GovernanceFieldInput(props: GovernanceFieldInputProps) {
+  const [value, setValue] = useState(String(props.initialValue));
+  return (
+    <Input
+      id={props.id}
+      name={props.name}
+      type="number"
+      inputMode="numeric"
+      min={props.min}
+      max={props.max}
+      step={1}
+      required
+      value={value}
+      onChange={(event) => setValue(event.target.value)}
+      aria-label={props["aria-label"]}
+      aria-describedby={props.describedBy}
+      disabled={props.disabled}
+    />
   );
 }

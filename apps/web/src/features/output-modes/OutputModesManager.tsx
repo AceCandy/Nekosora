@@ -16,7 +16,18 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Plus, Edit2, Play, Square, Trash2, ShieldAlert, GripVertical } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  Eye,
+  Plus,
+  Edit2,
+  Play,
+  Square,
+  Trash2,
+  ShieldAlert,
+  GripVertical,
+} from "lucide-react";
 import { clsx } from "clsx";
 import OutputModeFormDialog, { type OutputMode } from "./OutputModeFormDialog";
 import ConfirmDialog from "@/shared/ui/ConfirmDialog";
@@ -45,7 +56,9 @@ export default function OutputModesManager({
   const [addOpen, setAddOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [, startTransition] = useTransition();
+  const [previewId, setPreviewId] = useState<string | null>(modes[0]?.id ?? null);
+  const [feedback, setFeedback] = useState<"idle" | "success" | "error">("idle");
+  const [pending, startTransition] = useTransition();
 
   // 乐观顺序:拖动时立即按新 id 顺序重排渲染,revalidate 后自动对齐真实数据(顺序一致)。
   const [optimisticModes, setOptimisticModes] = useOptimistic(
@@ -64,6 +77,32 @@ export default function OutputModesManager({
 
   const editing = optimisticModes.find((m) => m.id === editId) ?? null;
   const deleting = optimisticModes.find((m) => m.id === deleteId) ?? null;
+  const previewing = optimisticModes.find((m) => m.id === previewId) ?? optimisticModes[0] ?? null;
+
+  async function performAction(action: () => void | Promise<void>) {
+    setFeedback("idle");
+    try {
+      await action();
+      setFeedback("success");
+    } catch (error) {
+      setFeedback("error");
+      throw error;
+    }
+  }
+
+  function runAction(action: () => void | Promise<void>) {
+    startTransition(async () => {
+      await performAction(action).catch(() => undefined);
+    });
+  }
+
+  function reorder(newIds: string[]) {
+    if (pending) return;
+    startTransition(async () => {
+      setOptimisticModes(newIds);
+      await performAction(() => reorderAction(newIds)).catch(() => undefined);
+    });
+  }
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -76,10 +115,15 @@ export default function OutputModesManager({
     // async transition:await server action 期间 transition 保持 pending,useOptimistic
     // 乐观态持续到 revalidate 送回真实数据(顺序一致),避免「新序→旧序→新序」闪动。
     // 与本仓所有 startTransition(async () => await ...Action()) 约定一致。
-    startTransition(async () => {
-      setOptimisticModes(newIds);
-      await reorderAction(newIds);
-    });
+    reorder(newIds);
+  }
+
+  function move(id: string, offset: -1 | 1) {
+    const ids = optimisticModes.map((mode) => mode.id);
+    const from = ids.indexOf(id);
+    const to = from + offset;
+    if (from < 0 || to < 0 || to >= ids.length) return;
+    reorder(arrayMove(ids, from, to));
   }
 
   return (
@@ -92,6 +136,7 @@ export default function OutputModesManager({
           variant="primary"
           size="sm"
           onClick={() => setAddOpen(true)}
+          disabled={pending}
           className="font-semibold"
         >
           <Plus className="w-3.5 h-3.5" />
@@ -99,9 +144,28 @@ export default function OutputModesManager({
         </Button>
       </div>
 
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <div className="rounded-lg border border-morning-mist  bg-nebula-white  overflow-hidden transition-colors duration-150">
-          <table className="w-full text-ui-body border-collapse text-left">
+      <div className="min-h-5 text-ui-body" aria-live="polite">
+        {pending && <p className="text-neutral-600">{t("saving")}</p>}
+        {!pending && feedback === "success" && <p role="status" className="text-success">{t("saved")}</p>}
+        {!pending && feedback === "error" && <p role="alert" className="text-danger">{t("saveFailed")}</p>}
+      </div>
+
+      {previewing && (
+        <section className="grid gap-3 rounded-lg border border-morning-mist bg-neutral-50/60 p-4 lg:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
+          <div>
+            <p className="text-ui-caption font-medium text-neutral-500">{t("previewTitle")}</p>
+            <h3 className="mt-1 text-ui-body font-semibold text-space-ink">{previewing.name}</h3>
+            <p className="mt-1 text-ui-caption text-neutral-500">{t("previewHint")}</p>
+          </div>
+          <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-md border border-morning-mist bg-nebula-white p-3 text-ui-caption leading-relaxed text-neutral-700">
+            {previewing.systemPrompt}
+          </pre>
+        </section>
+      )}
+
+      <DndContext id="output-modes-sortable" sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <div className="overflow-x-auto rounded-lg border border-morning-mist bg-nebula-white transition-colors duration-150">
+          <table className="w-full min-w-[760px] text-ui-body border-collapse text-left">
             <thead className="bg-neutral-50/70  border-b border-morning-mist  text-neutral-500  font-mono text-ui-caption uppercase">
               <tr>
                 <th className="p-3.5 w-8" />
@@ -121,13 +185,18 @@ export default function OutputModesManager({
                 </tr>
               ) : (
                 <SortableContext items={optimisticModes.map((m) => m.id)} strategy={verticalListSortingStrategy}>
-                  {optimisticModes.map((m) => (
+                  {optimisticModes.map((m, index) => (
                     <SortableOutputModeRow
                       key={m.id}
                       mode={m}
                       onEdit={setEditId}
                       onDelete={setDeleteId}
-                      toggleAction={toggleActions[m.id]}
+                      onToggle={() => runAction(toggleActions[m.id])}
+                      onPreview={setPreviewId}
+                      onMove={move}
+                      canMoveUp={index > 0}
+                      canMoveDown={index < optimisticModes.length - 1}
+                      pending={pending}
                     />
                   ))}
                 </SortableContext>
@@ -143,6 +212,7 @@ export default function OutputModesManager({
         onClose={() => setAddOpen(false)}
         mode="add"
         action={createAction}
+        onSuccess={() => setFeedback("success")}
       />
 
       {/* 编辑弹窗 */}
@@ -152,6 +222,7 @@ export default function OutputModesManager({
           onClose={() => setEditId(null)}
           mode="edit"
           action={updateActions[editing.id]}
+          onSuccess={() => setFeedback("success")}
           initial={editing}
         />
       )}
@@ -175,7 +246,8 @@ export default function OutputModesManager({
           }
           confirmLabel={t("deleteButton")}
           danger
-          action={deleteActions[deleting.id]}
+          onConfirm={() => performAction(deleteActions[deleting.id])}
+          errorMessage={t("saveFailed")}
         />
       )}
     </div>
@@ -187,12 +259,22 @@ function SortableOutputModeRow({
   mode,
   onEdit,
   onDelete,
-  toggleAction,
+  onToggle,
+  onPreview,
+  onMove,
+  canMoveUp,
+  canMoveDown,
+  pending,
 }: {
   mode: OutputMode;
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
-  toggleAction: () => void | Promise<void>;
+  onToggle: () => void;
+  onPreview: (id: string) => void;
+  onMove: (id: string, offset: -1 | 1) => void;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  pending: boolean;
 }) {
   const t = useTranslations("admin.outputModes");
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -210,18 +292,30 @@ function SortableOutputModeRow({
       className="hover:bg-neutral-50/50  transition-colors duration-150"
     >
       <td className="p-3.5 text-center align-middle">
-        <button
-          type="button"
-          aria-label={t("dragHandle")}
-          className="cursor-grab active:cursor-grabbing inline-flex items-center justify-center text-neutral-400 hover:text-neutral-600  "
-          {...attributes}
-          {...listeners}
-        >
-          <GripVertical className="w-4 h-4" />
-        </button>
+        <span className="inline-flex items-center gap-0.5">
+          <button
+            type="button"
+            disabled={pending}
+            aria-label={t("dragHandle")}
+            className="touch-target cursor-grab active:cursor-grabbing inline-flex items-center justify-center text-neutral-400 hover:text-neutral-600"
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="w-4 h-4" />
+          </button>
+          <button type="button" disabled={pending || !canMoveUp} onClick={() => onMove(mode.id, -1)} aria-label={t("moveUp")} className="touch-target inline-flex items-center justify-center text-neutral-500 disabled:text-neutral-300">
+            <ArrowUp className="h-3.5 w-3.5" />
+          </button>
+          <button type="button" disabled={pending || !canMoveDown} onClick={() => onMove(mode.id, 1)} aria-label={t("moveDown")} className="touch-target inline-flex items-center justify-center text-neutral-500 disabled:text-neutral-300">
+            <ArrowDown className="h-3.5 w-3.5" />
+          </button>
+        </span>
       </td>
       <td className="p-3.5 font-semibold text-neutral-800 ">
-        {mode.name}
+        <button type="button" onClick={() => onPreview(mode.id)} className="inline-flex items-center gap-1.5 rounded text-left hover:text-sora-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue/40">
+          {mode.name}
+          <Eye className="h-3.5 w-3.5 text-neutral-400" aria-hidden="true" />
+        </button>
       </td>
       <td className="p-3.5 font-mono text-ui-caption">
         {mode.icon ? (
@@ -243,6 +337,7 @@ function SortableOutputModeRow({
           variant="ghost"
           size="sm"
           onClick={() => onEdit(mode.id)}
+          disabled={pending}
           className="text-neutral-700 hover:text-neutral-900  "
           title={t("edit")}
         >
@@ -250,11 +345,12 @@ function SortableOutputModeRow({
           <span>{t("edit")}</span>
         </Button>
 
-        <form action={toggleAction} className="inline">
-          <Button
-            type="submit"
+        <Button
+            type="button"
             variant="ghost"
             size="sm"
+            onClick={onToggle}
+            disabled={pending}
             className={clsx(
               mode.enabled
                 ? "text-warning  hover:bg-warning/10 "
@@ -274,12 +370,12 @@ function SortableOutputModeRow({
               </>
             )}
           </Button>
-        </form>
 
         <Button
           variant="ghost"
           size="sm"
           onClick={() => onDelete(mode.id)}
+          disabled={pending}
           className="text-danger hover:bg-red-50  hover:text-danger-hover"
           title={t("delete")}
         >

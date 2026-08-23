@@ -8,6 +8,10 @@ vi.mock("next-intl", () => ({
   useTranslations: () => (key: string) => key,
 }));
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn() }),
+}));
+
 vi.mock("next/link", () => ({
   default: ({
     children,
@@ -25,15 +29,16 @@ vi.mock("next/link", () => ({
 import { SettingsTabs } from "./SettingsTabs";
 
 describe("SettingsTabs", () => {
-  it("提供第五个治理入口并在窄屏允许换行", () => {
+  it("提供四分类导航、搜索与移动端原生选择器", () => {
     const html = renderToStaticMarkup(<SettingsTabs current="governance" />);
 
-    expect(html).toContain("flex-wrap");
+    expect(html).toContain('type="search"');
+    expect(html).toContain("<select");
     expect(html).toContain("touch-target");
-    expect(html).toContain('aria-label="ariaLabel"');
+    expect(html).toContain('aria-label="tabs.ariaLabel"');
     expect(html).toContain('href="/admin/settings?tab=governance"');
     expect(html).toContain('aria-current="page"');
-    expect(html.match(/href="\/admin\/settings\?tab=/g)).toHaveLength(5);
+    expect(html.match(/href="\/admin\/settings\?tab=/g)).toHaveLength(4);
   });
 
   it("中英文目录同步提供治理标签和导航名称", () => {

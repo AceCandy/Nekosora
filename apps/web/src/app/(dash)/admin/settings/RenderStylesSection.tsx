@@ -7,15 +7,27 @@
 import { revalidatePath } from "next/cache";
 import {
   listAllRenderStyles,
-  createRenderStyle,
-  updateRenderStyle,
-  deleteRenderStyle,
-  reorderRenderStyles as reorderRenderStylesService,
 } from "@/lib/render-styles/service";
+import { requireAdmin } from "@/lib/session";
+import {
+  projectRenderStyles,
+  stageRenderStyleCreate,
+  stageRenderStyleDelete,
+  stageRenderStyleReorder,
+  stageRenderStyleUpdate,
+  type SettingsControlView,
+} from "@/lib/settings-control/service";
 import RenderStylesManager from "@/features/render-styles/RenderStylesManager";
 
-export default async function RenderStylesSection() {
-  const styles = await listAllRenderStyles();
+export default async function RenderStylesSection({ control }: { control: SettingsControlView }) {
+  const styles = projectRenderStyles(
+    await listAllRenderStyles(),
+    control.draft?.changes ?? [],
+  );
+  const expected = {
+    changeSetId: control.draft?.id ?? null,
+    version: control.draft?.version ?? null,
+  };
 
   const managerStyles = styles.map((s) => ({
     id: s.id,
@@ -38,12 +50,17 @@ export default async function RenderStylesSection() {
     const description = String(formData.get("description") ?? "").trim() || undefined;
     const icon = String(formData.get("icon") ?? "").trim() || undefined;
     if (!name || !cssClass || !css) return;
-    try {
-      await createRenderStyle({ name, cssClass, css, description, icon });
-    } catch (e) {
-      // cssClass 冲突时,通过返回值提示(此处不阻断,revalidate 让表单重新渲染)
-      console.error("[render-styles] create failed:", e);
-    }
+    await stageRenderStyleCreate({
+      actorId: (await requireAdmin()).id,
+      expected,
+      value: {
+        name,
+        cssClass,
+        css,
+        description: description ?? null,
+        icon: icon ?? null,
+      },
+    });
     revalidatePath("/admin/settings");
   }
 
@@ -54,31 +71,40 @@ export default async function RenderStylesSection() {
     const description = String(formData.get("description") ?? "").trim();
     const enabled = formData.get("enabled") === "on";
     if (!name || !css) return;
-    await updateRenderStyle(id, {
-      name,
-      css,
-      description: description || null,
-      enabled,
+    await stageRenderStyleUpdate({
+      actorId: (await requireAdmin()).id,
+      expected,
+      id,
+      patch: { name, css, description: description || null, enabled },
     });
     revalidatePath("/admin/settings");
   }
 
   async function handleToggle(id: string, currentEnabled: boolean) {
     "use server";
-    await updateRenderStyle(id, { enabled: !currentEnabled });
+    await stageRenderStyleUpdate({
+      actorId: (await requireAdmin()).id,
+      expected,
+      id,
+      patch: { enabled: !currentEnabled },
+    });
     revalidatePath("/admin/settings");
   }
 
   async function handleDelete(id: string) {
     "use server";
-    await deleteRenderStyle(id);
+    await stageRenderStyleDelete({ actorId: (await requireAdmin()).id, expected, id });
     revalidatePath("/admin/settings");
   }
 
   /** 拖动重排:按拖动后的完整顺序重写 sortOrder,revalidate 后顺序刷新即落库。 */
   async function reorderRenderStyles(orderedIds: string[]) {
     "use server";
-    await reorderRenderStylesService(orderedIds);
+    await stageRenderStyleReorder({
+      actorId: (await requireAdmin()).id,
+      expected,
+      orderedIds,
+    });
     revalidatePath("/admin/settings");
   }
 
@@ -93,13 +119,15 @@ export default async function RenderStylesSection() {
   );
 
   return (
-    <RenderStylesManager
-      styles={managerStyles}
-      createAction={handleCreate}
-      updateActions={updateActions}
-      toggleActions={toggleActions}
-      deleteActions={deleteActions}
-      reorderAction={reorderRenderStyles}
-    />
+    <div id="render-styles" className="scroll-mt-40">
+      <RenderStylesManager
+        styles={managerStyles}
+        createAction={handleCreate}
+        updateActions={updateActions}
+        toggleActions={toggleActions}
+        deleteActions={deleteActions}
+        reorderAction={reorderRenderStyles}
+      />
+    </div>
   );
 }

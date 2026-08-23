@@ -7,15 +7,27 @@
 import { revalidatePath } from "next/cache";
 import {
   listAllOutputModes,
-  createOutputMode,
-  updateOutputMode,
-  deleteOutputMode,
-  reorderOutputModes as reorderOutputModesService,
 } from "@/lib/output-modes/service";
+import { requireAdmin } from "@/lib/session";
+import {
+  projectOutputModes,
+  stageOutputModeCreate,
+  stageOutputModeDelete,
+  stageOutputModeReorder,
+  stageOutputModeUpdate,
+  type SettingsControlView,
+} from "@/lib/settings-control/service";
 import OutputModesManager from "@/features/output-modes/OutputModesManager";
 
-export default async function OutputModesSection() {
-  const modes = await listAllOutputModes();
+export default async function OutputModesSection({ control }: { control: SettingsControlView }) {
+  const modes = projectOutputModes(
+    await listAllOutputModes(),
+    control.draft?.changes ?? [],
+  );
+  const expected = {
+    changeSetId: control.draft?.id ?? null,
+    version: control.draft?.version ?? null,
+  };
 
   const managerModes = modes.map((m) => ({
     id: m.id,
@@ -34,7 +46,16 @@ export default async function OutputModesSection() {
     const description = String(formData.get("description") ?? "").trim() || undefined;
     const icon = String(formData.get("icon") ?? "").trim() || undefined;
     if (!name || !systemPrompt) return;
-    await createOutputMode({ name, description, systemPrompt, icon });
+    await stageOutputModeCreate({
+      actorId: (await requireAdmin()).id,
+      expected,
+      value: {
+        name,
+        description: description ?? null,
+        systemPrompt,
+        icon: icon ?? null,
+      },
+    });
     revalidatePath("/admin/settings");
   }
 
@@ -45,31 +66,40 @@ export default async function OutputModesSection() {
     const description = String(formData.get("description") ?? "").trim();
     const enabled = formData.get("enabled") === "on";
     if (!name || !systemPrompt) return;
-    await updateOutputMode(id, {
-      name,
-      systemPrompt,
-      description: description || null,
-      enabled,
+    await stageOutputModeUpdate({
+      actorId: (await requireAdmin()).id,
+      expected,
+      id,
+      patch: { name, systemPrompt, description: description || null, enabled },
     });
     revalidatePath("/admin/settings");
   }
 
   async function handleToggle(id: string, currentEnabled: boolean) {
     "use server";
-    await updateOutputMode(id, { enabled: !currentEnabled });
+    await stageOutputModeUpdate({
+      actorId: (await requireAdmin()).id,
+      expected,
+      id,
+      patch: { enabled: !currentEnabled },
+    });
     revalidatePath("/admin/settings");
   }
 
   async function handleDelete(id: string) {
     "use server";
-    await deleteOutputMode(id);
+    await stageOutputModeDelete({ actorId: (await requireAdmin()).id, expected, id });
     revalidatePath("/admin/settings");
   }
 
   /** 拖动重排:按拖动后的完整顺序重写 sortOrder,revalidate 后顺序刷新即落库。 */
   async function reorderOutputModes(orderedIds: string[]) {
     "use server";
-    await reorderOutputModesService(orderedIds);
+    await stageOutputModeReorder({
+      actorId: (await requireAdmin()).id,
+      expected,
+      orderedIds,
+    });
     revalidatePath("/admin/settings");
   }
 
@@ -84,13 +114,15 @@ export default async function OutputModesSection() {
   );
 
   return (
-    <OutputModesManager
-      modes={managerModes}
-      createAction={handleCreate}
-      updateActions={updateActions}
-      toggleActions={toggleActions}
-      deleteActions={deleteActions}
-      reorderAction={reorderOutputModes}
-    />
+    <div id="output-modes" className="scroll-mt-40">
+      <OutputModesManager
+        modes={managerModes}
+        createAction={handleCreate}
+        updateActions={updateActions}
+        toggleActions={toggleActions}
+        deleteActions={deleteActions}
+        reorderAction={reorderOutputModes}
+      />
+    </div>
   );
 }

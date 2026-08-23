@@ -1,21 +1,46 @@
 import { CircleAlert, Info } from "lucide-react";
 import { getTranslations } from "next-intl/server";
-import { GATEWAY_GOVERNANCE_POLICY_BOUNDS } from "@/lib/gateway-governance/policy";
-import { createGatewayGovernanceRepository } from "@/lib/gateway-governance/repository";
+import {
+  GATEWAY_GOVERNANCE_POLICY_BOUNDS,
+  loadGatewayGovernancePolicy,
+} from "@/lib/gateway-governance/policy";
 import { requireAdmin } from "@/lib/session";
+import { getSettings } from "@/lib/system-settings/service";
+import {
+  projectSystemSettings,
+  type SettingsControlView,
+} from "@/lib/settings-control/service";
 import GovernanceSettingsForm from "./GovernanceSettingsForm";
 import { saveGatewayGovernancePolicy } from "./governance-actions";
+import {
+  getGatewayGovernanceInsights,
+  type GovernanceHistoryRange,
+} from "@/lib/gateway-governance/analytics";
+import GovernanceHistoryPanel from "./GovernanceHistoryPanel";
 
-export default async function GovernanceSettingsSection() {
+export default async function GovernanceSettingsSection({
+  control,
+  range,
+}: {
+  control: SettingsControlView;
+  range: GovernanceHistoryRange;
+}) {
   await requireAdmin();
-  const repository = await createGatewayGovernanceRepository();
-  const { policy, source } = await repository.loadPolicy();
+  const gateway = projectSystemSettings(
+    "gateway",
+    await getSettings("gateway"),
+    control.draft?.changes ?? [],
+  );
+  const { policy, source } = loadGatewayGovernancePolicy(
+    gateway.request_governance_v1 ?? null,
+  );
+  const insights = await getGatewayGovernanceInsights(range, policy);
   const t = await getTranslations("admin.settings.governance");
   const invalid = source === "invalid";
   const SourceIcon = invalid ? CircleAlert : Info;
 
   return (
-    <div className="max-w-5xl space-y-5">
+    <div id="governance-policy" className="max-w-5xl space-y-5 scroll-mt-40">
       <div className="max-w-3xl">
         <h2 className="text-ui-title font-semibold text-space-ink">{t("title")}</h2>
         <p className="mt-1 text-ui-body text-neutral-600">{t("desc")}</p>
@@ -38,8 +63,12 @@ export default async function GovernanceSettingsSection() {
       <GovernanceSettingsForm
         policy={policy}
         bounds={GATEWAY_GOVERNANCE_POLICY_BOUNDS}
-        action={saveGatewayGovernancePolicy}
+        action={saveGatewayGovernancePolicy.bind(null, {
+          changeSetId: control.draft?.id ?? null,
+          version: control.draft?.version ?? null,
+        })}
       />
+      <GovernanceHistoryPanel range={range} {...insights} />
     </div>
   );
 }

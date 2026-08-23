@@ -5,8 +5,11 @@ import {
   parseGatewayGovernancePolicyForm,
   type GatewayGovernancePolicy,
 } from "@/lib/gateway-governance/policy";
-import { createGatewayGovernanceRepository } from "@/lib/gateway-governance/repository";
 import { requireAdmin } from "@/lib/session";
+import {
+  stageSystemSettings,
+  type SettingsDraftExpectation,
+} from "@/lib/settings-control/service";
 
 export interface GovernanceSettingsActionState {
   status: "idle" | "success" | "error";
@@ -14,10 +17,11 @@ export interface GovernanceSettingsActionState {
 }
 
 export async function saveGatewayGovernancePolicy(
+  expected: SettingsDraftExpectation,
   _previousState: GovernanceSettingsActionState,
   formData: FormData,
 ): Promise<GovernanceSettingsActionState> {
-  await requireAdmin();
+  const admin = await requireAdmin();
 
   let policy: GatewayGovernancePolicy;
   try {
@@ -27,8 +31,12 @@ export async function saveGatewayGovernancePolicy(
   }
 
   try {
-    const repository = await createGatewayGovernanceRepository();
-    await repository.savePolicy(policy);
+    await stageSystemSettings({
+      actorId: admin.id,
+      expected,
+      namespace: "gateway",
+      values: { request_governance_v1: JSON.stringify(policy) },
+    });
     revalidatePath("/admin/settings");
     return { status: "success", error: null };
   } catch {

@@ -6,15 +6,14 @@ import {
 
 const mockFunctions = vi.hoisted(() => ({
   requireAdmin: vi.fn(),
-  createRepository: vi.fn(),
-  savePolicy: vi.fn(),
+  stageSystemSettings: vi.fn(),
   revalidatePath: vi.fn(),
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: mockFunctions.revalidatePath }));
 vi.mock("@/lib/session", () => ({ requireAdmin: mockFunctions.requireAdmin }));
-vi.mock("@/lib/gateway-governance/repository", () => ({
-  createGatewayGovernanceRepository: mockFunctions.createRepository,
+vi.mock("@/lib/settings-control/service", () => ({
+  stageSystemSettings: mockFunctions.stageSystemSettings,
 }));
 
 import {
@@ -23,6 +22,7 @@ import {
 } from "./governance-actions";
 
 const INITIAL_STATE: GovernanceSettingsActionState = { status: "idle", error: null };
+const EXPECTED = { changeSetId: null, version: null };
 const FORM_FIELDS: readonly [keyof GatewayScopeLimits, string][] = [
   ["rpm", "rpm"],
   ["burst", "burst"],
@@ -36,20 +36,24 @@ const FORM_FIELDS: readonly [keyof GatewayScopeLimits, string][] = [
 beforeEach(() => {
   vi.clearAllMocks();
   mockFunctions.requireAdmin.mockResolvedValue({ id: "admin-a", role: "admin" });
-  mockFunctions.savePolicy.mockResolvedValue(DEFAULT_GATEWAY_GOVERNANCE_POLICY);
-  mockFunctions.createRepository.mockResolvedValue({ savePolicy: mockFunctions.savePolicy });
+  mockFunctions.stageSystemSettings.mockResolvedValue(undefined);
 });
 
 describe("saveGatewayGovernancePolicy", () => {
   it("管理员整组保存有效策略并刷新设置页", async () => {
     const formData = policyForm();
 
-    await expect(saveGatewayGovernancePolicy(INITIAL_STATE, formData)).resolves.toEqual({
+    await expect(saveGatewayGovernancePolicy(EXPECTED, INITIAL_STATE, formData)).resolves.toEqual({
       status: "success",
       error: null,
     });
     expect(mockFunctions.requireAdmin).toHaveBeenCalledOnce();
-    expect(mockFunctions.savePolicy).toHaveBeenCalledWith(DEFAULT_GATEWAY_GOVERNANCE_POLICY);
+    expect(mockFunctions.stageSystemSettings).toHaveBeenCalledWith({
+      actorId: "admin-a",
+      expected: EXPECTED,
+      namespace: "gateway",
+      values: { request_governance_v1: JSON.stringify(DEFAULT_GATEWAY_GOVERNANCE_POLICY) },
+    });
     expect(mockFunctions.revalidatePath).toHaveBeenCalledWith("/admin/settings");
   });
 
@@ -57,19 +61,18 @@ describe("saveGatewayGovernancePolicy", () => {
     const formData = policyForm();
     formData.set("key_rpm", "0");
 
-    await expect(saveGatewayGovernancePolicy(INITIAL_STATE, formData)).resolves.toEqual({
+    await expect(saveGatewayGovernancePolicy(EXPECTED, INITIAL_STATE, formData)).resolves.toEqual({
       status: "error",
       error: "invalid",
     });
-    expect(mockFunctions.createRepository).not.toHaveBeenCalled();
-    expect(mockFunctions.savePolicy).not.toHaveBeenCalled();
+    expect(mockFunctions.stageSystemSettings).not.toHaveBeenCalled();
     expect(mockFunctions.revalidatePath).not.toHaveBeenCalled();
   });
 
   it("数据库保存失败时保留原页面状态且不刷新", async () => {
-    mockFunctions.savePolicy.mockRejectedValueOnce(new Error("database unavailable"));
+    mockFunctions.stageSystemSettings.mockRejectedValueOnce(new Error("database unavailable"));
 
-    await expect(saveGatewayGovernancePolicy(INITIAL_STATE, policyForm())).resolves.toEqual({
+    await expect(saveGatewayGovernancePolicy(EXPECTED, INITIAL_STATE, policyForm())).resolves.toEqual({
       status: "error",
       error: "saveFailed",
     });
@@ -79,10 +82,9 @@ describe("saveGatewayGovernancePolicy", () => {
   it("未通过管理员鉴权时拒绝执行", async () => {
     mockFunctions.requireAdmin.mockRejectedValueOnce(new Error("forbidden"));
 
-    await expect(saveGatewayGovernancePolicy(INITIAL_STATE, policyForm()))
+    await expect(saveGatewayGovernancePolicy(EXPECTED, INITIAL_STATE, policyForm()))
       .rejects.toThrow("forbidden");
-    expect(mockFunctions.createRepository).not.toHaveBeenCalled();
-    expect(mockFunctions.savePolicy).not.toHaveBeenCalled();
+    expect(mockFunctions.stageSystemSettings).not.toHaveBeenCalled();
   });
 });
 

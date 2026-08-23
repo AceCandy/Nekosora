@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useTransition, type FormEvent } from "react";
 import { useTranslations } from "next-intl";
 import Modal from "@/shared/ui/Modal";
 import Input from "@/shared/ui/Input";
@@ -25,6 +25,7 @@ interface RenderStyleFormDialogProps {
   onClose: () => void;
   mode: "add" | "edit";
   action: (formData: FormData) => void | Promise<void>;
+  onSuccess?: () => void;
   initial?: Partial<RenderStyle>;
 }
 
@@ -35,6 +36,7 @@ export default function RenderStyleFormDialog({
   onClose,
   mode,
   action,
+  onSuccess,
   initial,
 }: RenderStyleFormDialogProps) {
   const t = useTranslations("admin.renderStyles");
@@ -42,12 +44,30 @@ export default function RenderStyleFormDialog({
   // 内置预设编辑时 cssClass 锁定不可改(会破坏已发布 CSS 的选择器约定)
   const cssClassReadOnly = isEdit && initial?.builtin;
   const [formKey, setFormKey] = useState(0);
+  const [failed, setFailed] = useState(false);
+  const [pending, startTransition] = useTransition();
 
   const handleClose = () => {
+    setFailed(false);
     onClose();
     setFormKey((k) => k + 1);
   };
   const { contentRef, requestClose, dialogProps } = useUnsavedChanges<HTMLFormElement>(handleClose);
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    startTransition(async () => {
+      setFailed(false);
+      try {
+        await action(formData);
+        onSuccess?.();
+        handleClose();
+      } catch {
+        setFailed(true);
+      }
+    });
+  };
 
   return (
     <>
@@ -59,10 +79,7 @@ export default function RenderStyleFormDialog({
       <form
         ref={contentRef}
         key={formKey}
-        action={action}
-        onSubmit={() => {
-          setTimeout(handleClose, 0);
-        }}
+        onSubmit={handleSubmit}
         className="space-y-5"
       >
         {isEdit && initial?.renderer === "custom" && (
@@ -135,11 +152,14 @@ export default function RenderStyleFormDialog({
           </label>
         </div>
 
+        {failed && <p role="alert" className="text-ui-body text-danger">{t("saveFailed")}</p>}
         <div className="flex justify-end gap-2.5 pt-4 border-t border-morning-mist ">
           <Button
+            type="button"
             variant="secondary"
             size="sm"
             onClick={requestClose}
+            disabled={pending}
           >
             {t("cancel")}
           </Button>
@@ -147,8 +167,9 @@ export default function RenderStyleFormDialog({
             type="submit"
             variant="contrast"
             size="sm"
+            disabled={pending}
           >
-            {isEdit ? t("save") : t("createBtn")}
+            {pending ? t("saving") : isEdit ? t("save") : t("createBtn")}
           </Button>
         </div>
       </form>

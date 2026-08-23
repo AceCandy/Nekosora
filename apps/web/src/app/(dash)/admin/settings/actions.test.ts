@@ -8,8 +8,8 @@ const mockData = vi.hoisted(() => ({
 }));
 
 const mockFunctions = vi.hoisted(() => ({
-  resetEmbeddingConfig: vi.fn(),
   revalidatePath: vi.fn(),
+  stageSystemSettings: vi.fn(),
 }));
 
 vi.mock("drizzle-orm", () => ({
@@ -19,7 +19,9 @@ vi.mock("drizzle-orm", () => ({
 
 vi.mock("next/cache", () => ({ revalidatePath: mockFunctions.revalidatePath }));
 vi.mock("@/lib/session", () => ({ requireAdmin: vi.fn(async () => mockData.admin) }));
-vi.mock("@/lib/rag/embedding", () => ({ resetEmbeddingConfig: mockFunctions.resetEmbeddingConfig }));
+vi.mock("@/lib/settings-control/service", () => ({
+  stageSystemSettings: mockFunctions.stageSystemSettings,
+}));
 
 vi.mock("@/lib/infra/db", () => {
   type Condition =
@@ -105,8 +107,9 @@ vi.mock("@/lib/infra/db", () => {
   return { getDb: async () => db, getSchema: () => schema };
 });
 
-import { getSettings } from "@/lib/system-settings/service";
 import { saveEmbedding } from "./actions";
+
+const EXPECTED = { changeSetId: null, version: null };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -125,13 +128,14 @@ describe("saveEmbedding", () => {
     formData.set("provider_id", "provider-a");
     formData.set("model", "  model-new  ");
 
-    await expect(saveEmbedding(formData)).resolves.toBeUndefined();
-    await expect(getSettings("rag")).resolves.toEqual({
-      embedding_provider_id: "provider-a",
-      embedding_model: "model-new",
+    await expect(saveEmbedding(EXPECTED, formData)).resolves.toBeUndefined();
+    expect(mockFunctions.stageSystemSettings).toHaveBeenCalledWith({
+      actorId: "admin-a",
+      expected: EXPECTED,
+      namespace: "rag",
+      values: { embedding_provider_id: "provider-a", embedding_model: "model-new" },
     });
     expect(mockData.providerSelectCount).toBe(1);
-    expect(mockFunctions.resetEmbeddingConfig).toHaveBeenCalledOnce();
     expect(mockFunctions.revalidatePath).toHaveBeenCalledWith("/admin/settings");
   });
 
@@ -140,13 +144,9 @@ describe("saveEmbedding", () => {
     formData.set("provider_id", "provider-b");
     formData.set("model", "model-b");
 
-    await expect(saveEmbedding(formData)).rejects.toThrow("服务商不存在");
-    await expect(getSettings("rag")).resolves.toEqual({
-      embedding_provider_id: "provider-a",
-      embedding_model: "model-a",
-    });
+    await expect(saveEmbedding(EXPECTED, formData)).rejects.toThrow("服务商不存在");
     expect(mockData.providerSelectCount).toBe(1);
-    expect(mockFunctions.resetEmbeddingConfig).not.toHaveBeenCalled();
+    expect(mockFunctions.stageSystemSettings).not.toHaveBeenCalled();
     expect(mockFunctions.revalidatePath).not.toHaveBeenCalled();
   });
 
@@ -155,13 +155,9 @@ describe("saveEmbedding", () => {
     formData.set("provider_id", "provider-missing");
     formData.set("model", "model-missing");
 
-    await expect(saveEmbedding(formData)).rejects.toThrow("服务商不存在");
-    await expect(getSettings("rag")).resolves.toEqual({
-      embedding_provider_id: "provider-a",
-      embedding_model: "model-a",
-    });
+    await expect(saveEmbedding(EXPECTED, formData)).rejects.toThrow("服务商不存在");
     expect(mockData.providerSelectCount).toBe(1);
-    expect(mockFunctions.resetEmbeddingConfig).not.toHaveBeenCalled();
+    expect(mockFunctions.stageSystemSettings).not.toHaveBeenCalled();
     expect(mockFunctions.revalidatePath).not.toHaveBeenCalled();
   });
 
@@ -170,10 +166,14 @@ describe("saveEmbedding", () => {
     formData.set("provider_id", "");
     formData.set("model", "");
 
-    await expect(saveEmbedding(formData)).resolves.toBeUndefined();
-    await expect(getSettings("rag")).resolves.toEqual({});
+    await expect(saveEmbedding(EXPECTED, formData)).resolves.toBeUndefined();
     expect(mockData.providerSelectCount).toBe(0);
-    expect(mockFunctions.resetEmbeddingConfig).toHaveBeenCalledOnce();
+    expect(mockFunctions.stageSystemSettings).toHaveBeenCalledWith({
+      actorId: "admin-a",
+      expected: EXPECTED,
+      namespace: "rag",
+      values: { embedding_provider_id: "", embedding_model: "" },
+    });
     expect(mockFunctions.revalidatePath).toHaveBeenCalledWith("/admin/settings");
   });
 });

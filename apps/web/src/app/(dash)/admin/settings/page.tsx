@@ -14,16 +14,22 @@ import GovernanceSettingsSection from "./GovernanceSettingsSection";
 import ModelConfigSection from "./ModelConfigSection";
 import OutputModesSection from "./OutputModesSection";
 import RenderStylesSection from "./RenderStylesSection";
+import { getSettingsControlView, listSettingsHistory } from "@/lib/settings-control/service";
+import SettingsChangeControl from "./SettingsChangeControl";
+import type { GovernanceHistoryRange } from "@/lib/gateway-governance/analytics";
 
 export const dynamic = "force-dynamic";
 
-const VALID_TABS: SettingsTab[] = [
-  "basic",
-  "model",
-  "output-modes",
-  "render-styles",
-  "governance",
-];
+const SETTINGS_TAB_ALIASES: Record<string, SettingsTab> = {
+  basic: "protocol",
+  model: "models",
+  "output-modes": "output",
+  "render-styles": "output",
+  governance: "governance",
+  models: "models",
+  output: "output",
+  protocol: "protocol",
+};
 
 export default async function SettingsPage({
   searchParams,
@@ -32,12 +38,18 @@ export default async function SettingsPage({
 }) {
   const t = await getTranslations("admin.settings");
   const tn = await getTranslations("nav");
+  const [control, history] = await Promise.all([
+    getSettingsControlView(),
+    listSettingsHistory(20),
+  ]);
 
   const sp = await searchParams;
   const tabParam = typeof sp.tab === "string" ? sp.tab : "";
-  const tab: SettingsTab = VALID_TABS.includes(tabParam as SettingsTab)
-    ? (tabParam as SettingsTab)
-    : "model";
+  const tab: SettingsTab = SETTINGS_TAB_ALIASES[tabParam] ?? "models";
+  const rangeParam = typeof sp.range === "string" ? Number(sp.range) : 7;
+  const governanceRange: GovernanceHistoryRange = rangeParam === 30 || rangeParam === 90
+    ? rangeParam
+    : 7;
 
   return (
     <div className="space-y-8">
@@ -45,8 +57,9 @@ export default async function SettingsPage({
 
       <SettingsTabs current={tab} />
 
-      {tab === "model" && (
+      {tab === "models" && (
         <ModelConfigSection
+          control={control}
           labels={{
             title: t("configTitle"),
             desc: t("configDesc"),
@@ -67,16 +80,70 @@ export default async function SettingsPage({
             mem0LlmHint: t("mem0LlmHint"),
             mem0LlmAuto: t("mem0LlmAuto"),
             save: t("configSave"),
+            saving: t("configSaving"),
             saved: t("configSaved"),
+            saveFailed: t("configSaveFailed"),
             selectProvider: t("configSelectProvider"),
             noProviders: t("configNoProviders"),
           }}
         />
       )}
-      {tab === "basic" && <BasicSettingsSection />}
-      {tab === "output-modes" && <OutputModesSection />}
-      {tab === "render-styles" && <RenderStylesSection />}
-      {tab === "governance" && <GovernanceSettingsSection />}
+      {tab === "protocol" && <BasicSettingsSection control={control} />}
+      {tab === "output" && (
+        <div className="space-y-12">
+          <OutputModesSection control={control} />
+          <RenderStylesSection control={control} />
+        </div>
+      )}
+      {tab === "governance" && (
+        <GovernanceSettingsSection control={control} range={governanceRange} />
+      )}
+
+      <SettingsChangeControl
+        revision={control.currentRevision}
+        draft={control.draft ? {
+          id: control.draft.id,
+          kind: control.draft.kind,
+          version: control.draft.version,
+          changes: control.draft.changes,
+        } : null}
+        history={history.map((item) => ({
+          id: item.id,
+          kind: item.kind,
+          rollbackOf: item.rollbackOf,
+          appliedRevision: item.appliedRevision,
+          appliedAt: item.appliedAt.toISOString(),
+          changes: item.changes,
+        }))}
+        labels={{
+          draftSummary: t("control.draftSummary"),
+          currentRevision: t("control.currentRevision"),
+          draftPersisted: t("control.draftPersisted"),
+          noDraft: t("control.noDraft"),
+          history: t("control.history"),
+          historyEmpty: t("control.historyEmpty"),
+          rollback: t("control.rollback"),
+          release: t("control.release"),
+          changes: t("control.changes"),
+          reverseRelease: t("control.reverseRelease"),
+          working: t("control.working"),
+          abandon: t("control.abandon"),
+          applying: t("control.applying"),
+          reviewApply: t("control.reviewApply"),
+          reviewChanges: t("control.reviewChanges"),
+          created: t("control.created"),
+          deleted: t("control.deleted"),
+          updated: t("control.updated"),
+          applied: t("control.applied"),
+          applied_cache_warning: t("control.appliedCacheWarning"),
+          abandoned: t("control.abandoned"),
+          rollback_created: t("control.rollbackCreated"),
+          stale: t("control.stale"),
+          rollback_conflict: t("control.rollbackConflict"),
+          invalid: t("control.invalid"),
+          failed: t("control.failed"),
+        }}
+      />
     </div>
   );
 }

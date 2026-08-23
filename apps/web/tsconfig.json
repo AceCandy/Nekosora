@@ -47,6 +47,9 @@
       "@/lib/render-styles/service": [
         "./src/lib/render-styles/service.ts"
       ],
+      "@/lib/settings-control/runtime": [
+        "./src/lib/settings-control/runtime.ts"
+      ],
       "@/lib/*": [
         "../../packages/core/src/lib/*"
       ],

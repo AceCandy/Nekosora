@@ -1,10 +1,12 @@
 import { revalidatePath } from "next/cache";
 import { eq, and } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
-import { getSettings, upsertSettings } from "@/lib/system-settings/service";
-import { resetTitleModelConfig } from "@/lib/conversation-title/service";
-import { resetCompactModelConfig } from "@/lib/compact/service";
-import { resetMemoryClient } from "@/lib/memory/mem0";
+import { getSettings } from "@/lib/system-settings/service";
+import {
+  projectSystemSettings,
+  stageSystemSettings,
+  type SettingsControlView,
+} from "@/lib/settings-control/service";
 import { requireAdmin } from "@/lib/session";
 import EmbeddingConfigForm from "./EmbeddingConfigForm";
 import BackgroundModelConfigForm from "./BackgroundModelConfigForm";
@@ -36,12 +38,14 @@ async function assertBackgroundModelId(modelId: string): Promise<void> {
 /**
  * 模型配置区 —— embedding / 标题生成的系统级配置。
  *
- * 嵌入 admin/settings 页。提交后 upsert system_settings 并清除对应缓存即时生效。
+ * 嵌入 admin/settings 页。提交后写入活动草稿，整批发布后生效。
  * provider 列表来自 global_providers(管理员先在 /admin/providers 建好上游)。
  */
 export default async function ModelConfigSection({
+  control,
   labels,
 }: {
+  control: SettingsControlView;
   labels: {
     title: string;
     desc: string;
@@ -62,7 +66,9 @@ export default async function ModelConfigSection({
     mem0LlmHint: string;
     mem0LlmAuto: string;
     save: string;
+    saving: string;
     saved: string;
+    saveFailed: string;
     selectProvider: string;
     noProviders: string;
   };
@@ -96,7 +102,14 @@ export default async function ModelConfigSection({
         .map((model) => [model.id, model]),
     ).values(),
   );
-  const [rag, task] = await Promise.all([getSettings("rag"), getSettings("task")]);
+  const [storedRag, storedTask] = await Promise.all([getSettings("rag"), getSettings("task")]);
+  const changes = control.draft?.changes ?? [];
+  const rag = projectSystemSettings("rag", storedRag, changes);
+  const task = projectSystemSettings("task", storedTask, changes);
+  const expected = {
+    changeSetId: control.draft?.id ?? null,
+    version: control.draft?.version ?? null,
+  };
   const titleModelId =
     task.title_model_id ?? backgroundModels.find((model) => model.name === task.title_model)?.id ?? "";
   const compactModelId =
@@ -106,31 +119,43 @@ export default async function ModelConfigSection({
 
   async function saveTitleModel(formData: FormData) {
     "use server";
-    await requireAdmin();
+    const actionAdmin = await requireAdmin();
     const modelId = String(formData.get("model_id") ?? "").trim();
     await assertBackgroundModelId(modelId);
-    await upsertSettings("task", { title_model_id: modelId, title_model: "" });
-    resetTitleModelConfig();
+    await stageSystemSettings({
+      actorId: actionAdmin.id,
+      expected,
+      namespace: "task",
+      values: { title_model_id: modelId, title_model: "" },
+    });
     revalidatePath("/admin/settings");
   }
 
   async function saveCompactModel(formData: FormData) {
     "use server";
-    await requireAdmin();
+    const actionAdmin = await requireAdmin();
     const modelId = String(formData.get("model_id") ?? "").trim();
     await assertBackgroundModelId(modelId);
-    await upsertSettings("task", { compact_model_id: modelId, compact_model: "" });
-    resetCompactModelConfig();
+    await stageSystemSettings({
+      actorId: actionAdmin.id,
+      expected,
+      namespace: "task",
+      values: { compact_model_id: modelId, compact_model: "" },
+    });
     revalidatePath("/admin/settings");
   }
 
   async function saveMem0LlmModel(formData: FormData) {
     "use server";
-    await requireAdmin();
+    const actionAdmin = await requireAdmin();
     const modelId = String(formData.get("model_id") ?? "").trim();
     await assertBackgroundModelId(modelId);
-    await upsertSettings("rag", { mem0_llm_model_id: modelId, mem0_llm_model: "" });
-    resetMemoryClient();
+    await stageSystemSettings({
+      actorId: actionAdmin.id,
+      expected,
+      namespace: "rag",
+      values: { mem0_llm_model_id: modelId, mem0_llm_model: "" },
+    });
     revalidatePath("/admin/settings");
   }
 
@@ -153,7 +178,7 @@ export default async function ModelConfigSection({
           initialProviderId={rag.embedding_provider_id ?? ""}
           initialModel={rag.embedding_model ?? ""}
           fetchAction={listUpstreamModelsCached}
-          action={saveEmbedding}
+          action={saveEmbedding.bind(null, expected)}
           labels={{
             embeddingTitle: labels.embeddingTitle,
             embeddingProvider: labels.embeddingProvider,
@@ -161,48 +186,62 @@ export default async function ModelConfigSection({
             embeddingHint: labels.embeddingHint,
             selectProvider: labels.selectProvider,
             save: labels.save,
+            saving: labels.saving,
+            saved: labels.saved,
+            saveFailed: labels.saveFailed,
           }}
         />
       )}
 
-      <BackgroundModelConfigForm
-        key={`title:${titleModelId}`}
-        id="title-model-id"
-        title={labels.titleTaskTitle}
-        modelLabel={labels.titleTaskModel}
-        hint={labels.titleTaskHint}
-        autoLabel={labels.titleTaskAuto}
-        saveLabel={labels.save}
-        models={backgroundModels}
-        initialModelId={titleModelId}
-        action={saveTitleModel}
-      />
+      <section className="divide-y divide-morning-mist overflow-hidden rounded-lg border border-morning-mist bg-nebula-white">
+        <BackgroundModelConfigForm
+          key={`title:${titleModelId}`}
+          id="title-model-id"
+          title={labels.titleTaskTitle}
+          modelLabel={labels.titleTaskModel}
+          hint={labels.titleTaskHint}
+          autoLabel={labels.titleTaskAuto}
+          saveLabel={labels.save}
+          savingLabel={labels.saving}
+          savedLabel={labels.saved}
+          saveFailedLabel={labels.saveFailed}
+          models={backgroundModels}
+          initialModelId={titleModelId}
+          action={saveTitleModel}
+        />
 
-      <BackgroundModelConfigForm
-        key={`compact:${compactModelId}`}
-        id="compact-model-id"
-        title={labels.compactTaskTitle}
-        modelLabel={labels.compactTaskModel}
-        hint={labels.compactTaskHint}
-        autoLabel={labels.compactTaskAuto}
-        saveLabel={labels.save}
-        models={backgroundModels}
-        initialModelId={compactModelId}
-        action={saveCompactModel}
-      />
+        <BackgroundModelConfigForm
+          key={`compact:${compactModelId}`}
+          id="compact-model-id"
+          title={labels.compactTaskTitle}
+          modelLabel={labels.compactTaskModel}
+          hint={labels.compactTaskHint}
+          autoLabel={labels.compactTaskAuto}
+          saveLabel={labels.save}
+          savingLabel={labels.saving}
+          savedLabel={labels.saved}
+          saveFailedLabel={labels.saveFailed}
+          models={backgroundModels}
+          initialModelId={compactModelId}
+          action={saveCompactModel}
+        />
 
-      <BackgroundModelConfigForm
-        key={`mem0:${mem0ModelId}`}
-        id="mem0-model-id"
-        title={labels.mem0LlmTitle}
-        modelLabel={labels.mem0LlmModel}
-        hint={labels.mem0LlmHint}
-        autoLabel={labels.mem0LlmAuto}
-        saveLabel={labels.save}
-        models={backgroundModels}
-        initialModelId={mem0ModelId}
-        action={saveMem0LlmModel}
-      />
+        <BackgroundModelConfigForm
+          key={`mem0:${mem0ModelId}`}
+          id="mem0-model-id"
+          title={labels.mem0LlmTitle}
+          modelLabel={labels.mem0LlmModel}
+          hint={labels.mem0LlmHint}
+          autoLabel={labels.mem0LlmAuto}
+          saveLabel={labels.save}
+          savingLabel={labels.saving}
+          savedLabel={labels.saved}
+          saveFailedLabel={labels.saveFailed}
+          models={backgroundModels}
+          initialModelId={mem0ModelId}
+          action={saveMem0LlmModel}
+        />
+      </section>
     </div>
   );
 }

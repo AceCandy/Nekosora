@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/shared/ui/Button";
+import { useDraftAction } from "./useDraftAction";
 
 interface BackgroundModelOption {
   id: string;
@@ -16,6 +17,9 @@ interface BackgroundModelConfigFormProps {
   hint: string;
   autoLabel: string;
   saveLabel: string;
+  savingLabel: string;
+  savedLabel: string;
+  saveFailedLabel: string;
   models: BackgroundModelOption[];
   initialModelId: string;
   action: (formData: FormData) => Promise<void>;
@@ -29,18 +33,30 @@ export default function BackgroundModelConfigForm({
   hint,
   autoLabel,
   saveLabel,
+  savingLabel,
+  savedLabel,
+  saveFailedLabel,
   models,
   initialModelId,
   action,
 }: BackgroundModelConfigFormProps) {
   const [modelId, setModelId] = useState(initialModelId);
+  const { onSubmit, pending, status } = useDraftAction(action);
 
   return (
     <form
-      action={action}
-      className="rounded-lg border border-neutral-200 bg-white   p-5 space-y-3"
+      onSubmit={onSubmit}
+      className="grid gap-4 p-4 md:grid-cols-[minmax(0,1fr)_minmax(15rem,1fr)_auto] md:items-center"
     >
-      <h3 className="text-ui-body font-bold text-neutral-800 ">{title}</h3>
+      <div>
+        <h3 className="text-ui-body font-bold text-neutral-800 ">{title}</h3>
+        <p className="mt-1 text-ui-caption text-neutral-400">{hint}</p>
+        <div className="mt-1 min-h-4 text-ui-caption" aria-live="polite">
+          {pending && <p className="text-neutral-600">{savingLabel}</p>}
+          {!pending && status === "success" && <p role="status" className="text-success">{savedLabel}</p>}
+          {!pending && status === "error" && <p role="alert" className="text-danger">{saveFailedLabel}</p>}
+        </div>
+      </div>
       <div className="space-y-1">
         <label htmlFor={id} className="text-ui-caption font-medium text-neutral-500">
           {modelLabel}
@@ -50,6 +66,7 @@ export default function BackgroundModelConfigForm({
           name="model_id"
           value={modelId}
           onChange={(event) => setModelId(event.target.value)}
+          disabled={pending}
           className="w-full rounded-md border border-neutral-200 bg-transparent px-3 py-2 text-ui-body "
         >
           <option value="">{autoLabel}</option>
@@ -59,14 +76,14 @@ export default function BackgroundModelConfigForm({
             </option>
           ))}
         </select>
-        <p className="text-ui-caption text-neutral-400">{hint}</p>
       </div>
       <Button
         type="submit"
         variant="primary"
-        className="px-4 py-2 font-semibold"
+        disabled={pending}
+        className="px-4 py-2 font-semibold md:self-end"
       >
-        {saveLabel}
+        {pending ? savingLabel : saveLabel}
       </Button>
     </form>
   );
