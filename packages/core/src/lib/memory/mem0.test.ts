@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({
   resolveRoutesById: vi.fn(),
   createNekosoraLLM: vi.fn((model: unknown) => ({ model })),
   memoryConfig: null as unknown,
+  memoryInitCount: 0,
+  settingsRevision: 1,
 }));
 
 vi.mock("drizzle-orm", () => ({
@@ -31,6 +33,9 @@ vi.mock("@/lib/infra/db", () => ({
 }));
 
 vi.mock("@/lib/routing", () => ({ resolveRoutesById: mocks.resolveRoutesById }));
+vi.mock("@/lib/settings-control/service", () => ({
+  getSettingsRevision: async () => mocks.settingsRevision,
+}));
 vi.mock("@/lib/system-settings/service", () => ({
   getSetting: async (namespace: string, key: string) => mocks.settings[`${namespace}.${key}`] ?? null,
 }));
@@ -42,6 +47,7 @@ vi.mock("mem0ai/oss", () => ({
   Memory: class {
     constructor(config: unknown) {
       mocks.memoryConfig = config;
+      mocks.memoryInitCount += 1;
     }
   },
 }));
@@ -62,6 +68,8 @@ describe("mem0 model resolution", () => {
     });
     mocks.createNekosoraLLM.mockClear();
     mocks.memoryConfig = null;
+    mocks.memoryInitCount = 0;
+    mocks.settingsRevision = 1;
   });
 
   it("旧模型名无可用路由时继续回退到标题模型", async () => {
@@ -83,5 +91,15 @@ describe("mem0 model resolution", () => {
       modelId: "title-id",
       modelName: "title-model",
     });
+  });
+
+  it("设置 revision 变化时重建已缓存客户端", async () => {
+    await getMemory();
+    await getMemory();
+    expect(mocks.memoryInitCount).toBe(1);
+
+    mocks.settingsRevision = 2;
+    await getMemory();
+    expect(mocks.memoryInitCount).toBe(2);
   });
 });

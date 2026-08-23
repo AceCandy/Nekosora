@@ -24,12 +24,14 @@ test("PostgreSQL integration scripts keep isolated local databases and explicit 
   ]) assert.match(coreScript, new RegExp(name));
   for (const file of [
     "gateway-governance/repository.pg.test.ts",
+    "settings-control/service.pg.test.ts",
     "gateway-execution/retention.pg.test.ts",
     "chat/completion.pg.test.ts",
     "rag/process.pg.test.ts",
   ]) assert.match(coreScript, new RegExp(file.replaceAll(".", "\\.")));
   for (const file of [
     "packages/core/src/lib/gateway-governance/repository.pg.test.ts",
+    "packages/core/src/lib/settings-control/service.pg.test.ts",
     "packages/core/src/lib/gateway-execution/retention.pg.test.ts",
     "packages/core/src/lib/chat/completion.pg.test.ts",
     "packages/core/src/lib/rag/process.pg.test.ts",

@@ -33,35 +33,3 @@ export async function getSetting(namespace: string, key: string): Promise<string
     .limit(1);
   return row ? String(row.value) : null;
 }
-
-/**
- * 批量 upsert 某 namespace 下的键值对(存在则更新,不存在则插入)。
- * 空字符串视为删除该键(便于「清空配置」)。
- */
-export async function upsertSettings(namespace: string, values: Record<string, string>): Promise<void> {
-  const db = await getDb();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const s = getSchema() as any;
-  for (const [key, value] of Object.entries(values)) {
-    const existing = await db
-      .select({ id: s.systemSettings.id })
-      .from(s.systemSettings)
-      .where(and(eq(s.systemSettings.namespace, namespace), eq(s.systemSettings.key, key)))
-      .limit(1);
-    if (value === "") {
-      // 空值:若已存在则删除(允许取消配置)
-      if (existing.length > 0) {
-        await db.delete(s.systemSettings).where(eq(s.systemSettings.id, existing[0].id));
-      }
-      continue;
-    }
-    if (existing.length > 0) {
-      await db
-        .update(s.systemSettings)
-        .set({ value, updatedAt: new Date() })
-        .where(eq(s.systemSettings.id, existing[0].id));
-    } else {
-      await db.insert(s.systemSettings).values({ namespace, key, value });
-    }
-  }
-}

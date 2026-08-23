@@ -13,6 +13,7 @@ import { eq, and } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { parseKeyBundle, pickWeightedKey } from "@/lib/providers/keys";
 import type { Vector } from "@/lib/infra/vector";
+import { getSettingsRevision } from "@/lib/settings-control/service";
 
 export const EMBEDDING_DIM = 1024;
 
@@ -24,11 +25,19 @@ export interface EmbeddingConfig {
 
 let _config: EmbeddingConfig | null = null;
 let _configError: string | null = null;
+let _configRevision: number | null = null;
 
 /** 加载 embedding 配置(带缓存)。失败时 _configError 记录原因。 */
 async function loadConfig(): Promise<EmbeddingConfig | null> {
-  if (_config) return _config;
-  if (_configError) return null;
+  const revision = await getSettingsRevision();
+  if (_configRevision === revision) {
+    if (_config) return _config;
+    if (_configError) return null;
+  } else {
+    _config = null;
+    _configError = null;
+    _configRevision = revision;
+  }
 
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -77,6 +86,7 @@ async function loadConfig(): Promise<EmbeddingConfig | null> {
 export function resetEmbeddingConfig(): void {
   _config = null;
   _configError = null;
+  _configRevision = null;
 }
 
 /** 当前 embedding 配置(供 mem0 等复用;触发 loadConfig 缓存)。 */

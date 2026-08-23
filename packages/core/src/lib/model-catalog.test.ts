@@ -360,14 +360,29 @@ describe("model catalog reasoning migration", () => {
       id: string;
       prevId: string;
     };
-    expect(journal.entries.at(-1)).toEqual({
-      idx: 2,
-      version: "7",
-      when: expect.any(Number),
-      tag: "0002_model_catalog_reasoning",
-      breakpoints: true,
-    });
+    const next = JSON.parse(readFileSync("drizzle/pg/meta/0003_snapshot.json", "utf8")) as {
+      id: string;
+      prevId: string;
+    };
+    expect(journal.entries.slice(-2)).toEqual([
+      {
+        idx: 2,
+        version: "7",
+        when: expect.any(Number),
+        tag: "0002_model_catalog_reasoning",
+        breakpoints: true,
+      },
+      {
+        idx: 3,
+        version: "7",
+        when: expect.any(Number),
+        tag: "0003_complex_slayback",
+        breakpoints: true,
+      },
+    ]);
     expect(current.id).not.toBe(previous.id);
     expect(current.prevId).toBe(previous.id);
+    expect(next.id).not.toBe(current.id);
+    expect(next.prevId).toBe(current.id);
   });
 });

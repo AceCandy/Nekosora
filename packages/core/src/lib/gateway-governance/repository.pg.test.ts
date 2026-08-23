@@ -68,9 +68,14 @@ describePg("gateway governance PostgreSQL repository", () => {
     await pool.end();
   });
 
-  it("atomically saves and loads one versioned policy row", async () => {
+  it("loads the policy row published by settings control", async () => {
     const policy = withLimits({ key: { rpm: 321 } });
-    await expect(repository.savePolicy(policy)).resolves.toEqual(policy);
+    await pool.query(
+      `INSERT INTO "system_settings" ("namespace", "key", "value")
+       VALUES ('gateway', 'request_governance_v1', $1)
+       ON CONFLICT ("namespace", "key") DO UPDATE SET "value" = excluded."value"`,
+      [JSON.stringify(policy)],
+    );
     await expect(repository.loadPolicy()).resolves.toEqual({ policy, source: "stored" });
 
     const rows = await pool.query<{ count: string }>(
@@ -78,6 +83,57 @@ describePg("gateway governance PostgreSQL repository", () => {
        WHERE "namespace" = 'gateway' AND "key" = 'request_governance_v1'`,
     );
     expect(rows.rows[0]?.count).toBe("1");
+  });
+
+  it("accumulates hourly counts and keeps the highest observations", async () => {
+    const bucketStart = new Date("2026-08-24T12:00:00.000Z");
+    const delta = {
+      bucketStart,
+      scope: "key" as const,
+      requestCount: 2,
+      rpmPeak: 4,
+      concurrencyPeak: 3,
+      rateRejected: 1,
+      concurrencyRejected: 0,
+      quotaChatTokensRejected: 0,
+      quotaImageCountRejected: 0,
+      quotaTtsCodePointsRejected: 0,
+      quotaSttSecondsRejected: 0,
+    };
+    await pool.query(
+      'DELETE FROM "gateway_governance_hourly" WHERE "bucket_start" = $1 AND "scope" = $2',
+      [bucketStart, "key"],
+    );
+
+    await repository.upsertHourly([delta]);
+    await repository.upsertHourly([{
+      ...delta,
+      requestCount: 5,
+      rpmPeak: 9,
+      concurrencyPeak: 2,
+      rateRejected: 0,
+      concurrencyRejected: 1,
+    }]);
+
+    const result = await pool.query<{
+      request_count: string;
+      rpm_peak: number;
+      concurrency_peak: number;
+      rate_rejected: string;
+      concurrency_rejected: string;
+    }>(`
+      SELECT "request_count", "rpm_peak", "concurrency_peak",
+             "rate_rejected", "concurrency_rejected"
+        FROM "gateway_governance_hourly"
+       WHERE "bucket_start" = $1 AND "scope" = 'key'
+    `, [bucketStart]);
+    expect(result.rows).toEqual([{
+      request_count: "7",
+      rpm_peak: 9,
+      concurrency_peak: 3,
+      rate_rejected: "1",
+      concurrency_rejected: "1",
+    }]);
   });
 
   it("lets only one concurrent request consume a one-token Key/User burst", async () => {
@@ -98,7 +154,9 @@ describePg("gateway governance PostgreSQL repository", () => {
     const rejected = results.find((result) => result.status === "rejected");
     expect(rejected).toMatchObject({
       status: "rejected",
-      reason: expect.any(GovernanceRejectedError),
+      reason: expect.objectContaining({
+        affectedScopes: ["key", "user"],
+      }),
     });
   });
 

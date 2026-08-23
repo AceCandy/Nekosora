@@ -1,5 +1,10 @@
 import type { GatewayGovernancePolicy } from "./policy";
 import {
+  recordGatewayGovernanceAggregateRejection,
+  recordGatewayGovernanceConcurrency,
+  recordGatewayGovernanceRequest,
+} from "./aggregate";
+import {
   observeGatewayGovernanceFailure,
   observeGatewayGovernanceRejection,
   observeGatewayGovernanceSettlement,
@@ -254,12 +259,14 @@ async function acquireGovernanceLease(
     });
   } catch (error) {
     if (error instanceof GovernanceRejectedError) {
+      recordGovernanceConcurrencySafely(error.observation);
       recordGovernanceRejection(error, input.operation);
       throw error;
     }
     recordGovernanceFailure("lease");
     throw toGovernanceStateError(error);
   }
+  recordGovernanceConcurrencySafely(lease.observation);
   return new GatewayGovernanceHandle({
     lease,
     policy: input.policy,
@@ -379,12 +386,15 @@ async function consumeGovernanceRate(
   operation: GatewayGovernanceMetricOperation,
 ): Promise<void> {
   try {
-    await repository.consumeRate(identity, policy);
+    const observation = await repository.consumeRate(identity, policy);
+    recordGovernanceRequestSafely(observation);
   } catch (error) {
     if (error instanceof GovernanceRejectedError) {
+      recordGovernanceRequestSafely(error.observation);
       recordGovernanceRejection(error, operation);
       throw error;
     }
+    recordGovernanceRequestSafely();
     recordGovernanceFailure("rate");
     throw toGovernanceStateError(error);
   }
@@ -395,13 +405,32 @@ function recordGovernanceRejection(
   operation: GatewayGovernanceMetricOperation,
 ): void {
   try {
-    observeGatewayGovernanceRejection({
-      reason: error.reason,
-      scope: error.scope,
-      operation,
-    });
+    for (const scope of error.affectedScopes) {
+      recordGatewayGovernanceAggregateRejection(error, scope);
+      observeGatewayGovernanceRejection({ reason: error.reason, scope, operation });
+    }
   } catch {
     // Metrics are best-effort and never participate in admission decisions.
+  }
+}
+
+function recordGovernanceRequestSafely(
+  observation?: import("./repository").GovernanceObservation,
+): void {
+  try {
+    recordGatewayGovernanceRequest(observation);
+  } catch {
+    // Persistent aggregates are best-effort and never participate in admission.
+  }
+}
+
+function recordGovernanceConcurrencySafely(
+  observation?: import("./repository").GovernanceObservation,
+): void {
+  try {
+    recordGatewayGovernanceConcurrency(observation);
+  } catch {
+    // Persistent aggregates are best-effort and never participate in admission.
   }
 }
 

@@ -19,6 +19,7 @@ vi.mock("@/lib/infra/metrics", () => ({
 
 import {
   claimGatewayRetention,
+  deleteExpiredGatewayGovernanceHourly,
   deleteExpiredGatewayExecutions,
   runGatewayRetention,
 } from "./retention";
@@ -67,6 +68,20 @@ describe("gateway execution retention", () => {
     expect(query.text).toContain("'failed', 'interrupted'");
     expect(query.text).not.toContain("'running'");
     expect(query.text).toContain('ORDER BY "created_at" ASC, "id" ASC');
+    expect(query.text).toContain("FOR UPDATE SKIP LOCKED");
+    expect(query.values).toEqual([1_000]);
+  });
+
+  it("按 90 天边界分批删除治理小时聚合", async () => {
+    const execute = vi.fn().mockResolvedValue({ rows: [{ id: "hour-1" }] });
+    mocks.getDb.mockResolvedValue({ execute });
+
+    await expect(deleteExpiredGatewayGovernanceHourly()).resolves.toBe(1);
+
+    const query = execute.mock.calls[0]![0] as { text: string; values: unknown[] };
+    expect(query.text).toContain('FROM "gateway_governance_hourly"');
+    expect(query.text).toContain("interval '90 days'");
+    expect(query.text).toContain('ORDER BY "bucket_start" ASC, "id" ASC');
     expect(query.text).toContain("FOR UPDATE SKIP LOCKED");
     expect(query.values).toEqual([1_000]);
   });

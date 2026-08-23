@@ -4,6 +4,7 @@
  * pgvector 用于向量检索(文件 RAG)。
  */
 import {
+  type AnyPgColumn,
   pgTable,
   text,
   boolean,
@@ -890,6 +891,83 @@ export const userSettings = pgTable(
   (t) => [uniqueIndex("user_settings_unique_idx").on(t.userId, t.key)],
 );
 
+export const settingsChangeSetStatus = pgEnum("settings_change_set_status", [
+  "draft",
+  "applied",
+  "abandoned",
+]);
+
+export const settingsChangeSetKind = pgEnum("settings_change_set_kind", ["edit", "rollback"]);
+
+/** 全局设置发布的串行化锁点与缓存代际。 */
+export const settingsControlState = pgTable(
+  "settings_control_state",
+  {
+    id: text("id").primaryKey(),
+    currentRevision: bigint("current_revision", { mode: "number" }).notNull().default(0),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check("settings_control_state_singleton_check", sql`${t.id} = 'global'`),
+    check("settings_control_state_revision_check", sql`${t.currentRevision} >= 0`),
+  ],
+);
+
+/** 设置草稿与不可变发布历史；changes 仅保存 canonical 资源快照。 */
+export const settingsChangeSets = pgTable(
+  "settings_change_sets",
+  {
+    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
+    status: settingsChangeSetStatus("status").notNull().default("draft"),
+    kind: settingsChangeSetKind("kind").notNull().default("edit"),
+    rollbackOf: text("rollback_of").references(
+      (): AnyPgColumn => settingsChangeSets.id,
+      { onDelete: "restrict" },
+    ),
+    actorId: text("actor_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    baseRevision: bigint("base_revision", { mode: "number" }).notNull(),
+    appliedRevision: bigint("applied_revision", { mode: "number" }),
+    version: integer("version").notNull().default(1),
+    changes: jsonb("changes").$type<unknown[]>().notNull().default([]),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    appliedAt: timestamp("applied_at", { withTimezone: true }),
+    abandonedAt: timestamp("abandoned_at", { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("settings_change_sets_single_draft_idx")
+      .on(t.status)
+      .where(sql`${t.status} = 'draft'`),
+    uniqueIndex("settings_change_sets_applied_revision_idx").on(t.appliedRevision),
+    index("settings_change_sets_applied_at_idx").on(t.appliedAt),
+    check("settings_change_sets_base_revision_check", sql`${t.baseRevision} >= 0`),
+    check("settings_change_sets_version_check", sql`${t.version} > 0`),
+    check("settings_change_sets_changes_array_check", sql`jsonb_typeof(${t.changes}) = 'array'`),
+    check(
+      "settings_change_sets_rollback_check",
+      sql`(${t.kind} = 'edit' and ${t.rollbackOf} is null)
+        or (${t.kind} = 'rollback' and ${t.rollbackOf} is not null)`,
+    ),
+    check(
+      "settings_change_sets_status_check",
+      sql`(${t.status} = 'draft'
+          and ${t.appliedRevision} is null
+          and ${t.appliedAt} is null
+          and ${t.abandonedAt} is null)
+        or (${t.status} = 'applied'
+          and ${t.appliedRevision} is not null
+          and ${t.appliedAt} is not null
+          and ${t.abandonedAt} is null)
+        or (${t.status} = 'abandoned'
+          and ${t.appliedRevision} is null
+          and ${t.appliedAt} is null
+          and ${t.abandonedAt} is not null)`,
+    ),
+  ],
+);
+
 export const gatewayGovernanceOperation = pgEnum("gateway_governance_operation", [
   "chat.stream",
   "chat.generate",
@@ -906,6 +984,8 @@ export const gatewayQuotaKind = pgEnum("gateway_quota_kind", [
   "stt_seconds",
 ]);
 
+export const gatewayGovernanceScope = pgEnum("gateway_governance_scope", ["key", "user"]);
+
 /** API Key 或用户的速率状态，同时作为治理事务的稳定锁点。 */
 export const gatewayGovernanceSubjects = pgTable(
   "gateway_governance_subjects",
@@ -915,6 +995,8 @@ export const gatewayGovernanceSubjects = pgTable(
     apiKeyId: text("api_key_id").references(() => apiKeys.id, { onDelete: "cascade" }),
     rateTokens: numeric("rate_tokens", { precision: 20, scale: 6 }).notNull(),
     rateRefilledAt: timestamp("rate_refilled_at", { withTimezone: true }).notNull(),
+    metricsMinuteStart: timestamp("metrics_minute_start", { withTimezone: true }),
+    metricsMinuteRequests: integer("metrics_minute_requests").notNull().default(0),
     policyFingerprint: text("policy_fingerprint").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -931,6 +1013,60 @@ export const gatewayGovernanceSubjects = pgTable(
       sql`num_nonnulls(${t.userId}, ${t.apiKeyId}) = 1`,
     ),
     check("gateway_governance_subjects_rate_tokens_check", sql`${t.rateTokens} >= 0`),
+    check(
+      "gateway_governance_subjects_metrics_requests_check",
+      sql`${t.metricsMinuteRequests} >= 0`,
+    ),
+  ],
+);
+
+/** 不含主体标识的小时治理趋势；计数累加、峰值取最高观测值。 */
+export const gatewayGovernanceHourly = pgTable(
+  "gateway_governance_hourly",
+  {
+    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
+    bucketStart: timestamp("bucket_start", { withTimezone: true }).notNull(),
+    scope: gatewayGovernanceScope("scope").notNull(),
+    requestCount: bigint("request_count", { mode: "number" }).notNull().default(0),
+    rpmPeak: integer("rpm_peak").notNull().default(0),
+    concurrencyPeak: integer("concurrency_peak").notNull().default(0),
+    rateRejected: bigint("rate_rejected", { mode: "number" }).notNull().default(0),
+    concurrencyRejected: bigint("concurrency_rejected", { mode: "number" })
+      .notNull()
+      .default(0),
+    quotaChatTokensRejected: bigint("quota_chat_tokens_rejected", { mode: "number" })
+      .notNull()
+      .default(0),
+    quotaImageCountRejected: bigint("quota_image_count_rejected", { mode: "number" })
+      .notNull()
+      .default(0),
+    quotaTtsCodePointsRejected: bigint("quota_tts_code_points_rejected", { mode: "number" })
+      .notNull()
+      .default(0),
+    quotaSttSecondsRejected: bigint("quota_stt_seconds_rejected", { mode: "number" })
+      .notNull()
+      .default(0),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("gateway_governance_hourly_bucket_scope_idx").on(t.bucketStart, t.scope),
+    index("gateway_governance_hourly_bucket_idx").on(t.bucketStart),
+    check(
+      "gateway_governance_hourly_bucket_start_check",
+      sql`${t.bucketStart} = date_trunc('hour', ${t.bucketStart} at time zone 'UTC') at time zone 'UTC'`,
+    ),
+    check(
+      "gateway_governance_hourly_non_negative_check",
+      sql`${t.requestCount} >= 0
+        and ${t.rpmPeak} >= 0
+        and ${t.concurrencyPeak} >= 0
+        and ${t.rateRejected} >= 0
+        and ${t.concurrencyRejected} >= 0
+        and ${t.quotaChatTokensRejected} >= 0
+        and ${t.quotaImageCountRejected} >= 0
+        and ${t.quotaTtsCodePointsRejected} >= 0
+        and ${t.quotaSttSecondsRejected} >= 0`,
+    ),
   ],
 );
 

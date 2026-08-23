@@ -6,23 +6,27 @@
  * 未配置时回退 Nekusora/{version}。保存后调 resetUAConfig 清缓存即时生效。
  */
 import { getSetting } from "./service";
+import { getSettingsRevision } from "@/lib/settings-control/service";
 import pkg from "../../../package.json";
 
-const DEFAULT_UA = `Nekusora/${pkg.version}`;
+export const DEFAULT_UA = `Nekusora/${pkg.version}`;
 
 let chatUA: string | undefined;
 let gatewayUA: string | undefined;
 let loaded = false;
+let loadedRevision: number | null = null;
 
 async function ensureLoaded(): Promise<void> {
-  if (loaded) return;
   try {
+    const revision = await getSettingsRevision();
+    if (loaded && loadedRevision === revision) return;
     const [chat, gateway] = await Promise.all([
       getSetting("gateway", "chat_ua"),
       getSetting("gateway", "gateway_ua"),
     ]);
     chatUA = chat || undefined;
     gatewayUA = gateway || undefined;
+    loadedRevision = revision;
   } catch {
     // DB 不可用(测试 / 启动早期)时降级默认 UA,不阻断转发与检测。
     chatUA = undefined;
@@ -48,6 +52,7 @@ export function resetUAConfig(): void {
   chatUA = undefined;
   gatewayUA = undefined;
   loaded = false;
+  loadedRevision = null;
 }
 
 /** 检测请求 headers(含 user-agent=聊天 UA);probe 调用方传入,probeProviderKey 两条路径共用。 */

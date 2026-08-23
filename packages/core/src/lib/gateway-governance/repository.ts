@@ -11,7 +11,6 @@ import {
   GATEWAY_GOVERNANCE_POLICY_KEY,
   gatewayGovernancePolicyFingerprint,
   loadGatewayGovernancePolicy,
-  parseGatewayGovernancePolicy,
 } from "./policy";
 
 export const GOVERNANCE_LEASE_TTL_SECONDS = 120;
@@ -38,12 +37,34 @@ export interface GovernanceIdentity {
   apiKeyId: string;
 }
 
+export interface GovernanceObservation {
+  keyRpm?: number;
+  userRpm?: number;
+  keyConcurrency?: number;
+  userConcurrency?: number;
+}
+
 export interface GovernanceLease {
   id: string;
   keySubjectId: string;
   userSubjectId: string;
   operation: GatewayGovernanceOperation;
   expiresAt: Date;
+  observation?: GovernanceObservation;
+}
+
+export interface GatewayGovernanceHourlyDelta {
+  bucketStart: Date;
+  scope: GovernanceScope;
+  requestCount: number;
+  rpmPeak: number;
+  concurrencyPeak: number;
+  rateRejected: number;
+  concurrencyRejected: number;
+  quotaChatTokensRejected: number;
+  quotaImageCountRejected: number;
+  quotaTtsCodePointsRejected: number;
+  quotaSttSecondsRejected: number;
 }
 
 export interface LoadedGatewayGovernancePolicy {
@@ -63,12 +84,16 @@ export class GovernanceRejectedError extends Error {
   readonly scope: GovernanceScope;
   readonly retryAfterSeconds: number;
   readonly quotaKind?: GatewayQuotaKind;
+  readonly observation?: GovernanceObservation;
+  readonly affectedScopes: readonly GovernanceScope[];
 
   constructor(input: {
     reason: GovernanceRejectionReason;
     scope: GovernanceScope;
     retryAfterSeconds: number;
     quotaKind?: GatewayQuotaKind;
+    observation?: GovernanceObservation;
+    affectedScopes?: readonly GovernanceScope[];
   }) {
     super(`Gateway governance ${input.reason} limit exceeded`);
     this.name = "GovernanceRejectedError";
@@ -76,6 +101,8 @@ export class GovernanceRejectedError extends Error {
     this.scope = input.scope;
     this.retryAfterSeconds = Math.max(1, Math.ceil(input.retryAfterSeconds));
     this.quotaKind = input.quotaKind;
+    this.observation = input.observation;
+    this.affectedScopes = input.affectedScopes ?? [input.scope];
   }
 }
 
@@ -133,58 +160,49 @@ export class GatewayGovernanceRepository {
     return loadGatewayGovernancePolicy(row ? String(row.value) : null);
   }
 
-  async savePolicy(input: unknown): Promise<GatewayGovernancePolicy> {
-    const policy = parseGatewayGovernancePolicy(input);
-    await this.db.execute(sql`
-      INSERT INTO "system_settings" ("namespace", "key", "value", "updated_at")
-      VALUES (
-        ${GATEWAY_GOVERNANCE_NAMESPACE},
-        ${GATEWAY_GOVERNANCE_POLICY_KEY},
-        ${JSON.stringify(policy)},
-        statement_timestamp()
-      )
-      ON CONFLICT ("namespace", "key") DO UPDATE SET
-        "value" = excluded."value",
-        "updated_at" = statement_timestamp()
-    `);
-    return policy;
-  }
-
   async consumeRate(
     identity: GovernanceIdentity,
     policy: GatewayGovernancePolicy,
-  ): Promise<void> {
+  ): Promise<GovernanceObservation> {
     const fingerprint = gatewayGovernancePolicyFingerprint(policy);
-    const result = await this.db.transaction<RejectionResult | null>(async (tx) => {
+    const result = await this.db.transaction<{
+      observation: GovernanceObservation;
+      rejection?: GovernanceRejectedError;
+    }>(async (tx) => {
       const subjects = await ensureSubjects(tx, identity, policy, fingerprint);
       await lockSubject(tx, subjects.keySubjectId);
       await lockSubject(tx, subjects.userSubjectId);
 
-      const keyTokens = await refillSubject(
+      const keyRate = await refillSubject(
         tx,
         subjects.keySubjectId,
         policy.key,
         fingerprint,
       );
-      const userTokens = await refillSubject(
+      const userRate = await refillSubject(
         tx,
         subjects.userSubjectId,
         policy.user,
         fingerprint,
       );
+      const observation = {
+        keyRpm: keyRate.minuteRequests,
+        userRpm: userRate.minuteRequests,
+      };
       const failures = [
-        rateFailure("key", keyTokens, policy.key.rpm),
-        rateFailure("user", userTokens, policy.user.rpm),
+        rateFailure("key", keyRate.tokens, policy.key.rpm, observation),
+        rateFailure("user", userRate.tokens, policy.user.rpm, observation),
       ].filter((failure): failure is GovernanceRejectedError => failure !== null);
       if (failures.length > 0) {
-        return { rejection: longestRejection(failures) };
+        return { observation, rejection: longestRejection(failures) };
       }
 
       await decrementRateToken(tx, subjects.keySubjectId);
       await decrementRateToken(tx, subjects.userSubjectId);
-      return null;
+      return { observation };
     });
-    if (result) throw result.rejection;
+    if (result.rejection) throw result.rejection;
+    return result.observation;
   }
 
   async acquireLease(input: {
@@ -209,12 +227,17 @@ export class GatewayGovernanceRepository {
       }
 
       const activity = await readActiveLeaseCounts(tx, subjects);
+      const rejectedObservation = {
+        keyConcurrency: activity.keyCount,
+        userConcurrency: activity.userCount,
+      };
       const failures: GovernanceRejectedError[] = [];
       if (activity.keyCount >= input.policy.key.concurrency) {
         failures.push(new GovernanceRejectedError({
           reason: "concurrency",
           scope: "key",
           retryAfterSeconds: secondsUntil(activity.keyRetryAt, activity.now),
+          observation: rejectedObservation,
         }));
       }
       if (activity.userCount >= input.policy.user.concurrency) {
@@ -222,6 +245,7 @@ export class GatewayGovernanceRepository {
           reason: "concurrency",
           scope: "user",
           retryAfterSeconds: secondsUntil(activity.userRetryAt, activity.now),
+          observation: rejectedObservation,
         }));
       }
       if (failures.length > 0) return { rejection: longestRejection(failures) };
@@ -248,6 +272,10 @@ export class GatewayGovernanceRepository {
         userSubjectId: subjects.userSubjectId,
         operation: input.operation,
         expiresAt: dateValue(row.lease_expires_at),
+        observation: {
+          keyConcurrency: activity.keyCount + 1,
+          userConcurrency: activity.userCount + 1,
+        },
       };
     });
     if ("rejection" in result) throw result.rejection;
@@ -413,6 +441,54 @@ export class GatewayGovernanceRepository {
       return true;
     });
   }
+
+  /** 同一 flush 必须整批提交，避免部分成功后重试造成计数重复。 */
+  async upsertHourly(deltas: readonly GatewayGovernanceHourlyDelta[]): Promise<void> {
+    if (deltas.length === 0) return;
+    await this.db.transaction(async (tx) => {
+      for (const delta of deltas) {
+        await tx.execute(sql`
+          INSERT INTO "gateway_governance_hourly" (
+            "bucket_start", "scope", "request_count", "rpm_peak", "concurrency_peak",
+            "rate_rejected", "concurrency_rejected", "quota_chat_tokens_rejected",
+            "quota_image_count_rejected", "quota_tts_code_points_rejected",
+            "quota_stt_seconds_rejected", "updated_at"
+          ) VALUES (
+            ${delta.bucketStart}, ${delta.scope}, ${delta.requestCount}, ${delta.rpmPeak},
+            ${delta.concurrencyPeak}, ${delta.rateRejected}, ${delta.concurrencyRejected},
+            ${delta.quotaChatTokensRejected}, ${delta.quotaImageCountRejected},
+            ${delta.quotaTtsCodePointsRejected}, ${delta.quotaSttSecondsRejected},
+            statement_timestamp()
+          )
+          ON CONFLICT ("bucket_start", "scope") DO UPDATE SET
+            "request_count" = "gateway_governance_hourly"."request_count"
+              + excluded."request_count",
+            "rpm_peak" = greatest("gateway_governance_hourly"."rpm_peak", excluded."rpm_peak"),
+            "concurrency_peak" = greatest(
+              "gateway_governance_hourly"."concurrency_peak",
+              excluded."concurrency_peak"
+            ),
+            "rate_rejected" = "gateway_governance_hourly"."rate_rejected"
+              + excluded."rate_rejected",
+            "concurrency_rejected" = "gateway_governance_hourly"."concurrency_rejected"
+              + excluded."concurrency_rejected",
+            "quota_chat_tokens_rejected" =
+              "gateway_governance_hourly"."quota_chat_tokens_rejected"
+              + excluded."quota_chat_tokens_rejected",
+            "quota_image_count_rejected" =
+              "gateway_governance_hourly"."quota_image_count_rejected"
+              + excluded."quota_image_count_rejected",
+            "quota_tts_code_points_rejected" =
+              "gateway_governance_hourly"."quota_tts_code_points_rejected"
+              + excluded."quota_tts_code_points_rejected",
+            "quota_stt_seconds_rejected" =
+              "gateway_governance_hourly"."quota_stt_seconds_rejected"
+              + excluded."quota_stt_seconds_rejected",
+            "updated_at" = statement_timestamp()
+        `);
+      }
+    });
+  }
 }
 
 export async function createGatewayGovernanceRepository(): Promise<GatewayGovernanceRepository> {
@@ -464,7 +540,7 @@ async function refillSubject(
   subjectId: string,
   limits: GatewayScopeLimits,
   fingerprint: string,
-): Promise<number> {
+): Promise<{ tokens: number; minuteRequests: number }> {
   const result = await tx.execute(sql`
     UPDATE "gateway_governance_subjects"
        SET "rate_tokens" = CASE
@@ -478,14 +554,28 @@ async function refillSubject(
              )
            END,
            "rate_refilled_at" = statement_timestamp(),
+           "metrics_minute_requests" = CASE
+             WHEN "metrics_minute_start" =
+               date_trunc('minute', statement_timestamp() at time zone 'UTC') at time zone 'UTC'
+             THEN "metrics_minute_requests" + 1
+             ELSE 1
+           END,
+           "metrics_minute_start" =
+             date_trunc('minute', statement_timestamp() at time zone 'UTC') at time zone 'UTC',
            "policy_fingerprint" = ${fingerprint},
            "updated_at" = statement_timestamp()
      WHERE "id" = ${subjectId}
-     RETURNING "rate_tokens"
+     RETURNING "rate_tokens", "metrics_minute_requests"
   `);
-  const [row] = rowsOf<{ rate_tokens: number | string }>(result);
+  const [row] = rowsOf<{
+    rate_tokens: number | string;
+    metrics_minute_requests: number | string;
+  }>(result);
   if (!row) throw new GovernanceStateError("Failed to refill governance rate bucket");
-  return numberValue(row.rate_tokens);
+  return {
+    tokens: numberValue(row.rate_tokens),
+    minuteRequests: numberValue(row.metrics_minute_requests),
+  };
 }
 
 async function decrementRateToken(tx: SqlExecutor, subjectId: string): Promise<void> {
@@ -707,19 +797,29 @@ function rateFailure(
   scope: GovernanceScope,
   tokens: number,
   rpm: number,
+  observation: GovernanceObservation,
 ): GovernanceRejectedError | null {
   if (tokens >= 1) return null;
   return new GovernanceRejectedError({
     reason: "rate",
     scope,
     retryAfterSeconds: ((1 - tokens) * 60) / rpm,
+    observation,
   });
 }
 
 function longestRejection(errors: GovernanceRejectedError[]): GovernanceRejectedError {
-  return errors.reduce((current, next) => (
+  const selected = errors.reduce((current, next) => (
     next.retryAfterSeconds > current.retryAfterSeconds ? next : current
   ));
+  return new GovernanceRejectedError({
+    reason: selected.reason,
+    scope: selected.scope,
+    retryAfterSeconds: selected.retryAfterSeconds,
+    quotaKind: selected.quotaKind,
+    observation: selected.observation,
+    affectedScopes: [...new Set(errors.map((error) => error.scope))],
+  });
 }
 
 function quotaLimit(limits: GatewayScopeLimits, kind: GatewayQuotaKind): number {

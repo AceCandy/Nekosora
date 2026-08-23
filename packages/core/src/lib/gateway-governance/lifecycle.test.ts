@@ -85,6 +85,36 @@ describe("gateway governance lifecycle", () => {
     expect(repository.acquireLease).not.toHaveBeenCalled();
   });
 
+  it("records every affected scope while preserving one client rejection", async () => {
+    const rejection = new GovernanceRejectedError({
+      reason: "rate",
+      scope: "user",
+      retryAfterSeconds: 2,
+      affectedScopes: ["key", "user"],
+    });
+    const repository = repositoryMock({
+      consumeRate: vi.fn().mockRejectedValue(rejection),
+    });
+
+    await expect(beginGatewayGovernance({
+      identity: { userId: "user-1", apiKeyId: "key-1" },
+      operation: "image.generate",
+      repository,
+    })).rejects.toBe(rejection);
+
+    expect(metrics.observeGatewayGovernanceRejection).toHaveBeenCalledTimes(2);
+    expect(metrics.observeGatewayGovernanceRejection).toHaveBeenNthCalledWith(1, {
+      reason: "rate",
+      scope: "key",
+      operation: "image.generate",
+    });
+    expect(metrics.observeGatewayGovernanceRejection).toHaveBeenNthCalledWith(2, {
+      reason: "rate",
+      scope: "user",
+      operation: "image.generate",
+    });
+  });
+
   it("acquires a lease from an already checked policy without consuming rate again", async () => {
     const repository = repositoryMock();
 

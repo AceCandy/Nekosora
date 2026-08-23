@@ -2,6 +2,7 @@ import { bootstrapDatabase } from "@nekusora/core/bootstrap";
 import { validateEnv } from "@nekusora/core/env";
 import {
   createGatewayGovernanceRepository,
+  startGatewayGovernanceAggregate,
   startGatewayGovernanceReaper,
   type GovernanceReaperController,
 } from "@nekusora/core/gateway-governance";
@@ -20,13 +21,22 @@ async function main(): Promise<void> {
   configureQueueProvider(getQueue);
   await bootstrapDatabase({ seedAdmin: false });
 
+  const repository = await createGatewayGovernanceRepository();
   const reaper = startGatewayGovernanceReaper({
-    repository: await createGatewayGovernanceRepository(),
+    repository,
     onFailure: (code) => console.error(`[gateway] 治理租约回收失败 code=${code}`),
   });
-  governanceReaper = reaper;
+  const aggregate = startGatewayGovernanceAggregate({
+    repository,
+    onFailure: () => console.error("[gateway] 治理聚合刷新失败"),
+  });
+  governanceReaper = {
+    stop: async () => {
+      await Promise.all([reaper.stop(), aggregate.stop()]);
+    },
+  };
   server = buildServer({
-    closeResources: () => closeGatewayResources(reaper),
+    closeResources: () => closeGatewayResources(governanceReaper!),
   });
   const port = Number(process.env.GATEWAY_PORT ?? 4000);
   const host = process.env.GATEWAY_HOST ?? "0.0.0.0";

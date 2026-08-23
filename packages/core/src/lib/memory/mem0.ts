@@ -3,6 +3,7 @@ import type { Memory } from "mem0ai/oss";
 import { and, eq } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { resolveRoutesById } from "@/lib/routing";
+import { getSettingsRevision } from "@/lib/settings-control/service";
 import { createNekosoraLLM } from "./nekosora-llm";
 
 /** Mem0 抽取的软约束；确定性角色与内容边界由调用方负责。 */
@@ -15,6 +16,7 @@ const MEMORY_EXTRACTION_INSTRUCTIONS = [
 let _memory: Memory | null = null;
 let _initPromise: Promise<Memory> | null = null;
 let _modelFingerprint: string | null = null;
+let _settingsRevision: number | null = null;
 
 type ModelReference = { modelId: string; modelName: string };
 
@@ -69,7 +71,7 @@ async function resolveConfiguredModel(): Promise<ModelReference> {
   throw new Error("mem0 初始化失败:未配置可用的 mem0 抽取模型");
 }
 
-async function initialize(model: ModelReference): Promise<Memory> {
+async function initialize(model: ModelReference, revision: number): Promise<Memory> {
   const [{ Memory }, { getEmbeddingConfig }] = await Promise.all([
     import("mem0ai/oss"),
     import("@/lib/rag/embedding"),
@@ -91,21 +93,23 @@ async function initialize(model: ModelReference): Promise<Memory> {
   });
   _memory = memory;
   _modelFingerprint = `${model.modelId}:${model.modelName}`;
+  _settingsRevision = revision;
   return memory;
 }
 
 /** 普通召回/CRUD 复用客户端；抽取传 refreshModel=true 以跨 worker 进程刷新配置。 */
 export async function getMemory(options?: { refreshModel?: boolean }): Promise<Memory> {
-  if (!options?.refreshModel && _memory) return _memory;
+  const revision = await getSettingsRevision();
+  if (!options?.refreshModel && _memory && _settingsRevision === revision) return _memory;
   const model = await resolveConfiguredModel();
   const fingerprint = `${model.modelId}:${model.modelName}`;
-  if (_memory && _modelFingerprint === fingerprint) return _memory;
+  if (_memory && _modelFingerprint === fingerprint && _settingsRevision === revision) return _memory;
   if (_initPromise) {
     // 配置在初始化窗口内变化时，先等待旧 client，再按新指纹重建。
     await _initPromise.catch(() => undefined);
-    if (_memory && _modelFingerprint === fingerprint) return _memory;
+    if (_memory && _modelFingerprint === fingerprint && _settingsRevision === revision) return _memory;
   }
-  _initPromise = initialize(model).catch((error) => {
+  _initPromise = initialize(model, revision).catch((error) => {
     _initPromise = null;
     throw error;
   });
@@ -120,4 +124,5 @@ export function resetMemoryClient(): void {
   _memory = null;
   _initPromise = null;
   _modelFingerprint = null;
+  _settingsRevision = null;
 }

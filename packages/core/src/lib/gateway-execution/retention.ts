@@ -58,6 +58,25 @@ export async function deleteExpiredGatewayExecutions(): Promise<GatewayRetention
   return counts;
 }
 
+export async function deleteExpiredGatewayGovernanceHourly(): Promise<number> {
+  const db = await getDb();
+  const result = await db.execute(sql`
+    WITH "doomed" AS (
+      SELECT "id"
+        FROM "gateway_governance_hourly"
+       WHERE "bucket_start" < statement_timestamp() - interval '90 days'
+       ORDER BY "bucket_start" ASC, "id" ASC
+       LIMIT ${GATEWAY_RETENTION_BATCH_SIZE}
+       FOR UPDATE SKIP LOCKED
+    )
+    DELETE FROM "gateway_governance_hourly" AS "hourly"
+     USING "doomed"
+     WHERE "hourly"."id" = "doomed"."id"
+     RETURNING "hourly"."id"
+  `);
+  return rowsOf(result).length;
+}
+
 export async function runGatewayRetention(): Promise<void> {
   let claimed: boolean;
   try {
@@ -72,6 +91,7 @@ export async function runGatewayRetention(): Promise<void> {
   const startedAt = performance.now();
   try {
     const deleted = await deleteExpiredGatewayExecutions();
+    await deleteExpiredGatewayGovernanceHourly();
     observeRun("success", deleted, performance.now() - startedAt);
   } catch (error) {
     observeRun("failed", {}, performance.now() - startedAt);

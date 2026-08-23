@@ -81,6 +81,7 @@ async function main(): Promise<void> {
       "vitest",
       "run",
       "src/lib/gateway-governance/repository.pg.test.ts",
+      "src/lib/settings-control/service.pg.test.ts",
       "src/lib/gateway-execution/retention.pg.test.ts",
       "src/lib/chat/completion.pg.test.ts",
       "src/lib/rag/process.pg.test.ts",
