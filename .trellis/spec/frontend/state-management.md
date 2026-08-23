@@ -141,59 +141,79 @@ store 的 `migrate(临时key → 真实id)` 先于回写执行，活动 id 一�
 - 写：Server Action 完成后调用 `revalidatePath(path)` 让 Server Component 重取。
 - DB 行类型是 `Record<string, unknown>`，传给 Client 前转成显式 DTO（见 type-safety）。
 
-## Scenario: Server Action 配置表单保存后保持当前值
+## Scenario: 设置活动草稿表单保留输入与提交状态
 
 ### 1. Scope / Trigger
 
-- 使用 React 19 `<form action={serverAction}>` 保存配置，且提交成功后选择器或输入值必须留在最新服务端值时，适用本节。
+- 修改 `/admin/settings` 中写入活动变更集的普通表单、治理表单、输出模式/样式弹窗、排序或删除确认时，适用本节。
 
 ### 2. Signatures
 
-- Server Action：`(formData: FormData) => Promise<void>`，写入后调用 `revalidatePath(containerPath)`。
-- Client 表单接收 `initialValue`、Server Action 与候选项；Server Component 以已保存值组成 React `key`。
+- 普通表单：`useDraftAction(action: (formData: FormData) => Promise<void>)`，返回 `onSubmit`、`pending`、`idle | success | error`。
+- 治理表单：`useActionState(saveGatewayGovernancePolicy.bind(null, expected), initialState)`；Action 返回 `idle | success | error`，不以异常作为字段校验反馈。
+- 输出资源弹窗：`action(formData): void | Promise<void>`；删除确认使用可等待的 `onConfirm(): void | Promise<void>` 分支。
+- 所有设置 Action 只 stage 服务端活动草稿并 `revalidatePath("/admin/settings")`；它们不表示生产配置已发布。
 
 ### 3. Contracts
 
-- React 19 在 Action 成功后会 reset 原生表单；`defaultValue` 只定义挂载默认值，不能负责保存后的 current value。
-- 需要留值的选择器使用 `value + useState + onChange` 维持提交期间交互状态。
-- 仅受控值仍不够：原生 reset 可直接改 DOM，state 未变化时 React 不会再次写回。Action 必须写库并 revalidate，Server Component 用新已保存值改变 Client 表单 `key`，重建 DOM/state 后收敛。
-- 清空配置也必须改变 key（例如 `task:${savedId}`，空值仍参与字符串），确保自动模式正确重建。
+- “保存”只表示变更已进入唯一活动草稿；界面必须使用“发布后生效”语义，不能显示成生产配置即时生效。
+- 普通表单 `preventDefault()` 后必须立即复制 `new FormData(event.currentTarget)`，再在 transition 内调用 Action。失败时不调用 `reset()`、不关闭容器，保留用户输入。
+- React 19 Action 可能 reset 原生表单。治理等使用 `<form action>` 的字段必须由 `value + useState + onChange` 控制；服务端草稿投影变化时，以包含完整 policy/value 的稳定 `key` 重建字段，使 DOM 与新服务端值收敛。
+- pending 期间禁用当前表单的可变控件、提交、取消和重复确认。状态容器使用 `aria-live="polite"`；成功用 `role="status"`，失败用行内 `role="alert"`，不能只依赖 Toast。
+- 输出模式/样式新增或编辑只有 Action 成功后才关闭弹窗并触发列表成功反馈；失败保留弹窗、当前输入和 unsaved 状态。关闭后才允许递增 form key 清理旧值。
+- 排序可以乐观展示，但服务端失败必须恢复服务端顺序并显示错误。它与其他编辑共享同一草稿 expectation，过期版本不得静默覆盖。
+- 设置页删除必须走 `ConfirmDialog.onConfirm` 的异步 pending/失败保留路径；在 `action` 分支具备同等语义前，不得用于这些删除操作。
 
 ### 4. Validation & Error Matrix
 
 | 条件 | 预期行为 |
 |---|---|
-| 保存不同值成功 | revalidate 返回新值，key 变化，控件保持新值 |
-| 清空成功 | key 变化到空值，控件保持自动/空状态 |
-| 保存相同值成功 | reset 回到相同已保存值，无视觉回退 |
-| Action 失败 | 不把失败值伪装成已保存；错误交给现有 Action 边界处理 |
-| 忘记 revalidate | RSC 不返回新已保存值，key 不变化，属于契约违例 |
+| 普通表单 stage 成功 | 保留/投影草稿值，显示成功状态；等待显式发布 |
+| 普通表单 Action 抛错 | 保留输入，显示 `role=alert`，容器不关闭 |
+| `useActionState` 返回字段错误 | 受控输入不回退，显示具体错误，允许修正后重试 |
+| 草稿投影在 RSC 刷新后变化 | 相关 value key 变化，DOM/state 重建到新草稿值 |
+| 新增/编辑输出资源成功 | 关闭弹窗并显示列表成功反馈 |
+| 新增/编辑输出资源失败 | 弹窗、输入和 unsaved 状态保持可编辑 |
+| 删除失败 | 确认框保持打开，显示行内错误，不重复提交 |
+| expectation 过期 | 显示失败/冲突；不覆盖新草稿版本 |
+| 忘记 revalidate | 页面无法取得新草稿/version，属于契约违例 |
 
 ### 5. Good / Base / Bad Cases
 
-- Good：Client 受控选择器 + Server Action 写库/revalidate + 服务端已保存值 key。
-- Base：保存当前已有值，提交前后显示不变。
-- Bad：只给 Server Component `<select>` 写 `defaultValue`，Action reset 后回旧值，整页刷新才正确。
-- Bad：只改成受控选择器但 key 恒定；reset 直接改 DOM 后可能仍显示旧值。
+- Good：UA 表单拦截原生提交并复制 FormData；stage 失败后两个输入仍是管理员刚输入的值。
+- Good：治理输入受控，RSC 返回新草稿 policy 后通过 policy key 重建，成功与失败都有可访问反馈。
+- Good：输出样式删除等待异步 `onConfirm`；失败时确认框保持打开，用户可重试或取消。
+- Base：保存与当前草稿相同的值，控件不跳动，仍显示明确结果。
+- Bad：把 stage 成功文案写成“已即时生效”，会绕过显式发布的真实心智模型。
+- Bad：使用原生 Action 后立即关闭/重置弹窗，失败时丢失输入且无法定位错误。
 
 ### 6. Tests Required
 
-- 浏览器集成至少覆盖：选择另一个值并保存、清空为自动并保存、随后刷新仍一致。
-- 断言提交前后的 DOM `select.value`，不能只断言数据库或 Server Action 返回成功。
-- lint/typecheck 只能验证边界类型，不能替代 React form reset 的运行时检查。
+- Hook/组件测试覆盖 pending 锁定、成功状态、Action 抛错后的输入保留和 `role=alert`。
+- `useActionState` 表单覆盖字段校验失败、React 原生 reset、服务端 policy key 变化和清空/自动值。
+- 输出资源测试覆盖新增/编辑失败不关闭、成功才关闭、排序失败回退并显示错误。
+- 删除确认测试覆盖异步 pending、失败保留弹窗、成功关闭，且设置页不得误走立即关闭的 `action` 分支。
+- 浏览器验收断言提交前后的真实 `input/select.value`、焦点与弹窗可见性；lint/typecheck 不能替代 React form reset 的运行时检查。
 
 ### 7. Wrong vs Correct
 
 ```tsx
-// Wrong：revalidate 虽正确，但非受控 current value 会被 Action reset。
-<select name="model_id" defaultValue={savedModelId} />
+// Wrong：原生 Action/立即关闭会在失败时 reset 并丢失输入。
+<form action={stageAction} onSubmit={closeDialog} />
 
-// Correct：客户端维持交互值，服务端新值通过 key 强制重新收敛。
-<ModelConfigForm
-  key={`model:${savedModelId}`}
-  initialModelId={savedModelId}
-  action={saveModel}
-/>
+// Correct：先捕获输入，失败保留；只有成功路径关闭。
+const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+  event.preventDefault();
+  const formData = new FormData(event.currentTarget);
+  startTransition(async () => {
+    try {
+      await stageAction(formData);
+      closeDialog();
+    } catch {
+      setFailed(true);
+    }
+  });
+};
 ```
 
 ---

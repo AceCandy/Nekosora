@@ -21,6 +21,14 @@ quota metering, media usage telemetry, or the governance PostgreSQL schema.
   `GatewayGovernanceHandle.{reserveQuota,markProviderStarted,finalize}`.
 - PostgreSQL facts: `gateway_governance_subjects`, `gateway_quota_windows`, and
   `gateway_governance_leases`.
+- Aggregate facts: `gateway_governance_hourly` keyed by UTC hour and `key | user`
+  scope, plus `GatewayGovernanceHourlyDelta` numeric counters and peaks.
+- Aggregate entrypoints: `recordGatewayGovernanceRequest`,
+  `recordGatewayGovernanceConcurrency`,
+  `recordGatewayGovernanceAggregateRejection`, and
+  `startGatewayGovernanceAggregate(...): GovernanceAggregateController`.
+- Analytics entrypoint: `getGatewayGovernanceInsights(range, candidate)` where
+  `range` is exactly `7 | 30 | 90` days.
 - Media telemetry: `IRUsage.{imageCount,ttsCodePoints,sttSeconds}` maps to the
   same nullable columns on `gateway_executions` and `gateway_attempts`.
 
@@ -59,10 +67,38 @@ quota metering, media usage telemetry, or the governance PostgreSQL schema.
   field. Non-applicable, rejected, failed-without-usage, and interrupted facts
   store `null`, not a fabricated token or request count. Telemetry remains
   best-effort and never controls admission or settlement.
+- After API-key authentication, each logical request increments both aggregate
+  scopes once before governance admission. Authentication failures are excluded.
+  RPM and concurrency peaks are the maximum observed value for one subject in
+  that scope; never sum subjects into a fabricated per-subject peak.
+- A rejection is recorded for every scope in `GovernanceRejectedError.affectedScopes`.
+  The client still receives one selected error, but simultaneous key and user
+  failures increment both aggregate scopes. Quota failures use only the fixed
+  four quota-kind counters.
+- The aggregate recorder keeps only `UTC hour + scope` numeric deltas. Its
+  five-second timer swaps the active buffer before awaiting PostgreSQL, allows
+  one flush in flight, and merges a failed batch back by summing counters and
+  taking peak maxima. Recording and flush failure must not change admission,
+  rejection, settlement, or the client response.
+- `upsertHourly` commits one flushed batch in one transaction. Conflict updates
+  add request/rejection counters and use `greatest` for both peaks; partial batch
+  success is forbidden because retry would double-count successful rows.
+- Graceful Gateway shutdown stops scheduling, waits for the in-flight flush,
+  flushes the remaining active buffer, and unregisters that recorder. An
+  abnormal exit may lose the unflushed window; persisted rows survive restarts.
+- Analytics exposes only hourly scope DTOs, last update time, delayed status,
+  and deterministic replay. RPM/concurrency replay counts hours whose observed
+  peak exceeds a candidate threshold; it does not predict future rejection
+  counts. Monthly quota replay uses the current UTC month's used plus reserved
+  units and exposes aggregate maxima and subject counts, not subject identities;
+  the 7/30/90-day selector applies only to hourly history.
+- `gateway_governance_hourly` contains no user ID, API-key ID/fingerprint,
+  request ID/content, Provider, model, operation, or free-text error. Rows older
+  than 90 days are deleted in batches by the existing Gateway retention claim.
 - Policy form input is a complete, strict, bounded safe-integer object. The
   Server Action authenticates with `requireAdmin`, parses the whole group, and
-  saves it with one `INSERT ... ON CONFLICT DO UPDATE`. Invalid stored JSON uses
-  the safe defaults and surfaces a configuration warning.
+  stages the canonical JSON into the active settings draft. Invalid stored JSON
+  uses the safe defaults and surfaces a configuration warning.
 
 ### 4. Validation & Error Matrix
 
@@ -80,6 +116,12 @@ quota metering, media usage telemetry, or the governance PostgreSQL schema.
 | Finalize races reaper | Exactly one settles and deletes; the loser is a no-op |
 | Stored policy is missing | Use `DEFAULT_GATEWAY_GOVERNANCE_POLICY` |
 | Stored policy is invalid | Use defaults and record the fixed `policy_invalid` failure stage |
+| Aggregate recorder is not started | Admission proceeds; no aggregate is recorded |
+| Aggregate flush fails | Merge the whole batch back, emit low-cardinality failure telemetry, and do not throw into the request |
+| Key and user reject the same request | Return one client error; increment both `affectedScopes` |
+| Hourly row already exists | Add counters and retain the greatest peaks |
+| Latest aggregate update is older than 10 seconds | Return `dataDelayed=true`; do not label data as live |
+| Hourly row is older than 90 days | Delete through the existing batched retention loop |
 
 All governance 429 responses include `X-Gateway-Error-Code`. Chat protocols keep
 their native envelope; Provider 429 responses remain upstream failures and are
@@ -93,14 +135,24 @@ not converted into client quota state.
   statement rejects instead of extending the lease.
 - Good: an Image request reserves two images, receives one, refunds one, and
   records `imageCount=1` with the other media fields null.
+- Good: key and user RPM both fail; the response remains one 429 while each
+  scope's hourly `rateRejected` increases once.
+- Good: traffic arrives during a slow flush; it lands in the new active buffer,
+  and a failed old batch merges back without overwriting the new counters.
+- Good: a 30-day replay reports exceeded-hour counts from persisted peaks and
+  clearly remains historical evidence, not a future guarantee.
 - Base: one successful Chat request reserves once, marks Provider start once,
-  charges actual tokens, and deletes its lease.
+  charges actual tokens, deletes its lease, and increments both request scopes.
 - Bad: creating a new lease per route attempt multiplies concurrency and quota
   charges for one client request.
 - Bad: using transaction-start `now()` after a lock wait or updating only by ID
   can revive a lease that expired while waiting.
 - Bad: writing Image/TTS/STT units into token columns makes usage and quota
   semantics unverifiable.
+- Bad: aggregating all subjects' minute counts into `rpmPeak` invents a value
+  that no governed key or user experienced.
+- Bad: persisting one row per rejected request, or any subject/request ID, turns
+  bounded operational trends into a sensitive event ledger.
 
 ### 6. Tests Required
 
@@ -121,8 +173,18 @@ not converted into client quota state.
   reservation refund, conservative settlement, and overage.
 - Telemetry tests assert media fields on attempts and executions, with `null`
   for all non-applicable fields.
+- Aggregate tests assert one request in both scopes, per-scope peak maxima, all
+  rejection reasons, every `affectedScopes` entry, exact privacy-safe DTO keys,
+  single-flight flushing, failed-batch merge, and shutdown drain.
+- Real PostgreSQL tests assert repeated upsert adds counters and keeps peak
+  maxima for one hour/scope. Retention tests assert the 90-day boundary and
+  batched `SKIP LOCKED` deletion; mock SQL tests do not replace the real
+  PostgreSQL upsert/retention checks.
+- Analytics tests assert only 7/30/90-day ranges, delayed-data detection,
+  exceeded-hour replay, aggregate quota output, and no future-rejection claim.
 - Migration tests assert SQL, journal, snapshot, both subject foreign keys,
-  delete behavior, checks, indexes, and nullable media columns.
+  delete behavior, checks, indexes, nullable media columns, and the hourly
+  bucket/scope unique constraint.
 
 ### 7. Wrong vs Correct
 
@@ -152,4 +214,14 @@ UPDATE gateway_governance_leases
 SET lease_expires_at = statement_timestamp() + interval '120 seconds'
 WHERE id = $1
   AND lease_expires_at > statement_timestamp();
+```
+
+```typescript
+// Wrong: only the selected client-facing scope is counted.
+recordGatewayGovernanceAggregateRejection(error, error.scope);
+
+// Correct: one response may represent simultaneous failures in both scopes.
+for (const scope of error.affectedScopes) {
+  recordGatewayGovernanceAggregateRejection(error, scope);
+}
 ```
