@@ -1259,3 +1259,24 @@ Show routes as currently unavailable when their provider is disabled in admin an
 ### Status
 
 [OK] **Completed**
+
+
+## Session 118: Refine chat and login experience
+
+**Date**: 2026-08-23
+**Task**: Refine chat and login experience
+**Branch**: `main`
+
+### Summary
+
+Refined chat interaction, research status, accessibility, login visuals, and conversation title/snippet presentation; full workspace checks passed.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `21bbccf` | (see git log) |
+
+### Status
+
+[OK] **Completed**
