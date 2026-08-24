@@ -35,7 +35,7 @@ export default async function GovernanceHistoryPanel({
     <section className="space-y-4 border-t border-morning-mist pt-6" aria-labelledby="governance-history-title">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 id="governance-history-title" className="text-ui-subtitle font-semibold text-space-ink">
+          <h3 id="governance-history-title" className="text-ui-subheading font-semibold text-space-ink">
             {t("historyTitle")}
           </h3>
           <p className="mt-1 text-ui-body text-neutral-600">{t("historyDesc")}</p>

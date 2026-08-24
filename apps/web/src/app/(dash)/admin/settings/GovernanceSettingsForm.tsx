@@ -112,6 +112,7 @@ export default function GovernanceSettingsForm({
 
   return (
     <form
+      autoComplete="off"
       action={formAction}
       className="rounded-lg border border-morning-mist bg-nebula-white p-4 sm:p-5"
     >

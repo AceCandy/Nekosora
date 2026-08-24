@@ -51,7 +51,7 @@ export default async function GovernanceSettingsSection({
           role={invalid ? "alert" : "status"}
           className={
             invalid
-              ? "flex max-w-3xl items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-red-800"
+              ? "flex max-w-3xl items-start gap-2 rounded-md border border-danger/20 bg-danger/[0.05] px-3 py-2.5 text-danger"
               : "flex max-w-3xl items-start gap-2 rounded-md border border-sora-blue/20 bg-sora-blue/5 px-3 py-2.5 text-neutral-700"
           }
         >

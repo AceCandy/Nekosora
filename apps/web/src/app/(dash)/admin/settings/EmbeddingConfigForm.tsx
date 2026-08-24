@@ -49,6 +49,7 @@ export default function EmbeddingConfigForm({
 
   return (
     <form
+      autoComplete="off"
       onSubmit={onSubmit}
       className="rounded-lg border border-neutral-200 bg-white   p-5 space-y-3"
     >
@@ -93,7 +94,7 @@ export default function EmbeddingConfigForm({
             filter={(m) => EMBEDDING_NAME_RE.test(m.id)}
           />
         </div>
-        <p className="text-ui-caption text-neutral-400">{labels.embeddingHint}</p>
+        <p className="text-ui-caption text-ink-tertiary">{labels.embeddingHint}</p>
         <div className="min-h-4 text-ui-caption" aria-live="polite">
           {pending && <p className="text-neutral-600">{labels.saving}</p>}
           {!pending && status === "success" && <p role="status" className="text-success">{labels.saved}</p>}

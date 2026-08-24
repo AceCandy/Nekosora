@@ -73,6 +73,7 @@ export default function OutputModeFormDialog({
       <form
         ref={contentRef}
         key={formKey}
+        autoComplete="off"
         onSubmit={handleSubmit}
         className="space-y-5"
       >

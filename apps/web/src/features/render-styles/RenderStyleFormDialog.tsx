@@ -79,6 +79,7 @@ export default function RenderStyleFormDialog({
       <form
         ref={contentRef}
         key={formKey}
+        autoComplete="off"
         onSubmit={handleSubmit}
         className="space-y-5"
       >
@@ -113,7 +114,7 @@ export default function RenderStyleFormDialog({
               placeholder={t("cssClassPlaceholder")}
               className={cssClassReadOnly ? "opacity-60 cursor-not-allowed" : ""}
             />
-            <span className="block text-ui-caption text-neutral-400  mt-1 leading-normal">
+            <span className="block text-ui-caption text-ink-tertiary  mt-1 leading-normal">
               {t("cssClassHint")}
             </span>
           </label>
@@ -146,7 +147,7 @@ export default function RenderStyleFormDialog({
               placeholder={t("cssPlaceholder")}
               className="w-full rounded-md border border-morning-mist  bg-white  px-3 py-2 text-ui-body text-space-ink  focus:outline-none focus:border-sora-blue  focus-visible:ring-2 focus-visible:ring-sora-blue transition-[background-color,color,border-color,box-shadow] duration-150 font-mono resize-y"
             />
-            <span className="block text-ui-caption text-neutral-400  mt-1 leading-normal">
+            <span className="block text-ui-caption text-ink-tertiary  mt-1 leading-normal">
               {t("cssHint")}
             </span>
           </label>

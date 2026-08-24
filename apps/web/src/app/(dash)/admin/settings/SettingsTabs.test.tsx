@@ -33,6 +33,10 @@ describe("SettingsTabs", () => {
     const html = renderToStaticMarkup(<SettingsTabs current="governance" />);
 
     expect(html).toContain('type="search"');
+    expect(html).toContain('role="combobox"');
+    expect(html).toContain('aria-autocomplete="list"');
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain('autoComplete="off"');
     expect(html).toContain("<select");
     expect(html).toContain("touch-target");
     expect(html).toContain('aria-label="tabs.ariaLabel"');

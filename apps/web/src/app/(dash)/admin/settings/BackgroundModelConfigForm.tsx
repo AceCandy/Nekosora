@@ -45,12 +45,13 @@ export default function BackgroundModelConfigForm({
 
   return (
     <form
+      autoComplete="off"
       onSubmit={onSubmit}
       className="grid gap-4 p-4 md:grid-cols-[minmax(0,1fr)_minmax(15rem,1fr)_auto] md:items-center"
     >
       <div>
         <h3 className="text-ui-body font-bold text-neutral-800 ">{title}</h3>
-        <p className="mt-1 text-ui-caption text-neutral-400">{hint}</p>
+        <p className="mt-1 text-ui-caption text-ink-tertiary">{hint}</p>
         <div className="mt-1 min-h-4 text-ui-caption" aria-live="polite">
           {pending && <p className="text-neutral-600">{savingLabel}</p>}
           {!pending && status === "success" && <p role="status" className="text-success">{savedLabel}</p>}

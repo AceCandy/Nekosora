@@ -26,7 +26,7 @@ export default function BasicSettingsForm(props: BasicSettingsFormProps) {
   const { onSubmit, pending, status } = useDraftAction(props.action);
 
   return (
-    <form onSubmit={onSubmit} className="space-y-3 rounded-lg border border-neutral-200 bg-white p-5">
+    <form autoComplete="off" onSubmit={onSubmit} className="space-y-3 rounded-lg border border-neutral-200 bg-white p-5">
       <UaField
         name="chat_ua"
         label={props.labels.chat}
@@ -78,7 +78,7 @@ function UaField(props: UaFieldProps) {
         disabled={props.disabled}
         className="w-full rounded-md border border-neutral-200 bg-transparent px-3 py-2 text-ui-body font-mono focus-visible:border-sora-blue"
       />
-      <p className="text-ui-caption text-neutral-400">{props.hint}</p>
+      <p className="text-ui-caption text-ink-tertiary">{props.hint}</p>
       <p className="text-ui-caption text-neutral-500">{props.summary}</p>
     </label>
   );

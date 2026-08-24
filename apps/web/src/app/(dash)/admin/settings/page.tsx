@@ -57,93 +57,91 @@ export default async function SettingsPage({
 
       <SettingsTabs current={tab} />
 
-      {tab === "models" && (
-        <ModelConfigSection
-          control={control}
-          labels={{
-            title: t("configTitle"),
-            desc: t("configDesc"),
-            embeddingTitle: t("embeddingTitle"),
-            embeddingProvider: t("embeddingProvider"),
-            embeddingModel: t("embeddingModel"),
-            embeddingHint: t("embeddingHint"),
-            titleTaskTitle: t("titleTaskTitle"),
-            titleTaskModel: t("titleTaskModel"),
-            titleTaskHint: t("titleTaskHint"),
-            titleTaskAuto: t("titleTaskAuto"),
-            compactTaskTitle: t("compactTaskTitle"),
-            compactTaskModel: t("compactTaskModel"),
-            compactTaskHint: t("compactTaskHint"),
-            compactTaskAuto: t("compactTaskAuto"),
-            mem0LlmTitle: t("mem0LlmTitle"),
-            mem0LlmModel: t("mem0LlmModel"),
-            mem0LlmHint: t("mem0LlmHint"),
-            mem0LlmAuto: t("mem0LlmAuto"),
-            save: t("configSave"),
-            saving: t("configSaving"),
-            saved: t("configSaved"),
-            saveFailed: t("configSaveFailed"),
-            selectProvider: t("configSelectProvider"),
-            noProviders: t("configNoProviders"),
-          }}
-        />
-      )}
-      {tab === "protocol" && <BasicSettingsSection control={control} />}
-      {tab === "output" && (
-        <div className="space-y-12">
-          <OutputModesSection control={control} />
-          <RenderStylesSection control={control} />
+      <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_20rem] xl:items-start">
+        <div className="min-w-0">
+          {tab === "models" && (
+            <ModelConfigSection
+              control={control}
+              labels={{
+                title: t("configTitle"),
+                desc: t("configDesc"),
+                embeddingTitle: t("embeddingTitle"),
+                embeddingProvider: t("embeddingProvider"),
+                embeddingModel: t("embeddingModel"),
+                embeddingHint: t("embeddingHint"),
+                titleTaskTitle: t("titleTaskTitle"),
+                titleTaskModel: t("titleTaskModel"),
+                titleTaskHint: t("titleTaskHint"),
+                titleTaskAuto: t("titleTaskAuto"),
+                compactTaskTitle: t("compactTaskTitle"),
+                compactTaskModel: t("compactTaskModel"),
+                compactTaskHint: t("compactTaskHint"),
+                compactTaskAuto: t("compactTaskAuto"),
+                mem0LlmTitle: t("mem0LlmTitle"),
+                mem0LlmModel: t("mem0LlmModel"),
+                mem0LlmHint: t("mem0LlmHint"),
+                mem0LlmAuto: t("mem0LlmAuto"),
+                save: t("configSave"),
+                saving: t("configSaving"),
+                saved: t("configSaved"),
+                saveFailed: t("configSaveFailed"),
+                selectProvider: t("configSelectProvider"),
+                noProviders: t("configNoProviders"),
+              }}
+            />
+          )}
+          {tab === "protocol" && <BasicSettingsSection control={control} />}
+          {tab === "output" && (
+            <div className="space-y-12">
+              <nav
+                aria-label={t("outputWorkspaceAriaLabel")}
+                className="grid border-y border-morning-mist sm:grid-cols-2 sm:divide-x sm:divide-morning-mist"
+              >
+                <a href="#output-modes" className="block px-1 py-4 sm:px-4">
+                  <span className="block text-ui-body font-semibold text-space-ink">
+                    {t("outputModesNavTitle")}
+                  </span>
+                  <span className="mt-1 block text-ui-caption text-ink-tertiary">
+                    {t("outputModesNavDesc")}
+                  </span>
+                </a>
+                <a href="#render-styles" className="block border-t border-morning-mist px-1 py-4 sm:border-t-0 sm:px-4">
+                  <span className="block text-ui-body font-semibold text-space-ink">
+                    {t("renderStylesNavTitle")}
+                  </span>
+                  <span className="mt-1 block text-ui-caption text-ink-tertiary">
+                    {t("renderStylesNavDesc")}
+                  </span>
+                </a>
+              </nav>
+              <OutputModesSection control={control} />
+              <RenderStylesSection control={control} />
+            </div>
+          )}
+          {tab === "governance" && (
+            <GovernanceSettingsSection control={control} range={governanceRange} />
+          )}
         </div>
-      )}
-      {tab === "governance" && (
-        <GovernanceSettingsSection control={control} range={governanceRange} />
-      )}
 
-      <SettingsChangeControl
-        revision={control.currentRevision}
-        draft={control.draft ? {
-          id: control.draft.id,
-          kind: control.draft.kind,
-          version: control.draft.version,
-          changes: control.draft.changes,
-        } : null}
-        history={history.map((item) => ({
-          id: item.id,
-          kind: item.kind,
-          rollbackOf: item.rollbackOf,
-          appliedRevision: item.appliedRevision,
-          appliedAt: item.appliedAt.toISOString(),
-          changes: item.changes,
-        }))}
-        labels={{
-          draftSummary: t("control.draftSummary"),
-          currentRevision: t("control.currentRevision"),
-          draftPersisted: t("control.draftPersisted"),
-          noDraft: t("control.noDraft"),
-          history: t("control.history"),
-          historyEmpty: t("control.historyEmpty"),
-          rollback: t("control.rollback"),
-          release: t("control.release"),
-          changes: t("control.changes"),
-          reverseRelease: t("control.reverseRelease"),
-          working: t("control.working"),
-          abandon: t("control.abandon"),
-          applying: t("control.applying"),
-          reviewApply: t("control.reviewApply"),
-          reviewChanges: t("control.reviewChanges"),
-          created: t("control.created"),
-          deleted: t("control.deleted"),
-          updated: t("control.updated"),
-          applied: t("control.applied"),
-          applied_cache_warning: t("control.appliedCacheWarning"),
-          abandoned: t("control.abandoned"),
-          rollback_created: t("control.rollbackCreated"),
-          stale: t("control.stale"),
-          rollback_conflict: t("control.rollbackConflict"),
-          invalid: t("control.invalid"),
-          failed: t("control.failed"),
-        }}
-      />
+        <SettingsChangeControl
+          key={control.draft?.id ?? `revision-${control.currentRevision}`}
+          revision={control.currentRevision}
+          draft={control.draft ? {
+            id: control.draft.id,
+            kind: control.draft.kind,
+            version: control.draft.version,
+            changes: control.draft.changes,
+          } : null}
+          history={history.map((item) => ({
+            id: item.id,
+            kind: item.kind,
+            rollbackOf: item.rollbackOf,
+            appliedRevision: item.appliedRevision,
+            appliedAt: item.appliedAt.toISOString(),
+            changes: item.changes,
+          }))}
+        />
+      </div>
     </div>
   );
 }

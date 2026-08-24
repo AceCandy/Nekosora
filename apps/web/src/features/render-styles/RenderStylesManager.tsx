@@ -145,7 +145,7 @@ export default function RenderStylesManager({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <span className="text-ui-caption font-mono text-neutral-400 ">
+        <span className="text-ui-caption font-mono text-ink-tertiary ">
           {t("configuredCount", { count: optimisticStyles.length })}
         </span>
         <Button
@@ -213,7 +213,7 @@ export default function RenderStylesManager({
             <tbody className="divide-y divide-neutral-200 ">
               {optimisticStyles.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-10 text-center text-ui-caption text-neutral-400 ">
+                  <td colSpan={6} className="p-10 text-center text-ui-caption text-ink-tertiary ">
                     {t("empty")}
                   </td>
                 </tr>
@@ -272,7 +272,7 @@ export default function RenderStylesManager({
               <ShieldAlert className="w-5 h-5 text-danger shrink-0" />
               <div>
                 {t("deleteConfirm", { name: deleting.name })}
-                <p className="text-ui-caption text-neutral-400  mt-1 leading-normal">
+                <p className="text-ui-caption text-ink-tertiary  mt-1 leading-normal">
                   {t("deleteWarning")}
                 </p>
               </div>
@@ -375,7 +375,7 @@ function SortableRenderStyleRow({
         </Badge>
       </td>
       <td className="p-3.5 text-ui-caption text-neutral-500  max-w-[240px] truncate" title={style.description ?? ""}>
-        {style.description || <span className="text-neutral-400 ">-</span>}
+        {style.description || <span className="text-ink-tertiary ">-</span>}
       </td>
       <td className="p-3.5">
         <StatusDot enabled={style.enabled} label={style.enabled ? undefined : t("disabled")} />
@@ -435,7 +435,7 @@ function SortableRenderStyleRow({
             size="sm"
             onClick={() => onDelete(style.id)}
             disabled={pending}
-            className="text-danger hover:bg-red-50  hover:text-danger-hover"
+            className="text-danger hover:bg-danger/[0.05] hover:text-danger-hover"
             title={t("delete")}
           >
             <Trash2 className="w-3.5 h-3.5" />
