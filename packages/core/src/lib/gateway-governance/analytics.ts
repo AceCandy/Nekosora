@@ -69,7 +69,7 @@ export async function getGatewayGovernanceInsights(
          date_trunc('month', statement_timestamp() at time zone 'UTC') at time zone 'UTC'
     )
     SELECT "scope", "quota_kind", max("units") AS "maximum_units",
-           count(*) FILTER (WHERE "units" > CASE
+           count(*) FILTER (WHERE "units" > (CASE
              WHEN "scope" = 'key' AND "quota_kind" = 'chat_tokens' THEN ${candidate.key.chatTokensPerMonth}
              WHEN "scope" = 'key' AND "quota_kind" = 'image_count' THEN ${candidate.key.imageCountPerMonth}
              WHEN "scope" = 'key' AND "quota_kind" = 'tts_code_points' THEN ${candidate.key.ttsCodePointsPerMonth}
@@ -78,7 +78,7 @@ export async function getGatewayGovernanceInsights(
              WHEN "scope" = 'user' AND "quota_kind" = 'image_count' THEN ${candidate.user.imageCountPerMonth}
              WHEN "scope" = 'user' AND "quota_kind" = 'tts_code_points' THEN ${candidate.user.ttsCodePointsPerMonth}
              ELSE ${candidate.user.sttSecondsPerMonth}
-           END) AS "subjects_over_candidate"
+           END)::bigint) AS "subjects_over_candidate"
       FROM "subject_usage"
      GROUP BY "scope", "quota_kind"
      ORDER BY "scope", "quota_kind"
