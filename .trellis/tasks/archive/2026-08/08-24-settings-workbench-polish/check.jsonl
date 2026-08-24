@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "复核设置页改动是否满足前端层规范"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "复核导航、Modal、响应式与可访问性契约"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "复核发布与回滚 Action 在 Modal 内的提交状态和冲突反馈"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "复核测试、i18n、设计 token 和静态质量门"}

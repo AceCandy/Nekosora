@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "设置页前端层索引与预开发检查清单"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Server/Client、管理页导航、Modal、响应式与无障碍契约"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "设置 Action 的 pending、冲突与 Modal 内可达反馈契约"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Web lint、typecheck、测试与设计 token 质量门"}
