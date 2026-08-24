@@ -145,13 +145,14 @@ store 的 `migrate(临时key → 真实id)` 先于回写执行，活动 id 一�
 
 ### 1. Scope / Trigger
 
-- 修改 `/admin/settings` 中写入活动变更集的普通表单、治理表单、输出模式/样式弹窗、排序或删除确认时，适用本节。
+- 修改 `/admin/settings` 中写入活动变更集的普通表单、治理表单、输出模式/样式弹窗、排序、删除确认、发布审查或历史回滚时，适用本节。
 
 ### 2. Signatures
 
 - 普通表单：`useDraftAction(action: (formData: FormData) => Promise<void>)`，返回 `onSubmit`、`pending`、`idle | success | error`。
 - 治理表单：`useActionState(saveGatewayGovernancePolicy.bind(null, expected), initialState)`；Action 返回 `idle | success | error`，不以异常作为字段校验反馈。
 - 输出资源弹窗：`action(formData): void | Promise<void>`；删除确认使用可等待的 `onConfirm(): void | Promise<void>` 分支。
+- 发布/回滚：`useActionState(action, initialState)` 返回 `idle | success | warning | error`，冲突作为可展示状态返回。
 - 所有设置 Action 只 stage 服务端活动草稿并 `revalidatePath("/admin/settings")`；它们不表示生产配置已发布。
 
 ### 3. Contracts
@@ -163,6 +164,7 @@ store 的 `migrate(临时key → 真实id)` 先于回写执行，活动 id 一�
 - 输出模式/样式新增或编辑只有 Action 成功后才关闭弹窗并触发列表成功反馈；失败保留弹窗、当前输入和 unsaved 状态。关闭后才允许递增 form key 清理旧值。
 - 排序可以乐观展示，但服务端失败必须恢复服务端顺序并显示错误。它与其他编辑共享同一草稿 expectation，过期版本不得静默覆盖。
 - 设置页删除必须走 `ConfirmDialog.onConfirm` 的异步 pending/失败保留路径；在 `action` 分支具备同等语义前，不得用于这些删除操作。
+- Action 从原生 `showModal()` 弹窗内提交时，pending 与成功/失败 live region 必须渲染在当前弹窗内；弹窗外控制面可以保留最终状态，但不能成为打开期间的唯一反馈，因为 dialog top layer 会使外层内容不可达。
 
 ### 4. Validation & Error Matrix
 
@@ -175,6 +177,7 @@ store 的 `migrate(临时key → 真实id)` 先于回写执行，活动 id 一�
 | 新增/编辑输出资源成功 | 关闭弹窗并显示列表成功反馈 |
 | 新增/编辑输出资源失败 | 弹窗、输入和 unsaved 状态保持可编辑 |
 | 删除失败 | 确认框保持打开，显示行内错误，不重复提交 |
+| 发布或回滚冲突 | 对应弹窗保持打开，并在弹窗内显示 `role=alert`；不得只更新弹窗外状态 |
 | expectation 过期 | 显示失败/冲突；不覆盖新草稿版本 |
 | 忘记 revalidate | 页面无法取得新草稿/version，属于契约违例 |
 
@@ -183,9 +186,11 @@ store 的 `migrate(临时key → 真实id)` 先于回写执行，活动 id 一�
 - Good：UA 表单拦截原生提交并复制 FormData；stage 失败后两个输入仍是管理员刚输入的值。
 - Good：治理输入受控，RSC 返回新草稿 policy 后通过 policy key 重建，成功与失败都有可访问反馈。
 - Good：输出样式删除等待异步 `onConfirm`；失败时确认框保持打开，用户可重试或取消。
+- Good：发布审查或历史回滚失败时，冲突文案出现在当前 Modal 内；关闭后控制面仍可保留结果。
 - Base：保存与当前草稿相同的值，控件不跳动，仍显示明确结果。
 - Bad：把 stage 成功文案写成“已即时生效”，会绕过显式发布的真实心智模型。
 - Bad：使用原生 Action 后立即关闭/重置弹窗，失败时丢失输入且无法定位错误。
+- Bad：Modal 内提交 Action，却只在 Modal 外更新状态；弹窗打开时用户看不到失败原因。
 
 ### 6. Tests Required
 
@@ -193,6 +198,7 @@ store 的 `migrate(临时key → 真实id)` 先于回写执行，活动 id 一�
 - `useActionState` 表单覆盖字段校验失败、React 原生 reset、服务端 policy key 变化和清空/自动值。
 - 输出资源测试覆盖新增/编辑失败不关闭、成功才关闭、排序失败回退并显示错误。
 - 删除确认测试覆盖异步 pending、失败保留弹窗、成功关闭，且设置页不得误走立即关闭的 `action` 分支。
+- 发布/回滚组件测试覆盖冲突后 Modal 保持打开，且当前 dialog 内存在对应 `role=alert`。
 - 浏览器验收断言提交前后的真实 `input/select.value`、焦点与弹窗可见性；lint/typecheck 不能替代 React form reset 的运行时检查。
 
 ### 7. Wrong vs Correct
