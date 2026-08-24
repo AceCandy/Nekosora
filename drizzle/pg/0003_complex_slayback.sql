@@ -85,10 +85,7 @@ BEGIN
 	IF OLD."status" = 'applied' THEN
 		RAISE EXCEPTION 'applied settings change sets are immutable' USING ERRCODE = '55000';
 	END IF;
-	IF TG_OP = 'DELETE' THEN
-		RETURN OLD;
-	END IF;
-	RETURN NEW;
+	RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
 END;
 $$;--> statement-breakpoint
 CREATE TRIGGER "settings_change_sets_applied_immutable"
