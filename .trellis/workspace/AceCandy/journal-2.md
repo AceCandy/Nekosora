@@ -1325,3 +1325,26 @@ Refined chat interaction, research status, accessibility, login visuals, and con
 ### Status
 
 [OK] **Completed**
+
+
+## Session 121: 系统设置工作台顶级化
+
+**Date**: 2026-08-24
+**Task**: 系统设置工作台顶级化
+**Branch**: `main`
+
+### Summary
+
+升级系统设置工作台导航、发布审查与人类可读差异，修复 Modal 内冲突反馈，并恢复已发布 PostgreSQL 迁移 hash 一致性。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e49ac72` | (see git log) |
+| `a406f11` | (see git log) |
+| `85b35ff` | (see git log) |
+
+### Status
+
+[OK] **Completed**
