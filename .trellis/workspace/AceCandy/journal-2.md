@@ -1453,3 +1453,24 @@ Refined chat interaction, research status, accessibility, login visuals, and con
 ### Status
 
 [OK] **Completed**
+
+
+## Session 127: 修正设置页加载与交互反馈
+
+**Date**: 2026-08-26
+**Task**: 修正设置页加载与交互反馈
+**Branch**: `main`
+
+### Summary
+
+为设置中心增加真实路由加载骨架，精简指令卡展示，并增强返回聊天入口的自主提示动效。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `27f26ba` | (see git log) |
+
+### Status
+
+[OK] **Completed**
