@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 125
-- **Last Active**: 2026-08-25
+- **Total Sessions**: 126
+- **Last Active**: 2026-08-26
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~1434 | Active |
+| `journal-2.md` | ~1455 | Active |
 | `journal-1.md` | ~1981 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 126 | 2026-08-26 | 完善管理与设置体验 | `930fb07` | `main` |
 | 125 | 2026-08-25 | 修复斜杠指令 Tab 选择 | `6f94970` | `main` |
 | 124 | 2026-08-25 | 统一拖拽排序控件 | `badd3c5` | `main` |
 | 123 | 2026-08-25 | 修复设置页 Server Action 导出边界 | `717e3d8` | `main` |

@@ -1432,3 +1432,24 @@ Refined chat interaction, research status, accessibility, login visuals, and con
 ### Status
 
 [OK] **Completed**
+
+
+## Session 126: 完善管理与设置体验
+
+**Date**: 2026-08-26
+**Task**: 完善管理与设置体验
+**Branch**: `main`
+
+### Summary
+
+完成账号删除权限、上游健康可读维度、长期记忆缓存性能、设置导航与过渡动效、指令卡 Markdown 展示及返回聊天微交互，并通过测试、类型检查、lint 与浏览器验收。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `930fb07` | (see git log) |
+
+### Status
+
+[OK] **Completed**
