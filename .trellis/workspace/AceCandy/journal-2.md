@@ -1390,3 +1390,24 @@ Refined chat interaction, research status, accessibility, login visuals, and con
 ### Status
 
 [OK] **Completed**
+
+
+## Session 124: 统一拖拽排序控件
+
+**Date**: 2026-08-25
+**Task**: 统一拖拽排序控件
+**Branch**: `main`
+
+### Summary
+
+统一模型、输出模式、渲染样式和 Web 搜索后端的拖拽手柄与移到顶部操作，补齐键盘排序、共享控件测试和排序规范；全仓检查、测试与生产构建通过。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `badd3c5` | (see git log) |
+
+### Status
+
+[OK] **Completed**
