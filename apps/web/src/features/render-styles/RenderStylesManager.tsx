@@ -3,6 +3,7 @@ import { useState, useOptimistic, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import {
   DndContext,
+  KeyboardSensor,
   closestCenter,
   PointerSensor,
   useSensor,
@@ -17,8 +18,6 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
-  ArrowDown,
-  ArrowUp,
   Eye,
   Monitor,
   Smartphone,
@@ -27,7 +26,6 @@ import {
   Trash2,
   ShieldAlert,
   Lock,
-  GripVertical,
 } from "lucide-react";
 import { clsx } from "clsx";
 import RenderStyleFormDialog, { type RenderStyle } from "./RenderStyleFormDialog";
@@ -35,6 +33,7 @@ import ConfirmDialog from "@/shared/ui/ConfirmDialog";
 import { Button } from "@/shared/ui/Button";
 import Badge from "@/shared/ui/Badge";
 import Modal from "@/shared/ui/Modal";
+import SortableControls, { moveItemToTop } from "@/shared/ui/SortableControls";
 import StatusSwitch from "@/shared/ui/StatusSwitch";
 import { Markdown } from "@/shared/components/markdown/Markdown";
 
@@ -87,6 +86,7 @@ export default function RenderStylesManager({
   );
 
   const sensors = useSensors(
+    useSensor(KeyboardSensor),
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   );
 
@@ -133,12 +133,11 @@ export default function RenderStylesManager({
     reorder(newIds);
   }
 
-  function move(id: string, offset: -1 | 1) {
+  function moveToTop(id: string) {
     const ids = optimisticStyles.map((style) => style.id);
     const from = ids.indexOf(id);
-    const to = from + offset;
-    if (from < 0 || to < 0 || to >= ids.length) return;
-    reorder(arrayMove(ids, from, to));
+    if (from <= 0) return;
+    reorder(moveItemToTop(ids, from));
   }
 
   return (
@@ -195,9 +194,8 @@ export default function RenderStylesManager({
                       onDelete={setDeleteId}
                       onToggle={() => runAction(toggleActions[s.id])}
                       onPreview={setPreviewId}
-                      onMove={move}
-                      canMoveUp={index > 0}
-                      canMoveDown={index < optimisticStyles.length - 1}
+                      onMoveToTop={() => moveToTop(s.id)}
+                      canMoveToTop={index > 0}
                       pending={pending}
                     />
                   ))}
@@ -299,9 +297,8 @@ function SortableRenderStyleRow({
   onDelete,
   onToggle,
   onPreview,
-  onMove,
-  canMoveUp,
-  canMoveDown,
+  onMoveToTop,
+  canMoveToTop,
   pending,
 }: {
   style: RenderStyle;
@@ -309,9 +306,8 @@ function SortableRenderStyleRow({
   onDelete: (id: string) => void;
   onToggle: () => void;
   onPreview: (id: string) => void;
-  onMove: (id: string, offset: -1 | 1) => void;
-  canMoveUp: boolean;
-  canMoveDown: boolean;
+  onMoveToTop: () => void;
+  canMoveToTop: boolean;
   pending: boolean;
 }) {
   const t = useTranslations("admin.renderStyles");
@@ -330,24 +326,15 @@ function SortableRenderStyleRow({
       className="hover:bg-neutral-50/50  transition-colors duration-150"
     >
       <td className="p-3.5 text-center align-middle">
-        <span className="inline-flex items-center gap-0.5">
-          <button
-            type="button"
-            disabled={pending}
-            aria-label={t("dragHandle")}
-            className="touch-target cursor-grab active:cursor-grabbing inline-flex items-center justify-center text-neutral-400 hover:text-neutral-600"
-            {...attributes}
-            {...listeners}
-          >
-            <GripVertical className="w-4 h-4" />
-          </button>
-          <button type="button" disabled={pending || !canMoveUp} onClick={() => onMove(style.id, -1)} aria-label={t("moveUp")} className="touch-target inline-flex items-center justify-center text-neutral-500 disabled:text-neutral-300">
-            <ArrowUp className="h-3.5 w-3.5" />
-          </button>
-          <button type="button" disabled={pending || !canMoveDown} onClick={() => onMove(style.id, 1)} aria-label={t("moveDown")} className="touch-target inline-flex items-center justify-center text-neutral-500 disabled:text-neutral-300">
-            <ArrowDown className="h-3.5 w-3.5" />
-          </button>
-        </span>
+        <SortableControls
+          attributes={attributes}
+          listeners={listeners}
+          dragLabel={t("dragHandle")}
+          moveToTopLabel={t("moveToTop")}
+          canMoveToTop={canMoveToTop}
+          onMoveToTop={onMoveToTop}
+          disabled={pending}
+        />
       </td>
       <td className="p-3.5 font-semibold text-neutral-800 ">
         <span className="inline-flex flex-wrap items-center gap-1.5">

@@ -10,6 +10,7 @@ vi.mock("next-intl", () => ({
 vi.mock("@dnd-kit/core", () => ({
   DndContext: ({ children }: { children: React.ReactNode }) => children,
   closestCenter: () => null,
+  KeyboardSensor: class KeyboardSensor {},
   PointerSensor: class PointerSensor {},
   useSensor: () => ({}),
   useSensors: () => [],
@@ -84,6 +85,15 @@ describe("render style trust warning", () => {
     expect(html).not.toContain("<span>disable</span>");
   });
 
+  it("排序区只提供拖拽和移到顶部", () => {
+    const html = renderManager("streamdown");
+
+    expect(html).toContain('aria-label="dragHandle"');
+    expect(html).toContain('aria-label="moveToTop"');
+    expect(html).not.toContain('aria-label="moveUp"');
+    expect(html).not.toContain('aria-label="moveDown"');
+  });
+
   it("在 custom 样式列表中持续显示高信任标识", () => {
     const html = renderManager("custom");
 
@@ -134,5 +144,9 @@ describe("render style trust warning", () => {
     expect(en.customRendererWarning).toContain("public shares");
     expect(zh.previewAction).toContain("{name}");
     expect(en.previewAction).toContain("{name}");
+    expect(zh.moveToTop).toBe("移到顶部");
+    expect(en.moveToTop).toBe("Move to top");
+    expect(zh.moveUp).toBeUndefined();
+    expect(en.moveDown).toBeUndefined();
   });
 });

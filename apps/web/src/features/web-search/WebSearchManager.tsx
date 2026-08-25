@@ -30,7 +30,8 @@ import { Input } from "@/shared/ui/Input";
 import { Select } from "@/shared/ui/Select";
 import { Button } from "@/shared/ui/Button";
 import ConfirmDialog from "@/shared/ui/ConfirmDialog";
-import { Edit2, GripVertical, Plus, Search, Trash2 } from "lucide-react";
+import SortableControls, { moveItemToTop } from "@/shared/ui/SortableControls";
+import { Edit2, Plus, Search, Trash2 } from "lucide-react";
 
 export interface WebSearchProviderInput {
   type: WebSearchProviderType;
@@ -70,7 +71,7 @@ export default function WebSearchManager({
   saveQueryRewriteModelAction,
 }: Props) {
   const t = useTranslations("panel.webSearch");
-  const [, startTransition] = useTransition();
+  const [reorderPending, startTransition] = useTransition();
   const [optimisticBackends, setOptimisticBackends] = useOptimistic(
     config.backends,
     (_state, next: SearchBackend[]) => next,
@@ -144,11 +145,20 @@ export default function WebSearchManager({
     const oldIndex = keys.indexOf(String(event.active.id));
     const newIndex = keys.indexOf(String(event.over.id));
     if (oldIndex < 0 || newIndex < 0) return;
-    const next = arrayMove(optimisticBackends, oldIndex, newIndex);
+    reorder(arrayMove(optimisticBackends, oldIndex, newIndex));
+  }
+
+  function reorder(next: SearchBackend[]) {
+    if (reorderPending) return;
     startTransition(async () => {
       setOptimisticBackends(next);
       await reorderAction(next);
     });
+  }
+
+  function moveToTop(index: number) {
+    if (index <= 0) return;
+    reorder(moveItemToTop(optimisticBackends, index));
   }
 
   async function handleToggle(provider: WebSearchProviderDto) {
@@ -273,8 +283,11 @@ export default function WebSearchManager({
                   modelLabel={t("modelBackend")}
                   unavailableLabel={t("unavailable")}
                   dragLabel={t("dragLabel")}
+                  moveToTopLabel={t("moveToTop")}
                   removeLabel={t("removeModel")}
-                  pending={backend.type === "model" && pendingModelId === backend.modelId}
+                  canMoveToTop={index > 0}
+                  pending={reorderPending || (backend.type === "model" && pendingModelId === backend.modelId)}
+                  onMoveToTop={() => moveToTop(index)}
                   onRemoveModel={handleRemoveModel}
                 />
               ))}
@@ -427,8 +440,11 @@ interface SortableBackendRowProps {
   modelLabel: string;
   unavailableLabel: string;
   dragLabel: string;
+  moveToTopLabel: string;
   removeLabel: string;
+  canMoveToTop: boolean;
   pending: boolean;
+  onMoveToTop: () => void;
   onRemoveModel: (modelId: string) => Promise<void>;
 }
 
@@ -441,8 +457,11 @@ function SortableBackendRow({
   modelLabel,
   unavailableLabel,
   dragLabel,
+  moveToTopLabel,
   removeLabel,
+  canMoveToTop,
   pending,
+  onMoveToTop,
   onRemoveModel,
 }: SortableBackendRowProps) {
   const id = searchBackendKey(backend);
@@ -458,9 +477,15 @@ function SortableBackendRow({
 
   return (
     <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={`flex min-h-12 items-center gap-3 px-3 py-2 ${isDragging ? "z-10 bg-neutral-50 " : ""}`}>
-      <button type="button" {...attributes} {...listeners} className="rounded p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue  " aria-label={dragLabel}>
-        <GripVertical className="h-4 w-4" />
-      </button>
+      <SortableControls
+        attributes={attributes}
+        listeners={listeners}
+        dragLabel={dragLabel}
+        moveToTopLabel={moveToTopLabel}
+        canMoveToTop={canMoveToTop}
+        onMoveToTop={onMoveToTop}
+        disabled={pending}
+      />
       <span className="w-5 text-ui-caption tabular-nums text-neutral-400">{index + 1}</span>
       <Search className="h-4 w-4 text-neutral-500" />
       <span className="min-w-0 flex-1 truncate text-ui-body font-medium text-neutral-800 ">{label}</span>

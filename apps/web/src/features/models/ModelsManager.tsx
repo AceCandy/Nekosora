@@ -29,11 +29,12 @@ import type { FetchModelsAction } from "@/features/models/UpstreamModelPicker";
 import ConfirmDialog from "@/shared/ui/ConfirmDialog";
 import Popover from "@/shared/ui/Popover";
 import CatalogDetailCard from "@/features/models/CatalogDetailCard";
-import { Plus, Edit2, Play, Square, Trash2, ShieldAlert, GitCommit, ChevronDown, ChevronUp, GripVertical } from "lucide-react";
+import { Plus, Edit2, Play, Square, Trash2, ShieldAlert, GitCommit, ChevronDown, ChevronUp } from "lucide-react";
 import { clsx } from "clsx";
 import { Button } from "@/shared/ui/Button";
 import Badge from "@/shared/ui/Badge";
 import StatusDot from "@/shared/ui/StatusDot";
+import SortableControls from "@/shared/ui/SortableControls";
 import StatusSwitch from "@/shared/ui/StatusSwitch";
 
 // ---------- 共享数据形状 ----------
@@ -150,7 +151,7 @@ export default function ModelsManager({
   const [routeAddModelId, setRouteAddModelId] = useState<string | null>(null);
   const [routeEditId, setRouteEditId] = useState<string | null>(null);
   const [routeDeleteId, setRouteDeleteId] = useState<string | null>(null);
-  const [, startTransition] = useTransition();
+  const [reorderPending, startTransition] = useTransition();
 
   // 乐观顺序:分组拖动只重排所属可见性分组,revalidate 后自动对齐真实数据。
   const [optimisticModels, setOptimisticModels] = useOptimistic(
@@ -191,14 +192,21 @@ export default function ModelsManager({
     groupModels: ModelItem[],
     visibility?: ModelVisibility,
   ) {
-    if (visibility ? !groupedReorderAction : !reorderAction) return;
     const { active, over } = event;
     if (!over || active.id === over.id) return;
     const ids = groupModels.map((m) => m.id);
-    const oldIndex = ids.indexOf(String(active.id));
-    const newIndex = ids.indexOf(String(over.id));
-    if (oldIndex === -1 || newIndex === -1) return;
-    const newIds = arrayMove(ids, oldIndex, newIndex);
+    reorderModels(groupModels, ids.indexOf(String(active.id)), ids.indexOf(String(over.id)), visibility);
+  }
+
+  function reorderModels(
+    groupModels: ModelItem[],
+    from: number,
+    to: number,
+    visibility?: ModelVisibility,
+  ) {
+    if (reorderPending || (visibility ? !groupedReorderAction : !reorderAction)) return;
+    if (from < 0 || to < 0 || from === to) return;
+    const newIds = arrayMove(groupModels.map((model) => model.id), from, to);
     // async transition:await server action 期间 transition 保持 pending,useOptimistic
     // 乐观态持续到 revalidate 送回真实数据(顺序一致),避免「新序→旧序→新序」闪动。
     // 与本仓所有 startTransition(async () => await ...Action()) 约定一致。
@@ -233,7 +241,7 @@ export default function ModelsManager({
               </tr>
             ) : tableReorderable ? (
               <SortableContext items={groupModels.map((m) => m.id)} strategy={verticalListSortingStrategy}>
-                {groupModels.map((m) => {
+                {groupModels.map((m, index) => {
                   const modelRoutes = routes?.filter((r) => r.modelId === m.id) ?? [];
                   const expanded = expandedModel === m.id;
                   return (
@@ -255,6 +263,9 @@ export default function ModelsManager({
                       onAddRoute={() => setRouteAddModelId(m.id)}
                       onEditRoute={(rid) => setRouteEditId(rid)}
                       onDeleteRoute={(rid) => setRouteDeleteId(rid)}
+                      onMoveToTop={() => reorderModels(groupModels, index, 0, visibility)}
+                      canMoveToTop={index > 0}
+                      pending={reorderPending}
                       routeToggleActions={toggleRouteActions}
                       testRouteActions={testRouteActions}
                       fetchModelsAction={fetchModelsAction}
@@ -677,6 +688,9 @@ function SortableModelRow({
   onAddRoute,
   onEditRoute,
   onDeleteRoute,
+  onMoveToTop,
+  canMoveToTop,
+  pending,
   routeToggleActions,
   testRouteActions,
   fetchModelsAction,
@@ -697,6 +711,9 @@ function SortableModelRow({
   onAddRoute: () => void;
   onEditRoute: (routeId: string) => void;
   onDeleteRoute: (routeId: string) => void;
+  onMoveToTop: () => void;
+  canMoveToTop: boolean;
+  pending: boolean;
   routeToggleActions?: Record<string, FormDataSerializableAction>;
   testRouteActions?: Record<string, RouteTestAction>;
   fetchModelsAction?: FetchModelsAction;
@@ -718,15 +735,15 @@ function SortableModelRow({
         className="hover:bg-neutral-50/50  transition-colors duration-150"
       >
         <td className="p-3.5 text-center align-middle">
-          <button
-            type="button"
-            aria-label={t("dragHandle")}
-            className="cursor-grab active:cursor-grabbing inline-flex items-center justify-center text-neutral-500 hover:text-neutral-700  "
-            {...attributes}
-            {...listeners}
-          >
-            <GripVertical className="w-4 h-4" />
-          </button>
+          <SortableControls
+            attributes={attributes}
+            listeners={listeners}
+            dragLabel={t("dragHandle")}
+            moveToTopLabel={t("moveToTop")}
+            canMoveToTop={canMoveToTop}
+            onMoveToTop={onMoveToTop}
+            disabled={pending}
+          />
         </td>
         <ModelRowCells
           model={model}

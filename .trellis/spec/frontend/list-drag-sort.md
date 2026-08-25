@@ -40,6 +40,27 @@ const sensors = useSensors(
 
 垂直列表用 dnd-kit 默认 keyboard coordinate getter 即可(↑/↓ 上下)。验证:Tab 到手柄 → Space 拾起 → ↑/↓ 移动 → Space 落下,顺序正确落库。
 
+## 统一排序控件与长列表快捷操作
+
+已有排序列表统一使用 `src/shared/ui/SortableControls.tsx`，只显示拖拽手柄和“移到顶部”。不要再为同一排序能力增加逐项上移/下移按钮；长列表通过一次移动到索引 `0` 解决跨屏拖动不便。
+
+```tsx
+<SortableControls
+  attributes={attributes}
+  listeners={listeners}
+  dragLabel={t("dragHandle")}
+  moveToTopLabel={t("moveToTop")}
+  canMoveToTop={index > 0}
+  onMoveToTop={() => reorder(moveItemToTop(items, index))}
+  disabled={pending}
+/>
+```
+
+- 第一项的“移到顶部”必须不可见、不可聚焦，但保留布局占位，确保每行内容对齐。
+- `disabled` 必须同时覆盖拖拽与快捷操作，避免排序落库期间重复提交。
+- “移到顶部”只是复用现有 reorder action 的一次性重排，不新增 pin 字段、分组或后端接口；原有 per-user / per-scope 排序范围保持不变。
+- 至少为 `moveItemToTop` 的有效索引、首项和越界输入留单测，并断言首项快捷操作不可访问。
+
 ## SSR hydration: DndContext 必须传稳定 id
 
 `@dnd-kit` 未传 `id` 时会以模块级计数生成 `DndDescribedBy-<n>`。Node SSR 进程已处理过的请求会推进计数，而浏览器首次 hydration 从不同计数开始，导致拖拽手柄的 `aria-describedby` 不一致。

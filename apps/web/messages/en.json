@@ -374,6 +374,7 @@
       "modelBackend": "Selected model",
       "unavailable": "Unavailable",
       "dragLabel": "Drag to reorder search priority",
+      "moveToTop": "Move to top",
       "searchModelLabel": "Search model",
       "searchModelPlaceholder": "Select GPT, Claude, Gemini, or Grok",
       "noSearchModels": "No more search-capable models",
@@ -842,8 +843,7 @@
       "deleteButton": "Delete",
       "cancel": "Cancel",
       "dragHandle": "Drag to sort",
-      "moveUp": "Move up",
-      "moveDown": "Move down"
+      "moveToTop": "Move to top"
     },
     "renderStyles": {
       "desc": "Preset session-level Markdown render styles. Pure presentation-layer beautification, does not affect model output. Users pick one in the chat toolbar and AI answers render with the chosen style.",
@@ -890,8 +890,7 @@
       "deleteButton": "Delete",
       "cancel": "Cancel",
       "dragHandle": "Drag to sort",
-      "moveUp": "Move up",
-      "moveDown": "Move down",
+      "moveToTop": "Move to top",
       "previewAction": "Preview {name}",
       "previewTitle": "Real Markdown preview",
       "previewViewport": "Preview viewport",
@@ -925,6 +924,7 @@
     "configuredCount": "Configured models: {count}",
     "addModel": "Add model",
     "dragHandle": "Drag to sort",
+    "moveToTop": "Move to top",
     "colExternalName": "Public name",
     "colDisplayName": "Display name",
     "catalogLabel": "Model template",

@@ -3,6 +3,7 @@ import { useState, useOptimistic, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import {
   DndContext,
+  KeyboardSensor,
   closestCenter,
   PointerSensor,
   useSensor,
@@ -17,18 +18,16 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
-  ArrowDown,
-  ArrowUp,
   Plus,
   Edit2,
   Trash2,
   ShieldAlert,
-  GripVertical,
 } from "lucide-react";
 import OutputModeFormDialog, { type OutputMode } from "./OutputModeFormDialog";
 import ConfirmDialog from "@/shared/ui/ConfirmDialog";
 import { Button } from "@/shared/ui/Button";
 import Badge from "@/shared/ui/Badge";
+import SortableControls, { moveItemToTop } from "@/shared/ui/SortableControls";
 import StatusSwitch from "@/shared/ui/StatusSwitch";
 
 interface OutputModesManagerProps {
@@ -67,6 +66,7 @@ export default function OutputModesManager({
   );
 
   const sensors = useSensors(
+    useSensor(KeyboardSensor),
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   );
 
@@ -112,12 +112,11 @@ export default function OutputModesManager({
     reorder(newIds);
   }
 
-  function move(id: string, offset: -1 | 1) {
+  function moveToTop(id: string) {
     const ids = optimisticModes.map((mode) => mode.id);
     const from = ids.indexOf(id);
-    const to = from + offset;
-    if (from < 0 || to < 0 || to >= ids.length) return;
-    reorder(arrayMove(ids, from, to));
+    if (from <= 0) return;
+    reorder(moveItemToTop(ids, from));
   }
 
   return (
@@ -173,9 +172,8 @@ export default function OutputModesManager({
                       onEdit={setEditId}
                       onDelete={setDeleteId}
                       onToggle={() => runAction(toggleActions[m.id])}
-                      onMove={move}
-                      canMoveUp={index > 0}
-                      canMoveDown={index < optimisticModes.length - 1}
+                      onMoveToTop={() => moveToTop(m.id)}
+                      canMoveToTop={index > 0}
                       pending={pending}
                     />
                   ))}
@@ -240,18 +238,16 @@ function SortableOutputModeRow({
   onEdit,
   onDelete,
   onToggle,
-  onMove,
-  canMoveUp,
-  canMoveDown,
+  onMoveToTop,
+  canMoveToTop,
   pending,
 }: {
   mode: OutputMode;
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
   onToggle: () => void;
-  onMove: (id: string, offset: -1 | 1) => void;
-  canMoveUp: boolean;
-  canMoveDown: boolean;
+  onMoveToTop: () => void;
+  canMoveToTop: boolean;
   pending: boolean;
 }) {
   const t = useTranslations("admin.outputModes");
@@ -270,24 +266,15 @@ function SortableOutputModeRow({
       className="hover:bg-neutral-50/50  transition-colors duration-150"
     >
       <td className="p-3.5 text-center align-middle">
-        <span className="inline-flex items-center gap-0.5">
-          <button
-            type="button"
-            disabled={pending}
-            aria-label={t("dragHandle")}
-            className="touch-target cursor-grab active:cursor-grabbing inline-flex items-center justify-center text-neutral-400 hover:text-neutral-600"
-            {...attributes}
-            {...listeners}
-          >
-            <GripVertical className="w-4 h-4" />
-          </button>
-          <button type="button" disabled={pending || !canMoveUp} onClick={() => onMove(mode.id, -1)} aria-label={t("moveUp")} className="touch-target inline-flex items-center justify-center text-neutral-500 disabled:text-neutral-300">
-            <ArrowUp className="h-3.5 w-3.5" />
-          </button>
-          <button type="button" disabled={pending || !canMoveDown} onClick={() => onMove(mode.id, 1)} aria-label={t("moveDown")} className="touch-target inline-flex items-center justify-center text-neutral-500 disabled:text-neutral-300">
-            <ArrowDown className="h-3.5 w-3.5" />
-          </button>
-        </span>
+        <SortableControls
+          attributes={attributes}
+          listeners={listeners}
+          dragLabel={t("dragHandle")}
+          moveToTopLabel={t("moveToTop")}
+          canMoveToTop={canMoveToTop}
+          onMoveToTop={onMoveToTop}
+          disabled={pending}
+        />
       </td>
       <td className="p-3.5 font-semibold text-neutral-800 ">{mode.name}</td>
       <td className="p-3.5 font-mono text-ui-caption">

@@ -374,6 +374,7 @@
       "modelBackend": "指定模型",
       "unavailable": "不可用",
       "dragLabel": "拖动调整搜索优先级",
+      "moveToTop": "移到顶部",
       "searchModelLabel": "搜索模型",
       "searchModelPlaceholder": "选择 GPT、Claude、Gemini 或 Grok",
       "noSearchModels": "没有更多可用搜索模型",
@@ -842,8 +843,7 @@
       "deleteButton": "确定删除",
       "cancel": "取消",
       "dragHandle": "拖动排序",
-      "moveUp": "上移",
-      "moveDown": "下移"
+      "moveToTop": "移到顶部"
     },
     "renderStyles": {
       "desc": "预设会话级 Markdown 渲染样式,纯渲染层美化展示,不影响模型输出。用户在 chat 工具栏选用后,AI 回答按所选样式排版渲染。",
@@ -890,8 +890,7 @@
       "deleteButton": "确定删除",
       "cancel": "取消",
       "dragHandle": "拖动排序",
-      "moveUp": "上移",
-      "moveDown": "下移",
+      "moveToTop": "移到顶部",
       "previewAction": "预览「{name}」",
       "previewTitle": "真实 Markdown 预览",
       "previewViewport": "预览视口",
@@ -925,6 +924,7 @@
     "configuredCount": "已配置模型: {count}",
     "addModel": "添加模型",
     "dragHandle": "拖动排序",
+    "moveToTop": "移到顶部",
     "colExternalName": "对外名",
     "colDisplayName": "显示名",
     "catalogLabel": "模型模板",
