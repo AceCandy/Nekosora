@@ -272,7 +272,7 @@ export function ChatInputBox({
           }}
           onDragOver={(e) => e.preventDefault()}
           onKeyDown={(e) => {
-            // 斜杠命令激活时拦截导航键,Enter 选中而非发送
+            // 斜杠命令激活时拦截导航键,Enter/Tab 选中而非发送或移焦
             if (slashMatches.length > 0) {
               if (e.key === "ArrowDown") {
                 e.preventDefault();
@@ -284,7 +284,7 @@ export function ChatInputBox({
                 setSlashIndex((i) => (i - 1 + slashMatches.length) % slashMatches.length);
                 return;
               }
-              if (e.key === "Enter") {
+              if (e.key === "Enter" || (e.key === "Tab" && !e.shiftKey)) {
                 e.preventDefault();
                 applySlash(slashMatches[slashIndex]);
                 return;
