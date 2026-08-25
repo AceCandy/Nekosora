@@ -129,11 +129,14 @@ if (!latestUserMessage || !isMemoryEligibleText(latestUserMessage.content)) {
 - `getMemories(userId): Promise<UserMemory[]>`，缓存键 `memories:${userId}`，TTL 60s。
 - `toMemoryDate(value: unknown): Date | null`。
 - `invalidateMemoryCache(userId)` 在 `addMemory` / `updateMemory` / `deleteMemory` / `clearMemories` / `extractMemories` 后调用。
+- 缓存未命中只调用一次 `memory.getAll({ filters:{ user_id:userId }, showExpired:true })`。
 
 ### 3. Contracts
 
 - Keyv 会把 `Date` 序列化为字符串；`getMemories` 必须在 `cacheWrap` 出口恢复 `createdAt`，保证首次读取与缓存命中都符合 `UserMemory.createdAt: Date | null`。
 - 空值或无效日期统一收敛为 `null`，不得把无效 `Date` 传给排序或渲染层。
+- Mem0 读取、过期 project 过滤与懒硬删必须位于 `cacheWrap` fetcher 内；缓存命中不得初始化或访问 Mem0。
+- fetcher 用同一次 `showExpired:true` 结果返回有效记忆，并以 `Promise.allSettled` 尽力删除 `metadata.scope=project` 且 `metadata.expirationDate < today` 的记录；单条删除失败不得丢弃有效结果。
 
 ### 4. Validation & Error Matrix
 
@@ -142,25 +145,39 @@ if (!latestUserMessage || !isMemoryEligibleText(latestUserMessage.content)) {
 | 有效 `Date` | 原 `Date` |
 | ISO 日期字符串 | 等值 `Date` |
 | 空值或无效字符串 | `null` |
+| 60s 内缓存命中 | 返回缓存结果，Mem0 `getAll` / `delete` 均不调用 |
+| 缓存未命中且包含过期 project | 过滤过期项，单次 `getAll`，尽力 `delete` |
+| 过期项 `delete` 失败 | 仍返回其余有效记忆 |
+| `getAll` 失败 | 返回空数组，不阻断页面或对话 |
 
 ### 5. Good / Base / Bad Cases
 
 - Good：缓存命中返回字符串日期，service 出口恢复为 `Date`。
+- Good：连续两次读取同一用户只发生一次 Mem0 `getAll`。
 - Base：mem0 首次读取已返回 `Date`，保持原对象。
+- Base：未命中结果没有过期 project，不调用 `delete`。
 - Bad：页面直接对缓存值调用 `.getTime()`，导致 `getTime is not a function`。
+- Bad：在 `cacheWrap` 之前调用过期清理；即使缓存命中，页面仍等待一次 Mem0 查询。
 
 ### 6. Tests Required
 
 - 单测必须覆盖有效 `Date`、ISO 字符串、无效值，以及实际 Keyv 首次读取与缓存命中两次调用。
+- 缓存测试必须断言连续读取只调用一次 `getAll(showExpired:true)`；过期测试必须断言过期 project 不返回，且 `delete` reject 时有效记忆仍返回。
 
 ### 7. Wrong vs Correct
 
 ```typescript
-// Wrong：把缓存反序列化后的字符串当成 Date。
-memories.sort((a, b) => b.createdAt!.getTime() - a.createdAt!.getTime());
+// Wrong：缓存命中前仍访问 Mem0 做清理。
+await purgeExpiredProjectMemories(userId);
+return cacheWrap(`memories:${userId}`, fetchMemories, 60_000);
 
-// Correct：在 service 缓存出口恢复领域类型，调用方只消费 UserMemory。
-return memories.map((memory) => ({ ...memory, createdAt: toMemoryDate(memory.createdAt) }));
+// Correct：读取、过滤和尽力清理只发生在 cacheWrap fetcher 内。
+const memories = await cacheWrap(`memories:${userId}`, async () => {
+  const res = await memory.getAll({ filters: { user_id: userId }, showExpired: true });
+  // 本地过滤过期 project，并用 Promise.allSettled 尽力删除。
+  return activeMemories;
+}, 60_000);
+return memories.map((item) => ({ ...item, createdAt: toMemoryDate(item.createdAt) }));
 ```
 
 ---
@@ -171,7 +188,7 @@ return memories.map((memory) => ({ ...memory, createdAt: toMemoryDate(memory.cre
 - **Embedding 维度边界**：`mem0ai@3.1.6` 的 pgvector 用 `embeddingModelDims` 建立 `vector(1024)`；不要给 OpenAI-compatible embedder 设置 `embeddingDims`，因为 mem0 会把它翻译成请求字段 `dimensions`，部分固定维度上游会直接返回 400。
 - **AI 抽取默认 project**：mem0 全权抽取不产 scope；AI 抽取统一标 `scope=project`（metadata）。preference/profile 靠用户手动添加。自研三分类 LLM 抽取（prompt/disclosure/confidence/去重）已废弃。
 - **手动 add infer=false**：`addMemory` 传 `infer=false`，直接存原文，不经 mem0 LLM 抽取改写。
-- **M-4：project 过期已重建,诊断/disclosure 废弃**：project 记忆 add 时设 `expirationDate=+7d`（`AddMemoryOptions` 软过滤 + `metadata.expirationDate` 供硬删）；`purgeExpiredProjectMemories` 在 `getMemories` 入口懒硬删（`getAll({showExpired:true})` + filter + delete）。诊断废弃：mem0 `MemoryItem` 不暴露 embedding/lastAccessedAt,重复/陈旧检测不可行（`getMemoryDiagnostics` 已删）。disclosure 废弃：mem0 全权抽取不产 disclosure。M-5 已移除诊断/disclosure UI。
+- **M-4：project 过期已重建,诊断/disclosure 废弃**：project 记忆 add 时设 `expirationDate=+7d`（`AddMemoryOptions` 软过滤 + `metadata.expirationDate` 供硬删）；`getMemories` 仅在缓存未命中时用一次 `getAll({showExpired:true})` 同时读取、过滤并尽力硬删，缓存命中不得访问 Mem0。诊断废弃：mem0 `MemoryItem` 不暴露 embedding/lastAccessedAt,重复/陈旧检测不可行（`getMemoryDiagnostics` 已删）。disclosure 废弃：mem0 全权抽取不产 disclosure。M-5 已移除诊断/disclosure UI。
 - **mem0 自建表**：mem0 在本库 PG 自建 `mem0_memories` 表承载记忆。`user_memories` 表已于 M-5 drop（迁移 0006）。
 - **embedding 维度固定 1024(bge-m3)**：`file_chunks.embedding` 与 `user_memories.embedding` 均为 `vector(1024)`，常量 `EMBEDDING_DIM=1024`（`rag/embedding.ts`、`infra/vector.ts`）。管理员须配 1024 维 embedding 模型（如 bge-m3，经硅基流动等 OpenAI 兼容接口）。改维度须同步 schema 两处 + 两处常量 + 迁移清旧向量（维度不兼容，`ALTER TYPE` 前须 `UPDATE SET embedding=NULL`）。
 - **输出呈现偏好（退化风险）**：自研 extract.ts 的 prompt 曾排除「回答呈现类偏好」；M-3 切 mem0 内置 prompt 后不再硬过滤。若需恢复，用 mem0 `customInstructions` 定制（M-4/M-5 可加）。

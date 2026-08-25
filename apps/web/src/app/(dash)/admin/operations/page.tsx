@@ -34,10 +34,13 @@ export default async function OperationsPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
 
-  // 各 provider 近 90 天成功率；providerRef 非空也确保 execution 已 finalize。
+  // 各服务商 + 上游模型近 90 天成功率；providerRef 仅作为稳定分组键，不对用户展示。
+  const upstreamModel = sql<string>`coalesce(${s.gatewayExecutions.upstreamModel}, ${s.gatewayExecutions.model})`;
   const providerHealth = await db
     .select({
       providerRef: s.gatewayExecutions.providerRef,
+      providerName: s.gatewayExecutions.providerName,
+      upstreamModel,
       total: sql<number>`count(*)`,
       success: sql<number>`sum(case when ${s.gatewayExecutions.status} = 'success' then 1 else 0 end)`,
       avgLatency: sql<number>`coalesce(avg(${s.gatewayExecutions.latencyMs}),0)`,
@@ -47,7 +50,7 @@ export default async function OperationsPage() {
       ${s.gatewayExecutions.providerRef} is not null
       and ${s.gatewayExecutions.createdAt} >= statement_timestamp() - interval '90 days'
     `)
-    .groupBy(s.gatewayExecutions.providerRef)
+    .groupBy(s.gatewayExecutions.providerRef, s.gatewayExecutions.providerName, upstreamModel)
     .orderBy(desc(sql`count(*)`));
 
   // 从 registry 文本输出读活跃流式计数(prom-client v15 get() 为异步,改走 metrics 文本)。
@@ -102,7 +105,8 @@ export default async function OperationsPage() {
             <table className="w-full text-ui-body border-collapse">
               <thead>
                 <tr className="bg-neutral-50/70 border-b border-neutral-200 text-neutral-500    text-ui-caption uppercase tracking-wider font-semibold">
-                  <th className="text-left px-5 py-3">Provider</th>
+                  <th className="text-left px-5 py-3">{t("thProvider")}</th>
+                  <th className="text-left px-5 py-3">{t("thModel")}</th>
                   <th className="text-right px-5 py-3">{t("thCalls")}</th>
                   <th className="text-right px-5 py-3">{t("thSuccessRate")}</th>
                   <th className="text-right px-5 py-3">{t("thAvgLatency")}</th>
@@ -111,7 +115,7 @@ export default async function OperationsPage() {
               <tbody className="divide-y divide-neutral-100 ">
                 {providerHealth.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="px-5 py-10 text-center text-neutral-400 ">
+                    <td colSpan={5} className="px-5 py-10 text-center text-neutral-400 ">
                       {t("providerEmpty")}
                     </td>
                   </tr>
@@ -123,9 +127,12 @@ export default async function OperationsPage() {
                   const avgLat = Math.round(Number(r.avgLatency));
                   const healthy = rate >= 95;
                   return (
-                    <tr key={r.providerRef as string} className="hover:bg-neutral-50/30  transition-colors duration-150">
-                      <td className="px-5 py-3.5 font-mono text-ui-caption font-medium text-neutral-900 ">
-                        {r.providerRef as string}
+                    <tr key={`${String(r.providerRef)}:${String(r.providerName)}:${String(r.upstreamModel)}`} className="hover:bg-neutral-50/30  transition-colors duration-150">
+                      <td className="px-5 py-3.5 font-medium text-neutral-900 ">
+                        {String(r.providerName ?? "").trim() || t("unknownProvider")}
+                      </td>
+                      <td className="px-5 py-3.5 font-mono text-ui-caption text-neutral-700 ">
+                        {String(r.upstreamModel)}
                       </td>
                       <td className="px-5 py-3.5 text-right font-mono text-ui-caption text-neutral-700 ">
                         {total.toLocaleString()}

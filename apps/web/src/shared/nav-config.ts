@@ -47,7 +47,6 @@ export interface NavSearchResult {
 
 /** 用户个人配置(所有登录用户可见)。 */
 const myConfigGroup: NavGroup = {
-  titleKey: "sectionMyConfig",
   items: [
     { href: "/panel/keys", labelKey: "keys", icon: "Key", keywords: "api key token 密钥 令牌" },
     { href: "/panel/providers", labelKey: "providers", icon: "Server", keywords: "provider endpoint base url health 服务商 渠道 地址 健康" },
@@ -123,7 +122,7 @@ export function searchNavGroups(
 }
 
 /**
- * /panel 侧栏分组:普通用户仅见「我的配置」;admin 额外见「全局管理」分组(跳 /admin)。
+ * /panel 侧栏分组:普通用户仅见个人配置项;admin 额外见「全局管理」分组(跳 /admin)。
  * 按 role 决定是否附加全局管理分组,实现"admin 是 user 的权限超集"在 UI 上的表达。
  */
 export function panelNavGroups(role: SessionUser["role"]): NavGroup[] {

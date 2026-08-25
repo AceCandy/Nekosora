@@ -135,9 +135,9 @@ export default function DashSidebar({
         </button>
         <Link
           href={chatHref}
-          className="inline-flex min-w-0 items-center gap-2 truncate rounded px-2 py-1 text-ui-body font-medium text-neutral-700 transition-colors hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
+          className="group inline-flex min-w-0 items-center gap-2 truncate rounded px-2 py-1 text-ui-body font-medium text-neutral-700 transition-colors hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
         >
-          <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <ArrowLeft className="h-4 w-4 shrink-0 transition-transform duration-200 group-hover:-translate-x-0.5 group-focus-visible:-translate-x-0.5 group-active:-translate-x-1 motion-reduce:transition-none" aria-hidden="true" />
           {t("backToChat")}
         </Link>
       </header>
@@ -174,13 +174,13 @@ export default function DashSidebar({
             <Link
               href={chatHref}
               className={clsx(
-                "touch-target inline-flex h-9 min-w-0 items-center rounded-md text-ui-body font-medium text-neutral-700 transition-colors hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue",
+                "group touch-target inline-flex h-9 min-w-0 items-center rounded-md text-ui-body font-medium text-neutral-700 transition-colors hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue",
                 collapsed ? "w-9 justify-center" : "flex-1 gap-2 px-2",
               )}
               aria-label={collapsed ? t("backToChat") : undefined}
               title={collapsed ? t("backToChat") : undefined}
             >
-              <ArrowLeft className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />
+              <ArrowLeft className="h-[18px] w-[18px] shrink-0 transition-transform duration-200 group-hover:-translate-x-0.5 group-focus-visible:-translate-x-0.5 group-active:-translate-x-1 motion-reduce:transition-none" aria-hidden="true" />
               <span className={clsx("truncate", collapsed && "md:hidden")}>{t("backToChat")}</span>
             </Link>
             <button

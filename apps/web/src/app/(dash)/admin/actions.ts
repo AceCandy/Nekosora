@@ -1,6 +1,8 @@
 "use server";
 import { eq, ne, and, or, asc, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
+import { getAuth } from "@/auth";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { encryptKeyBundle, parseKeyBundle } from "@/lib/providers/keys";
 import type { WeightedKey } from "@/lib/providers/keys";
@@ -817,9 +819,22 @@ export async function toggleModel(id: string, enabled: boolean) {
 // ===================== Users =====================
 
 export async function listUsers() {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const db = await getDb();
-  return db.select().from(S().user).orderBy(S().user.createdAt);
+  const users = await db.select().from(S().user).orderBy(S().user.createdAt);
+  return users.map((user: Record<string, unknown>) => ({
+    ...user,
+    isCurrent: user.id === admin.id,
+  }));
+}
+
+export async function deleteUser(id: string) {
+  const admin = await requireAdmin();
+  if (id === admin.id) throw new Error("Cannot delete the current account");
+
+  const auth = await getAuth();
+  await auth.api.removeUser({ body: { userId: id }, headers: await headers() });
+  revalidatePath("/admin/users");
 }
 
 export async function toggleUserStatus(id: string, status: string) {

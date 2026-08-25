@@ -433,6 +433,7 @@
       "thName": "Name",
       "thRole": "Role",
       "thStatus": "Status",
+      "thActions": "Actions",
       "empty": "No users",
       "roleAdminLabel": "Admin",
       "roleUserLabel": "User",
@@ -440,6 +441,10 @@
       "statusDisabled": "Disabled",
       "actionDisable": "Disable account",
       "actionEnable": "Enable account",
+      "deleteButton": "Delete {name}",
+      "deleteConfirmTitle": "Delete account",
+      "deleteConfirmMessage": "Delete \"{name}\"? Its sessions and sign-in data will also be removed. This cannot be undone.",
+      "deleteFailed": "Could not delete the account. Please try again.",
       "footerNote": "New users are typically synced on first Better Auth login, or created by the seed script."
     },
     "operations": {
@@ -473,6 +478,9 @@
       "depMetrics": "Metrics endpoint",
       "depHealth": "Health check",
       "providerHealthTitle": "Upstream provider health (last 90 days)",
+      "thProvider": "Provider",
+      "thModel": "Upstream model",
+      "unknownProvider": "Unknown provider",
       "thCalls": "Calls",
       "thSuccessRate": "Success rate",
       "thAvgLatency": "Avg latency",

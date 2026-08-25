@@ -15,6 +15,7 @@ const mockFunctions = vi.hoisted(() => ({
   fetchUpstreamModels: vi.fn(async () => []),
   recordSuccess: vi.fn(),
   recordFailure: vi.fn(),
+  removeUser: vi.fn(async () => ({ success: true })),
 }));
 
 vi.mock("drizzle-orm", () => ({
@@ -27,6 +28,10 @@ vi.mock("drizzle-orm", () => ({
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("next/headers", () => ({ headers: vi.fn(async () => new Headers({ cookie: "session=test" })) }));
+vi.mock("@/auth", () => ({
+  getAuth: vi.fn(async () => ({ api: { removeUser: mockFunctions.removeUser } })),
+}));
 vi.mock("@/lib/session", () => ({ requireAdmin: vi.fn(async () => mockData.admin) }));
 vi.mock("@/lib/providers/keys", () => ({
   encryptKeyBundle: vi.fn(),
@@ -171,8 +176,10 @@ import {
   testRoute,
   updateProvider,
   updateRoute,
+  deleteUser,
 } from "./actions";
 import { encryptKeyBundle } from "@/lib/providers/keys";
+import { revalidatePath } from "next/cache";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -191,6 +198,23 @@ beforeEach(() => {
     supportsStreamUsage: false,
   }];
   mockData.routes = [];
+});
+
+describe("deleteUser", () => {
+  it("拒绝管理员删除自己", async () => {
+    await expect(deleteUser("admin-a")).rejects.toThrow("Cannot delete the current account");
+    expect(mockFunctions.removeUser).not.toHaveBeenCalled();
+  });
+
+  it("允许删除其他账号并刷新账号列表", async () => {
+    await deleteUser("admin-b");
+
+    expect(mockFunctions.removeUser).toHaveBeenCalledWith({
+      body: { userId: "admin-b" },
+      headers: expect.any(Headers),
+    });
+    expect(revalidatePath).toHaveBeenCalledWith("/admin/users");
+  });
 });
 
 describe("updateProvider", () => {

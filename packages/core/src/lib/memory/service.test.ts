@@ -44,12 +44,10 @@ describe("memory date normalization", () => {
   });
 
   it("Keyv 缓存命中后仍返回 Date", async () => {
-    const getAll = vi.fn().mockImplementation((options: { showExpired?: boolean }) => ({
-      results: options.showExpired
-        ? []
-        : [{ id: "m-cache", memory: "cached", metadata: {}, createdAt: "2026-01-03T00:00:00.000Z" }],
-    }));
-    vi.mocked(getMemory).mockResolvedValue({ getAll } as never);
+    const getAll = vi.fn().mockResolvedValue({
+      results: [{ id: "m-cache", memory: "cached", metadata: {}, createdAt: "2026-01-03T00:00:00.000Z" }],
+    });
+    vi.mocked(getMemory).mockResolvedValue({ getAll, delete: vi.fn() } as never);
 
     await invalidateMemoryCache("cache-date-user");
     const first = await getMemories("cache-date-user");
@@ -58,7 +56,28 @@ describe("memory date normalization", () => {
     expect(first[0].createdAt).toBeInstanceOf(Date);
     expect(cached[0].createdAt).toBeInstanceOf(Date);
     expect(cached[0].createdAt?.toISOString()).toBe("2026-01-03T00:00:00.000Z");
+    expect(getAll).toHaveBeenCalledTimes(1);
+    expect(getAll).toHaveBeenCalledWith({ filters: { user_id: "cache-date-user" }, showExpired: true });
     await invalidateMemoryCache("cache-date-user");
+  });
+
+  it("过滤过期项目记忆且清理失败不影响有效结果", async () => {
+    const getAll = vi.fn().mockResolvedValue({
+      results: [
+        { id: "expired", memory: "旧项目", metadata: { scope: "project", expirationDate: "2000-01-01" } },
+        { id: "active", memory: "当前项目", metadata: { scope: "project", expirationDate: "2999-01-01" } },
+        { id: "profile", memory: "用户画像", metadata: { scope: "profile" } },
+      ],
+    });
+    const remove = vi.fn().mockRejectedValue(new Error("mem0 unavailable"));
+    vi.mocked(getMemory).mockResolvedValue({ getAll, delete: remove } as never);
+
+    await invalidateMemoryCache("expired-memory-user");
+    const memories = await getMemories("expired-memory-user");
+
+    expect(memories.map((item) => item.id)).toEqual(["active", "profile"]);
+    expect(remove).toHaveBeenCalledWith("expired");
+    await invalidateMemoryCache("expired-memory-user");
   });
 });
 

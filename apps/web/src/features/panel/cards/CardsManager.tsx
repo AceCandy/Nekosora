@@ -14,6 +14,7 @@ import {
   deleteMyCard,
 } from "@/features/panel/cards/actions";
 import type { InstructionCard } from "@/lib/instruction-cards/service";
+import { Markdown } from "@/shared/components/markdown/Markdown";
 
 /**
  * 指令卡管理器 —— /panel/cards 的主组件。
@@ -114,7 +115,7 @@ function CardItem({
           <h3 className="text-ui-body font-semibold text-neutral-800  truncate">
             {card.title}
           </h3>
-          <code className="text-ui-caption text-neutral-400 font-mono">/{card.trigger}</code>
+          <code className="text-ui-caption text-ink-tertiary font-mono">/{card.trigger}</code>
         </div>
         <div className="flex items-center gap-1 shrink-0">
           <button type="button" onClick={onEdit} className="touch-target inline-flex items-center justify-center p-1 text-neutral-400 hover:text-neutral-600 " title={t("editButton")} aria-label={t("editButton")}>
@@ -128,11 +129,15 @@ function CardItem({
       {card.description && (
         <p className="text-ui-caption text-neutral-500 mb-2 line-clamp-2">{card.description}</p>
       )}
-      <pre className="text-ui-caption text-neutral-600  bg-neutral-50  rounded p-2 max-h-24 overflow-auto whitespace-pre-wrap break-words font-mono">
-        {card.markdown.slice(0, 200)}
-        {card.markdown.length > 200 && "\n…"}
-      </pre>
-      <div className="mt-2 text-ui-caption text-neutral-400">
+      <div
+        role="region"
+        aria-label={t("content")}
+        tabIndex={0}
+        className="max-h-40 overflow-auto rounded-md bg-neutral-50 p-3"
+      >
+        <Markdown content={card.markdown} className="text-ui-caption text-neutral-600" />
+      </div>
+      <div className="mt-2 text-ui-caption text-ink-tertiary">
         {t("useCount", { count: card.useCount })}
       </div>
     </div>

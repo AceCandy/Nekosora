@@ -42,44 +42,31 @@ export function defaultPriorityForScope(scope: MemoryScope): number {
 
 const PROJECT_EXPIRE_DAYS = 7;
 
-/** project 记忆的过期日期(YYYY-MM-DD,M-4 用 mem0 expirationDate 软过滤 + 懒硬删)。 */
+/** project 记忆的过期日期(YYYY-MM-DD,M-4 用 mem0 expirationDate 过滤 + 懒硬删)。 */
 export function toProjectExpirationDate(): string {
   return new Date(Date.now() + PROJECT_EXPIRE_DAYS * 86400 * 1000).toISOString().slice(0, 10);
 }
 
-/**
- * 清理过期的 project 记忆(M-4:mem0 expirationDate 懒硬删)。
- * mem0 search/getAll 默认 showExpired=false 已软过滤;此处额外硬删清理空间。
- * 在 getMemories 入口懒触发。
- */
-export async function purgeExpiredProjectMemories(userId: string): Promise<void> {
-  try {
-    const memory = await getMemory();
-    const res = await memory.getAll({
-      filters: { user_id: userId, scope: "project" },
-      showExpired: true,
-    });
-    const today = new Date().toISOString().slice(0, 10);
-    const expired = (res.results ?? []).filter((m) => {
-      const exp = m.metadata?.expirationDate;
-      return typeof exp === "string" && exp < today;
-    });
-    await Promise.all(expired.map((m) => memory.delete(m.id)));
-  } catch {
-    // mem0 不可用时静默
-  }
-}
-
-/** 读取用户全部记忆(带 60s 缓存)。入口触发 project 过期懒硬删。 */
+/** 读取用户全部记忆(带 60s 缓存)。缓存未命中时过滤并尽力清理过期 project 记忆。 */
 export async function getMemories(userId: string): Promise<UserMemory[]> {
-  await purgeExpiredProjectMemories(userId).catch(() => {});
   const memories = await cacheWrap(
     `memories:${userId}`,
     async () => {
       try {
         const memory = await getMemory();
-        const res = await memory.getAll({ filters: { user_id: userId } });
-        return (res.results ?? []).map(toUserMemory);
+        const res = await memory.getAll({ filters: { user_id: userId }, showExpired: true });
+        const today = new Date().toISOString().slice(0, 10);
+        const expiredIds: string[] = [];
+        const active = (res.results ?? []).filter((item) => {
+          const expirationDate = item.metadata?.expirationDate;
+          const expired = item.metadata?.scope === "project"
+            && typeof expirationDate === "string"
+            && expirationDate < today;
+          if (expired) expiredIds.push(item.id);
+          return !expired;
+        });
+        await Promise.allSettled(expiredIds.map((id) => memory.delete(id)));
+        return active.map(toUserMemory);
       } catch {
         return [];
       }
