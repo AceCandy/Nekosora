@@ -1369,3 +1369,24 @@ Refined chat interaction, research status, accessibility, login visuals, and con
 ### Status
 
 [OK] **Completed**
+
+
+## Session 123: 修复设置页 Server Action 导出边界
+
+**Date**: 2026-08-25
+**Task**: 修复设置页 Server Action 导出边界
+**Branch**: `main`
+
+### Summary
+
+将设置控制初始状态移出 use server 模块，补充导出形态回归测试与前端边界规范；Web lint、typecheck、Vitest 和 Next.js 构建通过。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `717e3d8` | (see git log) |
+
+### Status
+
+[OK] **Completed**

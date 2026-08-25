@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 122
+- **Total Sessions**: 123
 - **Last Active**: 2026-08-25
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~1371 | Active |
+| `journal-2.md` | ~1392 | Active |
 | `journal-1.md` | ~1981 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 123 | 2026-08-25 | 修复设置页 Server Action 导出边界 | `717e3d8` | `main` |
 | 122 | 2026-08-25 | 重新设计设置中心 | `801fe3b` | `main` |
 | 121 | 2026-08-24 | 系统设置工作台顶级化 | `e49ac72`, `a406f11`, `85b35ff` | `main` |
 | 120 | 2026-08-24 | 重设计设置控制面 | `8d5df90`, `301c230`, `3dc5f95` | `main` |
