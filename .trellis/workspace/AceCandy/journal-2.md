@@ -1348,3 +1348,24 @@ Refined chat interaction, research status, accessibility, login visuals, and con
 ### Status
 
 [OK] **Completed**
+
+
+## Session 122: 重新设计设置中心
+
+**Date**: 2026-08-25
+**Task**: 重新设计设置中心
+**Branch**: `main`
+
+### Summary
+
+重构设置导航和系统工作区，统一草稿发布、状态开关与指令卡用户隔离。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `801fe3b` | (see git log) |
+
+### Status
+
+[OK] **Completed**
