@@ -27,28 +27,35 @@ vi.mock("next/link", () => ({
 }));
 
 import { SettingsTabs } from "./SettingsTabs";
+import { resolveSettingsSelection } from "./settings-selection";
 
 describe("SettingsTabs", () => {
-  it("提供四分类导航、搜索与移动端原生选择器", () => {
-    const html = renderToStaticMarkup(<SettingsTabs current="governance" />);
+  it("只提供系统设置分类和当前复合领域的子视图", () => {
+    const html = renderToStaticMarkup(<SettingsTabs tab="output" view="styles" />);
 
-    expect(html).toContain('type="search"');
-    expect(html).toContain('role="combobox"');
-    expect(html).toContain('aria-autocomplete="list"');
-    expect(html).toContain('aria-expanded="false"');
-    expect(html).toContain('autoComplete="off"');
+    expect(html).not.toContain('type="search"');
     expect(html).toContain("<select");
-    expect(html).toContain("touch-target");
     expect(html).toContain('aria-label="tabs.ariaLabel"');
-    expect(html).toContain('href="/admin/settings?tab=governance"');
+    expect(html).toContain('aria-label="tabs.outputAriaLabel"');
+    expect(html).toContain('href="/admin/settings?tab=output&amp;view=modes"');
+    expect(html).toContain('href="/admin/settings?tab=output&amp;view=styles"');
     expect(html).toContain('aria-current="page"');
-    expect(html.match(/href="\/admin\/settings\?tab=/g)).toHaveLength(4);
   });
 
-  it("中英文目录同步提供治理标签和导航名称", () => {
-    expect(zhMessages.admin.settings.tabs.governance).toBe("流量治理");
-    expect(enMessages.admin.settings.tabs.governance).toBe("Request governance");
-    expect(zhMessages.admin.settings.tabs.ariaLabel).toEqual(expect.any(String));
-    expect(enMessages.admin.settings.tabs.ariaLabel).toEqual(expect.any(String));
+  it("兼容旧 tab 并为复合领域选择稳定默认视图", () => {
+    expect(resolveSettingsSelection("basic", "")).toEqual({ tab: "protocol" });
+    expect(resolveSettingsSelection("model", "")).toEqual({ tab: "models" });
+    expect(resolveSettingsSelection("output-modes", "")).toEqual({ tab: "output", view: "modes" });
+    expect(resolveSettingsSelection("render-styles", "")).toEqual({ tab: "output", view: "styles" });
+    expect(resolveSettingsSelection("output", "unknown")).toEqual({ tab: "output", view: "modes" });
+    expect(resolveSettingsSelection("governance", "history")).toEqual({ tab: "governance", view: "history" });
+    expect(resolveSettingsSelection("unknown", "")).toEqual({ tab: "models" });
+  });
+
+  it("中英文目录同步提供子视图名称", () => {
+    expect(zhMessages.admin.settings.tabs.governancePolicy).toBe("策略配置");
+    expect(enMessages.admin.settings.tabs.governanceHistory).toBe("Runtime history");
+    expect(zhMessages.admin.settings.tabs.outputAriaLabel).toEqual(expect.any(String));
+    expect(enMessages.admin.settings.tabs.governanceAriaLabel).toEqual(expect.any(String));
   });
 });

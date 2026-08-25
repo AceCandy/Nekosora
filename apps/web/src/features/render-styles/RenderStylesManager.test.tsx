@@ -68,6 +68,22 @@ function renderManager(renderer: "streamdown" | "custom") {
 }
 
 describe("render style trust warning", () => {
+  it("默认只显示列表和独立预览按钮", () => {
+    const html = renderManager("streamdown");
+
+    expect(html).not.toContain("previewTitle");
+    expect(html).not.toContain("星枢输出预览");
+    expect(html).toContain('aria-label="previewAction"');
+  });
+
+  it("在状态列直接提供启停开关", () => {
+    const html = renderManager("streamdown");
+
+    expect(html).toContain('role="switch"');
+    expect(html).toContain('aria-checked="true"');
+    expect(html).not.toContain("<span>disable</span>");
+  });
+
   it("在 custom 样式列表中持续显示高信任标识", () => {
     const html = renderManager("custom");
 
@@ -116,5 +132,7 @@ describe("render style trust warning", () => {
     expect(en.customRendererBadge).toBe("High-trust rendering");
     expect(zh.customRendererWarning).toContain("公开分享");
     expect(en.customRendererWarning).toContain("public shares");
+    expect(zh.previewAction).toContain("{name}");
+    expect(en.previewAction).toContain("{name}");
   });
 });

@@ -23,7 +23,6 @@ interface HistoryItem {
 }
 
 interface SettingsChangeControlProps {
-  revision: number;
   draft: {
     id: string;
     kind: "edit" | "rollback";
@@ -98,7 +97,6 @@ const HIDDEN_FIELDS = new Set(["id", "namespace", "key"]);
 const LONG_FIELDS = new Set(["value", "systemPrompt", "css"]);
 
 export default function SettingsChangeControl({
-  revision,
   draft,
   history,
 }: SettingsChangeControlProps) {
@@ -174,69 +172,66 @@ export default function SettingsChangeControl({
   });
 
   return (
-    <aside className="order-first xl:order-none xl:sticky xl:top-6">
-      <section className="rounded-lg border border-morning-mist bg-nebula-white p-4">
-        <div>
-          <p className="text-ui-body font-semibold text-space-ink">
-            {draft
-              ? t("draftSummary", { revision, count: draft.changes.length })
-              : t("currentRevision", { revision })}
-          </p>
-          <p className="mt-1 text-ui-caption text-ink-tertiary">
-            {draft ? t("draftPersisted") : t("noDraft")}
-          </p>
-        </div>
+    <aside>
+      {draft ? (
+        <section className="border-y border-morning-mist bg-neutral-50/60 px-4 py-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-ui-body font-semibold text-space-ink">
+                {t("draftSummary", { count: draft.changes.length })}
+              </p>
+              <p className="mt-0.5 text-ui-caption text-ink-tertiary">{t("draftPersisted")}</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="primary"
+                disabled={draft.changes.length === 0 || applyPending || abandonPending}
+                onClick={() => setReviewOpen(true)}
+              >
+                {t("reviewApply")}
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => setHistoryOpen(true)}>
+                {t("history")}
+              </Button>
+              <form action={abandonAction}>
+                <Button
+                  type="submit"
+                  variant="ghost"
+                  disabled={applyPending || abandonPending}
+                >
+                  {abandonPending ? t("working") : t("abandon")}
+                </Button>
+              </form>
+            </div>
+          </div>
 
-        {draftGroups.length > 0 && (
-          <ul className="mt-4 divide-y divide-morning-mist border-y border-morning-mist text-ui-caption">
-            {draftGroups.map((group) => (
-              <li key={group.domain} className="flex items-center justify-between gap-3 py-2">
-                <span className="font-medium text-neutral-700">{labels.domains[group.domain]}</span>
-                <span className="text-ink-tertiary">{t("changeCount", { count: group.items.length })}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        <div className="mt-4 grid gap-2">
-          {draft && (
-            <Button
-              type="button"
-              variant="primary"
-              disabled={draft.changes.length === 0 || applyPending || abandonPending}
-              onClick={() => setReviewOpen(true)}
-              className="w-full"
+          {state.code && !reviewOpen && !historyOpen && (
+            <p
+              role={state.status === "error" ? "alert" : "status"}
+              aria-live="polite"
+              className={`mt-3 text-ui-body ${statusColor(state.status)}`}
             >
-              {t("reviewApply")}
-            </Button>
+              {t(actionMessageKey(state.code))}
+            </p>
           )}
-          <Button type="button" variant="secondary" onClick={() => setHistoryOpen(true)} className="w-full">
+        </section>
+      ) : (
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          {state.code && !historyOpen && (
+            <p
+              role={state.status === "error" ? "alert" : "status"}
+              aria-live="polite"
+              className={`text-ui-body ${statusColor(state.status)}`}
+            >
+              {t(actionMessageKey(state.code))}
+            </p>
+          )}
+          <Button type="button" variant="ghost" onClick={() => setHistoryOpen(true)}>
             {t("history")}
           </Button>
-          {draft && (
-            <form action={abandonAction}>
-              <Button
-                type="submit"
-                variant="ghost"
-                disabled={applyPending || abandonPending}
-                className="w-full"
-              >
-                {abandonPending ? t("working") : t("abandon")}
-              </Button>
-            </form>
-          )}
         </div>
-
-        {state.code && !reviewOpen && !historyOpen && (
-          <p
-            role={state.status === "error" ? "alert" : "status"}
-            aria-live="polite"
-            className={`mt-3 text-ui-body ${statusColor(state.status)}`}
-          >
-            {t(actionMessageKey(state.code))}
-          </p>
-        )}
-      </section>
+      )}
 
       <Modal
         open={reviewOpen && Boolean(draft)}

@@ -1,8 +1,8 @@
 import { listUsers, toggleUserStatus } from "../actions";
 import { getTranslations } from "next-intl/server";
-import { Button } from "@/shared/ui/Button";
 import Badge from "@/shared/ui/Badge";
 import StatusDot from "@/shared/ui/StatusDot";
+import StatusSwitch from "@/shared/ui/StatusSwitch";
 import { Users } from "lucide-react";
 import { PageHeader } from "@/shared/components/PageHeader";
 
@@ -24,13 +24,12 @@ export default async function UsersPage() {
                 <th className="text-left px-5 py-3 font-semibold">{t("thName")}</th>
                 <th className="text-left px-5 py-3 font-semibold">{t("thRole")}</th>
                 <th className="text-left px-5 py-3 font-semibold">{t("thStatus")}</th>
-                <th className="text-right px-5 py-3 font-semibold">{t("thActions")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100 ">
               {users.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-5 py-10 text-center text-neutral-400 ">
+                  <td colSpan={4} className="px-5 py-10 text-center text-neutral-400 ">
                     {t("empty")}
                   </td>
                 </tr>
@@ -58,20 +57,22 @@ export default async function UsersPage() {
                     )}
                   </td>
                   <td className="px-5 py-3.5">
-                    <StatusDot enabled={u.status === "active"} label={u.status === "active" ? t("statusActive") : t("statusDisabled")} />
-                  </td>
-                  <td className="px-5 py-3.5 text-right">
                     {u.role !== "admin" ? (
                       <form
                         action={toggleUserStatus.bind(null, u.id as string, u.status === "active" ? "disabled" : "active")}
-                        className="inline"
+                        className="inline-block"
                       >
-                        <Button type="submit" variant="secondary" size="sm" className="font-semibold">
-                          {u.status === "active" ? t("actionDisable") : t("actionEnable")}
-                        </Button>
+                        <StatusSwitch
+                          type="submit"
+                          checked={u.status === "active"}
+                          label={u.status === "active" ? t("actionDisable") : t("actionEnable")}
+                        />
                       </form>
                     ) : (
-                      <span className="text-ui-caption text-neutral-400  select-none">-</span>
+                      <StatusDot
+                        enabled={u.status === "active"}
+                        label={u.status === "active" ? t("statusActive") : t("statusDisabled")}
+                      />
                     )}
                   </td>
                 </tr>

@@ -32,7 +32,7 @@ export default async function GovernanceHistoryPanel({
   const maxRequests = Math.max(1, ...recent.map((point) => point.requestCount));
 
   return (
-    <section className="space-y-4 border-t border-morning-mist pt-6" aria-labelledby="governance-history-title">
+    <section className="space-y-4" aria-labelledby="governance-history-title">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 id="governance-history-title" className="text-ui-subheading font-semibold text-space-ink">
@@ -44,7 +44,7 @@ export default async function GovernanceHistoryPanel({
           {([7, 30, 90] as const).map((days) => (
             <Link
               key={days}
-              href={`/admin/settings?tab=governance&range=${days}`}
+              href={`/admin/settings?tab=governance&view=history&range=${days}`}
               aria-current={range === days ? "page" : undefined}
               className={range === days
                 ? "touch-target rounded bg-neutral-100 px-3 py-2 text-ui-caption font-medium text-space-ink"

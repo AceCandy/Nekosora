@@ -24,8 +24,6 @@ import {
   Smartphone,
   Plus,
   Edit2,
-  Play,
-  Square,
   Trash2,
   ShieldAlert,
   Lock,
@@ -36,7 +34,8 @@ import RenderStyleFormDialog, { type RenderStyle } from "./RenderStyleFormDialog
 import ConfirmDialog from "@/shared/ui/ConfirmDialog";
 import { Button } from "@/shared/ui/Button";
 import Badge from "@/shared/ui/Badge";
-import StatusDot from "@/shared/ui/StatusDot";
+import Modal from "@/shared/ui/Modal";
+import StatusSwitch from "@/shared/ui/StatusSwitch";
 import { Markdown } from "@/shared/components/markdown/Markdown";
 
 const PREVIEW_MARKDOWN = `## 星枢输出预览
@@ -71,7 +70,7 @@ export default function RenderStylesManager({
   const [addOpen, setAddOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [previewId, setPreviewId] = useState<string | null>(styles[0]?.id ?? null);
+  const [previewId, setPreviewId] = useState<string | null>(null);
   const [previewWidth, setPreviewWidth] = useState<"desktop" | "mobile">("desktop");
   const [feedback, setFeedback] = useState<"idle" | "success" | "error">("idle");
   const [pending, startTransition] = useTransition();
@@ -93,7 +92,7 @@ export default function RenderStylesManager({
 
   const editing = optimisticStyles.find((s) => s.id === editId) ?? null;
   const deleting = optimisticStyles.find((s) => s.id === deleteId) ?? null;
-  const previewing = optimisticStyles.find((s) => s.id === previewId) ?? optimisticStyles[0] ?? null;
+  const previewing = optimisticStyles.find((s) => s.id === previewId) ?? null;
 
   async function performAction(action: () => void | Promise<void>) {
     setFeedback("idle");
@@ -166,37 +165,6 @@ export default function RenderStylesManager({
         {!pending && feedback === "error" && <p role="alert" className="text-danger">{t("saveFailed")}</p>}
       </div>
 
-      {previewing && (
-        <section className="rounded-lg border border-morning-mist bg-neutral-50/60 p-4">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-ui-caption font-medium text-neutral-500">{t("previewTitle")}</p>
-              <h3 className="mt-1 text-ui-body font-semibold text-space-ink">{previewing.name}</h3>
-            </div>
-            <div className="inline-flex rounded-md border border-morning-mist bg-nebula-white p-1" role="group" aria-label={t("previewViewport")}>
-              <button type="button" onClick={() => setPreviewWidth("desktop")} aria-pressed={previewWidth === "desktop"} className={clsx("touch-target inline-flex items-center gap-1 rounded px-2 text-ui-caption", previewWidth === "desktop" && "bg-neutral-100 text-space-ink")}>
-                <Monitor className="h-3.5 w-3.5" />{t("desktopPreview")}
-              </button>
-              <button type="button" onClick={() => setPreviewWidth("mobile")} aria-pressed={previewWidth === "mobile"} className={clsx("touch-target inline-flex items-center gap-1 rounded px-2 text-ui-caption", previewWidth === "mobile" && "bg-neutral-100 text-space-ink")}>
-                <Smartphone className="h-3.5 w-3.5" />{t("mobilePreview")}
-              </button>
-            </div>
-          </div>
-          <div className={clsx("mx-auto rounded-md border border-morning-mist bg-nebula-white p-5 transition-[max-width] duration-150", previewWidth === "mobile" ? "max-w-[390px]" : "max-w-none")}>
-            <style>{previewing.css}</style>
-            <div className={`rs-${previewing.cssClass}`}>
-              <Markdown content={PREVIEW_MARKDOWN} isStreaming={false} renderer={previewing.renderer} renderStyleClass={previewing.cssClass} />
-            </div>
-          </div>
-          {previewing.renderer === "custom" && (
-            <p className="mt-2 flex items-center gap-1.5 text-ui-caption text-warning">
-              <ShieldAlert className="h-3.5 w-3.5" aria-hidden="true" />
-              {t("previewTrustWarning")}
-            </p>
-          )}
-        </section>
-      )}
-
       <DndContext id="render-styles-sortable" sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <div className="overflow-x-auto rounded-lg border border-morning-mist bg-nebula-white transition-colors duration-150">
           <table className="w-full min-w-[780px] text-ui-body border-collapse text-left">
@@ -239,6 +207,39 @@ export default function RenderStylesManager({
           </table>
         </div>
       </DndContext>
+
+      {previewing && (
+        <Modal
+          open
+          onClose={() => setPreviewId(null)}
+          title={`${t("previewTitle")} · ${previewing.name}`}
+          dialogClassName="modal-pop m-auto max-h-[92vh] w-[min(1100px,94vw)] overflow-hidden rounded-lg border border-morning-mist bg-nebula-white p-0 text-space-ink shadow-xl backdrop:bg-black/40"
+          bodyClassName="max-h-[calc(92vh-3.5rem)] overflow-y-auto p-4"
+        >
+          <div className="mb-3 flex justify-end">
+            <div className="inline-flex rounded-md border border-morning-mist bg-nebula-white p-1" role="group" aria-label={t("previewViewport")}>
+              <button type="button" onClick={() => setPreviewWidth("desktop")} aria-pressed={previewWidth === "desktop"} className={clsx("touch-target inline-flex items-center gap-1 rounded px-2 text-ui-caption", previewWidth === "desktop" && "bg-neutral-100 text-space-ink")}>
+                <Monitor className="h-3.5 w-3.5" />{t("desktopPreview")}
+              </button>
+              <button type="button" onClick={() => setPreviewWidth("mobile")} aria-pressed={previewWidth === "mobile"} className={clsx("touch-target inline-flex items-center gap-1 rounded px-2 text-ui-caption", previewWidth === "mobile" && "bg-neutral-100 text-space-ink")}>
+                <Smartphone className="h-3.5 w-3.5" />{t("mobilePreview")}
+              </button>
+            </div>
+          </div>
+          <div className={clsx("mx-auto rounded-md border border-morning-mist bg-nebula-white p-5 transition-[max-width] duration-150", previewWidth === "mobile" ? "max-w-[390px]" : "max-w-none")}>
+            <style>{previewing.css}</style>
+            <div className={`rs-${previewing.cssClass}`}>
+              <Markdown content={PREVIEW_MARKDOWN} isStreaming={false} renderer={previewing.renderer} renderStyleClass={previewing.cssClass} />
+            </div>
+          </div>
+          {previewing.renderer === "custom" && (
+            <p className="mt-2 flex items-center gap-1.5 text-ui-caption text-warning">
+              <ShieldAlert className="h-3.5 w-3.5" aria-hidden="true" />
+              {t("previewTrustWarning")}
+            </p>
+          )}
+        </Modal>
+      )}
 
       {/* 新增弹窗 */}
       <RenderStyleFormDialog
@@ -350,9 +351,15 @@ function SortableRenderStyleRow({
       </td>
       <td className="p-3.5 font-semibold text-neutral-800 ">
         <span className="inline-flex flex-wrap items-center gap-1.5">
-          <button type="button" onClick={() => onPreview(style.id)} className="inline-flex items-center gap-1.5 rounded text-left hover:text-sora-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue/40">
-            {style.name}
-            <Eye className="h-3.5 w-3.5 text-neutral-400" aria-hidden="true" />
+          <span>{style.name}</span>
+          <button
+            type="button"
+            onClick={() => onPreview(style.id)}
+            className="touch-target inline-flex items-center justify-center rounded text-neutral-400 hover:text-sora-blue"
+            aria-label={t("previewAction", { name: style.name })}
+            title={t("previewAction", { name: style.name })}
+          >
+            <Eye className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
           {style.builtin && (
             <Lock className="w-3 h-3 text-neutral-400" aria-label={t("builtin")} />
@@ -378,7 +385,12 @@ function SortableRenderStyleRow({
         {style.description || <span className="text-ink-tertiary ">-</span>}
       </td>
       <td className="p-3.5">
-        <StatusDot enabled={style.enabled} label={style.enabled ? undefined : t("disabled")} />
+        <StatusSwitch
+          checked={style.enabled}
+          label={style.enabled ? t("disable") : t("enable")}
+          onClick={onToggle}
+          disabled={pending}
+        />
       </td>
       <td className="p-3.5 text-right space-x-1">
         <Button
@@ -392,33 +404,6 @@ function SortableRenderStyleRow({
           <Edit2 className="w-3.5 h-3.5" />
           <span>{t("edit")}</span>
         </Button>
-
-        <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={onToggle}
-            disabled={pending}
-            className={clsx(
-              style.enabled
-                ? "text-warning  hover:bg-warning/10 "
-                : "text-success  hover:bg-success/10 "
-            )}
-            title={style.enabled ? t("disable") : t("enable")}
-          >
-            {style.enabled ? (
-              <>
-                <Square className="w-3.5 h-3.5 fill-current" />
-                <span>{t("disable")}</span>
-              </>
-            ) : (
-              <>
-                <Play className="w-3.5 h-3.5 fill-current" />
-                <span>{t("enable")}</span>
-              </>
-            )}
-          </Button>
-
         {style.builtin ? (
           <Button
             variant="ghost"

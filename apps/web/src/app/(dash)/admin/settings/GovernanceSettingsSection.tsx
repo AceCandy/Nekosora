@@ -21,9 +21,11 @@ import GovernanceHistoryPanel from "./GovernanceHistoryPanel";
 export default async function GovernanceSettingsSection({
   control,
   range,
+  view,
 }: {
   control: SettingsControlView;
   range: GovernanceHistoryRange;
+  view: "policy" | "history";
 }) {
   await requireAdmin();
   const gateway = projectSystemSettings(
@@ -34,10 +36,18 @@ export default async function GovernanceSettingsSection({
   const { policy, source } = loadGatewayGovernancePolicy(
     gateway.request_governance_v1 ?? null,
   );
-  const insights = await getGatewayGovernanceInsights(range, policy);
   const t = await getTranslations("admin.settings.governance");
   const invalid = source === "invalid";
   const SourceIcon = invalid ? CircleAlert : Info;
+
+  if (view === "history") {
+    const insights = await getGatewayGovernanceInsights(range, policy);
+    return (
+      <div id="governance-history" className="max-w-5xl scroll-mt-40">
+        <GovernanceHistoryPanel range={range} {...insights} />
+      </div>
+    );
+  }
 
   return (
     <div id="governance-policy" className="max-w-5xl space-y-5 scroll-mt-40">
@@ -68,7 +78,6 @@ export default async function GovernanceSettingsSection({
           version: control.draft?.version ?? null,
         })}
       />
-      <GovernanceHistoryPanel range={range} {...insights} />
     </div>
   );
 }

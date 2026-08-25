@@ -1,6 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it, vi } from "vitest";
 import type { SettingsChange } from "@/lib/settings-control/changes";
-import { presentSettingsChanges } from "./SettingsChangeControl";
+
+vi.mock("next-intl", () => ({
+  useLocale: () => "zh-CN",
+  useTranslations: () => (key: string) => key,
+}));
+
+import SettingsChangeControl, { presentSettingsChanges } from "./SettingsChangeControl";
 
 describe("presentSettingsChanges", () => {
   it("按领域归组并标记确定性的重点变更", () => {
@@ -80,5 +87,38 @@ describe("presentSettingsChanges", () => {
       resourceLabelKey: "gatewayChatUa",
       attention: false,
     });
+  });
+});
+
+describe("SettingsChangeControl", () => {
+  it("无草稿时只保留发布记录入口且不显示 revision", () => {
+    const html = renderToStaticMarkup(<SettingsChangeControl draft={null} history={[]} />);
+
+    expect(html).toContain("history");
+    expect(html).not.toContain("currentRevision");
+    expect(html).not.toContain("draftSummary");
+    expect(html).not.toMatch(/r\d+/);
+  });
+
+  it("有草稿时显示轻量待发布状态和必要操作", () => {
+    const change: SettingsChange = {
+      resource: "system_setting",
+      resourceKey: "gateway:chat_ua",
+      before: { namespace: "gateway", key: "chat_ua", value: "old-agent" },
+      after: { namespace: "gateway", key: "chat_ua", value: "new-agent" },
+    };
+    const html = renderToStaticMarkup(
+      <SettingsChangeControl
+        draft={{ id: "draft-1", kind: "edit", version: 1, changes: [change] }}
+        history={[]}
+      />,
+    );
+
+    expect(html).toContain("draftSummary");
+    expect(html).toContain("draftPersisted");
+    expect(html).toContain("reviewApply");
+    expect(html).toContain("abandon");
+    expect(html).toContain("history");
+    expect(html).not.toContain("currentRevision");
   });
 });

@@ -3,7 +3,6 @@
 import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { Plus, Pencil, Trash2, Loader2, Sparkles } from "lucide-react";
-import { clsx } from "clsx";
 import { Button } from "@/shared/ui/Button";
 import Modal from "@/shared/ui/Modal";
 import Input from "@/shared/ui/Input";
@@ -14,17 +13,15 @@ import {
   updateMyCard,
   deleteMyCard,
 } from "@/features/panel/cards/actions";
-import type { InstructionCard, CardScope } from "@/lib/instruction-cards/service";
+import type { InstructionCard } from "@/lib/instruction-cards/service";
 
 /**
  * 指令卡管理器 —— /panel/cards 的主组件。
  *
  * 功能:
- *   - 列出可见卡(builtin 只读 + 自己的 private/shared 可编辑)
- *   - 新建卡(trigger/title/markdown/scope)
+ *   - 列出当前用户的卡
+ *   - 新建卡(trigger/title/markdown)
  *   - 编辑/删除自己的卡
- *
- * builtin 卡来自管理员配置,普通用户只读可见。
  */
 export default function CardsManager({ initialCards }: { initialCards: InstructionCard[] }) {
   const t = useTranslations("panel.cards");
@@ -86,7 +83,6 @@ export default function CardsManager({ initialCards }: { initialCards: Instructi
         <CardEditor
           title={t("edit")}
           initial={editing}
-          readOnly={editing.scope === "builtin"}
           onClose={() => setEditing(null)}
           onSave={async (patch) => {
             await updateMyCard(editing.id, patch);
@@ -110,42 +106,24 @@ function CardItem({
   onDelete: () => void;
 }) {
   const t = useTranslations("panel.cards");
-  const scopeLabelKey: Record<CardScope, string> = {
-    builtin: "scopeBuiltin",
-    shared: "scopeShared",
-    private: "scopePrivate",
-  };
-  const scopeStyle: Record<CardScope, string> = {
-    builtin: "bg-neutral-100  text-neutral-500",
-    shared: "bg-sora-blue/[0.04] text-sora-blue",
-    private: "bg-neku-amber/[0.04] text-warning",
-  };
-  const isMine = card.scope !== "builtin";
 
   return (
     <div className="rounded-lg border border-neutral-200  p-4 hover:border-neutral-300  transition-colors">
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <h3 className="text-ui-body font-semibold text-neutral-800  truncate">
-              {card.title}
-            </h3>
-            <span className={clsx("text-ui-caption px-1.5 py-0.5 rounded font-medium", scopeStyle[card.scope])}>
-              {t(scopeLabelKey[card.scope])}
-            </span>
-          </div>
+          <h3 className="text-ui-body font-semibold text-neutral-800  truncate">
+            {card.title}
+          </h3>
           <code className="text-ui-caption text-neutral-400 font-mono">/{card.trigger}</code>
         </div>
-        {isMine && (
-          <div className="flex items-center gap-1 shrink-0">
-            <button type="button" onClick={onEdit} className="touch-target inline-flex items-center justify-center p-1 text-neutral-400 hover:text-neutral-600 " title={t("editButton")} aria-label={t("editButton")}>
-              <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
-            </button>
-            <button type="button" onClick={onDelete} className="touch-target inline-flex items-center justify-center p-1 text-neutral-500 hover:text-danger" title={t("deleteButton")} aria-label={t("deleteButton")}>
-              <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
-            </button>
-          </div>
-        )}
+        <div className="flex items-center gap-1 shrink-0">
+          <button type="button" onClick={onEdit} className="touch-target inline-flex items-center justify-center p-1 text-neutral-400 hover:text-neutral-600 " title={t("editButton")} aria-label={t("editButton")}>
+            <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
+          </button>
+          <button type="button" onClick={onDelete} className="touch-target inline-flex items-center justify-center p-1 text-neutral-500 hover:text-danger" title={t("deleteButton")} aria-label={t("deleteButton")}>
+            <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+          </button>
+        </div>
       </div>
       {card.description && (
         <p className="text-ui-caption text-neutral-500 mb-2 line-clamp-2">{card.description}</p>
@@ -165,17 +143,14 @@ function CardItem({
 function CardEditor({
   title,
   initial,
-  readOnly,
   onClose,
   onSave,
 }: {
   title: string;
   initial?: InstructionCard;
-  readOnly?: boolean;
   onClose: () => void;
   onSave: (
     input: {
-      scope: Exclude<CardScope, "builtin">;
       trigger: string;
       title: string;
       description?: string;
@@ -187,9 +162,6 @@ function CardEditor({
   const [cardTitle, setCardTitle] = useState(initial?.title ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [markdown, setMarkdown] = useState(initial?.markdown ?? "");
-  const [scope, setScope] = useState<Exclude<CardScope, "builtin">>(
-    (initial?.scope as Exclude<CardScope, "builtin">) ?? "private",
-  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const t = useTranslations("panel.cards");
@@ -204,7 +176,7 @@ function CardEditor({
     }
     setSaving(true);
     try {
-      await onSave({ scope, trigger: trigger.trim(), title: cardTitle.trim(), description, markdown });
+      await onSave({ trigger: trigger.trim(), title: cardTitle.trim(), description, markdown });
     } catch (e) {
       setError(e instanceof Error ? e.message : t("saveFailed"));
     } finally {
@@ -216,44 +188,23 @@ function CardEditor({
     <>
       <Modal open onClose={requestClose} title={title} dialogClassName="m-auto w-[min(640px,92vw)] rounded-lg border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/40   " bodyClassName="p-0">
       <div ref={contentRef} className="p-5 space-y-3 max-h-[80vh] overflow-y-auto">
-        {readOnly && (
-          <p className="text-ui-caption text-warning  bg-warning/10  rounded p-2">
-            {t("builtinReadonly")}
-          </p>
-        )}
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-ui-caption font-semibold text-neutral-600  mb-1 block">
-              {t("trigger")}
-            </label>
-            <Input value={trigger} onChange={(e) => setTrigger(e.target.value)} disabled={readOnly} placeholder={t("triggerPlaceholder")} />
-          </div>
-          <div>
-            <label className="text-ui-caption font-semibold text-neutral-600  mb-1 block">
-              {t("scope")}
-            </label>
-            <select
-              value={scope}
-              onChange={(e) => setScope(e.target.value as Exclude<CardScope, "builtin">)}
-              disabled={readOnly}
-              className="w-full rounded-md border border-neutral-200  bg-white  px-3 py-2 text-ui-body disabled:opacity-50"
-            >
-              <option value="private">{t("scopePrivate")}</option>
-              <option value="shared">{t("scopeShared")}</option>
-            </select>
-          </div>
+        <div>
+          <label className="text-ui-caption font-semibold text-neutral-600  mb-1 block">
+            {t("trigger")}
+          </label>
+          <Input value={trigger} onChange={(e) => setTrigger(e.target.value)} placeholder={t("triggerPlaceholder")} />
         </div>
         <div>
           <label className="text-ui-caption font-semibold text-neutral-600  mb-1 block">
             {t("cardTitle")}
           </label>
-          <Input value={cardTitle} onChange={(e) => setCardTitle(e.target.value)} disabled={readOnly} placeholder={t("titlePlaceholder")} />
+          <Input value={cardTitle} onChange={(e) => setCardTitle(e.target.value)} placeholder={t("titlePlaceholder")} />
         </div>
         <div>
           <label className="text-ui-caption font-semibold text-neutral-600  mb-1 block">
             {tc("description")}
           </label>
-          <Input value={description} onChange={(e) => setDescription(e.target.value)} disabled={readOnly} placeholder={t("descPlaceholder")} />
+          <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder={t("descPlaceholder")} />
         </div>
         <div>
           <label className="text-ui-caption font-semibold text-neutral-600  mb-1 block">
@@ -262,9 +213,8 @@ function CardEditor({
           <textarea
             value={markdown}
             onChange={(e) => setMarkdown(e.target.value)}
-            disabled={readOnly}
             rows={10}
-            className="w-full rounded-md border border-neutral-200  bg-white  px-3 py-2 text-ui-caption font-mono resize-y disabled:opacity-50"
+            className="w-full rounded-md border border-neutral-200  bg-white  px-3 py-2 text-ui-caption font-mono resize-y"
             placeholder={t("contentPlaceholder")}
           />
           <div className="text-ui-caption text-neutral-400 mt-0.5 text-right">{markdown.length} / 10000</div>
@@ -273,7 +223,7 @@ function CardEditor({
       </div>
       <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-neutral-200 ">
         <Button variant="ghost" onClick={requestClose}>{tc("cancel")}</Button>
-        <Button onClick={handleSave} disabled={saving || readOnly}>
+        <Button onClick={handleSave} disabled={saving}>
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
           {tc("save")}
         </Button>

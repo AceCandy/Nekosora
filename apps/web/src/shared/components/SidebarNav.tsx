@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { useTranslations } from "next-intl";
 import { clsx } from "clsx";
 import {
@@ -18,7 +18,7 @@ import {
   Settings,
   type LucideIcon,
 } from "lucide-react";
-import type { NavGroup, NavIcon } from "@/shared/nav-config";
+import { searchNavGroups, type NavGroup, type NavIcon } from "@/shared/nav-config";
 
 /** NavIcon key -> lucide 图标组件。icon 以字符串 key 跨 RSC 边界传递,在此映射为组件。 */
 const NAV_ICONS: Record<NavIcon, LucideIcon> = {
@@ -58,9 +58,12 @@ export default function SidebarNav({ groups, matchMode = "exact", collapsed = fa
   const pathname = usePathname();
   const router = useRouter();
   const t = useTranslations("nav");
+  const [query, setQuery] = useState("");
 
   // 展开为扁平的有序列表,用于数字快捷键索引(1 起始,跨分组连续)。
   const flatItems = groups.flatMap((g) => g.items);
+  const results = searchNavGroups(groups, query, t);
+  const searching = Boolean(query.trim());
 
   // 预计算每个分组内项的全局序号(1 起始,跨分组连续),渲染时按 href 取值,
   // 避免在 .map 回调里自增计数器(触发 react-compiler 渲染后改值规则)。
@@ -102,8 +105,57 @@ export default function SidebarNav({ groups, matchMode = "exact", collapsed = fa
   );
 
   return (
-    <nav className={clsx("space-y-4", collapsed && "space-y-2")}>
-      {groups.map((group, groupIdx) => (
+    <nav className={clsx("space-y-4", collapsed && "space-y-2")} aria-label={t("sidebarNavigation")}>
+      {!collapsed && (
+        <div role="search" className="px-1">
+          <label htmlFor="settings-nav-search" className="sr-only">{t("searchLabel")}</label>
+          <input
+            id="settings-nav-search"
+            type="search"
+            autoComplete="off"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setQuery("");
+            }}
+            placeholder={t("searchPlaceholder")}
+            className="touch-target w-full rounded-md border border-morning-mist bg-nebula-white px-3 py-2 text-ui-body text-space-ink placeholder:text-ink-tertiary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue/40"
+          />
+          <p className="sr-only" aria-live="polite">
+            {searching ? t("searchResultCount", { count: results.length }) : ""}
+          </p>
+        </div>
+      )}
+
+      {searching && !collapsed ? (
+        results.length === 0 ? (
+          <p role="status" className="px-3 py-2 text-ui-body text-ink-tertiary">{t("searchEmpty")}</p>
+        ) : (
+          <div className="space-y-1">
+            {results.map((result) => {
+              const Icon = NAV_ICONS[result.icon];
+              return (
+                <Link
+                  key={`${result.href}:${result.labelKey}`}
+                  href={result.href}
+                  onClick={() => setQuery("")}
+                  className="touch-target flex items-start gap-2 rounded-md px-3 py-2 transition-colors duration-150 hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue/40"
+                >
+                  <Icon className="mt-0.5 h-4 w-4 shrink-0 text-neutral-500" aria-hidden="true" />
+                  <span className="min-w-0">
+                    <span className="block truncate text-ui-body font-medium text-neutral-700">
+                      {t(result.labelKey)}
+                    </span>
+                    <span className="block truncate text-ui-caption text-ink-tertiary">
+                      {t(result.parentLabelKey)}
+                    </span>
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        )
+      ) : groups.map((group, groupIdx) => (
         <div key={group.titleKey ?? groupIdx} className="space-y-1">
           {group.titleKey && !collapsed && (
             <div className="px-3 pb-1 text-ui-caption font-medium text-neutral-400 ">

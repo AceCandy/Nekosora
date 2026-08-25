@@ -71,6 +71,8 @@ export default async function ModelConfigSection({
     saveFailed: string;
     selectProvider: string;
     noProviders: string;
+    backgroundTasksTitle: string;
+    backgroundTasksDesc: string;
   };
 }) {
   const admin = await requireAdmin();
@@ -192,6 +194,11 @@ export default async function ModelConfigSection({
           }}
         />
       )}
+
+      <div>
+        <h3 className="text-ui-body font-semibold text-space-ink">{labels.backgroundTasksTitle}</h3>
+        <p className="mt-1 text-ui-caption text-ink-tertiary">{labels.backgroundTasksDesc}</p>
+      </div>
 
       <section className="divide-y divide-morning-mist overflow-hidden rounded-lg border border-morning-mist bg-nebula-white">
         <BackgroundModelConfigForm

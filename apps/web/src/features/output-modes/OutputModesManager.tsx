@@ -19,21 +19,17 @@ import { CSS } from "@dnd-kit/utilities";
 import {
   ArrowDown,
   ArrowUp,
-  Eye,
   Plus,
   Edit2,
-  Play,
-  Square,
   Trash2,
   ShieldAlert,
   GripVertical,
 } from "lucide-react";
-import { clsx } from "clsx";
 import OutputModeFormDialog, { type OutputMode } from "./OutputModeFormDialog";
 import ConfirmDialog from "@/shared/ui/ConfirmDialog";
 import { Button } from "@/shared/ui/Button";
 import Badge from "@/shared/ui/Badge";
-import StatusDot from "@/shared/ui/StatusDot";
+import StatusSwitch from "@/shared/ui/StatusSwitch";
 
 interface OutputModesManagerProps {
   modes: OutputMode[];
@@ -56,7 +52,6 @@ export default function OutputModesManager({
   const [addOpen, setAddOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [previewId, setPreviewId] = useState<string | null>(modes[0]?.id ?? null);
   const [feedback, setFeedback] = useState<"idle" | "success" | "error">("idle");
   const [pending, startTransition] = useTransition();
 
@@ -77,7 +72,6 @@ export default function OutputModesManager({
 
   const editing = optimisticModes.find((m) => m.id === editId) ?? null;
   const deleting = optimisticModes.find((m) => m.id === deleteId) ?? null;
-  const previewing = optimisticModes.find((m) => m.id === previewId) ?? optimisticModes[0] ?? null;
 
   async function performAction(action: () => void | Promise<void>) {
     setFeedback("idle");
@@ -150,19 +144,6 @@ export default function OutputModesManager({
         {!pending && feedback === "error" && <p role="alert" className="text-danger">{t("saveFailed")}</p>}
       </div>
 
-      {previewing && (
-        <section className="grid gap-3 rounded-lg border border-morning-mist bg-neutral-50/60 p-4 lg:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
-          <div>
-            <p className="text-ui-caption font-medium text-neutral-500">{t("previewTitle")}</p>
-            <h3 className="mt-1 text-ui-body font-semibold text-space-ink">{previewing.name}</h3>
-            <p className="mt-1 text-ui-caption text-neutral-500">{t("previewHint")}</p>
-          </div>
-          <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-md border border-morning-mist bg-nebula-white p-3 text-ui-caption leading-relaxed text-neutral-700">
-            {previewing.systemPrompt}
-          </pre>
-        </section>
-      )}
-
       <DndContext id="output-modes-sortable" sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <div className="overflow-x-auto rounded-lg border border-morning-mist bg-nebula-white transition-colors duration-150">
           <table className="w-full min-w-[760px] text-ui-body border-collapse text-left">
@@ -192,7 +173,6 @@ export default function OutputModesManager({
                       onEdit={setEditId}
                       onDelete={setDeleteId}
                       onToggle={() => runAction(toggleActions[m.id])}
-                      onPreview={setPreviewId}
                       onMove={move}
                       canMoveUp={index > 0}
                       canMoveDown={index < optimisticModes.length - 1}
@@ -260,7 +240,6 @@ function SortableOutputModeRow({
   onEdit,
   onDelete,
   onToggle,
-  onPreview,
   onMove,
   canMoveUp,
   canMoveDown,
@@ -270,7 +249,6 @@ function SortableOutputModeRow({
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
   onToggle: () => void;
-  onPreview: (id: string) => void;
   onMove: (id: string, offset: -1 | 1) => void;
   canMoveUp: boolean;
   canMoveDown: boolean;
@@ -311,12 +289,7 @@ function SortableOutputModeRow({
           </button>
         </span>
       </td>
-      <td className="p-3.5 font-semibold text-neutral-800 ">
-        <button type="button" onClick={() => onPreview(mode.id)} className="inline-flex items-center gap-1.5 rounded text-left hover:text-sora-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue/40">
-          {mode.name}
-          <Eye className="h-3.5 w-3.5 text-neutral-400" aria-hidden="true" />
-        </button>
-      </td>
+      <td className="p-3.5 font-semibold text-neutral-800 ">{mode.name}</td>
       <td className="p-3.5 font-mono text-ui-caption">
         {mode.icon ? (
           <Badge variant="neutral" className="font-mono text-ui-caption py-0.5">
@@ -330,7 +303,12 @@ function SortableOutputModeRow({
         {mode.description || <span className="text-ink-tertiary ">-</span>}
       </td>
       <td className="p-3.5">
-        <StatusDot enabled={mode.enabled} label={mode.enabled ? undefined : t("disabled")} />
+        <StatusSwitch
+          checked={mode.enabled}
+          label={mode.enabled ? t("disable") : t("enable")}
+          onClick={onToggle}
+          disabled={pending}
+        />
       </td>
       <td className="p-3.5 text-right space-x-1">
         <Button
@@ -344,33 +322,6 @@ function SortableOutputModeRow({
           <Edit2 className="w-3.5 h-3.5" />
           <span>{t("edit")}</span>
         </Button>
-
-        <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={onToggle}
-            disabled={pending}
-            className={clsx(
-              mode.enabled
-                ? "text-warning  hover:bg-warning/10 "
-                : "text-success  hover:bg-success/10 "
-            )}
-            title={mode.enabled ? t("disabled") : t("enabled")}
-          >
-            {mode.enabled ? (
-              <>
-                <Square className="w-3.5 h-3.5 fill-current" />
-                <span>{t("disabled")}</span>
-              </>
-            ) : (
-              <>
-                <Play className="w-3.5 h-3.5 fill-current" />
-                <span>{t("enabled")}</span>
-              </>
-            )}
-          </Button>
-
         <Button
           variant="ghost"
           size="sm"

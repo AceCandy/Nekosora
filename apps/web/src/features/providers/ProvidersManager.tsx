@@ -24,6 +24,7 @@ import Select from "@/shared/ui/Select";
 import { Plus, Edit2, Trash2, ShieldAlert, HeartPulse, Loader2, RefreshCw } from "lucide-react";
 import { clsx } from "clsx";
 import { Button } from "@/shared/ui/Button";
+import StatusSwitch from "@/shared/ui/StatusSwitch";
 import { rankSimilarModels } from "@/lib/model-catalog";
 
 // 协议徽标统一中性莫兰迪灰调(管理侧元数据不使用彩色区分),协议名文字本身即区分。
@@ -603,24 +604,11 @@ export default function ProvidersManager({
                   </td>
                   <td className="p-3.5">
                     <form action={toggleActions[p.id]} className="inline-block">
-                      <button
+                      <StatusSwitch
                         type="submit"
-                        role="switch"
-                        aria-checked={p.enabled}
-                        aria-label={p.enabled ? t("disable") : t("enable")}
-                        title={p.enabled ? t("disable") : t("enable")}
-                        className={clsx(
-                          "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue/40",
-                          p.enabled ? "bg-sora-blue " : "bg-neutral-300 "
-                        )}
-                      >
-                        <span
-                          className={clsx(
-                            "pointer-events-none absolute top-1/2 left-0 h-4 w-4 -translate-y-1/2 rounded-full bg-white transition-transform duration-200",
-                            p.enabled ? "translate-x-[18px]" : "translate-x-[2px]"
-                          )}
-                        />
-                      </button>
+                        checked={p.enabled}
+                        label={p.enabled ? t("disable") : t("enable")}
+                      />
                     </form>
                   </td>
                   <td className="p-3.5 text-right space-x-1">

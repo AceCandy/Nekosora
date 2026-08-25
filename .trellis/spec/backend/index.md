@@ -45,6 +45,7 @@ Nekusora is a pnpm TypeScript workspace. `apps/web` is the Next.js control plane
 | [Chat Message Attachments](./chat-message-attachments.md) | 用户消息图片关联、校验顺序、历史投影与编辑/重试契约 | Filled |
 | [Conversation Sharing](./conversation-sharing.md) | 快照/实时分享、密码解锁、版本选择与公开读取边界 | Filled |
 | [API Key Binding Authorization](./key-binding-authorization.md) | 子密钥模型绑定的 key 属主与模型可见性校验 | Filled |
+| [Instruction Cards](./instruction-cards.md) | 用户私有指令卡的存储、CRUD 与聊天注入权限边界 | Filled |
 
 ---
 

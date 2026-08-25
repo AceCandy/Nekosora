@@ -9,7 +9,6 @@ import {
   updateCard,
   deleteCard,
   type InstructionCard,
-  type CardScope,
 } from "@/lib/instruction-cards/service";
 
 /**
@@ -28,7 +27,6 @@ export async function listMyCards(): Promise<InstructionCard[]> {
 }
 
 export async function createMyCard(input: {
-  scope: Exclude<CardScope, "builtin">;
   trigger: string;
   title: string;
   description?: string;
@@ -44,7 +42,7 @@ export async function createMyCard(input: {
 export async function updateMyCard(
   id: string,
   patch: Partial<
-    Pick<InstructionCard, "trigger" | "title" | "description" | "markdown" | "scope" | "enabled" | "sortOrder">
+    Pick<InstructionCard, "trigger" | "title" | "description" | "markdown" | "enabled" | "sortOrder">
   >,
 ): Promise<InstructionCard> {
   const user = await requireSession();

@@ -17,6 +17,12 @@
 - Client Component(如 `ChatComposer.tsx`):`"use client"` → useState/useRef → fetch SSE → 渲染。
 - 表格列表:Server Component 查库 → `.map()` 渲染行;操作用 `<form action={serverAction.bind(null, id)}>`。
 
+### Server / Client 模块边界
+
+- 文件声明 `"use client"` 后，该模块的全部值导出（包括纯函数与常量）都会成为客户端引用；Server Component 只能渲染其中的组件，不能直接调用这些值。
+- 同时被 Server Component 与 Client Component 使用的纯解析逻辑应放在相邻的不带 `"use client"` 的 `.ts` 模块中；客户端模块只做类型导入或调用该纯模块，不能反向让服务端从客户端模块取值。
+- TypeScript typecheck 不会完整验证 Next.js 的模块边界。改动跨越 Server / Client 文件时，除单测与 typecheck 外，还应至少访问一次对应路由或执行等价的 Next.js 集成检查。
+
 ## 管理页二级 Tab（同域整合）
 
 多个同域管理页合并进一个设置页时,用二级 tab 而非各自独立路由:
@@ -25,6 +31,12 @@
 - 每个 tab 的数据获取 + server action 集中在独立 async server component(`XxxSection.tsx`),容器 `page.tsx` 只按 `tab` 渲染对应 section——只查当前 tab 数据。
 - server action 的 `revalidatePath` 指向容器页(如 `/admin/settings`),不是原独立路由。
 - tab 样式:无侧边彩色粗条、无 Eyebrow、静止无投影(遵守 DESIGN)。
+
+### 设置中心导航与发布展示
+
+- `/panel/*` 与 `/admin/*` 的设置入口统一由 `shared/nav-config.ts` 提供；搜索只处理 `DashLayout` 按角色过滤后的 `NavGroup[]`，不得另建权限表或让普通用户发现管理员目标。
+- 系统设置使用 `tab` + `view` 的 URL 子视图，一次只取数并渲染一个具体工作区；调整参数时必须保留 `resolveSettingsSelection` 中的旧 alias 与稳定字段锚点。
+- `settings-control` 的 revision、乐观并发、历史与回滚仍是底层契约；常规编辑界面只表达“待发布草稿”，revision 仅在历史或冲突诊断中展示。
 
 ## 侧边栏收起(chat + dash 后台)
 
@@ -160,6 +172,12 @@ document.documentElement.classList.remove("dark");
   ```
   守卫以内容首次挂载时的 DOM 表单快照为基线,因此同时覆盖受控和非受控字段,也允许用户改回原值后直接关闭。回归测试至少覆盖 clean、dirty、恢复基线、继续编辑、放弃修改,并锁定 Modal 的遮罩、Esc、X 共用 `onClose`。
 - 组件首行 `"use client"`;props 用具名 `interface`,导出供调用方复用。
+
+### 管理列表启停交互
+
+- 可逆的启用/停用状态统一复用 `shared/ui/StatusSwitch`;状态列就是操作入口，操作列不得再放重复的“启用/停用”按钮。
+- 若列表展示的是由多个条件派生的“有效状态”，而非当前记录的本地开关（如模型路由同时受服务商状态影响），保留只读状态和独立动作，不得强行合并。
+- 组件测试至少断言 `role="switch"`、`aria-checked` 与当前状态对应的动作 label。
 
 ### 客户端一次性请求生命周期
 

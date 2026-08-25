@@ -52,7 +52,7 @@ export default function AppShell({
         matchMode={matchMode}
         logoutAction={logoutAction}
       />
-      <main id="dash-main-content" className="scroll-fade-y min-h-0 flex-1 overflow-auto p-4 sm:p-6 md:p-8">
+      <main id="dash-main-content" className="scroll-fade-y min-h-0 min-w-0 flex-1 overflow-auto p-4 sm:p-6 md:p-8">
         {children}
       </main>
     </div>

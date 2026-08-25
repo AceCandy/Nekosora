@@ -364,7 +364,7 @@ describe("model catalog reasoning migration", () => {
       id: string;
       prevId: string;
     };
-    expect(journal.entries.slice(-2)).toEqual([
+    expect(journal.entries.slice(2, 4)).toEqual([
       {
         idx: 2,
         version: "7",

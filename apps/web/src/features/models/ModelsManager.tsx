@@ -34,6 +34,7 @@ import { clsx } from "clsx";
 import { Button } from "@/shared/ui/Button";
 import Badge from "@/shared/ui/Badge";
 import StatusDot from "@/shared/ui/StatusDot";
+import StatusSwitch from "@/shared/ui/StatusSwitch";
 
 // ---------- 共享数据形状 ----------
 
@@ -569,24 +570,11 @@ function ModelRowCells({
       )}
       <td className="p-3.5">
         <form action={toggleAction} className="inline-block">
-          <button
+          <StatusSwitch
             type="submit"
-            role="switch"
-            aria-checked={model.enabled}
-            aria-label={model.enabled ? t("disable") : t("enable")}
-            title={model.enabled ? t("disable") : t("enable")}
-            className={clsx(
-              "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue/40",
-              model.enabled ? "bg-sora-blue " : "bg-neutral-300 "
-            )}
-          >
-            <span
-              className={clsx(
-                "pointer-events-none absolute top-1/2 left-0 h-4 w-4 -translate-y-1/2 rounded-full bg-white transition-transform duration-200",
-                model.enabled ? "translate-x-[18px]" : "translate-x-[2px]"
-              )}
-            />
-          </button>
+            checked={model.enabled}
+            label={model.enabled ? t("disable") : t("enable")}
+          />
         </form>
       </td>
       <td className="p-3.5 text-right space-x-1 whitespace-nowrap">
