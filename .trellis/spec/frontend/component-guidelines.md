@@ -20,6 +20,7 @@
 ### Server / Client 模块边界
 
 - 文件声明 `"use client"` 后，该模块的全部值导出（包括纯函数与常量）都会成为客户端引用；Server Component 只能渲染其中的组件，不能直接调用这些值。
+- 文件声明模块级 `"use server"` 后，运行时只能导出异步函数；共享常量和类型放到相邻的普通 `.ts` 模块，否则 Next.js 会报 `invalid-use-server-value`。回归测试至少断言 Action 模块的所有运行时导出都是函数。
 - 同时被 Server Component 与 Client Component 使用的纯解析逻辑应放在相邻的不带 `"use client"` 的 `.ts` 模块中；客户端模块只做类型导入或调用该纯模块，不能反向让服务端从客户端模块取值。
 - TypeScript typecheck 不会完整验证 Next.js 的模块边界。改动跨越 Server / Client 文件时，除单测与 typecheck 外，还应至少访问一次对应路由或执行等价的 Next.js 集成检查。
 

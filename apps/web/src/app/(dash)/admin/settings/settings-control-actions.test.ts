@@ -25,12 +25,14 @@ vi.mock("@/lib/settings-control/service", async (importOriginal) => {
 });
 
 import { SettingsDraftConflictError } from "@/lib/settings-control/service";
-import {
-  INITIAL_SETTINGS_CONTROL_ACTION_STATE,
+import * as settingsControlActions from "./settings-control-actions";
+import { INITIAL_SETTINGS_CONTROL_ACTION_STATE } from "./settings-control-state";
+
+const {
   abandonSettingsChangeSet,
   applySettingsChangeSet,
   createSettingsRollback,
-} from "./settings-control-actions";
+} = settingsControlActions;
 
 const EXPECTED = { changeSetId: "draft-1", version: 3 };
 
@@ -41,6 +43,11 @@ beforeEach(() => {
 });
 
 describe("settings control actions", () => {
+  it("exports only server actions", () => {
+    expect(Object.values(settingsControlActions).every((value) => typeof value === "function"))
+      .toBe(true);
+  });
+
   it("invalidates runtime only after the apply transaction resolves", async () => {
     mocks.applySettingsDraft.mockResolvedValue({ revision: 5, changeSetId: "draft-1" });
 

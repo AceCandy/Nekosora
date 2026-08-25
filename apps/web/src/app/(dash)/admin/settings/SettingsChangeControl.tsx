@@ -6,12 +6,14 @@ import { changedFields, type SettingsChange } from "@/lib/settings-control/chang
 import { Button } from "@/shared/ui/Button";
 import Modal from "@/shared/ui/Modal";
 import {
-  INITIAL_SETTINGS_CONTROL_ACTION_STATE,
   abandonSettingsChangeSet,
   applySettingsChangeSet,
   createSettingsRollback,
-  type SettingsControlActionState,
 } from "./settings-control-actions";
+import {
+  INITIAL_SETTINGS_CONTROL_ACTION_STATE,
+  type SettingsControlActionState,
+} from "./settings-control-state";
 
 interface HistoryItem {
   id: string;
