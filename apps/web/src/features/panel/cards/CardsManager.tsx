@@ -14,7 +14,6 @@ import {
   deleteMyCard,
 } from "@/features/panel/cards/actions";
 import type { InstructionCard } from "@/lib/instruction-cards/service";
-import { Markdown } from "@/shared/components/markdown/Markdown";
 
 /**
  * 指令卡管理器 —— /panel/cards 的主组件。
@@ -109,36 +108,26 @@ function CardItem({
   const t = useTranslations("panel.cards");
 
   return (
-    <div className="rounded-lg border border-neutral-200  p-4 hover:border-neutral-300  transition-colors">
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <div className="min-w-0">
-          <h3 className="text-ui-body font-semibold text-neutral-800  truncate">
-            {card.title}
-          </h3>
-          <code className="text-ui-caption text-ink-tertiary font-mono">/{card.trigger}</code>
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <button type="button" onClick={onEdit} className="touch-target inline-flex items-center justify-center p-1 text-neutral-400 hover:text-neutral-600 " title={t("editButton")} aria-label={t("editButton")}>
-            <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
-          </button>
-          <button type="button" onClick={onDelete} className="touch-target inline-flex items-center justify-center p-1 text-neutral-500 hover:text-danger" title={t("deleteButton")} aria-label={t("deleteButton")}>
-            <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
-          </button>
-        </div>
+    <div className="rounded-lg border border-morning-mist bg-white p-4 transition-colors hover:border-neutral-300">
+      <div className="min-w-0">
+        <h3 className="truncate text-ui-body font-semibold text-neutral-800">{card.title}</h3>
+        <code className="mt-1.5 inline-flex max-w-full truncate rounded-md bg-nebula-silver px-2 py-1 font-mono text-ui-caption text-ink-secondary">
+          /{card.trigger}
+        </code>
       </div>
       {card.description && (
-        <p className="text-ui-caption text-neutral-500 mb-2 line-clamp-2">{card.description}</p>
+        <p className="mt-3 line-clamp-2 text-ui-caption text-ink-secondary">{card.description}</p>
       )}
-      <div
-        role="region"
-        aria-label={t("content")}
-        tabIndex={0}
-        className="max-h-40 overflow-auto rounded-md bg-neutral-50 p-3"
-      >
-        <Markdown content={card.markdown} className="text-ui-caption text-neutral-600" />
-      </div>
-      <div className="mt-2 text-ui-caption text-ink-tertiary">
-        {t("useCount", { count: card.useCount })}
+      <div className="mt-4 flex items-center justify-between gap-3 border-t border-morning-mist pt-3">
+        <span className="text-ui-caption text-ink-tertiary">{t("useCount", { count: card.useCount })}</span>
+        <div className="flex shrink-0 items-center gap-1">
+          <button type="button" onClick={onEdit} className="touch-target inline-flex items-center justify-center rounded-md p-1 text-neutral-500 transition-colors hover:bg-nebula-silver hover:text-neutral-700" title={t("editButton")} aria-label={t("editButton")}>
+            <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+          <button type="button" onClick={onDelete} className="touch-target inline-flex items-center justify-center rounded-md p-1 text-neutral-500 transition-colors hover:bg-nebula-silver hover:text-danger" title={t("deleteButton")} aria-label={t("deleteButton")}>
+            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        </div>
       </div>
     </div>
   );

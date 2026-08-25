@@ -453,6 +453,30 @@ body {
   }
 }
 
+/* 返回聊天入口周期性轻推两次；交互位移由内层箭头单独承担。 */
+@keyframes back-to-chat-hint {
+  0%,
+  14%,
+  28%,
+  100% {
+    transform: translateX(0);
+  }
+  7%,
+  21% {
+    transform: translateX(-2px);
+  }
+}
+
+.back-to-chat-hint {
+  animation: back-to-chat-hint 2.8s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .back-to-chat-hint {
+    animation: none;
+  }
+}
+
 /*
  * 星枢天流动效词汇(DESIGN.md §4 Motion):
  * - halo-drift:光晕慢速呼吸漂移(±2% 位移 + 1→1.06 缩放,18s 往返),仅登录页与聊天欢迎区氛围层。

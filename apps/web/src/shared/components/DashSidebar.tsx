@@ -137,7 +137,9 @@ export default function DashSidebar({
           href={chatHref}
           className="group inline-flex min-w-0 items-center gap-2 truncate rounded px-2 py-1 text-ui-body font-medium text-neutral-700 transition-colors hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
         >
-          <ArrowLeft className="h-4 w-4 shrink-0 transition-transform duration-200 group-hover:-translate-x-0.5 group-focus-visible:-translate-x-0.5 group-active:-translate-x-1 motion-reduce:transition-none" aria-hidden="true" />
+          <span className="back-to-chat-hint inline-flex shrink-0 motion-reduce:animate-none">
+            <ArrowLeft className="h-4 w-4 transition-transform duration-200 group-hover:-translate-x-0.5 group-focus-visible:-translate-x-0.5 group-active:-translate-x-1 motion-reduce:transition-none" aria-hidden="true" />
+          </span>
           {t("backToChat")}
         </Link>
       </header>
@@ -180,7 +182,9 @@ export default function DashSidebar({
               aria-label={collapsed ? t("backToChat") : undefined}
               title={collapsed ? t("backToChat") : undefined}
             >
-              <ArrowLeft className="h-[18px] w-[18px] shrink-0 transition-transform duration-200 group-hover:-translate-x-0.5 group-focus-visible:-translate-x-0.5 group-active:-translate-x-1 motion-reduce:transition-none" aria-hidden="true" />
+              <span className="back-to-chat-hint inline-flex shrink-0 motion-reduce:animate-none">
+                <ArrowLeft className="h-[18px] w-[18px] transition-transform duration-200 group-hover:-translate-x-0.5 group-focus-visible:-translate-x-0.5 group-active:-translate-x-1 motion-reduce:transition-none" aria-hidden="true" />
+              </span>
               <span className={clsx("truncate", collapsed && "md:hidden")}>{t("backToChat")}</span>
             </Link>
             <button
