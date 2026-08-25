@@ -1411,3 +1411,24 @@ Refined chat interaction, research status, accessibility, login visuals, and con
 ### Status
 
 [OK] **Completed**
+
+
+## Session 125: 修复斜杠指令 Tab 选择
+
+**Date**: 2026-08-25
+**Task**: 修复斜杠指令 Tab 选择
+**Branch**: `main`
+
+### Summary
+
+修复聊天输入框斜杠菜单中 Tab 未选中高亮指令卡的问题；已通过前端 lint、类型检查和全量测试。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6f94970` | (see git log) |
+
+### Status
+
+[OK] **Completed**
