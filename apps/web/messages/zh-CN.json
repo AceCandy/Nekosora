@@ -145,6 +145,8 @@
     "cacheCompact": "缓存 {count, number}",
     "conversationOutline": "对话大纲",
     "outlineGoToTurn": "跳到第 {index} 轮",
+    "outlineConversation": "会话",
+    "outlineCurrentResponse": "当前回答",
     "newConversation": "新对话",
     "conversations": "历史对话",
     "noConversations": "还没有对话",

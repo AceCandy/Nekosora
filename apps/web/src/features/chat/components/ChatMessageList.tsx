@@ -23,7 +23,6 @@ import { AICopyIcon } from "@/shared/components/animated-icons";
 import { clsx } from "clsx";
 import { ChatMessageItem } from "@/features/chat/components/ChatMessageItem";
 import { ChatOutline } from "@/features/chat/components/ChatOutline";
-import { ChatResponseOutline } from "@/features/chat/components/ChatResponseOutline";
 import { MessageTimeSeparator } from "@/features/chat/components/MessageTimeSeparator";
 import { ErrorBoundary } from "@/shared/components/ErrorBoundary";
 import ConfirmDialog from "@/shared/ui/ConfirmDialog";
@@ -603,13 +602,9 @@ export function ChatMessageList({
           />
         )}
 
-        {/* 对话大纲:贴消息区右边缘(滚动条左侧),hover 整列弹出完整轮次列表。
+        {/* 对话大纲:右侧仅保留一列圆点，展开面板同时承载会话轮次与当前回答标题。
             高亮/跳转由其内部 useMessageScrollerVisibility/useMessageScroller 承载(在 Provider 内)。 */}
         <ChatOutline messages={messages} streaming={streaming} />
-
-        {/* 回答内标题大纲轨:当前锚定回答含 ≥2 个标题时出现在轮次大纲左侧,
-            hover 展开完整大纲,点击跳转;自身按条件渲染,无标题时为空。 */}
-        <ChatResponseOutline messages={messages} />
 
         <ScrollPositionRestorer ref={scrollPositionRestorerRef} viewportRef={viewportRef} />
 

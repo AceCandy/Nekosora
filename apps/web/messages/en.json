@@ -145,6 +145,8 @@
     "cacheCompact": "cache {count, number}",
     "conversationOutline": "Conversation outline",
     "outlineGoToTurn": "Go to turn {index}",
+    "outlineConversation": "Conversation",
+    "outlineCurrentResponse": "Current response",
     "newConversation": "New conversation",
     "conversations": "Conversations",
     "noConversations": "No conversations yet",

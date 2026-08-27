@@ -14,6 +14,19 @@ interface OutlineTurn {
   preview: string;
 }
 
+/** 当前锚定回答内的标题。 */
+interface ResponseHeading {
+  el: HTMLElement;
+  text: string;
+  /** h1=1 / h2=2 / h3=3，用于目录缩进。 */
+  level: number;
+}
+
+/** 短回答不显示回答目录，避免增加视觉噪音。 */
+const MIN_RESPONSE_HEADINGS = 2;
+const MIN_RESPONSE_HEIGHT_PX = 360;
+const RESPONSE_GUIDE_RATIO = 0.28;
+
 /**
  * 把扁平消息配对成「轮」。每条 user 消息开启新的一轮。
  */
@@ -48,6 +61,8 @@ export function ChatOutline({ messages, streaming }: ChatOutlineProps) {
   const { scrollToMessage } = useMessageScroller();
   // 完整列表是否展开:桌面 hover 或 手机 scrub 期间
   const [open, setOpen] = useState(false);
+  const [responseHeadings, setResponseHeadings] = useState<ResponseHeading[]>([]);
+  const [activeHeadingIdx, setActiveHeadingIdx] = useState(0);
   // 手机 scrub 高亮的轮次索引,null=未拖动;ref 同步供 touchend 即时读取(state 异步可能未提交)
   const [scrubIdx, setScrubIdx] = useState<number | null>(null);
   const scrubIdxRef = useRef<number | null>(null);
@@ -86,10 +101,80 @@ export function ChatOutline({ messages, streaming }: ChatOutlineProps) {
     return idx;
   }, [turns, anchorIndex]);
 
-  if (turns.length <= 2) return null;
+  const responseIndex =
+    anchorIndex >= 0 && messages[anchorIndex + 1]?.role === "assistant"
+      ? anchorIndex + 1
+      : -1;
+
+  // 当前回答在流式期间会持续增高，ResizeObserver 跟随重测标题位置。
+  useEffect(() => {
+    const el = responseIndex >= 0 ? document.getElementById(`msg-${responseIndex}`) : null;
+    const measure = () => {
+      const rect = el?.getBoundingClientRect();
+      const nodes = el ? Array.from(el.querySelectorAll<HTMLElement>("h1, h2, h3")) : [];
+      if (!rect || nodes.length < MIN_RESPONSE_HEADINGS || rect.height < MIN_RESPONSE_HEIGHT_PX) {
+        setResponseHeadings([]);
+        return;
+      }
+      setResponseHeadings(
+        nodes.map((node) => ({
+          el: node,
+          text: (node.textContent ?? "").trim(),
+          level: Number(node.tagName[1]) || 1,
+        })),
+      );
+    };
+    const raf = requestAnimationFrame(measure);
+    if (!el || typeof ResizeObserver === "undefined") return () => cancelAnimationFrame(raf);
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+    };
+  }, [responseIndex, messages]);
+
+  // 取阅读视口顶部往下 28% 引导线上方的最后一个标题。
+  useEffect(() => {
+    if (responseIndex < 0 || responseHeadings.length === 0) return;
+    const el = document.getElementById(`msg-${responseIndex}`);
+    const scroller = el?.closest<HTMLElement>(".overflow-y-auto");
+    if (!scroller) return;
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      const guide =
+        scroller.getBoundingClientRect().top + scroller.clientHeight * RESPONSE_GUIDE_RATIO;
+      let idx = 0;
+      for (let i = 0; i < responseHeadings.length; i++) {
+        if (responseHeadings[i].el.getBoundingClientRect().top <= guide) idx = i;
+        else break;
+      }
+      setActiveHeadingIdx(idx);
+    };
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(update);
+    };
+    raf = requestAnimationFrame(update);
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      scroller.removeEventListener("scroll", onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [responseIndex, responseHeadings]);
+
+  if (turns.length <= 2 && responseHeadings.length === 0) return null;
 
   const handleJump = (userIndex: number) => {
     scrollToMessage(`msg-${userIndex}`, { behavior: "smooth" });
+  };
+
+  const handleHeadingJump = (index: number) => {
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    responseHeadings[index].el.scrollIntoView({
+      behavior: reduce ? "auto" : "smooth",
+      block: "start",
+    });
   };
 
   const decideFlip = () => {
@@ -150,32 +235,67 @@ export function ChatOutline({ messages, streaming }: ChatOutlineProps) {
       {/* 完整轮次列表:桌面 hover 或 手机 scrub 时展开;手机拖动时列表项高亮跟随 scrubIdx */}
       {open && (
         <div className={clsx(
-          "mr-1 max-h-[60vh] w-64 max-w-[80vw] overflow-y-auto rounded-lg border border-morning-mist bg-white p-2 shadow-lg",
+          "mr-1 max-h-[60vh] w-64 max-w-[80vw] rounded-lg border border-morning-mist bg-white p-2 shadow-lg",
+          responseHeadings.length > 0 ? "overflow-hidden" : "overflow-y-auto",
           flipLeft
             ? "lg:order-1 lg:absolute lg:right-full lg:top-1/2 lg:mr-1 lg:w-64 lg:max-w-none lg:-translate-y-1/2"
             : "lg:order-2 lg:ml-1 lg:mr-0 lg:min-w-0 lg:flex-1 lg:w-auto lg:max-w-none",
         )}>
-          <ul className="space-y-0.5">
-            {turns.map((turn, i) => (
-              <li key={turn.userIndex}>
-                <button
-                  type="button"
-                  onClick={() => handleJump(turn.userIndex)}
-                  className={clsx(
-                    "w-full truncate whitespace-nowrap rounded-md px-2 py-1.5 text-left text-ui-caption transition-colors",
-                    i === scrubIdx
-                      ? "bg-sora-blue/20 text-neutral-800  font-medium"
-                      : i === activeTurnIdx
-                        ? "bg-sora-blue/[0.10] text-neutral-800  font-medium"
-                        : "text-neutral-600  hover:bg-sora-blue/[0.06] ",
-                  )}
-                >
-                  <span className="text-neutral-400  mr-1.5 tabular-nums">{i + 1}.</span>
-                  {turn.preview || "(空消息)"}
-                </button>
-              </li>
-            ))}
-          </ul>
+          <div className={responseHeadings.length > 0 ? "max-h-[28vh] overflow-y-auto" : undefined}>
+            {responseHeadings.length > 0 && (
+              <p className="px-2 py-1 text-ui-caption font-medium text-ink-tertiary">
+                {t("outlineConversation")}
+              </p>
+            )}
+            <ul className="space-y-0.5">
+              {turns.map((turn, i) => (
+                <li key={turn.userIndex}>
+                  <button
+                    type="button"
+                    onClick={() => handleJump(turn.userIndex)}
+                    className={clsx(
+                      "w-full truncate whitespace-nowrap rounded-md px-2 py-1.5 text-left text-ui-caption transition-colors",
+                      i === scrubIdx
+                        ? "bg-sora-blue/20 text-neutral-800  font-medium"
+                        : i === activeTurnIdx
+                          ? "bg-sora-blue/[0.10] text-neutral-800  font-medium"
+                          : "text-neutral-600  hover:bg-sora-blue/[0.06] ",
+                    )}
+                  >
+                    <span className="text-neutral-400  mr-1.5 tabular-nums">{i + 1}.</span>
+                    {turn.preview || "(空消息)"}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+          {responseHeadings.length > 0 && (
+            <div className="mt-2 max-h-[20vh] overflow-y-auto border-t border-morning-mist pt-2">
+              <p className="px-2 py-1 text-ui-caption font-medium text-ink-tertiary">
+                {t("outlineCurrentResponse")}
+              </p>
+              <ul className="space-y-0.5">
+                {responseHeadings.map((heading, i) => (
+                  <li key={i}>
+                    <button
+                      type="button"
+                      onClick={() => handleHeadingJump(i)}
+                      aria-current={i === activeHeadingIdx ? "location" : undefined}
+                      className={clsx(
+                        "w-full truncate whitespace-nowrap rounded-md px-2 py-1.5 text-left text-ui-caption transition-colors",
+                        i === activeHeadingIdx
+                          ? "bg-sora-blue/[0.10] font-medium text-neutral-800"
+                          : "text-neutral-600 hover:bg-sora-blue/[0.06]",
+                      )}
+                      style={{ paddingLeft: `${0.5 + (heading.level - 1) * 0.75}rem` }}
+                    >
+                      {heading.text}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
 
