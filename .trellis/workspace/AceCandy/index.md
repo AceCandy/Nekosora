@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 127
-- **Last Active**: 2026-08-26
+- **Total Sessions**: 128
+- **Last Active**: 2026-08-27
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~1476 | Active |
+| `journal-2.md` | ~1497 | Active |
 | `journal-1.md` | ~1981 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 128 | 2026-08-27 | 合并会话与回答大纲 | `de912c2` | `main` |
 | 127 | 2026-08-26 | 修正设置页加载与交互反馈 | `27f26ba` | `main` |
 | 126 | 2026-08-26 | 完善管理与设置体验 | `930fb07` | `main` |
 | 125 | 2026-08-25 | 修复斜杠指令 Tab 选择 | `6f94970` | `main` |

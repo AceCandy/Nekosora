@@ -1474,3 +1474,24 @@ Refined chat interaction, research status, accessibility, login visuals, and con
 ### Status
 
 [OK] **Completed**
+
+
+## Session 128: 合并会话与回答大纲
+
+**Date**: 2026-08-27
+**Task**: 合并会话与回答大纲
+**Branch**: `main`
+
+### Summary
+
+将 Markdown 回答目录合并进会话圆点大纲面板，删除独立短横线轨道；长会话与当前回答分区独立滚动，并完成浏览器交互、lint、类型检查与全量测试验证。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `de912c2` | (see git log) |
+
+### Status
+
+[OK] **Completed**
