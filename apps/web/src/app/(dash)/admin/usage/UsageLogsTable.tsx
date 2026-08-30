@@ -13,6 +13,7 @@ import { Pagination } from "@/shared/ui/Pagination";
 import { Popover } from "@/shared/ui/Popover";
 import Badge from "@/shared/ui/Badge";
 import { formatDateTimeLocal, formatDuration } from "@/shared/lib/format";
+import type { ReasoningLevel } from "@/db/types";
 import { UsageFilterBar, type UsageFilterValues } from "./UsageFilterBar";
 import { getTaskKindMessageKey } from "./task-kind";
 
@@ -29,6 +30,7 @@ export interface UsageLogClientRow {
   completionTokens: number;
   /** 缓存读取 token(prompt cache 命中)。 */
   cacheReadTokens: number;
+  reasoningLevel: ReasoningLevel | null;
   latencyMs: number | null;
   firstTokenLatencyMs: number | null;
   /** 命中的对外网关 key 名(panel 可见;错误视图脱敏置空)。 */
@@ -145,6 +147,11 @@ export function UsageLogsTable({
                         <div className="text-neutral-700  truncate">{r.providerName ?? r.providerRef ?? "-"}</div>
                         <div className="font-mono text-neutral-900  truncate">
                           {r.model}
+                          {r.reasoningLevel && r.reasoningLevel !== "off" && (
+                            <span className="font-sans text-ui-caption text-ink-tertiary">
+                              {" · "}{t(`reasoningLevels.${r.reasoningLevel}`)}
+                            </span>
+                          )}
                           {r.upstreamModel && r.upstreamModel !== r.model && (
                             <span className="block text-ui-caption text-ink-tertiary  truncate">↳ {r.upstreamModel}</span>
                           )}

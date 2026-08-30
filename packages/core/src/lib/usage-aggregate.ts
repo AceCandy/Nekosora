@@ -6,6 +6,7 @@
  */
 import { sql, and, gte, eq, desc, lte, isNotNull, ilike, or, type SQL } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
+import type { ReasoningLevel } from "@/db/types";
 
 export type TimeRange = "24h" | "7d" | "30d";
 
@@ -146,6 +147,7 @@ export interface UsageLogRow {
   cacheReadTokens: number;
   cacheWriteTokens: number;
   reasoningTokens: number;
+  reasoningLevel: ReasoningLevel | null;
   latencyMs: number | null;
   status: string;
   firstTokenLatencyMs: number | null;
@@ -236,6 +238,7 @@ function toUsageRow(
     cacheReadTokens: Number(r.cacheReadTokens ?? 0),
     cacheWriteTokens: Number(r.cacheWriteTokens ?? 0),
     reasoningTokens: Number(r.reasoningTokens ?? 0),
+    reasoningLevel: r.reasoningLevel ?? null,
     latencyMs: r.latencyMs ?? null,
     status: String(r.status ?? "success"),
     firstTokenLatencyMs: r.firstTokenLatencyMs ?? null,

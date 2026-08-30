@@ -6,7 +6,7 @@
 
 ### 1. Scope / Trigger
 
-- 修改 Chat、Image、TTS、STT 的 route/key 执行、上游错误、用量统计、管理页查询或网关 metrics 时适用。
+- 修改 Chat、Image、TTS、STT 的 route/key 执行、上游错误、用量统计、实际推理档位展示、管理页查询或网关 metrics 时适用。
 - `gateway_executions` / `gateway_attempts` 是当前统一事实模型。旧 `usage_logs` / `ops_error_logs` 已破坏性删除，不得恢复双表分流。
 - `runs` / `tool_calls` 是 WebChat 业务审计，不属于网关执行观测，禁止合并或清空。
 
@@ -22,6 +22,7 @@
 Database facts:
 
 - `gateway_executions`: one row per logical execution, status `running | success | failed | interrupted`.
+- `gateway_executions.reasoning_level`: nullable canonical `off | minimal | low | medium | high | xhigh | max` used by the successful adapter.
 - `gateway_attempts`: one row per real or rejected upstream attempt, unique `(execution_id, attempt)`, status `success | failed | interrupted | rejected`.
 - `gateway_attempts.execution_id -> gateway_executions.id ON DELETE CASCADE`; caller identity FKs use `ON DELETE SET NULL`.
 
@@ -34,6 +35,7 @@ Database facts:
 - Raw provider `Error`, API key, headers, and base URL never enter telemetry. Only `SafeGatewayError`, `GatewayRouteSnapshot`, and `upstreamKeyMasked` may cross the engine boundary.
 - `redactErrorMessage(error, secrets, fallback)` 必须先清理已知凭据与敏感字段，再移除完整 `http` / `https` / PostgreSQL URL。调用方可以保留低敏错误阶段文本，但不得把原始 `Error` 作为第二个 console 参数绕过该边界。
 - Route/provider/upstream names are write-time snapshots. Historical rows do not change when configuration names change.
+- `reasoningLevel` comes from the successful adapter after clamping against that route's catalog capabilities. Never derive it from the raw request, reasoning token count, or model capabilities during query; legacy rows and operations that did not apply a reasoning level remain null, while Usage hides both null and `off`.
 - `taskKind` is nullable: main reply/gateway request is `null`; background title/memory/compact calls use their stable task kind.
 - Route-layer auth/body failures occurring before the engine may use the compatibility `logUsage` entry to insert one final execution row. Engine-owned failures must not be written again by route handlers.
 - Agent tool loops share one telemetry session and one execution id. Internal steps globally renumber attempts and aggregate usage; only the outer loop finalizes.
@@ -52,6 +54,8 @@ Database facts:
 | Telemetry DB/metrics throws or times out | best-effort may be missing | gateway outcome remains unchanged |
 | Route auth/body rejection before engine | no upstream attempt | one compatibility execution row |
 | Agent has multiple model steps | globally ordered attempts | one aggregated final execution |
+| Successful adapter resolves `high` | successful attempt | execution stores `high`; Usage shows it after the model |
+| Legacy row, non-chat operation, or explicit `off` | unchanged attempt facts | null/`off` remains hidden in Usage |
 
 ### 5. Good / Base / Bad Cases
 
@@ -59,7 +63,9 @@ Database facts:
 - Good: a reasoning event commits the response without starting TTFT; the first non-empty visible text delta records TTFT.
 - Good: an error containing key/header/base URL reaches storage only after exact-value and generic redaction.
 - Base: a single successful attempt creates one attempt and one success execution.
+- Base: historical null and successful `off` rows keep the existing model-only presentation.
 - Bad: each retry writes another final execution, inflating calls and tokens.
+- Bad: displaying a catalog default or inferring a level from `reasoningTokens` misreports what the successful route used.
 - Bad: reuse `commitsResponse` as the TTFT trigger; it makes hidden reasoning and tool calls look like visible answer latency.
 - Bad: a route catches an engine failure and inserts a second final row.
 - Bad: attempt labels include `model`, `routeId`, `providerId`, or key masks.
@@ -71,6 +77,7 @@ Database facts:
 - `redaction.test.ts`：断言 provider 与 PostgreSQL URL 不离开错误边界；RAG retrieve 与 Chat compaction 降级测试断言 console 只接收脱敏字符串。
 - Schema/migration tests: both facts, unique attempt number, FK actions, journal/snapshot, no `CASCADE` drop, and only old log tables removed.
 - Usage/error repository tests: success-only aggregation, time range/user isolation, failed attempt-chain filtering, pagination count consistency.
+- Reasoning-level tests: engine propagates the adapter's clamped level, final telemetry writes it, migration SQL/journal/snapshot stay aligned, and Usage hides null/`off` while showing active levels.
 - Agent loop tests: one execution finalization, globally ordered attempts, aggregated tokens, one final metric; stream tests also cover natural final usage and consumer Abort cleanup.
 - Metrics smoke: execution counter, attempt counter, execution duration, and absence of high-cardinality labels.
 
@@ -91,6 +98,12 @@ if (event.commitsResponse) firstTokenAt ??= Date.now();
 // Correct: keep failover safety and visible-answer latency as separate facts.
 if (event.commitsResponse) committed = true;
 if (event.firstTokenAt !== undefined) firstTokenAt ??= event.firstTokenAt;
+
+// Wrong: raw request or model capability is not proof of the successful route's actual level.
+reasoningLevel: request.reasoning ?? getDefaultReasoningLevel(model.capabilities)
+
+// Correct: persist the level returned by the successful adapter.
+reasoningLevel: result.reasoningLevel
 ```
 
 ## Query And Presentation Contracts

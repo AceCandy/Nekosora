@@ -87,6 +87,7 @@ export const gatewayTelemetry: GatewayTelemetryPort = {
           cacheReadTokens: input.outcome.usage.cachedInputTokens ?? 0,
           cacheWriteTokens: 0,
           reasoningTokens: input.outcome.usage.reasoningTokens ?? 0,
+          reasoningLevel: input.outcome.reasoningLevel ?? null,
           imageCount: input.outcome.usage.imageCount ?? null,
           ttsCodePoints: input.outcome.usage.ttsCodePoints ?? null,
           sttSeconds: input.outcome.usage.sttSeconds ?? null,

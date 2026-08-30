@@ -34,6 +34,7 @@ import type {
   ConversationShareRenderStyleSnapshot,
   MessageVersionSelections,
   MemoryExtractionMessage,
+  ReasoningLevel,
   RouteApiFormat,
 } from "./types";
 
@@ -1164,6 +1165,7 @@ export const gatewayExecutions = pgTable(
     cacheReadTokens: integer("cache_read_tokens").notNull().default(0),
     cacheWriteTokens: integer("cache_write_tokens").notNull().default(0),
     reasoningTokens: integer("reasoning_tokens").notNull().default(0),
+    reasoningLevel: text("reasoning_level").$type<ReasoningLevel>(),
     imageCount: integer("image_count"),
     ttsCodePoints: integer("tts_code_points"),
     sttSeconds: integer("stt_seconds"),

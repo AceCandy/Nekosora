@@ -120,14 +120,22 @@ describe("gateway execution engine", () => {
       if (apiKey === "key-a") {
         throw Object.assign(new Error("temporary failure"), { statusCode: 503 });
       }
-      return { value: { text: "ok" }, usage: { inputTokens: 2, outputTokens: 1 } };
+      return {
+        value: { text: "ok" },
+        usage: { inputTokens: 2, outputTokens: 1 },
+        reasoningLevel: "high",
+      };
     };
     const h = harness([route("a", ["key-a", "key-b"])], () => adapter);
 
     const { outcome } = await consume(h.generator);
 
     expect(calls).toEqual(["key-a", "key-b"]);
-    expect(outcome).toMatchObject({ status: "success", result: { text: "ok" } });
+    expect(outcome).toMatchObject({
+      status: "success",
+      result: { text: "ok" },
+      reasoningLevel: "high",
+    });
     expect(h.attempts.map((item) => item.status)).toEqual(["failed", "success"]);
     expect(h.permit.recordFailure).toHaveBeenCalledOnce();
     expect(h.permit.recordSuccess).toHaveBeenCalledOnce();

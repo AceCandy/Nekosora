@@ -171,6 +171,7 @@ async function renderUsageTab({
     promptTokens: r.promptTokens,
     completionTokens: r.completionTokens,
     cacheReadTokens: r.cacheReadTokens,
+    reasoningLevel: r.reasoningLevel,
     latencyMs: r.latencyMs,
     firstTokenLatencyMs: r.firstTokenLatencyMs,
     apiKeyName: r.apiKeyName,

@@ -1,0 +1,1 @@
+ALTER TABLE "gateway_executions" ADD COLUMN "reasoning_level" text;

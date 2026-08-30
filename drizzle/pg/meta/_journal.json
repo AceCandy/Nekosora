@@ -36,6 +36,13 @@
       "when": 1787627350231,
       "tag": "0004_typical_photon",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788107900096,
+      "tag": "0005_ambitious_moondragon",
+      "breakpoints": true
     }
   ]
 }

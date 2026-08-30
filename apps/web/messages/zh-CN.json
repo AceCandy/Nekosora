@@ -729,6 +729,14 @@
         "compact": "摘要",
         "web_search": "联网搜索"
       },
+      "reasoningLevels": {
+        "minimal": "最小",
+        "low": "低",
+        "medium": "中",
+        "high": "高",
+        "xhigh": "超高",
+        "max": "最大"
+      },
       "tabs": {
         "usage": "用量明细",
         "errors": "错误请求"

@@ -24,7 +24,11 @@ import { gatewayBreaker } from "@/lib/circuit-breaker";
 import type { LogUsageParams } from "@/lib/usage";
 import { classifyError } from "@/lib/error-classify";
 import { redactErrorMessage } from "@/lib/redaction";
-import { buildReasoningProviderOptions, getDefaultReasoningLevel } from "@/lib/reasoning";
+import {
+  buildReasoningProviderOptions,
+  clampReasoningLevel,
+  getDefaultReasoningLevel,
+} from "@/lib/reasoning";
 import type {
   CallContext,
   IRRequest,
@@ -34,7 +38,7 @@ import type {
   IRUsage,
   ResolvedRoute,
 } from "@/lib/providers/types";
-import type { ProviderProtocol } from "@/db/types";
+import type { ProviderProtocol, ReasoningLevel } from "@/db/types";
 import {
   executeAtomicGateway,
   executeGateway,
@@ -126,6 +130,10 @@ export async function* streamChat(
       apiKey,
       abortSignal,
     }) {
+      const reasoningLevel = clampReasoningLevel(
+        route.capabilities,
+        currentRequest.reasoning ?? getDefaultReasoningLevel(route.capabilities),
+      );
       const timing: { firstTokenAt?: number } = {};
       let firstTokenReported = false;
       let usage: IRUsage = {};
@@ -133,6 +141,7 @@ export async function* streamChat(
         route,
         currentRequest,
         apiKey,
+        reasoningLevel,
         timing,
         opts.cacheKey,
         abortSignal,
@@ -157,7 +166,7 @@ export async function* streamChat(
           firstTokenAt: eventFirstTokenAt,
         };
       }
-      return { value: undefined, usage, firstTokenAt: timing.firstTokenAt };
+      return { value: undefined, usage, firstTokenAt: timing.firstTokenAt, reasoningLevel };
     };
 
     return executeGateway({
@@ -466,6 +475,7 @@ async function* streamWithRoute(
   route: ResolvedRoute,
   request: IRRequest,
   apiKey: string,
+  reasoning: ReasoningLevel,
   /** 首 token 计时载体(mutable,由调用方持有;首个非空可见正文时回写 firstTokenAt)。 */
   timing: { firstTokenAt?: number },
   /** 会话级 cache key(chat=conversationId / 网关=apiKeyId);缺省不注入缓存控制。 */
@@ -475,7 +485,6 @@ async function* streamWithRoute(
   /** 上游请求 User-Agent(覆盖 AI SDK 默认 UA)。 */
   userAgent?: string,
 ): AsyncGenerator<StreamEvent, void, unknown> {
-  const reasoning = request.reasoning ?? getDefaultReasoningLevel(route.capabilities);
   const model = buildLanguageModelWithKey(route, apiKey, cacheKey, reasoning, userAgent); // 失败则抛出,交由上层故障转移
   const { system, messages } = separateSystem(request);
   const requestProtocol = requestProtocolForRoute(route);

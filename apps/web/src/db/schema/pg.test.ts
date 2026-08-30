@@ -36,6 +36,8 @@ describe("gateway observability schema", () => {
     expect(gatewayExecutions.operation.notNull).toBe(true);
     expect(gatewayExecutions.status.default).toBe("running");
     expect(gatewayExecutions.modelType.name).toBe("model_type");
+    expect(gatewayExecutions.reasoningLevel.name).toBe("reasoning_level");
+    expect(gatewayExecutions.reasoningLevel.notNull).toBe(false);
 
     const executionConfig = getTableConfig(gatewayExecutions);
     const retentionIndex = executionConfig.indexes.find(

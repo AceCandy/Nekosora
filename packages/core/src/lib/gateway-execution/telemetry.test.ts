@@ -138,6 +138,7 @@ describe("gateway telemetry repository", () => {
         result: { text: "ok" },
         usage: { inputTokens: 3, outputTokens: 2 },
         route,
+        reasoningLevel: "high",
         committed: true,
       },
       latencyMs: 50,
@@ -151,6 +152,7 @@ describe("gateway telemetry repository", () => {
     expect(db.updateSet).toHaveBeenCalledWith(expect.objectContaining({
       status: "success",
       providerRef: "byo:provider-1",
+      reasoningLevel: "high",
       latencyMs: 50,
       completedAt: new Date(1_050),
     }));

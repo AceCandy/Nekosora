@@ -729,6 +729,14 @@
         "compact": "Summary",
         "web_search": "Web search"
       },
+      "reasoningLevels": {
+        "minimal": "Minimal",
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High",
+        "xhigh": "Extra high",
+        "max": "Maximum"
+      },
       "tabs": {
         "usage": "Usage logs",
         "errors": "Error requests"

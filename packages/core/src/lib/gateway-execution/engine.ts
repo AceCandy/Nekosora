@@ -249,6 +249,7 @@ export async function* executeGateway<TEvent, TResult>(
               route: snapshotRoute(route),
               upstreamKeyMasked: maskKey(apiKey) ?? undefined,
               firstTokenAt: attemptFirstTokenAt,
+              reasoningLevel: result.reasoningLevel,
               committed,
             };
             return outcome;

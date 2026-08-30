@@ -1,4 +1,5 @@
 import type { CallContext, IRUsage, ResolvedRoute } from "@/lib/providers/types";
+import type { ReasoningLevel } from "@/db/types";
 
 export type GatewayOperation =
   | "chat.stream"
@@ -30,6 +31,7 @@ export interface GatewayAttemptResult<TResult> {
   value: TResult;
   usage?: IRUsage;
   firstTokenAt?: number;
+  reasoningLevel?: ReasoningLevel;
 }
 
 export type GatewayAttemptAdapter<TEvent, TResult> = (
@@ -70,6 +72,7 @@ export interface GatewayExecutionOutcome<TResult> {
   route?: GatewayRouteSnapshot;
   upstreamKeyMasked?: string;
   firstTokenAt?: number;
+  reasoningLevel?: ReasoningLevel;
   error?: SafeGatewayError;
   committed: boolean;
 }
