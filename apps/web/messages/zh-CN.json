@@ -296,8 +296,8 @@
       "unbind": "解绑模型",
       "bindNewModel": "绑定新模型",
       "selectModelPlaceholder": "+ 选择需要绑定的上游模型...",
-      "globalModels": "全局模型",
-      "byoModels": "我的模型",
+      "modelsSelected": "已选择 {count} 个模型",
+      "noModelsToBind": "没有可绑定的模型",
       "bind": "绑定",
       "bindHint": "绑定后，持有该子密钥的客户端即可调用所选的上游模型。"
     },

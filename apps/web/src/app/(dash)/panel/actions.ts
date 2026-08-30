@@ -1,6 +1,7 @@
 "use server";
-import { eq, ne, and, asc, sql } from "drizzle-orm";
+import { eq, ne, and, asc, inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { encryptKeyBundle, parseKeyBundle, pickWeightedKey } from "@/lib/providers/keys";
 import type { WeightedKey } from "@/lib/providers/keys";
@@ -81,6 +82,11 @@ export async function disableKey(keyId: string) {
 
 // ===================== Sub-key model bindings =====================
 
+const bindModelsInputSchema = z.object({
+  keyId: z.string().trim().min(1),
+  modelIds: z.array(z.string().trim().min(1)).min(1),
+});
+
 export async function getBindings(keyId: string) {
   const user = await requireSession();
   const db = await getDb();
@@ -88,25 +94,26 @@ export async function getBindings(keyId: string) {
   return db.select().from(S().keyModelBindings).where(eq(S().keyModelBindings.keyId, keyId));
 }
 
-export async function bindModel(keyId: string, modelId: string) {
+export async function bindModels(keyId: string, inputModelIds: string[]) {
+  const input = bindModelsInputSchema.parse({ keyId, modelIds: inputModelIds });
+  const modelIds = [...new Set(input.modelIds)];
   const user = await requireSession();
   const db = await getDb();
-  await requireOwnedKey(db, user.id, keyId, true);
-  const [model] = await db
+  await requireOwnedKey(db, user.id, input.keyId, true);
+  const models = await db
     .select({ id: S().models.id })
     .from(S().models)
     .where(and(
-      eq(S().models.id, modelId),
+      inArray(S().models.id, modelIds),
       eq(S().models.enabled, true),
       eq(S().models.ownerUserId, user.id),
-    ))
-    .limit(1);
-  if (!model) throw new Error("模型不存在或无权操作");
+    ));
+  if (models.length !== modelIds.length) throw new Error("模型不存在或无权操作");
   // 收敛后绑定只存 modelId(原 scope+globalModelId+userModelId 已废弃)。
-  await db.insert(S().keyModelBindings).values({
-    keyId,
-    modelId,
-  });
+  await db
+    .insert(S().keyModelBindings)
+    .values(modelIds.map((modelId) => ({ keyId: input.keyId, modelId })))
+    .onConflictDoNothing();
   revalidatePath("/panel", "layout");
 }
 

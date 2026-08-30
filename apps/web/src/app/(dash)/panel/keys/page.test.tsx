@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
   ensureMasterKey: vi.fn(),
   newSubKey: vi.fn(),
   disableKey: vi.fn(),
-  bindModel: vi.fn(),
+  bindModels: vi.fn(),
   unbindBinding: vi.fn(),
 }));
 

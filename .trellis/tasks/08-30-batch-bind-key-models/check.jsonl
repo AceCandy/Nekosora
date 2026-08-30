@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "核对前端质量门槛与 i18n/边界"}
+{"file": ".trellis/spec/backend/key-binding-authorization.md", "reason": "复核批量写入前的完整授权与测试覆盖"}

@@ -6,11 +6,13 @@ const mocks = vi.hoisted(() => ({
   getSchema: vi.fn(),
   setKeyEnabled: vi.fn(),
   eq: vi.fn((left: unknown, right: unknown) => ({ op: "eq", left, right })),
+  inArray: vi.fn((left: unknown, right: unknown) => ({ op: "inArray", left, right })),
   and: vi.fn((...conditions: unknown[]) => ({ op: "and", conditions })),
 }));
 
 vi.mock("drizzle-orm", () => ({
   eq: mocks.eq,
+  inArray: mocks.inArray,
   and: mocks.and,
   ne: vi.fn(),
   asc: vi.fn(),
@@ -26,7 +28,7 @@ vi.mock("@/lib/keys", () => ({
   setKeyEnabled: mocks.setKeyEnabled,
 }));
 
-import { bindModel, disableKey, getBindings, unbindBinding } from "./actions";
+import { bindModels, disableKey, getBindings, unbindBinding } from "./actions";
 
 const schema = {
   apiKeys: { id: "apiKeys.id", userId: "apiKeys.userId", kind: "apiKeys.kind" },
@@ -51,7 +53,8 @@ function selectReturning(rows: Record<string, unknown>[]) {
 }
 
 function makeDb(selectedRows: Record<string, unknown>[][]) {
-  const values = vi.fn().mockResolvedValue(undefined);
+  const onConflictDoNothing = vi.fn().mockResolvedValue(undefined);
+  const values = vi.fn(() => ({ onConflictDoNothing }));
   const insert = vi.fn(() => ({ values }));
   const deleteWhere = vi.fn().mockResolvedValue(undefined);
   const remove = vi.fn(() => ({ where: deleteWhere }));
@@ -62,6 +65,7 @@ function makeDb(selectedRows: Record<string, unknown>[][]) {
       delete: remove,
     },
     values,
+    onConflictDoNothing,
     insert,
     deleteWhere,
     remove,
@@ -112,7 +116,7 @@ describe("子密钥模型绑定属主隔离", () => {
     const { db, insert } = makeDb([[]]);
     mocks.getDb.mockResolvedValue(db);
 
-    await expect(bindModel("foreign-key", "public-model")).rejects.toThrow("密钥不存在或无权操作");
+    await expect(bindModels("foreign-key", ["public-model"])).rejects.toThrow("密钥不存在或无权操作");
     expect(insert).not.toHaveBeenCalled();
   });
 
@@ -120,7 +124,7 @@ describe("子密钥模型绑定属主隔离", () => {
     const { db, insert } = makeDb([[{ id: "master-key", kind: "master" }]]);
     mocks.getDb.mockResolvedValue(db);
 
-    await expect(bindModel("master-key", "public-model")).rejects.toThrow("密钥不存在或无权操作");
+    await expect(bindModels("master-key", ["public-model"])).rejects.toThrow("密钥不存在或无权操作");
     expect(insert).not.toHaveBeenCalled();
   });
 
@@ -128,7 +132,7 @@ describe("子密钥模型绑定属主隔离", () => {
     const { db, insert } = makeDb([[{ id: "sub-key", kind: "sub" }], []]);
     mocks.getDb.mockResolvedValue(db);
 
-    await expect(bindModel("sub-key", `foreign-${visibility}-model`)).rejects.toThrow("模型不存在或无权操作");
+    await expect(bindModels("sub-key", [`foreign-${visibility}-model`])).rejects.toThrow("模型不存在或无权操作");
     expect(mocks.eq).toHaveBeenCalledWith(schema.models.ownerUserId, "user-1");
     expect(insert).not.toHaveBeenCalled();
   });
@@ -137,12 +141,54 @@ describe("子密钥模型绑定属主隔离", () => {
     ["自己的 public 模型", { id: "public-model", visibility: "public", ownerUserId: "user-1" }],
     ["自己的 private 模型", { id: "private-model", visibility: "private", ownerUserId: "user-1" }],
   ])("允许绑定%s", async (_name, model) => {
+    const { db, values, onConflictDoNothing } = makeDb([[{ id: "sub-key", kind: "sub" }], [model]]);
+    mocks.getDb.mockResolvedValue(db);
+
+    await bindModels("sub-key", [model.id]);
+
+    expect(values).toHaveBeenCalledWith([{ keyId: "sub-key", modelId: model.id }]);
+    expect(onConflictDoNothing).toHaveBeenCalledOnce();
+  });
+
+  it("一次写入多个模型绑定", async () => {
+    const models = [{ id: "model-1" }, { id: "model-2" }];
+    const { db, values } = makeDb([[{ id: "sub-key", kind: "sub" }], models]);
+    mocks.getDb.mockResolvedValue(db);
+
+    await bindModels("sub-key", ["model-1", "model-2"]);
+
+    expect(values).toHaveBeenCalledWith([
+      { keyId: "sub-key", modelId: "model-1" },
+      { keyId: "sub-key", modelId: "model-2" },
+    ]);
+  });
+
+  it("批量绑定前去重模型 ID", async () => {
+    const model = { id: "model-1" };
     const { db, values } = makeDb([[{ id: "sub-key", kind: "sub" }], [model]]);
     mocks.getDb.mockResolvedValue(db);
 
-    await bindModel("sub-key", model.id);
+    await bindModels("sub-key", [model.id, model.id]);
 
-    expect(values).toHaveBeenCalledWith({ keyId: "sub-key", modelId: model.id });
+    expect(mocks.inArray).toHaveBeenCalledWith(schema.models.id, [model.id]);
+    expect(values).toHaveBeenCalledWith([{ keyId: "sub-key", modelId: model.id }]);
+  });
+
+  it("批次含无权模型时不写入任何绑定", async () => {
+    const { db, insert } = makeDb([
+      [{ id: "sub-key", kind: "sub" }],
+      [{ id: "model-1" }],
+    ]);
+    mocks.getDb.mockResolvedValue(db);
+
+    await expect(bindModels("sub-key", ["model-1", "foreign-model"]))
+      .rejects.toThrow("模型不存在或无权操作");
+    expect(insert).not.toHaveBeenCalled();
+  });
+
+  it("拒绝空模型批次", async () => {
+    await expect(bindModels("sub-key", [])).rejects.toThrow();
+    expect(mocks.getDb).not.toHaveBeenCalled();
   });
 
   it("不能删除其他用户 key 的绑定", async () => {

@@ -38,6 +38,11 @@ import KeysManager from "./KeysManager";
 interface TestElementProps {
   children?: ReactNode;
   onClick?: (event?: { stopPropagation: () => void }) => void;
+  onSubmit?: (event: { preventDefault: () => void }) => void;
+  onToggle?: (id: string) => void;
+  mode?: string;
+  options?: { id: string }[];
+  selectedIds?: string[];
   title?: string;
 }
 
@@ -82,7 +87,7 @@ describe("KeysManager", () => {
       }),
       newSubKeyAction: vi.fn(),
       disableKeyAction: vi.fn().mockResolvedValue(undefined),
-      bindModelAction: vi.fn(),
+      bindModelsAction: vi.fn().mockResolvedValue(undefined),
       unbindBindingAction: vi.fn(),
     };
   });
@@ -161,5 +166,48 @@ describe("KeysManager", () => {
     expect(elements.some((element) => elementText(element) === "sk-live-****")).toBe(true);
     expect(elements.some((element) => elementText(element) === "sk-new-a****7XyZ")).toBe(true);
     expect(elements.some((element) => element.props.title === "copyPrefix")).toBe(false);
+  });
+
+  it("勾选多个未绑定模型后一次提交", async () => {
+    props.keys = [{
+      id: "sub-1",
+      name: "生产环境",
+      keyPrefix: "sk-new-a****7XyZ",
+      kind: "sub",
+      enabled: true,
+      bindings: [{
+        id: "binding-0",
+        keyId: "sub-1",
+        modelId: "model-0",
+        createdAt: null,
+      }],
+    }];
+    props.bindable.byos = [
+      { id: "model-0", name: "model-0", displayName: "Bound Model" },
+      { id: "model-1", name: "model-1", displayName: "Model One" },
+      { id: "model-2", name: "model-2", displayName: "Model Two" },
+    ];
+
+    let root = render();
+    let picker = collectElements(root).find((element) => element.props.mode === "multi");
+    expect(picker?.props.options).toEqual([
+      { id: "model-1", label: "Model One", description: "model-1" },
+      { id: "model-2", label: "Model Two", description: "model-2" },
+    ]);
+
+    picker?.props.onToggle?.("model-1");
+    root = render();
+    picker = collectElements(root).find((element) => element.props.mode === "multi");
+    picker?.props.onToggle?.("model-2");
+
+    root = render();
+    picker = collectElements(root).find((element) => element.props.mode === "multi");
+    expect(picker?.props.selectedIds).toEqual(["model-1", "model-2"]);
+    const form = collectElements(root).find((element) =>
+      element.type === "form" && elementText(element).includes("bindNewModel"));
+    form?.props.onSubmit?.({ preventDefault: vi.fn() });
+    await flushTransitions();
+
+    expect(props.bindModelsAction).toHaveBeenCalledWith("sub-1", ["model-1", "model-2"]);
   });
 });

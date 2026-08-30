@@ -6,7 +6,7 @@ import {
   disableKey,
   getBindings,
   getBindableModels,
-  bindModel,
+  bindModels,
   unbindBinding,
   type BindableModels,
 } from "../actions";
@@ -78,9 +78,9 @@ export default async function KeysPage() {
     return disableKey(keyId);
   }
 
-  async function handleBindModel(keyId: string, modelId: string) {
+  async function handleBindModels(keyId: string, modelIds: string[]) {
     "use server";
-    return bindModel(keyId, modelId);
+    return bindModels(keyId, modelIds);
   }
 
   async function handleUnbindBinding(bindingId: string) {
@@ -98,7 +98,7 @@ export default async function KeysPage() {
         ensureMasterAction={handleEnsureMaster}
         newSubKeyAction={handleNewSubKey}
         disableKeyAction={handleDisableKey}
-        bindModelAction={handleBindModel}
+        bindModelsAction={handleBindModels}
         unbindBindingAction={handleUnbindBinding}
       />
     </div>

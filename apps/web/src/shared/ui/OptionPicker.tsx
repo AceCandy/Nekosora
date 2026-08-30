@@ -86,7 +86,9 @@ function OptionList({
             role="option"
             aria-selected={isSelected}
             onClick={handleClick}
-            aria-label={ariaLabel ? `${ariaLabel}: ${opt.label}` : opt.label}
+            aria-label={ariaLabel
+              ? `${ariaLabel}: ${opt.label}${opt.description ? ` (${opt.description})` : ""}`
+              : undefined}
             className={clsx(
               "w-full text-left rounded px-2 py-1.5 text-ui-caption transition-colors flex items-start gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue",
               isSelected
@@ -94,24 +96,38 @@ function OptionList({
                 : "text-neutral-700  hover:bg-neutral-50 ",
             )}
           >
-            <span className={clsx("mt-0.5 shrink-0", isSelected ? "opacity-100" : "opacity-30")} aria-hidden="true">
-              {isSelected ? "✓" : "○"}
-            </span>
+            {mode === "multi" ? (
+              <span
+                className={clsx(
+                  "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border text-ui-micro font-semibold",
+                  isSelected
+                    ? "border-sora-blue bg-sora-blue text-nebula-white"
+                    : "border-neutral-300 bg-white text-transparent",
+                )}
+                aria-hidden="true"
+              >
+                {isSelected ? "✓" : ""}
+              </span>
+            ) : (
+              <span className={clsx("mt-0.5 shrink-0", isSelected ? "opacity-100" : "opacity-30")} aria-hidden="true">
+                {isSelected ? "✓" : "○"}
+              </span>
+            )}
             <span className="min-w-0">
               {opt.badge && opt.badgeVariant ? (
                 // 有色 Badge:label 与 Badge 同行(标签紧贴名字,与重生成列表一致)
                 <span className="flex items-center gap-1.5">
-                  <span className="font-semibold truncate">{opt.label}</span>
+                  <span className="font-semibold truncate" title={opt.label}>{opt.label}</span>
                   <Badge variant={opt.badgeVariant} className="shrink-0 py-0 leading-none">{opt.badge}</Badge>
                 </span>
               ) : (
                 <>
-                  <span className="font-semibold block truncate">{opt.label}</span>
+                  <span className="font-semibold block truncate" title={opt.label}>{opt.label}</span>
                   {opt.badge && <span className="text-ui-caption text-ink-tertiary font-mono">{opt.badge}</span>}
                 </>
               )}
               {opt.description && (
-                <span className="text-ui-caption text-ink-tertiary block truncate">{opt.description}</span>
+                <span className="text-ui-caption text-ink-tertiary block truncate" title={opt.description}>{opt.description}</span>
               )}
             </span>
           </button>

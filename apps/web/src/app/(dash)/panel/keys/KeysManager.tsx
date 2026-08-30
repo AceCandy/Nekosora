@@ -1,12 +1,12 @@
 "use client";
 import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
-import { Copy, Check, Key, ShieldAlert, Plus, X } from "lucide-react";
+import { Copy, Check, ChevronDown, Key, ShieldAlert, Plus, X } from "lucide-react";
 import { clsx } from "clsx";
 import { Button } from "@/shared/ui/Button";
 import Input from "@/shared/ui/Input";
-import Select from "@/shared/ui/Select";
 import Badge from "@/shared/ui/Badge";
+import OptionPicker from "@/shared/ui/OptionPicker";
 import { copyToClipboard } from "@/shared/lib/clipboard";
 import type { ApiKeyListItem } from "@/lib/keys";
 import type { BindableModels } from "../actions";
@@ -33,7 +33,7 @@ interface KeysManagerProps {
   ensureMasterAction: () => Promise<{ key: string | null; error: string | null }>;
   newSubKeyAction: (name: string) => Promise<string>;
   disableKeyAction: (keyId: string) => Promise<void>;
-  bindModelAction: (keyId: string, modelId: string) => Promise<void>;
+  bindModelsAction: (keyId: string, modelIds: string[]) => Promise<void>;
   unbindBindingAction: (bindingId: string) => Promise<void>;
 }
 
@@ -43,7 +43,7 @@ export default function KeysManager({
   ensureMasterAction,
   newSubKeyAction,
   disableKeyAction,
-  bindModelAction,
+  bindModelsAction,
   unbindBindingAction,
 }: KeysManagerProps) {
   const t = useTranslations("panel.keys");
@@ -57,9 +57,21 @@ export default function KeysManager({
   const [copiedRaw, setCopiedRaw] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [subKeyNameInput, setSubKeyNameInput] = useState("");
-  const [selectedModelVal, setSelectedModelVal] = useState("");
+  const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
+  const [modelPickerOpen, setModelPickerOpen] = useState(false);
 
   const selectedSubKey = subKeys.find((sk) => sk.id === selectedSubKeyId) ?? null;
+  const boundModelIds = new Set(selectedSubKey?.bindings.map((binding) => binding.modelId));
+  const bindableOptions = [...bindable.globals, ...bindable.byos]
+    .filter((model) => !boundModelIds.has(model.id))
+    .map((model) => {
+      const displayName = model.displayName?.trim();
+      return {
+        id: model.id,
+        label: displayName || model.name,
+        description: displayName && displayName !== model.name ? model.name : null,
+      };
+    });
 
   const handleCopyRaw = async () => {
     if (!newRawKey) return;
@@ -97,19 +109,28 @@ export default function KeysManager({
       setNewRawKey(null);
       if (selectedSubKeyId === id) {
         setSelectedSubKeyId(null);
+        setSelectedModelIds([]);
+        setModelPickerOpen(false);
       }
     });
   };
 
-  const handleBindModel = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedSubKeyId || !selectedModelVal) return;
-    const keyId = selectedSubKeyId;
-    const modelId = selectedModelVal;
+  const handleSelectSubKey = (id: string) => {
+    setSelectedSubKeyId(id);
+    setSelectedModelIds([]);
+    setModelPickerOpen(false);
+  };
 
-    setSelectedModelVal("");
+  const handleBindModels = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedSubKeyId || selectedModelIds.length === 0) return;
+    const keyId = selectedSubKeyId;
+    const modelIds = selectedModelIds;
+
     startTransition(async () => {
-      await bindModelAction(keyId, modelId);
+      await bindModelsAction(keyId, modelIds);
+      setSelectedModelIds([]);
+      setModelPickerOpen(false);
     });
   };
 
@@ -244,12 +265,12 @@ export default function KeysManager({
                     role="option"
                     aria-selected={isActive}
                     tabIndex={0}
-                    onClick={() => setSelectedSubKeyId(sk.id)}
+                    onClick={() => handleSelectSubKey(sk.id)}
                     onKeyDown={(e) => {
                       if (e.target !== e.currentTarget) return;
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
-                        setSelectedSubKeyId(sk.id);
+                        handleSelectSubKey(sk.id);
                       }
                     }}
                     className={clsx(
@@ -344,41 +365,51 @@ export default function KeysManager({
             </div>
 
             {/* Bind New Model Form */}
-            <form onSubmit={handleBindModel} className="space-y-3 pt-2">
+            <form onSubmit={handleBindModels} className="space-y-3 pt-2">
               <div className="text-ui-caption font-semibold text-neutral-400">{t("bindNewModel")}</div>
 
               <div className="flex gap-2">
-                <Select
-                  value={selectedModelVal}
-                  onChange={(e) => setSelectedModelVal(e.target.value)}
-                  className="flex-1"
-                >
-                  <option value="">{t("selectModelPlaceholder")}</option>
-
-                  {bindable.globals.length > 0 && (
-                    <optgroup label={t("globalModels")} className="font-semibold text-ui-caption text-neutral-400">
-                      {bindable.globals.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
-
-                  {bindable.byos.length > 0 && (
-                    <optgroup label={t("byoModels")} className="font-semibold text-ui-caption text-neutral-400">
-                      {bindable.byos.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
-                </Select>
+                <div className="min-w-0 flex-1">
+                  <OptionPicker
+                    options={bindableOptions}
+                    selectedIds={selectedModelIds}
+                    mode="multi"
+                    open={modelPickerOpen}
+                    onClose={() => setModelPickerOpen(false)}
+                    panelClassName="w-[min(32rem,calc(100vw-1rem))] max-h-72 overflow-y-auto"
+                    onToggle={(id) => setSelectedModelIds((current) =>
+                      current.includes(id)
+                        ? current.filter((modelId) => modelId !== id)
+                        : [...current, id]
+                    )}
+                    ariaLabel={t("bindNewModel")}
+                    trigger={(
+                      <Button
+                        variant="secondary"
+                        disabled={bindableOptions.length === 0}
+                        aria-haspopup="listbox"
+                        aria-expanded={modelPickerOpen}
+                        onClick={() => setModelPickerOpen((open) => !open)}
+                        className="w-full min-w-0"
+                      >
+                        <span className="flex w-full min-w-0 items-center justify-between gap-3">
+                          <span className="truncate text-left font-normal">
+                            {bindableOptions.length === 0
+                              ? t("noModelsToBind")
+                              : selectedModelIds.length > 0
+                                ? t("modelsSelected", { count: selectedModelIds.length })
+                                : t("selectModelPlaceholder")}
+                          </span>
+                          <ChevronDown className="h-4 w-4 shrink-0 text-ink-tertiary" aria-hidden="true" />
+                        </span>
+                      </Button>
+                    )}
+                  />
+                </div>
 
                 <Button
                   type="submit"
-                  disabled={!selectedModelVal}
+                  disabled={selectedModelIds.length === 0}
                   loading={isPending}
                   variant="contrast"
                   className="font-semibold flex items-center gap-1"

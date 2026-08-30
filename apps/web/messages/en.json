@@ -295,9 +295,9 @@
       "noBindings": "No bindings. This sub key cannot call any gateway model.",
       "unbind": "Unbind model",
       "bindNewModel": "Bind new model",
-      "selectModelPlaceholder": "+ Select an upstream model to bind...",
-      "globalModels": "Global Models",
-      "byoModels": "My Models (BYO)",
+      "selectModelPlaceholder": "+ Select upstream models to bind...",
+      "modelsSelected": "{count} models selected",
+      "noModelsToBind": "No models available to bind",
       "bind": "Bind",
       "bindHint": "Once bound, clients with this sub key can call the selected upstream models."
     },

@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "复用 OptionPicker 并遵守 Server/Client 与无障碍契约"}
+{"file": ".trellis/spec/backend/key-binding-authorization.md", "reason": "批量绑定必须保持 key 与模型属主鉴权"}
