@@ -1517,3 +1517,25 @@ Refined chat interaction, research status, accessibility, login visuals, and con
 ### Status
 
 [OK] **Completed**
+
+
+## Session 130: 支持 Responses reasoning.summary
+<!-- trellis-session: v=2 fp=d6c5a40670541d3e -->
+
+**Date**: 2026-08-30
+**Task**: 支持 Responses reasoning.summary
+**Branch**: `main`
+
+### Summary
+
+网关入口校验 reasoning.summary；Responses 上游原样透传，其他上游格式静默省略；补齐协议测试与路由规范。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3c3a882` | fix(gateway): support Responses reasoning summaries |
+
+### Status
+
+[OK] **Completed**
