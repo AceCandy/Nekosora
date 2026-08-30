@@ -1495,3 +1495,25 @@ Refined chat interaction, research status, accessibility, login visuals, and con
 ### Status
 
 [OK] **Completed**
+
+
+## Session 129: 批量绑定子密钥模型
+<!-- trellis-session: v=2 fp=77a9a3ff3f98c74b -->
+
+**Date**: 2026-08-30
+**Task**: 批量绑定子密钥模型
+**Branch**: `main`
+
+### Summary
+
+密钥管理支持一次选择并绑定多个模型；服务端统一校验属主和启用状态后批量写入，补齐多选交互、文案、授权规范及测试。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c4bd7f6` | feat(keys): bind multiple models to sub keys |
+
+### Status
+
+[OK] **Completed**
