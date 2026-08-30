@@ -1539,3 +1539,25 @@ Refined chat interaction, research status, accessibility, login visuals, and con
 ### Status
 
 [OK] **Completed**
+
+
+## Session 131: Usage execution reasoning level
+<!-- trellis-session: v=2 fp=36006703783b6dad -->
+
+**Date**: 2026-08-31
+**Task**: Usage execution reasoning level
+**Branch**: `main`
+
+### Summary
+
+Persist the successful route's clamped reasoning level in gateway usage records, display active levels after model names, and add the PostgreSQL migration and regression coverage.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `53cc046` | feat(usage): show reasoning level in execution chain |
+
+### Status
+
+[OK] **Completed**

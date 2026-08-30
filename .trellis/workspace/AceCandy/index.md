@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 130
-- **Last Active**: 2026-08-30
+- **Total Sessions**: 131
+- **Last Active**: 2026-08-31
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~1541 | Active |
+| `journal-2.md` | ~1563 | Active |
 | `journal-1.md` | ~1981 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 131 | 2026-08-31 | Usage execution reasoning level | `53cc046` | `main` |
 | 130 | 2026-08-30 | 支持 Responses reasoning.summary | `3c3a882` | `main` |
 | 129 | 2026-08-30 | 批量绑定子密钥模型 | `c4bd7f6` | `main` |
 | 128 | 2026-08-27 | 合并会话与回答大纲 | `de912c2` | `main` |
