@@ -1,6 +1,7 @@
 import type {
   IRContentPart,
   IRMessage,
+  IRReasoningSummary,
   IRRequest,
   IRResponseFormat,
   IRToolCall,
@@ -24,6 +25,7 @@ import {
 const REASONING_LEVELS = new Set<ReasoningLevel>([
   "off", "minimal", "low", "medium", "high", "xhigh", "max",
 ]);
+const REASONING_SUMMARIES = new Set<IRReasoningSummary>(["auto", "concise", "detailed"]);
 
 function optionalNumber(object: JsonObject, key: string, path = key): number | undefined {
   return object[key] === undefined ? undefined : numberAt(object[key], path);
@@ -34,6 +36,13 @@ function parseReasoning(value: unknown, path: string): ReasoningLevel | undefine
   const level = stringAt(value, path) === "none" ? "off" : value as ReasoningLevel;
   if (!REASONING_LEVELS.has(level)) unsupported(path);
   return level;
+}
+
+function parseReasoningSummary(value: unknown, path: string): IRReasoningSummary | undefined {
+  if (value === undefined) return undefined;
+  const summary = stringAt(value, path) as IRReasoningSummary;
+  if (!REASONING_SUMMARIES.has(summary)) unsupported(path);
+  return summary;
 }
 
 function parseJsonSchema(
@@ -282,7 +291,6 @@ export function parseResponses(body: unknown): ParsedGatewayRequest {
   if (text?.verbosity !== undefined) unsupported("text.verbosity");
   const reasoning = object.reasoning === undefined ? undefined : objectAt(object.reasoning, "reasoning");
   if (reasoning) assertAllowed(reasoning, ["effort", "summary"], "reasoning");
-  if (reasoning?.summary !== undefined) unsupported("reasoning.summary");
   const model = typeof object.model === "string" ? object.model : missing("model");
   return {
     protocol: "openai-responses",
@@ -300,6 +308,7 @@ export function parseResponses(body: unknown): ParsedGatewayRequest {
         ? undefined
         : parseResponsesTextFormat(text.format, "text.format"),
       reasoning: parseReasoning(reasoning?.effort, "reasoning.effort"),
+      reasoning_summary: parseReasoningSummary(reasoning?.summary, "reasoning.summary"),
     },
   };
 }

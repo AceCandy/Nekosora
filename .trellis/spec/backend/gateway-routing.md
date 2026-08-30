@@ -661,6 +661,70 @@ return buildLanguageModelWithKey({ ...route, apiFormat }, apiKey);
 
 ---
 
+## Scenario: Responses Reasoning Summary
+
+### 1. Scope / Trigger
+
+修改 `/v1/responses` 的 `reasoning.summary`、统一 `IRRequest`、Responses Provider
+Options 或多协议 route 转换时适用。
+
+### 2. Signatures
+
+- 入站：`reasoning.summary?: "auto" | "concise" | "detailed"`。
+- IR：`IRRequest.reasoning_summary?: IRReasoningSummary`。
+- 出站：`providerOptions.openai.reasoningSummary: string | null`。
+
+### 3. Contracts
+
+- Responses parser 只接受三个官方值，并在协议边界写入 IR；HTTP handler 和 Provider
+  adapter 不重新读取原始请求体。
+- `apiFormat="openai-responses"` 原样发送请求值；其他 route format 静默省略该字段，
+  不因无法表达摘要详细度而拒绝整个请求。
+- 未请求 summary 时向 AI SDK 显式传 `reasoningSummary: null`，避免 SDK 根据
+  `reasoningEffort` 自动补成 `detailed`。
+- 仅当客户端请求 summary 且 `model_catalog.capabilities.reasoning=true` 时设置 SDK
+  内部 `forceReasoning=true`；不得按上游模型名猜测推理能力。
+- 保持 Responses 上游 `store:false`，不新增数据库能力字段、自动探测或失败后重试。
+
+### 4. Validation & Error Matrix
+
+| Condition | Result |
+| --- | --- |
+| summary 为 `auto` / `concise` / `detailed` | 写入 IR，继续路由 |
+| summary 为其他字符串或非字符串 | HTTP 400，参数路径 `reasoning.summary`，不触网上游 |
+| route 为 `openai-responses` | 原样写入上游 `reasoning.summary` |
+| route 为 OpenAI Chat / Anthropic / Gemini | 省略 summary，继续请求 |
+| 客户端未传 summary | Responses Provider Options 使用 `null` 抑制 SDK 默认值 |
+
+### 5. Good / Base / Bad Cases
+
+- Good：Responses 客户端请求 `summary:"auto"`，Responses 上游收到相同值。
+- Base：同一入口命中 Anthropic route，摘要详细度被省略但生成正常完成。
+- Bad：入口 allowlist 包含 `summary`，随后仍无条件抛 `UnsupportedParameterError`。
+- Bad：把 summary 原样塞给所有上游协议，导致非 Responses Provider 返回 400。
+
+### 6. Tests Required
+
+- Parser 覆盖三个合法值和非法值的准确参数路径。
+- Handler 使用真实 parser 断言非法值返回 400，且 encoder/upstream 未调用。
+- 真实多协议矩阵断言 Responses 上游原样收到字段，其他三种上游请求体不含该字段。
+- Core lint、typecheck 和全量测试必须通过。
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong:入口永远拒绝官方字段，或把它无条件发给每种上游。
+if (reasoning?.summary !== undefined) unsupported("reasoning.summary");
+
+// Correct:边界校验后进入 IR，仅 Responses route 消费。
+request.reasoning_summary = parseReasoningSummary(reasoning?.summary);
+const openai = route.apiFormat === "openai-responses"
+  ? { store: false, reasoningSummary: request.reasoning_summary ?? null }
+  : undefined;
+```
+
+---
+
 ## Scenario: Protocol-Native Model Discovery
 
 ### 1. Scope / Trigger

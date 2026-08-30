@@ -505,7 +505,15 @@ async function* streamWithRoute(
     ? { anthropic: { structuredOutputMode: "outputFormat" } }
     : undefined;
   const responsesProviderOptions = resolveRouteApiFormat(route) === "openai-responses"
-    ? { openai: { store: false } }
+    ? {
+        openai: {
+          store: false,
+          reasoningSummary: request.reasoning_summary ?? null,
+          ...(request.reasoning_summary && route.capabilities?.reasoning
+            ? { forceReasoning: true }
+            : {}),
+        },
+      }
     : undefined;
 
   const generationOptions = {

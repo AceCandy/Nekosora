@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/gateway-routing.md", "reason": "Responses ingress 到 route apiFormat adapter 的跨协议契约"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "reasoning.summary 非法值的稳定 400 参数路径"}
+{"file": ".trellis/tasks/08-30-support-reasoning-summary/research/reasoning-summary.md", "reason": "官方字段、AI SDK 和 pi 透传证据"}

@@ -105,7 +105,12 @@ const ingressCases: IngressCase[] = [
     name: "OpenAI Responses",
     protocol: "openai-responses",
     path: "/v1/responses",
-    body: { model: CLIENT_MODEL, input: INPUT_TEXT, store: false },
+    body: {
+      model: CLIENT_MODEL,
+      input: INPUT_TEXT,
+      store: false,
+      reasoning: { summary: "detailed" },
+    },
     parse: parseResponses,
   },
   {
@@ -170,7 +175,12 @@ function routeFor(apiFormat: RouteApiFormat): ResolvedRoute {
     source: "byo",
     routeId: "route-matrix",
     supportsTools: true,
-    capabilities: { tools: true },
+    capabilities: {
+      tools: true,
+      ...(apiFormat === "openai-responses"
+        ? { reasoning: true, thinkingFormat: "openai" as const }
+        : {}),
+    },
   };
 }
 
@@ -415,6 +425,11 @@ describe("multi-protocol gateway matrix", () => {
       expectEndpoint(egress.apiFormat, captured[0].url);
       expectAuthentication(egress.apiFormat, captured[0].headers);
       expectUpstreamBody(egress.apiFormat, captured[0].body);
+      if (ingress.protocol === "openai-responses" && egress.apiFormat === "openai-responses") {
+        expect(captured[0].body).toMatchObject({ reasoning: { summary: "detailed" } });
+      } else {
+        expect(captured[0].body).not.toHaveProperty("reasoning.summary");
+      }
       expectIngressResponse(ingress.protocol, responseBody);
       expect(mocks.recordSuccess).toHaveBeenCalledOnce();
       expect(mocks.recordFailure).not.toHaveBeenCalled();

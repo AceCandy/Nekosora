@@ -94,6 +94,8 @@ export interface IRToolCall {
   function: { name: string; arguments: string };
 }
 
+export type IRReasoningSummary = "auto" | "concise" | "detailed";
+
 /** IR 请求(OpenAI Chat Completions 请求体的核心字段)。 */
 export interface IRRequest {
   model: string;
@@ -108,6 +110,8 @@ export interface IRRequest {
   stop?: string | string[];
   /** 推理级别(off/low/medium/high);stream 层据此 + route.capabilities 翻译为 providerOptions。 */
   reasoning?: ReasoningLevel;
+  /** Responses 推理摘要详细度；仅 openai-responses 上游会读取并透传。 */
+  reasoning_summary?: IRReasoningSummary;
   /** 透传的原始字段(供 adapter 使用协议特定选项)。 */
   [key: string]: unknown;
 }

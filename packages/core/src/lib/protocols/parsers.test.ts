@@ -126,6 +126,22 @@ describe("multi-protocol parsers", () => {
     expectUnsupported(() => parseResponses({ model: "m", input: [{ role: "user", content: [{ type: "input_file", file_id: "file-1" }] }] }), "input[0].content[0].type");
   });
 
+  it.each(["auto", "concise", "detailed"] as const)("Responses 接受 reasoning.summary=%s", (summary) => {
+    expect(parseResponses({
+      model: "m",
+      input: "x",
+      reasoning: { summary },
+    }).request.reasoning_summary).toBe(summary);
+  });
+
+  it("Responses 拒绝非法 reasoning.summary", () => {
+    expectUnsupported(() => parseResponses({
+      model: "m",
+      input: "x",
+      reasoning: { summary: "full" },
+    }), "reasoning.summary");
+  });
+
   it("Anthropic Messages 解析 system、tool_use 和 tool_result", () => {
     const parsed = parseAnthropicMessages({
       model: "model-a",

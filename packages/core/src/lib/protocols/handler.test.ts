@@ -4,6 +4,7 @@ import { DEFAULT_GATEWAY_GOVERNANCE_POLICY } from "@/lib/gateway-governance/poli
 import { GovernanceRejectedError } from "@/lib/gateway-governance/repository";
 import type { CallContext, IRRequest } from "@/lib/providers/types";
 import { handleProtocolRequest } from "./handler";
+import { parseResponses } from "./parsers";
 import { GatewayRequestError, UnsupportedParameterError } from "./validation";
 
 const mocks = vi.hoisted(() => ({
@@ -149,6 +150,29 @@ describe("handleProtocolRequest boundary telemetry", () => {
       errorMessage: "Unsupported parameter: 'store'.",
       errorPhase: "request",
     }));
+  });
+
+  it("非法 reasoning.summary 在触网前返回准确参数路径", async () => {
+    const response = await handleProtocolRequest(
+      request(JSON.stringify({
+        model: "demo",
+        input: "hello",
+        reasoning: { summary: "full" },
+      })),
+      "openai-responses",
+      "/v1/responses",
+      parseResponses,
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: {
+        code: ErrorCode.REQUEST_UNSUPPORTED_PARAMETER,
+        param: "reasoning.summary",
+      },
+    });
+    expect(mocks.nonStreamResponse).not.toHaveBeenCalled();
+    expect(mocks.streamResponse).not.toHaveBeenCalled();
   });
 
   it("parser 成功后 encoder/engine 失败不重复写 route telemetry", async () => {

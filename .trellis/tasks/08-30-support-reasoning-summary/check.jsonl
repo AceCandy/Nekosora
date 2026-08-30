@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/gateway-routing.md", "reason": "复核多协议入口与上游格式隔离"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "复核非法参数在触网前稳定拒绝"}
+{"file": ".trellis/tasks/08-30-support-reasoning-summary/research/reasoning-summary.md", "reason": "核对实现与官方及参考证据一致"}
