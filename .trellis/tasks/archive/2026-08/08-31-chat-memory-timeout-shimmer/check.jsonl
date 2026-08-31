@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/chat-process-trace.md", "reason": "复核 memory trace 收敛与过程事件兼容性"}
+{"file": ".trellis/spec/backend/memory-system.md", "reason": "复核记忆降级不影响核心聊天"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "复核前端动效改动与定向质量检查"}
