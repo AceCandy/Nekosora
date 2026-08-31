@@ -1649,3 +1649,25 @@ Added bounded model-list reads, same-origin redirect controls, model-count limit
 ### Status
 
 [OK] **Completed**
+
+
+## Session 136: RAG 结构化来源
+<!-- trellis-session: v=2 fp=919768a310d47415 -->
+
+**Date**: 2026-09-01
+**Task**: RAG 结构化来源
+**Branch**: `main`
+
+### Summary
+
+为全文与向量 RAG 增加安全文件级来源，沿现有过程轨迹贯通实时、历史和版本切换，复用属主鉴权预览并保持匿名分享不泄露。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e407a26` | feat: add structured RAG sources |
+
+### Status
+
+[OK] **Completed**
