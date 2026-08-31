@@ -2,7 +2,7 @@
 
 # Nekusora · 星枢
 
-**AI 聊天工作台 + OpenAI 兼容模型网关**
+**AI 聊天工作台 + OpenAI / Anthropic / Gemini 兼容模型网关**
 
 「猫与星空」的治愈感 × 「高可用网关」的精密工程 — 一个融合 claude.ai / chatgpt 式对话体验与 sub2api / CLIProxyAPI 式 API 网关的混合型全栈平台。
 
@@ -12,7 +12,7 @@
 [![Drizzle ORM](https://img.shields.io/badge/Drizzle%20ORM-PostgreSQL-d6f334.svg)](https://orm.drizzle.team/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-f59e0b.svg)](.)
 
-**设计主线 · 星枢天流 (The Astral Skyline)** — 暮色微澜黑与星云纯白
+**设计主线 · 星枢天流 (The Astral Skyline)** — 天空蓝与星云纯白
 
 </div>
 
@@ -23,7 +23,7 @@
 Nekusora(星枢,取自 Neku 猫 / Sora 天空)把两件事揉进了同一个产品里:
 
 1. **AI 聊天工作台** —— 类 claude.ai / chatgpt 的流式对话界面,面向终端用户与提示词工程师。
-2. **OpenAI 兼容模型网关** —— 通过 `base_url + sk-*` 接入,带**主-子密钥层级**、**每子密钥双来源模型绑定**、加权负载均衡与故障转移,面向开发者与团队。
+2. **多协议兼容模型网关** —— 通过 `base_url + sk-*` 接入,兼容 OpenAI / Anthropic / Gemini 请求格式,带**主-子密钥层级**、**每子密钥多模型绑定**、加权负载均衡与故障转移,面向开发者与团队。
 
 现有 OpenAI SDK 客户端可**零改动**接入网关,只需替换 `base_url` 与 `api_key`。
 
@@ -35,36 +35,42 @@ Nekusora(星枢,取自 Neku 猫 / Sora 天空)把两件事揉进了同一个产�
 - 流式对话(SSE)、多模型选择、多会话管理
 - CJK 感知的 token 估算 + 上下文窗口裁剪(防止历史过长)
 - 全局模型 + 用户 BYO 模型统一选择
+- 按模型能力选择推理档位、输出模式与输出样式
+- **联网搜索**:支持 Tavily / Exa / Bocha / 智谱 / SearXNG
 - **Artifacts**:代码 / 文档类回答的可视化渲染面板
 - **会话分享**:生成只读分享链接(`/share/:id`)
 - **多模态**:图片输入、文件上传与解析
+- **图像工作区**:独立的模型选择、生成与结果管理界面(`/image`)
 - **记忆 (Memory)**:长期用户画像与偏好记忆
-- **RAG**:基于 pgvector 的检索增强
-- **Prompt 模板**:可复用的对话模板库
+- **RAG**:基于 pgvector 的检索增强,过程面板展示可预览的文件来源
+- **指令卡**:可复用并按会话组合的 System Prompt
 
-### OpenAI 兼容 API 网关
+### 多协议兼容 API 网关
 - `POST /v1/chat/completions`(流式 + 非流式,严格 OpenAI 格式)
+- `POST /v1/responses` —— OpenAI Responses API
+- `POST /v1/messages` —— Anthropic Messages API
+- `POST /v1beta/models/:model:generateContent` —— Gemini API(含流式入口)
 - `POST /v1/images/generations` —— 图像生成
 - `POST /v1/audio/speech` —— TTS 语音合成
 - `POST /v1/audio/transcriptions` —— 语音转写
-- `POST /v1/mcp` —— MCP(Model Context Protocol)桥接端点
+- `GET/POST /v1/mcp` —— MCP(Model Context Protocol)桥接端点
 - `GET /v1/models`(返回该 key 可用模型)
-- 加权负载均衡 + 故障转移(多上游路由)
+- 按优先级、权重与健康状态进行负载均衡和故障转移
 
 ### 主-子密钥层级
-- **主 Key**(每用户唯一):可直接调用,无模型绑定限制
-- **子 Key**(多个):受显式模型绑定约束,可为每个子 key 勾选可用模型
-- **双来源模型**:子 key 可绑定「全局模型」(管理员配) ∪ 「用户 BYO 模型」(用户自配 provider)
+- **主 Key**(每用户唯一):可调用该用户全部已启用模型
+- **子 Key**(多个):可批量绑定多个模型,仅能调用该用户已启用且显式绑定的模型
+- WebChat 可使用系统公开模型与用户自有模型;网关 Key 仅访问所属用户的模型
 
-### 基础设施(本地默认零依赖)
+### 基础设施
 - **数据库**:PostgreSQL(+pgvector)
 - **缓存**:Redis ↔ 进程内内存 LRU 自动降级
 - **队列**:pg-boss(PostgreSQL)
 - **对象存储**:未配置时使用本地磁盘；显式选择 S3 / R2 / MinIO 后配置错误会阻断启动，不回退本地
 
 ### 管理
-- 管理员后台:Provider / Model / Route / User / Template / 用量统计 / 运维
-- 用户面板:主/子 key 管理、BYO provider/model、记忆、模板、用量
+- 管理员后台:用户管理、运维监控、系统模型、输出模式 / 样式与请求治理
+- 用户面板:主/子 Key、Provider / Model / Route、联网搜索、指令卡、记忆、用量与错误日志
 
 ---
 
@@ -77,11 +83,11 @@ Nekusora(星枢,取自 Neku 猫 / Sora 天空)把两件事揉进了同一个产�
 | 缓存 | cache-manager v6 + Keyv + Redis |
 | 队列 | pg-boss(PostgreSQL) |
 | 认证 | Better Auth + admin 插件 + Drizzle 适配器 |
-| AI | Vercel AI SDK v5(`@ai-sdk/openai` / `anthropic` / `google`) |
+| AI | Vercel AI SDK 7(`@ai-sdk/openai` / `anthropic` / `google`) |
 | 向量 | pgvector(PostgreSQL) |
-| 协议 | MCP SDK(`@modelcontextprotocol/sdk`) |
+| 协议 | OpenAI / Anthropic / Gemini 兼容 API + MCP SDK |
 | 监控 | prom-client + `/metrics` 端点 |
-| UI | TailwindCSS v4 + shadcn/ui + Radix |
+| UI | TailwindCSS v4 + `@shadcn/react` + Lucide |
 | 加密 | AES-256-GCM(所有 provider key 加密入库) |
 
 ---
@@ -90,9 +96,12 @@ Nekusora(星枢,取自 Neku 猫 / Sora 天空)把两件事揉进了同一个产�
 
 ### 本地开发(PostgreSQL + 内存缓存)
 
+要求 Node.js 22+、pnpm 10.22.0 与 Docker Compose。
+
 ```bash
 pnpm install
-docker compose up -d          # 起 PostgreSQL(+ Redis 可选)
+cp .env.example .env.local    # 按需修改本地配置与密钥
+docker compose up -d          # 启动 PostgreSQL(+pgvector)与 Redis
 ./dev.sh                      # Web: http://localhost:3500
 ./dev-w.sh                    # 另开终端，Gateway: http://localhost:3502
 ./dev-q.sh                    # 另开终端，Worker 健康端口: 3501
@@ -107,8 +116,8 @@ docker compose up -d          # 起 PostgreSQL(+ Redis 可选)
 
 ### 配置上游 Provider
 
-1. 登录后进入 `/admin/providers` 添加全局 Provider(base_url + key,加密存储)
-2. 进入 `/admin/models` 创建对外模型名,绑定到 Provider 的上游模型
+1. 登录后进入 `/panel/providers` 添加 Provider(base_url + key,加密存储)
+2. 进入 `/panel/models` 创建模型与路由,选择对应 API wire format
 3. 进入 `/panel/keys` 生成主密钥,或创建子密钥并绑定模型
 
 ### 同步 pi 模型目录
@@ -160,15 +169,6 @@ resp = client.chat.completions.create(
 )
 ```
 
-### 使用 PostgreSQL + Redis(生产推荐)
-
-```bash
-docker compose up -d           # 启动 pg + redis
-# 在 .env.local 中配置 DATABASE_URL / REDIS_URL
-pnpm dev                       # 主进程(首次启动自动建表 + 建管理员)
-pnpm worker                    # 另开终端:文件处理队列(pg-boss)
-```
-
 ### 生产多进程部署
 
 生产环境使用 Web、Gateway、Worker 和 edge-router 分离的编排，只有 edge-router 发布应用端口。完整的健康依赖、路由边界、共享上传卷、连接预算和回滚步骤见 [`deploy/production.md`](./deploy/production.md)。
@@ -210,62 +210,32 @@ docker pull acecandy/nekusora:latest             # v* tag，可选 DockerHub 同
 
 旧的 `nekusora-web`、`nekusora-gateway`、`nekusora-worker` 镜像地址不再更新。统一镜像仍应通过 `compose.production.yml` 启动三个独立容器，不要在一个容器内同时运行三个进程。
 
-或本地构建:
+或仅在本地构建镜像:
 
 ```bash
 docker build -t nekusora .
-docker run -p 3000:3000 \
-  -e DATABASE_URL=postgresql://user:pass@db:5432/nekusora \
-  -e DATA_ENCRYPTION_KEY=$(openssl rand -hex 32) \
-  -e BETTER_AUTH_SECRET=$(openssl rand -hex 32) \
-  -e SEED_ADMIN_PASSWORD="$SEED_ADMIN_PASSWORD" \
-  nekusora
 ```
 
-PostgreSQL 数据由外部 PG 管理(docker compose 的 pgdata 卷持久化)。
+`compose.production.yml` 默认自托管 PostgreSQL,数据保存在 `postgres-data` 卷;完整部署仍使用上面的生产编排命令。
 
 ---
 
 ## 📁 项目结构
 
 ```
-apps/web/
-  src/
-    app/
-      (auth)/login/        登录
-      chat/                WebChat(会话列表 + 对话区 + 流式)
-      share/[shareId]/     只读会话分享
-      admin/               管理后台(providers/models/users/usage/templates/operations)
-      panel/               用户面板(keys/providers/models/memory/templates)
-      api/
-        chat/route.ts      WebChat 流式端点(session 鉴权)
-        auth/[...all]/     Better Auth
-        files/ upload/     文件上传
-      v1/                  OpenAI 兼容网关(sk 鉴权)
-        chat/completions/  对话
-        images/generations/ 图像
-        audio/speech/      TTS
-        audio/transcriptions/ STT
-        mcp/               MCP 桥接
-        models/
-      metrics/             Prometheus
-      healthz/             健康检查
-    lib/
-      providers/           统一 IR + provider 适配(openai/anthropic/gemini)
-      routing.ts           四表路由器 + 加权负载均衡 + 故障转移
-      stream.ts            唯一流式核心 streamChat()
-      keys.ts              主/子密钥签发与校验
-      tokens.ts            CJK token 估算 + 上下文裁剪
-      multimodal/          多模态输入处理
-      rag/                 检索增强(pgvector)
-      memory/              长期记忆
-      mcp/                 MCP 适配
-      templates/           Prompt 模板
-      artifacts/           Artifacts 渲染
-      infra/               db/cache/queue/crypto/vector/storage 降级基建
-    db/
-      schema/pg.ts          Drizzle schema
-drizzle/pg/                 PostgreSQL 迁移(仓库级唯一副本)
+apps/
+  web/                       Next.js 聊天工作台与管理界面
+  gateway/                   Fastify API 数据面
+  worker/                    pg-boss 后台任务进程
+packages/
+  core/                      协议适配、Provider、路由与核心业务
+  db/                        Drizzle schema 与数据库类型
+  queue/                     队列目录与运行时
+  contracts/                 跨进程共享契约
+  observability/             指标与可观测性
+drizzle/pg/                   PostgreSQL 迁移(仓库级唯一副本)
+edge/                         生产入口路由
+deploy/                       生产部署文档与环境模板
 ```
 
 ---
@@ -281,7 +251,7 @@ drizzle/pg/                 PostgreSQL 迁移(仓库级唯一副本)
 
 ## 🎨 设计
 
-Nekusora 遵循自研设计系统「**星枢天流 (The Astral Skyline)**」:暮色微澜黑与星云纯白的双面平衡 —— 聊天侧温和治愈、管理侧莫兰迪灰调严谨专业。完整设计参数见 [DESIGN.md](./DESIGN.md),产品定位见 [PRODUCT.md](./PRODUCT.md)。
+Nekusora 遵循自研设计系统「**星枢天流 (The Astral Skyline)**」:天空蓝与星云纯白的单亮色体系 —— 聊天侧温和治愈、管理侧莫兰迪灰调严谨专业。完整设计参数见 [DESIGN.md](./DESIGN.md),产品定位见 [PRODUCT.md](./PRODUCT.md)。
 
 ---
 
