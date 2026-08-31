@@ -1605,3 +1605,25 @@ Persist the successful route's clamped reasoning level in gateway usage records,
 ### Status
 
 [OK] **Completed**
+
+
+## Session 134: Harden upstream model list fetching
+<!-- trellis-session: v=2 fp=1421557477e26896 -->
+
+**Date**: 2026-08-31
+**Task**: Harden upstream model list fetching
+**Branch**: `main`
+
+### Summary
+
+Added bounded model-list reads, same-origin redirect controls, model-count limits, cache-preservation coverage, related provider specs, and included the current chat UI refinements and follow-up task plans in the work commit.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f61b816` | fix: harden upstream models and refine chat UI |
+
+### Status
+
+[OK] **Completed**

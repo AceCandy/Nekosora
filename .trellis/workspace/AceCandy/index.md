@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 133
+- **Total Sessions**: 134
 - **Last Active**: 2026-08-31
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~1607 | Active |
+| `journal-2.md` | ~1629 | Active |
 | `journal-1.md` | ~1981 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 134 | 2026-08-31 | Harden upstream model list fetching | `f61b816` | `main` |
 | 133 | 2026-08-31 | 修复聊天记忆超时与流光动画 | `bc871d6` | `main` |
 | 132 | 2026-08-31 | 路由 API 格式默认继承 | `470b08b` | `main` |
 | 131 | 2026-08-31 | Usage execution reasoning level | `53cc046` | `main` |
