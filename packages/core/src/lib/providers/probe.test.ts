@@ -22,6 +22,11 @@ const baseOpts = {
   baseUrl: "https://api.example.com",
   apiKey: "sk-test",
 };
+const MODELS_RESPONSE_LIMIT_BYTES = 4 * 1024 * 1024;
+
+function jsonResponse(value: unknown): Response {
+  return new Response(JSON.stringify(value), { status: 200 });
+}
 
 /** 用给定实现桩掉全局 fetch(忽略 AbortSignal 等 init 字段)。 */
 function mockFetch(
@@ -407,15 +412,12 @@ describe("probeProviderKey 模型深度探测脱敏", () => {
 describe("fetchUpstreamModels 脱敏边界", () => {
   it("响应体停滞时使用 Provider read timeout 并清理计时器", async () => {
     vi.useFakeTimers();
-    mockFetch((_url, init) => Promise.resolve({
-      ok: true,
-      status: 200,
-      statusText: "OK",
-      json: () => new Promise((_resolve, reject) => {
+    mockFetch((_url, init) => Promise.resolve(new Response(new ReadableStream({
+      start(controller) {
         const signal = init?.signal;
-        signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
-      }),
-    }));
+        signal?.addEventListener("abort", () => controller.error(signal.reason), { once: true });
+      },
+    }), { status: 200 })));
 
     const pending = fetchUpstreamModels({
       ...baseOpts,
@@ -427,6 +429,147 @@ describe("fetchUpstreamModels 脱敏边界", () => {
 
     await rejection;
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("响应体读取失败时取消 reader", async () => {
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    const releaseLock = vi.fn();
+    mockFetch(() => Promise.resolve({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      body: {
+        getReader: () => ({
+          read: () => Promise.reject(new Error("body failed")),
+          cancel,
+          releaseLock,
+        }),
+      } as unknown as ReadableStream<Uint8Array>,
+    }));
+
+    await expect(fetchUpstreamModels(baseOpts)).rejects.toThrow("body failed");
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(releaseLock).toHaveBeenCalledOnce();
+  });
+
+  it("声明或实际响应体超过 4 MiB 时拒绝", async () => {
+    mockFetch(() => Promise.resolve(new Response("{}", {
+      status: 200,
+      headers: { "content-length": String(MODELS_RESPONSE_LIMIT_BYTES + 1) },
+    })));
+    await expect(fetchUpstreamModels(baseOpts)).rejects.toThrow("响应超过 4 MiB");
+
+    mockFetch(() => Promise.resolve(new Response(
+      new Uint8Array(MODELS_RESPONSE_LIMIT_BYTES + 1),
+      { status: 200 },
+    )));
+    await expect(fetchUpstreamModels(baseOpts)).rejects.toThrow("响应超过 4 MiB");
+  });
+
+  it("恰好 4 MiB 可解析，非法 Content-Length 退回实际字节计数", async () => {
+    const prefix = '{"data":[],"padding":"';
+    const suffix = '"}';
+    const body = prefix + "x".repeat(MODELS_RESPONSE_LIMIT_BYTES - prefix.length - suffix.length) + suffix;
+    mockFetch(() => Promise.resolve(new Response(body, { status: 200 })));
+    await expect(fetchUpstreamModels(baseOpts)).resolves.toEqual([]);
+
+    mockFetch(() => Promise.resolve(new Response('{"data":[{"id":"model-a"}]}', {
+      status: 200,
+      headers: { "content-length": "invalid" },
+    })));
+    await expect(fetchUpstreamModels(baseOpts)).resolves.toEqual([{ id: "model-a" }]);
+  });
+
+  it("最多接受 2000 个有效模型", async () => {
+    mockFetch(() => Promise.resolve(jsonResponse({
+      data: Array.from({ length: 1999 }, (_, index) => ({ id: `model-${index}` })),
+    })));
+    await expect(fetchUpstreamModels(baseOpts)).resolves.toHaveLength(1999);
+
+    mockFetch(() => Promise.resolve(jsonResponse({
+      data: Array.from({ length: 2000 }, (_, index) => ({ id: `model-${index}` })),
+    })));
+    await expect(fetchUpstreamModels(baseOpts)).resolves.toHaveLength(2000);
+
+    mockFetch(() => Promise.resolve(jsonResponse({
+      data: Array.from({ length: 2001 }, (_, index) => ({ id: `model-${index}` })),
+    })));
+    await expect(fetchUpstreamModels(baseOpts)).rejects.toThrow("模型数量超过 2000");
+  });
+
+  it("trim、过滤空值并按精确字符串去重", async () => {
+    mockFetch(() => Promise.resolve(jsonResponse({
+      data: [{ id: " model-a " }, { id: "model-a" }, { id: "Model-A" }, { id: "  " }],
+    })));
+    await expect(fetchUpstreamModels(baseOpts)).resolves.toEqual([
+      { id: "model-a" },
+      { id: "Model-A" },
+    ]);
+
+    mockFetch(() => Promise.resolve(jsonResponse({
+      models: [{ name: " models/gemini-a " }, { name: "models/gemini-a" }],
+    })));
+    await expect(fetchUpstreamModels({ ...baseOpts, protocol: "gemini" })).resolves.toEqual([
+      { id: "gemini-a" },
+    ]);
+  });
+
+  it("最多跟随 5 次同 origin 重定向", async () => {
+    let calls = 0;
+    const apiKey = "GEMINI_REDIRECT_SECRET";
+    mockFetch((url, init) => {
+      expect(init?.redirect).toBe("manual");
+      expect(new URL(url).searchParams.get("key")).toBe(apiKey);
+      calls += 1;
+      return Promise.resolve(calls <= 5
+        ? new Response(null, { status: 302, headers: { location: `/redirect-${calls}` } })
+        : jsonResponse({ models: [{ name: "models/gemini-a" }] }));
+    });
+
+    await expect(fetchUpstreamModels({
+      ...baseOpts,
+      protocol: "gemini",
+      apiKey,
+    })).resolves.toEqual([{ id: "gemini-a" }]);
+    expect(calls).toBe(6);
+  });
+
+  it("拒绝第 6 次重定向、缺失 Location 和循环", async () => {
+    let redirects = 0;
+    mockFetch(() => {
+      redirects += 1;
+      return Promise.resolve(
+        new Response(null, { status: 302, headers: { location: `/next-${redirects}` } }),
+      );
+    });
+    await expect(fetchUpstreamModels(baseOpts)).rejects.toThrow("重定向超过 5 次");
+
+    mockFetch(() => Promise.resolve(new Response(null, { status: 302 })));
+    await expect(fetchUpstreamModels(baseOpts)).rejects.toThrow("重定向缺少 Location");
+
+    mockFetch(() => Promise.resolve(
+      new Response(null, { status: 302, headers: { location: "/models" } }),
+    ));
+    await expect(fetchUpstreamModels(baseOpts)).rejects.toThrow("重定向循环");
+  });
+
+  it("跨 origin 重定向在发送凭据前拒绝", async () => {
+    const urls: string[] = [];
+    mockFetch((url) => {
+      urls.push(url);
+      return Promise.resolve(new Response(null, {
+        status: 302,
+        headers: { location: "https://evil.example/models" },
+      }));
+    });
+
+    await expect(fetchUpstreamModels({
+      ...baseOpts,
+      protocol: "gemini",
+      apiKey: "CROSS_ORIGIN_SECRET",
+    })).rejects.toThrow("跨 origin 重定向");
+    expect(urls).toHaveLength(1);
+    expect(urls[0]).not.toContain("evil.example");
   });
 
   it("Gemini fetch 异常离开持 key 边界前会重建为安全 Error", async () => {
@@ -454,5 +597,24 @@ describe("fetchUpstreamModels 脱敏边界", () => {
     expect(caught?.message).not.toContain(headerSecret);
     expect(caught?.stack).not.toContain(apiKey);
     expect(caught?.stack).not.toContain(headerSecret);
+  });
+
+  it("Gemini URL 构造失败也不会泄露 key", async () => {
+    const apiKey = "INVALID_URL_SECRET";
+
+    let caught: Error | undefined;
+    try {
+      await fetchUpstreamModels({
+        protocol: "gemini",
+        baseUrl: "not-a-valid-url",
+        apiKey,
+      });
+    } catch (error) {
+      caught = error as Error;
+    }
+
+    expect(caught).toBeInstanceOf(Error);
+    expect(caught?.message).not.toContain(apiKey);
+    expect(caught?.stack).not.toContain(apiKey);
   });
 });

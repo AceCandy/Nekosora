@@ -562,6 +562,11 @@ function ChatMessageItemContent({
           </div>)
         )}
 
+        {/* 常驻运行元数据签名:模型/耗时/token 全端直接可见,不再藏进 hover 动作条或粗指针展开层 */}
+        {role === "assistant" && publicId && !(isStreaming && isLast) && visibleRunMetadata && (
+          <MessageRunMetadataDisplay metadata={visibleRunMetadata} />
+        )}
+
         {role === "assistant" && publicId && !(isStreaming && isLast) && (
           <div className="flex min-w-0 max-w-full flex-col items-start gap-1 opacity-0 pointer-events-none transition-opacity duration-150 group-hover/message:pointer-events-auto group-hover/message:opacity-100 group-focus-within/message:pointer-events-auto group-focus-within/message:opacity-100 [@media(pointer:coarse)]:pointer-events-auto [@media(pointer:coarse)]:opacity-100 motion-reduce:transition-none">
             <div className="flex min-w-0 max-w-full flex-wrap items-center gap-x-1 gap-y-1">
@@ -764,11 +769,6 @@ function ChatMessageItemContent({
             )}
             </div>
           </div>
-        )}
-
-        {/* 常驻运行元数据签名:模型/耗时/token 全端直接可见,不再藏进 hover 动作条或粗指针展开层 */}
-        {role === "assistant" && publicId && !(isStreaming && isLast) && visibleRunMetadata && (
-          <MessageRunMetadataDisplay metadata={visibleRunMetadata} />
         )}
       </div>
       {role === "user" && menuOpen && canShowMenu && (

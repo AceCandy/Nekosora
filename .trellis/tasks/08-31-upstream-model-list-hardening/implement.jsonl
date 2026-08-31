@@ -1,0 +1,3 @@
+{"file":".trellis/spec/backend/provider-probe.md","reason":"保持模型发现、固定预算、缓存回退与脱敏契约"}
+{"file":".trellis/spec/backend/provider-timeouts.md","reason":"保持共享 probe timeout scope 与清理语义"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"约束上游错误分类与凭据脱敏"}

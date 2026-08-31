@@ -1,0 +1,7 @@
+{"file":".trellis/spec/backend/chat-process-trace.md","reason":"复核来源 allowlist、数组复制和实时历史 round-trip"}
+{"file":".trellis/spec/backend/chat-message-attachments.md","reason":"复核全文/向量来源只来自属主文件"}
+{"file":".trellis/spec/backend/file-storage.md","reason":"复核预览继续经过文件属主鉴权"}
+{"file":".trellis/spec/backend/conversation-sharing.md","reason":"复核匿名分享完全排除来源 sentinel"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"复核刷新、版本切换和 runtime 快照一致"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"执行 Core/Web 定向测试、类型与 diff 门禁"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"复核 contracts、Core、Web 与分享投影无断点"}

@@ -173,6 +173,7 @@ import {
   createProvider,
   createModel,
   createRoute,
+  refreshUpstreamModels,
   testRoute,
   updateProvider,
   updateRoute,
@@ -309,6 +310,23 @@ describe("createProvider", () => {
       connectTimeoutMs: 60_000,
       readTimeoutMs: null,
       streamIdleTimeoutMs: 120_500,
+    }));
+  });
+});
+
+describe("refreshUpstreamModels", () => {
+  it("拉取失败时保留已有模型缓存", async () => {
+    const upstreamModelsAt = new Date("2026-08-31T00:00:00.000Z");
+    Object.assign(mockData.providers[0], {
+      upstreamModels: ["model-old"],
+      upstreamModelsAt,
+    });
+    mockFunctions.fetchUpstreamModels.mockRejectedValueOnce(new Error("upstream failed"));
+
+    await expect(refreshUpstreamModels("provider-a")).rejects.toThrow("upstream failed");
+    expect(mockData.providers[0]).toEqual(expect.objectContaining({
+      upstreamModels: ["model-old"],
+      upstreamModelsAt,
     }));
   });
 });

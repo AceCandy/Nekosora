@@ -1,0 +1,30 @@
+{
+  "id": "provider-rag-offline-hardening",
+  "name": "provider-rag-offline-hardening",
+  "title": "加固模型拉取、RAG 来源与离线预检",
+  "description": "分别优化上游模型列表边界、RAG 结构化来源和浏览器离线请求预检",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "AceCandy",
+  "assignee": "AceCandy",
+  "createdAt": "2026-08-31",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "08-31-upstream-model-list-hardening",
+    "08-31-rag-structured-sources",
+    "08-31-offline-request-preflight"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

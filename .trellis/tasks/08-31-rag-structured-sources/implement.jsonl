@@ -1,0 +1,8 @@
+{"file":".trellis/spec/backend/chat-process-trace.md","reason":"保持 RAG step 实时事件、快照和安全 data 契约"}
+{"file":".trellis/spec/backend/chat-message-attachments.md","reason":"保持文件属主、附件与 RAG 注入边界"}
+{"file":".trellis/spec/backend/file-storage.md","reason":"复用私有文件预览与下载鉴权"}
+{"file":".trellis/spec/backend/conversation-sharing.md","reason":"保持匿名分享白名单与私有数据排除"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"保持 process runtime、历史和版本切换一致"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"约束来源 disclosure、预览交互和无障碍"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"共享 RagSource 类型与 unknown guard 单一来源"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"核对来源从检索到 SSE、JSONB、UI 和分享的完整链路"}

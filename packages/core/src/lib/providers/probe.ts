@@ -54,6 +54,10 @@ export interface UpstreamModel {
 
 /** /models 探测与列表拉取的超时上限,避免异常上游拖住请求。 */
 const PROBE_TIMEOUT_MS = 15000;
+const MODELS_RESPONSE_MAX_BYTES = 4 * 1024 * 1024;
+const MODELS_MAX_COUNT = 2000;
+const MODELS_MAX_REDIRECTS = 5;
+const MODELS_REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
 /**
  * 按协议构建 GET /models 的 URL 与鉴权头。
@@ -443,7 +447,6 @@ export async function fetchUpstreamModels(opts: {
   if (!baseUrl) throw new Error("缺少接口地址");
 
   const base = baseUrl.replace(/\/+$/, "");
-  const { url, init } = buildModelsRequest(protocol, base, apiKey, headers);
   const timeouts = resolveProviderTimeouts(opts);
   const timeoutScope = createProviderTimeoutScope(
     undefined,
@@ -454,17 +457,53 @@ export async function fetchUpstreamModels(opts: {
     connectTimeoutMs: Math.min(timeouts.connectTimeoutMs, PROBE_TIMEOUT_MS),
   });
   try {
-    const res = await providerFetch(url, { ...init, signal: timeoutScope.signal });
-    if (!res.ok) {
-      throw new Error(`上游返回 ${res.status} ${res.statusText}`);
+    const { url, init } = buildModelsRequest(protocol, base, apiKey, headers);
+    const initialUrl = new URL(url);
+    let currentUrl = initialUrl;
+    let redirectCount = 0;
+    const visitedUrls = new Set([initialUrl.href]);
+    while (true) {
+      const res = await providerFetch(currentUrl.href, {
+        ...init,
+        redirect: "manual",
+        signal: timeoutScope.signal,
+      });
+      if (MODELS_REDIRECT_STATUSES.has(res.status)) {
+        const location = res.headers.get("location");
+        await res.body?.cancel().catch(() => undefined);
+        if (!location) throw new Error("上游模型列表重定向缺少 Location");
+        if (redirectCount >= MODELS_MAX_REDIRECTS) {
+          throw new Error(`上游模型列表重定向超过 ${MODELS_MAX_REDIRECTS} 次`);
+        }
+        let nextUrl: URL;
+        try {
+          nextUrl = new URL(location, currentUrl);
+        } catch {
+          throw new Error("上游模型列表重定向 Location 无效");
+        }
+        if (nextUrl.origin !== initialUrl.origin) {
+          throw new Error("上游模型列表拒绝跨 origin 重定向");
+        }
+        if (protocol === "gemini") nextUrl.searchParams.set("key", apiKey);
+        if (visitedUrls.has(nextUrl.href)) {
+          throw new Error("上游模型列表检测到重定向循环");
+        }
+        visitedUrls.add(nextUrl.href);
+        currentUrl = nextUrl;
+        redirectCount += 1;
+        continue;
+      }
+      if (!res.ok) {
+        await res.body?.cancel().catch(() => undefined);
+        throw new Error(`上游返回 ${res.status} ${res.statusText}`);
+      }
+      const json = await readModelsJson(res);
+      // gemini 的列表结构与其他协议不同,单独解析;openai/openai-compatible/anthropic
+      // 都是 {data:[{id}]} 结构,共用 parseDataModels。
+      return normalizeModels(
+        protocol === "gemini" ? parseGeminiModels(json) : parseDataModels(json),
+      );
     }
-    const json = await res.json();
-    // gemini 的列表结构与其他协议不同,单独解析;openai/openai-compatible/anthropic
-    // 都是 {data:[{id}]} 结构,共用 parseDataModels。
-    if (protocol === "gemini") {
-      return parseGeminiModels(json);
-    }
-    return parseDataModels(json);
   } catch (error) {
     const failure = preserveProbeTimeoutReason(error, timeoutScope.signal);
     throw new Error(
@@ -473,6 +512,68 @@ export async function fetchUpstreamModels(opts: {
   } finally {
     timeoutScope.dispose();
   }
+}
+
+/** 在解析前限制实际上游字节数,避免 Response.json() 无界读取。 */
+async function readModelsJson(response: Response): Promise<unknown> {
+  const contentLength = response.headers.get("content-length");
+  if (
+    contentLength !== null
+    && /^\d+$/.test(contentLength)
+    && Number(contentLength) > MODELS_RESPONSE_MAX_BYTES
+  ) {
+    await response.body?.cancel().catch(() => undefined);
+    throw new Error("上游模型列表响应超过 4 MiB");
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error("上游模型列表响应体为空");
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  let completed = false;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        completed = true;
+        break;
+      }
+      totalBytes += value.byteLength;
+      if (totalBytes > MODELS_RESPONSE_MAX_BYTES) {
+        throw new Error("上游模型列表响应超过 4 MiB");
+      }
+      chunks.push(value);
+    }
+  } finally {
+    if (!completed) await reader.cancel().catch(() => undefined);
+    reader.releaseLock();
+  }
+
+  const body = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  try {
+    return JSON.parse(new TextDecoder().decode(body));
+  } catch {
+    throw new Error("上游模型列表响应不是有效 JSON");
+  }
+}
+
+/** 模型 ID 只做 trim、空值过滤和大小写敏感去重。 */
+function normalizeModels(models: UpstreamModel[]): UpstreamModel[] {
+  const ids = new Set<string>();
+  for (const model of models) {
+    const id = model.id.trim();
+    if (!id || ids.has(id)) continue;
+    if (ids.size >= MODELS_MAX_COUNT) {
+      throw new Error(`上游模型数量超过 ${MODELS_MAX_COUNT}`);
+    }
+    ids.add(id);
+  }
+  return [...ids].map((id) => ({ id }));
 }
 
 /** OpenAI 兼容/Anthropic:响应 {data:[{id}]}。data 缺失时返回空列表(不抛错)。 */
@@ -491,7 +592,7 @@ function parseGeminiModels(json: unknown): UpstreamModel[] {
   const models = (json as { models?: { name?: string }[] | null })?.models;
   const ids = Array.isArray(models)
     ? models
-        .map((m) => m?.name?.replace(/^models\//, ""))
+        .map((m) => m?.name?.trim().replace(/^models\//, ""))
         .filter((id): id is string => typeof id === "string" && id.length > 0)
     : [];
   return ids.map((id) => ({ id }));

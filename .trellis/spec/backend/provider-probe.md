@@ -54,6 +54,63 @@
 
 ---
 
+## Scenario: 有界拉取上游模型列表
+
+### 1. Scope / Trigger
+- Trigger: admin 或 panel 发现、刷新 Provider 的 `/models` 列表。
+- 目标:在共享信任边界限制不受信任响应，避免内存放大、凭据随重定向泄露和失败覆盖旧缓存。
+
+### 2. Signatures
+- `fetchUpstreamModels({ protocol, baseUrl, apiKey, headers?, connectTimeoutMs?, readTimeoutMs?, streamIdleTimeoutMs? }): Promise<UpstreamModel[]>`。
+- `UpstreamModel = { id: string }`；admin/panel 必须共用该函数，不能各自实现限制。
+
+### 3. Contracts
+- 响应体实际读取硬上限为 4 MiB；只有单个十进制非负整数 `Content-Length` 可用于快速拒绝，其他值依赖实际字节计数。
+- 最多接受 2000 个 trim 后非空、大小写敏感去重的模型 ID；第 2001 个有效唯一 ID 使本次拉取整体失败。
+- 使用 `redirect: "manual"`，最多跟随 5 次初始 origin 内重定向；拒绝跨 origin、缺失/无效 `Location`、循环和第 6 次跳转。Gemini key 只重建到同 origin URL。
+- URL 构造、逐跳请求、受限读取和解析必须位于持有 key/header 的同一脱敏 `try/catch` 内，并共用现有 `min(provider read timeout, 15s)` scope。
+- 拉取失败抛出安全错误；admin/panel 只能在成功返回后更新 `upstreamModels` 与 `upstreamModelsAt`，失败保留旧缓存。
+
+### 4. Validation & Error Matrix
+
+| 条件 | 结果 |
+| --- | --- |
+| 合法 `Content-Length` 或实际读取超过 4 MiB | 取消响应读取并失败，不解析 JSON |
+| 有效唯一模型为 2000 个 | 正常返回 |
+| 出现第 2001 个有效唯一模型 | 整体失败，不截断 |
+| 同 origin 重定向不超过 5 次 | 继续使用同一预算与鉴权语义 |
+| 跨 origin、无效跳转、循环或第 6 次跳转 | 发起下一跳前失败 |
+| URL 构造、fetch、读取或解析失败 | 经 `redactErrorMessage` 后抛出，旧缓存不变 |
+
+### 5. Good / Base / Bad Cases
+- Good: Gemini 同源跳转保留 query key，最终返回去重后的模型列表。
+- Base: 无重定向的小响应按既有 OpenAI 兼容、Anthropic 或 Gemini 结构解析。
+- Bad: 调用 `Response.json()` 无界读取，或让 fetch 自动把认证头/query key 带到其他 origin。
+
+### 6. Tests Required
+- Core 测试覆盖 4 MiB 声明值/实际值/恰好边界、非法 `Content-Length` 和 reader 取消。
+- 覆盖 1999/2000/2001、空白/重复/大小写不同 ID，以及同源 5 跳、跨源、循环、缺失 Location 和第 6 跳。
+- 用 key/header sentinel 覆盖 fetch 与 URL 构造异常脱敏；Web action 测试断言刷新失败保留旧缓存与时间戳。
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong: 自动重定向且无界读取，URL 构造异常也绕过脱敏边界。
+const response = await fetch(new URL(`${base}/models?key=${apiKey}`));
+return response.json();
+
+// Correct: 构造、手动同源跳转和有界读取都在统一安全边界内。
+try {
+  const { url, init } = buildModelsRequest(protocol, base, apiKey, headers);
+  const response = await providerFetch(new URL(url).href, { ...init, redirect: "manual" });
+  return normalizeModels(parseDataModels(await readModelsJson(response)));
+} catch (error) {
+  throw new Error(redactErrorMessage(error, [apiKey]));
+}
+```
+
+---
+
 ## Scenario: 两级存活检测(网络层 + key 层)
 
 ### 1. Scope / Trigger

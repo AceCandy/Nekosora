@@ -631,7 +631,7 @@ export default function Sidebar({
         onClick={handleClick}
         aria-current={isActive ? "page" : undefined}
         className={clsx(
-          "inline-flex min-w-0 max-w-full w-full items-center gap-2 overflow-hidden rounded-md px-3 py-2 pr-8 text-ui-body font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue",
+          "inline-flex min-w-0 max-w-full w-full items-center gap-2 overflow-hidden rounded-md px-3 py-2 pr-7 text-ui-body font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue",
           isActive
             ? "bg-sora-blue/[0.08] text-neutral-900  font-semibold"
             : "text-neutral-600  hover:text-neutral-900  hover:bg-neutral-100 ",
@@ -641,7 +641,7 @@ export default function Sidebar({
         {(c.generating || streamingConvIds.includes(c.id)) && <span className="relative ml-auto inline-flex h-4 w-4 shrink-0 items-center justify-center" aria-label={tSidebar("generating")}><span className="h-1.5 w-1.5 rounded-full bg-sora-blue" /><Loader2 className="absolute inset-0 h-4 w-4 animate-spin text-sora-blue motion-reduce:animate-none" aria-hidden="true" /></span>}
         {justCompleted && <span className="ml-auto h-2 w-2 shrink-0 rounded-full bg-sora-blue" aria-label={tSidebar("newReplies")} />}
       </Link>
-      <div className="absolute right-1 top-1/2 -translate-y-1/2">
+      <div className="absolute right-0 top-1/2 -translate-y-1/2">
       <Popover
         open={menuOpenId === c.id}
         onClose={() => { setMenuOpenId(null); requestAnimationFrame(() => menuButtonRefs.current.get(c.id)?.focus()); }}
@@ -836,7 +836,7 @@ export default function Sidebar({
             <>
             {sections.map((section) => (
               <div key={section.key}>
-                <button type="button" onClick={() => toggleGroup(section.key, section.items, section.total)} className="touch-target flex w-full items-center gap-2 px-3 py-2 text-ui-caption font-medium text-ink-tertiary hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sora-blue  " aria-expanded={!collapsedGroups.has(section.key)}>
+                <button type="button" onClick={() => toggleGroup(section.key, section.items, section.total)} className="touch-target flex w-full items-center gap-2 py-2 pl-3 pr-0 text-ui-caption font-medium text-ink-tertiary hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sora-blue  " aria-expanded={!collapsedGroups.has(section.key)}>
                   <span>{section.label}</span>
                   <span className="h-px min-w-4 flex-1 bg-morning-mist/80 " aria-hidden="true" />
                   <span className="text-ink-tertiary">{section.total}</span>

@@ -164,7 +164,7 @@ describe("MessageRunMetadataDisplay", () => {
 
     expect(html.indexOf('aria-label="copy"')).toBeLessThan(html.indexOf('aria-label="feedbackUp"'));
     expect(html.indexOf('aria-label="regenerate"')).toBeLessThan(html.indexOf("<time"));
-    expect(html.indexOf("<time")).toBeLessThan(html.indexOf("Model A"));
+    expect(html.indexOf("Model A")).toBeLessThan(html.indexOf('aria-label="copy"'));
     expect(html).not.toContain("<span>copy</span>");
     expect(html).not.toContain("<span>regenerate</span>");
     expect(html).toMatch(/<button[^>]*title="copy"[^>]*aria-label="copy"[^>]*><svg/);
@@ -185,12 +185,12 @@ describe("MessageRunMetadataDisplay", () => {
     expect(html).toContain("group-focus-within/message:opacity-100");
     expect(html).toContain("[@media(pointer:coarse)]:pointer-events-auto");
     expect(html).toContain("[@media(pointer:coarse)]:opacity-100");
-    // 元数据签名不再藏进 hover/展开层:无 Info 按钮、无粗指针隐藏、无展开面板,且位于动作条之后常驻
+    // 元数据签名不再藏进 hover/展开层:无 Info 按钮、无粗指针隐藏、无展开面板,且位于动作条之前常驻
     expect(html).not.toContain('aria-controls="run-metadata-');
     expect(html).not.toContain("[@media(pointer:coarse)]:hidden");
     expect(html).not.toContain("[@media(pointer:coarse)]:inline-flex");
     expect(html).not.toContain('role="region"');
-    expect(html.indexOf('aria-label="responseDetails"')).toBeGreaterThan(html.indexOf("</time>"));
+    expect(html.indexOf('aria-label="responseDetails"')).toBeLessThan(html.indexOf("</time>"));
 
     const timeOnlyHtml = renderAssistantMessage({
       completedAt: "2026-07-25T00:00:02.000Z",
