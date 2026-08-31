@@ -24,6 +24,7 @@ import { getCardsByIds, renderCardContext, incUseCount as incCardUseCount } from
 import { assembleContext } from "@/lib/context-assembler";
 import { buildTrace } from "@/lib/trace";
 import { redactErrorMessage } from "@/lib/redaction";
+import { BestEffortTimeoutError, withBestEffortTimeout } from "@/lib/best-effort";
 import {
   assertVisionModel,
   type ResolvedChatImage,
@@ -255,23 +256,36 @@ export async function prepareChatContext(
 
     // 分支 B:长期记忆(preference/profile 恒定注入 + project 召回)
     (async () => {
-      const allMemories = await getMemories(userId).catch(() => []);
-      let recalledMemories: typeof allMemories = [];
       try {
-        recalledMemories = await recallMemories(userId, userContent);
-      } catch {
-        /* 召回失败:project 不注入,不影响恒定注入 */
+        const { allMemories, recalledMemories } = await withBestEffortTimeout(async () => {
+          const memories = await getMemories(userId).catch(() => []);
+          let recalled: typeof memories = [];
+          try {
+            recalled = await recallMemories(userId, userContent);
+          } catch {
+            /* 召回失败:project 不注入,不影响恒定注入 */
+          }
+          return { allMemories: memories, recalledMemories: recalled };
+        });
+        await processRecorder?.recordStep({
+          id: "memory",
+          kind: "memory",
+          status: "completed",
+          data: {
+            availableCount: allMemories.length,
+            recalledCount: recalledMemories.length,
+          },
+        });
+        return { allMemories, recalledMemories };
+      } catch (error) {
+        if (!(error instanceof BestEffortTimeoutError)) throw error;
+        await processRecorder?.recordStep({
+          id: "memory",
+          kind: "memory",
+          status: "skipped",
+        });
+        return { allMemories: [], recalledMemories: [] };
       }
-      await processRecorder?.recordStep({
-        id: "memory",
-        kind: "memory",
-        status: "completed",
-        data: {
-          availableCount: allMemories.length,
-          recalledCount: recalledMemories.length,
-        },
-      });
-      return { allMemories, recalledMemories };
     })(),
 
     // 分支 C:已有消息查询 → 上下文压缩(顺序依赖)

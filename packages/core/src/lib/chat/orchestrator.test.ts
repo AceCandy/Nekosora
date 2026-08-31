@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   getMemories: vi.fn(),
@@ -27,6 +27,7 @@ import {
   resolveModelGenerationSettings,
   selectCurrentBranchMessages,
 } from "@/lib/chat/orchestrator";
+import { BEST_EFFORT_TIMEOUT_MS } from "@/lib/best-effort";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -35,6 +36,8 @@ beforeEach(() => {
   mocks.assembleContext.mockImplementation(({ messages }) => messages);
   mocks.buildTrace.mockReturnValue({ sources: [] });
 });
+
+afterEach(() => vi.useRealTimers());
 
 describe("calculateTokenBudgets", () => {
   it("小窗口仍为输入和输出各保留有效预算", () => {
@@ -313,6 +316,84 @@ describe("prepareChatContext 降级日志", () => {
 
     expect(mocks.assembleContext).toHaveBeenLastCalledWith(expect.objectContaining({
       templateSystemPrompt: expect.stringContaining("当前日期：2026-08-05"),
+    }));
+  });
+
+  it("长期记忆超时后跳过并继续准备聊天", async () => {
+    vi.useFakeTimers();
+    const recordStep = vi.fn().mockResolvedValue(undefined);
+    let releaseRecall!: () => void;
+    mocks.recallMemories.mockImplementationOnce(() => new Promise((resolve) => {
+      releaseRecall = () => resolve([]);
+    }));
+    const createQuery = () => {
+      const query = {
+        from: vi.fn(() => query),
+        innerJoin: vi.fn(() => query),
+        where: vi.fn(() => query),
+        orderBy: vi.fn().mockResolvedValue([]),
+        limit: vi.fn().mockResolvedValue([]),
+      };
+      return query;
+    };
+    const db = { select: vi.fn(createQuery) };
+    const schema = {
+      messages: {
+        conversationId: "messages.conversationId",
+        deletedAt: "messages.deletedAt",
+        createdAt: "messages.createdAt",
+      },
+      models: {
+        catalogId: "models.catalogId",
+        id: "models.id",
+        name: "models.name",
+        enabled: "models.enabled",
+        visibility: "models.visibility",
+        ownerUserId: "models.ownerUserId",
+      },
+      modelCatalog: {
+        id: "catalog.id",
+        contextWindow: "catalog.contextWindow",
+        maxOutputTokens: "catalog.maxOutputTokens",
+        capabilities: "catalog.capabilities",
+      },
+    };
+
+    const resultPromise = prepareChatContext({
+      userId: "user-1",
+      conversationId: "conversation-1",
+      conv: { outputModeId: null },
+      userContent: "hello",
+      model: "model-a",
+      messages: [{ role: "user", content: "hello" }],
+      branchLeafPublicId: "message-1",
+      processRecorder: { recordStep },
+      db,
+      schema,
+    });
+
+    await vi.advanceTimersByTimeAsync(BEST_EFFORT_TIMEOUT_MS);
+    await expect(resultPromise).resolves.toMatchObject({ ragStatus: null });
+    expect(mocks.recallMemories).toHaveBeenCalledWith("user-1", "hello");
+    expect(mocks.assembleContext).toHaveBeenCalledWith(expect.objectContaining({
+      memories: [],
+      recalledMemories: [],
+    }));
+    expect(recordStep).toHaveBeenCalledWith({
+      id: "memory",
+      kind: "memory",
+      status: "skipped",
+    });
+    expect(recordStep).not.toHaveBeenCalledWith(expect.objectContaining({
+      id: "memory",
+      status: "completed",
+    }));
+
+    releaseRecall();
+    await Promise.resolve();
+    expect(recordStep).not.toHaveBeenCalledWith(expect.objectContaining({
+      id: "memory",
+      status: "completed",
     }));
   });
 });

@@ -37,7 +37,11 @@
 - preference / profile：恒定注入（getMemories 过滤 + buildPreferencePrompt/buildProfilePrompt）。
 - project：按下方「Automatic Project Memory Boundary」过滤查询，再通过 `mem0.search` 召回并经 `toUserMemory` 转 UserMemory。
 - mem0 不可用时 recallMemories 静默返回空（不阻断对话）。
+- Chat 准备阶段用同一个 `withBestEffortTimeout` 包住 `getMemories + recallMemories`，两者合计最多等待 5 秒；超时后两类记忆都按空数组降级，memory trace 记为 `skipped`，主对话继续。
+- trace 更新必须位于超时竞速之外，避免底层 Promise 在超时后迟到完成并把 `skipped` 覆盖为 `completed`。当前记忆 API 不接收取消信号，超时只停止 Chat 等待，不强制终止底层任务。
 - `assembleContext`：preference + profile 恒定 slot；project 召回 slot。
+
+对应回归测试位于 `chat/orchestrator.test.ts`：召回 Promise 超时后 Chat 返回空记忆，释放迟到 Promise 后仍不得记录 memory `completed`。
 
 ---
 

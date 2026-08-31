@@ -189,13 +189,12 @@ body {
   );
 }
 
-/* 运行态文案保持可读，由窄蒙版扫过高光提示仍在执行。 */
+/* 运行态文案保持可读，由宽蒙版连续扫过高光提示仍在执行。 */
 @keyframes research-status-shimmer {
   0% {
     -webkit-mask-position: 140% 0;
     mask-position: 140% 0;
   }
-  45%,
   100% {
     -webkit-mask-position: -40% 0;
     mask-position: -40% 0;
@@ -212,11 +211,11 @@ body {
   inset: 0;
   content: attr(data-shimmer);
   color: var(--color-space-ink);
-  -webkit-mask-image: linear-gradient(90deg, transparent 38%, black 47%, transparent 56%);
-  mask-image: linear-gradient(90deg, transparent 38%, black 47%, transparent 56%);
+  -webkit-mask-image: linear-gradient(90deg, transparent 30%, black 44%, black 56%, transparent 70%);
+  mask-image: linear-gradient(90deg, transparent 30%, black 44%, black 56%, transparent 70%);
   -webkit-mask-size: 220% 100%;
   mask-size: 220% 100%;
-  animation: research-status-shimmer 4s ease-in-out infinite;
+  animation: research-status-shimmer 2s linear infinite;
   pointer-events: none;
 }
 
