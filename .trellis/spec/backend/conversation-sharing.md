@@ -13,6 +13,7 @@ Apply this contract when changing conversation share creation, public reads, pas
 - `revokeShare(shareId): Promise<void>`
 - `selectMessageVersion(messagePublicId): Promise<void>`
 - `PublicShareState = { status: "unavailable" } | { status: "locked" } | { status: "ready"; title; model; messages; renderStyle }`
+- `PublicShareMessage` is an explicit allowlist of `role`, `content`, optional `createdAt`, and optional safe `runMetadata`; it never includes `processTrace`, attachments, or RAG sources.
 - `conversation_shares.mode`: nullable `snapshot | live`; `null` means legacy.
 - `conversations.message_version_selections`: nullable JSON object keyed by assistant sibling `parentId`.
 
@@ -28,6 +29,7 @@ Apply this contract when changing conversation share creation, public reads, pas
 - A successful unlock sets an HttpOnly, SameSite=Lax, production-Secure cookie scoped to `/share/{shareId}`. Its expiry is `min(now + 24h, share.expiresAt)`. Every content read rechecks status and expiry, so revocation invalidates an existing cookie immediately.
 - Manual version switching persists `selectMessageVersion(target.publicId)` before replacing local runtime state. Regeneration records the real assistant public ID from SSE after the stream completes; persistence failure is logged separately and must not turn a successful generation into a generation error.
 - Share configuration is immutable. Owners may list safe DTOs, copy URLs, revoke links, and create replacements. Listing never returns verifier, snapshots, CSS, cookies, or rate-limit rows.
+- Snapshot, live, and legacy public reads must project messages through the public message allowlist. Private attachment and RAG provenance (`fileId`, `filename`, `mime`, preview URLs, and `processTrace`) remain owner-only even when they are stored on the source message.
 
 ## 4. Validation & Error Matrix
 
@@ -44,23 +46,27 @@ Apply this contract when changing conversation share creation, public reads, pas
 | Blocked password attempt | Return `rate_limited` with retry seconds; do not run scrypt |
 | Stale message-version selection | Ignore it and fall back to the latest valid sibling |
 | Version persistence fails after successful regeneration | Keep generated message; report persistence failure separately |
+| Source message contains attachment or RAG provenance | Strip it during public projection; return no private file fields or preview entry |
 
 ## 5. Good / Base / Bad Cases
 
 - Good: a snapshot remains byte-for-byte stable after the owner edits the conversation or an administrator changes/deletes the source style.
 - Good: a live link follows later messages and the owner's persisted assistant version after refresh.
 - Good: an empty current conversation can still open the management dialog and revoke an older share, while creating a new share stays disabled.
+- Good: a live share of an answer backed by private RAG returns the answer body and safe run metadata but no filename, MIME, file ID, trace, or preview URL.
 - Base: an unprotected permanent link returns ready content without setting an unlock cookie.
 - Base: a legacy row remains readable with its historical soft-delete semantics.
 - Bad: using `renderStyleId ?? conversation.renderStyleId` erases explicit `null` and prevents selecting default snapshot rendering.
 - Bad: throwing when a live conversation style is disabled turns a recoverable presentation change into a public 500 response.
 - Bad: trusting TypeScript's `password: string` signature as runtime validation allows oversized Server Action inputs to reach scrypt.
 - Bad: hiding private fields in the component after returning them from `getShare` leaks them across the Server Component boundary.
+- Bad: spreading a database message or frozen message JSON into `PublicShareMessage` can expose future private fields by default.
 
 ## 6. Tests Required
 
 - Migration tests assert the new nullable columns, share-list index, unlock-attempt table, unique bucket key, FK cascade, journal sequence, and snapshot `prevId`.
 - Share action tests cover owner isolation, server-derived visible order, strict snapshot behavior, explicit default style, live style fallback, legacy filtering, safe list DTOs, expiry/revocation equivalence, and locked-state non-disclosure.
+- Share projection tests place unique `fileId`, `filename`, and `mime` sentinels inside stored RAG trace data and assert that serialized `getShare` results contain none of them.
 - Security tests cover scrypt verifier parsing, malformed verifiers, constant-time comparison boundary, share-bound HMAC cookies, 24-hour/expiry clipping, and invalid password length before DB/KDF.
 - Rate-limit tests cover client/global thresholds, window reset, successful client-bucket clear, and transaction failure propagation.
 - Branch/store tests cover stale selection fallback, manual switch persistence before local mutation, regeneration using the real SSE public ID, and persistence failure isolation.
@@ -100,4 +106,12 @@ try {
 } catch (error) {
   console.error("persist regenerated version failed:", error);
 }
+```
+
+```typescript
+// Wrong: new stored message fields become public automatically.
+return { ...message };
+
+// Correct: project only the public message contract.
+return { role: message.role, content: String(message.content ?? "") };
 ```

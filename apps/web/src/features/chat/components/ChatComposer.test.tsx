@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReasoningLevel } from "@/db/types";
 import type { ComposerSelectionState, ComposerTransition } from "@/features/chat/model/composerState";
 import type { ModelOption, RenderStyleOption } from "@/features/chat/model/types";
+import type { PreviewableFile } from "@/shared/components/file-preview/FilePreviewModal";
 
 const mocks = vi.hoisted(() => ({
   adoptConversation: vi.fn(),
@@ -24,6 +25,7 @@ interface CapturedToolbarProps {
   onRenderStyleToggle: (id: string) => void;
   onModelChange: (id: string) => void;
   onReasoningChange: (reasoning: ReasoningLevel) => void;
+  onPreviewFile: (file: PreviewableFile) => void;
 }
 
 interface CapturedInputBoxProps {
@@ -37,6 +39,7 @@ interface CapturedMessageListProps {
   renderStyleClass?: string | null;
   renderStyleRenderer?: "streamdown" | "custom";
   isPaper?: boolean;
+  onPreviewFile?: (file: PreviewableFile) => void;
 }
 
 interface CapturedHeaderProps {
@@ -231,6 +234,7 @@ describe("ChatComposer coordinator integration", () => {
 
     expect(mocks.handleUpload).toHaveBeenCalledWith(files);
     expect(capturedToolbar?.webSearchAvailable).toBe(true);
+    expect(capturedMessageList?.onPreviewFile).toBe(capturedToolbar?.onPreviewFile);
   });
 
   it("passes one coherent render style snapshot to the message list", () => {

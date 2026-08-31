@@ -8,7 +8,7 @@ describe("consumeChatSSE", () => {
     const onTrace = vi.fn();
     const body = streamFrom(
       'data: {"type":"trace","version":1,"action":"phase","runId":"run-1","seq":1,"at":"2026-08-07T00:00:00.000Z","phase":"preparing"}\n\n' +
-      'data: {"type":"trace","version":1,"action":"step","runId":"run-1","seq":2,"at":"2026-08-07T00:00:01.000Z","phase":"processing","step":{"id":"prompt","kind":"prompt","status":"completed","data":{"fullMessageCount":2,"sentMessageCount":2,"tokenEstimate":20}}}\n\n' +
+      'data: {"type":"trace","version":1,"action":"step","runId":"run-1","seq":2,"at":"2026-08-07T00:00:01.000Z","phase":"processing","step":{"id":"rag","kind":"rag","status":"completed","data":{"fileCount":1,"sources":[{"fileId":"file-1","filename":"notes.txt","mime":"text/plain"}]}}}\n\n' +
       'data: {"type":"terminal","status":"interrupted"}\n\n' +
       "data: [DONE]\n\n",
     );
@@ -17,6 +17,9 @@ describe("consumeChatSSE", () => {
 
     expect(onTrace).toHaveBeenCalledTimes(2);
     expect(onTrace.mock.calls.map(([event]) => event.seq)).toEqual([1, 2]);
+    expect(onTrace.mock.calls[1][0]).toMatchObject({
+      step: { data: { sources: [{ fileId: "file-1", filename: "notes.txt" }] } },
+    });
   });
 
   it("拒绝带额外敏感字段的过程事件", async () => {

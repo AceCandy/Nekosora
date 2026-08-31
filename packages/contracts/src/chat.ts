@@ -22,6 +22,13 @@ export interface ChatMessageAttachment {
   mime: string;
 }
 
+/** RAG 轨迹中可安全展示并通过属主接口预览的文件来源。 */
+export interface RagSource {
+  fileId: string;
+  filename: string;
+  mime: string;
+}
+
 export const CHAT_PROCESS_PHASES = [
   "preparing",
   "processing",
@@ -85,6 +92,7 @@ export type ChatProcessStep =
         fileCount: number;
         hitCount?: number;
         reason?: ChatProcessSkipReason;
+        sources?: RagSource[];
       };
     })
   | (ChatProcessStepBase & {
@@ -210,10 +218,12 @@ function isChatProcessStep(value: unknown): value is ChatProcessStep {
         && isOptionalNonNegativeInteger(data.sentMessageCount));
     case "rag":
       return data === undefined || (isRecord(data)
-        && hasOnlyKeys(data, ["fileCount", "hitCount", "reason"])
+        && hasOnlyKeys(data, ["fileCount", "hitCount", "reason", "sources"])
         && isNonNegativeInteger(data.fileCount)
         && isOptionalNonNegativeInteger(data.hitCount)
-        && isOptionalSkipReason(data.reason));
+        && isOptionalSkipReason(data.reason)
+        && (data.sources === undefined
+          || (Array.isArray(data.sources) && data.sources.every(isRagSource))));
     case "prompt":
       return data === undefined || (isRecord(data)
         && hasOnlyKeys(data, ["fullMessageCount", "sentMessageCount", "tokenEstimate"])
@@ -246,6 +256,14 @@ function isChatProcessStep(value: unknown): value is ChatProcessStep {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isRagSource(value: unknown): value is RagSource {
+  return isRecord(value)
+    && hasOnlyKeys(value, ["fileId", "filename", "mime"])
+    && isNonEmptyString(value.fileId)
+    && isNonEmptyString(value.filename)
+    && isNonEmptyString(value.mime);
 }
 
 function hasOnlyKeys(value: Record<string, unknown>, allowed: readonly string[]): boolean {

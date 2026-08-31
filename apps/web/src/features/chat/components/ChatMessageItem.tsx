@@ -42,6 +42,7 @@ import { useClickOutside } from "@/shared/lib/useClickOutside";
 import { MessageImageAttachments } from "@/features/chat/components/MessageImageAttachments";
 import { RunMetadataFields } from "@/features/chat/components/RunMetadataFields";
 import { MessageProcessTrace } from "@/features/chat/components/MessageProcessTrace";
+import type { PreviewableFile } from "@/shared/components/file-preview/FilePreviewModal";
 
 /** 用户消息超过此行数才折叠(长消息默认收起,避免撑高会话)。 */
 const USER_MESSAGE_COLLAPSE_LINES = 6;
@@ -104,6 +105,8 @@ interface ChatMessageItemProps {
   isPaper?: boolean;
   onRegenerate: (publicId: string, model: string) => void;
   onOpenArtifact: (a: Artifact) => void;
+  /** 打开 RAG 文件来源的属主鉴权预览。 */
+  onPreviewFile?: (file: PreviewableFile) => void;
   /** 编辑用户消息后重发(publicId 为被编辑 user 消息的稳定标识)。 */
   onEdit?: (
     publicId: string,
@@ -137,6 +140,7 @@ function ChatMessageItemContent({
   isPaper,
   onRegenerate,
   onOpenArtifact,
+  onPreviewFile,
   onEdit,
   onSwitchVersion,
   onRequestDelete,
@@ -539,6 +543,7 @@ function ChatMessageItemContent({
               processRuntime={processRuntime}
               isStreaming={isStreaming}
               isLast={isLast}
+              onPreviewFile={onPreviewFile}
             />
             {content ? (() => {
               const { body, error } = splitChatError(content);

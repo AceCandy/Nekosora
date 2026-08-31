@@ -72,4 +72,30 @@ describe("reduceChatProcessEvent", () => {
     expect(snapshotFromProcessRuntime(continued, first)?.runs.map((run) => run.runId))
       .toEqual(["run-1", "run-2"]);
   });
+
+  it("RAG 来源在事件与快照之间深复制", () => {
+    const sources = [{ fileId: "file-1", filename: "notes.txt", mime: "text/plain" }];
+    let state = reduceChatProcessEvent(undefined, phaseEvent(1, "preparing"));
+    state = reduceChatProcessEvent(state, {
+      ...phaseEvent(2, "processing"),
+      action: "step",
+      step: {
+        id: "rag",
+        kind: "rag",
+        status: "completed",
+        data: { fileCount: 1, sources },
+      },
+    });
+    sources[0].filename = "event-mutated.txt";
+    expect(state.steps[0]).toMatchObject({ data: { sources: [{ filename: "notes.txt" }] } });
+
+    state = { ...state, phase: "completed" };
+    const snapshot = snapshotFromProcessRuntime(state);
+    const step = state.steps[0];
+    if (step.kind !== "rag" || !step.data?.sources) throw new Error("missing sources");
+    step.data.sources[0].filename = "runtime-mutated.txt";
+    expect(snapshot?.runs[0].steps[0]).toMatchObject({
+      data: { sources: [{ filename: "notes.txt" }] },
+    });
+  });
 });

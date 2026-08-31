@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   maybeCompact: vi.fn(),
   assembleContext: vi.fn(),
   buildTrace: vi.fn(),
+  buildMessagesWithFileContext: vi.fn(),
 }));
 
 vi.mock("drizzle-orm", () => ({
@@ -20,6 +21,9 @@ vi.mock("@/lib/memory/recall", () => ({ recallMemories: mocks.recallMemories }))
 vi.mock("@/lib/compact/service", () => ({ maybeCompact: mocks.maybeCompact }));
 vi.mock("@/lib/context-assembler", () => ({ assembleContext: mocks.assembleContext }));
 vi.mock("@/lib/trace", () => ({ buildTrace: mocks.buildTrace }));
+vi.mock("@/lib/rag/context", () => ({
+  buildMessagesWithFileContext: mocks.buildMessagesWithFileContext,
+}));
 
 import {
   calculateTokenBudgets,
@@ -33,8 +37,14 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.getMemories.mockResolvedValue([]);
   mocks.recallMemories.mockResolvedValue([]);
+  mocks.maybeCompact.mockResolvedValue(null);
   mocks.assembleContext.mockImplementation(({ messages }) => messages);
   mocks.buildTrace.mockReturnValue({ sources: [] });
+  mocks.buildMessagesWithFileContext.mockImplementation(async ({ messages }) => ({
+    messages,
+    ragStatus: "rag_empty",
+    sources: [],
+  }));
 });
 
 afterEach(() => vi.useRealTimers());
@@ -152,6 +162,103 @@ describe("selectCurrentBranchMessages", () => {
 });
 
 describe("prepareChatContext 降级日志", () => {
+  it("将真正使用的 RAG 文件来源写入现有步骤", async () => {
+    const recordStep = vi.fn().mockResolvedValue(undefined);
+    mocks.buildMessagesWithFileContext.mockResolvedValueOnce({
+      messages: [{ role: "user", content: "hello" }],
+      ragStatus: "rag_hit",
+      sources: [{ fileId: "file-1", filename: "notes.txt", mime: "text/plain" }],
+    });
+    const schema = {
+      fileObjects: {
+        id: "files.id",
+        userId: "files.userId",
+        filename: "files.filename",
+        mime: "files.mime",
+        storagePath: "files.storagePath",
+      },
+      userSettings: { userId: "settings.userId", key: "settings.key" },
+      messages: {
+        conversationId: "messages.conversationId",
+        deletedAt: "messages.deletedAt",
+        createdAt: "messages.createdAt",
+      },
+      models: {
+        catalogId: "models.catalogId",
+        id: "models.id",
+        name: "models.name",
+        enabled: "models.enabled",
+        visibility: "models.visibility",
+        ownerUserId: "models.ownerUserId",
+      },
+      modelCatalog: {
+        id: "catalog.id",
+        contextWindow: "catalog.contextWindow",
+        maxOutputTokens: "catalog.maxOutputTokens",
+        capabilities: "catalog.capabilities",
+      },
+      routes: {},
+      providers: {},
+    };
+    const rowsByTable = new Map<unknown, unknown[]>([
+      [schema.fileObjects, []],
+      [schema.userSettings, [{ value: "rag" }]],
+      [schema.messages, []],
+      [schema.models, [{
+        modelId: "model-a",
+        contextWindow: 32_000,
+        maxOutputTokens: 4_000,
+        capabilities: { tools: false },
+      }]],
+    ]);
+    const db = {
+      select: vi.fn(() => {
+        let rows: unknown[] = [];
+        const query = {
+          from: vi.fn((table: unknown) => {
+            rows = rowsByTable.get(table) ?? [];
+            return query;
+          }),
+          innerJoin: vi.fn(() => query),
+          where: vi.fn(() => query),
+          orderBy: vi.fn(() => Promise.resolve(rows)),
+          limit: vi.fn(() => Promise.resolve(rows)),
+          then: (
+            resolve: (value: unknown[]) => unknown,
+            reject: (reason: unknown) => unknown,
+          ) => Promise.resolve(rows).then(resolve, reject),
+        };
+        return query;
+      }),
+    };
+
+    const result = await prepareChatContext({
+      userId: "user-1",
+      conversationId: "conversation-1",
+      conv: { outputModeId: null },
+      userContent: "hello",
+      model: "model-a",
+      modelId: "model-a",
+      messages: [{ role: "user", content: "hello" }],
+      branchLeafPublicId: "message-1",
+      fileIds: ["file-1"],
+      processRecorder: { recordStep },
+      db,
+      schema,
+    });
+
+    expect("error" in result).toBe(false);
+    expect(recordStep).toHaveBeenCalledWith({
+      id: "rag",
+      kind: "rag",
+      status: "completed",
+      data: {
+        fileCount: 1,
+        sources: [{ fileId: "file-1", filename: "notes.txt", mime: "text/plain" }],
+      },
+    });
+  });
+
   it("压缩失败时不暴露原始错误或 provider URL", async () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const recordStep = vi.fn().mockResolvedValue(undefined);

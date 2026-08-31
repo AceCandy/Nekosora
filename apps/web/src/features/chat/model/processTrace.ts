@@ -99,6 +99,15 @@ function isTerminal(phase: ChatProcessPhase): phase is ChatProcessTerminalPhase 
 }
 
 function cloneStep(step: ChatProcessStep): ChatProcessStep {
+  if (step.kind === "rag" && step.data?.sources) {
+    return {
+      ...step,
+      data: {
+        ...step.data,
+        sources: step.data.sources.map((source) => ({ ...source })),
+      },
+    };
+  }
   return {
     ...step,
     ...("data" in step && step.data ? { data: { ...step.data } } : {}),

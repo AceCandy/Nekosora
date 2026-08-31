@@ -227,6 +227,7 @@
     "researchStepRead": "Read and filter {count} sources",
     "researchPartialSources": "Some sources could not be retrieved. Continued with {count} available sources.",
     "researchViewSources": "View {count} cited sources",
+    "ragSourceOpen": "Preview file source: {filename}",
     "webSearch": "Web Search",
     "prevVersion": "Previous version",
     "nextVersion": "Next version",

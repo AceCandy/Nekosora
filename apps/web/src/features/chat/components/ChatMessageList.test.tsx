@@ -2,12 +2,14 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatMessage } from "@/features/chat/model/types";
+import type { PreviewableFile } from "@/shared/components/file-preview/FilePreviewModal";
 
 const capturedItems = vi.hoisted(() => [] as Array<{
   message: ChatMessage;
   renderStyleClass?: string | null;
   renderStyleRenderer?: "streamdown" | "custom";
   isPaper?: boolean;
+  onPreviewFile?: (file: PreviewableFile) => void;
 }>);
 
 vi.mock("next-intl", () => ({
@@ -66,6 +68,7 @@ beforeEach(() => {
 
 describe("ChatMessageList render style boundary", () => {
   it("scopes CSS per assistant and keeps all style props away from user messages", () => {
+    const onPreviewFile = vi.fn();
     const html = renderToStaticMarkup(
       <ChatMessageList
         messages={[
@@ -80,6 +83,7 @@ describe("ChatMessageList render style boundary", () => {
         isPaper
         onRegenerate={() => undefined}
         onOpenArtifact={() => undefined}
+        onPreviewFile={onPreviewFile}
       />,
     );
 
@@ -103,5 +107,6 @@ describe("ChatMessageList render style boundary", () => {
       renderStyleRenderer: "custom",
       isPaper: true,
     });
+    expect(capturedItems.every((item) => item.onPreviewFile === onPreviewFile)).toBe(true);
   });
 });

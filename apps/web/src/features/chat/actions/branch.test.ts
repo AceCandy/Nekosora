@@ -1232,7 +1232,18 @@ describe("getMessageSiblings 版本切换 toolCalls 回填", () => {
             runs: [{
               runId: "run_v1",
               phase: "completed",
-              steps: [{ id: "prompt", kind: "prompt", status: "completed" }],
+              steps: [
+                { id: "prompt", kind: "prompt", status: "completed" },
+                {
+                  id: "rag",
+                  kind: "rag",
+                  status: "completed",
+                  data: {
+                    fileCount: 1,
+                    sources: [{ fileId: "file-v1", filename: "v1.txt", mime: "text/plain" }],
+                  },
+                },
+              ],
               startedAt: "2026-07-25T00:00:00.000Z",
               endedAt: "2026-07-25T00:00:01.000Z",
             }],
@@ -1352,7 +1363,18 @@ describe("getMessageSiblings 版本切换 toolCalls 回填", () => {
         runs: [{
           runId: "run_v1",
           phase: "completed",
-          steps: [{ id: "prompt", kind: "prompt", status: "completed" }],
+          steps: [
+            { id: "prompt", kind: "prompt", status: "completed" },
+            {
+              id: "rag",
+              kind: "rag",
+              status: "completed",
+              data: {
+                fileCount: 1,
+                sources: [{ fileId: "file-v1", filename: "v1.txt", mime: "text/plain" }],
+              },
+            },
+          ],
           startedAt: "2026-07-25T00:00:00.000Z",
           endedAt: "2026-07-25T00:00:01.000Z",
         }],

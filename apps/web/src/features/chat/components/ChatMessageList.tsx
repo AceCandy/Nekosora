@@ -28,6 +28,7 @@ import { ErrorBoundary } from "@/shared/components/ErrorBoundary";
 import ConfirmDialog from "@/shared/ui/ConfirmDialog";
 import type { ChatMessage, MessageFeedback, ModelOption } from "@/features/chat/model/types";
 import type { Artifact } from "@/features/artifacts/ArtifactPanel";
+import type { PreviewableFile } from "@/shared/components/file-preview/FilePreviewModal";
 import { copyToClipboard } from "@/shared/lib/clipboard";
 import { useMessageSpeech } from "@/features/chat/hooks/useMessageSpeech";
 import {
@@ -65,6 +66,8 @@ interface ChatMessageListProps {
   onEdit?: (publicId: string, newContent: string, attachmentFileIds: string[], model: string) => void;
   onSwitchVersion?: (publicId: string, direction: "prev" | "next") => void;
   onOpenArtifact: (a: Artifact) => void;
+  /** 打开 RAG 文件来源的属主鉴权预览。 */
+  onPreviewFile?: (file: PreviewableFile) => void;
   /** 软删除一条消息。 */
   onDelete?: (publicId: string) => void;
   /** 在 assistant 消息末尾续写。 */
@@ -409,6 +412,7 @@ export function ChatMessageList({
   onEdit,
   onSwitchVersion,
   onOpenArtifact,
+  onPreviewFile,
   onDelete,
   onContinue,
   onFeedbackChange,
@@ -573,6 +577,7 @@ export function ChatMessageList({
                           onEdit={handleEdit}
                           onSwitchVersion={onSwitchVersion}
                           onOpenArtifact={onOpenArtifact}
+                          onPreviewFile={onPreviewFile}
                           onRequestDelete={handleRequestDelete}
                           conversationStreaming={streaming}
                           onContinue={onContinue}

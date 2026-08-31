@@ -244,6 +244,7 @@ export async function prepareChatContext(
           status: ragCompleted ? "completed" : "skipped",
           data: {
             fileCount: fileIds.length,
+            ...(built.sources.length ? { sources: built.sources } : {}),
             ...(ragCompleted
               ? {}
               : { reason: ragStatus === "rag_empty" ? "empty" as const : "not_needed" as const }),

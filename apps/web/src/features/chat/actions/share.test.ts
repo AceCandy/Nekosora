@@ -247,7 +247,36 @@ describe("conversation share actions", () => {
       [{ id: "conversation-1", title: "Current", modelName: "new-model", renderStyleId: "style-2", messageVersionSelections: { u1: "a-old-public" } }],
       [
         { id: "u1", publicId: "u1-public", parentId: null, role: "user", content: "Q", createdAt: new Date("2026-01-01T00:00:00Z") },
-        { id: "a-old", publicId: "a-old-public", parentId: "u1", runId: "run-live", role: "assistant", content: "Chosen", createdAt: new Date("2026-01-01T00:01:00Z") },
+        {
+          id: "a-old",
+          publicId: "a-old-public",
+          parentId: "u1",
+          runId: "run-live",
+          role: "assistant",
+          content: "Chosen",
+          createdAt: new Date("2026-01-01T00:01:00Z"),
+          processTrace: {
+            version: 1,
+            runs: [{
+              runId: "run-live",
+              phase: "completed",
+              startedAt: "2026-01-01T00:00:00.000Z",
+              steps: [{
+                id: "rag",
+                kind: "rag",
+                status: "completed",
+                data: {
+                  fileCount: 1,
+                  sources: [{
+                    fileId: "PRIVATE_FILE_ID_SENTINEL",
+                    filename: "PRIVATE_FILENAME_SENTINEL",
+                    mime: "PRIVATE_MIME_SENTINEL",
+                  }],
+                },
+              }],
+            }],
+          },
+        },
         { id: "a-new", publicId: "a-new-public", parentId: "u1", role: "assistant", content: "Latest", createdAt: new Date("2026-01-01T00:02:00Z") },
       ],
       [{ id: "style-2", name: "Compact", cssClass: "compact", css: ".rs-compact{}", renderer: "streamdown" }],
@@ -276,6 +305,10 @@ describe("conversation share actions", () => {
       ],
       renderStyle: expect.objectContaining({ sourceId: "style-2", cssClass: "compact" }),
     }));
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain("PRIVATE_FILE_ID_SENTINEL");
+    expect(serialized).not.toContain("PRIVATE_FILENAME_SENTINEL");
+    expect(serialized).not.toContain("PRIVATE_MIME_SENTINEL");
   });
 
   it("实时分享的当前样式不可用时回退默认渲染", async () => {

@@ -5,6 +5,7 @@ const capturedMarkdownProps = vi.hoisted(() => [] as Array<{
   renderer?: "streamdown" | "custom";
   renderStyleClass?: string | null;
 }>);
+const popoverTestState = vi.hoisted(() => ({ showContent: false }));
 
 vi.mock("next-intl", () => ({
   useLocale: () => "en",
@@ -24,6 +25,11 @@ vi.mock("@/shared/components/markdown/Markdown", () => ({
 
 vi.mock("@/shared/lib/useClickOutside", () => ({
   useClickOutside: vi.fn(),
+}));
+vi.mock("@/shared/ui/Popover", () => ({
+  Popover: ({ trigger, children }: { trigger: React.ReactNode; children: React.ReactNode }) => (
+    <>{trigger}{popoverTestState.showContent ? children : null}</>
+  ),
 }));
 
 import { ChatMessageItem, MessageRunMetadataDisplay } from "./ChatMessageItem";
@@ -203,6 +209,71 @@ describe("MessageRunMetadataDisplay", () => {
 });
 
 describe("ChatMessageItem research process", () => {
+  it("历史与实时 RAG 来源按文件去重并渲染为预览按钮", () => {
+    popoverTestState.showContent = true;
+    const ragStep = {
+      id: "rag",
+      kind: "rag" as const,
+      status: "completed" as const,
+      data: {
+        fileCount: 1,
+        sources: [
+          { fileId: "file-1", filename: "notes.txt", mime: "text/plain" },
+          { fileId: "file-1", filename: "notes.txt", mime: "text/plain" },
+        ],
+      },
+    };
+    const historical = renderToStaticMarkup(
+      <ChatMessageItem
+        message={{
+          role: "assistant",
+          content: "Answer",
+          publicId: "assistant-rag-history",
+          processTrace: {
+            version: 1,
+            runs: [{
+              runId: "run-history",
+              phase: "completed",
+              startedAt: "2026-08-08T00:00:00.000Z",
+              steps: [ragStep],
+            }],
+          },
+        }}
+        isLast
+        isStreaming={false}
+        model="model-a"
+        onRegenerate={() => undefined}
+        onOpenArtifact={() => undefined}
+        onPreviewFile={() => undefined}
+      />,
+    );
+    const realtime = renderToStaticMarkup(
+      <MessageProcessTrace
+        content="Answer"
+        processRuntime={{
+          runId: "run-realtime",
+          lastSeq: 2,
+          phase: "answering",
+          steps: [ragStep],
+          startedAt: "2026-08-08T00:00:00.000Z",
+        }}
+        isStreaming
+        isLast
+        onPreviewFile={() => undefined}
+      />,
+    );
+    popoverTestState.showContent = false;
+
+    for (const html of [historical, realtime]) {
+      expect(html.match(/notes\.txt/g)).toHaveLength(1);
+      expect(html).toContain('aria-label="ragSourceOpen"');
+      expect(html).toMatch(/<button[^>]*type="button"[^>]*aria-label="ragSourceOpen"/);
+      expect(html).not.toContain("text/plain");
+      expect(html).not.toContain("chunkIndex");
+      expect(html).not.toContain("similarity");
+    }
+  });
+
   it("无研究活动的轻量运行完成后不渲染研究摘要", () => {
     const html = renderToStaticMarkup(
       <MessageProcessTrace

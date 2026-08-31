@@ -8,6 +8,7 @@
  * 输出增强后的 messages(system 块里带文件上下文)+ ragStatus。
  */
 import { and, eq, inArray } from "drizzle-orm";
+import type { RagSource } from "@nekusora/contracts/chat";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { retrieve, type RetrieveStatus } from "./retrieve";
 import { estimateTokens } from "@/lib/tokens";
@@ -28,6 +29,7 @@ export interface BuildContextInput {
 export interface BuildContextOutput {
   messages: { role: string; content: string | unknown[] }[];
   ragStatus: RetrieveStatus | "full_text" | "skipped";
+  sources: RagSource[];
 }
 
 export async function buildMessagesWithFileContext(
@@ -49,7 +51,7 @@ export async function buildMessagesWithFileContext(
     );
 
   if (fileRows.length === 0) {
-    return { messages: input.messages, ragStatus: "skipped" };
+    return { messages: input.messages, ragStatus: "skipped", sources: [] };
   }
 
   // 决定模式:auto 根据文件大小分流
@@ -74,6 +76,7 @@ async function buildFullContext(
   s: any,
 ): Promise<BuildContextOutput> {
   const parts: string[] = [];
+  const sources: RagSource[] = [];
   let used = 0;
   for (const f of fileRows) {
     const fileId = f.id as string;
@@ -87,14 +90,20 @@ async function buildFullContext(
     const cost = estimateTokens(fullText);
     if (used + cost > FULL_CONTEXT_TOKEN_LIMIT) break;
     parts.push(`--- 文件:${f.filename as string} ---\n${fullText}`);
+    sources.push({
+      fileId,
+      filename: f.filename as string,
+      mime: f.mime as string,
+    });
     used += cost;
   }
   if (parts.length === 0) {
-    return { messages: input.messages, ragStatus: "rag_empty" };
+    return { messages: input.messages, ragStatus: "rag_empty", sources: [] };
   }
   return {
     messages: injectContext(input.messages, parts.join("\n\n")),
     ragStatus: "full_text",
+    sources,
   };
 }
 
@@ -106,22 +115,33 @@ async function buildRagContext(
   const ownedFileIds = fileRows.map((file) => file.id as string);
   const result = await retrieve(input.query, ownedFileIds, { userId: input.userId });
   if (result.status !== "rag_hit" || result.chunks.length === 0) {
-    return { messages: input.messages, ragStatus: result.status };
+    return { messages: input.messages, ragStatus: result.status, sources: [] };
   }
+  const ownedFiles = new Map(fileRows.map((file) => [file.id as string, {
+    fileId: file.id as string,
+    filename: file.filename as string,
+    mime: file.mime as string,
+  }]));
   // 按文件分组拼成上下文块
-  const byFile = new Map<string, { filename: string; fragments: string[] }>();
+  const byFile = new Map<string, { source: RagSource; fragments: string[] }>();
   for (const c of result.chunks) {
-    const entry = byFile.get(c.fileId) ?? { filename: c.filename, fragments: [] };
+    const source = ownedFiles.get(c.fileId);
+    if (!source) continue;
+    const entry = byFile.get(c.fileId) ?? { source, fragments: [] };
     entry.fragments.push(c.content);
     byFile.set(c.fileId, entry);
   }
+  if (byFile.size === 0) {
+    return { messages: input.messages, ragStatus: "rag_empty", sources: [] };
+  }
   const parts: string[] = [];
   for (const [, e] of byFile) {
-    parts.push(`--- 文件:${e.filename}(检索片段) ---\n${e.fragments.join("\n\n---\n\n")}`);
+    parts.push(`--- 文件:${e.source.filename}(检索片段) ---\n${e.fragments.join("\n\n---\n\n")}`);
   }
   return {
     messages: injectContext(input.messages, parts.join("\n\n")),
     ragStatus: "rag_hit",
+    sources: [...byFile.values()].map((entry) => entry.source),
   };
 }
 

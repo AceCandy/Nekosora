@@ -6,7 +6,7 @@ Apply this contract when changing Chat context preparation, reasoning/tool/searc
 
 ## 2. Signatures
 
-- Shared contract owner: `@nekusora/contracts/chat` exports `ChatProcessEvent`, `ChatProcessSnapshot`, and their runtime guards.
+- Shared contract owner: `@nekusora/contracts/chat` exports `ChatProcessEvent`, `ChatProcessSnapshot`, `RagSource`, and their runtime guards.
 - `ChatProcessRecorder` owns run-local monotonic `seq`, phase progression, step upsert, terminal projection, and best-effort event emission.
 - SSE process frame: `ChatProcessEvent` with `type="trace"`, `version=1`, `runId`, `seq`, `at`, `phase`, and either `action="phase"` or `action="step"`.
 - Persistent message field: `ProcessTrace.process?: { version: 1; runs: ChatProcessRunSnapshot[] }`.
@@ -18,12 +18,15 @@ Apply this contract when changing Chat context preparation, reasoning/tool/searc
 - Phases only advance: `preparing -> processing -> answering -> completed|failed|interrupted`. The first non-empty text delta must be preceded by `answering`.
 - Steps use stable IDs. Tool and Web Search steps include `toolCallId`; consumers never join by tool name or array position.
 - Trace payloads are allowlisted metadata only. Do not include prompt text, memory text, hidden reasoning, tool arguments/results, search query/snippets, secrets, or raw provider errors.
+- `kind="rag"` may carry `data.sources?: RagSource[]`, where each source has exactly three non-empty strings: `fileId`, `filename`, and `mime`. Raw chunk content, `chunkIndex`, `similarity`, storage paths, and extra keys are forbidden.
+- Full-context RAG records only files actually admitted to the token budget. Vector RAG records only final packed hits, deduplicated by first `fileId`, and resolves display metadata from the owner-filtered file rows rather than retrieval payloads.
 - The completion transaction stores a projected terminal snapshot. The terminal trace event is emitted only after persistence succeeds; persistence failure emits `failed`.
 - Continue appends a run snapshot and preserves older runs and Web Search calls. Regenerate/version switch uses the selected assistant's own snapshot.
 - The SSE parser validates trace frames once with the shared guard and preserves the existing `finish -> terminal(success) -> [DONE]` contract.
 - If a best-effort terminal trace is lost, the validated SSE terminal locally converges the client runtime to the same terminal phase.
 - UI projects raw steps into user-facing research stages (`understand/context/reasoning/search/read`). When the canonical phase enters `answering`, the research summary immediately becomes completed before the first text delta is rendered; its duration is `startedAt -> firstContentAt` and no longer changes during answer streaming. It never adds a redundant answer-generation stage or renders prompt construction, hidden reasoning, raw tool names/arguments, or provider attempt paths.
 - The disclosure is collapsed by default: while active its summary shows only the current stage, safe query, and source count; a run transition to terminal collapses it once. Sources are a separate disclosure below the semantic timeline, never an execution step.
+- RAG sources use real file buttons and the existing `FilePreviewModal -> /api/files/{fileId}` owner-authorized path. Core and Web step cloning must copy both the `sources` array and each source object so live state, snapshots, and sibling versions do not share mutable references.
 
 ## 4. Validation & Error Matrix
 
@@ -32,6 +35,7 @@ Apply this contract when changing Chat context preparation, reasoning/tool/searc
 | Strict start fails | No trace run | Existing `start_failed` terminal |
 | Out-of-order, duplicate, or cross-run event | Reducer ignores it | Stream continues |
 | Event contains an extra/sensitive field | SSE parser rejects protocol | Message becomes interrupted |
+| RAG source is missing a required field or has any extra field | Shared guard rejects the event/snapshot | No private source metadata is projected |
 | Trace emitter fails | Recorder counts/logs safe failure | Generation continues |
 | Completion persistence fails | Live process converges to failed; no fake snapshot | `persistence_failed` terminal |
 | Client Abort | Running steps and phase converge to interrupted | Partial content is preserved |
@@ -41,9 +45,12 @@ Apply this contract when changing Chat context preparation, reasoning/tool/searc
 
 - Good: memory, prompt, reasoning, Web Search, sources, and tools appear under one disclosure before the answer.
 - Good: two Web Search calls update separate steps by `toolCallId` and preserve their own backend/citations.
+- Good: multiple packed chunks from one private file produce one `{ fileId, filename, mime }` source and one owner-authorized preview button.
 - Base: an old message without `process` still renders the legacy reasoning/tool/source projection.
+- Base: skipped/empty RAG and old RAG steps without `sources` keep their existing behavior.
 - Bad: infer the whole process status from `content` or `isStreaming` when a server phase exists.
 - Bad: persist only the latest continue run or copy tool/search payloads into the process snapshot.
+- Bad: expose retrieval snippets, scores, chunk indexes, storage paths, or public file URLs as RAG provenance.
 
 ## 6. Tests Required
 
@@ -53,6 +60,7 @@ Apply this contract when changing Chat context preparation, reasoning/tool/searc
 - SSE tests cover valid trace frames, invalid frames, terminal-after-trace, and terminal fallback convergence.
 - Store tests cover send, regenerate, edit-and-resend, continue, multi-run preservation, Abort, and failure.
 - History/version tests assert snapshot round-trip and selected-version isolation.
+- RAG tests assert full-context budget admission, packed-hit deduplication, strict source allowlisting, SSE preservation, nested clone isolation, history/version round-trip, and owner-preview callback wiring.
 - Component/model tests cover semantic step grouping, hidden internal details, `answering` completing research at `firstContentAt`, frozen research duration during answer streaming, current-stage summaries, terminal auto-collapse, partial-source warning, legacy fallback, independent sources, keyboard disclosure, and reduced motion.
 
 ## 7. Wrong vs Correct
@@ -74,4 +82,12 @@ const research = buildResearchStatus({
   startedAt: runtime.startedAt,
   endedAt: runtime.endedAt,
 });
+```
+
+```ts
+// Wrong: expose retrieval internals or every candidate file.
+data.sources = result.chunks;
+
+// Correct: emit only owner-filtered files that actually entered model context.
+data.sources = packedFileIds.map((fileId) => ({ fileId, filename, mime }));
 ```

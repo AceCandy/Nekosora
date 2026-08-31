@@ -82,6 +82,31 @@ describe("ChatProcessRecorder", () => {
     expect(onEmitError).toHaveBeenCalledTimes(2);
     expect(recorder.snapshot()?.phase).toBe("failed");
   });
+
+  it("RAG 来源快照不共享可变引用", async () => {
+    const recorder = new ChatProcessRecorder({
+      runId: "run-rag",
+      now: advancingClock(),
+      emit: vi.fn(),
+    });
+    const sources = [{ fileId: "file-1", filename: "notes.txt", mime: "text/plain" }];
+
+    await recorder.recordStep({
+      id: "rag",
+      kind: "rag",
+      status: "completed",
+      data: { fileCount: 1, sources },
+    });
+    const first = recorder.projectedSnapshot("completed");
+    const firstStep = first.steps[0];
+    if (firstStep.kind !== "rag" || !firstStep.data?.sources) throw new Error("missing sources");
+    firstStep.data.sources[0].filename = "changed.txt";
+
+    const second = recorder.projectedSnapshot("completed");
+    expect(second.steps[0]).toMatchObject({
+      data: { sources: [{ filename: "notes.txt" }] },
+    });
+  });
 });
 
 describe("Chat process contract", () => {
@@ -108,6 +133,39 @@ describe("Chat process contract", () => {
     };
 
     expect(isChatProcessEvent(event)).toBe(false);
+  });
+
+  it("RAG 来源严格限制为安全文件字段", () => {
+    const event = {
+      type: "trace",
+      version: 1,
+      action: "step",
+      runId: "run-1",
+      seq: 1,
+      at: "2026-08-07T00:00:00.000Z",
+      phase: "preparing",
+      step: {
+        id: "rag",
+        kind: "rag",
+        status: "completed",
+        data: {
+          fileCount: 1,
+          sources: [{ fileId: "file-1", filename: "notes.txt", mime: "text/plain" }],
+        },
+      },
+    };
+
+    expect(isChatProcessEvent(event)).toBe(true);
+    expect(isChatProcessEvent({
+      ...event,
+      step: {
+        ...event.step,
+        data: {
+          ...event.step.data,
+          sources: [{ ...event.step.data.sources[0], content: "SENTINEL" }],
+        },
+      },
+    })).toBe(false);
   });
 
   it("按 run 追加快照且替换同 run", () => {

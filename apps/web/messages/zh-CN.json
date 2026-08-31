@@ -227,6 +227,7 @@
     "researchStepRead": "阅读并筛选 {count} 个来源",
     "researchPartialSources": "部分来源获取失败，已使用 {count} 个可用来源继续生成答案。",
     "researchViewSources": "查看 {count} 个引用来源",
+    "ragSourceOpen": "预览文件来源：{filename}",
     "webSearch": "联网搜索",
     "prevVersion": "上一个版本",
     "nextVersion": "下一个版本",

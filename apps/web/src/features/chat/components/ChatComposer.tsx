@@ -448,6 +448,7 @@ export default function ChatComposer({
           onEdit={handleEditAndResend}
           onSwitchVersion={runtime.switchVersion}
           onOpenArtifact={setActiveArtifact}
+          onPreviewFile={setPreviewFile}
           onDelete={runtime.deleteMessage}
           onContinue={handleContinue}
           onFeedbackChange={runtime.setMessageFeedbackLocal}

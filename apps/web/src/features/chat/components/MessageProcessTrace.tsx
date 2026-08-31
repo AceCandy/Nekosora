@@ -9,6 +9,7 @@ import {
   Check,
   ChevronDown,
   ExternalLink,
+  FileText,
   Sparkles,
 } from "lucide-react";
 import type { ChatProcessPhase } from "@nekusora/contracts/chat";
@@ -23,6 +24,7 @@ import {
   type ChatProcessRuntimeState,
 } from "@/features/chat/model/processTrace";
 import { Popover } from "@/shared/ui/Popover";
+import type { PreviewableFile } from "@/shared/components/file-preview/FilePreviewModal";
 
 const RUNNING_STAGE_I18N: Record<ResearchStage, string> = {
   understand: "researchRunningUnderstand",
@@ -49,6 +51,7 @@ interface MessageProcessTraceProps {
   processRuntime?: ChatProcessRuntimeState;
   isStreaming: boolean;
   isLast: boolean;
+  onPreviewFile?: (file: PreviewableFile) => void;
 }
 
 function formatDuration(durationMs: number): string {
@@ -86,6 +89,7 @@ export function MessageProcessTrace({
   processRuntime,
   isStreaming,
   isLast,
+  onPreviewFile,
 }: MessageProcessTraceProps) {
   const t = useTranslations("chat");
   const historicalRun = latestProcessRun(processTrace);
@@ -93,12 +97,18 @@ export function MessageProcessTrace({
     ?? historicalRun?.phase
     ?? (isStreaming && isLast ? "preparing" : "completed");
   const canonicalSteps = processRuntime?.steps ?? historicalRun?.steps ?? [];
-  const tracedSourceCount = canonicalSteps.reduce((count, step) => {
+  const ragSources = canonicalSteps
+    .flatMap((step) => step.kind === "rag" ? step.data?.sources ?? [] : [])
+    .filter((source, index, sources) =>
+      sources.findIndex((candidate) => candidate.fileId === source.fileId) === index);
+  const tracedWebSourceCount = canonicalSteps.reduce((count, step) => {
     if (step.kind === "sources") return Math.max(count, step.data?.count ?? 0);
     if (step.kind === "web_search") return Math.max(count, step.data?.citationCount ?? 0);
     return count;
   }, 0);
-  const sourceCount = Math.max(searchResults?.length ?? 0, tracedSourceCount);
+  const sourceCount = Math.max(searchResults?.length ?? 0, tracedWebSourceCount)
+    + ragSources.length;
+  const visibleSourceCount = (searchResults?.length ?? 0) + ragSources.length;
   const hasTrace = Boolean(
     canonicalSteps.length
     || reasoning
@@ -275,16 +285,16 @@ export function MessageProcessTrace({
             ))}
           </ol>
 
-          {searchResults && searchResults.length > 0 && (
+          {visibleSourceCount > 0 && (
             <details className="group/sources mt-3 border-t border-morning-mist/60 pt-1 ">
               <summary className="touch-target flex min-h-9 cursor-pointer list-none items-center justify-between gap-3 rounded-md px-1.5 py-1 text-ui-caption font-medium text-space-ink/70 transition-colors duration-150 hover:text-space-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue  ">
-                <span>{t("researchViewSources", { count: searchResults.length })}</span>
+                <span>{t("researchViewSources", { count: visibleSourceCount })}</span>
                 <span className="flex items-center gap-1 text-ink-tertiary ">
                   <ChevronDown className="size-4 transition-transform duration-200 group-open/sources:rotate-180 motion-reduce:transition-none" aria-hidden="true" />
                 </span>
               </summary>
               <div className="space-y-1 pb-1 pt-1 group-open/sources:animate-in group-open/sources:fade-in group-open/sources:slide-in-from-top-1 group-open/sources:duration-200 motion-reduce:animate-none">
-                {searchResults.map((result, index) => (
+                {searchResults?.map((result, index) => (
                   <a
                     key={`${result.url}-${index}`}
                     href={result.url}
@@ -307,6 +317,21 @@ export function MessageProcessTrace({
                     </span>
                     <ExternalLink className="size-3.5 shrink-0 text-space-ink/35 transition-colors group-hover/source:text-sora-blue " aria-hidden="true" />
                   </a>
+                ))}
+                {ragSources.map((source) => (
+                  <button
+                    key={source.fileId}
+                    type="button"
+                    aria-label={t("ragSourceOpen", { filename: source.filename })}
+                    disabled={!onPreviewFile}
+                    onClick={() => onPreviewFile?.(source)}
+                    className="group/source flex min-h-12 w-full min-w-0 items-center gap-3 rounded-md px-2 py-1.5 text-left text-ui-caption transition-colors duration-150 hover:bg-nebula-silver/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <FileText className="size-4 shrink-0 text-space-ink/35 transition-colors group-hover/source:text-sora-blue" aria-hidden="true" />
+                    <span className="min-w-0 truncate font-medium text-space-ink/80">
+                      {source.filename}
+                    </span>
+                  </button>
                 ))}
               </div>
             </details>
