@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import type { FormDataSerializableAction } from "@/features/providers/types";
 import Modal from "@/shared/ui/Modal";
@@ -67,11 +67,21 @@ export default function RouteFormDialog({
 }: RouteFormDialogProps) {
   const t = useTranslations("models");
   const isEdit = mode === "edit";
+  const initialProvider = providers.find((provider) => provider.id === initial?.providerId);
+  const initialApiFormat = initial?.apiFormat
+    ?? (initialProvider ? defaultRouteApiFormat(initialProvider.protocol) : "");
+  const apiFormatIsOverridden = Boolean(
+    initial?.apiFormat
+      && initialProvider
+      && initial.apiFormat !== defaultRouteApiFormat(initialProvider.protocol),
+  );
   const [formKey, setFormKey] = useState(0);
   // provider 选择需受控,以便拉取按钮据此请求对应上游。
   const [providerId, setProviderId] = useState(initial?.providerId ?? "");
-  const [apiFormat, setApiFormat] = useState<RouteApiFormat | "">(initial?.apiFormat ?? "");
-  const apiFormatTouched = useRef(Boolean(initial?.apiFormat));
+  const [apiFormat, setApiFormat] = useState<RouteApiFormat | "">(initialApiFormat);
+  const [advancedOpen, setAdvancedOpen] = useState(apiFormatIsOverridden);
+  const apiFormatTouched = useRef(apiFormatIsOverridden);
+  const apiFormatId = useId();
   const upstreamInputRef = useRef<HTMLInputElement>(null);
   // upstreamModelName 受控:兼容手填、拉取器 ref 写回(经 input 事件同步)与下面的自动匹配填充。
   const [upstreamModelName, setUpstreamModelName] = useState(initial?.upstreamModelName ?? "");
@@ -140,6 +150,7 @@ export default function RouteFormDialog({
         onSubmit={() => setTimeout(handleClose, 0)}
         className="space-y-4"
       >
+        <input type="hidden" name="apiFormat" value={apiFormat} />
         <label className="block">
           <span className="text-ui-body font-medium">{t("upstreamProviderLabel")}</span>
           <select
@@ -159,25 +170,6 @@ export default function RouteFormDialog({
             <option value="">{t("selectProvider")}</option>
             {providers.map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-        </label>
-
-        <label className="block">
-          <span className="text-ui-body font-medium">{t("apiFormatLabel")}</span>
-          <select
-            name="apiFormat"
-            required
-            value={apiFormat}
-            onChange={(e) => {
-              apiFormatTouched.current = true;
-              setApiFormat(e.target.value as RouteApiFormat);
-            }}
-            className={inputCls}
-          >
-            <option value="">{t("selectApiFormat")}</option>
-            {formatOptions.map((format) => (
-              <option key={format} value={format}>{formatLabels[format]}</option>
             ))}
           </select>
         </label>
@@ -205,6 +197,42 @@ export default function RouteFormDialog({
             )}
           </div>
         </label>
+
+        {modelType === "chat" && (
+          <details
+            open={advancedOpen}
+            onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}
+            className="rounded-md border border-morning-mist px-3 py-2"
+          >
+            <summary className="touch-target cursor-pointer text-ui-body font-medium text-space-ink">
+              {t("advancedSettings")}
+              {apiFormat && (
+                <span className="ml-2 text-ui-caption font-normal text-ink-tertiary">
+                  {formatLabels[apiFormat]}
+                </span>
+              )}
+            </summary>
+            <div className="pt-3">
+              <label htmlFor={apiFormatId} className="text-ui-body font-medium">
+                {t("apiFormatLabel")}
+              </label>
+              <select
+                id={apiFormatId}
+                value={apiFormat}
+                onChange={(e) => {
+                  apiFormatTouched.current = true;
+                  setApiFormat(e.target.value as RouteApiFormat);
+                }}
+                className={inputCls}
+              >
+                <option value="">{t("selectApiFormat")}</option>
+                {formatOptions.map((format) => (
+                  <option key={format} value={format}>{formatLabels[format]}</option>
+                ))}
+              </select>
+            </div>
+          </details>
+        )}
 
         <div className="grid grid-cols-2 gap-4">
           <label className="block">
