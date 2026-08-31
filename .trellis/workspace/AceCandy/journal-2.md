@@ -1627,3 +1627,25 @@ Added bounded model-list reads, same-origin redirect controls, model-count limit
 ### Status
 
 [OK] **Completed**
+
+
+## Session 135: Add offline request preflight
+<!-- trellis-session: v=2 fp=aec9dc175a79b805 -->
+
+**Date**: 2026-09-01
+**Task**: Add offline request preflight
+**Branch**: `main`
+
+### Summary
+
+统一拦截浏览器明确离线时的聊天与附件请求，保留可在线重试状态，并复用 Sidebar 离线判断。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `11b9c18` | fix: add offline request preflight |
+
+### Status
+
+[OK] **Completed**
