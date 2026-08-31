@@ -162,6 +162,7 @@
     "attachUploading": "(上传中...)",
     "attachError": "(失败)",
     "attachmentUploadFailed": "图片上传失败，请重试或移除后再发送",
+    "browserOffline": "当前网络已断开，请联网后重试",
     "attachmentLoadFailed": "图片无法加载",
     "attachRemove": "移除",
     "composerInputLabel": "对话输入框",

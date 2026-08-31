@@ -95,6 +95,67 @@ Composer 的选择保存是高频乐观持久化：Server Action 成功后不 `r
 
 ---
 
+## Scenario: 聊天请求明确离线预检
+
+### 1. Scope / Trigger
+
+修改聊天发送、重新生成、编辑重发、续写、附件上传或 Sidebar 分页请求时，适用本节。
+
+### 2. Signatures
+
+- `isBrowserOffline(): boolean`：仅 `navigator.onLine === false` 返回 `true`。
+- `BROWSER_OFFLINE_REASON = "browser_offline"`：客户端离线拒绝的稳定原因码。
+- 四个聊天 Store action 通过可选 `onRequestRejected(reason)` 向 runtime hook 和 Composer 传递拒绝原因。
+
+### 3. Contracts
+
+- SSR、缺少 `navigator`、`onLine` 未知或为 `true` 时放行；在线标记不代表请求一定成功，真实网络错误仍走原有处理。
+- 四个聊天 action 必须在任何 `streaming`、AbortController、Server Action、附件上传和乐观消息写入之前拒绝明确离线请求。
+- 离线不得创建新会话、迁移 runtime、消费附件、修改版本树或追加 assistant 错误正文。
+- 附件在上传前再次预检；明确离线时进入可重试 `error`，保留原 `File`，恢复在线后的 `uploadPending` 可重新上传。
+- Composer 把稳定原因码映射为 next-intl 文案；排队消息若被拒绝，必须恢复到输入框。Sidebar 复用同一判断函数并保持原 loading/failed 状态机。
+- 不为该契约增加在线监听器、探活、自动重放、全局网络 Store 或新请求依赖。
+
+### 4. Validation & Error Matrix
+
+| 条件 | 请求行为 | UI / Store 状态 |
+| --- | --- | --- |
+| `navigator.onLine === false` | 不调用 Server Action、upload、chat fetch 或 SSE | 原消息与版本树不变；显示离线文案 |
+| SSR / 缺少 navigator | 继续请求 | 由原有成功或网络错误路径收敛 |
+| `navigator.onLine === true` 但请求失败 | 已尝试请求 | 保留原真实网络失败处理 |
+| 附件选择时明确离线 | 不调用 upload fetch | 附件为 `error`，保留 File 供重试 |
+
+### 5. Good / Base / Bad Cases
+
+- Good：新会话离线发送只回调 `browser_offline`，不创建会话或乐观侧栏项；联网后用户可再次发送。
+- Good：离线续写保留原 assistant 正文、`runMetadata` 和版本关系。
+- Base：测试环境没有 navigator，Store 仍按既有请求 mock 正常执行。
+- Bad：先置 `streaming=true` 或创建会话，再检查离线；这会留下 spinner、空会话或被截断的版本树。
+
+### 6. Tests Required
+
+- 纯函数测试覆盖明确离线、在线、缺少 navigator 和缺少 `onLine`。
+- 四 action 参数化测试断言状态引用不变，Server Action、附件上传、fetch、SSE 与接受回调均未调用，并收到稳定原因码。
+- 覆盖离线后恢复在线的成功发送和运行态清理；UI 测试断言原因码请求 `browserOffline` 翻译键。
+- 附件与队列若有 Hook/浏览器测试夹具，覆盖 `error -> uploading -> uploaded` 重试和拒绝后草稿不丢失。
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong：预检发生在乐观状态写入之后。
+setStreaming(true);
+if (!navigator.onLine) return;
+
+// Correct：共享判断先拒绝，未知状态仍交给真实请求处理。
+if (isBrowserOffline()) {
+  onRequestRejected?.(BROWSER_OFFLINE_REASON);
+  return;
+}
+setStreaming(true);
+```
+
+---
+
 ## 乐观创建资源后的 URL 同步
 
 新会话(或任何「客户端先乐观渲染、再异步创建持久化资源」)场景，资源创建成功后要把 URL 切到真实路径。**必须用 `window.history.replaceState` 静默换 URL，不要用 `router.replace`**。

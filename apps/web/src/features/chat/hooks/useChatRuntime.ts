@@ -21,6 +21,8 @@ interface UseChatRuntimeOptions {
   uploadAttachments?: (convId: string) => Promise<ChatMessageAttachment[]>;
   /** /api/chat 接受附件后清理已消费的上传项。 */
   onAttachmentsConsumed?: (fileIds: string[]) => void;
+  /** 请求在客户端预检或服务端接受前被拒绝时通知上层。 */
+  onRequestRejected?: (reason: string) => void;
   /** 新会话建会后回调(用于上层更新活动会话 id);本 hook 会在此前静默替换 URL。 */
   onConversationCreated?: (newConvId: string) => void;
 }
@@ -38,6 +40,7 @@ export function useChatRuntime({
   hasAttachments = false,
   uploadAttachments,
   onAttachmentsConsumed,
+  onRequestRejected,
   onConversationCreated,
 }: UseChatRuntimeOptions = {}) {
   const router = useRouter();
@@ -116,7 +119,10 @@ export function useChatRuntime({
           uploadAttachments,
           onAttachmentsConsumed,
           onRequestAccepted: lifecycle?.onAccepted,
-          onRequestRejected: lifecycle?.onRejected,
+          onRequestRejected: (reason) => {
+            onRequestRejected?.(reason);
+            lifecycle?.onRejected?.(reason);
+          },
           onTitleUpdated: () => { if (!wasNewConversation.current) router.refresh(); },
           // 静默换 URL,不触发 Next.js RSC 导航(避免组件重挂、流式中断);同时通知上层更新活动会话 id。
           onConversationCreated: (newConvId) => {
@@ -125,14 +131,23 @@ export function useChatRuntime({
           },
         });
       },
-    [actions, key, hasAttachments, uploadAttachments, onAttachmentsConsumed, router, onConversationCreated],
+    [
+      actions,
+      key,
+      hasAttachments,
+      uploadAttachments,
+      onAttachmentsConsumed,
+      onRequestRejected,
+      router,
+      onConversationCreated,
+    ],
   );
 
   const regenerate = useMemo(
     () => (assistantPublicId: string, modelName: string, modelId: string) => {
-      void actions.regenerate(key, assistantPublicId, modelName, modelId);
+      void actions.regenerate(key, assistantPublicId, modelName, modelId, onRequestRejected);
     },
-    [actions, key],
+    [actions, key, onRequestRejected],
   );
 
   const editAndResend = useMemo(
@@ -150,9 +165,10 @@ export function useChatRuntime({
         attachmentFileIds,
         modelName,
         modelId,
+        onRequestRejected,
       );
     },
-    [actions, key],
+    [actions, key, onRequestRejected],
   );
 
   const deleteMessage = useMemo(
@@ -164,9 +180,15 @@ export function useChatRuntime({
 
   const continueGeneration = useMemo(
     () => (assistantPublicId: string, modelName: string, modelId: string) => {
-      void actions.continueGeneration(key, assistantPublicId, modelName, modelId);
+      void actions.continueGeneration(
+        key,
+        assistantPublicId,
+        modelName,
+        modelId,
+        onRequestRejected,
+      );
     },
-    [actions, key],
+    [actions, key, onRequestRejected],
   );
 
   const switchVersion = useMemo(

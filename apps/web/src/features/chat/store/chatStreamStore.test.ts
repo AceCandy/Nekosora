@@ -30,6 +30,7 @@ vi.mock("@/features/chat/actions/branch", () => ({
 }));
 
 import { NEW_CONVERSATION_KEY, useChatStreamStore } from "@/features/chat/store/chatStreamStore";
+import { BROWSER_OFFLINE_REASON } from "@/features/chat/lib/network";
 import type { ChatMessage, MessageRunMetadata, ToolCallRecord } from "@/features/chat/model/types";
 import type { SSEHandlers } from "@/features/chat/model/sse";
 
@@ -162,6 +163,149 @@ describe("chatStreamStore Composer 请求快照", () => {
     expect(JSON.parse(request.body as string)).toMatchObject({
       outputModeId: null,
       reasoning: "off",
+    });
+  });
+});
+
+describe("chatStreamStore 离线预检", () => {
+  type StreamAction = "send" | "regenerate" | "edit" | "continue";
+  const key = "conversation-offline";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useChatStreamStore.setState({
+      runtimes: {
+        [NEW_CONVERSATION_KEY]: {
+          messages: [],
+          streaming: false,
+          abortController: null,
+        },
+        [key]: {
+          messages: [
+            { role: "user", publicId: "user-1", content: "question" },
+            {
+              role: "assistant",
+              publicId: "assistant-1",
+              content: "answer",
+              runMetadata: finishMetadata,
+            },
+          ],
+          streaming: false,
+          abortController: null,
+        },
+      },
+      activeConversationId: key,
+      optimisticConversation: null,
+    });
+    mocks.retryFromMessage.mockResolvedValue({
+      newAssistantPublicId: "assistant-placeholder",
+      parentPublicId: "user-1",
+      messages: [{ role: "user", content: "question" }],
+    });
+    mocks.editMessage.mockResolvedValue({
+      messages: [{ role: "user", content: "edited" }],
+      attachments: [],
+    });
+    mocks.continueMessage.mockResolvedValue({
+      messages: [{ role: "assistant", content: "answer" }],
+    });
+    mocks.consumeChatSSE.mockResolvedValue("success");
+    vi.stubGlobal("navigator", { onLine: false });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("data: done\n\n")));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  async function invokeOfflineAction(
+    action: StreamAction,
+    onRequestRejected: (reason: string) => void,
+    uploadAttachments: () => Promise<never[]>,
+    onRequestAccepted: () => void,
+    onAttachmentsConsumed: () => void,
+  ) {
+    const store = useChatStreamStore.getState();
+    if (action === "send") {
+      await store.send(NEW_CONVERSATION_KEY, "next", sendOptions, {
+        hasAttachments: true,
+        uploadAttachments,
+        onRequestAccepted,
+        onRequestRejected,
+        onAttachmentsConsumed,
+      });
+    } else if (action === "regenerate") {
+      await store.regenerate(key, "assistant-1", "model-a", "model-id-a", onRequestRejected);
+    } else if (action === "edit") {
+      await store.editAndResend(
+        key,
+        "user-1",
+        "edited",
+        [],
+        "model-a",
+        "model-id-a",
+        onRequestRejected,
+      );
+    } else {
+      await store.continueGeneration(
+        key,
+        "assistant-1",
+        "model-a",
+        "model-id-a",
+        onRequestRejected,
+      );
+    }
+  }
+
+  it.each(["send", "regenerate", "edit", "continue"] as const)(
+    "%s 在明确离线时不产生请求或乐观状态",
+    async (action) => {
+      const onRequestRejected = vi.fn();
+      const uploadAttachments = vi.fn<() => Promise<never[]>>().mockResolvedValue([]);
+      const onRequestAccepted = vi.fn();
+      const onAttachmentsConsumed = vi.fn();
+      const stateBefore = useChatStreamStore.getState();
+
+      await invokeOfflineAction(
+        action,
+        onRequestRejected,
+        uploadAttachments,
+        onRequestAccepted,
+        onAttachmentsConsumed,
+      );
+
+      expect(useChatStreamStore.getState()).toBe(stateBefore);
+      expect(onRequestRejected).toHaveBeenCalledOnce();
+      expect(onRequestRejected).toHaveBeenCalledWith(BROWSER_OFFLINE_REASON);
+      expect(onRequestAccepted).not.toHaveBeenCalled();
+      expect(uploadAttachments).not.toHaveBeenCalled();
+      expect(onAttachmentsConsumed).not.toHaveBeenCalled();
+      expect(mocks.createConversation).not.toHaveBeenCalled();
+      expect(mocks.retryFromMessage).not.toHaveBeenCalled();
+      expect(mocks.editMessage).not.toHaveBeenCalled();
+      expect(mocks.continueMessage).not.toHaveBeenCalled();
+      expect(fetch).not.toHaveBeenCalled();
+      expect(mocks.consumeChatSSE).not.toHaveBeenCalled();
+    },
+  );
+
+  it("恢复在线后允许重新发送并清理运行态", async () => {
+    const onRequestRejected = vi.fn();
+
+    await useChatStreamStore.getState().send(key, "next", sendOptions, {
+      onRequestRejected,
+    });
+    vi.stubGlobal("navigator", { onLine: true });
+    await useChatStreamStore.getState().send(key, "next", sendOptions, {
+      onRequestRejected,
+    });
+
+    expect(onRequestRejected).toHaveBeenCalledOnce();
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(mocks.consumeChatSSE).toHaveBeenCalledOnce();
+    expect(useChatStreamStore.getState().runtimes[key]).toMatchObject({
+      streaming: false,
+      abortController: null,
     });
   });
 });

@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   retry: vi.fn(),
   send: vi.fn(),
   handleUpload: vi.fn(),
+  translate: vi.fn<(key: string) => string>(),
 }));
 
 interface CapturedToolbarProps {
@@ -46,6 +47,7 @@ interface CapturedHeaderProps {
 
 interface CapturedRuntimeOptions {
   onConversationCreated?: (conversationId: string) => void;
+  onRequestRejected?: (reason: string) => void;
 }
 
 let capturedToolbar: CapturedToolbarProps | null = null;
@@ -61,12 +63,7 @@ vi.mock("next/image", () => ({
   default: () => React.createElement("span", { "data-image": "true" }),
 }));
 vi.mock("next-intl", () => ({
-  useTranslations: () => (key: string) => ({
-    composerSyncFailed: "输入区设置未同步",
-    newConversation: "新对话",
-    retry: "重试",
-    welcomeTitle: "Nekusora",
-  })[key] ?? key,
+  useTranslations: () => mocks.translate,
 }));
 vi.mock("@/features/artifacts/ArtifactPanel", () => ({
   ArtifactPanel: () => null,
@@ -195,6 +192,13 @@ function renderComposer(
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.translate.mockImplementation((key) => ({
+    browserOffline: "当前网络已断开，请联网后重试",
+    composerSyncFailed: "输入区设置未同步",
+    newConversation: "新对话",
+    retry: "重试",
+    welcomeTitle: "Nekusora",
+  })[key] ?? key);
   capturedToolbar = null;
   capturedInputBox = null;
   capturedMessageList = null;
@@ -313,6 +317,14 @@ describe("ChatComposer coordinator integration", () => {
     capturedRuntimeOptions?.onConversationCreated?.("conversation-new");
 
     expect(mocks.adoptConversation).toHaveBeenCalledWith("conversation-new", createSnapshot);
+  });
+
+  it("maps the stable offline reason to localized copy", () => {
+    renderComposer();
+
+    capturedRuntimeOptions?.onRequestRejected?.("browser_offline");
+
+    expect(mocks.translate).toHaveBeenCalledWith("browserOffline");
   });
 
   it("renders an accessible unsynced state and retries through the coordinator", () => {

@@ -26,6 +26,10 @@ import {
   reduceChatProcessEvent,
   snapshotFromProcessRuntime,
 } from "@/features/chat/model/processTrace";
+import {
+  BROWSER_OFFLINE_REASON,
+  isBrowserOffline,
+} from "@/features/chat/lib/network";
 
 /** 新会话(尚无会话 id)在 store 内使用的隔离键。 */
 export const NEW_CONVERSATION_KEY = "__new__";
@@ -43,6 +47,8 @@ interface ConversationRuntime {
   streaming: boolean;
   abortController: AbortController | null;
 }
+
+type RequestRejected = (reason: string) => void;
 
 export interface SendOptions {
   /** 对外模型名(子任务/用量日志/会话持久化沿用 name)。 */
@@ -88,13 +94,19 @@ interface ChatStreamState {
       uploadAttachments?: (convId: string) => Promise<ChatMessageAttachment[]>;
       onAttachmentsConsumed?: (fileIds: string[]) => void;
       onRequestAccepted?: () => void;
-      onRequestRejected?: (message: string) => void;
+      onRequestRejected?: RequestRejected;
       onUserMessagePublicId?: (publicId: string) => void;
       onTitleUpdated?: () => void;
       onConversationCreated?: (newConvId: string) => void;
     },
   ) => Promise<void>;
-  regenerate: (key: string, assistantPublicId: string, model: string, modelId: string) => Promise<void>;
+  regenerate: (
+    key: string,
+    assistantPublicId: string,
+    model: string,
+    modelId: string,
+    onRequestRejected?: RequestRejected,
+  ) => Promise<void>;
   editAndResend: (
     key: string,
     userPublicId: string,
@@ -102,9 +114,16 @@ interface ChatStreamState {
     attachmentFileIds: string[],
     model: string,
     modelId: string,
+    onRequestRejected?: RequestRejected,
   ) => Promise<void>;
   deleteMessage: (key: string, publicId: string) => Promise<void>;
-  continueGeneration: (key: string, assistantPublicId: string, model: string, modelId: string) => Promise<void>;
+  continueGeneration: (
+    key: string,
+    assistantPublicId: string,
+    model: string,
+    modelId: string,
+    onRequestRejected?: RequestRejected,
+  ) => Promise<void>;
   switchVersion: (key: string, publicId: string, direction: "prev" | "next") => Promise<void>;
   refreshVersionInfo: (key: string, publicId: string) => Promise<void>;
   /** 同步某条消息的反馈(乐观更新 / 失败回滚由调用方控制)。 */
@@ -115,6 +134,12 @@ interface ChatStreamState {
 /** 读取某会话运行时,不存在则返回空壳(避免 undefined)。 */
 function getRuntime(state: ChatStreamState, key: string): ConversationRuntime {
   return state.runtimes[key] ?? { messages: [], streaming: false, abortController: null };
+}
+
+function rejectOfflineRequest(onRequestRejected?: RequestRejected): boolean {
+  if (!isBrowserOffline()) return false;
+  onRequestRejected?.(BROWSER_OFFLINE_REASON);
+  return true;
 }
 
 /** 不可变更新某会话运行时。 */
@@ -604,6 +629,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
   send: async (key, text, opts, hooks) => {
     const rt = getRuntime(get(), key);
     if ((!text.trim() && !hooks?.hasAttachments) || !opts.model || rt.streaming) return;
+    if (rejectOfflineRequest(hooks?.onRequestRejected)) return;
     set((s) => patchRuntime(s, key, (r) => ({ ...r, streaming: true })));
 
     const controller = new AbortController();
@@ -785,9 +811,10 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
     }
   },
 
-  regenerate: async (key, assistantPublicId, model, modelId) => {
+  regenerate: async (key, assistantPublicId, model, modelId, onRequestRejected) => {
     const rt = getRuntime(get(), key);
     if (key === NEW_CONVERSATION_KEY || rt.streaming || !assistantPublicId) return;
+    if (rejectOfflineRequest(onRequestRejected)) return;
     set((s) => patchRuntime(s, key, (r) => ({ ...r, streaming: true })));
     const controller = new AbortController();
     set((s) => patchRuntime(s, key, (r) => ({ ...r, abortController: controller })));
@@ -889,7 +916,15 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
     }
   },
 
-  editAndResend: async (key, userPublicId, newContent, attachmentFileIds, model, modelId) => {
+  editAndResend: async (
+    key,
+    userPublicId,
+    newContent,
+    attachmentFileIds,
+    model,
+    modelId,
+    onRequestRejected,
+  ) => {
     const rt = getRuntime(get(), key);
     if (
       key === NEW_CONVERSATION_KEY
@@ -897,6 +932,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
       || !userPublicId
       || (!newContent.trim() && attachmentFileIds.length === 0)
     ) return;
+    if (rejectOfflineRequest(onRequestRejected)) return;
     set((s) => patchRuntime(s, key, (r) => ({ ...r, streaming: true })));
     const controller = new AbortController();
     set((s) => patchRuntime(s, key, (r) => ({ ...r, abortController: controller })));
@@ -1008,11 +1044,12 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
     }
   },
 
-  continueGeneration: async (key, assistantPublicId, model, modelId) => {
+  continueGeneration: async (key, assistantPublicId, model, modelId, onRequestRejected) => {
     const rt = getRuntime(get(), key);
     if (key === NEW_CONVERSATION_KEY || rt.streaming || !assistantPublicId) return;
     const assistantIdx = rt.messages.findIndex((x) => x.publicId === assistantPublicId);
     if (assistantIdx < 0) return; // 续写必须落在既有 assistant 消息上
+    if (rejectOfflineRequest(onRequestRejected)) return;
     set((s) => patchRuntime(s, key, (r) => ({
       ...r,
       streaming: true,

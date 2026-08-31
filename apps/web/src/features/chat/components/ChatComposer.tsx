@@ -25,6 +25,7 @@ import {
   resolveComposerSnapshot,
   type ComposerSelectionState,
 } from "@/features/chat/model/composerState";
+import { BROWSER_OFFLINE_REASON } from "@/features/chat/lib/network";
 
 export type { ChatMessage, ModelOption, CardOption, OutputModeOption, RenderStyleOption } from "@/features/chat/model/types";
 
@@ -169,12 +170,16 @@ export default function ChatComposer({
     clearConsumedAttachments,
     uploadPending,
   } = useChatAttachments(activeConvId ?? null);
+  const handleRequestRejected = useCallback((reason: string) => {
+    setSendError(reason === BROWSER_OFFLINE_REASON ? t("browserOffline") : reason);
+  }, [t]);
   const runtime = useChatRuntime({
     conversationId: activeConvId ?? null,
     initialMessages,
     hasAttachments: attached.length > 0,
     uploadAttachments: uploadPending,
     onAttachmentsConsumed: clearConsumedAttachments,
+    onRequestRejected: handleRequestRejected,
     onConversationCreated: (newConversationId) => {
       const persistedSnapshot = pendingCreateSnapshotRef.current ?? composer.getSnapshot();
       composer.adoptConversation(newConversationId, persistedSnapshot);
@@ -196,6 +201,7 @@ export default function ChatComposer({
   const { regenerate, editAndResend, continueGeneration } = runtime;
   const handleRegenerate = useCallback(
     (publicId: string, modelId: string) => {
+      setSendError(null);
       const name = models.find((m) => m.modelId === modelId)?.name ?? modelId;
       regenerate(publicId, name, modelId);
     },
@@ -203,13 +209,17 @@ export default function ChatComposer({
   );
   const handleEditAndResend = useCallback(
     (publicId: string, newContent: string, attachmentFileIds: string[], modelId: string) => {
+      setSendError(null);
       const name = models.find((m) => m.modelId === modelId)?.name ?? modelId;
       editAndResend(publicId, newContent, attachmentFileIds, name, modelId);
     },
     [models, editAndResend],
   );
   const handleContinue = useCallback(
-    (id: string) => continueGeneration(id, modelName, model),
+    (id: string) => {
+      setSendError(null);
+      continueGeneration(id, modelName, model);
+    },
     [continueGeneration, modelName, model],
   );
   const sendWithCurrentSnapshot = (
@@ -255,7 +265,11 @@ export default function ChatComposer({
       if (next === undefined) return;
       queueRef.current = rest;
       setQueue(rest);
-      sendRef.current(next);
+      sendRef.current(next, {
+        onRejected: () => {
+          setInput((current) => (current.trim() ? `${current}\n${next}` : next));
+        },
+      });
     });
     return () => cancelAnimationFrame(raf);
   }, [runtime.streaming]);
@@ -304,9 +318,8 @@ export default function ChatComposer({
         setInput("");
         setSendError(null);
       },
-      onRejected: (message) => {
+      onRejected: () => {
         setInput((current) => current || submittedInput);
-        setSendError(message);
       },
     });
   };

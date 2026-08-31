@@ -162,6 +162,7 @@
     "attachUploading": "(uploading...)",
     "attachError": "(failed)",
     "attachmentUploadFailed": "Image upload failed. Retry or remove it before sending.",
+    "browserOffline": "You are offline. Reconnect and try again.",
     "attachmentLoadFailed": "Image unavailable",
     "attachRemove": "Remove",
     "composerInputLabel": "Message input",

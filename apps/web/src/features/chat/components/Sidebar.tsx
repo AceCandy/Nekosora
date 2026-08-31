@@ -32,6 +32,7 @@ import { useShallow } from "zustand/react/shallow";
 import { useChatStreamStore } from "@/features/chat/store/chatStreamStore";
 import { useClickOutside } from "@/shared/lib/useClickOutside";
 import { newConversationHref } from "@/features/chat/model/newConversationNavigation";
+import { isBrowserOffline } from "@/features/chat/lib/network";
 
 type ConversationItem = ConversationNavigationItem;
 
@@ -538,7 +539,7 @@ export default function Sidebar({
       ? encodeConversationGroupCursor(items.at(-1)!)
       : knownCursor;
     setGroupLoads((current) => ({ ...current, [key]: { ...current[key], loading: true, failed: false } }));
-    if (!navigator.onLine) {
+    if (isBrowserOffline()) {
       setGroupLoads((current) => ({ ...current, [key]: { ...current[key], loading: false, failed: true } }));
       return;
     }

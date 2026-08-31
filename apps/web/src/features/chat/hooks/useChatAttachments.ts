@@ -6,6 +6,7 @@ import type {
   ChatMessageAttachment,
   UploadFileItem,
 } from "@/features/chat/model/types";
+import { isBrowserOffline } from "@/features/chat/lib/network";
 
 /**
  * 聊天附件管理 —— 封装附件 state + 上传逻辑 + 粘贴/拖拽入口。
@@ -47,8 +48,14 @@ export function useChatAttachments(conversationId: string | null) {
 
   const uploadOne = useCallback(
     async (item: UploadFileItem, targetConvId: string): Promise<string | null> => {
-      const fd = new FormData();
       if (!item.file) return null;
+      if (isBrowserOffline()) {
+        setAttached((prev) =>
+          prev.map((x) => (x.id === item.id ? { ...x, status: "error" } : x)),
+        );
+        return null;
+      }
+      const fd = new FormData();
       fd.append("file", item.file);
       fd.append("conversationId", targetConvId);
       try {
@@ -76,6 +83,7 @@ export function useChatAttachments(conversationId: string | null) {
   const handleUpload = useCallback(
     async (files: FileList | File[] | null) => {
       if (!files || (files as FileList).length === 0) return;
+      const offline = isBrowserOffline();
 
       const newItems: UploadFileItem[] = Array.from(files).map((file) => {
         const previewUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined;
@@ -85,7 +93,7 @@ export function useChatAttachments(conversationId: string | null) {
           filename: file.name,
           mime: file.type || "application/octet-stream",
           file,
-          status: conversationId ? "uploading" : "pending",
+          status: offline ? "error" : conversationId ? "uploading" : "pending",
           isImage: file.type.startsWith("image/"),
           previewUrl,
         };
@@ -93,7 +101,7 @@ export function useChatAttachments(conversationId: string | null) {
 
       setAttached((prev) => [...prev, ...newItems]);
 
-      if (conversationId) {
+      if (conversationId && !offline) {
         for (const item of newItems) {
           const task = uploadOne(item, conversationId);
           uploadTasksRef.current.set(item.id, task);
