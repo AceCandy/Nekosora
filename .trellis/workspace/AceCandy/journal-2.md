@@ -1561,3 +1561,25 @@ Persist the successful route's clamped reasoning level in gateway usage records,
 ### Status
 
 [OK] **Completed**
+
+
+## Session 132: 路由 API 格式默认继承
+<!-- trellis-session: v=2 fp=89a1985e17e88bb6 -->
+
+**Date**: 2026-08-31
+**Task**: 路由 API 格式默认继承
+**Branch**: `main`
+
+### Summary
+
+路由表单默认继承服务商协议对应的 API 格式，并将聊天格式覆盖收进高级设置；完成静态检查、全量前端测试和浏览器验证。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `470b08b` | feat(models): inherit route API format from provider |
+
+### Status
+
+[OK] **Completed**
