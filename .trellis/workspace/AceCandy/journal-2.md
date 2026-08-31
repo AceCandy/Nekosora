@@ -1583,3 +1583,25 @@ Persist the successful route's clamped reasoning level in gateway usage records,
 ### Status
 
 [OK] **Completed**
+
+
+## Session 133: 修复聊天记忆超时与流光动画
+<!-- trellis-session: v=2 fp=c6c62ecc868cc9b6 -->
+
+**Date**: 2026-08-31
+**Task**: 修复聊天记忆超时与流光动画
+**Branch**: `main`
+
+### Summary
+
+为 Chat 记忆准备增加 5 秒整体超时降级，避免阻塞核心聊天；将过程流光改为 2 秒连续匀速扫描并加宽高光，补充回归测试与记忆系统契约。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `bc871d6` | fix(chat): prevent memory stalls and restore shimmer |
+
+### Status
+
+[OK] **Completed**
