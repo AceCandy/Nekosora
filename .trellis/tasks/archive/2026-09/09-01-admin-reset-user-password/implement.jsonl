@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/auth-guidelines.md","reason":"Better Auth 管理员设密与会话授权边界"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"管理员页 Server/Client、Modal 与无障碍表单约定"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"局部表单状态、Server Action 与失败保留输入约定"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Server Action 外部输入的 zod 边界校验"}

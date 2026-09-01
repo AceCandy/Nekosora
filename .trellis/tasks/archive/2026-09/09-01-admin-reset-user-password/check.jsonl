@@ -1,0 +1,3 @@
+{"file":".trellis/spec/backend/auth-guidelines.md","reason":"复核管理员鉴权、权威会话及敏感凭据边界"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"复核 Server/Client、i18n、测试与设计 token 质量门槛"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"复核客户端 userId 授权、校验顺序及跨层结果契约"}
