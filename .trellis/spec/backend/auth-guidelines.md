@@ -154,6 +154,65 @@ const session = await auth.api.getSession({
 if (session?.user.status !== "active") return null;
 ```
 
+## Scenario: Admin Password Reset
+
+### 1. Scope / Trigger
+
+- 修改管理员用户页的密码设置、用户凭据或会话撤销流程时适用。
+- 目标是通过 Better Auth 设置密码，并在成功后立即撤销目标用户现有会话；不得直接写 `account.password`。
+
+### 2. Signatures
+
+```ts
+resetUserPassword(userId: string, formData: FormData): Promise<
+  | { status: "success"; error: null }
+  | { status: "error"; error: "invalidPassword" | "passwordMismatch" | "selfResetForbidden" | "resetFailed" | "sessionRevokeFailed" }
+>
+```
+
+### 3. Contracts
+
+- 先执行 `requireAdmin()`，再校验目标 ID、8–128 位新密码和确认密码；所有校验必须先于 Better Auth 副作用。
+- 管理员用户列表入口不得重置当前登录账号。
+- 使用同一请求 headers 依次调用 `auth.api.setUserPassword` 和 `auth.api.revokeUserSessions`。
+- 只有两步都成功才返回 `success`；密码、Better Auth 原始错误和凭据数据不得进入日志、URL、返回值或客户端持久化。
+- 两个 Better Auth 调用不是同一事务。撤销会话失败时不得尝试恢复旧密码，返回 `sessionRevokeFailed` 并允许管理员使用同一密码重试。
+
+### 4. Validation & Error Matrix
+
+| 条件 | 结果 | 副作用 |
+| --- | --- | --- |
+| 非管理员 | 鉴权异常 | 不调用 Better Auth |
+| 当前管理员为目标 | `selfResetForbidden` | 不调用 Better Auth |
+| 密码长度非法 | `invalidPassword` | 不调用 Better Auth |
+| 两次密码不一致 | `passwordMismatch` | 不调用 Better Auth |
+| 设密失败或目标不存在 | `resetFailed` | 不撤销会话 |
+| 设密成功、撤销会话失败 | `sessionRevokeFailed` | 新密码已生效，允许重试 |
+| 两步成功 | `success` | 新密码生效，旧会话全部撤销 |
+
+### 5. Good / Base / Bad Cases
+
+- Good：管理员为其他用户设置密码，随后撤销该用户全部会话，UI 只在两步成功后显示完整成功。
+- Base：输入不合法时在客户端和服务端都返回稳定错误，表单保留输入供修正。
+- Bad：直接更新密码哈希，或设密成功后未撤销会话却显示完整成功。
+
+### 6. Tests Required
+
+- 单测覆盖管理员鉴权、自重置、8/128 位边界、确认密码、调用顺序、设密失败和会话撤销失败。
+- 浏览器覆盖初始焦点、行内错误、pending 锁定、失败保留输入、关闭回焦和窄屏无横向溢出。
+- 真实合法重置会改变账号凭据并撤销会话；仅在明确可处置的测试账号上执行。
+
+### 7. Wrong vs Correct
+
+```ts
+// Wrong：绕过 Better Auth，且不会撤销现有会话。
+await db.update(account).set({ password: hash });
+
+// Correct：保留 Better Auth 权限与哈希语义，并按顺序撤销会话。
+await auth.api.setUserPassword({ body: { userId, newPassword }, headers });
+await auth.api.revokeUserSessions({ body: { userId }, headers });
+```
+
 Wrong:
 
 ```ts

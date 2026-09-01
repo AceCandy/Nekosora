@@ -6,6 +6,7 @@ import StatusSwitch from "@/shared/ui/StatusSwitch";
 import { Users } from "lucide-react";
 import { PageHeader } from "@/shared/components/PageHeader";
 import DeleteUserButton from "./DeleteUserButton";
+import ResetPasswordButton from "./ResetPasswordButton";
 
 export default async function UsersPage() {
   const users = await listUsers();
@@ -79,10 +80,16 @@ export default async function UsersPage() {
                   </td>
                   <td className="px-5 py-3.5 text-right">
                     {!u.isCurrent && (
-                      <DeleteUserButton
-                        userId={u.id as string}
-                        displayName={(u.name || u.email) as string}
-                      />
+                      <div className="inline-flex items-center gap-1">
+                        <ResetPasswordButton
+                          userId={u.id as string}
+                          displayName={(u.name || u.email) as string}
+                        />
+                        <DeleteUserButton
+                          userId={u.id as string}
+                          displayName={(u.name || u.email) as string}
+                        />
+                      </div>
                     )}
                   </td>
                 </tr>

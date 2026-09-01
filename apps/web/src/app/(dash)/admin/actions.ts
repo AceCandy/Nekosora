@@ -25,6 +25,7 @@ import type { ProviderProtocol, RouteApiFormat } from "@/db/types";
 import type { ProviderKeyResult } from "@/db/schema/pg";
 import { requireAdmin } from "@/lib/session";
 import { pickDisplayName } from "@/lib/model-catalog";
+import { z } from "zod";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const S = () => getSchema() as any;
@@ -818,6 +819,19 @@ export async function toggleModel(id: string, enabled: boolean) {
 
 // ===================== Users =====================
 
+const resetUserPasswordSchema = z.object({
+  userId: z.string().min(1),
+  newPassword: z.string().min(8).max(128),
+  confirmPassword: z.string(),
+});
+
+export type ResetUserPasswordResult =
+  | { status: "success"; error: null }
+  | {
+    status: "error";
+    error: "invalidPassword" | "passwordMismatch" | "selfResetForbidden" | "resetFailed" | "sessionRevokeFailed";
+  };
+
 export async function listUsers() {
   const admin = await requireAdmin();
   const db = await getDb();
@@ -835,6 +849,48 @@ export async function deleteUser(id: string) {
   const auth = await getAuth();
   await auth.api.removeUser({ body: { userId: id }, headers: await headers() });
   revalidatePath("/admin/users");
+}
+
+/** 管理员为其他用户设置新密码，并在设密成功后撤销其全部现有会话。 */
+export async function resetUserPassword(
+  id: string,
+  formData: FormData,
+): Promise<ResetUserPasswordResult> {
+  const admin = await requireAdmin();
+  const parsed = resetUserPasswordSchema.safeParse({
+    userId: id,
+    newPassword: formData.get("newPassword"),
+    confirmPassword: formData.get("confirmPassword"),
+  });
+  if (!parsed.success) return { status: "error", error: "invalidPassword" };
+  if (parsed.data.userId === admin.id) return { status: "error", error: "selfResetForbidden" };
+  if (parsed.data.newPassword !== parsed.data.confirmPassword) {
+    return { status: "error", error: "passwordMismatch" };
+  }
+
+  const auth = await getAuth().catch(() => null);
+  const requestHeaders = await headers().catch(() => null);
+  if (!auth || !requestHeaders) return { status: "error", error: "resetFailed" };
+
+  try {
+    await auth.api.setUserPassword({
+      body: { userId: parsed.data.userId, newPassword: parsed.data.newPassword },
+      headers: requestHeaders,
+    });
+  } catch {
+    return { status: "error", error: "resetFailed" };
+  }
+
+  try {
+    await auth.api.revokeUserSessions({
+      body: { userId: parsed.data.userId },
+      headers: requestHeaders,
+    });
+  } catch {
+    return { status: "error", error: "sessionRevokeFailed" };
+  }
+
+  return { status: "success", error: null };
 }
 
 export async function toggleUserStatus(id: string, status: string) {

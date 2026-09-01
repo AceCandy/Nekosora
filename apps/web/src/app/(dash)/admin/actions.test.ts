@@ -15,7 +15,10 @@ const mockFunctions = vi.hoisted(() => ({
   fetchUpstreamModels: vi.fn(async () => []),
   recordSuccess: vi.fn(),
   recordFailure: vi.fn(),
+  requireAdmin: vi.fn(),
   removeUser: vi.fn(async () => ({ success: true })),
+  setUserPassword: vi.fn(),
+  revokeUserSessions: vi.fn(),
 }));
 
 vi.mock("drizzle-orm", () => ({
@@ -30,9 +33,15 @@ vi.mock("drizzle-orm", () => ({
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/headers", () => ({ headers: vi.fn(async () => new Headers({ cookie: "session=test" })) }));
 vi.mock("@/auth", () => ({
-  getAuth: vi.fn(async () => ({ api: { removeUser: mockFunctions.removeUser } })),
+  getAuth: vi.fn(async () => ({
+    api: {
+      removeUser: mockFunctions.removeUser,
+      setUserPassword: mockFunctions.setUserPassword,
+      revokeUserSessions: mockFunctions.revokeUserSessions,
+    },
+  })),
 }));
-vi.mock("@/lib/session", () => ({ requireAdmin: vi.fn(async () => mockData.admin) }));
+vi.mock("@/lib/session", () => ({ requireAdmin: mockFunctions.requireAdmin }));
 vi.mock("@/lib/providers/keys", () => ({
   encryptKeyBundle: vi.fn(),
   parseKeyBundle: mockFunctions.parseKeyBundle,
@@ -178,12 +187,16 @@ import {
   updateProvider,
   updateRoute,
   deleteUser,
+  resetUserPassword,
 } from "./actions";
 import { encryptKeyBundle } from "@/lib/providers/keys";
 import { revalidatePath } from "next/cache";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockFunctions.requireAdmin.mockResolvedValue(mockData.admin);
+  mockFunctions.setUserPassword.mockResolvedValue({ status: true });
+  mockFunctions.revokeUserSessions.mockResolvedValue({ success: true });
   mockData.models = [
     { id: "private-a", ownerUserId: "admin-a", visibility: "private", name: "private-a", catalogId: "catalog-chat" },
     { id: "private-b", ownerUserId: "user-b", visibility: "private", name: "private-b", catalogId: "catalog-chat" },
@@ -215,6 +228,76 @@ describe("deleteUser", () => {
       headers: expect.any(Headers),
     });
     expect(revalidatePath).toHaveBeenCalledWith("/admin/users");
+  });
+});
+
+function passwordForm(password: string, confirmation = password) {
+  const formData = new FormData();
+  formData.set("newPassword", password);
+  formData.set("confirmPassword", confirmation);
+  return formData;
+}
+
+describe("resetUserPassword", () => {
+  it("未通过管理员鉴权时不调用 Better Auth", async () => {
+    mockFunctions.requireAdmin.mockRejectedValueOnce(new Error("forbidden"));
+
+    await expect(resetUserPassword("user-b", passwordForm("new-password")))
+      .rejects.toThrow("forbidden");
+    expect(mockFunctions.setUserPassword).not.toHaveBeenCalled();
+    expect(mockFunctions.revokeUserSessions).not.toHaveBeenCalled();
+  });
+
+  it("拒绝管理员通过用户列表重置自己", async () => {
+    await expect(resetUserPassword("admin-a", passwordForm("new-password")))
+      .resolves.toEqual({ status: "error", error: "selfResetForbidden" });
+    expect(mockFunctions.setUserPassword).not.toHaveBeenCalled();
+    expect(mockFunctions.revokeUserSessions).not.toHaveBeenCalled();
+  });
+
+  it.each(["short", "x".repeat(129)])("拒绝长度非法的密码", async (password) => {
+    await expect(resetUserPassword("user-b", passwordForm(password)))
+      .resolves.toEqual({ status: "error", error: "invalidPassword" });
+    expect(mockFunctions.setUserPassword).not.toHaveBeenCalled();
+    expect(mockFunctions.revokeUserSessions).not.toHaveBeenCalled();
+  });
+
+  it("拒绝两次输入不一致", async () => {
+    await expect(resetUserPassword("user-b", passwordForm("new-password", "other-password")))
+      .resolves.toEqual({ status: "error", error: "passwordMismatch" });
+    expect(mockFunctions.setUserPassword).not.toHaveBeenCalled();
+    expect(mockFunctions.revokeUserSessions).not.toHaveBeenCalled();
+  });
+
+  it("更新密码后撤销目标用户会话", async () => {
+    await expect(resetUserPassword("user-b", passwordForm("new-password")))
+      .resolves.toEqual({ status: "success", error: null });
+
+    expect(mockFunctions.setUserPassword).toHaveBeenCalledWith({
+      body: { userId: "user-b", newPassword: "new-password" },
+      headers: expect.any(Headers),
+    });
+    expect(mockFunctions.revokeUserSessions).toHaveBeenCalledWith({
+      body: { userId: "user-b" },
+      headers: mockFunctions.setUserPassword.mock.calls[0][0].headers,
+    });
+    expect(mockFunctions.setUserPassword.mock.invocationCallOrder[0])
+      .toBeLessThan(mockFunctions.revokeUserSessions.mock.invocationCallOrder[0]);
+  });
+
+  it("密码更新失败时不撤销会话", async () => {
+    mockFunctions.setUserPassword.mockRejectedValueOnce(new Error("set failed"));
+
+    await expect(resetUserPassword("user-b", passwordForm("new-password")))
+      .resolves.toEqual({ status: "error", error: "resetFailed" });
+    expect(mockFunctions.revokeUserSessions).not.toHaveBeenCalled();
+  });
+
+  it("会话撤销失败时返回部分失败", async () => {
+    mockFunctions.revokeUserSessions.mockRejectedValueOnce(new Error("revoke failed"));
+
+    await expect(resetUserPassword("user-b", passwordForm("new-password")))
+      .resolves.toEqual({ status: "error", error: "sessionRevokeFailed" });
   });
 });
 
