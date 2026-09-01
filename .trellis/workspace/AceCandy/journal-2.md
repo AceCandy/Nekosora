@@ -1671,3 +1671,25 @@ Added bounded model-list reads, same-origin redirect controls, model-count limit
 ### Status
 
 [OK] **Completed**
+
+
+## Session 137: 管理员重置用户密码
+<!-- trellis-session: v=2 fp=2f1cc7303f47f1b4 -->
+
+**Date**: 2026-09-01
+**Task**: 管理员重置用户密码
+**Branch**: `main`
+
+### Summary
+
+新增管理员为其他用户重置密码并撤销会话的能力，补齐双语交互、鉴权与失败分支测试，并完成浏览器可访问性验收。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `18e16e8` | feat: add admin password reset |
+
+### Status
+
+[OK] **Completed**
