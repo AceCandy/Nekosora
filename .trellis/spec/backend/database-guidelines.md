@@ -172,12 +172,13 @@ if (job) void dispatchConversationTitleJob(job.id);
 - `runMigrations(db)`：从 `db.$client` 取得专用 `PoolClient`，持锁完成协调与迁移。
 - `migrate(db, { migrationsFolder: "drizzle/pg" })`
 - `pg_advisory_lock(hashtext(current_database()), hashtext('drizzle.__drizzle_migrations'))`
-- 迁移产物:`drizzle/pg/0000_*.sql`、`meta/_journal.json`、`meta/0000_snapshot.json`。
+- 主迁移产物:`drizzle/pg/0000_*.sql`、`meta/_journal.json`、`meta/0000_snapshot.json`；发版前 squash 若仍需兼容更早基线，可在相邻的 `drizzle/pg-compat/` 仅保留补齐最终基线所需的尾部 SQL 与 journal，该目录不得参与新空库主迁移。
 
 #### 3. Contracts
 - `drizzle/pg/meta/**` 必须与 SQL 文件一起提交;`.gitignore` 不得忽略 `meta`。
 - **已发布并可能在任一数据库执行过的 SQL、journal `when/tag/idx` 均不可改写**；结构变更必须追加新迁移。
 - “尚未上线”不等于“没有存量数据库”：压缩开发期迁移前必须盘点本地/测试库账本。需要保留数据时，只能在锁与事务内，将 hash 完整匹配旧迁移全集的账本归并为新基线；不能靠环境名称或记录数量推断已完整执行。
+- 更早账本若只对应中间基线，禁止直接标记为最终基线。必须先归并到已知中间基线，在同一 advisory lock 保护下通过 `pg-compat` 补跑缺失尾部，再验证完整预发布 hash 链并归并为最终基线；任一步失败都阻断主 migrator。
 - 旧账本的 `id` 只用于条件更新/删除，不代表 canonical 迁移顺序；验证完整历史时按唯一 `created_at` 排序后逐项匹配已知 hash，兼容历史重定时造成的插入顺序差异。
 - PG baseline enum 用 `DO ... EXCEPTION WHEN duplicate_object` 幂等。
 - 全部 PG 表/enum 存在但 `drizzle.__drizzle_migrations` 为空 → 启动补基线记录后继续。
@@ -197,6 +198,7 @@ if (job) void dispatchConversationTitleJob(job.id);
 - 相同 hash 位于旧时间且完整连续前缀可证明 → 条件修正 `created_at`，再由官方 migrator 执行尾部迁移。
 - 前序缺失、后续提前登记、未知记录、重复 id/hash/时间或目标时间冲突 → 不 UPDATE、不调用 migrator。
 - 开发期 squash 后完整旧 hash 集合匹配 → 精确更新首条为新基线 hash/time、删除其余旧记录并校验各自 `rowCount`；任一 hash 缺失/未知、时间重复或行数异常 → 整个事务回滚并阻断启动。
+- 旧链只到中间基线 → 精确归并到中间 baseline → 运行相邻 `pg-compat` 尾部 → 再次锁表并确认形成完整预发布链 → 归并当前 baseline；兼容迁移完成后链不完整则阻断主 migrator。
 - 单基线必须保留新库启动所需的目录数据；schema-only 生成物缺少 `model_catalog` 数据时，须附带受审目录快照及 SHA-256，不能依赖已有数据库内容。
 - 条件 UPDATE 未命中或无明确 `rowCount` → 视为并发变化，回滚并阻断启动。
 - advisory lock 获取/释放失败 → 阻断启动；无法确认解锁时销毁连接。
@@ -223,7 +225,7 @@ if (job) void dispatchConversationTitleJob(job.id);
 - PG 迁移单测:complete-existing-schema adoption + partial-table/critical-column rejection
   (见 `src/lib/infra/db/bootstrap.test.ts`)。
 - 协调单测:安全重定时、连续前缀/空账本、journal 与 ledger 重复、断层、未知记录、baseline 白名单、UPDATE `rowCount`。
-- squash 账本单测:已知旧 baseline hash、完整旧链成功、`id`/时间顺序不同、任一 hash 不匹配、仅旧 baseline、UPDATE/DELETE `rowCount` 异常。
+- squash 账本单测:已知旧 baseline hash、完整旧链经兼容尾部升级成功、完整预发布链直接归并、连续预发布前缀补跑、`id`/时间顺序不同、任一 hash 不匹配、仅未知旧 baseline、UPDATE/DELETE `rowCount` 异常。
 - squash 产物测试:journal 仅一条、root snapshot 与当前 schema 等价、模型目录快照存在且来源 hash 合法。
 - 连接生命周期单测:锁获取失败、migrate 失败、unlock 返回 false/抛错，断言 unlock 与 `release(destroy)`。
 - 断言点:`insert/update drizzle.__drizzle_migrations`、表锁与 advisory lock 顺序、错误路径不调用 migrator。

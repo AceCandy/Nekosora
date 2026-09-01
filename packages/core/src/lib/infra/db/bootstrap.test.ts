@@ -19,11 +19,14 @@ afterEach(async () => {
 const PG_BASELINE_TYPES = [
   "api_key_kind",
   "gateway_governance_operation",
+  "gateway_governance_scope",
   "gateway_quota_kind",
   "message_status",
   "model_visibility",
   "provider_protocol",
   "route_api_format",
+  "settings_change_set_kind",
+  "settings_change_set_status",
 ];
 
 const PG_BASELINE_TABLES = [
@@ -48,7 +51,6 @@ const PG_BASELINE_TABLES = [
   "image_jobs",
   "instruction_cards",
   "key_model_bindings",
-  "knowledge_bases",
   "mcp_servers",
   "memory_extraction_jobs",
   "message_feedback",
@@ -57,7 +59,6 @@ const PG_BASELINE_TABLES = [
   "model_catalog",
   "models",
   "output_modes",
-  "prompt_templates",
   "providers",
   "render_styles",
   "routes",
@@ -80,6 +81,7 @@ const PG_BASELINE_REQUIRED_COLUMNS = [
   "tool_calls.input_json",
   "tool_calls.output_json",
   "tool_calls.error_json",
+  "gateway_executions.reasoning_level",
 ];
 
 const TEST_MIGRATION_HASHES = ["a".repeat(64), "b".repeat(64), "c".repeat(64)];
@@ -101,6 +103,14 @@ const PRE_SQUASH_MIGRATION_HASHES = [
   "2a7be65eff84ae31a0f62d77615318665c80b6d9a149df87f036e9ad4ebd663a",
   "181e5a0921b270020da8780a76481eea7c17873317d9877952ef1f52ed8810e1",
 ];
+const PRE_RELEASE_MIGRATIONS = [
+  { hash: "89ea768e6f5ded124bf354d03841797a39852918bc8af97bc90341cc937212d9", created_at: 1786851244170 },
+  { hash: "e9d66e6c8b021abf9f15bf11f3eb83600b72b8a97e2df0d6d24ae9570a645c86", created_at: 1787302155039 },
+  { hash: "96fac93ba0238e751f410eb52a5bbbe52c80cc6b4716aef74791eee8a8fdfe1c", created_at: 1787322814372 },
+  { hash: "cabd0270134d1027b7eb1539005be31d8386e4177f32bcd0e11cd5e4fa2e457e", created_at: 1787501905680 },
+  { hash: "0683a0afb8a22e31c450f7067e1ba12a7fde16f20c6e2fba8f425f19d92d2ad7", created_at: 1787627350231 },
+  { hash: "880ec9d32d38095ca91b9942d6b7b90bf3e9a3762cb755a400f660a3d21c7afc", created_at: 1788107900096 },
+];
 const SQUASHED_BASELINE_HASH = "f".repeat(64);
 
 function mockSquashedBaselineMigrationFile() {
@@ -117,6 +127,13 @@ function preSquashLedger() {
   }));
   [ledger[8].id, ledger[9].id] = [ledger[9].id, ledger[8].id];
   return ledger.sort((left, right) => left.id - right.id);
+}
+
+function preReleaseLedger() {
+  return PRE_RELEASE_MIGRATIONS.map((migration, index) => ({
+    id: index + 1,
+    ...migration,
+  }));
 }
 
 function mockTestMigrationFiles() {
@@ -181,9 +198,9 @@ function migrationLedgerDb(
   mutationResult: unknown | ((text: string) => unknown) = { rows: [], rowCount: 1 },
   options: PooledMigrationDbOptions = {},
 ) {
-  const latest = [...ledger].sort((left, right) => right.created_at - left.created_at)[0];
   return pooledMigrationDb((text) => {
     if (text.includes("order by created_at desc limit 1")) {
+      const latest = [...ledger].sort((left, right) => right.created_at - left.created_at)[0];
       return { rows: latest ? [latest] : [] };
     }
     if (text.includes("order by id")) return { rows: ledger };
@@ -365,34 +382,82 @@ describe("runMigrations", () => {
     expect(migrate).not.toHaveBeenCalled();
   });
 
-  it("完整旧迁移链自动归并为当前单基线账本", async () => {
-      const baselineHash = PRE_SQUASH_MIGRATION_HASHES[0];
-      mockSquashedBaselineMigrationFile();
-      const migrate = vi.fn(async () => undefined);
-      vi.doMock("drizzle-orm/node-postgres/migrator", () => ({ migrate }));
-      const ledger = preSquashLedger();
-      ledger[0].hash = baselineHash;
-      const { db, executedSql } = migrationLedgerDb(ledger, (text) => ({
-        rows: [],
-        rowCount: text.startsWith("delete from") ? 15 : 1,
-      }));
-      const trailingIds = [...ledger]
-        .sort((left, right) => left.created_at - right.created_at)
-        .slice(1)
-        .map((row) => row.id)
-        .join(", ");
-      const { runMigrations } = await import("@/lib/infra/db/bootstrap");
+  it("完整旧迁移链先补跑兼容尾部再归并为当前单基线", async () => {
+    const baselineHash = PRE_SQUASH_MIGRATION_HASHES[0];
+    mockSquashedBaselineMigrationFile();
+    const ledger = preSquashLedger();
+    const migrate = vi.fn(async (_db: unknown, options: { migrationsFolder: string }) => {
+      if (options.migrationsFolder === "drizzle/pg-compat") {
+        ledger.splice(0, ledger.length, ...preReleaseLedger());
+      }
+    });
+    vi.doMock("drizzle-orm/node-postgres/migrator", () => ({ migrate }));
+    const { db, executedSql } = migrationLedgerDb(ledger, (text) => ({
+      rows: [],
+      rowCount: text.startsWith("delete from")
+        ? (text.match(/,/g)?.length ?? 0) + 1
+        : 1,
+    }));
+    const { runMigrations } = await import("@/lib/infra/db/bootstrap");
 
-      await expect(runMigrations(db)).resolves.toBeUndefined();
-      expect(executedSql).toContain(
-        `update drizzle.__drizzle_migrations set hash = '${SQUASHED_BASELINE_HASH}', ` +
-          `created_at = 100 where id = 1 and hash = '${baselineHash}' ` +
-          `and created_at = 100`,
-      );
-      expect(executedSql).toContain(
-        `delete from drizzle.__drizzle_migrations where id in (${trailingIds})`,
-      );
-      expect(migrate).toHaveBeenCalledWith(db, { migrationsFolder: "drizzle/pg" });
+    await expect(runMigrations(db)).resolves.toBeUndefined();
+    expect(executedSql).toContain(
+      `update drizzle.__drizzle_migrations set hash = '${PRE_RELEASE_MIGRATIONS[0].hash}', ` +
+        `created_at = ${PRE_RELEASE_MIGRATIONS[0].created_at} ` +
+        `where id = 1 and hash = '${baselineHash}' and created_at = 100`,
+    );
+    expect(executedSql).toContain(
+      `update drizzle.__drizzle_migrations set hash = '${SQUASHED_BASELINE_HASH}', ` +
+        `created_at = 100 where id = 1 and hash = '${PRE_RELEASE_MIGRATIONS[0].hash}' ` +
+        `and created_at = ${PRE_RELEASE_MIGRATIONS[0].created_at}`,
+    );
+    expect(migrate).toHaveBeenNthCalledWith(1, db, {
+      migrationsFolder: "drizzle/pg-compat",
+    });
+    expect(migrate).toHaveBeenNthCalledWith(2, db, { migrationsFolder: "drizzle/pg" });
+  });
+
+  it("完整 0000-0005 预发布账本直接归并为当前单基线", async () => {
+    mockSquashedBaselineMigrationFile();
+    const migrate = vi.fn(async () => undefined);
+    vi.doMock("drizzle-orm/node-postgres/migrator", () => ({ migrate }));
+    const ledger = preReleaseLedger();
+    const { db, executedSql } = migrationLedgerDb(ledger, (text) => ({
+      rows: [],
+      rowCount: text.startsWith("delete from") ? 5 : 1,
+    }));
+    const { runMigrations } = await import("@/lib/infra/db/bootstrap");
+
+    await expect(runMigrations(db)).resolves.toBeUndefined();
+    expect(executedSql).toContain(
+      `update drizzle.__drizzle_migrations set hash = '${SQUASHED_BASELINE_HASH}', ` +
+        `created_at = 100 where id = 1 and hash = '${PRE_RELEASE_MIGRATIONS[0].hash}' ` +
+        `and created_at = ${PRE_RELEASE_MIGRATIONS[0].created_at}`,
+    );
+    expect(migrate).toHaveBeenCalledTimes(1);
+    expect(migrate).toHaveBeenCalledWith(db, { migrationsFolder: "drizzle/pg" });
+  });
+
+  it("预发布账本连续前缀先补跑缺失尾部再归并", async () => {
+    mockSquashedBaselineMigrationFile();
+    const ledger = preReleaseLedger().slice(0, 3);
+    const migrate = vi.fn(async (_db: unknown, options: { migrationsFolder: string }) => {
+      if (options.migrationsFolder === "drizzle/pg-compat") {
+        ledger.splice(0, ledger.length, ...preReleaseLedger());
+      }
+    });
+    vi.doMock("drizzle-orm/node-postgres/migrator", () => ({ migrate }));
+    const { db } = migrationLedgerDb(ledger, (text) => ({
+      rows: [],
+      rowCount: text.startsWith("delete from") ? 5 : 1,
+    }));
+    const { runMigrations } = await import("@/lib/infra/db/bootstrap");
+
+    await expect(runMigrations(db)).resolves.toBeUndefined();
+    expect(migrate).toHaveBeenNthCalledWith(1, db, {
+      migrationsFolder: "drizzle/pg-compat",
+    });
+    expect(migrate).toHaveBeenNthCalledWith(2, db, { migrationsFolder: "drizzle/pg" });
   });
 
   it("旧迁移链任一 hash 不匹配时拒绝归并", async () => {

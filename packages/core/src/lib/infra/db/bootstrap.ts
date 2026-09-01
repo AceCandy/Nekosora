@@ -83,6 +83,9 @@ export async function runMigrations(db: unknown): Promise<void> {
   try {
     const migrationsFolder = process.env.DRIZZLE_MIGRATIONS_DIR ?? "../../drizzle/pg";
     await withPgMigrationLock(db, async (migrationDb) => {
+      const { migrate } = await import("drizzle-orm/node-postgres/migrator");
+      let needsCompatibilityMigration = false;
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (migrationDb as any).transaction(async (tx: unknown) => {
         await ensurePgMigrationTable(tx);
@@ -91,11 +94,26 @@ export async function runMigrations(db: unknown): Promise<void> {
           "lock table drizzle.__drizzle_migrations in share row exclusive mode",
         );
         await adoptExistingPgBaselineIfNeeded(tx, migrationsFolder);
-        const compacted = await compactPreSquashPgMigrationLedgerIfNeeded(tx, migrationsFolder);
-        if (!compacted) await reconcileRetimedPgMigrations(tx, migrationsFolder);
+        const action = await coordinatePreReleasePgMigrationLedger(tx, migrationsFolder);
+        needsCompatibilityMigration = action === "compatibility";
+        if (action === "none") await reconcileRetimedPgMigrations(tx, migrationsFolder);
       });
 
-      const { migrate } = await import("drizzle-orm/node-postgres/migrator");
+      if (needsCompatibilityMigration) {
+        await migrate(migrationDb as never, { migrationsFolder: `${migrationsFolder}-compat` });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (migrationDb as any).transaction(async (tx: unknown) => {
+          await pgExecute(
+            tx,
+            "lock table drizzle.__drizzle_migrations in share row exclusive mode",
+          );
+          const action = await coordinatePreReleasePgMigrationLedger(tx, migrationsFolder);
+          if (action !== "compacted") {
+            throw new Error("[bootstrap] PostgreSQL 兼容迁移未形成完整预发布账本");
+          }
+        });
+      }
+
       await migrate(migrationDb as never, { migrationsFolder });
     });
     console.log(`[bootstrap] ✅ 数据库表已就绪(pg migrate 完成)`);
@@ -109,11 +127,14 @@ export async function runMigrations(db: unknown): Promise<void> {
 const PG_BASELINE_TYPES = [
   "api_key_kind",
   "gateway_governance_operation",
+  "gateway_governance_scope",
   "gateway_quota_kind",
   "message_status",
   "model_visibility",
   "provider_protocol",
   "route_api_format",
+  "settings_change_set_kind",
+  "settings_change_set_status",
 ] as const;
 
 // 仅完整匹配本次预发布迁移链时，才允许无损归并现有账本。
@@ -139,6 +160,16 @@ const PG_PRE_SQUASH_MIGRATION_HASHES = [
   "37c25fbb9ee852721b1a068a97abf7196fcd1c17526f035a40794dd78b1c22db",
   "2a7be65eff84ae31a0f62d77615318665c80b6d9a149df87f036e9ad4ebd663a",
   "181e5a0921b270020da8780a76481eea7c17873317d9877952ef1f52ed8810e1",
+] as const;
+
+/** 本次发版前 0000-0005 的 canonical 元数据，用于补跑尾部迁移并归并账本。 */
+const PG_PRE_RELEASE_MIGRATIONS = [
+  { hash: "89ea768e6f5ded124bf354d03841797a39852918bc8af97bc90341cc937212d9", folderMillis: 1786851244170 },
+  { hash: "e9d66e6c8b021abf9f15bf11f3eb83600b72b8a97e2df0d6d24ae9570a645c86", folderMillis: 1787302155039 },
+  { hash: "96fac93ba0238e751f410eb52a5bbbe52c80cc6b4716aef74791eee8a8fdfe1c", folderMillis: 1787322814372 },
+  { hash: "cabd0270134d1027b7eb1539005be31d8386e4177f32bcd0e11cd5e4fa2e457e", folderMillis: 1787501905680 },
+  { hash: "0683a0afb8a22e31c450f7067e1ba12a7fde16f20c6e2fba8f425f19d92d2ad7", folderMillis: 1787627350231 },
+  { hash: "880ec9d32d38095ca91b9942d6b7b90bf3e9a3762cb755a400f660a3d21c7afc", folderMillis: 1788107900096 },
 ] as const;
 
 const PG_MIGRATION_LOCK_SQL =
@@ -168,7 +199,6 @@ const PG_BASELINE_TABLES = [
   "image_jobs",
   "instruction_cards",
   "key_model_bindings",
-  "knowledge_bases",
   "mcp_servers",
   "memory_extraction_jobs",
   "message_feedback",
@@ -176,7 +206,6 @@ const PG_BASELINE_TABLES = [
   "messages",
   "model_catalog",
   "output_modes",
-  "prompt_templates",
   "render_styles",
   "runs",
   "session",
@@ -200,6 +229,7 @@ const PG_BASELINE_REQUIRED_COLUMNS = [
   "tool_calls.input_json",
   "tool_calls.output_json",
   "tool_calls.error_json",
+  "gateway_executions.reasoning_level",
 ] as const;
 
 /**
@@ -258,7 +288,7 @@ async function adoptExistingPgBaselineIfNeeded(
     `select table_name || '.' || column_name as name
      from information_schema.columns
      where table_schema = 'public'
-       and table_name in ('runs', 'tool_calls')`,
+       and table_name in ('runs', 'tool_calls', 'gateway_executions')`,
   );
   const missingColumns = PG_BASELINE_REQUIRED_COLUMNS.filter(
     (name) => !existingColumns.has(name),
@@ -368,40 +398,44 @@ interface PgMigrationReconciliation {
   to: number;
 }
 
-/**
- * 开发期将 0000-0015 合并为单基线后，完整旧账本可安全收敛为新基线记录。
- * 只有全部旧 hash 按顺序匹配时才改写；部分迁移或未知记录交给后续严格校验阻断。
- */
-async function compactPreSquashPgMigrationLedgerIfNeeded(
-  db: unknown,
-  migrationsFolder: string,
-): Promise<boolean> {
+async function readPgMigrationLedger(db: unknown): Promise<PgMigrationLedgerRow[]> {
   const rawRows = await pgRows<{ id: unknown; hash: unknown; created_at: unknown }>(
     db,
     "select id, hash, created_at from drizzle.__drizzle_migrations order by id",
   );
-  if (rawRows.length !== PG_PRE_SQUASH_MIGRATION_HASHES.length) return false;
-
-  const ledger = rawRows.map((row, index): PgMigrationLedgerRow => ({
+  return rawRows.map((row, index): PgMigrationLedgerRow => ({
     id: validatePositiveInteger(row.id, `ledger[${index}].id`),
     hash: validateMigrationHash(row.hash, `ledger[${index}]`),
     createdAt: validatePositiveInteger(row.created_at, `ledger[${index}].created_at`),
   }));
+}
+
+function matchingMigrationLedger(
+  ledger: PgMigrationLedgerRow[],
+  hashes: readonly string[],
+  baselineHashes?: ReadonlySet<string>,
+): PgMigrationLedgerRow[] | undefined {
+  if (ledger.length !== hashes.length) return undefined;
   const orderedLedger = [...ledger].sort((left, right) => left.createdAt - right.createdAt);
   const matches = orderedLedger.every((row, index) => {
-    if (index === 0) return PG_PRE_SQUASH_BASELINE_HASHES.has(row.hash);
-    return row.hash === PG_PRE_SQUASH_MIGRATION_HASHES[index];
+    if (index === 0 && baselineHashes) return baselineHashes.has(row.hash);
+    return row.hash === hashes[index];
   });
   const hasUniqueIds = new Set(ledger.map((row) => row.id)).size === ledger.length;
   const hasUniqueTimes = new Set(ledger.map((row) => row.createdAt)).size === ledger.length;
-  if (!matches || !hasUniqueIds || !hasUniqueTimes) return false;
+  if (!matches || !hasUniqueIds || !hasUniqueTimes) return undefined;
+  return orderedLedger;
+}
 
-  const { readMigrationFiles } = await import("drizzle-orm/migrator");
-  const [baseline] = readMigrationFiles({ migrationsFolder });
-  if (!baseline) throw new Error(`[bootstrap] 未找到迁移基线:${migrationsFolder}`);
-  const baselineHash = validateMigrationHash(baseline.hash, "journal[0]");
-  const baselineTime = validatePositiveInteger(baseline.folderMillis, "journal[0].when");
+async function replacePgMigrationLedgerWithBaseline(
+  db: unknown,
+  orderedLedger: PgMigrationLedgerRow[],
+  baseline: { hash: string; folderMillis: number },
+): Promise<void> {
+  const baselineHash = validateMigrationHash(baseline.hash, "target baseline");
+  const baselineTime = validatePositiveInteger(baseline.folderMillis, "target baseline.when");
   const [first, ...trailing] = orderedLedger;
+  if (!first) throw new Error("[bootstrap] PostgreSQL 旧迁移账本为空");
 
   const updateResult = await pgExecute(
     db,
@@ -424,9 +458,52 @@ async function compactPreSquashPgMigrationLedgerIfNeeded(
   if (deleteCount !== trailing.length) {
     throw new Error("[bootstrap] PostgreSQL 旧迁移账本尾部归并失败");
   }
+}
 
-  console.log(`[bootstrap] ✅ 已将 ${ledger.length} 条旧迁移账本归并为当前基线`);
-  return true;
+/**
+ * 识别两代预发布账本：完整 0000-0005 可直接归并；旧 0000-0015 或其后续前缀
+ * 先补跑 pg-compat 尾部迁移，再归并为当前基线。未知或不完整历史交给严格协调阻断。
+ */
+async function coordinatePreReleasePgMigrationLedger(
+  db: unknown,
+  migrationsFolder: string,
+): Promise<"none" | "compacted" | "compatibility"> {
+  const ledger = await readPgMigrationLedger(db);
+  const preReleaseHashes = PG_PRE_RELEASE_MIGRATIONS.map((migration) => migration.hash);
+  const completePreRelease = matchingMigrationLedger(ledger, preReleaseHashes);
+  if (completePreRelease) {
+    await replacePgMigrationLedgerWithBaseline(
+      db,
+      completePreRelease,
+      await readFirstMigrationMeta(migrationsFolder),
+    );
+    console.log(`[bootstrap] ✅ 已将 ${ledger.length} 条预发布迁移账本归并为当前基线`);
+    return "compacted";
+  }
+
+  const orderedLedger = [...ledger].sort((left, right) => left.createdAt - right.createdAt);
+  const isCanonicalPreReleasePrefix = orderedLedger.length > 0
+    && orderedLedger.length < PG_PRE_RELEASE_MIGRATIONS.length
+    && new Set(ledger.map((row) => row.id)).size === ledger.length
+    && new Set(ledger.map((row) => row.createdAt)).size === ledger.length
+    && orderedLedger.every((row, index) => {
+      const migration = PG_PRE_RELEASE_MIGRATIONS[index];
+      return migration !== undefined
+        && row.hash === migration.hash
+        && row.createdAt === migration.folderMillis;
+    });
+  if (isCanonicalPreReleasePrefix) return "compatibility";
+
+  const preSquash = matchingMigrationLedger(
+    ledger,
+    PG_PRE_SQUASH_MIGRATION_HASHES,
+    PG_PRE_SQUASH_BASELINE_HASHES,
+  );
+  if (!preSquash) return "none";
+
+  await replacePgMigrationLedgerWithBaseline(db, preSquash, PG_PRE_RELEASE_MIGRATIONS[0]);
+  console.log(`[bootstrap] ✅ 已将 ${ledger.length} 条旧迁移账本归并为预发布基线`);
+  return "compatibility";
 }
 
 /**

@@ -295,7 +295,7 @@ describe("model catalog baseline migration", () => {
 
 describe("model catalog reasoning migration", () => {
   const baseline = readFileSync("drizzle/pg/0000_baseline.sql", "utf8");
-  const migration = readFileSync("drizzle/pg/0002_model_catalog_reasoning.sql", "utf8");
+  const migration = baseline;
   const rows = JSON.parse(
     baseline.match(/\$model_catalog\$(.*)\$model_catalog\$/s)?.[1] ?? "[]",
   ) as Array<{ canonical_model_id: string; capabilities: ModelCapabilities }>;
@@ -349,40 +349,4 @@ describe("model catalog reasoning migration", () => {
     expect(migration).toContain('NOT (catalog."capabilities" ? \'thinkingFormat\')');
   });
 
-  it("保持 Drizzle journal 与 snapshot 链连续", () => {
-    const journal = JSON.parse(readFileSync("drizzle/pg/meta/_journal.json", "utf8")) as {
-      entries: Array<{ idx: number; tag: string }>;
-    };
-    const previous = JSON.parse(readFileSync("drizzle/pg/meta/0001_snapshot.json", "utf8")) as {
-      id: string;
-    };
-    const current = JSON.parse(readFileSync("drizzle/pg/meta/0002_snapshot.json", "utf8")) as {
-      id: string;
-      prevId: string;
-    };
-    const next = JSON.parse(readFileSync("drizzle/pg/meta/0003_snapshot.json", "utf8")) as {
-      id: string;
-      prevId: string;
-    };
-    expect(journal.entries.slice(2, 4)).toEqual([
-      {
-        idx: 2,
-        version: "7",
-        when: expect.any(Number),
-        tag: "0002_model_catalog_reasoning",
-        breakpoints: true,
-      },
-      {
-        idx: 3,
-        version: "7",
-        when: expect.any(Number),
-        tag: "0003_complex_slayback",
-        breakpoints: true,
-      },
-    ]);
-    expect(current.id).not.toBe(previous.id);
-    expect(current.prevId).toBe(previous.id);
-    expect(next.id).not.toBe(current.id);
-    expect(next.prevId).toBe(current.id);
-  });
 });

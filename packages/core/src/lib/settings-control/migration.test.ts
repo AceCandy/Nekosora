@@ -7,11 +7,11 @@ const migrationDir = join(process.cwd(), "drizzle/pg");
 describe("settings control PostgreSQL migration", () => {
   it("creates revision, immutable history and private hourly aggregates", () => {
     const migration = readFileSync(
-      join(migrationDir, "0003_complex_slayback.sql"),
+      join(migrationDir, "0000_baseline.sql"),
       "utf8",
     );
     const snapshot = JSON.parse(
-      readFileSync(join(migrationDir, "meta/0003_snapshot.json"), "utf8"),
+      readFileSync(join(migrationDir, "meta/0000_snapshot.json"), "utf8"),
     ) as {
       tables: Record<string, {
         columns?: Record<string, unknown>;

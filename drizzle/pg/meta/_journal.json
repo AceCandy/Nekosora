@@ -5,43 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1786851244170,
+      "when": 1788276146150,
       "tag": "0000_baseline",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1787302155039,
-      "tag": "0001_bitter_senator_kelly",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1787322814372,
-      "tag": "0002_model_catalog_reasoning",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1787501905680,
-      "tag": "0003_complex_slayback",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1787627350231,
-      "tag": "0004_typical_photon",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1788107900096,
-      "tag": "0005_ambitious_moondragon",
       "breakpoints": true
     }
   ]
