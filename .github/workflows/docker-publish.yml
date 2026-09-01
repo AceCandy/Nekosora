@@ -91,6 +91,7 @@ jobs:
         run: |
           docker compose -f docker-compose.yml config --quiet
           docker compose --env-file deploy/production.env.example -f compose.production.yml config --quiet
+          docker compose --env-file deploy/production.env.example -f compose.production.external.yml config --quiet
 
       - name: Check workspace policy
         if: steps.freshness.outputs.skip != 'true'

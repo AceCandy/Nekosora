@@ -25,6 +25,7 @@ published image names, Registry credentials, or deployment documentation.
 - Publish Docker target: unified `nekusora`, native `linux/amd64` and `linux/arm64` builds, `push=true`
 - GHCR image: `nekusora`
 - DockerHub image: `nekusora`, only for `v*` push tags
+- Production Compose image: `ghcr.io/acecandy/nekusora:${IMAGE_TAG:-latest}`
 
 ### 3. Contracts
 
@@ -47,6 +48,13 @@ published image names, Registry credentials, or deployment documentation.
   Gateway, and Worker remain separate containers with separate commands and health
   checks. Do not update the former `nekusora-web`, `nekusora-gateway`, or
   `nekusora-worker` images.
+- Production Compose pulls the same GHCR `IMAGE_TAG` for Web, Gateway, and Worker.
+  The tracked environment example pins a released version; `latest` is only an
+  explicit rolling-update choice. Keep Web's build definition for explicit source builds.
+- Production provides two standalone Compose files. `compose.production.yml` includes
+  PostgreSQL and Redis with strict health dependencies; `compose.production.external.yml`
+  contains only application services and uses external `DATABASE_URL` and `REDIS_URL`
+  endpoints. Both files keep their shared application service definitions aligned.
 - Gateway and Worker bundles share the workspace-external `deploy/runtime` production
   manifest and frozen lock. Keep peer auto-install disabled for this isolated graph and
   reject Next, SWC, Vitest, Vite, esbuild, and `pdfjs-dist` from it. Do not copy two

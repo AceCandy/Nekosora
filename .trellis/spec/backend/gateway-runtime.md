@@ -41,7 +41,7 @@ HTTP adaptation and process lifecycle; Core owns framework-neutral behavior.
 
 ### Production edge and process boundary
 
-- `compose.production.yml` runs PostgreSQL, Redis, Web, Gateway, Worker, and an unprivileged edge-router. Only edge-router publishes the application port; Web, Gateway, and Worker listen on the internal backend network (`3000`, `4000`, and `4001`).
+- `compose.production.yml` runs PostgreSQL, Redis, Web, Gateway, Worker, and an unprivileged edge-router. `compose.production.external.yml` omits PostgreSQL/Redis and connects every application process to external endpoints. Only edge-router publishes the application port; Web, Gateway, and Worker listen on the internal backend network (`3000`, `4000`, and `4001`).
 - The edge route matrix is authoritative for production ingress: `/v1/*`, `/api/chat`, `/api/upload`, `/api/files/*`, `/api/images*`, and `/metrics` go to Gateway; `/api/auth/*`, pages, static assets, and `/_next/*` go to Web.
 - Gateway SSE routes use `proxy_buffering off`; the edge preserves Host, Origin, Cookie, Authorization, and `X-Forwarded-*` headers. `/metrics` is denied by default and only allows `METRICS_ALLOW_CIDR`.
 - Gateway and Worker share the named `uploads` volume and use an explicit absolute `LOCAL_STORAGE_DIR=/app/uploads`. Web does not mount this volume.

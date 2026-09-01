@@ -187,12 +187,19 @@ resp = client.chat.completions.create(
 
 ```bash
 cp deploy/production.env.example deploy/production.env
-docker compose --env-file deploy/production.env -f compose.production.yml pull postgres redis edge-router
-docker compose --env-file deploy/production.env -f compose.production.yml build --pull
-docker compose --env-file deploy/production.env -f compose.production.yml up -d
+# 内置 PostgreSQL 17(+pgvector)与 Redis
+docker compose --env-file deploy/production.env -f compose.production.yml up -d --pull always --no-build
 ```
 
-现有 PostgreSQL 16 部署不能直接复用数据目录启动 PostgreSQL 17；升级前请按 [`deploy/production.md`](./deploy/production.md) 完成大版本迁移。
+`deploy/production.env` 中的 `IMAGE_TAG` 固定部署版本；示例使用 `0.1.0`，升级时改为新的版本标签，也可使用滚动更新的 `latest`。
+
+外接已有 PostgreSQL/Redis 时，将 `DATABASE_URL`、`REDIS_URL` 改为容器可访问的外部地址，直接使用外接版 Compose：
+
+```bash
+docker compose --env-file deploy/production.env -f compose.production.external.yml up -d --pull always --no-build
+```
+
+内置模式中，现有 PostgreSQL 16 数据目录不能直接由 PostgreSQL 17 启动；升级前请按 [`deploy/production.md`](./deploy/production.md) 完成大版本迁移。
 
 ---
 
@@ -224,7 +231,7 @@ docker pull ghcr.io/acecandy/nekusora:edge
 docker pull acecandy/nekusora:latest             # v* tag，可选 DockerHub 同步
 ```
 
-旧的 `nekusora-web`、`nekusora-gateway`、`nekusora-worker` 镜像地址不再更新。统一镜像仍应通过 `compose.production.yml` 启动三个独立容器，不要在一个容器内同时运行三个进程。
+旧的 `nekusora-web`、`nekusora-gateway`、`nekusora-worker` 镜像地址不再更新。统一镜像仍应通过生产 Compose 启动三个独立容器，不要在一个容器内同时运行三个进程。
 
 或仅在本地构建镜像:
 
@@ -232,7 +239,7 @@ docker pull acecandy/nekusora:latest             # v* tag，可选 DockerHub 同
 docker build -t nekusora .
 ```
 
-`compose.production.yml` 默认自托管 PostgreSQL,数据保存在 `postgres-data` 卷;完整部署仍使用上面的生产编排命令。
+`compose.production.yml` 自带 PostgreSQL/Redis，内置 PostgreSQL 数据保存在 `postgres-data` 卷；`compose.production.external.yml` 不创建基础设施容器，只连接 `DATABASE_URL`、`REDIS_URL` 指向的外部服务。
 
 ---
 

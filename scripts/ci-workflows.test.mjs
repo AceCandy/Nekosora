@@ -59,6 +59,7 @@ test("PR and main quality workflow gates the unified amd64 image", () => {
     "pnpm lint:workflows",
     "docker compose -f docker-compose.yml config --quiet",
     "docker compose --env-file deploy/production.env.example -f compose.production.yml config --quiet",
+    "docker compose --env-file deploy/production.env.example -f compose.production.external.yml config --quiet",
     "pnpm quality:workspace",
     "pnpm check",
     "pnpm test",
@@ -83,6 +84,7 @@ test("publish workflow builds one image on native runners and isolates DockerHub
   assert.match(qualityCommands, /pnpm quality:workspace/);
   assert.match(qualityCommands, /docker compose -f docker-compose\.yml config --quiet/);
   assert.match(qualityCommands, /docker compose --env-file deploy\/production\.env\.example -f compose\.production\.yml config --quiet/);
+  assert.match(qualityCommands, /docker compose --env-file deploy\/production\.env\.example -f compose\.production\.external\.yml config --quiet/);
   assertPostgresGate(workflow.jobs.quality);
 
   assert.equal(ghcrBuild.needs, "quality");
@@ -163,6 +165,7 @@ test("production compose runs three containers from one image", () => {
   const runtimeLock = read("deploy/runtime/pnpm-lock.yaml");
   const webManifest = JSON.parse(read("apps/web/package.json"));
   const compose = load("compose.production.yml");
+  const externalCompose = load("compose.production.external.yml");
   const services = [compose.services.web, compose.services.gateway, compose.services.worker];
 
   for (const artifact of [
@@ -189,13 +192,37 @@ test("production compose runs three containers from one image", () => {
   assert.doesNotMatch(runtimeLock, /^  (?:next|vitest|vite|pdfjs-dist|esbuild|['"]?@next\/swc)[@:]/m);
 
   assert.deepEqual(services.map((service) => service.image), [
-    "nekusora:${IMAGE_TAG:-local}",
-    "nekusora:${IMAGE_TAG:-local}",
-    "nekusora:${IMAGE_TAG:-local}",
+    "ghcr.io/acecandy/nekusora:${IMAGE_TAG:-latest}",
+    "ghcr.io/acecandy/nekusora:${IMAGE_TAG:-latest}",
+    "ghcr.io/acecandy/nekusora:${IMAGE_TAG:-latest}",
   ]);
+  assert.match(read("deploy/production.env.example"), /^IMAGE_TAG=0\.1\.0$/m);
   assert.equal(compose.services.web.build.dockerfile, "Dockerfile");
   assert.equal(compose.services.gateway.build, undefined);
   assert.equal(compose.services.worker.build, undefined);
+  assert.equal(compose.services.postgres.profiles, undefined);
+  assert.equal(compose.services.redis.profiles, undefined);
+  assert.equal(externalCompose.services.postgres, undefined);
+  assert.equal(externalCompose.services.redis, undefined);
+  assert.equal(compose["x-common-environment"].REDIS_URL, "${REDIS_URL:-redis://redis:6379}");
+  assert.equal(externalCompose["x-common-environment"].REDIS_URL, "${REDIS_URL:-}");
+  for (const service of services) {
+    assert.deepEqual(service.depends_on.postgres, { condition: "service_healthy" });
+    assert.deepEqual(service.depends_on.redis, { condition: "service_healthy" });
+  }
+  for (const name of ["web", "gateway", "worker"]) {
+    const bundledService = structuredClone(compose.services[name]);
+    delete bundledService.depends_on;
+    const inherited = bundledService.environment["<<"];
+    const commonEnvironment = (Array.isArray(inherited) ? inherited : [inherited])
+      .find((environment) => environment.DATABASE_URL);
+    commonEnvironment.REDIS_URL = "${REDIS_URL:-}";
+    assert.deepEqual(bundledService, externalCompose.services[name]);
+  }
+  assert.deepEqual(compose.services["edge-router"], externalCompose.services["edge-router"]);
+  assert.deepEqual(compose.networks, externalCompose.networks);
+  assert.deepEqual(compose.volumes.uploads, externalCompose.volumes.uploads);
+  assert.deepEqual(compose.services.worker.networks, ["backend", "ingress"]);
   assert.deepEqual(compose.services.gateway.command, ["node", "dist/main.js"]);
   assert.deepEqual(compose.services.worker.command, ["node", "dist/main.js"]);
   assert.equal(compose.services.gateway.working_dir, "/app/runtime/apps/gateway");

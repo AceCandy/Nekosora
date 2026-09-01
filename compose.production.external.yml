@@ -3,7 +3,7 @@ name: nekusora
 x-common-environment: &common-environment
   NODE_ENV: production
   DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in the production env file}
-  REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+  REDIS_URL: ${REDIS_URL:-}
   DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:?Set DATA_ENCRYPTION_KEY in the production env file}
   BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Set BETTER_AUTH_SECRET in the production env file}
   BETTER_AUTH_URL: ${BETTER_AUTH_URL:?Set BETTER_AUTH_URL in the production env file}
@@ -22,35 +22,6 @@ x-storage-environment: &storage-environment
   S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-}
 
 services:
-  postgres:
-    image: pgvector/pgvector:pg17
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-nekusora}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the production env file}
-      POSTGRES_DB: ${POSTGRES_DB:-nekusora}
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-    networks: [backend]
-
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
-    volumes:
-      - redis-data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-    networks: [backend]
-
   web:
     build:
       context: .
@@ -61,11 +32,6 @@ services:
       <<: *common-environment
       DB_POOL_MAX: ${WEB_DB_POOL_MAX:-5}
       GATEWAY_DEBUG_REQUESTS: ${GATEWAY_DEBUG_REQUESTS:-false}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/healthz/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s
@@ -87,11 +53,6 @@ services:
       GATEWAY_DEBUG_REQUESTS: ${GATEWAY_DEBUG_REQUESTS:-false}
     volumes:
       - uploads:/app/uploads
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/healthz/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s
@@ -113,11 +74,6 @@ services:
       WORKER_HEALTH_PORT: 4001
     volumes:
       - uploads:/app/uploads
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4001/healthz/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s
@@ -152,8 +108,6 @@ services:
     networks: [ingress]
 
 volumes:
-  postgres-data:
-  redis-data:
   uploads:
 
 networks:
