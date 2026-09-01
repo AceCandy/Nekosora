@@ -114,9 +114,9 @@ Nekusora(星枢,取自 Neku 猫 / Sora 天空)把两件事揉进了同一个产�
 pnpm install
 cp .env.example .env.local    # 按需修改本地配置与密钥
 docker compose up -d          # 启动 PostgreSQL(+pgvector)与 Redis
-./dev.sh                      # Web: http://localhost:3500
-./dev-w.sh                    # 另开终端，Gateway: http://localhost:3502
-./dev-q.sh                    # 另开终端，Worker 健康端口: 3501
+PORT=3500 pnpm dev            # Web: http://localhost:3500
+GATEWAY_PORT=3502 pnpm dev:gateway # 另开终端，Gateway: http://localhost:3502
+WORKER_HEALTH_PORT=3501 pnpm worker # 另开终端，Worker 健康端口: 3501
 ```
 
 > 首次启动会**自动**创建首个管理员账号(读 `.env.local` 的 `SEED_ADMIN_*`)。
