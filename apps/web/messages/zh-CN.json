@@ -99,6 +99,22 @@
     "renderStyles": "输出样式",
     "webSearch": "联网搜索"
   },
+  "account": {
+    "changePassword": "修改密码",
+    "changePasswordTitle": "修改密码",
+    "changePasswordDescription": "请输入当前密码并设置新密码。修改成功后，其他设备将退出登录。",
+    "currentPassword": "当前密码",
+    "newPassword": "新密码",
+    "confirmPassword": "确认新密码",
+    "passwordHint": "请输入 8–128 位密码。",
+    "changePasswordSubmit": "修改密码",
+    "changePasswordSuccess": "密码已修改，其他设备已退出登录。",
+    "currentPasswordRequired": "请输入当前密码。",
+    "invalidCurrentPassword": "当前密码不正确。",
+    "invalidPassword": "新密码必须为 8–128 位。",
+    "passwordMismatch": "两次输入的新密码不一致。",
+    "changeFailed": "密码修改失败，请稍后重试。"
+  },
   "chat": {
     "welcomeTitle": "Nekusora",
     "welcomeSubtitle": "星枢天流，从第一段对话开始",

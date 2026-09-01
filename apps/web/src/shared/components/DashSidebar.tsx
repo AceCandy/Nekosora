@@ -4,11 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { clsx } from "clsx";
-import { ArrowLeft, ChevronDown, Menu, PanelLeftClose, PanelLeftOpen, LogOut, X } from "lucide-react";
+import { ArrowLeft, ChevronDown, KeyRound, Menu, PanelLeftClose, PanelLeftOpen, LogOut, X } from "lucide-react";
 import type { SessionUser } from "@/lib/session";
 import type { NavGroup } from "@/shared/nav-config";
 import SidebarNav from "@/shared/components/SidebarNav";
 import LanguageSwitcher from "@/shared/components/LanguageSwitcher";
+import ChangePasswordDialog from "@/shared/components/ChangePasswordDialog";
 import { useClickOutside } from "@/shared/lib/useClickOutside";
 
 interface DashSidebarProps {
@@ -39,11 +40,15 @@ export default function DashSidebar({
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const mobileTriggerRef = useRef<HTMLButtonElement>(null);
   const mobileCloseRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const userMenuButtonRef = useRef<HTMLButtonElement>(null);
+  const changePasswordOpenRef = useRef(false);
   const t = useTranslations("nav");
+  const tAccount = useTranslations("account");
   const displayName = user.name.trim() || user.email;
 
   useClickOutside(userMenuRef, () => setUserMenuOpen(false), userMenuOpen);
@@ -73,6 +78,7 @@ export default function DashSidebar({
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        if (changePasswordOpenRef.current) return;
         event.preventDefault();
         setMobileOpen(false);
         return;
@@ -112,6 +118,18 @@ export default function DashSidebar({
   const openMobileSidebar = () => {
     setCollapsed(false);
     setMobileOpen(true);
+  };
+
+  const openChangePassword = () => {
+    changePasswordOpenRef.current = true;
+    setUserMenuOpen(false);
+    setChangePasswordOpen(true);
+  };
+
+  const closeChangePassword = () => {
+    changePasswordOpenRef.current = false;
+    setChangePasswordOpen(false);
+    requestAnimationFrame(() => userMenuButtonRef.current?.focus());
   };
 
   return (
@@ -223,6 +241,15 @@ export default function DashSidebar({
               )}
             >
               <LanguageSwitcher className="touch-target flex w-full rounded-md px-3 py-2 hover:bg-neutral-100 " />
+              <button
+                type="button"
+                onClick={openChangePassword}
+                className="touch-target flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-ui-body text-neutral-700 hover:bg-neutral-100"
+                aria-haspopup="dialog"
+              >
+                <KeyRound className="h-4 w-4" aria-hidden="true" />
+                {tAccount("changePassword")}
+              </button>
               <form action={logoutAction}>
                 <button
                   type="submit"
@@ -235,6 +262,7 @@ export default function DashSidebar({
             </div>
           )}
           <button
+            ref={userMenuButtonRef}
             type="button"
             onClick={() => setUserMenuOpen((open) => !open)}
             className={clsx(
@@ -259,6 +287,7 @@ export default function DashSidebar({
           </button>
         </div>
       </aside>
+      <ChangePasswordDialog open={changePasswordOpen} onClose={closeChangePassword} />
     </>
   );
 }

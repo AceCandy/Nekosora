@@ -99,6 +99,22 @@
     "renderStyles": "Render styles",
     "webSearch": "Web Search"
   },
+  "account": {
+    "changePassword": "Change password",
+    "changePasswordTitle": "Change password",
+    "changePasswordDescription": "Enter your current password and choose a new one. Other devices will be signed out after the change.",
+    "currentPassword": "Current password",
+    "newPassword": "New password",
+    "confirmPassword": "Confirm new password",
+    "passwordHint": "Enter a password between 8 and 128 characters.",
+    "changePasswordSubmit": "Change password",
+    "changePasswordSuccess": "Your password was changed and other devices were signed out.",
+    "currentPasswordRequired": "Enter your current password.",
+    "invalidCurrentPassword": "The current password is incorrect.",
+    "invalidPassword": "The new password must be between 8 and 128 characters.",
+    "passwordMismatch": "The new passwords do not match.",
+    "changeFailed": "Could not change the password. Please try again."
+  },
   "chat": {
     "welcomeTitle": "Nekusora",
     "welcomeSubtitle": "The astral skyline — start your first conversation",

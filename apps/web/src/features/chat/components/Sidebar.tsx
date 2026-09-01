@@ -24,9 +24,10 @@ import Modal from "@/shared/ui/Modal";
 import Popover from "@/shared/ui/Popover";
 import { Button } from "@/shared/ui/Button";
 import UnsavedChangesDialog, { useUnsavedChanges } from "@/shared/ui/UnsavedChangesDialog";
-import { Plus, Settings2, LogOut, Menu, Search, Pin, Archive, ImageIcon, Loader2, ChevronDown, ArrowRight } from "lucide-react";
+import { Plus, Settings2, LogOut, Menu, Search, Pin, Archive, ImageIcon, Loader2, ChevronDown, ArrowRight, KeyRound } from "lucide-react";
 import { AIPanelLeftCloseIcon, AIPanelLeftOpenIcon, AIPencilIcon, AISearchIcon, AITrash2Icon, AIXIcon } from "@/shared/components/animated-icons";
 import { AnimatedText } from "@/shared/components/AnimatedText";
+import ChangePasswordDialog from "@/shared/components/ChangePasswordDialog";
 import { clsx } from "clsx";
 import { useShallow } from "zustand/react/shallow";
 import { useChatStreamStore } from "@/features/chat/store/chatStreamStore";
@@ -154,10 +155,12 @@ export default function Sidebar({
   const [collapsed, setCollapsed] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set(["earlier", "archived"]));
   const tSidebar = useTranslations("chat");
   const tNav = useTranslations("nav");
   const tCommon = useTranslations("common");
+  const tAccount = useTranslations("account");
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -192,6 +195,7 @@ export default function Sidebar({
   const [isPending, startTransition] = useTransition();
   const displayName = userName.trim() || userEmail;
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const userMenuButtonRef = useRef<HTMLButtonElement>(null);
   const conversationSwitchStartedRef = useRef(false);
   const newConversationSequenceRef = useRef(0);
   const groupRequestRef = useRef<Partial<Record<ConversationGroupKey, number>>>({});
@@ -429,6 +433,11 @@ export default function Sidebar({
         console.error("Sign out failed:", err);
       }
     });
+  };
+
+  const handlePasswordDialogClose = () => {
+    setChangePasswordOpen(false);
+    requestAnimationFrame(() => userMenuButtonRef.current?.focus());
   };
 
   const runAction = (fn: (id: string) => Promise<void>, id: string) => {
@@ -868,6 +877,10 @@ export default function Sidebar({
                 <Settings2 className="h-4 w-4" aria-hidden="true" />
                 {settingsText}
               </Link>
+              <button type="button" onClick={() => { setUserMenuOpen(false); setChangePasswordOpen(true); }} className="touch-target flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-ui-body text-neutral-700 hover:bg-neutral-100" aria-haspopup="dialog">
+                <KeyRound className="h-4 w-4" aria-hidden="true" />
+                {tAccount("changePassword")}
+              </button>
               <form onSubmit={handleSignOut}>
                 <button type="submit" disabled={isPending} className="touch-target flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-ui-body text-danger hover:bg-red-50 disabled:opacity-50 ">
                   <LogOut className="h-4 w-4" aria-hidden="true" />
@@ -876,13 +889,15 @@ export default function Sidebar({
               </form>
             </div>
           )}
-          <button type="button" onClick={() => setUserMenuOpen((value) => !value)} className={clsx("touch-target flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left hover:bg-neutral-100  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue", collapsed && "md:justify-center")} aria-expanded={userMenuOpen}>
+          <button ref={userMenuButtonRef} type="button" onClick={() => setUserMenuOpen((value) => !value)} className={clsx("touch-target flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left hover:bg-neutral-100  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue", collapsed && "md:justify-center")} aria-expanded={userMenuOpen}>
             <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sora-blue/10 text-ui-caption font-semibold text-sora-blue">{displayName.slice(0, 1).toUpperCase()}</span>
             <span className={clsx("min-w-0 flex-1", collapsed && "md:hidden")}><span className="block truncate text-ui-body font-semibold text-neutral-800 ">{displayName}</span><span className="mt-0.5 block truncate text-ui-caption font-mono text-ink-tertiary ">{userEmail}</span></span>
             <ChevronDown className={clsx("h-4 w-4 shrink-0 text-neutral-400 transition-transform", userMenuOpen && "rotate-180", collapsed && "md:hidden")} aria-hidden="true" />
           </button>
         </div>
       </aside>
+
+      <ChangePasswordDialog open={changePasswordOpen} onClose={handlePasswordDialogClose} />
 
       <ConfirmDialog
         open={deleteTargetId !== null}
