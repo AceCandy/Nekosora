@@ -8,7 +8,14 @@ import ChangePasswordDialog, {
   validatePasswordChange,
 } from "./ChangePasswordDialog";
 
-const { changePasswordMock } = vi.hoisted(() => ({ changePasswordMock: vi.fn() }));
+const { changePasswordMock, useUnsavedChangesMock } = vi.hoisted(() => ({
+  changePasswordMock: vi.fn(),
+  useUnsavedChangesMock: vi.fn(() => ({
+    contentRef: vi.fn(),
+    requestClose: vi.fn(),
+    dialogProps: { open: false, onClose: vi.fn(), onConfirm: vi.fn() },
+  })),
+}));
 
 vi.mock("next-intl", () => ({
   useTranslations: () => (key: string) => key,
@@ -18,9 +25,22 @@ vi.mock("@/lib/auth-client", () => ({
   authClient: { changePassword: changePasswordMock },
 }));
 
+vi.mock("@/shared/ui/UnsavedChangesDialog", () => ({
+  default: () => <div data-unsaved-changes-dialog="self" />,
+  useUnsavedChanges: useUnsavedChangesMock,
+}));
+
 describe("ChangePasswordDialog", () => {
   beforeEach(() => {
     changePasswordMock.mockReset();
+    useUnsavedChangesMock.mockClear();
+  });
+
+  it("接入未保存修改关闭保护", () => {
+    const html = renderToStaticMarkup(<ChangePasswordDialog open onClose={() => {}} />);
+
+    expect(useUnsavedChangesMock).toHaveBeenCalledOnce();
+    expect(html).toContain('data-unsaved-changes-dialog="self"');
   });
 
   it("声明当前密码与两次新密码输入", () => {

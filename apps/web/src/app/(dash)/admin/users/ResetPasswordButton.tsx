@@ -6,6 +6,7 @@ import { KeyRound } from "lucide-react";
 import Modal from "@/shared/ui/Modal";
 import Input from "@/shared/ui/Input";
 import { Button } from "@/shared/ui/Button";
+import UnsavedChangesDialog, { useUnsavedChanges } from "@/shared/ui/UnsavedChangesDialog";
 import { resetUserPassword, type ResetUserPasswordResult } from "../actions";
 
 interface ResetPasswordButtonProps {
@@ -28,6 +29,7 @@ export function ResetPasswordDialog({ userId, displayName, onClose }: ResetPassw
   const [confirmPassword, setConfirmPassword] = useState("");
   const [result, setResult] = useState<ResetUserPasswordResult | null>(null);
   const [pending, startTransition] = useTransition();
+  const { contentRef, requestClose, dialogProps } = useUnsavedChanges<HTMLFormElement>(onClose);
   const newPasswordRef = useRef<HTMLInputElement>(null);
   const confirmPasswordRef = useRef<HTMLInputElement>(null);
   const invalidPassword = result?.error === "invalidPassword";
@@ -69,82 +71,85 @@ export function ResetPasswordDialog({ userId, displayName, onClose }: ResetPassw
   }
 
   return (
-    <Modal
-      open
-      onClose={pending ? () => {} : onClose}
-      title={t("resetTitle")}
-      dialogClassName="modal-pop m-auto max-h-[90vh] w-[min(440px,92vw)] overflow-y-auto rounded-lg border border-morning-mist bg-white p-0 text-left text-space-ink shadow-xl backdrop:bg-black/40"
-    >
-      {result?.status === "success" ? (
-        <div className="space-y-4">
-          <p role="status" aria-live="polite" className="text-ui-body text-success">
-            {t("resetSuccess", { name: displayName })}
-          </p>
-          <div className="flex justify-end">
-            <Button type="button" variant="primary" onClick={onClose} autoFocus>{tc("close")}</Button>
-          </div>
-        </div>
-      ) : (
-        <form onSubmit={handleSubmit} noValidate className="space-y-4">
-          <p className="text-ui-body text-ink-secondary">
-            {t("resetDescription", { name: displayName })}
-          </p>
-          <div className="space-y-1.5">
-            <label htmlFor={newPasswordId} className="text-ui-body font-medium text-space-ink">
-              {t("newPassword")}
-            </label>
-            <Input
-              ref={newPasswordRef}
-              id={newPasswordId}
-              name="newPassword"
-              type="password"
-              value={newPassword}
-              onChange={(event) => { setNewPassword(event.target.value); setResult(null); }}
-              minLength={8}
-              maxLength={128}
-              autoComplete="new-password"
-              aria-describedby={`${hintId}${invalidPassword ? ` ${feedbackId}` : ""}`}
-              aria-errormessage={invalidPassword ? feedbackId : undefined}
-              aria-invalid={invalidPassword || undefined}
-              disabled={pending}
-              data-autofocus
-              required
-            />
-          </div>
-          <div className="space-y-1.5">
-            <label htmlFor={confirmPasswordId} className="text-ui-body font-medium text-space-ink">
-              {t("confirmPassword")}
-            </label>
-            <Input
-              ref={confirmPasswordRef}
-              id={confirmPasswordId}
-              name="confirmPassword"
-              type="password"
-              value={confirmPassword}
-              onChange={(event) => { setConfirmPassword(event.target.value); setResult(null); }}
-              minLength={8}
-              maxLength={128}
-              autoComplete="new-password"
-              aria-describedby={passwordMismatch ? feedbackId : undefined}
-              aria-errormessage={passwordMismatch ? feedbackId : undefined}
-              aria-invalid={passwordMismatch || undefined}
-              disabled={pending}
-              required
-            />
-          </div>
-          <p id={hintId} className="text-ui-caption text-ink-tertiary">{t("passwordHint")}</p>
-          {result?.error && (
-            <p id={feedbackId} role="alert" className="text-ui-body text-danger">
-              {t(result.error)}
+    <>
+      <Modal
+        open
+        onClose={pending ? () => {} : requestClose}
+        title={t("resetTitle")}
+        dialogClassName="modal-pop m-auto max-h-[90vh] w-[min(440px,92vw)] overflow-y-auto rounded-lg border border-morning-mist bg-white p-0 text-left text-space-ink shadow-xl backdrop:bg-black/40"
+      >
+        {result?.status === "success" ? (
+          <div className="space-y-4">
+            <p role="status" aria-live="polite" className="text-ui-body text-success">
+              {t("resetSuccess", { name: displayName })}
             </p>
-          )}
-          <div className="flex justify-end gap-2 border-t border-morning-mist pt-4">
-            <Button type="button" onClick={onClose} disabled={pending}>{tc("cancel")}</Button>
-            <Button type="submit" variant="primary" loading={pending}>{t("resetSubmit")}</Button>
+            <div className="flex justify-end">
+              <Button type="button" variant="primary" onClick={onClose} autoFocus>{tc("close")}</Button>
+            </div>
           </div>
-        </form>
-      )}
-    </Modal>
+        ) : (
+          <form ref={contentRef} onSubmit={handleSubmit} noValidate className="space-y-4">
+            <p className="text-ui-body text-ink-secondary">
+              {t("resetDescription", { name: displayName })}
+            </p>
+            <div className="space-y-1.5">
+              <label htmlFor={newPasswordId} className="text-ui-body font-medium text-space-ink">
+                {t("newPassword")}
+              </label>
+              <Input
+                ref={newPasswordRef}
+                id={newPasswordId}
+                name="newPassword"
+                type="password"
+                value={newPassword}
+                onChange={(event) => { setNewPassword(event.target.value); setResult(null); }}
+                minLength={8}
+                maxLength={128}
+                autoComplete="new-password"
+                aria-describedby={`${hintId}${invalidPassword ? ` ${feedbackId}` : ""}`}
+                aria-errormessage={invalidPassword ? feedbackId : undefined}
+                aria-invalid={invalidPassword || undefined}
+                disabled={pending}
+                data-autofocus
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor={confirmPasswordId} className="text-ui-body font-medium text-space-ink">
+                {t("confirmPassword")}
+              </label>
+              <Input
+                ref={confirmPasswordRef}
+                id={confirmPasswordId}
+                name="confirmPassword"
+                type="password"
+                value={confirmPassword}
+                onChange={(event) => { setConfirmPassword(event.target.value); setResult(null); }}
+                minLength={8}
+                maxLength={128}
+                autoComplete="new-password"
+                aria-describedby={passwordMismatch ? feedbackId : undefined}
+                aria-errormessage={passwordMismatch ? feedbackId : undefined}
+                aria-invalid={passwordMismatch || undefined}
+                disabled={pending}
+                required
+              />
+            </div>
+            <p id={hintId} className="text-ui-caption text-ink-tertiary">{t("passwordHint")}</p>
+            {result?.error && (
+              <p id={feedbackId} role="alert" className="text-ui-body text-danger">
+                {t(result.error)}
+              </p>
+            )}
+            <div className="flex justify-end gap-2 border-t border-morning-mist pt-4">
+              <Button type="button" onClick={requestClose} disabled={pending}>{tc("cancel")}</Button>
+              <Button type="submit" variant="primary" loading={pending}>{t("resetSubmit")}</Button>
+            </div>
+          </form>
+        )}
+      </Modal>
+      <UnsavedChangesDialog {...dialogProps} />
+    </>
   );
 }
 

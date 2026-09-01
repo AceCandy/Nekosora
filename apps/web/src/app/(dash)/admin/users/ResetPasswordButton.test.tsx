@@ -1,8 +1,16 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import enMessages from "../../../../../messages/en.json";
 import zhMessages from "../../../../../messages/zh-CN.json";
 import { ResetPasswordDialog } from "./ResetPasswordButton";
+
+const { useUnsavedChangesMock } = vi.hoisted(() => ({
+  useUnsavedChangesMock: vi.fn(() => ({
+    contentRef: vi.fn(),
+    requestClose: vi.fn(),
+    dialogProps: { open: false, onClose: vi.fn(), onConfirm: vi.fn() },
+  })),
+}));
 
 vi.mock("next-intl", () => ({
   useTranslations: () => (key: string) => key,
@@ -12,7 +20,25 @@ vi.mock("../actions", () => ({
   resetUserPassword: vi.fn(),
 }));
 
+vi.mock("@/shared/ui/UnsavedChangesDialog", () => ({
+  default: () => <div data-unsaved-changes-dialog="admin" />,
+  useUnsavedChanges: useUnsavedChangesMock,
+}));
+
 describe("ResetPasswordDialog", () => {
+  beforeEach(() => {
+    useUnsavedChangesMock.mockClear();
+  });
+
+  it("接入未保存修改关闭保护", () => {
+    const html = renderToStaticMarkup(
+      <ResetPasswordDialog userId="user-b" displayName="User B" onClose={() => {}} />,
+    );
+
+    expect(useUnsavedChangesMock).toHaveBeenCalledOnce();
+    expect(html).toContain('data-unsaved-changes-dialog="admin"');
+  });
+
   it("声明两次密码输入及认证边界", () => {
     const html = renderToStaticMarkup(
       <ResetPasswordDialog userId="user-b" displayName="User B" onClose={() => {}} />,
