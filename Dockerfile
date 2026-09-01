@@ -2,7 +2,7 @@
 # docker build -t nekusora . && docker run -p 3000:3000 -e DATABASE_URL=... nekusora
 
 # ---- 构建阶段 ----
-FROM node:22-alpine AS builder
+FROM node:24-alpine AS builder
 RUN corepack enable
 WORKDIR /app
 
@@ -41,7 +41,7 @@ RUN mkdir -p /runtime/apps/gateway /runtime/apps/worker && \
     cd /runtime/apps/worker && node -e "import('mem0ai/oss')"
 
 # ---- 运行阶段 ----
-FROM node:22-alpine AS runner
+FROM node:24-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1

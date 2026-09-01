@@ -29,6 +29,7 @@ yarn-error.log*
 .env
 .env.*
 !.env.example
+/deploy/production.env
 
 # local data (SQLite fallback db, file uploads)
 docs/cankao/

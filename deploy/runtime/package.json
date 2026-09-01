@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=24"
   },
-  "packageManager": "pnpm@10.22.0",
+  "packageManager": "pnpm@10.34.5",
   "dependencies": {
     "@ai-sdk/anthropic": "4.0.16",
     "@ai-sdk/google": "4.0.18",

@@ -5,7 +5,7 @@ export default defineConfig({
   entry: ["src/main.ts"],
   format: ["esm"],
   platform: "node",
-  target: "node22",
+  target: "node24",
   bundle: true,
   noExternal: [/^@nekusora\//],
   skipNodeModulesBundle: true,

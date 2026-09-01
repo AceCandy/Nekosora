@@ -3,12 +3,19 @@
 生产编排使用 `compose.production.yml`，只有 `edge-router` 发布端口；Web、Gateway 和 Worker 端口仅在内部网络可见。
 三个应用容器共用同一个 `nekusora` 镜像，通过各自的工作目录和启动命令运行独立进程。
 
+## 从 PostgreSQL 16 升级
+
+生产编排使用 `pgvector/pgvector:pg17`。PostgreSQL 17 不能直接读取 PostgreSQL 16 数据目录；已有部署必须在旧容器仍运行 PostgreSQL 16 时先完成备份，再按 PostgreSQL 官方流程使用 `pg_upgrade`，或把逻辑备份恢复到新的 PostgreSQL 17 数据目录。备份文件包含全部业务数据和密钥材料，必须保存在仓库外的受控位置。
+
+不要直接用 PostgreSQL 17 启动现有 PostgreSQL 16 卷，也不要用 `down -v` 腾空数据库；本编排不会自动执行数据库大版本迁移。完成迁移并验证备份可恢复后，再执行下面的启动步骤。
+
 ## 首次启动
 
 ```bash
 cp deploy/production.env.example deploy/production.env
 # 编辑 deploy/production.env，使用强随机密钥和正式 BETTER_AUTH_URL
-docker compose --env-file deploy/production.env -f compose.production.yml build
+docker compose --env-file deploy/production.env -f compose.production.yml pull postgres redis edge-router
+docker compose --env-file deploy/production.env -f compose.production.yml build --pull
 docker compose --env-file deploy/production.env -f compose.production.yml up -d
 docker compose --env-file deploy/production.env -f compose.production.yml ps
 ```
@@ -31,7 +38,7 @@ docker compose --env-file deploy/production.env -f compose.production.yml up -d 
 
 ## 指标与回滚
 
-`/metrics` 默认只允许 edge 所在主机的回环地址；容器化 scraper 必须把 `METRICS_ALLOW_CIDR` 设置为其实际来源网段。发布前保留上一版 Web 镜像 tag 和对应 edge 配置。回滚时停止新 edge，恢复旧 edge 配置与 Web 镜像，再启动旧 Web；数据库和队列卷保留，不执行破坏性迁移。
+`/metrics` 默认的 `127.0.0.1/32` 只允许 edge 容器自身访问。宿主机或其他容器中的 scraper 必须把 `METRICS_ALLOW_CIDR` 设置为 edge 实际看到的来源网段。发布前保留上一版应用镜像 tag 和对应 edge 配置。回滚时停止新 edge，恢复旧 edge 配置与应用镜像，再启动 Web、Gateway、Worker 和 edge；PostgreSQL、Redis 和上传卷保留，不执行破坏性迁移。
 
 ## 停止
 

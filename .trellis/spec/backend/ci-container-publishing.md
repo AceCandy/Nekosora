@@ -55,8 +55,11 @@ published image names, Registry credentials, or deployment documentation.
   first. Create edge, sha, and version tags only after both digests exist. Do not use
   QEMU to run dependency installation for the production image.
 - Workflows do not load `.env.local` or persist Registry, database, or provider
-  credentials in logs, outputs, labels, or caches.
-- Both quality jobs provide a healthy `pgvector/pgvector:pg16` service and run
+  credentials in logs, outputs, labels, or caches. The private
+  `deploy/production.env` stays excluded from Git and the Docker build context.
+- Both quality jobs validate the development and production Compose files with
+  the tracked production environment example before building the unified image.
+- Both quality jobs provide a healthy `pgvector/pgvector:pg17` service and run
   `pnpm test:pg` as a separate step after `pnpm test`. Missing or unreachable
   PostgreSQL must fail the job instead of turning the integration step into skips.
 - PostgreSQL orchestration accepts only `postgres:` / `postgresql:` URLs on
@@ -112,12 +115,12 @@ published image names, Registry credentials, or deployment documentation.
   archive rejection before extraction.
 - `scripts/ci-workflows.test.mjs`: triggers, `needs`, permissions, native platform
   runners, atomic manifest creation, push behavior, Action SHAs, secret conditions,
-  schedule fail-open behavior, image names, Compose commands, isolated runtime lock,
-  and Dependabot schedule.
+  schedule fail-open behavior, image names, Compose commands, private environment
+  exclusions, isolated runtime lock, and Dependabot schedule.
 - `scripts/postgres-tests.test.mjs`: root/Web command wiring, local-only guard, all four
   Core suite variables/files, cleanup/redaction, and the audited API key fixture journal
   and SQL transition.
-- Run `pnpm test:pg` against a real `pgvector/pgvector:pg16`; assert four Core files and
+- Run `pnpm test:pg` against a real `pgvector/pgvector:pg17`; assert four Core files and
   the API key file pass with no skipped tests, then verify no prefixed database remains.
 - Run `pnpm install --frozen-lockfile`, `pnpm check`, `pnpm test`, all three application
   builds, and the unified amd64 Docker build before merging. Verify the image is no

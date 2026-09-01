@@ -23,7 +23,7 @@ x-storage-environment: &storage-environment
 
 services:
   postgres:
-    image: pgvector/pgvector:pg16
+    image: pgvector/pgvector:pg17
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-nekusora}
@@ -127,7 +127,7 @@ services:
     networks: [backend]
 
   edge-router:
-    image: nginxinc/nginx-unprivileged:1.29-alpine
+    image: nginxinc/nginx-unprivileged:1.30.4-alpine
     restart: unless-stopped
     environment:
       METRICS_ALLOW_CIDR: ${METRICS_ALLOW_CIDR:-127.0.0.1/32}

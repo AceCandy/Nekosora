@@ -18,6 +18,8 @@
 
 ---
 
+![Nekusora 星枢 AI 聊天工作台与高可用模型网关产品总览](./assets/readme/product-overview.webp)
+
 ## 概述
 
 Nekusora(星枢,取自 Neku 猫 / Sora 天空)把两件事揉进了同一个产品里:
@@ -26,6 +28,16 @@ Nekusora(星枢,取自 Neku 猫 / Sora 天空)把两件事揉进了同一个产�
 2. **多协议兼容模型网关** —— 通过 `base_url + sk-*` 接入,兼容 OpenAI / Anthropic / Gemini 请求格式,带**主-子密钥层级**、**每子密钥多模型绑定**、加权负载均衡与故障转移,面向开发者与团队。
 
 现有 OpenAI SDK 客户端可**零改动**接入网关,只需替换 `base_url` 与 `api_key`。
+
+## 产品预览
+
+### 高可用模型网关
+
+![Nekusora 模型网关的多上游路由、故障转移与加权负载界面](./assets/readme/model-gateway.webp)
+
+### 图像工作区
+
+![Nekusora 图像工作区的模型选择、生成控制与结果管理界面](./assets/readme/image-workspace.webp)
 
 ---
 
@@ -96,7 +108,7 @@ Nekusora(星枢,取自 Neku 猫 / Sora 天空)把两件事揉进了同一个产�
 
 ### 本地开发(PostgreSQL + 内存缓存)
 
-要求 Node.js 22+、pnpm 10.22.0 与 Docker Compose。
+要求 Node.js 24+、pnpm 10.34.5 与 Docker Compose。
 
 ```bash
 pnpm install
@@ -175,8 +187,12 @@ resp = client.chat.completions.create(
 
 ```bash
 cp deploy/production.env.example deploy/production.env
-docker compose --env-file deploy/production.env -f compose.production.yml up -d --build
+docker compose --env-file deploy/production.env -f compose.production.yml pull postgres redis edge-router
+docker compose --env-file deploy/production.env -f compose.production.yml build --pull
+docker compose --env-file deploy/production.env -f compose.production.yml up -d
 ```
+
+现有 PostgreSQL 16 部署不能直接复用数据目录启动 PostgreSQL 17；升级前请按 [`deploy/production.md`](./deploy/production.md) 完成大版本迁移。
 
 ---
 

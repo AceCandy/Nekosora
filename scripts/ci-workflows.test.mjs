@@ -24,7 +24,7 @@ function assertActionsPinned(source) {
 
 function assertPostgresGate(job) {
   const service = job.services.postgres;
-  assert.equal(service.image, "pgvector/pgvector:pg16");
+  assert.equal(service.image, "pgvector/pgvector:pg17");
   assert.deepEqual(service.ports, ["5432:5432"]);
   assert.match(service.options, /pg_isready/);
 
@@ -48,6 +48,7 @@ test("PR and main quality workflow gates the unified amd64 image", () => {
   const build = workflow.jobs.docker.steps.find((step) => step.id === "build");
   assert.equal(build.with.file, "Dockerfile");
   assert.equal(build.with.platforms, "linux/amd64");
+  assert.equal(build.with.pull, true);
   assert.equal(build.with.push, false);
   assert.equal(build.with.tags, "local/nekusora:ci");
   assert.match(build.with["cache-from"], /scope=quality-nekusora/);
@@ -56,6 +57,8 @@ test("PR and main quality workflow gates the unified amd64 image", () => {
   for (const command of [
     "pnpm install --frozen-lockfile",
     "pnpm lint:workflows",
+    "docker compose -f docker-compose.yml config --quiet",
+    "docker compose --env-file deploy/production.env.example -f compose.production.yml config --quiet",
     "pnpm quality:workspace",
     "pnpm check",
     "pnpm test",
@@ -78,6 +81,8 @@ test("publish workflow builds one image on native runners and isolates DockerHub
   const qualityCommands = workflow.jobs.quality.steps.map((step) => step.run ?? "").join("\n");
 
   assert.match(qualityCommands, /pnpm quality:workspace/);
+  assert.match(qualityCommands, /docker compose -f docker-compose\.yml config --quiet/);
+  assert.match(qualityCommands, /docker compose --env-file deploy\/production\.env\.example -f compose\.production\.yml config --quiet/);
   assertPostgresGate(workflow.jobs.quality);
 
   assert.equal(ghcrBuild.needs, "quality");
@@ -98,6 +103,7 @@ test("publish workflow builds one image on native runners and isolates DockerHub
   const platformBuild = ghcrBuild.steps.find((step) => step.id === "push");
   assert.equal(platformBuild.with.file, "Dockerfile");
   assert.equal(platformBuild.with.platforms, "${{ matrix.platform }}");
+  assert.equal(platformBuild.with.pull, true);
   assert.match(platformBuild.with.outputs, /push-by-digest=true/);
   assert.equal(ghcr["timeout-minutes"], 10);
   assert.match(ghcr.steps.find((step) => step.id === "manifest").run, /imagetools create/);
@@ -201,4 +207,9 @@ test("Dependabot updates pinned GitHub Actions weekly", () => {
   const actions = config.updates.find((entry) => entry["package-ecosystem"] === "github-actions");
   assert.equal(actions.directory, "/");
   assert.equal(actions.schedule.interval, "weekly");
+});
+
+test("production environment stays out of Git and Docker build context", () => {
+  assert.match(read(".gitignore"), /^\/deploy\/production\.env$/m);
+  assert.match(read(".dockerignore"), /^deploy\/production\.env$/m);
 });

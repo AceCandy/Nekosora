@@ -3,7 +3,7 @@
 # 然后在 .env.local 配置对应 DATABASE_URL / REDIS_URL。
 services:
   postgres:
-    image: pgvector/pgvector:pg16
+    image: pgvector/pgvector:pg17
     container_name: nekusora-postgres
     restart: unless-stopped
     environment:

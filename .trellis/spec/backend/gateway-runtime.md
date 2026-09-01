@@ -46,7 +46,7 @@ HTTP adaptation and process lifecycle; Core owns framework-neutral behavior.
 - Gateway SSE routes use `proxy_buffering off`; the edge preserves Host, Origin, Cookie, Authorization, and `X-Forwarded-*` headers. `/metrics` is denied by default and only allows `METRICS_ALLOW_CIDR`.
 - Gateway and Worker share the named `uploads` volume and use an explicit absolute `LOCAL_STORAGE_DIR=/app/uploads`. Web does not mount this volume.
 - Default pool budgets are Web 5, Gateway 10, and Worker 5 connections per replica. PostgreSQL capacity must cover `5 * WEB_REPLICAS + 10 * GATEWAY_REPLICAS + 5 * WORKER_REPLICAS + 20`.
-- Rollback retains the previous Web image tag and edge configuration. Restore those artifacts and restart the edge/Web services while preserving PostgreSQL, Redis, and uploads volumes; do not use `down -v` during rollback.
+- Rollback retains the previous shared application image tag and edge configuration. Restore those artifacts and restart Web, Gateway, Worker, and edge while preserving PostgreSQL, Redis, and uploads volumes; do not use `down -v` during rollback.
 
 ### 4. Validation & Error Matrix
 
