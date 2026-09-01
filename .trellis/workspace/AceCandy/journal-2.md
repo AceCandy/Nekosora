@@ -1715,3 +1715,25 @@ Added shared self-service password change UI to chat and dashboard account menus
 ### Status
 
 [OK] **Completed**
+
+
+## Session 139: 补齐密码弹窗未保存保护
+<!-- trellis-session: v=2 fp=e0c04c6b15b71ee6 -->
+
+**Date**: 2026-09-01
+**Task**: 补齐密码弹窗未保存保护
+**Branch**: `main`
+
+### Summary
+
+自助修改密码与管理员重置密码弹窗接入共享未保存修改守卫，并补充回归测试。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f79745d` | fix: guard unsaved password changes |
+
+### Status
+
+[OK] **Completed**
