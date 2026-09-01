@@ -1693,3 +1693,25 @@ Added bounded model-list reads, same-origin redirect controls, model-count limit
 ### Status
 
 [OK] **Completed**
+
+
+## Session 138: Self-service password change
+<!-- trellis-session: v=2 fp=73d8128159c97872 -->
+
+**Date**: 2026-09-01
+**Task**: Self-service password change
+**Branch**: `main`
+
+### Summary
+
+Added shared self-service password change UI to chat and dashboard account menus using Better Auth current-password verification and other-session revocation; added localized copy and tests.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2a12047` | feat: add self-service password change |
+
+### Status
+
+[OK] **Completed**

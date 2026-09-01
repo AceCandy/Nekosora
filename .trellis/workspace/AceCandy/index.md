@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 137
+- **Total Sessions**: 138
 - **Last Active**: 2026-09-01
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~1695 | Active |
+| `journal-2.md` | ~1717 | Active |
 | `journal-1.md` | ~1981 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 138 | 2026-09-01 | Self-service password change | `2a12047` | `main` |
 | 137 | 2026-09-01 | 管理员重置用户密码 | `18e16e8` | `main` |
 | 136 | 2026-09-01 | RAG 结构化来源 | `e407a26` | `main` |
 | 135 | 2026-09-01 | Add offline request preflight | `11b9c18` | `main` |
