@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend package conventions and pre-development checklist"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Client component, shared Modal, accessibility, account-menu, and i18n conventions"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Targeted frontend test and review requirements"}
+{"file": ".trellis/tasks/09-01-self-service-password-change/research/password-change.md", "reason": "Verified Better Auth 1.6.23 contract and reuse boundaries"}

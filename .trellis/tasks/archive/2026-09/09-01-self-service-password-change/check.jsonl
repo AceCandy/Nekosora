@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend review checklist"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Accessibility, shared UI, account-menu, and client-boundary contracts"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Required targeted checks and review criteria"}
+{"file": ".trellis/tasks/09-01-self-service-password-change/research/password-change.md", "reason": "Verified authentication behavior to review against"}
