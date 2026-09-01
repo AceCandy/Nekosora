@@ -811,7 +811,7 @@ export default function Sidebar({
           </Link>
         </nav>
 
-        <div className={clsx("flex min-h-0 flex-1 flex-col", collapsed && "md:hidden")}>
+        <div className={clsx("flex min-h-0 flex-1 flex-col [container-type:inline-size]", collapsed && "md:hidden")}>
           {/* New Conversation Button */}
           <button
             type="button"
@@ -839,13 +839,13 @@ export default function Sidebar({
         </div>
 
         {/* Scrollable Conversation List */}
-        <div className="scroll-fade-y flex-1 overflow-y-auto -mx-1 px-1 space-y-3">
+        <div className="scroll-fade-y flex-1 overflow-y-auto -ml-1 -mr-3 pl-1 space-y-3">
           {sections.length === 0 ? (
-            <p className="text-ui-body text-ink-tertiary px-3 py-2">{noConversationsText}</p>
+            <p className="w-[100cqw] px-3 py-2 text-ui-body text-ink-tertiary">{noConversationsText}</p>
           ) : (
             <>
             {sections.map((section) => (
-              <div key={section.key}>
+              <div key={section.key} className="w-[100cqw]">
                 <button type="button" onClick={() => toggleGroup(section.key, section.items, section.total)} className="touch-target flex w-full items-center gap-2 py-2 pl-3 pr-0 text-ui-caption font-medium text-ink-tertiary hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sora-blue  " aria-expanded={!collapsedGroups.has(section.key)}>
                   <span>{section.label}</span>
                   <span className="h-px min-w-4 flex-1 bg-morning-mist/80 " aria-hidden="true" />
