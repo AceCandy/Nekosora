@@ -7,7 +7,6 @@ export interface EnvInfo {
   storageDriver: "local" | "s3" | "r2" | "minio";
   appUrl: string;
   skPrefix: string;
-  skRandomLength: number;
   isDev: boolean;
 }
 
@@ -20,7 +19,6 @@ export function getEnvInfo(): EnvInfo {
     storageDriver,
     appUrl: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
     skPrefix: process.env.SK_PREFIX ?? "sk-",
-    skRandomLength: Number(process.env.SK_RANDOM_LENGTH ?? 48),
     isDev: process.env.NODE_ENV !== "production",
   };
 }

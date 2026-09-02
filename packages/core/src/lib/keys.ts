@@ -2,7 +2,7 @@
  * 密钥管理 —— 主 Key(每用户唯一,可调用)与子 Key(多个,受模型绑定约束)。
  *
  * 存储:只存 sha256 hash + 脱敏预览,明文仅创建时一次性返回。
- * 格式:${SK_PREFIX}${nanoid(SK_RANDOM_LENGTH)},如 sk-abc123...
+ * 格式:${SK_PREFIX} + 48 位随机串,如 sk-abc123...
  *
  * 校验:从 Authorization: Bearer 提取 → sha256 → 按 prefix 候选查回 → 常量时间比对。
  */

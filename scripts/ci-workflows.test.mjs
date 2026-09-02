@@ -5,6 +5,15 @@ import { parse } from "yaml";
 
 const read = (path) => readFileSync(path, "utf8");
 const load = (path) => parse(read(path));
+const documentedEnvNames = (source) => new Set(
+  [...source.matchAll(/^(?:#\s*)?([A-Z][A-Z0-9_]*)=/gm)].map((match) => match[1]),
+);
+const assignedEnvNames = (source) => new Set(
+  [...source.matchAll(/^([A-Z][A-Z0-9_]*)=/gm)].map((match) => match[1]),
+);
+const interpolationNames = (source) => new Set(
+  [...source.matchAll(/\$\{([A-Z][A-Z0-9_]*)[:}]/g)].map((match) => match[1]),
+);
 
 function collectValues(value, key, results = []) {
   if (!value || typeof value !== "object") return results;
@@ -166,6 +175,7 @@ test("production compose runs three containers from one image", () => {
   const webManifest = JSON.parse(read("apps/web/package.json"));
   const compose = load("compose.production.yml");
   const externalCompose = load("compose.production.external.yml");
+  const productionEnv = read("deploy/production.env.example");
   const services = [compose.services.web, compose.services.gateway, compose.services.worker];
 
   for (const artifact of [
@@ -196,7 +206,9 @@ test("production compose runs three containers from one image", () => {
     "ghcr.io/acecandy/nekusora:${IMAGE_TAG:-latest}",
     "ghcr.io/acecandy/nekusora:${IMAGE_TAG:-latest}",
   ]);
-  assert.match(read("deploy/production.env.example"), /^IMAGE_TAG=0\.1\.0$/m);
+  assert.match(productionEnv, /^IMAGE_TAG=0\.1\.0$/m);
+  const composeEnvNames = interpolationNames(`${read("compose.production.yml")}\n${read("compose.production.external.yml")}`);
+  assert.deepEqual([...assignedEnvNames(productionEnv)].sort(), [...composeEnvNames].sort());
   assert.equal(compose.services.web.build.dockerfile, "Dockerfile");
   assert.equal(compose.services.gateway.build, undefined);
   assert.equal(compose.services.worker.build, undefined);
@@ -227,6 +239,22 @@ test("production compose runs three containers from one image", () => {
   assert.deepEqual(compose.services.worker.command, ["node", "dist/main.js"]);
   assert.equal(compose.services.gateway.working_dir, "/app/runtime/apps/gateway");
   assert.equal(compose.services.worker.working_dir, "/app/runtime/apps/worker");
+});
+
+test("development environment example documents supported options", () => {
+  const names = documentedEnvNames(read(".env.example"));
+  for (const name of [
+    "GATEWAY_HOST",
+    "GATEWAY_PORT",
+    "CIRCUIT_BREAKER_THRESHOLD",
+    "CIRCUIT_BREAKER_COOLDOWN_MS",
+    "MCP_CONNECT_TIMEOUT_MS",
+    "BOOTSTRAP_SKIP_MIGRATE",
+    "DRIZZLE_MIGRATIONS_DIR",
+    "PI_MODELS_FILE",
+    "PI_MODELS_URL",
+  ]) assert.ok(names.has(name), `${name} missing from .env.example`);
+  assert.ok(!names.has("SK_RANDOM_LENGTH"));
 });
 
 test("Dependabot updates pinned GitHub Actions weekly", () => {
