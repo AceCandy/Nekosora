@@ -1737,3 +1737,25 @@ Added shared self-service password change UI to chat and dashboard account menus
 ### Status
 
 [OK] **Completed**
+
+
+## Session 140: Environment configuration contract alignment
+<!-- trellis-session: v=2 fp=a6f8f5930decd154 -->
+
+**Date**: 2026-09-02
+**Task**: Environment configuration contract alignment
+**Branch**: `main`
+
+### Summary
+
+Completed local and production environment examples, aligned both production Compose modes, removed the ineffective API key length setting, and added drift checks.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7afdd9a` | fix: align environment configuration contracts |
+
+### Status
+
+[OK] **Completed**
