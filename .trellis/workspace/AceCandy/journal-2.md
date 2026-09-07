@@ -1781,3 +1781,25 @@ Completed local and production environment examples, aligned both production Com
 ### Status
 
 [OK] **Completed**
+
+
+## Session 142: 推理胶囊滑杆视觉收尾
+<!-- trellis-session: v=2 fp=59bb0046cb384a5f -->
+
+**Date**: 2026-09-08
+**Task**: 推理胶囊滑杆视觉收尾
+**Branch**: `main`
+
+### Summary
+
+按参考图实现胶囊轨道、内嵌档位与局部柔和流光；保留原生 range 与目录档位。全仓 lint/typecheck/test 通过，新增回归共 5 项通过，Chromium 验证多尺寸、拖动、键盘及减弱动态。临时预览与截图已删除，调试服务及浏览器已关闭。未验证生产构建、真实登录会话、Firefox/Safari 与真机触控。任务已归档，本地提交尚未推送。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `69fff3a` | style: polish reasoning slider with subtle shimmer |
+
+### Status
+
+[OK] **Completed**
