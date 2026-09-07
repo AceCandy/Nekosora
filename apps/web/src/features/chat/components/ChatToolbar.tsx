@@ -17,6 +17,7 @@ import type { UploadFileItem } from "@/features/chat/model/types";
 import type { PreviewableFile } from "@/shared/components/file-preview/FilePreviewModal";
 import { getSupportedReasoningLevels } from "@/lib/reasoning";
 import { useClickOutside } from "@/shared/lib/useClickOutside";
+import styles from "./ReasoningSlider.module.css";
 
 const MENU_ROW = "flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-ui-caption font-medium text-neutral-700 transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue  ";
 /** 输入栏内联控件:与发送按钮同高,无多余描边框。 */
@@ -328,6 +329,7 @@ function ModelConfigPicker(props: ModelConfigPickerProps) {
     levels.length > 0 &&
     !(levels.length === 1 && levels[0] === "off");
   const fixed = levels.length === 1;
+  const reasoningIndex = Math.max(0, levels.indexOf(props.reasoning));
   const filteredModels = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
     if (!normalized) return props.models;
@@ -478,22 +480,30 @@ function ModelConfigPicker(props: ModelConfigPickerProps) {
               <span className="text-ui-caption font-medium text-neutral-700">{statusLabel}</span>
             </div>
             {!fixed && (
-              <div className="mt-2">
+              <div
+                className={clsx(styles.slider, "mt-2")}
+                data-off={props.reasoning === "off"}
+                style={{ "--progress": reasoningIndex / Math.max(1, levels.length - 1) } as React.CSSProperties}
+              >
+                <div className={styles.track} aria-hidden="true">
+                  <div className={styles.fill} />
+                  <div className={styles.stops}>
+                    {levels.map((level, index) => (
+                      <span key={level} data-filled={index < reasoningIndex} />
+                    ))}
+                  </div>
+                </div>
                 <input
                   type="range"
                   min={0}
                   max={levels.length - 1}
                   step={1}
-                  value={Math.max(0, levels.indexOf(props.reasoning))}
+                  value={reasoningIndex}
                   onChange={(event) => commitReasoning(levels[Number(event.target.value)])}
                   aria-label={t("reasoningLevel")}
                   aria-valuetext={statusLabel ?? undefined}
-                  className="h-6 w-full cursor-pointer accent-sora-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
+                  className={styles.input}
                 />
-                <div className="flex justify-between text-ui-caption text-neutral-600" aria-hidden="true">
-                  <span>{t(reasoningShortLabelKey(levels[0], false))}</span>
-                  <span>{t(reasoningShortLabelKey(levels[levels.length - 1], false))}</span>
-                </div>
               </div>
             )}
           </div>

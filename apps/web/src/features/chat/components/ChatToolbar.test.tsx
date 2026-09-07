@@ -80,4 +80,16 @@ describe("模型选择", () => {
     (slider.props.onChange as (event: unknown) => void)({ target: { value: "1" } });
     expect(onReasoningChange).toHaveBeenCalledWith("high");
   });
+
+  it("填充位置与目录档位对齐，关闭时标记静止且不重复端点标签", () => {
+    const html = renderToStaticMarkup(<ModelControlMenu {...props} reasoning="high" />);
+    const slider = elements(panel).find((el) => el.props.type === "range")!;
+    expect(slider.props.value).toBe(slider.props.max);
+    expect(html).toContain('--progress:1');
+    expect(html).toContain('aria-valuetext="reasoningHighShort"');
+    expect(html).not.toContain('reasoningOffShort');
+    const off = renderToStaticMarkup(<ModelControlMenu {...props} />);
+    expect(off).toContain('--progress:0');
+    expect(off).toContain('data-off="true"');
+  });
 });

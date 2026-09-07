@@ -148,7 +148,7 @@ components:
 - **返回聊天提示 (Back To Chat Hint)** (`back-to-chat-hint`, 2.8s 周期): 设置侧栏返回聊天箭头周期性轻推两次，大部分时间保持静止；外层提示与内层 hover/focus/active 位移分离。用户明确要求的导航可发现性提示，是工作区自主运动的有限例外。
 
 ### Named Rules
-**门面限定规则 (The Facade-Only Rule).** `halo-drift` / `star-twinkle` / `shooting-star` / `welcome-rise` / `orbit-spin`（含星图指针视差）五个氛围动效只允许出现在品牌门面（登录页、聊天首屏空会话欢迎区；前者由 `login/StarChart.tsx`、其余由 `SkyAtmosphere` 组件承载）；工作区与管理界面新增动效必须是状态反馈型，且时长 ≤250ms。唯一自主运动例外是返回聊天入口的低频可发现性提示，且必须支持减弱动效。
+**门面限定规则 (The Facade-Only Rule).** `halo-drift` / `star-twinkle` / `shooting-star` / `welcome-rise` / `orbit-spin`（含星图指针视差）五个氛围动效只允许出现在品牌门面（登录页、聊天首屏空会话欢迎区；前者由 `login/StarChart.tsx`、其余由 `SkyAtmosphere` 组件承载）；工作区与管理界面新增动效必须是状态反馈型，且时长 ≤250ms。自主运动例外限于返回聊天入口的低频可发现性提示，以及用户明确要求的推理胶囊已选区域柔和流光（6s 往返，仅模型菜单展开且推理非 off 时显示）；两者都必须支持减弱动效，流光不得扩散至其他表单控件。
 **减弱动效兜底规则 (The Reduced-Motion Rule).** 全部动效必须被 `globals.css` 的 `prefers-reduced-motion` 媒体查询压至 0.01ms（时长与延迟同压），开启减弱动态时界面直接呈现最终状态，不得先隐后现。
 
 ## 5. Elevation

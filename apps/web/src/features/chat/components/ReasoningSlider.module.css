@@ -1,0 +1,123 @@
+.slider {
+  position: relative;
+  height: 44px;
+}
+
+.track {
+  position: absolute;
+  inset: 6px 0;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--color-morning-mist);
+  pointer-events: none;
+}
+
+.fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: calc(16px + (100% - 32px) * var(--progress));
+  overflow: hidden;
+  background: color-mix(in oklch, var(--color-sora-blue) 65%, var(--color-chart-3));
+}
+
+.fill::before,
+.fill::after {
+  content: "";
+  position: absolute;
+  inset: -70% -40%;
+  background: radial-gradient(ellipse at 35% 40%, color-mix(in oklch, var(--color-nebula-white) 38%, transparent), transparent 55%);
+  animation: shimmer 6s ease-in-out infinite alternate;
+}
+
+.fill::after {
+  background: radial-gradient(ellipse at 65% 70%, color-mix(in oklch, var(--color-nebula-white) 26%, transparent), transparent 45%);
+  animation-delay: -3s;
+  animation-direction: alternate-reverse;
+}
+
+.slider[data-off="true"] .fill {
+  visibility: hidden;
+}
+
+.slider[data-off="true"] .fill::before,
+.slider[data-off="true"] .fill::after {
+  animation: none;
+}
+
+.stops {
+  position: absolute;
+  inset: 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.stops span {
+  width: 4px;
+  height: 4px;
+  margin-inline: -2px;
+  border-radius: 50%;
+  background: var(--color-ink-tertiary);
+}
+
+.stops span[data-filled="true"] {
+  background: var(--color-nebula-white);
+}
+
+.input {
+  position: relative;
+  display: block;
+  appearance: none;
+  width: 100%;
+  height: 44px;
+  margin: 0;
+  background: transparent;
+  border-radius: 999px;
+  cursor: pointer;
+  touch-action: pan-y;
+}
+
+.input::-webkit-slider-runnable-track {
+  height: 32px;
+  background: transparent;
+}
+
+.input::-moz-range-track {
+  height: 32px;
+  background: transparent;
+}
+
+.input::-webkit-slider-thumb {
+  appearance: none;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--color-ink-tertiary);
+  border-radius: 50%;
+  background: var(--color-nebula-white);
+}
+
+.input::-moz-range-thumb {
+  box-sizing: border-box;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--color-ink-tertiary);
+  border-radius: 50%;
+  background: var(--color-nebula-white);
+}
+
+.input:focus-visible {
+  outline: 2px solid var(--color-sora-blue);
+  outline-offset: 2px;
+}
+
+@keyframes shimmer {
+  from { transform: translateX(-16%) rotate(-8deg); opacity: 0.55; }
+  to { transform: translateX(16%) rotate(8deg); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fill::before,
+  .fill::after {
+    animation: none;
+  }
+}

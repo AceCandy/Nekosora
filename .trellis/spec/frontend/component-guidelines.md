@@ -142,6 +142,8 @@ document.documentElement.classList.remove("dark");
 
 ### 触屏目标
 
+推理强度使用 `ChatToolbar` 的原生离散 range，局部视觉由 `ReasoningSlider.module.css` 承载：44px 操作区、32px 胶囊与滑块、内嵌目录档位圆点。填充终点按 `16px + (轨道宽度 - 32px) × 档位比例` 对齐滑块中心；不得退回未经视觉验收的默认浏览器滑杆或重复低/高端点文案。流光限已选区域，`off` 与 reduced-motion 时停止。修改时复核首尾档位几何、键盘焦点和动态目录映射，不能仅凭原生控件功能可用判断视觉达标。
+
 需要保持桌面紧凑密度、但在触屏上达到 44px 的控件使用 `touch-target`。`globals.css` 只在 `(pointer: coarse)` 下设置 `min-width/min-height: 44px`。
 
 - 共享 `Button` / `Input` / `Select` / `Pagination` 默认接入。
