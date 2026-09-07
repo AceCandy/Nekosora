@@ -1,14 +1,13 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { refreshSettings } from "./refresh-settings";
 import {
   parseGatewayGovernancePolicyForm,
   type GatewayGovernancePolicy,
 } from "@/lib/gateway-governance/policy";
 import { requireAdmin } from "@/lib/session";
 import {
-  stageSystemSettings,
-  type SettingsDraftExpectation,
+  saveSystemSettings,
 } from "@/lib/settings-control/service";
 
 export interface GovernanceSettingsActionState {
@@ -17,7 +16,7 @@ export interface GovernanceSettingsActionState {
 }
 
 export async function saveGatewayGovernancePolicy(
-  expected: SettingsDraftExpectation,
+  expected: number,
   _previousState: GovernanceSettingsActionState,
   formData: FormData,
 ): Promise<GovernanceSettingsActionState> {
@@ -31,13 +30,13 @@ export async function saveGatewayGovernancePolicy(
   }
 
   try {
-    await stageSystemSettings({
+    const saved = await saveSystemSettings({
       actorId: admin.id,
       expected,
       namespace: "gateway",
       values: { request_governance_v1: JSON.stringify(policy) },
     });
-    revalidatePath("/admin/settings");
+    await refreshSettings(saved);
     return { status: "success", error: null };
   } catch {
     return { status: "error", error: "saveFailed" };

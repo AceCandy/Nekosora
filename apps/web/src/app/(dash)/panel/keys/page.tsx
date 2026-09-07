@@ -92,6 +92,19 @@ export default async function KeysPage() {
     <div className="space-y-6 max-w-6xl">
       <PageHeader icon={Key} title={tn("keys")} desc={t("desc")} />
 
+      <details className="border-y border-morning-mist py-3">
+        <summary className="touch-target cursor-pointer text-ui-body font-medium text-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue">{t("apiExample")}</summary>
+        <p className="my-3 max-w-prose text-ui-body leading-relaxed text-neutral-600">{t("apiExampleHelp")}</p>
+        <pre className="overflow-x-auto rounded-md bg-neutral-50 p-4 text-ui-caption text-space-ink"><code>{`curl "$API_BASE_URL/v1/models" \\
+  -H "Authorization: Bearer $API_KEY"
+
+curl "$API_BASE_URL/v1/chat/completions" \\
+  -H "Authorization: Bearer $API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"model":"YOUR_CHAT_MODEL","messages":[{"role":"user","content":"Hello"}]}'`}</code></pre>
+        <p className="mt-3 text-ui-caption text-neutral-600">{t("apiExampleKeyHint")}</p>
+      </details>
+
       <KeysManager
         keys={augmentedKeys}
         bindable={displayBindable}

@@ -46,13 +46,11 @@ function bucketExpr(range: TimeRange): unknown {
 }
 
 /** 时间序列(按桶聚合 calls + tokens)。可选 userId 限定为某用户。 */
-export async function getTimeSeries(range: TimeRange, userId?: string): Promise<TimeSeriesPoint[]> {
+export async function getTimeSeries(range: TimeRange, userId?: string, bounds?: Pick<UsageLogFilters, "startAt" | "endAt">): Promise<TimeSeriesPoint[]> {
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
-  const start = rangeStart(range);
-  const conds = [gte(s.gatewayExecutions.createdAt, start), eq(s.gatewayExecutions.status, "success")];
-  if (userId) conds.push(eq(s.gatewayExecutions.userId, userId));
+  const where = buildUsageWhere({ userId, filters: bounds ?? { startAt: rangeStart(range) } });
 
   const rows = await db
     .select({
@@ -62,7 +60,7 @@ export async function getTimeSeries(range: TimeRange, userId?: string): Promise<
       completionTokens: sql<number>`coalesce(sum(${s.gatewayExecutions.completionTokens}),0)`,
     })
     .from(s.gatewayExecutions)
-    .where(and(...conds))
+    .where(where)
     .groupBy(sql`bucket`)
     .orderBy(sql`bucket`);
 
@@ -75,13 +73,11 @@ export async function getTimeSeries(range: TimeRange, userId?: string): Promise<
 }
 
 /** 模型分布(范围内)。可选 userId 限定为某用户。 */
-export async function getModelBreakdown(range: TimeRange, userId?: string): Promise<ModelBreakdownRow[]> {
+export async function getModelBreakdown(range: TimeRange, userId?: string, bounds?: Pick<UsageLogFilters, "startAt" | "endAt">): Promise<ModelBreakdownRow[]> {
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
-  const start = rangeStart(range);
-  const conds = [gte(s.gatewayExecutions.createdAt, start), eq(s.gatewayExecutions.status, "success")];
-  if (userId) conds.push(eq(s.gatewayExecutions.userId, userId));
+  const where = buildUsageWhere({ userId, filters: bounds ?? { startAt: rangeStart(range) } });
 
   const rows = await db
     .select({
@@ -91,7 +87,7 @@ export async function getModelBreakdown(range: TimeRange, userId?: string): Prom
       completionTokens: sql<number>`coalesce(sum(${s.gatewayExecutions.completionTokens}),0)`,
     })
     .from(s.gatewayExecutions)
-    .where(and(...conds))
+    .where(where)
     .groupBy(s.gatewayExecutions.model)
     .orderBy(sql`count(*) DESC`);
 
@@ -104,13 +100,11 @@ export async function getModelBreakdown(range: TimeRange, userId?: string): Prom
 }
 
 /** 来源分布(chat vs gateway)。可选 userId 限定为某用户。 */
-export async function getSourceBreakdown(range: TimeRange, userId?: string): Promise<SourceBreakdownRow[]> {
+export async function getSourceBreakdown(range: TimeRange, userId?: string, bounds?: Pick<UsageLogFilters, "startAt" | "endAt">): Promise<SourceBreakdownRow[]> {
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
-  const start = rangeStart(range);
-  const conds = [gte(s.gatewayExecutions.createdAt, start), eq(s.gatewayExecutions.status, "success")];
-  if (userId) conds.push(eq(s.gatewayExecutions.userId, userId));
+  const where = buildUsageWhere({ userId, filters: bounds ?? { startAt: rangeStart(range) } });
 
   const rows = await db
     .select({
@@ -118,7 +112,7 @@ export async function getSourceBreakdown(range: TimeRange, userId?: string): Pro
       calls: sql<number>`count(*)`,
     })
     .from(s.gatewayExecutions)
-    .where(and(...conds))
+    .where(where)
     .groupBy(s.gatewayExecutions.source)
     .orderBy(sql`count(*) DESC`);
 
@@ -198,7 +192,7 @@ export interface ListUsageLogsResult {
 }
 
 /** 组装 where 条件(list 与 count 复用)。 */
-function buildUsageWhere(opts: ListUsageLogsOptions): SQL | undefined {
+function buildUsageWhere(opts: Pick<ListUsageLogsOptions, "userId" | "filters">): SQL | undefined {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
   const t = s.gatewayExecutions;

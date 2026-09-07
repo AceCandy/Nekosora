@@ -64,6 +64,7 @@ export interface ErrorLogClientRow {
 }
 
 interface ErrorLogsTableProps {
+  summary?: React.ReactNode;
   rows: ErrorLogClientRow[];
   total: number;
   page: number;
@@ -90,6 +91,7 @@ function statusVariant(http: number | null): "neutral" | "warning" | "danger" {
 }
 
 export function ErrorLogsTable({
+  summary,
   rows,
   total,
   page,
@@ -132,9 +134,10 @@ export function ErrorLogsTable({
   return (
     <div className="space-y-3">
       <ErrorFilterBar variant={variant} values={filterValues} labels={labels} basePath={basePath} />
+      {summary}
 
       <div className="rounded-lg border border-neutral-200 bg-white   overflow-hidden shadow-none">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sora-blue" tabIndex={0} role="region" aria-label={t("tabs.errors")}>
           <table className="w-full text-ui-caption border-collapse">
             <thead>
               <tr className="bg-neutral-50/70 border-b border-neutral-200 text-neutral-500    uppercase tracking-wider font-semibold">

@@ -47,6 +47,7 @@ export interface UsageLogClientRow {
 }
 
 interface UsageLogsTableProps {
+  summary?: React.ReactNode;
   rows: UsageLogClientRow[];
   total: number;
   page: number;
@@ -60,6 +61,7 @@ interface UsageLogsTableProps {
 }
 
 export function UsageLogsTable({
+  summary,
   rows,
   total,
   page,
@@ -92,9 +94,10 @@ export function UsageLogsTable({
   return (
     <div className="space-y-3">
       <UsageFilterBar variant={variant} values={filterValues} labels={labels} basePath={basePath} tab={tab} />
+      {summary}
 
       <div className="rounded-lg border border-neutral-200 bg-white   overflow-hidden shadow-none">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sora-blue" tabIndex={0} role="region" aria-label={t("tabs.usage")}>
           <table className="w-full text-ui-caption border-collapse">
             <thead>
               <tr className="bg-neutral-50/70 border-b border-neutral-200 text-neutral-500    uppercase tracking-wider font-semibold">

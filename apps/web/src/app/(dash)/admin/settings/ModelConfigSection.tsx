@@ -1,10 +1,9 @@
-import { revalidatePath } from "next/cache";
+import { refreshSettings } from "./refresh-settings";
 import { eq, and } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { getSettings } from "@/lib/system-settings/service";
 import {
-  projectSystemSettings,
-  stageSystemSettings,
+  saveSystemSettings,
   type SettingsControlView,
 } from "@/lib/settings-control/service";
 import { requireAdmin } from "@/lib/session";
@@ -38,7 +37,7 @@ async function assertBackgroundModelId(modelId: string): Promise<void> {
 /**
  * 模型配置区 —— embedding / 标题生成的系统级配置。
  *
- * 嵌入 admin/settings 页。提交后写入活动草稿，整批发布后生效。
+ * 嵌入 admin/settings 页。保存后立即生效，历史记录可按需查看。
  * provider 列表来自 global_providers(管理员先在 /admin/providers 建好上游)。
  */
 export default async function ModelConfigSection({
@@ -104,14 +103,8 @@ export default async function ModelConfigSection({
         .map((model) => [model.id, model]),
     ).values(),
   );
-  const [storedRag, storedTask] = await Promise.all([getSettings("rag"), getSettings("task")]);
-  const changes = control.draft?.changes ?? [];
-  const rag = projectSystemSettings("rag", storedRag, changes);
-  const task = projectSystemSettings("task", storedTask, changes);
-  const expected = {
-    changeSetId: control.draft?.id ?? null,
-    version: control.draft?.version ?? null,
-  };
+  const [rag, task] = await Promise.all([getSettings("rag"), getSettings("task")]);
+  const expected = control.currentRevision;
   const titleModelId =
     task.title_model_id ?? backgroundModels.find((model) => model.name === task.title_model)?.id ?? "";
   const compactModelId =
@@ -124,13 +117,13 @@ export default async function ModelConfigSection({
     const actionAdmin = await requireAdmin();
     const modelId = String(formData.get("model_id") ?? "").trim();
     await assertBackgroundModelId(modelId);
-    await stageSystemSettings({
+    const saved = await saveSystemSettings({
       actorId: actionAdmin.id,
       expected,
       namespace: "task",
       values: { title_model_id: modelId, title_model: "" },
     });
-    revalidatePath("/admin/settings");
+    await refreshSettings(saved);
   }
 
   async function saveCompactModel(formData: FormData) {
@@ -138,13 +131,13 @@ export default async function ModelConfigSection({
     const actionAdmin = await requireAdmin();
     const modelId = String(formData.get("model_id") ?? "").trim();
     await assertBackgroundModelId(modelId);
-    await stageSystemSettings({
+    const saved = await saveSystemSettings({
       actorId: actionAdmin.id,
       expected,
       namespace: "task",
       values: { compact_model_id: modelId, compact_model: "" },
     });
-    revalidatePath("/admin/settings");
+    await refreshSettings(saved);
   }
 
   async function saveMem0LlmModel(formData: FormData) {
@@ -152,13 +145,13 @@ export default async function ModelConfigSection({
     const actionAdmin = await requireAdmin();
     const modelId = String(formData.get("model_id") ?? "").trim();
     await assertBackgroundModelId(modelId);
-    await stageSystemSettings({
+    const saved = await saveSystemSettings({
       actorId: actionAdmin.id,
       expected,
       namespace: "rag",
       values: { mem0_llm_model_id: modelId, mem0_llm_model: "" },
     });
-    revalidatePath("/admin/settings");
+    await refreshSettings(saved);
   }
 
   return (

@@ -1,11 +1,10 @@
-import { revalidatePath } from "next/cache";
+import { refreshSettings } from "./refresh-settings";
 import { getTranslations } from "next-intl/server";
 import { getSettings } from "@/lib/system-settings/service";
 import { DEFAULT_UA, getChatUA, getGatewayUA } from "@/lib/system-settings/ua";
 import { requireAdmin } from "@/lib/session";
 import {
-  projectSystemSettings,
-  stageSystemSettings,
+  saveSystemSettings,
   type SettingsControlView,
 } from "@/lib/settings-control/service";
 import BasicSettingsForm from "./BasicSettingsForm";
@@ -13,17 +12,13 @@ import BasicSettingsForm from "./BasicSettingsForm";
 /**
  * 基础设置区 -- 聊天 UA / 转发 UA 配置。
  *
- * 嵌入 admin/settings 页。提交后写入活动草稿，整批发布后生效。
+ * 嵌入 admin/settings 页。保存后立即生效，历史记录可按需查看。
  * 未配置时 getChatUA/getGatewayUA 回退 Nekusora/{version};placeholder 显当前生效值(含默认)。
  */
 export default async function BasicSettingsSection({ control }: { control: SettingsControlView }) {
   await requireAdmin();
   const t = await getTranslations("admin.settings");
-  const ua = projectSystemSettings(
-    "gateway",
-    await getSettings("gateway"),
-    control.draft?.changes ?? [],
-  );
+  const ua = await getSettings("gateway");
   // 当前生效 UA(配置值或默认),placeholder 提示用户留空时会用什么。
   const effectiveChatUA = await getChatUA();
   const effectiveGatewayUA = await getGatewayUA();
@@ -33,16 +28,13 @@ export default async function BasicSettingsSection({ control }: { control: Setti
     const admin = await requireAdmin();
     const chatUa = String(formData.get("chat_ua") ?? "").trim();
     const gatewayUa = String(formData.get("gateway_ua") ?? "").trim();
-    await stageSystemSettings({
+    const saved = await saveSystemSettings({
       actorId: admin.id,
-      expected: {
-        changeSetId: control.draft?.id ?? null,
-        version: control.draft?.version ?? null,
-      },
+      expected: control.currentRevision,
       namespace: "gateway",
       values: { chat_ua: chatUa, gateway_ua: gatewayUa },
     });
-    revalidatePath("/admin/settings");
+    await refreshSettings(saved);
   }
 
   return (

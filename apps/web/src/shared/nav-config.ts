@@ -47,15 +47,26 @@ export interface NavSearchResult {
 
 /** 用户个人配置(所有登录用户可见)。 */
 const myConfigGroup: NavGroup = {
+  titleKey: "sectionConnections",
   items: [
     { href: "/panel/keys", labelKey: "keys", icon: "Key", keywords: "api key token 密钥 令牌" },
     { href: "/panel/providers", labelKey: "providers", icon: "Server", keywords: "provider endpoint base url health 服务商 渠道 地址 健康" },
     { href: "/panel/models", labelKey: "models", icon: "Boxes", keywords: "model route routing upstream capability 模型 路由 上游 能力" },
+  ],
+};
+
+const workspaceGroup: NavGroup = {
+  titleKey: "sectionWorkspace",
+  items: [
     { href: "/panel/web-search", labelKey: "webSearch", icon: "Globe", keywords: "web search engine 联网 搜索 引擎" },
     { href: "/panel/cards", labelKey: "cards", icon: "CreditCard", keywords: "instruction system prompt card 指令 提示词 卡片" },
     { href: "/panel/memory", labelKey: "memory", icon: "Brain", keywords: "memory mem0 long term 记忆 长期" },
-    { href: "/panel/usage", labelKey: "myUsage", icon: "BarChart3", keywords: "usage token request error log 用量 请求 错误 日志" },
   ],
+};
+
+const activityGroup: NavGroup = {
+  titleKey: "sectionActivity",
+  items: [{ href: "/panel/usage", labelKey: "myUsage", icon: "BarChart3", keywords: "usage token request error log 用量 请求 错误 日志" }],
 };
 
 /**
@@ -126,7 +137,8 @@ export function searchNavGroups(
  * 按 role 决定是否附加全局管理分组,实现"admin 是 user 的权限超集"在 UI 上的表达。
  */
 export function panelNavGroups(role: SessionUser["role"]): NavGroup[] {
-  return role === "admin" ? [myConfigGroup, globalManagementGroup] : [myConfigGroup];
+  const groups = [myConfigGroup, workspaceGroup, activityGroup];
+  return role === "admin" ? [...groups, globalManagementGroup] : groups;
 }
 
 /**
@@ -134,5 +146,5 @@ export function panelNavGroups(role: SessionUser["role"]): NavGroup[] {
  * 个人配置组常驻,与 /panel 下 admin 视角保持一致,避免跨段跳转时左侧 tab 闪失。
  */
 export function adminNavGroups(): NavGroup[] {
-  return [myConfigGroup, globalManagementGroup];
+  return panelNavGroups("admin");
 }

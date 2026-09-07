@@ -91,8 +91,8 @@ describe("presentSettingsChanges", () => {
 });
 
 describe("SettingsChangeControl", () => {
-  it("无草稿时只保留发布记录入口且不显示 revision", () => {
-    const html = renderToStaticMarkup(<SettingsChangeControl draft={null} history={[]} />);
+  it("无草稿时只保留修改记录入口且不显示 revision", () => {
+    const html = renderToStaticMarkup(<SettingsChangeControl draft={null} />);
 
     expect(html).toContain("history");
     expect(html).not.toContain("currentRevision");
@@ -100,7 +100,7 @@ describe("SettingsChangeControl", () => {
     expect(html).not.toMatch(/r\d+/);
   });
 
-  it("有草稿时显示轻量待发布状态和必要操作", () => {
+  it("旧草稿默认收起且仍可显式处理", () => {
     const change: SettingsChange = {
       resource: "system_setting",
       resourceKey: "gateway:chat_ua",
@@ -110,11 +110,13 @@ describe("SettingsChangeControl", () => {
     const html = renderToStaticMarkup(
       <SettingsChangeControl
         draft={{ id: "draft-1", kind: "edit", version: 1, changes: [change] }}
-        history={[]}
       />,
     );
 
     expect(html).toContain("draftSummary");
+    expect(html).toContain("legacyDraft");
+    expect(html).toContain("<details");
+    expect(html).not.toContain("<details open");
     expect(html).toContain("draftPersisted");
     expect(html).toContain("reviewApply");
     expect(html).toContain("abandon");

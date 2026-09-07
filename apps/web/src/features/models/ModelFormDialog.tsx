@@ -69,6 +69,8 @@ export default function ModelFormDialog({
     onClose();
     setFormKey((k) => k + 1);
     setExternalModelName(ini?.name ?? "");
+    setCatalogId(ini?.catalogId ?? "");
+    setPreviewOpen(false);
     setFormError(null);
   };
   const { contentRef, requestClose, dialogProps } = useUnsavedChanges<HTMLFormElement>(handleClose);
@@ -98,7 +100,7 @@ export default function ModelFormDialog({
         }}
         className="space-y-5"
       >
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <label className="block">
             <span className={labelCls}>
               {t("externalModelNameLabel")} <span className="text-ui-caption lowercase font-normal text-neutral-400">{t("externalModelNameHint")}</span>
@@ -161,7 +163,7 @@ export default function ModelFormDialog({
                 onClose={() => setPreviewOpen(false)}
                 side="bottom"
                 align="right"
-                panelClassName="p-3"
+                panelClassName="max-w-[calc(100vw-1rem)] max-h-[calc(100dvh-1rem)] overflow-y-auto p-3"
                 portal={false}
                 trigger={
                   <button

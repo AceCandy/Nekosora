@@ -1,16 +1,33 @@
 import { readFileSync } from "node:fs";
-import { createElement, forwardRef, type ReactNode } from "react";
+import { Children, createElement, forwardRef, isValidElement, type ReactNode, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import ProviderFormDialog from "./ProviderFormDialog";
+
+let content: ReactNode;
+let saveWork: Promise<unknown>;
+vi.mock("react", async (importOriginal) => ({
+  ...await importOriginal<typeof import("react")>(),
+  useTransition: () => [false, (callback: () => unknown) => { saveWork = Promise.resolve(callback()); }],
+}));
 
 vi.mock("next-intl", () => ({
   useTranslations: () => (key: string) => key,
 }));
 
 vi.mock("@/shared/ui/Modal", () => ({
-  default: ({ children }: { children: ReactNode }) => createElement("div", null, children),
+  default: ({ children }: { children: ReactNode }) => {
+    if (isValidElement(children) && children.type === "form") content = children;
+    return createElement("div", null, children);
+  },
 }));
+
+afterEach(() => vi.unstubAllGlobals());
+
+function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
+  if (!isValidElement<Record<string, unknown>>(node)) return [];
+  return [node, ...Children.toArray(node.props.children as ReactNode).flatMap(elements)];
+}
 
 vi.mock("@/features/providers/KeyBundleEditor", () => ({
   default: forwardRef(function MockKeyBundleEditor() {
@@ -19,6 +36,25 @@ vi.mock("@/features/providers/KeyBundleEditor", () => ({
 }));
 
 describe("ProviderFormDialog timeout fields", () => {
+  it("失败不关闭，只有保存成功后才关闭弹窗", async () => {
+    const onClose = vi.fn();
+    const action = vi.fn().mockRejectedValueOnce(new Error("network unavailable")).mockResolvedValueOnce(undefined);
+    const NativeFormData = FormData;
+    vi.stubGlobal("FormData", class extends NativeFormData {
+      constructor() { super(); this.set("name", "draft"); }
+    });
+    renderToStaticMarkup(<ProviderFormDialog open mode="add" protocols={[]} onClose={onClose} action={action} />);
+    const form = elements(content).find((el) => el.type === "form")!;
+    const submit = form.props.onSubmit as (event: unknown) => void;
+    submit({ preventDefault: vi.fn(), currentTarget: {} });
+    await saveWork;
+    expect(onClose).not.toHaveBeenCalled();
+    expect(action.mock.calls[0][0].get("name")).toBe("draft");
+    submit({ preventDefault: vi.fn(), currentTarget: {} });
+    await saveWork;
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
   it("提交 marker、原生范围并把毫秒值回显为秒", () => {
     const html = renderToStaticMarkup(
       <ProviderFormDialog

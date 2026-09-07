@@ -530,7 +530,7 @@ function ModelRowCells({
             side="bottom"
             panelClassName="p-3"
             trigger={
-              <Badge variant="primary" className="cursor-default max-w-[10rem] min-w-0" title={model.catalogName}>
+              <Badge variant="neutral" className="cursor-default max-w-[10rem] min-w-0" title={model.catalogName}>
                 <span className="truncate">{model.catalogName}</span>
               </Badge>
             }
@@ -596,7 +596,7 @@ function ModelRowCells({
           className={clsx(
             expanded
               ? "text-neutral-800  bg-neutral-100 "
-              : "text-sora-blue hover:bg-sora-blue/10 "
+              : "text-neutral-700 hover:bg-neutral-100"
           )}
           title={t("configureRoutes")}
         >

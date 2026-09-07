@@ -138,6 +138,7 @@ export function Combobox({
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-ink-tertiary" />
             <input
               autoFocus
+              data-autofocus
               value={q}
               onChange={(e) => onQueryChange(e.target.value)}
               placeholder={searchPlaceholder}

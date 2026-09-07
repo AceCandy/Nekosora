@@ -6,14 +6,17 @@ import {
 
 const mockFunctions = vi.hoisted(() => ({
   requireAdmin: vi.fn(),
-  stageSystemSettings: vi.fn(),
+  saveSystemSettings: vi.fn().mockResolvedValue({ revision: 5, changeSetId: "save-1" }),
   revalidatePath: vi.fn(),
 }));
 
+vi.mock("@/lib/settings-control/runtime", () => ({
+  invalidateSettingsRuntime: vi.fn().mockResolvedValue(false),
+}));
 vi.mock("next/cache", () => ({ revalidatePath: mockFunctions.revalidatePath }));
 vi.mock("@/lib/session", () => ({ requireAdmin: mockFunctions.requireAdmin }));
 vi.mock("@/lib/settings-control/service", () => ({
-  stageSystemSettings: mockFunctions.stageSystemSettings,
+  saveSystemSettings: mockFunctions.saveSystemSettings,
 }));
 
 import {
@@ -22,7 +25,7 @@ import {
 } from "./governance-actions";
 
 const INITIAL_STATE: GovernanceSettingsActionState = { status: "idle", error: null };
-const EXPECTED = { changeSetId: null, version: null };
+const EXPECTED = 4;
 const FORM_FIELDS: readonly [keyof GatewayScopeLimits, string][] = [
   ["rpm", "rpm"],
   ["burst", "burst"],
@@ -36,7 +39,7 @@ const FORM_FIELDS: readonly [keyof GatewayScopeLimits, string][] = [
 beforeEach(() => {
   vi.clearAllMocks();
   mockFunctions.requireAdmin.mockResolvedValue({ id: "admin-a", role: "admin" });
-  mockFunctions.stageSystemSettings.mockResolvedValue(undefined);
+  mockFunctions.saveSystemSettings.mockResolvedValue({ revision: 5, changeSetId: "save-1" });
 });
 
 describe("saveGatewayGovernancePolicy", () => {
@@ -48,7 +51,7 @@ describe("saveGatewayGovernancePolicy", () => {
       error: null,
     });
     expect(mockFunctions.requireAdmin).toHaveBeenCalledOnce();
-    expect(mockFunctions.stageSystemSettings).toHaveBeenCalledWith({
+    expect(mockFunctions.saveSystemSettings).toHaveBeenCalledWith({
       actorId: "admin-a",
       expected: EXPECTED,
       namespace: "gateway",
@@ -65,12 +68,12 @@ describe("saveGatewayGovernancePolicy", () => {
       status: "error",
       error: "invalid",
     });
-    expect(mockFunctions.stageSystemSettings).not.toHaveBeenCalled();
+    expect(mockFunctions.saveSystemSettings).not.toHaveBeenCalled();
     expect(mockFunctions.revalidatePath).not.toHaveBeenCalled();
   });
 
   it("数据库保存失败时保留原页面状态且不刷新", async () => {
-    mockFunctions.stageSystemSettings.mockRejectedValueOnce(new Error("database unavailable"));
+    mockFunctions.saveSystemSettings.mockRejectedValueOnce(new Error("database unavailable"));
 
     await expect(saveGatewayGovernancePolicy(EXPECTED, INITIAL_STATE, policyForm())).resolves.toEqual({
       status: "error",
@@ -84,7 +87,7 @@ describe("saveGatewayGovernancePolicy", () => {
 
     await expect(saveGatewayGovernancePolicy(EXPECTED, INITIAL_STATE, policyForm()))
       .rejects.toThrow("forbidden");
-    expect(mockFunctions.stageSystemSettings).not.toHaveBeenCalled();
+    expect(mockFunctions.saveSystemSettings).not.toHaveBeenCalled();
   });
 });
 

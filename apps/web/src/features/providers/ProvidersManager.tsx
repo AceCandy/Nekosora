@@ -1,6 +1,7 @@
 "use client";
 import { useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useTranslations } from "next-intl";
 import type {
   AttachProviderModelRouteAction,
@@ -21,10 +22,11 @@ import ConfirmDialog from "@/shared/ui/ConfirmDialog";
 import Popover from "@/shared/ui/Popover";
 import Input from "@/shared/ui/Input";
 import Select from "@/shared/ui/Select";
-import { Plus, Edit2, Trash2, ShieldAlert, HeartPulse, Loader2, RefreshCw } from "lucide-react";
+import { Plus, Edit2, Trash2, ShieldAlert, HeartPulse, Loader2, RefreshCw, CircleHelp } from "lucide-react";
 import { clsx } from "clsx";
 import { Button } from "@/shared/ui/Button";
 import StatusSwitch from "@/shared/ui/StatusSwitch";
+import { formatDateTimeLocal } from "@/shared/lib/format";
 import { rankSimilarModels } from "@/lib/model-catalog";
 
 // 协议徽标统一中性莫兰迪灰调(管理侧元数据不使用彩色区分),协议名文字本身即区分。
@@ -119,6 +121,8 @@ export default function ProvidersManager({
   const router = useRouter();
   const t = useTranslations("providers");
   const [addOpen, setAddOpen] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [modelMatch, setModelMatch] = useState<ModelMatchState | null>(null);
@@ -137,6 +141,7 @@ export default function ProvidersManager({
   // 上游模型列表的会话级覆盖:拉取成功后即时刷新"共 N 个模型",无需等 RSC 重渲。
   const [modelsMap, setModelsMap] = useState<Record<string, { models: string[]; checkedAt: number }>>({});
   const [refreshingIds, setRefreshingIds] = useState<Set<string>>(new Set());
+  const [helpOpen, setHelpOpen] = useState(false);
 
   // testModel 深度检测结果:会话级覆盖优先,回退落库值(p.health.modelProbe*)。
   const [modelProbeMap, setModelProbeMap] = useState<Record<string, ModelProbeDisplay>>({});
@@ -419,9 +424,26 @@ export default function ProvidersManager({
   return (
     <div className="flex flex-col min-h-0 flex-1 gap-4">
       <div className="flex items-center justify-between shrink-0">
-        <span className="text-ui-caption font-mono text-neutral-400 ">
-          {t("configuredCount", { count: providers.length })}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-ui-caption font-mono text-ink-tertiary">
+            {t("configuredCount", { count: providers.length })}
+          </span>
+          <Popover
+            open={helpOpen}
+            onClose={() => setHelpOpen(false)}
+            panelClassName="w-80 max-w-[calc(100vw-1rem)] p-4"
+            trigger={<button type="button" onClick={() => setHelpOpen((value) => !value)} aria-label={t("setupHelp")} aria-expanded={helpOpen} aria-haspopup="dialog" className="touch-target inline-flex h-8 w-8 items-center justify-center rounded-md text-ink-tertiary hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"><CircleHelp className="h-4 w-4" aria-hidden="true" /></button>}
+          >
+            <div role="dialog" aria-label={t("setupHelp")} className="space-y-3 text-ui-body text-neutral-600">
+              <p>{t("setupGuide")}</p>
+              <div className="flex flex-col items-start gap-2">
+                <Link href={modelCreatePath} className="touch-target inline-flex items-center text-sora-blue-hover hover:underline">{t("setupModels")}</Link>
+                <Link href="/panel/keys" className="touch-target inline-flex items-center text-sora-blue-hover hover:underline">{t("setupKeys")}</Link>
+                <Link href="/chat" className="touch-target inline-flex items-center text-sora-blue-hover hover:underline">{t("setupChat")}</Link>
+              </div>
+            </div>
+          </Popover>
+        </div>
         <Button
           variant="primary"
           size="sm"
@@ -433,35 +455,43 @@ export default function ProvidersManager({
         </Button>
       </div>
 
-      <div className="flex items-center gap-2 shrink-0">
+      <button type="button" aria-expanded={filtersOpen} aria-controls="provider-filters" onClick={() => setFiltersOpen((open) => !open)} className="touch-target self-start rounded-md border border-morning-mist px-3 py-2 text-ui-body text-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue md:hidden">
+        {t("filters", { count: Object.entries(filter).filter(([key, value]) => key === "status" ? value !== "all" : Boolean(value)).length })}
+      </button>
+      <div id="provider-filters" className={clsx("shrink-0 flex-wrap items-center gap-2 md:flex", filtersOpen ? "flex" : "hidden")}>
         <Input
           placeholder={t("filterNamePlaceholder")}
+          aria-label={t("filterNamePlaceholder")}
           value={filter.name}
           onChange={(e) => setFilter((f) => ({ ...f, name: e.target.value }))}
-          className="h-8 w-32 text-ui-caption"
+          className="min-h-10 w-full text-ui-body md:w-40"
         />
         <Input
           placeholder={t("filterBaseUrlPlaceholder")}
+          aria-label={t("filterBaseUrlPlaceholder")}
           value={filter.baseUrl}
           onChange={(e) => setFilter((f) => ({ ...f, baseUrl: e.target.value }))}
-          className="h-8 w-36 text-ui-caption"
+          className="min-h-10 w-full text-ui-body md:w-44"
         />
         <Input
           placeholder={t("filterKeyPlaceholder")}
+          aria-label={t("filterKeyPlaceholder")}
           value={filter.key}
           onChange={(e) => setFilter((f) => ({ ...f, key: e.target.value }))}
-          className="h-8 w-36 text-ui-caption"
+          className="min-h-10 w-full text-ui-body md:w-44"
         />
         <Input
           placeholder={t("filterModelPlaceholder")}
+          aria-label={t("filterModelPlaceholder")}
           value={filter.model}
           onChange={(e) => setFilter((f) => ({ ...f, model: e.target.value }))}
-          className="h-8 w-32 text-ui-caption"
+          className="min-h-10 w-full text-ui-body md:w-40"
         />
         <Select
+          aria-label={t("colStatus")}
           value={filter.status}
           onChange={(e) => setFilter((f) => ({ ...f, status: e.target.value as typeof filter.status }))}
-          className="h-8 w-24 text-ui-caption"
+          className="min-h-10 w-full text-ui-body md:w-36"
         >
           <option value="all">{t("filterStatusAll")}</option>
           <option value="enabled">{t("filterStatusEnabled")}</option>
@@ -470,8 +500,8 @@ export default function ProvidersManager({
       </div>
 
       <div className="rounded-lg border border-morning-mist  bg-nebula-white  overflow-auto transition-colors duration-150 flex-1 min-h-0">
-        <table className="w-full text-ui-body border-collapse text-left">
-          <thead className="bg-neutral-50  border-b border-morning-mist  text-neutral-500  font-mono text-ui-caption uppercase sticky top-0 z-10">
+        <table className="block w-full text-ui-body border-collapse text-left md:table">
+          <thead className="hidden bg-neutral-50 border-b border-morning-mist text-neutral-500 text-ui-caption sticky top-0 z-10 md:table-header-group">
             <tr>
               <th className="p-3.5 font-medium">{t("colName")}</th>
               <th className="p-3.5 font-medium">{t("colBaseUrl")}</th>
@@ -500,7 +530,7 @@ export default function ProvidersManager({
               <th className="p-3.5 font-medium text-right">{t("colActions")}</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-neutral-200 ">
+          <tbody className="block divide-y divide-neutral-200 md:table-row-group">
             {filteredProviders.length === 0 ? (
               <tr>
                 <td colSpan={6} className="p-10 text-center text-ui-caption text-neutral-400 ">
@@ -509,15 +539,21 @@ export default function ProvidersManager({
               </tr>
             ) : (
               filteredProviders.map((p) => {
+                const expanded = expandedId === p.id;
+                const health = displayFor(p);
                 return (
                 <tr
                   key={p.id}
-                  className="hover:bg-neutral-50/50  transition-colors duration-150"
+                  className="grid grid-cols-[minmax(0,1fr)_auto] hover:bg-neutral-50/50 transition-colors duration-150 md:table-row"
                 >
-                  <td className="p-3.5 font-semibold text-neutral-800 ">
+                  <td className="min-w-0 break-words p-3.5 font-semibold text-neutral-800">
                     {p.name}
+                    <p className="mt-1 text-ui-caption font-normal text-neutral-600">
+                      {health ? t("healthSummary", { healthy: health.healthy, total: health.total }) : t("healthNotChecked")}
+                    </p>
+                    {health && <time dateTime={new Date(health.checkedAt).toISOString()} className="mt-1 block text-ui-caption font-normal text-neutral-600">{formatDateTimeLocal(new Date(health.checkedAt).toISOString())}</time>}
                   </td>
-                  <td className="p-3.5 max-w-[220px]">
+                  <td className={clsx("order-3 col-span-2 min-w-0 p-3.5 md:table-cell md:max-w-[220px]", !expanded && "hidden")}>
                     <div className="space-y-1.5">
                       <div className="font-mono text-ui-caption text-neutral-500  truncate">
                         {p.baseUrl}
@@ -527,9 +563,9 @@ export default function ProvidersManager({
                       </span>
                     </div>
                   </td>
-                  <td className="p-3.5 text-center font-mono text-ui-caption">
+                  <td className={clsx("order-4 col-span-2 p-3.5 text-center font-mono text-ui-caption md:table-cell", !expanded && "hidden")}>
                     <div className="flex flex-col items-center gap-1.5">
-                      <span>{p.keys.length}</span>
+                      <span>{t("colKeyCount")}: {p.keys.length}</span>
                       {healthActions?.[p.id] && (
                         <ProviderHealthButton
                           display={displayFor(p)}
@@ -540,7 +576,7 @@ export default function ProvidersManager({
                       )}
                     </div>
                   </td>
-                  <td className="p-3.5">
+                  <td className={clsx("order-5 col-span-2 min-w-0 p-3.5 md:table-cell", !expanded && "hidden")}>
                     <div className="space-y-1.5">
                       <div className="flex items-center gap-1.5">
                         <div className={clsx("truncate text-ui-caption font-medium max-w-[14rem]", p.testModel ? "text-neutral-700 " : "text-warning ")}>
@@ -565,14 +601,14 @@ export default function ProvidersManager({
                             align="left"
                             panelClassName="p-0"
                             trigger={
-                              <span className="text-ui-caption text-neutral-400  font-mono cursor-default">
+                              <button type="button" className="touch-target text-ui-caption text-neutral-600 font-mono underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue">
                                 {t.rich("modelsCount", {
                                   count: modelsFor(p).length,
                                   num: (chunks: ReactNode) => (
                                     <span className="font-semibold text-sora-blue tabular-nums">{chunks}</span>
                                   ),
                                 })}
-                              </span>
+                              </button>
                             }
                           >
                             <div className="max-h-60 w-64 overflow-auto py-1">
@@ -611,12 +647,13 @@ export default function ProvidersManager({
                       />
                     </form>
                   </td>
-                  <td className="p-3.5 text-right space-x-1">
+                  <td className="order-2 col-span-2 flex flex-wrap items-center gap-1 px-3.5 pb-3.5 md:table-cell md:p-3.5 md:text-right">
+                    <Button variant="ghost" size="sm" onClick={() => setExpandedId(expanded ? null : p.id)} aria-expanded={expanded} className="md:hidden">{t(expanded ? "hideDetails" : "showDetails")}</Button>
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => setEditId(p.id)}
-                      className="text-neutral-700 hover:text-neutral-900  "
+                      className="text-neutral-700 hover:text-neutral-900"
                       title={t("edit")}
                     >
                       <Edit2 className="w-3.5 h-3.5" />
@@ -627,7 +664,7 @@ export default function ProvidersManager({
                       variant="ghost"
                       size="sm"
                       onClick={() => setDeleteId(p.id)}
-                      className="text-danger hover:bg-red-50  hover:text-danger-hover"
+                      className="text-danger hover:bg-red-50 hover:text-danger-hover"
                       title={t("delete")}
                     >
                       <Trash2 className="w-3.5 h-3.5" />

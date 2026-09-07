@@ -1,6 +1,6 @@
 # Settings Control Plane
 
-## Scenario: Atomic Settings Drafts, Publishing, And Reversal
+## Scenario: Immediate Settings Saves, Legacy Drafts, And Reversal
 
 ### 1. Scope / Trigger
 
@@ -11,6 +11,12 @@ control PostgreSQL schema. `user_settings` is not part of this control plane.
 ### 2. Signatures
 
 ```typescript
+interface SettingsSaveResult {
+  revision: number;
+  changeSetId: string | null; // null means unchanged
+}
+
+// Only for explicitly handling legacy drafts.
 interface SettingsDraftExpectation {
   changeSetId: string | null;
   version: number | null;
@@ -26,19 +32,19 @@ type SettingsChange =
 
 getSettingsControlView(): Promise<SettingsControlView>;
 getSettingsRevision(): Promise<number>;
-stageSystemSettings(input): Promise<SettingsDraftView>;
-stageOutputModeCreate(input): Promise<SettingsDraftView>;
-stageOutputModeUpdate(input): Promise<SettingsDraftView>;
-stageOutputModeDelete(input): Promise<SettingsDraftView>;
-stageOutputModeReorder(input): Promise<SettingsDraftView>;
-stageRenderStyleCreate(input): Promise<SettingsDraftView>;
-stageRenderStyleUpdate(input): Promise<SettingsDraftView>;
-stageRenderStyleDelete(input): Promise<SettingsDraftView>;
-stageRenderStyleReorder(input): Promise<SettingsDraftView>;
+saveSystemSettings(input: { actorId: string; expected: number; /* resource fields */ }): Promise<SettingsSaveResult>;
+saveOutputModeCreate(input: { actorId: string; expected: number; /* resource fields */ }): Promise<SettingsSaveResult>;
+saveOutputModeUpdate(input: { actorId: string; expected: number; /* resource fields */ }): Promise<SettingsSaveResult>;
+saveOutputModeDelete(input: { actorId: string; expected: number; /* resource fields */ }): Promise<SettingsSaveResult>;
+saveOutputModeReorder(input: { actorId: string; expected: number; /* resource fields */ }): Promise<SettingsSaveResult>;
+saveRenderStyleCreate(input: { actorId: string; expected: number; /* resource fields */ }): Promise<SettingsSaveResult>;
+saveRenderStyleUpdate(input: { actorId: string; expected: number; /* resource fields */ }): Promise<SettingsSaveResult>;
+saveRenderStyleDelete(input: { actorId: string; expected: number; /* resource fields */ }): Promise<SettingsSaveResult>;
+saveRenderStyleReorder(input: { actorId: string; expected: number; /* resource fields */ }): Promise<SettingsSaveResult>;
 abandonSettingsDraft(input): Promise<void>;
 applySettingsDraft(input): Promise<{ revision: number; changeSetId: string }>;
 listSettingsHistory(limit?: number): Promise<SettingsHistoryEntry[]>;
-createRollbackDraft(input): Promise<SettingsDraftView>;
+rollbackSettings(input: { actorId: string; expected: number; targetChangeSetId: string }): Promise<SettingsSaveResult>;
 ```
 
 PostgreSQL facts:
@@ -59,40 +65,52 @@ PostgreSQL facts:
 - `changeSetId` and `version` are either both null or both present. Existing
   drafts require the exact actor, ID, and safe-integer version. A stale tab must
   fail instead of overwriting the current draft.
-- All stage operations lock `settings_control_state` and the active draft in one
-  transaction. The server loads the production/projected resource, derives the
-  canonical before/after snapshots, keeps the first `before`, replaces only the
-  latest `after`, and removes a resource change that returns to its original
-  value.
+- Daily saves require a nonnegative safe-integer production revision in
+  `expected`. Lock the control row and compare it before deriving changes from
+  production values (never from a legacy draft). Validate and write settings,
+  increment revision, and insert immutable applied history in one transaction.
+  Unchanged saves return the current revision and `changeSetId: null`, without
+  writing history or advancing revision.
+- Read the production revision before loading form values. Never bind a newer
+  token to values loaded before that token. Daily forms do not project drafts.
+- Existing drafts are neither published nor deleted by daily saves or reversal.
+  Expose their explicit review/apply/abandon operations only as legacy recovery.
 - One change exists per stable `resourceKey`. Create is `null -> value`, delete
   is `value -> null`, and reorder is a `sortOrder` field change. Reorder input
   must contain every current resource ID exactly once.
+- Merge input may be `null -> null` when a form clears an absent legacy key:
+  ignore it, or remove a staged creation that returns to its original absence.
+  Persisted changes must still reject both-null snapshots. Tests must cover
+  absent-key clearing alongside a real edit, not only populated fixtures.
 - Apply locks the control row and draft, re-reads every production resource, and
   requires it to equal the persisted `before`. It validates the complete
   projected state before writing, then performs deletes, updates, creates, the
   revision increment, and `draft -> applied` in one PostgreSQL transaction.
   Any error rolls back production rows, revision, and history status together.
-- `applySettingsDraft` owns only the database transaction. Its caller must run
+- All save/reversal functions and `applySettingsDraft` own only the database transaction. Their callers must run
   the single runtime invalidator only after the promise resolves. Cache cleanup
-  failure is an `applied_cache_warning`: the database publication remains
-  committed, and revision-aware readers converge on the next read.
+  failure must not turn into a save error: `refreshSettings` returns a warning
+  and logs a non-sensitive message; history actions surface
+  `applied_cache_warning`. The database remains committed, and revision-aware
+  readers converge on the next read. All reset calls are isolated by allSettled.
 - Applied rows are immutable. History is ordered by `applied_revision`; the
   public limit is a safe integer from 1 through 100.
-- Reversal requires no active draft and an applied target. It derives changed
+- Reversal requires the expected production revision and an applied target. It derives changed
   fields from the target's complete before/after snapshots. Create/delete uses
   the entity wildcard `*`; update/reorder uses only actually changed fields.
   Any later overlapping change or current-value mismatch returns structured
   conflicts and creates nothing.
-- A successful reversal creates a new `kind='rollback'` draft at the current
-  revision. It never edits history or production directly and must pass the
-  normal review and atomic apply path.
+- A successful reversal directly commits a new applied `kind='rollback'` history
+  record. It never edits existing history. The UI must show affected fields and
+  require confirmation before submission; loading history and previewing
+  reversal are read-only and authenticated. History is loaded only on request.
 
 ### 4. Validation & Error Matrix
 
 | Condition | Required result |
 | --- | --- |
-| Missing actor, half-null expectation, or invalid version | `SettingsValidationError` |
-| Draft ID/version/actor is stale, missing, or mismatched | `SettingsDraftConflictError` |
+| Missing actor, invalid revision, or malformed legacy expectation | `SettingsValidationError` |
+| Production revision or legacy draft ID/version/actor is stale | `SettingsDraftConflictError` |
 | Empty draft apply | `SettingsValidationError`; no revision change |
 | Production snapshot differs from persisted `before` | Conflict; no writes |
 | Unsupported system key or invalid governance JSON | Validation error before apply |
@@ -101,14 +119,14 @@ PostgreSQL facts:
 | Built-in render style CSS identity changed or deleted | Validation error |
 | Any projected-state or database write fails | Entire transaction rolls back |
 | Rollback target is not applied or has no reversible changes | Validation error |
-| Later publication overlaps target fields, or current value differs | `SettingsRollbackConflictError`; no draft |
+| Later publication overlaps target fields, or current value differs | `SettingsRollbackConflictError`; no writes |
 | Runtime invalidation fails after commit | Warning; do not report rollback |
 | Applied history is updated or deleted | PostgreSQL SQLSTATE `55000` |
 
 ### 5. Good / Base / Bad Cases
 
-- Good: one draft changes a User-Agent, creates an output mode, and reorders a
-  render style; one apply produces one revision or writes nothing.
+- Good: one form save updates both User-Agents in one transaction, immediately
+  producing one revision/history record or writing nothing on failure.
 - Good: reversing an old field-only update restores only those fields and keeps
   later non-overlapping fields unchanged.
 - Base: repeated edits to one resource keep its original `before` and latest
@@ -125,16 +143,17 @@ PostgreSQL facts:
 - Change logic tests assert strict snapshot parsing, stable resource keys,
   duplicate/no-op rejection, first-before/latest-after merge, field overlap,
   wildcard create/delete reversal, and field-only reversal.
-- Service tests assert one active draft, optimistic version conflicts, supported
-  system keys, resource validation, exact reorder sets, and history limit bounds.
-- Real PostgreSQL tests must publish system settings, output modes, and render
-  styles together; force projected validation/write failure and assert production,
-  revision, and draft status are unchanged; verify concurrent apply behavior.
+- Service tests assert stale and concurrent revision rejection, no-op saves,
+  supported system keys, resource validation, exact reorder sets, history
+  limits, and isolation from existing legacy drafts.
+- Real PostgreSQL tests must save system settings, output modes, and render
+  styles; force validation and final-history-write failure and assert production,
+  revision, and history are unchanged; verify exactly one concurrent save wins.
 - Migration/PostgreSQL tests assert the global singleton, partial draft index,
   state/time checks, applied revision uniqueness, and immutable-history trigger.
 - Rollback tests cover create/delete/update/reorder, later same-field conflict,
   later non-overlapping preservation, current-value mismatch, and re-apply as a
-  new revision.
+  new immediately effective revision.
 - Runtime tests assert no invalidation on failed apply, invalidation only after
   commit, revision-aware cache refresh across processes, and warning semantics
   when best-effort cleanup fails.
@@ -142,15 +161,13 @@ PostgreSQL facts:
 ### 7. Wrong vs Correct
 
 ```typescript
-// Wrong: bypasses one revision, one history record, and atomic rollback.
-await saveSystemSettings(values);
-await updateOutputMode(mode);
-await reorderRenderStyles(ids);
+// Wrong: separate stage/apply calls can leave a draft behind on failure.
+const draft = await stageSettings(values);
+await applySettingsDraft({ actorId, expected: draft });
 
-// Correct: every mutation stages into the same server-owned draft.
-await stageSystemSettings({ actorId, expected, namespace, values });
-await stageOutputModeUpdate({ actorId, expected: nextExpected, ...mode });
-await stageRenderStyleReorder({ actorId, expected: latestExpected, orderedIds: ids });
+// Correct: one transaction; pre-existing drafts remain untouched.
+const saved = await saveSystemSettings({ actorId, expected: revision, namespace, values });
+await refreshSettings(saved);
 ```
 
 ```typescript

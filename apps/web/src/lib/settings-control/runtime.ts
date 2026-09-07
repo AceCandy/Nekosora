@@ -8,14 +8,14 @@ import { invalidateRenderStylesCache } from "@/lib/render-styles/service";
 
 /** 只在发布事务提交后调用；revision 检查保证跨进程下一次读取收敛。 */
 export async function invalidateSettingsRuntime(previousRevision: number): Promise<boolean> {
-  resetUAConfig();
-  resetEmbeddingConfig();
-  resetTitleModelConfig();
-  resetCompactModelConfig();
-  resetMemoryClient();
   const results = await Promise.allSettled([
-    invalidateOutputModesCache(previousRevision),
-    invalidateRenderStylesCache(previousRevision),
-  ]);
+    resetUAConfig,
+    resetEmbeddingConfig,
+    resetTitleModelConfig,
+    resetCompactModelConfig,
+    resetMemoryClient,
+    () => invalidateOutputModesCache(previousRevision),
+    () => invalidateRenderStylesCache(previousRevision),
+  ].map(async (invalidate) => invalidate()));
   return results.some((result) => result.status === "rejected");
 }

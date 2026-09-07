@@ -158,7 +158,7 @@ export default function SidebarNav({ groups, matchMode = "exact", collapsed = fa
       ) : groups.map((group, groupIdx) => (
         <div key={group.titleKey ?? groupIdx} className="space-y-1">
           {group.titleKey && !collapsed && (
-            <div className="px-3 pb-1 text-ui-caption font-medium text-neutral-400 ">
+            <div className="px-3 pb-1 text-ui-caption font-medium text-neutral-600">
               {t(group.titleKey)}
             </div>
           )}
@@ -175,11 +175,12 @@ export default function SidebarNav({ groups, matchMode = "exact", collapsed = fa
                 href={item.href}
                 title={collapsed ? t(item.labelKey) : undefined}
                 aria-label={collapsed ? t(item.labelKey) : undefined}
+                aria-current={isActive ? "page" : undefined}
                 className={clsx(
                   "touch-target group/nav flex items-center rounded-md text-ui-body font-medium transition-[background-color,color,padding] duration-150 ease-out",
                   collapsed ? "justify-center p-2" : "gap-2 px-3 py-2",
                   isActive
-                    ? "bg-sora-blue/8 text-sora-blue "
+                    ? "bg-sora-blue/8 text-sora-blue-hover"
                     : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-50   ",
                 )}
               >

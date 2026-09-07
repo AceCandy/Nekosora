@@ -4,30 +4,23 @@
  * 数据获取 + server action + Manager 渲染集中于此;revalidate 指向 /admin/settings。
  * 鉴权依赖 service 层(create/update/... 内部 requireAdmin)+ /admin layout 守卫。
  */
-import { revalidatePath } from "next/cache";
+import { refreshSettings } from "./refresh-settings";
 import {
   listAllOutputModes,
 } from "@/lib/output-modes/service";
 import { requireAdmin } from "@/lib/session";
 import {
-  projectOutputModes,
-  stageOutputModeCreate,
-  stageOutputModeDelete,
-  stageOutputModeReorder,
-  stageOutputModeUpdate,
+  saveOutputModeCreate,
+  saveOutputModeDelete,
+  saveOutputModeReorder,
+  saveOutputModeUpdate,
   type SettingsControlView,
 } from "@/lib/settings-control/service";
 import OutputModesManager from "@/features/output-modes/OutputModesManager";
 
 export default async function OutputModesSection({ control }: { control: SettingsControlView }) {
-  const modes = projectOutputModes(
-    await listAllOutputModes(),
-    control.draft?.changes ?? [],
-  );
-  const expected = {
-    changeSetId: control.draft?.id ?? null,
-    version: control.draft?.version ?? null,
-  };
+  const modes = await listAllOutputModes();
+  const expected = control.currentRevision;
 
   const managerModes = modes.map((m) => ({
     id: m.id,
@@ -46,7 +39,7 @@ export default async function OutputModesSection({ control }: { control: Setting
     const description = String(formData.get("description") ?? "").trim() || undefined;
     const icon = String(formData.get("icon") ?? "").trim() || undefined;
     if (!name || !systemPrompt) return;
-    await stageOutputModeCreate({
+    const saved = await saveOutputModeCreate({
       actorId: (await requireAdmin()).id,
       expected,
       value: {
@@ -56,7 +49,7 @@ export default async function OutputModesSection({ control }: { control: Setting
         icon: icon ?? null,
       },
     });
-    revalidatePath("/admin/settings");
+    await refreshSettings(saved);
   }
 
   async function handleUpdate(id: string, formData: FormData) {
@@ -66,41 +59,41 @@ export default async function OutputModesSection({ control }: { control: Setting
     const description = String(formData.get("description") ?? "").trim();
     const enabled = formData.get("enabled") === "on";
     if (!name || !systemPrompt) return;
-    await stageOutputModeUpdate({
+    const saved = await saveOutputModeUpdate({
       actorId: (await requireAdmin()).id,
       expected,
       id,
       patch: { name, systemPrompt, description: description || null, enabled },
     });
-    revalidatePath("/admin/settings");
+    await refreshSettings(saved);
   }
 
   async function handleToggle(id: string, currentEnabled: boolean) {
     "use server";
-    await stageOutputModeUpdate({
+    const saved = await saveOutputModeUpdate({
       actorId: (await requireAdmin()).id,
       expected,
       id,
       patch: { enabled: !currentEnabled },
     });
-    revalidatePath("/admin/settings");
+    await refreshSettings(saved);
   }
 
   async function handleDelete(id: string) {
     "use server";
-    await stageOutputModeDelete({ actorId: (await requireAdmin()).id, expected, id });
-    revalidatePath("/admin/settings");
+    const saved = await saveOutputModeDelete({ actorId: (await requireAdmin()).id, expected, id });
+    await refreshSettings(saved);
   }
 
   /** 拖动重排:按拖动后的完整顺序重写 sortOrder,revalidate 后顺序刷新即落库。 */
   async function reorderOutputModes(orderedIds: string[]) {
     "use server";
-    await stageOutputModeReorder({
+    const saved = await saveOutputModeReorder({
       actorId: (await requireAdmin()).id,
       expected,
       orderedIds,
     });
-    revalidatePath("/admin/settings");
+    await refreshSettings(saved);
   }
 
   const updateActions = Object.fromEntries(

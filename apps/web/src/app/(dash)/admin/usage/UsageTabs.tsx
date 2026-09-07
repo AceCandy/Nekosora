@@ -9,6 +9,9 @@ interface UsageTabsProps {
   basePath: string;
   /** 当前时间范围(切换 Tab 时保留)。 */
   range?: string;
+  start?: string;
+  end?: string;
+  user?: string;
 }
 
 /**
@@ -16,11 +19,14 @@ interface UsageTabsProps {
  * 点击 Tab 跳转触发服务端重新查询。切换时重置 page=1、丢弃明细筛选,
  * 仅保留 range。
  */
-export function UsageTabs({ current, basePath, range }: UsageTabsProps) {
+export function UsageTabs({ current, basePath, range, start, end, user }: UsageTabsProps) {
   const t = useTranslations("admin.usage");
   const buildHref = (tab: "usage" | "errors") => {
     const params = new URLSearchParams();
     if (range !== undefined) params.set("range", range);
+    if (start) params.set("start", start);
+    if (end) params.set("end", end);
+    if (user) params.set("user", user);
     params.set("tab", tab);
     return `${basePath}?${params.toString()}`;
   };
@@ -30,10 +36,11 @@ export function UsageTabs({ current, basePath, range }: UsageTabsProps) {
       <Link
         href={buildHref(id)}
         prefetch={false}
+        aria-current={active ? "page" : undefined}
         className={clsx(
           "px-4 py-2 rounded-md text-ui-body font-medium transition-colors duration-150 border",
           active
-            ? "bg-sora-blue/8 text-sora-blue border-sora-blue/30 "
+            ? "bg-sora-blue/8 text-sora-blue-hover border-sora-blue/30"
             : "bg-nebula-white  text-neutral-500 border-morning-mist  hover:text-neutral-700 ",
         )}
       >

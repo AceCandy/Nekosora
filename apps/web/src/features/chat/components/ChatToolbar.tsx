@@ -6,7 +6,6 @@ import { Sparkles, Globe, Wand2, Palette, X, File as FileIcon, Brain, ChevronDow
 import { clsx } from "clsx";
 import { OptionPicker, type OptionItem } from "@/shared/ui/OptionPicker";
 import { Popover } from "@/shared/ui/Popover";
-import { Badge } from "@/shared/ui/Badge";
 import type { ReasoningLevel } from "@/db/types";
 import type {
   ModelOption,
@@ -22,7 +21,7 @@ import { useClickOutside } from "@/shared/lib/useClickOutside";
 const MENU_ROW = "flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-ui-caption font-medium text-neutral-700 transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue  ";
 /** 输入栏内联控件:与发送按钮同高,无多余描边框。 */
 const TOOLBAR_CHIP =
-  "pointer-events-auto inline-flex h-8 max-w-20 items-center gap-1 rounded-full px-2 text-ui-caption font-medium text-neutral-600 transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none   sm:max-w-52";
+  "pointer-events-auto inline-flex h-8 min-w-0 max-w-44 items-center gap-1 rounded-full px-2 text-ui-caption font-medium text-neutral-600 transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none sm:max-w-52";
 const TOOLBAR_ICON =
   "pointer-events-auto inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue motion-reduce:transition-none   ";
 
@@ -266,7 +265,7 @@ export function ModelControlMenu(props: ChatToolbarProps) {
   const t = useTranslations("chat");
   const current = props.models.find((item) => item.modelId === props.model);
   return (
-    <div className="flex shrink-0 items-center gap-0.5">
+    <div className="flex min-w-0 items-center gap-0.5">
       {props.outputModes.length > 0 && (
         <OptionPicker
           open={props.outputModePickerOpen}
@@ -320,7 +319,8 @@ interface ModelConfigPickerProps extends ChatToolbarProps {
 function ModelConfigPicker(props: ModelConfigPickerProps) {
   const t = useTranslations("chat");
   const [query, setQuery] = useState("");
-  const [reasoningDraft, setReasoningDraft] = useState<{ modelId: string; index: number } | null>(null);
+  const [recentIds, setRecentIds] = useState<string[]>([]);
+  const listRef = useRef<HTMLDivElement>(null);
   const pendingReasoningRef = useRef<{ modelId: string; level: ReasoningLevel } | null>(null);
   const levels = getSupportedReasoningLevels(props.current?.capabilities);
   const reasoningVisible =
@@ -337,27 +337,40 @@ function ModelConfigPicker(props: ModelConfigPickerProps) {
         || item.name.toLocaleLowerCase().includes(normalized);
     });
   }, [props.models, query]);
+  const recentModels = query.trim() ? [] : recentIds
+    .map((id) => filteredModels.find((item) => item.modelId === id))
+    .filter((item): item is ModelOption => Boolean(item));
+  const remainingModels = filteredModels.filter((item) => !recentModels.includes(item));
+  const groups = [
+    { label: t("recentModels"), models: recentModels },
+    { label: t("globalLabel"), models: remainingModels.filter((item) => item.source === "global") },
+    { label: t("personalModels"), models: remainingModels.filter((item) => item.source === "byo") },
+    { label: t("allModels"), models: remainingModels.filter((item) => !item.source) },
+  ].filter((group) => group.models.length > 0);
+  const navigateModels = (event: React.KeyboardEvent<HTMLElement>) => {
+    const inSearch = event.target instanceof HTMLInputElement;
+    if (!(inSearch ? ["ArrowDown", "ArrowUp"] : ["ArrowDown", "ArrowUp", "Home", "End"]).includes(event.key)) return;
+    const options = Array.from(listRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]') ?? []);
+    if (!options.length) return;
+    event.preventDefault();
+    const index = options.indexOf(document.activeElement as HTMLButtonElement);
+    const next = event.key === "Home" ? 0 : event.key === "End" ? options.length - 1
+      : event.key === "ArrowDown" ? (index + 1) % options.length
+        : (index < 0 ? options.length - 1 : (index - 1 + options.length) % options.length);
+    options[next]?.focus();
+  };
   const close = () => {
     setQuery("");
-    setReasoningDraft(null);
+    const id = props.current?.modelId;
+    if (id) setRecentIds((ids) => [id, ...ids.filter((item) => item !== id)].slice(0, 4));
     props.onModelPickerClose();
   };
   const statusLabel = reasoningVisible
     ? t(reasoningShortLabelKey(props.reasoning, fixed))
     : null;
-  const selectedReasoningIndex = Math.max(0, levels.indexOf(props.reasoning));
-  const draftReasoningIndex = reasoningDraft?.modelId === props.model
-    ? reasoningDraft.index
-    : selectedReasoningIndex;
-  const displayedReasoningIndex = Math.max(0, Math.min(draftReasoningIndex, Math.max(0, levels.length - 1)));
-  const displayedReasoning = levels[displayedReasoningIndex];
-  const reasoningProgress = levels.length > 1
-    ? (displayedReasoningIndex / (levels.length - 1)) * 100
-    : 0;
-  const commitReasoning = (index: number) => {
-    const level = levels[Math.max(0, Math.min(index, levels.length - 1))];
-    setReasoningDraft(null);
-    if (!level || level === props.reasoning) return;
+  const commitReasoning = (level: ReasoningLevel) => {
+    if (!levels.includes(level)) return;
+    if (level === props.reasoning) return;
     const pending = pendingReasoningRef.current;
     if (pending?.modelId === props.model && pending.level === level) return;
     pendingReasoningRef.current = { modelId: props.model, level };
@@ -389,7 +402,7 @@ function ModelConfigPicker(props: ModelConfigPickerProps) {
         >
           <span className="truncate">{props.current?.displayName ?? props.current?.name ?? t("selectModel")}</span>
           {statusLabel && (
-            <span className="hidden shrink-0 text-neutral-400  sm:inline">
+            <span className="hidden shrink-0 text-neutral-600 sm:inline">
               · {statusLabel}
             </span>
           )}
@@ -404,14 +417,18 @@ function ModelConfigPicker(props: ModelConfigPickerProps) {
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={navigateModels}
             placeholder={t("modelSearchPlaceholder")}
             aria-label={t("modelSearchPlaceholder")}
             className="h-8 w-full rounded-md border border-morning-mist bg-nebula-white pl-8 pr-3 text-ui-caption text-space-ink outline-none transition-colors placeholder:text-neutral-500 focus:border-sora-blue focus-visible:ring-2 focus-visible:ring-sora-blue/20   "
           />
         </div>
 
-        <div role="listbox" aria-label={t("selectModel")} className="max-h-56 overflow-y-auto p-1.5">
-          {filteredModels.length > 0 ? filteredModels.map((item) => {
+        <div ref={listRef} role="listbox" aria-label={t("selectModel")} onKeyDown={navigateModels} className="max-h-64 overflow-y-auto p-1.5">
+          {groups.length > 0 ? groups.map((group) => (
+            <div key={group.label} role="group" aria-label={group.label}>
+              <div aria-hidden="true" className="px-2.5 pb-1 pt-2 text-ui-caption font-medium text-neutral-600">{group.label}</div>
+              {group.models.map((item) => {
             const selected = item.modelId === props.model;
             return (
               <button
@@ -420,24 +437,31 @@ function ModelConfigPicker(props: ModelConfigPickerProps) {
                 role="option"
                 aria-selected={selected}
                 onClick={() => {
-                  setReasoningDraft(null);
                   props.onModelChange(item.modelId);
                 }}
                 className={clsx(
                   "touch-target flex min-h-9 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-ui-caption transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue",
                   selected
-                    ? "bg-sora-blue/[0.06] font-semibold text-sora-blue"
+                    ? "bg-sora-blue/[0.06] font-semibold text-sora-blue-hover"
                     : "text-neutral-600 hover:bg-neutral-50  ",
                 )}
               >
                 <Check className={clsx("h-3.5 w-3.5 shrink-0", selected ? "opacity-100" : "opacity-0")} aria-hidden="true" />
-                <span className="min-w-0 flex-1 truncate">{item.displayName ?? item.name}</span>
-                {item.source === "global" && (
-                  <Badge variant="primary" className="shrink-0 py-0 leading-none">{t("globalLabel")}</Badge>
-                )}
+                <span className="min-w-0 flex-1">
+                  <span className="block break-words">{item.displayName ?? item.name}</span>
+                  <span className="block text-ui-caption font-normal text-neutral-600">
+                    {[
+                      item.capabilities?.vision && t("modelVision"),
+                      item.capabilities?.tools && t("modelTools"),
+                      item.capabilities?.reasoning && t("reasoning"),
+                    ].filter(Boolean).join(" · ")}
+                  </span>
+                </span>
               </button>
             );
-          }) : (
+              })}
+            </div>
+          )) : (
             <div className="px-3 py-8 text-center text-ui-caption text-neutral-500 ">
               {t("modelSearchNoMatch")}
             </div>
@@ -445,63 +469,33 @@ function ModelConfigPicker(props: ModelConfigPickerProps) {
         </div>
 
         {reasoningVisible && (
-          <div className="border-t border-morning-mist bg-neutral-50/80 px-2 py-1.5  ">
-            <div className="flex items-center gap-2">
-              <span className="mt-2 inline-flex shrink-0 items-center self-start text-neutral-600 " title={t("reasoning")}>
+          <div className="border-t border-morning-mist bg-neutral-50/80 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <span className="inline-flex items-center gap-2 text-ui-caption font-medium text-neutral-700">
                 <Brain className="h-3.5 w-3.5" aria-hidden="true" />
+                {t("reasoningLevel")}
               </span>
-              {fixed && (
-                <span className="ml-auto text-ui-caption text-neutral-500 ">
-                  {t("reasoningFixedShort")}
-                </span>
-              )}
-              {!fixed && (
-                <div className="relative h-11 min-w-0 flex-1">
-                  <div className="pointer-events-none absolute inset-x-3 top-3 h-1.5 rounded-full bg-morning-mist">
-                    <span
-                      className="absolute top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full border border-morning-mist bg-white"
-                      style={{ left: `${reasoningProgress}%` }}
-                    />
-                  </div>
-                  <div className="pointer-events-none absolute inset-x-3 bottom-0 h-4">
-                    {levels.map((level, index) => (
-                      <span
-                        key={level}
-                        className={clsx(
-                          "absolute top-0 whitespace-nowrap text-ui-micro font-medium",
-                          index === 0 ? "text-left" : index === levels.length - 1 ? "-translate-x-full text-right" : "-translate-x-1/2 text-center",
-                          index === displayedReasoningIndex
-                            ? "text-space-ink "
-                            : "text-neutral-500 ",
-                        )}
-                        style={{ left: `${(index / (levels.length - 1)) * 100}%` }}
-                      >
-                        {t(reasoningShortLabelKey(level, false))}
-                      </span>
-                    ))}
-                  </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={levels.length - 1}
-                    step={1}
-                    value={displayedReasoningIndex}
-                    onChange={(event) => setReasoningDraft({ modelId: props.model, index: Number(event.currentTarget.value) })}
-                    onPointerUp={(event) => commitReasoning(Number(event.currentTarget.value))}
-                    onPointerCancel={() => setReasoningDraft(null)}
-                    onKeyUp={(event) => {
-                      if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"].includes(event.key)) {
-                        commitReasoning(Number(event.currentTarget.value));
-                      }
-                    }}
-                    onBlur={(event) => commitReasoning(Number(event.currentTarget.value))}
-                    aria-label={t("reasoningLevel")}
-                    aria-valuetext={displayedReasoning ? t(reasoningShortLabelKey(displayedReasoning, false)) : undefined}
-                    className="touch-target absolute inset-x-0 top-0 h-7 w-full cursor-pointer appearance-none bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue [&::-moz-range-thumb]:h-6 [&::-moz-range-thumb]:w-6 [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:opacity-0 [&::-moz-range-track]:h-6 [&::-moz-range-track]:bg-transparent [&::-webkit-slider-runnable-track]:h-6 [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:opacity-0"
-                  />
-                </div>
-              )}
+              <span className="text-ui-caption font-medium text-neutral-700">{statusLabel}</span>
             </div>
+            {!fixed && (
+              <div className="mt-2">
+                <input
+                  type="range"
+                  min={0}
+                  max={levels.length - 1}
+                  step={1}
+                  value={Math.max(0, levels.indexOf(props.reasoning))}
+                  onChange={(event) => commitReasoning(levels[Number(event.target.value)])}
+                  aria-label={t("reasoningLevel")}
+                  aria-valuetext={statusLabel ?? undefined}
+                  className="h-6 w-full cursor-pointer accent-sora-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
+                />
+                <div className="flex justify-between text-ui-caption text-neutral-600" aria-hidden="true">
+                  <span>{t(reasoningShortLabelKey(levels[0], false))}</span>
+                  <span>{t(reasoningShortLabelKey(levels[levels.length - 1], false))}</span>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

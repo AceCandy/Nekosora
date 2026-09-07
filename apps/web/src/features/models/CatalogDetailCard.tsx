@@ -38,7 +38,7 @@ export default function CatalogDetailCard({ catalog }: { catalog: ModelCatalogOp
   ].filter((x) => x.on);
 
   return (
-    <div className="w-72 space-y-2.5 text-ui-caption">
+    <div className="w-72 max-w-full space-y-2.5 text-ui-caption">
       <div className="flex items-center justify-between gap-2">
         <span className="truncate font-semibold text-neutral-800 ">{catalog.name}</span>
         <Badge variant="neutral">{typeMap[catalog.modelType] ?? catalog.modelType}</Badge>

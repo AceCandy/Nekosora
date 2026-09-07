@@ -41,7 +41,7 @@ interface UsageFilterBarProps {
 }
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
-  return <span className="text-ui-caption text-neutral-400 ">{children}</span>;
+  return <span className="text-ui-caption text-neutral-600 ">{children}</span>;
 }
 
 export function UsageFilterBar({ variant, values, labels, basePath, tab }: UsageFilterBarProps) {
@@ -125,6 +125,7 @@ export function UsageFilterBar({ variant, values, labels, basePath, tab }: Usage
         <div className="flex flex-col gap-1">
           <FieldLabel>{t("filters.source")}</FieldLabel>
           <Select
+            aria-label={t("filters.source")}
             value={values.source}
             onChange={(e) => update({ source: e.target.value })}
             className="w-28 py-1.5 text-ui-caption"

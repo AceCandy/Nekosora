@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import type { ProviderProtocol } from "@/db/types";
 import type { FormDataSerializableAction } from "@/features/providers/types";
@@ -58,6 +58,8 @@ export default function ProviderFormDialog({
   const t = useTranslations("providers");
   const isEdit = mode === "edit";
   const [formKey, setFormKey] = useState(0);
+  const [pending, startTransition] = useTransition();
+  const [saveFailed, setSaveFailed] = useState(false);
   // protocol / baseUrl 需受控,以便测试按钮据此请求对应上游,
   // 并在切换协议时自动填充默认 baseUrl。
   const [protocol, setProtocol] = useState(initial?.protocol ?? protocols[0]?.value ?? "openai-compatible");
@@ -82,6 +84,7 @@ export default function ProviderFormDialog({
 
   const handleClose = () => {
     onClose();
+    setSaveFailed(false);
     setFormKey((k) => k + 1);
     setProtocol(initial?.protocol ?? protocols[0]?.value ?? "openai-compatible");
     setBaseUrl(initial?.baseUrl ?? "");
@@ -154,24 +157,34 @@ export default function ProviderFormDialog({
     <>
     <Modal
       open={open}
-      onClose={requestClose}
+      onClose={() => { if (!pending) requestClose(); }}
       title={isEdit ? t("editTitle") : t("addTitle")}
     >
       <form
         ref={contentRef}
         key={formKey}
-        action={action}
+        aria-busy={pending}
         onSubmit={(e) => {
-          // 先做客户端查重:有重复则阻止提交并高亮到重复行,放行后再走原关闭逻辑。
+          e.preventDefault();
+          if (pending) return;
+          // 重复密钥阻止提交，并定位到重复行。
           if (editorRef.current?.validateDuplicates()) {
-            e.preventDefault();
             return;
           }
-          setTimeout(handleClose, 0);
+          const data = new FormData(e.currentTarget);
+          setSaveFailed(false);
+          startTransition(async () => {
+            try {
+              await action(data);
+              handleClose();
+            } catch {
+              setSaveFailed(true);
+            }
+          });
         }}
         className="space-y-5"
       >
-        <div className="grid grid-cols-2 gap-4">
+        <fieldset disabled={pending} className="grid grid-cols-2 gap-4 disabled:opacity-60">
           <label className="block">
             <span className={labelCls}>{t("fieldName")}</span>
             <Input
@@ -224,152 +237,6 @@ export default function ProviderFormDialog({
               )}
             </div>
           </label>
-          <label className="block col-span-2">
-            <span className={labelCls}>
-              {t("testModelLabel")}{" "}
-              <span className="text-ui-caption font-normal text-neutral-400">{t("testModelHint")}</span>
-            </span>
-            <div className="flex items-center gap-2">
-              <Input
-                name="testModel"
-                value={testModel}
-                onChange={(e) => setTestModel(e.target.value)}
-                placeholder={t("testModelPlaceholder")}
-                className="flex-1 min-w-0"
-              />
-              {(upstreamModels.length > 0 || refreshUpstreamModels) && (
-                <Popover
-                  open={modelsOpen}
-                  onClose={closeModelsPopover}
-                  side="bottom"
-                  align="right"
-                  portal={false}
-                  panelClassName="p-0"
-                  trigger={
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setModelsOpen(true);
-                        void handleRefreshIfStale();
-                      }}
-                      title={t("selectModelTitle")}
-                      className="inline-flex shrink-0 items-center justify-center rounded-md border border-morning-mist  px-2.5 py-2 text-neutral-500 hover:text-neutral-800   transition-colors"
-                    >
-                      {refreshing ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <ChevronDown className="w-3.5 h-3.5" />
-                      )}
-                    </button>
-                  }
-                >
-                  <div className="w-60">
-                    <div className="sticky top-0 z-10 border-b border-morning-mist  bg-white  px-1.5 py-1.5">
-                      <Input
-                        value={modelSearch}
-                        onChange={(e) => setModelSearch(e.target.value)}
-                        placeholder={t("modelSearchPlaceholder")}
-                        autoFocus
-                      />
-                    </div>
-                    <div className="max-h-52 overflow-auto py-1">
-                      {refreshing && upstreamModels.length === 0 ? (
-                        <div className="px-3 py-2 text-ui-caption text-neutral-400 ">
-                          {t("modelsLoading")}
-                        </div>
-                      ) : filteredModels.length === 0 ? (
-                        <div className="px-3 py-2 text-ui-caption text-neutral-400 ">
-                          {upstreamModels.length === 0 ? t("modelsEmpty") : t("modelSearchNoMatch")}
-                        </div>
-                      ) : (
-                        filteredModels.map((m) => (
-                          <button
-                            key={m}
-                            type="button"
-                            onClick={() => {
-                              setTestModel(m);
-                              closeModelsPopover();
-                            }}
-                            className="block w-full px-3 py-1.5 text-left text-ui-caption font-mono text-neutral-700  hover:bg-neutral-100  truncate"
-                          >
-                            {m}
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                </Popover>
-              )}
-            </div>
-          </label>
-          <fieldset className="col-span-2">
-            <legend className="text-ui-caption font-semibold text-neutral-500 ">
-              {t("timeoutTitle")}
-            </legend>
-            <p className="mt-1 text-ui-caption text-neutral-500 ">
-              {t("timeoutHint")}
-            </p>
-            <input type="hidden" name="providerTimeoutsPresent" value="1" />
-            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <label className="block">
-                <span className={labelCls}>{t("connectTimeoutLabel")}</span>
-                <Input
-                  type="number"
-                  name="connectTimeoutSeconds"
-                  min={PROVIDER_TIMEOUT_LIMITS.connectTimeoutMs.minMs / 1_000}
-                  max={PROVIDER_TIMEOUT_LIMITS.connectTimeoutMs.maxMs / 1_000}
-                  step="0.001"
-                  defaultValue={initial?.connectTimeoutMs == null ? "" : initial.connectTimeoutMs / 1_000}
-                  placeholder={String(PROVIDER_TIMEOUT_LIMITS.connectTimeoutMs.defaultMs / 1_000)}
-                />
-                <span className="mt-1 block text-ui-caption text-neutral-500 ">
-                  {t("timeoutRangeHint", {
-                    default: PROVIDER_TIMEOUT_LIMITS.connectTimeoutMs.defaultMs / 1_000,
-                    min: PROVIDER_TIMEOUT_LIMITS.connectTimeoutMs.minMs / 1_000,
-                    max: PROVIDER_TIMEOUT_LIMITS.connectTimeoutMs.maxMs / 1_000,
-                  })}
-                </span>
-              </label>
-              <label className="block">
-                <span className={labelCls}>{t("readTimeoutLabel")}</span>
-                <Input
-                  type="number"
-                  name="readTimeoutSeconds"
-                  min={PROVIDER_TIMEOUT_LIMITS.readTimeoutMs.minMs / 1_000}
-                  max={PROVIDER_TIMEOUT_LIMITS.readTimeoutMs.maxMs / 1_000}
-                  step="0.001"
-                  defaultValue={initial?.readTimeoutMs == null ? "" : initial.readTimeoutMs / 1_000}
-                  placeholder={String(PROVIDER_TIMEOUT_LIMITS.readTimeoutMs.defaultMs / 1_000)}
-                />
-                <span className="mt-1 block text-ui-caption text-neutral-500 ">
-                  {t("timeoutRangeHint", {
-                    default: PROVIDER_TIMEOUT_LIMITS.readTimeoutMs.defaultMs / 1_000,
-                    min: PROVIDER_TIMEOUT_LIMITS.readTimeoutMs.minMs / 1_000,
-                    max: PROVIDER_TIMEOUT_LIMITS.readTimeoutMs.maxMs / 1_000,
-                  })}
-                </span>
-              </label>
-              <label className="block">
-                <span className={labelCls}>{t("streamIdleTimeoutLabel")}</span>
-                <Input
-                  type="number"
-                  name="streamIdleTimeoutSeconds"
-                  min={PROVIDER_TIMEOUT_LIMITS.streamIdleTimeoutMs.minMs / 1_000}
-                  max={PROVIDER_TIMEOUT_LIMITS.streamIdleTimeoutMs.maxMs / 1_000}
-                  step="0.001"
-                  defaultValue={initial?.streamIdleTimeoutMs == null ? "" : initial.streamIdleTimeoutMs / 1_000}
-                  placeholder={String(PROVIDER_TIMEOUT_LIMITS.streamIdleTimeoutMs.defaultMs / 1_000)}
-                />
-                <span className="mt-1 block text-ui-caption text-neutral-500 ">
-                  {t("timeoutRangeHint", {
-                    default: PROVIDER_TIMEOUT_LIMITS.streamIdleTimeoutMs.defaultMs / 1_000,
-                    min: PROVIDER_TIMEOUT_LIMITS.streamIdleTimeoutMs.minMs / 1_000,
-                    max: PROVIDER_TIMEOUT_LIMITS.streamIdleTimeoutMs.maxMs / 1_000,
-                  })}
-                </span>
-              </label>
-            </div>
-          </fieldset>
           <div className="block col-span-2">
             <div className="mb-1.5 flex items-center justify-between">
               <span className="text-ui-caption font-semibold text-neutral-500 ">{t("fieldApiKey")}</span>
@@ -407,18 +274,173 @@ export default function ProviderFormDialog({
               testAction={testAction}
             />
           </div>
-        </div>
+          <details className="col-span-2 border-t border-morning-mist pt-3">
+            <summary className="touch-target cursor-pointer text-ui-body font-medium text-neutral-700">{t("advancedSettings")}</summary>
+            <p className="my-3 text-ui-caption text-neutral-600">{t("advancedSettingsHint")}</p>
+            <div className="space-y-4">
+              <label className="block col-span-2">
+                <span className={labelCls}>
+                  {t("testModelLabel")}{" "}
+                  <span className="text-ui-caption font-normal text-neutral-400">{t("testModelHint")}</span>
+                </span>
+                <div className="flex items-center gap-2">
+                  <Input
+                    name="testModel"
+                    value={testModel}
+                    onChange={(e) => setTestModel(e.target.value)}
+                    placeholder={t("testModelPlaceholder")}
+                    className="flex-1 min-w-0"
+                  />
+                  {(upstreamModels.length > 0 || refreshUpstreamModels) && (
+                    <Popover
+                      open={modelsOpen}
+                      onClose={closeModelsPopover}
+                      side="bottom"
+                      align="right"
+                      portal={false}
+                      panelClassName="p-0"
+                      trigger={
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setModelsOpen(true);
+                            void handleRefreshIfStale();
+                          }}
+                          title={t("selectModelTitle")}
+                          className="inline-flex shrink-0 items-center justify-center rounded-md border border-morning-mist  px-2.5 py-2 text-neutral-500 hover:text-neutral-800   transition-colors"
+                        >
+                          {refreshing ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <ChevronDown className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      }
+                    >
+                      <div className="w-60">
+                        <div className="sticky top-0 z-10 border-b border-morning-mist  bg-white  px-1.5 py-1.5">
+                          <Input
+                            value={modelSearch}
+                            onChange={(e) => setModelSearch(e.target.value)}
+                            placeholder={t("modelSearchPlaceholder")}
+                            autoFocus
+                          />
+                        </div>
+                        <div className="max-h-52 overflow-auto py-1">
+                          {refreshing && upstreamModels.length === 0 ? (
+                            <div className="px-3 py-2 text-ui-caption text-neutral-400 ">
+                              {t("modelsLoading")}
+                            </div>
+                          ) : filteredModels.length === 0 ? (
+                            <div className="px-3 py-2 text-ui-caption text-neutral-400 ">
+                              {upstreamModels.length === 0 ? t("modelsEmpty") : t("modelSearchNoMatch")}
+                            </div>
+                          ) : (
+                            filteredModels.map((m) => (
+                              <button
+                                key={m}
+                                type="button"
+                                onClick={() => {
+                                  setTestModel(m);
+                                  closeModelsPopover();
+                                }}
+                                className="block w-full px-3 py-1.5 text-left text-ui-caption font-mono text-neutral-700  hover:bg-neutral-100  truncate"
+                              >
+                                {m}
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </Popover>
+                  )}
+                </div>
+              </label>
+              <fieldset className="col-span-2">
+                <legend className="text-ui-caption font-semibold text-neutral-500 ">
+                  {t("timeoutTitle")}
+                </legend>
+                <p className="mt-1 text-ui-caption text-neutral-500 ">
+                  {t("timeoutHint")}
+                </p>
+                <input type="hidden" name="providerTimeoutsPresent" value="1" />
+                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <label className="block">
+                    <span className={labelCls}>{t("connectTimeoutLabel")}</span>
+                    <Input
+                      type="number"
+                      name="connectTimeoutSeconds"
+                      min={PROVIDER_TIMEOUT_LIMITS.connectTimeoutMs.minMs / 1_000}
+                      max={PROVIDER_TIMEOUT_LIMITS.connectTimeoutMs.maxMs / 1_000}
+                      step="0.001"
+                      defaultValue={initial?.connectTimeoutMs == null ? "" : initial.connectTimeoutMs / 1_000}
+                      placeholder={String(PROVIDER_TIMEOUT_LIMITS.connectTimeoutMs.defaultMs / 1_000)}
+                    />
+                    <span className="mt-1 block text-ui-caption text-neutral-500 ">
+                      {t("timeoutRangeHint", {
+                        default: PROVIDER_TIMEOUT_LIMITS.connectTimeoutMs.defaultMs / 1_000,
+                        min: PROVIDER_TIMEOUT_LIMITS.connectTimeoutMs.minMs / 1_000,
+                        max: PROVIDER_TIMEOUT_LIMITS.connectTimeoutMs.maxMs / 1_000,
+                      })}
+                    </span>
+                  </label>
+                  <label className="block">
+                    <span className={labelCls}>{t("readTimeoutLabel")}</span>
+                    <Input
+                      type="number"
+                      name="readTimeoutSeconds"
+                      min={PROVIDER_TIMEOUT_LIMITS.readTimeoutMs.minMs / 1_000}
+                      max={PROVIDER_TIMEOUT_LIMITS.readTimeoutMs.maxMs / 1_000}
+                      step="0.001"
+                      defaultValue={initial?.readTimeoutMs == null ? "" : initial.readTimeoutMs / 1_000}
+                      placeholder={String(PROVIDER_TIMEOUT_LIMITS.readTimeoutMs.defaultMs / 1_000)}
+                    />
+                    <span className="mt-1 block text-ui-caption text-neutral-500 ">
+                      {t("timeoutRangeHint", {
+                        default: PROVIDER_TIMEOUT_LIMITS.readTimeoutMs.defaultMs / 1_000,
+                        min: PROVIDER_TIMEOUT_LIMITS.readTimeoutMs.minMs / 1_000,
+                        max: PROVIDER_TIMEOUT_LIMITS.readTimeoutMs.maxMs / 1_000,
+                      })}
+                    </span>
+                  </label>
+                  <label className="block">
+                    <span className={labelCls}>{t("streamIdleTimeoutLabel")}</span>
+                    <Input
+                      type="number"
+                      name="streamIdleTimeoutSeconds"
+                      min={PROVIDER_TIMEOUT_LIMITS.streamIdleTimeoutMs.minMs / 1_000}
+                      max={PROVIDER_TIMEOUT_LIMITS.streamIdleTimeoutMs.maxMs / 1_000}
+                      step="0.001"
+                      defaultValue={initial?.streamIdleTimeoutMs == null ? "" : initial.streamIdleTimeoutMs / 1_000}
+                      placeholder={String(PROVIDER_TIMEOUT_LIMITS.streamIdleTimeoutMs.defaultMs / 1_000)}
+                    />
+                    <span className="mt-1 block text-ui-caption text-neutral-500 ">
+                      {t("timeoutRangeHint", {
+                        default: PROVIDER_TIMEOUT_LIMITS.streamIdleTimeoutMs.defaultMs / 1_000,
+                        min: PROVIDER_TIMEOUT_LIMITS.streamIdleTimeoutMs.minMs / 1_000,
+                        max: PROVIDER_TIMEOUT_LIMITS.streamIdleTimeoutMs.maxMs / 1_000,
+                      })}
+                    </span>
+                  </label>
+                </div>
+              </fieldset>
+            </div>
+          </details>
+        </fieldset>
 
+        {saveFailed && <p role="alert" className="text-ui-body text-danger">{t("saveFailed")}</p>}
         <div className="flex justify-end gap-2.5 pt-4 border-t border-morning-mist ">
           <Button
             variant="secondary"
             size="sm"
             onClick={requestClose}
+            disabled={pending}
           >
             {t("cancel")}
           </Button>
           <Button
             type="submit"
+            loading={pending}
             variant="contrast"
             size="sm"
           >

@@ -76,10 +76,12 @@ export default function RouteFormDialog({
       && initial.apiFormat !== defaultRouteApiFormat(initialProvider.protocol),
   );
   const [formKey, setFormKey] = useState(0);
+  const [pending, startSaveTransition] = useTransition();
+  const [saveFailed, setSaveFailed] = useState(false);
   // provider 选择需受控,以便拉取按钮据此请求对应上游。
   const [providerId, setProviderId] = useState(initial?.providerId ?? "");
   const [apiFormat, setApiFormat] = useState<RouteApiFormat | "">(initialApiFormat);
-  const [advancedOpen, setAdvancedOpen] = useState(apiFormatIsOverridden);
+  const [advancedOpen, setAdvancedOpen] = useState(apiFormatIsOverridden || (initial?.priority ?? 0) !== 0 || (initial?.weight ?? 1) !== 1 || initial?.supportsTools === false);
   const apiFormatTouched = useRef(apiFormatIsOverridden);
   const apiFormatId = useId();
   const upstreamInputRef = useRef<HTMLInputElement>(null);
@@ -116,6 +118,7 @@ export default function RouteFormDialog({
 
   const handleClose = () => {
     onClose();
+    setSaveFailed(false);
     setFormKey((k) => k + 1);
   };
   const { contentRef, requestClose, dialogProps } = useUnsavedChanges<HTMLFormElement>(handleClose);
@@ -140,16 +143,30 @@ export default function RouteFormDialog({
     <>
     <Modal
       open={open}
-      onClose={requestClose}
+      onClose={() => { if (!pending) requestClose(); }}
       title={isEdit ? t("editRoute") : t("addRouteTitle")}
     >
       <form
         ref={contentRef}
         key={formKey}
-        action={action}
-        onSubmit={() => setTimeout(handleClose, 0)}
+        aria-busy={pending}
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (pending) return;
+          const data = new FormData(event.currentTarget);
+          setSaveFailed(false);
+          startSaveTransition(async () => {
+            try {
+              await action(data);
+              handleClose();
+            } catch {
+              setSaveFailed(true);
+            }
+          });
+        }}
         className="space-y-4"
       >
+        <fieldset disabled={pending} className="space-y-4 disabled:opacity-60">
         <input type="hidden" name="apiFormat" value={apiFormat} />
         <label className="block">
           <span className="text-ui-body font-medium">{t("upstreamProviderLabel")}</span>
@@ -198,7 +215,6 @@ export default function RouteFormDialog({
           </div>
         </label>
 
-        {modelType === "chat" && (
           <details
             open={advancedOpen}
             onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}
@@ -212,7 +228,7 @@ export default function RouteFormDialog({
                 </span>
               )}
             </summary>
-            <div className="pt-3">
+            {modelType === "chat" && <div className="pt-3">
               <label htmlFor={apiFormatId} className="text-ui-body font-medium">
                 {t("apiFormatLabel")}
               </label>
@@ -230,63 +246,69 @@ export default function RouteFormDialog({
                   <option key={format} value={format}>{formatLabels[format]}</option>
                 ))}
               </select>
+            </div>}
+            <div className="space-y-3 pt-3">
+              <div className="grid grid-cols-2 gap-4">
+                <label className="block">
+                  <span className="text-ui-body font-medium" title={t("priorityTitle")}>
+                    {t("priorityLabel")}
+                  </span>
+                  <input
+                    name="priority"
+                    type="number"
+                    defaultValue={initial?.priority ?? 0}
+                    className={inputCls}
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-ui-body font-medium" title={t("weightTitle")}>
+                    {t("weightLabel")}
+                  </span>
+                  <input
+                    name="weight"
+                    type="number"
+                    min={0}
+                    defaultValue={initial?.weight ?? 1}
+                    className={inputCls}
+                  />
+                </label>
+              </div>
+              <p className="text-ui-caption text-neutral-400">
+                {t("priorityWeightExplanation")}
+              </p>
+
+              <label className="flex items-center gap-2 text-ui-body font-medium">
+                <input name="supportsToolsPresent" type="hidden" value="true" />
+                <input
+                  name="supportsTools"
+                  type="checkbox"
+                  defaultChecked={initial?.supportsTools ?? true}
+                  className="h-4 w-4 accent-sora-blue"
+                />
+                {t("supportsToolsLabel")}
+              </label>
+
             </div>
           </details>
-        )}
 
-        <div className="grid grid-cols-2 gap-4">
-          <label className="block">
-            <span className="text-ui-body font-medium" title={t("priorityTitle")}>
-              {t("priorityLabel")}
-            </span>
-            <input
-              name="priority"
-              type="number"
-              defaultValue={initial?.priority ?? 0}
-              className={inputCls}
-            />
-          </label>
-          <label className="block">
-            <span className="text-ui-body font-medium" title={t("weightTitle")}>
-              {t("weightLabel")}
-            </span>
-            <input
-              name="weight"
-              type="number"
-              min={0}
-              defaultValue={initial?.weight ?? 1}
-              className={inputCls}
-            />
-          </label>
-        </div>
-        <p className="text-ui-caption text-neutral-400">
-          {t("priorityWeightExplanation")}
-        </p>
 
-        <label className="flex items-center gap-2 text-ui-body font-medium">
-          <input name="supportsToolsPresent" type="hidden" value="true" />
-          <input
-            name="supportsTools"
-            type="checkbox"
-            defaultChecked={initial?.supportsTools ?? true}
-            className="h-4 w-4 accent-sora-blue"
-          />
-          {t("supportsToolsLabel")}
-        </label>
-
+        </fieldset>
+        {saveFailed && <p role="alert" className="text-ui-body text-danger">{t("saveFailed")}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <button
             type="button"
             onClick={requestClose}
+            disabled={pending}
             className="rounded-md border border-neutral-300 px-4 py-2 text-ui-body hover:bg-neutral-100  "
           >
             {t("cancel")}
           </button>
           <button
             type="submit"
+            disabled={pending}
             className="rounded-md bg-neutral-900 px-4 py-2 text-ui-body font-medium text-white hover:bg-neutral-700  "
           >
-            {isEdit ? t("save") : t("create")}
+            {pending ? t("saving") : isEdit ? t("save") : t("create")}
           </button>
         </div>
       </form>

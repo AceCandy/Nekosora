@@ -80,7 +80,8 @@ export function mergeSettingsChange(
   changes: readonly SettingsChange[],
   next: SettingsChange,
 ): SettingsChange[] {
-  validateResourceKey(next);
+  // 清空不存在的设置是无操作；暂存后再清空的新设置也应从草稿移除。
+  if (next.before !== null || next.after !== null) validateResourceKey(next);
   const index = changes.findIndex((change) => change.resourceKey === next.resourceKey);
   const before = index >= 0 ? changes[index]!.before : next.before;
   if (sameSnapshot(before, next.after)) {

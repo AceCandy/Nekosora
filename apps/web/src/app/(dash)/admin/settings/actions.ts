@@ -1,17 +1,16 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { refreshSettings } from "./refresh-settings";
 import { getDb } from "@/lib/infra/db";
 import { requireOwnedProvider } from "@/lib/providers/ownership";
 import { requireAdmin } from "@/lib/session";
 import {
-  stageSystemSettings,
-  type SettingsDraftExpectation,
+  saveSystemSettings,
 } from "@/lib/settings-control/service";
 
 /** 保存系统级 Embedding Provider 与模型配置。 */
 export async function saveEmbedding(
-  expected: SettingsDraftExpectation,
+  expected: number,
   formData: FormData,
 ): Promise<void> {
   const admin = await requireAdmin();
@@ -21,11 +20,11 @@ export async function saveEmbedding(
     const db = await getDb();
     await requireOwnedProvider(db, providerId, admin.id);
   }
-  await stageSystemSettings({
+  const saved = await saveSystemSettings({
     actorId: admin.id,
     expected,
     namespace: "rag",
     values: { embedding_provider_id: providerId, embedding_model: model },
   });
-  revalidatePath("/admin/settings");
+  await refreshSettings(saved);
 }

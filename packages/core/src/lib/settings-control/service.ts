@@ -60,6 +60,11 @@ export interface SettingsDraftExpectation {
   version: number | null;
 }
 
+export interface SettingsSaveResult {
+  revision: number;
+  changeSetId: string | null;
+}
+
 export interface SettingsDraftView {
   id: string;
   kind: "edit" | "rollback";
@@ -89,7 +94,7 @@ export interface SettingsRollbackConflict {
 export class SettingsDraftConflictError extends Error {
   readonly code = "settings_draft_conflict";
 
-  constructor(message = "设置草稿已变化，请刷新后重试") {
+  constructor(message = "设置已变化，请刷新后核对再保存") {
     super(message);
     this.name = "SettingsDraftConflictError";
   }
@@ -148,55 +153,13 @@ export async function getSettingsRevision(): Promise<number> {
   return integerValue(row.current_revision);
 }
 
-export function projectSystemSettings(
-  namespace: string,
-  production: Record<string, string>,
-  changes: readonly SettingsChange[],
-): Record<string, string> {
-  const projected = { ...production };
-  for (const change of changes) {
-    if (change.resource !== "system_setting") continue;
-    const snapshot = change.after ?? change.before;
-    if (snapshot?.namespace !== namespace) continue;
-    if (change.after) projected[change.after.key] = change.after.value;
-    else if (change.before) delete projected[change.before.key];
-  }
-  return projected;
-}
-
-export function projectOutputModes(
-  production: readonly OutputModeSnapshot[],
-  changes: readonly SettingsChange[],
-): OutputModeSnapshot[] {
-  const projected = new Map(production.map((mode) => [mode.id, mode]));
-  for (const change of changes) {
-    if (change.resource !== "output_mode") continue;
-    if (change.after) projected.set(change.after.id, change.after);
-    else if (change.before) projected.delete(change.before.id);
-  }
-  return [...projected.values()].sort((a, b) => a.sortOrder - b.sortOrder);
-}
-
-export function projectRenderStyles(
-  production: readonly RenderStyleSnapshot[],
-  changes: readonly SettingsChange[],
-): RenderStyleSnapshot[] {
-  const projected = new Map(production.map((style) => [style.id, style]));
-  for (const change of changes) {
-    if (change.resource !== "render_style") continue;
-    if (change.after) projected.set(change.after.id, change.after);
-    else if (change.before) projected.delete(change.before.id);
-  }
-  return [...projected.values()].sort((a, b) => a.sortOrder - b.sortOrder);
-}
-
-export async function stageSystemSettings(input: {
+export async function saveSystemSettings(input: {
   actorId: string;
-  expected: SettingsDraftExpectation;
+  expected: number;
   namespace: string;
   values: Record<string, string>;
-}): Promise<SettingsDraftView> {
-  return mutateDraft(input.actorId, input.expected, async (tx, changes) => {
+}): Promise<SettingsSaveResult> {
+  return mutateSettings(input.actorId, input.expected, async (tx, changes) => {
     let next = changes;
     for (const [key, rawValue] of Object.entries(input.values)) {
       const resourceKey = systemResourceKey(input.namespace, key);
@@ -215,12 +178,12 @@ export async function stageSystemSettings(input: {
   });
 }
 
-export async function stageOutputModeCreate(input: {
+export async function saveOutputModeCreate(input: {
   actorId: string;
-  expected: SettingsDraftExpectation;
+  expected: number;
   value: Pick<OutputModeSnapshot, "name" | "description" | "systemPrompt" | "icon">;
-}): Promise<SettingsDraftView> {
-  return mutateDraft(input.actorId, input.expected, async (tx, changes) => {
+}): Promise<SettingsSaveResult> {
+  return mutateSettings(input.actorId, input.expected, async (tx, changes) => {
     const modes = await projectedOutputModes(tx, changes);
     const id = randomUUID();
     const snapshot: OutputModeSnapshot = {
@@ -241,15 +204,15 @@ export async function stageOutputModeCreate(input: {
   });
 }
 
-export async function stageOutputModeUpdate(input: {
+export async function saveOutputModeUpdate(input: {
   actorId: string;
-  expected: SettingsDraftExpectation;
+  expected: number;
   id: string;
   patch: Partial<Pick<
     OutputModeSnapshot,
     "name" | "description" | "systemPrompt" | "icon" | "enabled"
   >>;
-}): Promise<SettingsDraftView> {
+}): Promise<SettingsSaveResult> {
   return mutateOutputMode(input, (current) => ({
     ...current,
     ...input.patch,
@@ -260,20 +223,20 @@ export async function stageOutputModeUpdate(input: {
   }));
 }
 
-export async function stageOutputModeDelete(input: {
+export async function saveOutputModeDelete(input: {
   actorId: string;
-  expected: SettingsDraftExpectation;
+  expected: number;
   id: string;
-}): Promise<SettingsDraftView> {
+}): Promise<SettingsSaveResult> {
   return mutateOutputMode(input, () => null);
 }
 
-export async function stageOutputModeReorder(input: {
+export async function saveOutputModeReorder(input: {
   actorId: string;
-  expected: SettingsDraftExpectation;
+  expected: number;
   orderedIds: string[];
-}): Promise<SettingsDraftView> {
-  return mutateDraft(input.actorId, input.expected, async (tx, changes) => {
+}): Promise<SettingsSaveResult> {
+  return mutateSettings(input.actorId, input.expected, async (tx, changes) => {
     const modes = await projectedOutputModes(tx, changes);
     requireExactOrder(modes.map((mode) => mode.id), input.orderedIds);
     let next = changes;
@@ -294,12 +257,12 @@ export async function stageOutputModeReorder(input: {
   });
 }
 
-export async function stageRenderStyleCreate(input: {
+export async function saveRenderStyleCreate(input: {
   actorId: string;
-  expected: SettingsDraftExpectation;
+  expected: number;
   value: Pick<RenderStyleSnapshot, "name" | "description" | "cssClass" | "css" | "icon">;
-}): Promise<SettingsDraftView> {
-  return mutateDraft(input.actorId, input.expected, async (tx, changes) => {
+}): Promise<SettingsSaveResult> {
+  return mutateSettings(input.actorId, input.expected, async (tx, changes) => {
     const styles = await projectedRenderStyles(tx, changes);
     const id = randomUUID();
     const snapshot: RenderStyleSnapshot = {
@@ -324,15 +287,15 @@ export async function stageRenderStyleCreate(input: {
   });
 }
 
-export async function stageRenderStyleUpdate(input: {
+export async function saveRenderStyleUpdate(input: {
   actorId: string;
-  expected: SettingsDraftExpectation;
+  expected: number;
   id: string;
   patch: Partial<Pick<
     RenderStyleSnapshot,
     "name" | "description" | "cssClass" | "css" | "icon" | "renderer" | "enabled"
   >>;
-}): Promise<SettingsDraftView> {
+}): Promise<SettingsSaveResult> {
   return mutateRenderStyle(input, async (current, tx, changes) => {
     if (current.builtin && input.patch.cssClass !== undefined
       && input.patch.cssClass !== current.cssClass) {
@@ -351,23 +314,23 @@ export async function stageRenderStyleUpdate(input: {
   });
 }
 
-export async function stageRenderStyleDelete(input: {
+export async function saveRenderStyleDelete(input: {
   actorId: string;
-  expected: SettingsDraftExpectation;
+  expected: number;
   id: string;
-}): Promise<SettingsDraftView> {
+}): Promise<SettingsSaveResult> {
   return mutateRenderStyle(input, (current) => {
     if (current.builtin) throw new SettingsValidationError("系统内置样式不可删除");
     return null;
   });
 }
 
-export async function stageRenderStyleReorder(input: {
+export async function saveRenderStyleReorder(input: {
   actorId: string;
-  expected: SettingsDraftExpectation;
+  expected: number;
   orderedIds: string[];
-}): Promise<SettingsDraftView> {
-  return mutateDraft(input.actorId, input.expected, async (tx, changes) => {
+}): Promise<SettingsSaveResult> {
+  return mutateSettings(input.actorId, input.expected, async (tx, changes) => {
     const styles = await projectedRenderStyles(tx, changes);
     requireExactOrder(styles.map((style) => style.id), input.orderedIds);
     let next = changes;
@@ -429,27 +392,7 @@ export async function applySettingsDraft(input: {
         throw new SettingsDraftConflictError(`生产设置 ${change.resourceKey} 已变化`);
       }
     }
-    await validateProjectedState(tx, changes, input.actorId);
-
-    for (const change of changes.filter((item) => item.after === null)) {
-      await writeSettingsChange(tx, change);
-    }
-    for (const change of changes.filter((item) => item.before && item.after)) {
-      await writeSettingsChange(tx, change);
-    }
-    for (const change of changes.filter((item) => item.before === null)) {
-      await writeSettingsChange(tx, change);
-    }
-
-    const nextRevision = revision + 1;
-    const stateResult = await tx.execute(sql`
-      UPDATE "settings_control_state"
-         SET "current_revision" = ${nextRevision}, "updated_at" = statement_timestamp()
-       WHERE "id" = ${CONTROL_STATE_ID}
-         AND "current_revision" = ${revision}
-       RETURNING "id"
-    `);
-    if (rowsOf(stateResult).length !== 1) throw new SettingsDraftConflictError();
+    const nextRevision = await applyChanges(tx, input.actorId, revision, changes);
     const applied = await tx.execute(sql`
       UPDATE "settings_change_sets"
          SET "status" = 'applied',
@@ -482,14 +425,17 @@ export async function listSettingsHistory(limit = 50): Promise<SettingsHistoryEn
   return rowsOf<ChangeSetRow>(result).map(historyView);
 }
 
-export async function createRollbackDraft(input: {
+export async function rollbackSettings(input: {
   actorId: string;
+  expected: number;
   targetChangeSetId: string;
-}): Promise<SettingsDraftView> {
+}): Promise<SettingsSaveResult> {
+  requireActor(input.actorId);
+  requireRevision(input.expected);
   const db = await getSettingsDb();
   return db.transaction(async (tx) => {
     const revision = await lockControlState(tx);
-    if (await lockActiveDraft(tx)) throw new SettingsDraftConflictError("请先处理当前活动草稿");
+    if (revision !== input.expected) throw new SettingsDraftConflictError();
     const target = await loadAppliedChangeSet(tx, input.targetChangeSetId);
     const later = await loadLaterAppliedChangeSets(tx, integerValue(target.applied_revision!));
     const targetChanges = parseSettingsChanges(target.changes);
@@ -514,28 +460,15 @@ export async function createRollbackDraft(input: {
       !sameSnapshot(change.before, change.after)
     )));
     if (changes.length === 0) throw new SettingsValidationError("目标发布没有可撤销变更");
-    const id = randomUUID();
-    const inserted = await tx.execute(sql`
-      INSERT INTO "settings_change_sets" (
-        "id", "status", "kind", "rollback_of", "actor_id", "base_revision", "version", "changes"
-      ) VALUES (
-        ${id}, 'draft', 'rollback', ${target.id}, ${input.actorId}, ${revision}, 1,
-        ${JSON.stringify(changes)}::jsonb
-      )
-      RETURNING "id", "status", "kind", "rollback_of", "actor_id", "base_revision",
-                "applied_revision", "version", "changes", "created_at", "updated_at", "applied_at"
-    `);
-    const [draft] = rowsOf<ChangeSetRow>(inserted);
-    if (!draft) throw new Error("创建回滚草稿失败");
-    return draftView(draft);
+    return commitSettings(tx, input.actorId, revision, changes, target.id);
   });
 }
 
 async function mutateOutputMode(
-  input: { actorId: string; expected: SettingsDraftExpectation; id: string },
+  input: { actorId: string; expected: number; id: string },
   mutate: (current: OutputModeSnapshot) => OutputModeSnapshot | null,
-): Promise<SettingsDraftView> {
-  return mutateDraft(input.actorId, input.expected, async (tx, changes) => {
+): Promise<SettingsSaveResult> {
+  return mutateSettings(input.actorId, input.expected, async (tx, changes) => {
     const resourceKey = `output-mode:${input.id}`;
     const current = await projectedSnapshot(tx, changes, resourceKey, () => (
       loadOutputMode(tx, input.id)
@@ -551,14 +484,14 @@ async function mutateOutputMode(
 }
 
 async function mutateRenderStyle(
-  input: { actorId: string; expected: SettingsDraftExpectation; id: string },
+  input: { actorId: string; expected: number; id: string },
   mutate: (
     current: RenderStyleSnapshot,
     tx: SqlExecutor,
     changes: SettingsChange[],
   ) => RenderStyleSnapshot | null | Promise<RenderStyleSnapshot | null>,
-): Promise<SettingsDraftView> {
-  return mutateDraft(input.actorId, input.expected, async (tx, changes) => {
+): Promise<SettingsSaveResult> {
+  return mutateSettings(input.actorId, input.expected, async (tx, changes) => {
     const resourceKey = `render-style:${input.id}`;
     const current = await projectedSnapshot(tx, changes, resourceKey, () => (
       loadRenderStyle(tx, input.id)
@@ -573,51 +506,79 @@ async function mutateRenderStyle(
   });
 }
 
-async function mutateDraft(
+/** 日常保存只基于生产值，旧草稿不参与本次提交。 */
+async function mutateSettings(
   actorId: string,
-  expected: SettingsDraftExpectation,
+  expected: number,
   mutate: (tx: SqlExecutor, changes: SettingsChange[]) => Promise<SettingsChange[]>,
-): Promise<SettingsDraftView> {
+): Promise<SettingsSaveResult> {
   requireActor(actorId);
-  requireExpectation(expected);
+  requireRevision(expected);
   const db = await getSettingsDb();
   return db.transaction(async (tx) => {
     const revision = await lockControlState(tx);
-    const draft = await lockActiveDraft(tx);
-    assertDraftExpectation(draft, expected, actorId);
-    const changes = parseSettingsChanges(draft?.changes ?? []);
-    const nextChanges = parseSettingsChanges(await mutate(tx, changes));
-
-    if (!draft) {
-      const id = randomUUID();
-      const inserted = await tx.execute(sql`
-        INSERT INTO "settings_change_sets" (
-          "id", "status", "kind", "actor_id", "base_revision", "version", "changes"
-        ) VALUES (${id}, 'draft', 'edit', ${actorId}, ${revision}, 1, ${JSON.stringify(nextChanges)}::jsonb)
-        RETURNING "id", "status", "kind", "rollback_of", "actor_id", "base_revision",
-                  "applied_revision", "version", "changes", "created_at", "updated_at", "applied_at"
-      `);
-      const [created] = rowsOf<ChangeSetRow>(inserted);
-      if (!created) throw new Error("创建设置草稿失败");
-      return draftView(created);
-    }
-
-    const version = integerValue(draft.version);
-    const updated = await tx.execute(sql`
-      UPDATE "settings_change_sets"
-         SET "changes" = ${JSON.stringify(nextChanges)}::jsonb,
-             "version" = "version" + 1,
-             "updated_at" = statement_timestamp()
-       WHERE "id" = ${draft.id}
-         AND "status" = 'draft'
-         AND "version" = ${version}
-       RETURNING "id", "status", "kind", "rollback_of", "actor_id", "base_revision",
-                 "applied_revision", "version", "changes", "created_at", "updated_at", "applied_at"
-    `);
-    const [result] = rowsOf<ChangeSetRow>(updated);
-    if (!result) throw new SettingsDraftConflictError();
-    return draftView(result);
+    if (revision !== expected) throw new SettingsDraftConflictError();
+    const changes = parseSettingsChanges(await mutate(tx, []));
+    if (changes.length === 0) return { revision, changeSetId: null };
+    return commitSettings(tx, actorId, revision, changes);
   });
+}
+
+/** 配置、并发版本和不可变历史必须在调用方的同一事务内提交。 */
+async function commitSettings(
+  tx: SqlExecutor,
+  actorId: string,
+  revision: number,
+  changes: SettingsChange[],
+  rollbackOf: string | null = null,
+): Promise<SettingsSaveResult> {
+  const nextRevision = await applyChanges(tx, actorId, revision, changes);
+  const id = randomUUID();
+  await tx.execute(sql`
+    INSERT INTO "settings_change_sets" (
+      "id", "status", "kind", "rollback_of", "actor_id", "base_revision",
+      "applied_revision", "version", "changes", "applied_at"
+    ) VALUES (
+      ${id}, 'applied', ${rollbackOf ? "rollback" : "edit"}, ${rollbackOf},
+      ${actorId}, ${revision}, ${nextRevision}, 1,
+      ${JSON.stringify(changes)}::jsonb, statement_timestamp()
+    )
+  `);
+  return { revision: nextRevision, changeSetId: id };
+}
+
+async function applyChanges(
+  tx: SqlExecutor,
+  actorId: string,
+  revision: number,
+  changes: SettingsChange[],
+): Promise<number> {
+  await validateProjectedState(tx, changes, actorId);
+  for (const change of changes.filter((item) => item.after === null)) {
+    await writeSettingsChange(tx, change);
+  }
+  for (const change of changes.filter((item) => item.before && item.after)) {
+    await writeSettingsChange(tx, change);
+  }
+  for (const change of changes.filter((item) => item.before === null)) {
+    await writeSettingsChange(tx, change);
+  }
+  const nextRevision = revision + 1;
+  requireRevision(nextRevision);
+  const result = await tx.execute(sql`
+    UPDATE "settings_control_state"
+       SET "current_revision" = ${nextRevision}, "updated_at" = statement_timestamp()
+     WHERE "id" = ${CONTROL_STATE_ID} AND "current_revision" = ${revision}
+     RETURNING "id"
+  `);
+  if (rowsOf(result).length !== 1) throw new SettingsDraftConflictError();
+  return nextRevision;
+}
+
+function requireRevision(revision: number): void {
+  if (!Number.isSafeInteger(revision) || revision < 0) {
+    throw new SettingsValidationError("设置版本非法");
+  }
 }
 
 async function projectedSnapshot(

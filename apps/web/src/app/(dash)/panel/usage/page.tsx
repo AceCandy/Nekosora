@@ -11,7 +11,7 @@ import {
 } from "@/lib/usage-aggregate";
 import { listErrorLogs, listAttemptsByRequestIds, type ErrorLogFilters, type ErrorLogRow } from "@/lib/repositories/error-log-repository";
 import { classifyError } from "@/lib/error-classify";
-import { UsageDashboard } from "@/app/(dash)/admin/usage/UsageDashboard";
+import { UsageDashboard, UsageSummary } from "@/app/(dash)/admin/usage/UsageDashboard";
 import { CollapsibleStats } from "@/app/(dash)/admin/usage/CollapsibleStats";
 import { UsageTabs } from "@/app/(dash)/admin/usage/UsageTabs";
 import { UsageLogsTable, type UsageLogClientRow } from "@/app/(dash)/admin/usage/UsageLogsTable";
@@ -61,9 +61,9 @@ export default async function PanelUsagePage({
 
   // 统计区(跨 tab 共享,按 effectiveUserId 范围)。
   const [series, byModel, bySource, totals] = await Promise.all([
-    getTimeSeries(timeRange.chartRange, effectiveUserId),
-    getModelBreakdown(timeRange.chartRange, effectiveUserId),
-    getSourceBreakdown(timeRange.chartRange, effectiveUserId),
+    getTimeSeries(timeRange.chartRange, effectiveUserId, timeRange),
+    getModelBreakdown(timeRange.chartRange, effectiveUserId, timeRange),
+    getSourceBreakdown(timeRange.chartRange, effectiveUserId, timeRange),
     db
       .select({
         calls: sql<number>`count(*)`,
@@ -79,28 +79,31 @@ export default async function PanelUsagePage({
       )),
   ]);
 
+  const summary = (
+    <UsageSummary totals={{
+        calls: Number(totals[0]?.calls ?? 0),
+        promptTokens: Number(totals[0]?.promptTokens ?? 0),
+        completionTokens: Number(totals[0]?.completionTokens ?? 0),
+    }} />
+  );
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-5">
       <PageHeader icon={BarChart3} title={tn("myUsage")} desc={t("desc")} />
+
+      <UsageTabs current={tab} basePath="/panel/usage" range={timeRange.range} start={timeRange.start} end={timeRange.end} user={isAdmin ? userParam : undefined} />
+
+      {tab === "usage"
+        ? await renderUsageTab({ isAdmin, effectiveUserId, selfId: user.id, sp, page, timeRange, db, s, summary })
+        : await renderErrorsTab({ isAdmin, effectiveUserId, selfId: user.id, sp, page, timeRange, db, s, summary })}
 
       <CollapsibleStats>
         <UsageDashboard
-          totals={{
-            calls: Number(totals[0]?.calls ?? 0),
-            promptTokens: Number(totals[0]?.promptTokens ?? 0),
-            completionTokens: Number(totals[0]?.completionTokens ?? 0),
-          }}
           series={series}
           byModel={byModel}
           bySource={bySource}
         />
       </CollapsibleStats>
-
-      <UsageTabs current={tab} basePath="/panel/usage" range={timeRange.range} />
-
-      {tab === "usage"
-        ? await renderUsageTab({ isAdmin, effectiveUserId, selfId: user.id, sp, page, timeRange, db, s })
-        : await renderErrorsTab({ isAdmin, effectiveUserId, selfId: user.id, sp, page, timeRange, db, s })}
     </div>
   );
 }
@@ -117,6 +120,7 @@ async function renderUsageTab({
   timeRange,
   db,
   s,
+  summary,
 }: {
   isAdmin: boolean;
   effectiveUserId: string | undefined;
@@ -127,6 +131,7 @@ async function renderUsageTab({
   db: Awaited<ReturnType<typeof getDb>>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   s: any;
+  summary: React.ReactNode;
 }) {
   const userParam = strParam(sp.user);
   // Combobox 回填值:全部(__all__)→空(显示 placeholder);否则默认回填自己或指定用户。
@@ -202,6 +207,7 @@ async function renderUsageTab({
 
   return (
     <UsageLogsTable
+      summary={summary}
       rows={clientRows}
       total={total}
       page={page}
@@ -228,6 +234,7 @@ async function renderErrorsTab({
   timeRange,
   db,
   s,
+  summary,
 }: {
   isAdmin: boolean;
   effectiveUserId: string | undefined;
@@ -238,6 +245,7 @@ async function renderErrorsTab({
   db: Awaited<ReturnType<typeof getDb>>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   s: any;
+  summary: React.ReactNode;
 }) {
   const userParam = strParam(sp.user);
   // Combobox 回填值:全部(__all__)→空(显示 placeholder);否则默认回填自己或指定用户。
@@ -343,6 +351,7 @@ async function renderErrorsTab({
 
   return (
     <ErrorLogsTable
+      summary={summary}
       rows={clientRows}
       total={total}
       page={page}

@@ -9,7 +9,7 @@ const mockData = vi.hoisted(() => ({
 
 const mockFunctions = vi.hoisted(() => ({
   revalidatePath: vi.fn(),
-  stageSystemSettings: vi.fn(),
+  saveSystemSettings: vi.fn().mockResolvedValue({ revision: 5, changeSetId: "save-1" }),
 }));
 
 vi.mock("drizzle-orm", () => ({
@@ -17,10 +17,13 @@ vi.mock("drizzle-orm", () => ({
   and: (...conditions: unknown[]) => ({ type: "and", conditions }),
 }));
 
+vi.mock("@/lib/settings-control/runtime", () => ({
+  invalidateSettingsRuntime: vi.fn().mockResolvedValue(false),
+}));
 vi.mock("next/cache", () => ({ revalidatePath: mockFunctions.revalidatePath }));
 vi.mock("@/lib/session", () => ({ requireAdmin: vi.fn(async () => mockData.admin) }));
 vi.mock("@/lib/settings-control/service", () => ({
-  stageSystemSettings: mockFunctions.stageSystemSettings,
+  saveSystemSettings: mockFunctions.saveSystemSettings,
 }));
 
 vi.mock("@/lib/infra/db", () => {
@@ -109,7 +112,7 @@ vi.mock("@/lib/infra/db", () => {
 
 import { saveEmbedding } from "./actions";
 
-const EXPECTED = { changeSetId: null, version: null };
+const EXPECTED = 4;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -129,7 +132,7 @@ describe("saveEmbedding", () => {
     formData.set("model", "  model-new  ");
 
     await expect(saveEmbedding(EXPECTED, formData)).resolves.toBeUndefined();
-    expect(mockFunctions.stageSystemSettings).toHaveBeenCalledWith({
+    expect(mockFunctions.saveSystemSettings).toHaveBeenCalledWith({
       actorId: "admin-a",
       expected: EXPECTED,
       namespace: "rag",
@@ -146,7 +149,7 @@ describe("saveEmbedding", () => {
 
     await expect(saveEmbedding(EXPECTED, formData)).rejects.toThrow("服务商不存在");
     expect(mockData.providerSelectCount).toBe(1);
-    expect(mockFunctions.stageSystemSettings).not.toHaveBeenCalled();
+    expect(mockFunctions.saveSystemSettings).not.toHaveBeenCalled();
     expect(mockFunctions.revalidatePath).not.toHaveBeenCalled();
   });
 
@@ -157,7 +160,7 @@ describe("saveEmbedding", () => {
 
     await expect(saveEmbedding(EXPECTED, formData)).rejects.toThrow("服务商不存在");
     expect(mockData.providerSelectCount).toBe(1);
-    expect(mockFunctions.stageSystemSettings).not.toHaveBeenCalled();
+    expect(mockFunctions.saveSystemSettings).not.toHaveBeenCalled();
     expect(mockFunctions.revalidatePath).not.toHaveBeenCalled();
   });
 
@@ -168,7 +171,7 @@ describe("saveEmbedding", () => {
 
     await expect(saveEmbedding(EXPECTED, formData)).resolves.toBeUndefined();
     expect(mockData.providerSelectCount).toBe(0);
-    expect(mockFunctions.stageSystemSettings).toHaveBeenCalledWith({
+    expect(mockFunctions.saveSystemSettings).toHaveBeenCalledWith({
       actorId: "admin-a",
       expected: EXPECTED,
       namespace: "rag",

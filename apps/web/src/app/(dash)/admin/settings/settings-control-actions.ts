@@ -5,13 +5,15 @@ import { requireAdmin } from "@/lib/session";
 import {
   abandonSettingsDraft,
   applySettingsDraft,
-  createRollbackDraft,
+  rollbackSettings,
+  getSettingsRevision,
+  listSettingsHistory,
   SettingsDraftConflictError,
   SettingsRollbackConflictError,
   SettingsValidationError,
   type SettingsDraftExpectation,
 } from "@/lib/settings-control/service";
-import { invalidateSettingsRuntime } from "@/lib/settings-control/runtime";
+import { refreshSettings } from "./refresh-settings";
 import type { SettingsControlActionState } from "./settings-control-state";
 
 export async function applySettingsChangeSet(
@@ -21,8 +23,7 @@ export async function applySettingsChangeSet(
   const admin = await requireAdmin();
   try {
     const applied = await applySettingsDraft({ actorId: admin.id, expected });
-    const warning = await invalidateSettingsRuntime(applied.revision - 1);
-    revalidatePath("/admin/settings");
+    const warning = await refreshSettings(applied);
     return warning
       ? { status: "warning", code: "applied_cache_warning" }
       : { status: "success", code: "applied" };
@@ -46,6 +47,7 @@ export async function abandonSettingsChangeSet(
 }
 
 export async function createSettingsRollback(
+  expected: number,
   _previous: SettingsControlActionState,
   formData: FormData,
 ): Promise<SettingsControlActionState> {
@@ -53,12 +55,32 @@ export async function createSettingsRollback(
   const targetChangeSetId = String(formData.get("target_change_set_id") ?? "");
   if (!targetChangeSetId) return { status: "error", code: "invalid" };
   try {
-    await createRollbackDraft({ actorId: admin.id, targetChangeSetId });
-    revalidatePath("/admin/settings");
-    return { status: "success", code: "rollback_created" };
+    const saved = await rollbackSettings({ actorId: admin.id, expected, targetChangeSetId });
+    const warning = await refreshSettings(saved);
+    return warning
+      ? { status: "warning", code: "applied_cache_warning" }
+      : { status: "success", code: "rollback_created" };
   } catch (error) {
     return actionError(error);
   }
+}
+
+export async function loadSettingsHistory() {
+  await requireAdmin();
+  // 先取并发令牌；随后读取的历史即使更新，也只能导致安全拒绝。
+  const revision = await getSettingsRevision();
+  const entries = await listSettingsHistory(20);
+  return {
+    revision,
+    history: entries.map((item) => ({
+      id: item.id,
+      kind: item.kind,
+      rollbackOf: item.rollbackOf,
+      appliedRevision: item.appliedRevision,
+      appliedAt: item.appliedAt.toISOString(),
+      changes: item.changes,
+    })),
+  };
 }
 
 function actionError(error: unknown): SettingsControlActionState {

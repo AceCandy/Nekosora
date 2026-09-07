@@ -4,7 +4,9 @@ const mocks = vi.hoisted(() => ({
   requireAdmin: vi.fn(),
   applySettingsDraft: vi.fn(),
   abandonSettingsDraft: vi.fn(),
-  createRollbackDraft: vi.fn(),
+  rollbackSettings: vi.fn(),
+  getSettingsRevision: vi.fn(),
+  listSettingsHistory: vi.fn(),
   invalidateSettingsRuntime: vi.fn(),
   revalidatePath: vi.fn(),
 }));
@@ -20,7 +22,9 @@ vi.mock("@/lib/settings-control/service", async (importOriginal) => {
     ...original,
     applySettingsDraft: mocks.applySettingsDraft,
     abandonSettingsDraft: mocks.abandonSettingsDraft,
-    createRollbackDraft: mocks.createRollbackDraft,
+    rollbackSettings: mocks.rollbackSettings,
+    getSettingsRevision: mocks.getSettingsRevision,
+    listSettingsHistory: mocks.listSettingsHistory,
   };
 });
 
@@ -32,6 +36,7 @@ const {
   abandonSettingsChangeSet,
   applySettingsChangeSet,
   createSettingsRollback,
+  loadSettingsHistory,
 } = settingsControlActions;
 
 const EXPECTED = { changeSetId: "draft-1", version: 3 };
@@ -85,14 +90,38 @@ describe("settings control actions", () => {
 
     const formData = new FormData();
     formData.set("target_change_set_id", "release-2");
-    mocks.createRollbackDraft.mockResolvedValue({ id: "rollback-1" });
+    mocks.rollbackSettings.mockResolvedValue({ revision: 6, changeSetId: "rollback-1" });
     await expect(createSettingsRollback(
+      5,
       INITIAL_SETTINGS_CONTROL_ACTION_STATE,
       formData,
     )).resolves.toEqual({ status: "success", code: "rollback_created" });
-    expect(mocks.createRollbackDraft).toHaveBeenCalledWith({
+    expect(mocks.rollbackSettings).toHaveBeenCalledWith({
       actorId: "admin-1",
+      expected: 5,
       targetChangeSetId: "release-2",
     });
+  });
+
+  it("reads history only after authentication and captures the revision first", async () => {
+    mocks.getSettingsRevision.mockResolvedValueOnce(6);
+    mocks.listSettingsHistory.mockResolvedValueOnce([]);
+    expect(await loadSettingsHistory()).toEqual({ revision: 6, history: [] });
+    expect(mocks.requireAdmin.mock.invocationCallOrder[0])
+      .toBeLessThan(mocks.getSettingsRevision.mock.invocationCallOrder[0]);
+    expect(mocks.getSettingsRevision.mock.invocationCallOrder[0])
+      .toBeLessThan(mocks.listSettingsHistory.mock.invocationCallOrder[0]);
+    mocks.requireAdmin.mockRejectedValueOnce(new Error("forbidden"));
+    await expect(loadSettingsHistory()).rejects.toThrow("forbidden");
+    expect(mocks.listSettingsHistory).toHaveBeenCalledOnce();
+  });
+
+  it("does not invalidate caches when a stale rollback is rejected", async () => {
+    mocks.rollbackSettings.mockRejectedValueOnce(new SettingsDraftConflictError());
+    const formData = new FormData();
+    formData.set("target_change_set_id", "release-2");
+    expect(await createSettingsRollback(5, INITIAL_SETTINGS_CONTROL_ACTION_STATE, formData))
+      .toEqual({ status: "error", code: "stale" });
+    expect(mocks.invalidateSettingsRuntime).not.toHaveBeenCalled();
   });
 });

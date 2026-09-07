@@ -15,7 +15,7 @@ import GovernanceSettingsSection from "./GovernanceSettingsSection";
 import ModelConfigSection from "./ModelConfigSection";
 import OutputModesSection from "./OutputModesSection";
 import RenderStylesSection from "./RenderStylesSection";
-import { getSettingsControlView, listSettingsHistory } from "@/lib/settings-control/service";
+import { getSettingsControlView } from "@/lib/settings-control/service";
 import SettingsChangeControl from "./SettingsChangeControl";
 import type { GovernanceHistoryRange } from "@/lib/gateway-governance/analytics";
 
@@ -28,10 +28,7 @@ export default async function SettingsPage({
 }) {
   const t = await getTranslations("admin.settings");
   const tn = await getTranslations("nav");
-  const [control, history] = await Promise.all([
-    getSettingsControlView(),
-    listSettingsHistory(20),
-  ]);
+  const control = await getSettingsControlView();
 
   const sp = await searchParams;
   const tabParam = typeof sp.tab === "string" ? sp.tab : "";
@@ -94,21 +91,13 @@ export default async function SettingsPage({
         )}
 
         <SettingsChangeControl
-          key={control.draft?.id ?? `revision-${control.currentRevision}`}
+          key={control.draft?.id ?? "settings"}
           draft={control.draft ? {
             id: control.draft.id,
             kind: control.draft.kind,
             version: control.draft.version,
             changes: control.draft.changes,
           } : null}
-          history={history.map((item) => ({
-            id: item.id,
-            kind: item.kind,
-            rollbackOf: item.rollbackOf,
-            appliedRevision: item.appliedRevision,
-            appliedAt: item.appliedAt.toISOString(),
-            changes: item.changes,
-          }))}
         />
       </div>
     </div>

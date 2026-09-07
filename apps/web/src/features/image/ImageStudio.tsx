@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { ImageIcon, Sparkles, Download } from "lucide-react";
 import { clsx } from "clsx";
 import { Button } from "@/shared/ui/Button";
+import Link from "next/link";
 
 interface ImageModel {
   /** 模型 id(选项唯一标识,WebChat byId 路由解析,避免 public/private 同名歧义)。 */
@@ -101,7 +102,9 @@ export default function ImageStudio({ models }: { models: ImageModel[] }) {
       <div className="flex-1 flex items-center justify-center text-ink-tertiary p-8">
         <div className="text-center space-y-2 max-w-sm">
           <ImageIcon className="w-8 h-8 mx-auto text-neutral-300 " aria-hidden="true" />
-          <p className="text-ui-caption leading-relaxed">{t("noModels")}</p>
+          <h2 className="text-ui-subheading font-semibold text-space-ink">{t("noModels")}</h2>
+          <p className="text-ui-body leading-relaxed">{t("noModelsHelp")}</p>
+          <Link href="/panel/models" className="touch-target mt-3 inline-flex rounded-md bg-space-ink px-4 py-2 text-ui-body font-medium text-white hover:bg-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue">{t("configureModels")}</Link>
         </div>
       </div>
     );

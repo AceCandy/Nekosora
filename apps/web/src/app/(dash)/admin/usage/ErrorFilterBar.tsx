@@ -45,7 +45,7 @@ interface ErrorFilterBarProps {
 }
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
-  return <span className="text-ui-caption text-neutral-400 ">{children}</span>;
+  return <span className="text-ui-caption text-neutral-600 ">{children}</span>;
 }
 
 export function ErrorFilterBar({ variant, values, labels, basePath }: ErrorFilterBarProps) {
@@ -143,6 +143,7 @@ export function ErrorFilterBar({ variant, values, labels, basePath }: ErrorFilte
         <div className="flex flex-col gap-1">
           <FieldLabel>{t("filters.source")}</FieldLabel>
           <Select
+            aria-label={t("filters.source")}
             value={values.source}
             onChange={(e) => update({ source: e.target.value })}
             className="w-28 py-1.5 text-ui-caption"
@@ -168,6 +169,7 @@ export function ErrorFilterBar({ variant, values, labels, basePath }: ErrorFilte
         <div className="flex flex-col gap-1">
           <FieldLabel>{t("filters.phase")}</FieldLabel>
           <Select
+            aria-label={t("filters.phase")}
             value={values.phase}
             onChange={(e) => update({ phase: e.target.value })}
             className="w-32 py-1.5 text-ui-caption"
@@ -184,6 +186,7 @@ export function ErrorFilterBar({ variant, values, labels, basePath }: ErrorFilte
           <input
             type="text"
             inputMode="numeric"
+            aria-label={t("filters.httpStatus")}
             value={values.httpStatus}
             onChange={(e) => update({ httpStatus: e.target.value.replace(/[^0-9]/g, "") })}
             placeholder="500"

@@ -100,7 +100,7 @@ export function ChatInputBox({
     if (!collapsedMeasure || !expandedMeasure) return;
 
     const syncLayout = () => {
-      const multiline = value.includes("\n") || collapsedMeasure.scrollHeight > 24;
+      const multiline = window.matchMedia("(max-width: 639px)").matches || value.includes("\n") || collapsedMeasure.scrollHeight > 24;
       const height = multiline
         ? Math.min(expandedMeasure.scrollHeight + 60, window.innerHeight * 0.33)
         : 48;
@@ -220,12 +220,12 @@ export function ChatInputBox({
       {topContent}
 
       <div
-        className="relative"
+        className="relative min-h-[88px] sm:min-h-0"
         style={{ height: `${layout.height}px` }}
       >
         <div
           ref={collapsedMeasureRef}
-          className="pointer-events-none invisible absolute left-12 right-40 top-0 whitespace-pre-wrap break-words text-ui-reading leading-6 sm:right-72"
+          className="pointer-events-none invisible absolute left-3 right-3 top-0 whitespace-pre-wrap break-words text-ui-reading leading-6 sm:left-12 sm:right-72"
           aria-hidden="true"
         >
           {`${value || " "}\u200b`}
@@ -305,7 +305,7 @@ export function ChatInputBox({
           rows={1}
           className={clsx(
             "scrollbar-hidden block h-full w-full resize-none overflow-y-auto border-0 bg-transparent py-3 text-ui-reading leading-6 text-neutral-800 outline-none placeholder-ink-tertiary focus:ring-0 focus-visible:outline-none focus-visible:ring-0",
-            layout.multiline ? "px-3 pb-12" : "pl-12 pr-40 sm:pr-72",
+            layout.multiline ? "px-3 pb-12" : "px-3 pb-12 sm:pb-3 sm:pl-12 sm:pr-72",
           )}
           aria-label={t("composerInputLabel")}
         />
@@ -313,7 +313,7 @@ export function ChatInputBox({
 
         <div className="pointer-events-none absolute inset-x-2 bottom-2 flex h-8 items-center gap-1.5">
           {leadingControl}
-          <div className="flex-1" />
+          <div className="min-w-0 flex-1" />
           {trailingControl}
           {mainButton}
         </div>

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   changedFields,
   mergeSettingsChange,
+  parseSettingsChanges,
   reverseSettingsChange,
   settingsChangesOverlap,
   type SettingsChange,
@@ -31,6 +32,13 @@ const original: SettingsChange = {
 };
 
 describe("settings change canonical helpers", () => {
+  it("ignores clearing an absent setting and removes an unpersisted creation", () => {
+    const empty: SettingsChange = { resource: "system_setting", resourceKey: "system:task:title_model", before: null, after: null };
+    expect(mergeSettingsChange([], empty)).toEqual([]);
+    const created: SettingsChange = { ...empty, after: { namespace: "task", key: "title_model", value: "test" } };
+    expect(mergeSettingsChange([created, original], empty)).toEqual([original]);
+    expect(() => parseSettingsChanges([empty])).toThrow();
+  });
   it("preserves the first before snapshot and removes a restored no-op", () => {
     const edited = mergeSettingsChange([original], {
       ...original,

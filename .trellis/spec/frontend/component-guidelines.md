@@ -423,7 +423,7 @@ useLayoutEffect(() => {
 - `PopoverCloseContext` 仍跨 Portal 生效(`createPortal` 保留 React 树),面板内 `usePopoverClose()` 照常工作。
 - hover 模式下面板已脱离 wrapper,需在面板自绑 `onMouseEnter/onMouseLeave`(复用 trigger 的 onEnter/onLeave),否则鼠标从 trigger 移到面板会触发 wrapper `onLeave` 收起浮层。
 - `typeof document !== "undefined"` 守卫避免 SSR 时 `createPortal` 报错(面板本就由 `effectiveOpen` 控制仅在客户端打开)。
-- `<dialog showModal>` top-layer 内的 fixed 面板必须保留在 dialog 内(`Popover portal={false}`);Portal 到 `document.body` 会被 top-layer 遮挡。
+- `<dialog showModal>` 内使用 `Popover portal={false}`，DOM 保留在 dialog 内，同时以 `popover="manual"` / `showPopover()` 进入原生顶层。仅关闭 Portal 不够：`modal-pop` 的保留态 transform 仍会劫持 fixed 坐标并导致预览错位。共享 Popover 继续以视口坐标定位；Esc 必须 preventDefault，只关闭浮层，不连带关闭父 dialog。搜索框用 `data-autofocus`，须在面板完成定位、visibility 可见后 focus；浏览器验证 320px/桌面边界、搜索焦点和 Esc 返回触发器。
 
 **click-outside 不要用「`fixed inset-0` 透明遮罩」**(除非是真正的视觉遮罩,如移动端抽屉/模态)。问题有两层:
 1. containing block 陷阱:遮罩嵌在 `transform`/`backdrop-filter` 祖先内时只盖住祖先盒子,点主内容区关不掉(侧栏会话菜单踩过)。

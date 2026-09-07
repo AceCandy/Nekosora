@@ -33,7 +33,7 @@ export interface PopoverProps {
   panelClassName?: string;
   /** 浮层面板 z-index 层级（默认 z-30）。 */
   panelZ?: string;
-  /** 是否 Portal 到 document.body；原生 <dialog> 内应关闭，以保留 top-layer 层级。 */
+  /** 是否 Portal 到 document.body；关闭时用原生 popover 保留 dialog 内焦点与顶层定位。 */
   portal?: boolean;
   /**
    * 是否改为 hover 打开（默认 false）。
@@ -123,6 +123,7 @@ export function Popover({
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       if (popoverStack[popoverStack.length - 1] !== id) return;
+      e.preventDefault();
       e.stopPropagation();
       close();
       // 焦点还给触发器,避免 Esc 后焦点丢失到 body。
@@ -147,6 +148,10 @@ export function Popover({
     const wrapper = wrapperRef.current;
     const panel = panelRef.current;
     if (!wrapper || !panel) return;
+    // dialog 的缩放动画会改变 fixed 坐标系；原生顶层保留 DOM 归属并避开祖先变换与裁剪。
+    if (!portal) {
+      panel.showPopover();
+    }
     let raf = 0;
     let scheduled = false;
     const compute = () => {
@@ -175,6 +180,7 @@ export function Popover({
     // 初始隐藏,compute 后定位并显示(避免首帧闪在 0,0)。
     panel.style.visibility = "hidden";
     compute();
+    if (!portal) panel.querySelector<HTMLElement>("[data-autofocus]")?.focus();
     raf = requestAnimationFrame(compute);
     const ro = new ResizeObserver(compute);
     ro.observe(panel);
@@ -186,13 +192,14 @@ export function Popover({
       window.removeEventListener("scroll", onScrollResize, true);
       window.removeEventListener("resize", onScrollResize);
     };
-  }, [effectiveOpen, align, side]);
+  }, [effectiveOpen, align, side, portal]);
 
   const ctx = close;
   // data-popover-root:供父级 useClickOutside 识别 Portal 面板,点选项时不误关父菜单。
   const floatingContent = (
     <div
       ref={panelRef}
+      popover={portal ? undefined : "manual"}
       data-popover-root=""
       // 面板内点击不冒泡到 wrapper,避免 clickToggle 模式下点面板误触发 toggle 关闭。
       onClick={(e) => e.stopPropagation()}
@@ -201,7 +208,7 @@ export function Popover({
       onMouseLeave={openOnHover ? onLeave : undefined}
       style={{ visibility: "hidden" }}
       className={clsx(
-        "menu-pop fixed rounded-md border border-morning-mist  bg-white  shadow-lg p-1",
+        "menu-pop fixed m-0 rounded-md border border-morning-mist bg-white text-space-ink shadow-lg p-1",
         panelZ,
         panelClassName,
       )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useState, useTransition } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { changedFields, type SettingsChange } from "@/lib/settings-control/changes";
 import { Button } from "@/shared/ui/Button";
@@ -9,6 +9,7 @@ import {
   abandonSettingsChangeSet,
   applySettingsChangeSet,
   createSettingsRollback,
+  loadSettingsHistory,
 } from "./settings-control-actions";
 import {
   INITIAL_SETTINGS_CONTROL_ACTION_STATE,
@@ -31,7 +32,6 @@ interface SettingsChangeControlProps {
     version: number;
     changes: SettingsChange[];
   } | null;
-  history: HistoryItem[];
 }
 
 type ChangeDomain = "models" | "outputModes" | "renderStyles" | "governance" | "protocol";
@@ -100,12 +100,30 @@ const LONG_FIELDS = new Set(["value", "systemPrompt", "css"]);
 
 export default function SettingsChangeControl({
   draft,
-  history,
 }: SettingsChangeControlProps) {
   const t = useTranslations("admin.settings.control");
   const locale = useLocale();
   const [reviewOpen, setReviewOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [historyRevision, setHistoryRevision] = useState(0);
+  const [historyError, setHistoryError] = useState(false);
+  const [historyPending, startHistoryTransition] = useTransition();
+  const [rollbackTarget, setRollbackTarget] = useState<string | null>(null);
+  const openHistory = () => {
+    setHistoryOpen(true);
+    setHistoryError(false);
+    setRollbackTarget(null);
+    startHistoryTransition(async () => {
+      try {
+        const loaded = await loadSettingsHistory();
+        setHistory(loaded.history);
+        setHistoryRevision(loaded.revision);
+      } catch {
+        setHistoryError(true);
+      }
+    });
+  };
   const expected = {
     changeSetId: draft?.id ?? null,
     version: draft?.version ?? null,
@@ -119,7 +137,20 @@ export default function SettingsChangeControl({
     INITIAL_SETTINGS_CONTROL_ACTION_STATE,
   );
   const [rollbackState, rollbackAction, rollbackPending] = useActionState(
-    createSettingsRollback,
+    async (previous: SettingsControlActionState, formData: FormData) => {
+      const result = await createSettingsRollback(historyRevision, previous, formData);
+      if (result.status === "success" || result.status === "warning") {
+        setRollbackTarget(null);
+        try {
+          const loaded = await loadSettingsHistory();
+          setHistory(loaded.history);
+          setHistoryRevision(loaded.revision);
+        } catch {
+          setHistoryError(true);
+        }
+      }
+      return result;
+    },
     INITIAL_SETTINGS_CONTROL_ACTION_STATE,
   );
   const state = latestState(applyState, abandonState, rollbackState);
@@ -175,8 +206,14 @@ export default function SettingsChangeControl({
 
   return (
     <aside>
+      <div className="flex justify-end">
+        <Button type="button" variant="ghost" onClick={openHistory}>
+          {t("history")}
+        </Button>
+      </div>
       {draft ? (
-        <section className="border-y border-morning-mist bg-neutral-50/60 px-4 py-3">
+        <details className="border-y border-morning-mist px-4 py-3">
+          <summary className="touch-target cursor-pointer text-ui-caption text-ink-tertiary">{t("legacyDraft")}</summary>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <p className="text-ui-body font-semibold text-space-ink">
@@ -192,9 +229,6 @@ export default function SettingsChangeControl({
                 onClick={() => setReviewOpen(true)}
               >
                 {t("reviewApply")}
-              </Button>
-              <Button type="button" variant="secondary" onClick={() => setHistoryOpen(true)}>
-                {t("history")}
               </Button>
               <form action={abandonAction}>
                 <Button
@@ -217,7 +251,7 @@ export default function SettingsChangeControl({
               {t(actionMessageKey(state.code))}
             </p>
           )}
-        </section>
+        </details>
       ) : (
         <div className="flex flex-wrap items-center justify-end gap-3">
           {state.code && !historyOpen && (
@@ -229,9 +263,6 @@ export default function SettingsChangeControl({
               {t(actionMessageKey(state.code))}
             </p>
           )}
-          <Button type="button" variant="ghost" onClick={() => setHistoryOpen(true)}>
-            {t("history")}
-          </Button>
         </div>
       )}
 
@@ -271,24 +302,27 @@ export default function SettingsChangeControl({
 
       <Modal
         open={historyOpen}
-        onClose={() => setHistoryOpen(false)}
+        onClose={() => { if (!rollbackPending) setHistoryOpen(false); }}
         title={t("history")}
         dialogClassName="modal-pop m-auto max-h-[90vh] w-[min(760px,92vw)] overflow-hidden rounded-lg border border-morning-mist bg-white p-0 text-space-ink shadow-xl backdrop:bg-black/40"
         bodyClassName="max-h-[calc(90vh-3.5rem)] overflow-y-auto px-5 py-2"
       >
-        {history.length === 0 ? (
+        {rollbackState.code && (
+          <p role={rollbackState.status === "error" ? "alert" : "status"} className={`py-3 text-ui-body ${statusColor(rollbackState.status)}`}>
+            {t(actionMessageKey(rollbackState.code))}
+          </p>
+        )}
+        {historyPending ? (
+          <p role="status" className="py-4 text-ui-body text-ink-tertiary">{t("working")}</p>
+        ) : historyError ? (
+          <div className="py-4">
+            <p role="alert" className="text-ui-body text-danger">{t("historyFailed")}</p>
+            <Button type="button" variant="secondary" onClick={openHistory}>{t("retry")}</Button>
+          </div>
+        ) : history.length === 0 ? (
           <p className="py-4 text-ui-body text-ink-tertiary">{t("historyEmpty")}</p>
         ) : (
           <>
-            {rollbackState.code && (
-              <p
-                role={rollbackState.status === "error" ? "alert" : "status"}
-                aria-live="polite"
-                className={`py-3 text-ui-body ${statusColor(rollbackState.status)}`}
-              >
-                {t(actionMessageKey(rollbackState.code))}
-              </p>
-            )}
             {history.map((item) => (
               <article key={item.id} className="border-b border-morning-mist py-4 last:border-b-0">
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -300,16 +334,25 @@ export default function SettingsChangeControl({
                       {dateFormatter.format(new Date(item.appliedAt))} · {t("changeCount", { count: item.changes.length })}
                     </p>
                   </div>
-                  {!draft && (
-                    <form action={rollbackAction}>
-                      <input type="hidden" name="target_change_set_id" value={item.id} />
-                      <Button type="submit" variant="secondary" disabled={rollbackPending}>
-                        {rollbackPending ? t("working") : t("reverseRelease")}
-                      </Button>
-                    </form>
-                  )}
+                  <Button type="button" variant="secondary" disabled={rollbackPending} onClick={() => setRollbackTarget(item.id)}>
+                    {t("reverseRelease")}
+                  </Button>
                 </div>
-                <ChangeSummary groups={presentSettingsChanges(item.changes)} labels={labels} compact />
+                <ChangeSummary groups={presentSettingsChanges(item.changes)} labels={labels} compact={rollbackTarget !== item.id} />
+                {rollbackTarget === item.id && (
+                  <form action={rollbackAction} className="mt-4 space-y-3 border-t border-morning-mist pt-3">
+                    <p className="text-ui-body text-neutral-600">{t("rollbackConfirm")}</p>
+                    <input type="hidden" name="target_change_set_id" value={item.id} />
+                    <div className="flex gap-2">
+                      <Button type="submit" variant="primary" disabled={rollbackPending}>
+                        {rollbackPending ? t("working") : t("confirmRollback")}
+                      </Button>
+                      <Button type="button" variant="secondary" disabled={rollbackPending} onClick={() => setRollbackTarget(null)}>
+                        {t("cancel")}
+                      </Button>
+                    </div>
+                  </form>
+                )}
               </article>
             ))}
           </>

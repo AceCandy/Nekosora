@@ -31,17 +31,18 @@ export function DateRangePicker({ range, start, end, onChange }: DateRangePicker
 
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-ui-caption text-neutral-400 ">{t("filters.range")}</span>
+      <span className="text-ui-caption text-neutral-600 ">{t("filters.range")}</span>
       <div className="flex flex-wrap items-center gap-1.5">
         {PRESETS.map((p) => (
           <button
             key={p.value}
             type="button"
+            aria-pressed={range === p.value}
             onClick={() => onChange({ range: p.value, start: "", end: "" })}
             className={clsx(
               "px-2 py-1 rounded text-ui-caption border transition-colors",
               range === p.value
-                ? "bg-sora-blue/8 text-sora-blue border-sora-blue/30 "
+                ? "bg-sora-blue/8 text-sora-blue-hover border-sora-blue/30 "
                 : "bg-white  text-neutral-500 border-neutral-200  hover:text-neutral-700 ",
             )}
           >
@@ -50,11 +51,12 @@ export function DateRangePicker({ range, start, end, onChange }: DateRangePicker
         ))}
         <button
           type="button"
+          aria-pressed={isCustom}
           onClick={() => onChange({ range: "custom" })}
           className={clsx(
             "px-2 py-1 rounded text-ui-caption border transition-colors",
             isCustom
-              ? "bg-sora-blue/8 text-sora-blue border-sora-blue/30 "
+              ? "bg-sora-blue/8 text-sora-blue-hover border-sora-blue/30 "
               : "bg-white  text-neutral-500 border-neutral-200  hover:text-neutral-700 ",
           )}
         >
@@ -65,13 +67,15 @@ export function DateRangePicker({ range, start, end, onChange }: DateRangePicker
         <div className="flex items-center gap-1.5 mt-0.5">
           <input
             type="date"
+            aria-label={t("startDate")}
             value={start ?? ""}
             onChange={(e) => onChange({ start: e.target.value, end: end ?? "" })}
             className="px-1.5 py-1 text-ui-caption rounded border border-neutral-200  bg-white  text-neutral-700 "
           />
-          <span className="text-ui-caption text-neutral-400">~</span>
+          <span className="text-ui-caption text-neutral-600">~</span>
           <input
             type="date"
+            aria-label={t("endDate")}
             value={end ?? ""}
             onChange={(e) => onChange({ start: start ?? "", end: e.target.value })}
             className="px-1.5 py-1 text-ui-caption rounded border border-neutral-200  bg-white  text-neutral-700 "

@@ -7,7 +7,6 @@ import {
 import { requireAdmin } from "@/lib/session";
 import { getSettings } from "@/lib/system-settings/service";
 import {
-  projectSystemSettings,
   type SettingsControlView,
 } from "@/lib/settings-control/service";
 import GovernanceSettingsForm from "./GovernanceSettingsForm";
@@ -28,11 +27,7 @@ export default async function GovernanceSettingsSection({
   view: "policy" | "history";
 }) {
   await requireAdmin();
-  const gateway = projectSystemSettings(
-    "gateway",
-    await getSettings("gateway"),
-    control.draft?.changes ?? [],
-  );
+  const gateway = await getSettings("gateway");
   const { policy, source } = loadGatewayGovernancePolicy(
     gateway.request_governance_v1 ?? null,
   );
@@ -73,10 +68,7 @@ export default async function GovernanceSettingsSection({
       <GovernanceSettingsForm
         policy={policy}
         bounds={GATEWAY_GOVERNANCE_POLICY_BOUNDS}
-        action={saveGatewayGovernancePolicy.bind(null, {
-          changeSetId: control.draft?.id ?? null,
-          version: control.draft?.version ?? null,
-        })}
+        action={saveGatewayGovernancePolicy.bind(null, control.currentRevision)}
       />
     </div>
   );
