@@ -21,8 +21,8 @@ import {
 } from "@/lib/providers/route-api-format";
 import { recordSuccess, recordFailure } from "@/lib/circuit-breaker";
 import { pickWeightedKey } from "@/lib/providers/keys";
-import type { ProviderProtocol, RouteApiFormat } from "@/db/types";
-import type { ProviderKeyResult } from "@/db/schema/pg";
+import type { ProviderProtocol, RouteApiFormat } from "@nekusora/db/types";
+import type { ProviderKeyResult } from "@nekusora/db/schema";
 import { requireAdmin } from "@/lib/session";
 import { pickDisplayName } from "@/lib/model-catalog";
 import { z } from "zod";

@@ -1,5 +1,5 @@
-import type { ProcessTrace } from "@/db/types";
-import type { WebSearchTraceCall } from "@/db/types";
+import type { ProcessTrace } from "@nekusora/db/types";
+import type { WebSearchTraceCall } from "@nekusora/db/types";
 import type {
   ChatProcessEvent,
   ChatProcessTerminalPhase,

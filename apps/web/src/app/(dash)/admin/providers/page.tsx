@@ -13,7 +13,7 @@ import {
   attachProviderModelRoute,
 } from "../actions";
 import { revealKeyBundle } from "@/lib/providers/keys";
-import type { ProviderKeyResult } from "@/db/schema/pg";
+import type { ProviderKeyResult } from "@nekusora/db/schema";
 import { getTranslations } from "next-intl/server";
 import ProvidersManager, {
   type ProviderItem,

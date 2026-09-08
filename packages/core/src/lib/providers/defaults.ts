@@ -9,7 +9,7 @@
  *
  * 借鉴 AQBot 的 DEFAULT_HOSTS / DEFAULT_PATHS 设计。
  */
-import type { ProviderProtocol } from "@/db/types";
+import type { ProviderProtocol } from "@nekusora/db/types";
 
 /** 各协议的默认 host(不含路径,不含末尾斜杠)。 */
 export const DEFAULT_HOSTS: Partial<Record<ProviderProtocol, string>> = {

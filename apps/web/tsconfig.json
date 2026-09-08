@@ -29,12 +29,6 @@
       "@/auth": [
         "../../packages/core/src/auth.ts"
       ],
-      "@/db/*": [
-        "../../packages/db/src/*"
-      ],
-      "@/db/schema/pg": [
-        "../../packages/db/src/schema.ts"
-      ],
       "@/lib/session": [
         "./src/lib/session.ts"
       ],

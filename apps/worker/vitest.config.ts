@@ -5,10 +5,6 @@ export default defineConfig({
   resolve: {
     alias: [
       {
-        find: /^@\/db\//,
-        replacement: fileURLToPath(new URL("../../packages/db/src/", import.meta.url)),
-      },
-      {
         find: /^@\/lib\//,
         replacement: fileURLToPath(new URL("../../packages/core/src/lib/", import.meta.url)),
       },

@@ -4,7 +4,7 @@ import { useTranslations } from "next-intl";
 import { clsx } from "clsx";
 import { Wrench, Eye, MessageSquare, Image as ImageIcon, Mic, Volume2 } from "lucide-react";
 import type { ModelCatalogOption } from "@/features/models/ModelsManager";
-import type { ReasoningLevel } from "@/db/types";
+import type { ReasoningLevel } from "@nekusora/db/types";
 import { getSupportedReasoningLevels } from "@/lib/reasoning";
 import Badge from "@/shared/ui/Badge";
 

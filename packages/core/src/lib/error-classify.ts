@@ -11,7 +11,7 @@
  * 优先级:已知 errorCode 精确匹配 > httpStatus 推断 > errorMessage 关键字 > 兜底。
  */
 import { ErrorCode } from "@/lib/errors";
-import type { ErrorPhase } from "@/db/types";
+import type { ErrorPhase } from "@nekusora/db/types";
 
 /** 错误粗分类(前端 i18n key 后缀)。 */
 export type ErrorCategory =

@@ -8,7 +8,7 @@ import type {
   ConversationShareMode,
   ConversationShareRenderStyleSnapshot,
   MessageVersionSelections,
-} from "@/db/types";
+} from "@nekusora/db/types";
 import { resolveVisibleBranch } from "@/features/chat/lib/visible-branch";
 import { toMessageCreatedAtIso } from "@/features/chat/model/messageTime";
 import type { MessageRunMetadata } from "@/features/chat/model/types";

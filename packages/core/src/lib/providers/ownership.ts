@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { getSchema } from "@/lib/infra/db";
-import type { ProviderProtocol } from "@/db/types";
+import type { ProviderProtocol } from "@nekusora/db/types";
 
 /** 获取指定属主拥有的服务商，不向调用方泄露其他服务商是否存在。 */
 export async function requireOwnedProvider(

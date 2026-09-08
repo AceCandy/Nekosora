@@ -5,7 +5,7 @@ import {
   type ModelType,
   type ProviderProtocol,
   type RouteApiFormat,
-} from "@/db/types";
+} from "@nekusora/db/types";
 
 /** 从模型目录读取类型并校验 route wire format。 */
 export async function resolveModelRouteApiFormat(

@@ -20,7 +20,8 @@
   "subtasks": [],
   "children": [
     "09-08-quality-gate-convergence",
-    "09-08-database-type-convergence"
+    "09-08-database-type-convergence",
+    "09-08-db-package-boundary"
   ],
   "parent": null,
   "relatedFiles": [],

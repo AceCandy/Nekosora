@@ -7,7 +7,7 @@
  * 约定:assembleContext 产出的 system 消息用 "\n\n---\n\n" 分隔各 slot。
  * 这里按分隔符拆块,推断 kind(基于内容前缀标记)。
  */
-import type { ProcessTrace, ProcessTraceBlock } from "@/db/types";
+import type { ProcessTrace, ProcessTraceBlock } from "@nekusora/db/types";
 import { estimateTokens } from "@/lib/tokens";
 
 const BLOCK_SEPARATOR = "\n\n---\n\n";

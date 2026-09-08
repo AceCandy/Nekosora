@@ -3,7 +3,6 @@ import { fileURLToPath } from "node:url";
 
 const src = fileURLToPath(new URL("./src/", import.meta.url));
 const coreSrc = fileURLToPath(new URL("../../packages/core/src/", import.meta.url));
-const dbSrc = fileURLToPath(new URL("../../packages/db/src/", import.meta.url));
 
 export default defineConfig({
   oxc: { jsx: { runtime: "automatic" } },
@@ -17,8 +16,6 @@ export default defineConfig({
       { find: "@/lib/output-modes/service", replacement: `${src}lib/output-modes/service.ts` },
       { find: "@/lib/render-styles/service", replacement: `${src}lib/render-styles/service.ts` },
       { find: "@/lib/settings-control/runtime", replacement: `${src}lib/settings-control/runtime.ts` },
-      { find: "@/db/schema/pg", replacement: `${dbSrc}schema.ts` },
-      { find: /^@\/db\//, replacement: dbSrc },
       { find: /^@\/lib\//, replacement: `${coreSrc}lib/` },
       { find: "@shared", replacement: fileURLToPath(new URL("./src/shared/", import.meta.url)) },
       { find: "@features", replacement: fileURLToPath(new URL("./src/features/", import.meta.url)) },

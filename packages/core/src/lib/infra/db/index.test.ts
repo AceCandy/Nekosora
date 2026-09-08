@@ -18,7 +18,7 @@ vi.mock("pg", () => ({
   },
 }));
 vi.mock("drizzle-orm/node-postgres", () => ({ drizzle: mocks.drizzle }));
-vi.mock("@/db/schema/pg", () => ({ apiKeys: { name: "api_keys" } }));
+vi.mock("@nekusora/db/schema", () => ({ apiKeys: { name: "api_keys" } }));
 
 describe("database factory", () => {
   beforeEach(() => {
@@ -37,7 +37,7 @@ describe("database factory", () => {
   });
 
   it("公共入口保留数据库、连接池与表字段类型", () => {
-    type Schema = typeof import("@/db/schema/pg");
+    type Schema = typeof import("@nekusora/db/schema");
     expectTypeOf<ReturnType<typeof getSchema>>().not.toBeAny();
     expectTypeOf<ReturnType<typeof getSchema>>().toEqualTypeOf<Schema>();
     expectTypeOf<Awaited<ReturnType<typeof getDb>>>().not.toBeAny();

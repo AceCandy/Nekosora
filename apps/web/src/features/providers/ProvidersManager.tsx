@@ -9,7 +9,7 @@ import type {
   ProviderModelCandidate,
   ProviderRouteRef,
 } from "@/features/providers/types";
-import type { ProviderKeyResult } from "@/db/schema/pg";
+import type { ProviderKeyResult } from "@nekusora/db/schema";
 import type { EditorRow, TestKeyAction } from "@/features/providers/KeyBundleEditor";
 import ProviderFormDialog from "@/features/providers/ProviderFormDialog";
 import ProviderHealthButton, { type HealthAction, type HealthDisplay } from "@/features/providers/ProviderHealthButton";

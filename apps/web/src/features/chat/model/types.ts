@@ -9,7 +9,7 @@ import type {
   WebSearchAttemptSummary,
   WebSearchTraceBackend,
   WebSearchTraceCitation,
-} from "@/db/types";
+} from "@nekusora/db/types";
 import type { MessageFeedback } from "@/features/chat/model/feedback";
 import type { ChatProcessRuntimeState } from "@/features/chat/model/processTrace";
 import type {

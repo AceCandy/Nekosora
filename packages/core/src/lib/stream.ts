@@ -38,7 +38,7 @@ import type {
   IRUsage,
   ResolvedRoute,
 } from "@/lib/providers/types";
-import type { ProviderProtocol, ReasoningLevel } from "@/db/types";
+import type { ProviderProtocol, ReasoningLevel } from "@nekusora/db/types";
 import {
   executeAtomicGateway,
   executeGateway,

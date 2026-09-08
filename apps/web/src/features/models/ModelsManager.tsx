@@ -17,7 +17,7 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { ModelCapabilities, RouteApiFormat } from "@/db/types";
+import type { ModelCapabilities, RouteApiFormat } from "@nekusora/db/types";
 import type { FormDataSerializableAction } from "@/features/providers/types";
 import ModelFormDialog, {
   type ModelInitial,

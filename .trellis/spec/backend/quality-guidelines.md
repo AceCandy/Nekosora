@@ -37,8 +37,11 @@ Build, real PostgreSQL, and container gates remain defined in
 - Use actual function signatures for mocks, for example
   `vi.fn<GatewayTelemetryPort["recordAttempt"]>()`. For generic return types, preserve
   the contract on the mock object and spy on its method instead of erasing the generic.
-- Keep TypeScript and Vitest aliases aligned, including the Core/Web
-  `@/db/schema/pg` compatibility alias to `packages/db/src/schema.ts`.
+- Keep TypeScript and Vitest aliases aligned. Database consumers use the existing
+  `@nekusora/db`, `@nekusora/db/types`, and `@nekusora/db/schema` exports;
+  do not restore consumer aliases into database source files. Keep type-only
+  imports erased and mock the public schema path in factory tests. Verify
+  resolver changes with typecheck, tests, and application builds.
 
 ---
 

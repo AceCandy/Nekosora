@@ -13,7 +13,7 @@ import { Pagination } from "@/shared/ui/Pagination";
 import { Popover } from "@/shared/ui/Popover";
 import Badge from "@/shared/ui/Badge";
 import { formatDateTimeLocal, formatDuration } from "@/shared/lib/format";
-import type { ReasoningLevel } from "@/db/types";
+import type { ReasoningLevel } from "@nekusora/db/types";
 import { UsageFilterBar, type UsageFilterValues } from "./UsageFilterBar";
 import { getTaskKindMessageKey } from "./task-kind";
 

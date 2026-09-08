@@ -1,5 +1,5 @@
 import type { CallContext, IRUsage, ResolvedRoute } from "@/lib/providers/types";
-import type { ReasoningLevel } from "@/db/types";
+import type { ReasoningLevel } from "@nekusora/db/types";
 
 export type GatewayOperation =
   | "chat.stream"

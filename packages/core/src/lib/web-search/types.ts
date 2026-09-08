@@ -6,7 +6,7 @@ import type {
   WebSearchFormat,
   WebSearchTraceAttempt,
   WebSearchTraceTimeRange,
-} from "@/db/types";
+} from "@nekusora/db/types";
 
 export type SearchTimeRange = WebSearchTraceTimeRange;
 export type SearchFreshness = Extract<SearchTimeRange["preset"], "week" | "month">;

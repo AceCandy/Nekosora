@@ -6,7 +6,7 @@ import { Sparkles, Globe, Wand2, Palette, X, File as FileIcon, Brain, ChevronDow
 import { clsx } from "clsx";
 import { OptionPicker, type OptionItem } from "@/shared/ui/OptionPicker";
 import { Popover } from "@/shared/ui/Popover";
-import type { ReasoningLevel } from "@/db/types";
+import type { ReasoningLevel } from "@nekusora/db/types";
 import type {
   ModelOption,
   CardOption,

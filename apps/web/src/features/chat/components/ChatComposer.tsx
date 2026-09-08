@@ -18,7 +18,7 @@ import ChatHeader from "@/features/chat/components/ChatHeader";
 import { useChatStreamStore } from "@/features/chat/store/chatStreamStore";
 import { saveConversationComposerState } from "@/features/chat/actions/conversations";
 import type { ChatMessage, ModelOption, CardOption, OutputModeOption, RenderStyleOption } from "@/features/chat/model/types";
-import type { ReasoningLevel } from "@/db/types";
+import type { ReasoningLevel } from "@nekusora/db/types";
 import type { ConversationShareListItem, CreateShareInput } from "@/features/chat/actions/share";
 import {
   createComposerSelectionState,

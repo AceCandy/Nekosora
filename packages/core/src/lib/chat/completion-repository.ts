@@ -1,5 +1,5 @@
 import { and, eq, isNull } from "drizzle-orm";
-import type { ProcessTrace, TokenUsage } from "@/db/types";
+import type { ProcessTrace, TokenUsage } from "@nekusora/db/types";
 import type { MemoryExtractionJob } from "@/lib/memory/jobs";
 import { getDb, getSchema } from "@/lib/infra/db";
 import {

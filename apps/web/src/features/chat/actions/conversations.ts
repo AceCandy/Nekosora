@@ -5,7 +5,7 @@ import { z } from "zod";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { requireSession } from "@/lib/session";
 import { getConversationTitleState } from "@/lib/conversation-title/service";
-import type { ReasoningLevel } from "@/db/types";
+import type { ReasoningLevel } from "@nekusora/db/types";
 import {
   CONVERSATION_GROUP_KEYS,
   CONVERSATION_GROUP_PAGE_SIZE,

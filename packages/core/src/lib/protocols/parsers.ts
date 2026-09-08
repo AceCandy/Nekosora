@@ -7,7 +7,7 @@ import type {
   IRToolChoice,
   IRToolDef,
 } from "@/lib/providers/types";
-import type { ReasoningLevel } from "@/db/types";
+import type { ReasoningLevel } from "@nekusora/db/types";
 import type { ParsedGatewayRequest } from "./types";
 import {
   arrayAt,

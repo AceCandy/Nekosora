@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ModelCapabilities } from "@/db/types";
+import type { ModelCapabilities } from "@nekusora/db/types";
 import {
   applyReasoningToCompatibleBody,
   buildReasoningProviderOptions,

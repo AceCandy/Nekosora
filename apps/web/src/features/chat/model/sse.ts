@@ -31,7 +31,7 @@ import type {
   WebSearchTraceAttempt,
   WebSearchTraceBackend,
   WebSearchTraceCitation,
-} from "@/db/types";
+} from "@nekusora/db/types";
 import {
   isChatTerminalStatus,
   type ChatTerminalEvent,

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { RouteApiFormat } from "@/db/types";
+import type { RouteApiFormat } from "@nekusora/db/types";
 import { probeProviderKey } from "./probe";
 
 const API_KEY = "probe-test-key";

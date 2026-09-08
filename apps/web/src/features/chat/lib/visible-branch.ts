@@ -1,4 +1,4 @@
-import type { MessageVersionSelections } from "@/db/types";
+import type { MessageVersionSelections } from "@nekusora/db/types";
 
 export interface VisibleBranchResult {
   messages: Record<string, unknown>[];

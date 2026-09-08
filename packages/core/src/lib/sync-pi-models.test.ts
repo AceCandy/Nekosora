@@ -5,7 +5,7 @@ import {
   nextSyncMigrationSlot, stableJson,
   type PiModel, type CatalogRow,
 } from "./sync-pi-models";
-import type { ModelCapabilities } from "@/db/types";
+import type { ModelCapabilities } from "@nekusora/db/types";
 
 const pi = (over: Partial<PiModel> = {}): PiModel => ({ id: "x", ...over });
 const cap = (o: Partial<ModelCapabilities>): ModelCapabilities => o as ModelCapabilities;

@@ -34,7 +34,7 @@ import { ChatProcessRecorder } from "@/lib/chat/process-trace";
 import type { ChatTerminalStatus } from "@/lib/chat/sse-contract";
 import { redactErrorMessage } from "@/lib/redaction";
 import type { IRRequest } from "@/lib/providers/types";
-import type { ProcessTrace, ReasoningLevel, WebSearchTraceCall } from "@/db/types";
+import type { ProcessTrace, ReasoningLevel, WebSearchTraceCall } from "@nekusora/db/types";
 import {
   isChatProcessSnapshot,
   toMessageCreatedAtIso,

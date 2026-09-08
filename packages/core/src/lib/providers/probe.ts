@@ -30,7 +30,7 @@ import {
   resolveProviderTimeouts,
   type ProviderTimeoutConfig,
 } from "@/lib/providers/timeouts";
-import type { ProviderProtocol, RouteApiFormat } from "@/db/types";
+import type { ProviderProtocol, RouteApiFormat } from "@nekusora/db/types";
 
 /** 探测结果。ok=false 时 errorKind 区分认证/网络/未知,供 UI 分类展示。 */
 export interface ProbeResult {

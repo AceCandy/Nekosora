@@ -1,6 +1,6 @@
 import { and, eq, or } from "drizzle-orm";
 import { z } from "zod";
-import type { ModelCapabilities, ProviderProtocol } from "@/db/types";
+import type { ModelCapabilities, ProviderProtocol } from "@nekusora/db/types";
 import { getDb, getSchema } from "@/lib/infra/db";
 import { decrypt, encrypt, hashSecret } from "@/lib/infra/crypto";
 import { assertPublicHttpUrl } from "./public-http";

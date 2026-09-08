@@ -18,8 +18,8 @@ import {
   resolveModelRouteApiFormat,
 } from "@/lib/providers/route-api-format";
 import { recordSuccess, recordFailure } from "@/lib/circuit-breaker";
-import type { ProviderProtocol, RouteApiFormat } from "@/db/types";
-import type { ProviderKeyResult } from "@/db/schema/pg";
+import type { ProviderProtocol, RouteApiFormat } from "@nekusora/db/types";
+import type { ProviderKeyResult } from "@nekusora/db/schema";
 import { requireSession } from "@/lib/session";
 import { findCatalogMatch, pickDisplayName } from "@/lib/model-catalog";
 import {

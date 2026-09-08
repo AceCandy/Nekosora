@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { RouteApiFormat } from "@/db/types";
+import type { RouteApiFormat } from "@nekusora/db/types";
 import { DEFAULT_GATEWAY_GOVERNANCE_POLICY } from "@/lib/gateway-governance/policy";
 import type { CallContext, ResolvedRoute } from "@/lib/providers/types";
 import { handleProtocolRequest } from "./handler";

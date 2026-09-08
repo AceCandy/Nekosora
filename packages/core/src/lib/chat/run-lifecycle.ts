@@ -19,7 +19,7 @@ import {
   redactErrorMessage,
   redactSensitiveText,
 } from "@/lib/redaction";
-import type { TokenUsage } from "@/db/types";
+import type { TokenUsage } from "@nekusora/db/types";
 import type { IRUsage } from "@/lib/providers/types";
 
 export type RunTerminalStatus = "success" | "failed" | "interrupted";

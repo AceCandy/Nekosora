@@ -11,7 +11,7 @@ import type {
   ModelCapabilities,
   ReasoningLevel,
   ThinkingLevel,
-} from "@/db/types";
+} from "@nekusora/db/types";
 
 const LEVELS: ReasoningLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 

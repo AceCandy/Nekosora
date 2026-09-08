@@ -30,7 +30,7 @@ import type {
   ResolvedProvider,
   CallContext,
 } from "@/lib/providers/types";
-import type { ModelCapabilities } from "@/db/types";
+import type { ModelCapabilities } from "@nekusora/db/types";
 
 /** 解析加密 key bundle,返回加权 key 列表(已向后兼容历史格式)。 */
 function resolveProviderKeys(encBundle: string) {

@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import type { MemoryExtractionMessage } from "@/db/types";
+import type { MemoryExtractionMessage } from "@nekusora/db/types";
 import { getDb, getSchema } from "@/lib/infra/db";
 import type { JobOutcome } from "@/lib/jobs/catalog";
 import { extractMemories, normalizeMemoryMessages } from "./extract";

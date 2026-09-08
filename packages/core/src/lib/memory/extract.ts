@@ -6,7 +6,7 @@
  *
  * 触发频率保护:同一用户 10 分钟内最多提取一次。核心失败向 worker 抛通用错误以触发重试。
  */
-import type { MemoryExtractionMessage } from "@/db/types";
+import type { MemoryExtractionMessage } from "@nekusora/db/types";
 import type { JobOutcome } from "@/lib/jobs/catalog";
 import { getMemory } from "./mem0";
 import { cacheWrap, cacheSet } from "@/lib/infra/cache";

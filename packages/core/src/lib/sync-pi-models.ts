@@ -11,7 +11,7 @@
  */
 import { getSupportedReasoningLevels } from "@/lib/reasoning";
 import { getMainstreamModelFamily } from "@/lib/mainstream-models";
-import type { ModelCapabilities, ThinkingFormat, WebSearchFormat } from "@/db/types";
+import type { ModelCapabilities, ThinkingFormat, WebSearchFormat } from "@nekusora/db/types";
 
 /** pi 模型条目的最小结构(pi.dev/api/models 子集)。 */
 export interface PiModel {

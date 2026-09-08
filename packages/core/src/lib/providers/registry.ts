@@ -20,8 +20,8 @@ import type { ResolvedRoute } from "./types";
 import {
   defaultRouteApiFormat,
   type RouteApiFormat,
-} from "@/db/types";
-import type { ReasoningLevel } from "@/db/types";
+} from "@nekusora/db/types";
+import type { ReasoningLevel } from "@nekusora/db/types";
 import { applyReasoningToCompatibleBody } from "@/lib/reasoning";
 import {
   isHostedSearchRouteCompatible,

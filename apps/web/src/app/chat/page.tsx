@@ -5,7 +5,7 @@ import { listEnabledOutputModes } from "@/lib/output-modes/service";
 import { listEnabledRenderStyles } from "@/lib/render-styles/service";
 import ChatComposer, { type ModelOption } from "@/features/chat/components/ChatComposer";
 import { createShare, listConversationShares, revokeShare, type CreateShareInput } from "@/features/chat/actions/share";
-import type { ModelCapabilities } from "@/db/types";
+import type { ModelCapabilities } from "@nekusora/db/types";
 import { newConversationKey } from "@/features/chat/model/newConversationNavigation";
 import { requireSession } from "@/lib/session";
 import { isWebSearchEnabled } from "@/lib/web-search/registry";

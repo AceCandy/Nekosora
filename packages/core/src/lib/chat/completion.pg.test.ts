@@ -12,7 +12,7 @@ vi.mock("@/lib/infra/db", () => ({
   getSchema: mocks.getSchema,
 }));
 
-import * as schema from "@/db/schema/pg";
+import * as schema from "@nekusora/db/schema";
 import { persistChatCompletion } from "@/lib/chat/completion-repository";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;

@@ -1,7 +1,7 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ReasoningLevel } from "@/db/types";
+import type { ReasoningLevel } from "@nekusora/db/types";
 import type { ComposerSelectionState, ComposerTransition } from "@/features/chat/model/composerState";
 import type { ModelOption, RenderStyleOption } from "@/features/chat/model/types";
 import type { PreviewableFile } from "@/shared/components/file-preview/FilePreviewModal";

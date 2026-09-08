@@ -1,4 +1,4 @@
-import type { ProviderProtocol } from "@/db/types";
+import type { ProviderProtocol } from "@nekusora/db/types";
 
 /**
  * 服务商协议可选项(供 ProviderFormDialog 的 select 使用)。

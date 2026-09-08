@@ -13,7 +13,7 @@
  */
 import { eq, and, or, inArray, isNull } from "drizzle-orm";
 import type { IRRequest } from "@/lib/providers/types";
-import type { ProcessTrace } from "@/db/types";
+import type { ProcessTrace } from "@nekusora/db/types";
 import { buildMultimodalUserMessage } from "@/lib/multimodal/assemble";
 import { buildMessagesWithFileContext } from "@/lib/rag/context";
 import { getMemories } from "@/lib/memory/service";

@@ -16,7 +16,7 @@ import type {
   WebSearchAttemptSummary,
   WebSearchTraceAttemptOutcome,
   WebSearchTraceBackend,
-} from "@/db/types";
+} from "@nekusora/db/types";
 import { resolveVisibleBranch } from "@/features/chat/lib/visible-branch";
 import type {
   ChatMessage,

@@ -20,7 +20,7 @@ import type {
   MessageRunMetadata,
   ToolCallRecord,
 } from "@/features/chat/model/types";
-import type { ReasoningLevel, WebSearchTraceBackend } from "@/db/types";
+import type { ReasoningLevel, WebSearchTraceBackend } from "@nekusora/db/types";
 import type { ChatProcessEvent } from "@nekusora/contracts/chat";
 import {
   reduceChatProcessEvent,

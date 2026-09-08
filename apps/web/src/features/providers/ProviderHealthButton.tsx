@@ -5,7 +5,7 @@ import { Button } from "@/shared/ui/Button";
 import Badge from "@/shared/ui/Badge";
 import Popover from "@/shared/ui/Popover";
 import { clsx } from "clsx";
-import type { ProviderKeyResult } from "@/db/schema/pg";
+import type { ProviderKeyResult } from "@nekusora/db/schema";
 
 /** server action 签名:检测 provider 所有 key,返回存活汇总(网络层 + key 层 + per-key)。 */
 export type HealthAction = (providerId: string) => Promise<{

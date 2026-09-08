@@ -58,7 +58,6 @@ src/
 | 别名 | 指向 | 用途 |
 |------|------|------|
 | `@/auth` | `packages/core/src/auth.ts` | 共享服务端认证 |
-| `@/db/*` | `packages/db/src/*` | 数据层；`@/db/schema/pg` 精确映射 `schema.ts` |
 | `@/lib/*` | `packages/core/src/lib/*` | 共享领域逻辑；下述精确别名优先 |
 | `@/*` | `apps/web/src/*` | 其他 Web 本地模块 |
 | `@shared/*` | `src/shared/*` | 复用 UI 与工具 |
@@ -70,6 +69,12 @@ src/
 `src/features` 相对 `apps/web`；不要把 `@/lib/*` 一概理解为 Web 本地源码。
 
 新增 import 时按被引用对象的归属选择前缀；同特性内部用相对路径即可。
+
+数据库引用使用已有包导出 `@nekusora/db`、`@nekusora/db/types`、
+`@nekusora/db/schema`，不配置 `@/db/*` 或直达数据库源码的消费端别名。
+纯类型保持 `import type`；业务运行时通过 `getDb/getSchema` 惰性取表。
+Web 的 `src/db/schema/pg.ts` 仍是 Drizzle 配置使用的迁移工具转发入口，
+不作为业务导入路径。验证导入调整须覆盖 typecheck、Vitest 和应用构建。
 
 ---
 

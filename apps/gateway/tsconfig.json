@@ -14,8 +14,6 @@
     "jsx": "react-jsx",
     "paths": {
       "@/auth": ["../../packages/core/src/auth.ts"],
-      "@/db/schema/pg": ["../../packages/db/src/schema.ts"],
-      "@/db/*": ["../../packages/db/src/*"],
       "@/lib/*": ["../../packages/core/src/lib/*"],
       "@/*": ["../../packages/core/src/*"]
     }

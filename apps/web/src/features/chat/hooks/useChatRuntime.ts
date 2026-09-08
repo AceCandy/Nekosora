@@ -9,7 +9,7 @@ import type {
   ChatMessageAttachment,
   MessageFeedback,
 } from "@/features/chat/model/types";
-import type { ReasoningLevel } from "@/db/types";
+import type { ReasoningLevel } from "@nekusora/db/types";
 
 interface UseChatRuntimeOptions {
   /** 当前会话 ID(来自路由;新会话为 null/undefined)。 */

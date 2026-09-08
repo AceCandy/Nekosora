@@ -20,7 +20,7 @@ import ModelsManager, {
   type RouteItem,
   type ProviderOption,
 } from "@/features/models/ModelsManager";
-import type { ModelCapabilities, ProviderProtocol, RouteApiFormat } from "@/db/types";
+import type { ModelCapabilities, ProviderProtocol, RouteApiFormat } from "@nekusora/db/types";
 import { getTranslations } from "next-intl/server";
 import { requireSession } from "@/lib/session";
 import { Boxes } from "lucide-react";

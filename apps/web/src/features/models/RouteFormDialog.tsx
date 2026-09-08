@@ -11,7 +11,7 @@ import {
   isChatRouteApiFormat,
   type ProviderProtocol,
   type RouteApiFormat,
-} from "@/db/types";
+} from "@nekusora/db/types";
 
 export interface RouteProviderOption {
   id: string;

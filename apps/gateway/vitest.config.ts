@@ -9,14 +9,6 @@ export default defineConfig({
         replacement: fileURLToPath(new URL("../../packages/core/src/auth.ts", import.meta.url)),
       },
       {
-        find: "@/db/schema/pg",
-        replacement: fileURLToPath(new URL("../../packages/db/src/schema.ts", import.meta.url)),
-      },
-      {
-        find: /^@\/db\//,
-        replacement: fileURLToPath(new URL("../../packages/db/src/", import.meta.url)),
-      },
-      {
         find: /^@\/lib\//,
         replacement: fileURLToPath(new URL("../../packages/core/src/lib/", import.meta.url)),
       },

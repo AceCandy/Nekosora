@@ -6,7 +6,7 @@ import { listMyCards } from "@/features/panel/cards/actions";
 import { listEnabledOutputModes } from "@/lib/output-modes/service";
 import { listEnabledRenderStyles } from "@/lib/render-styles/service";
 import ChatComposer, { type ModelOption } from "@/features/chat/components/ChatComposer";
-import type { ModelCapabilities } from "@/db/types";
+import type { ModelCapabilities } from "@nekusora/db/types";
 import type { ChatMessage } from "@/features/chat/model/types";
 import { toMessageCreatedAtIso } from "@/features/chat/model/messageTime";
 import { requireSession } from "@/lib/session";

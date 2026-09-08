@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
-import type { ProviderProtocol } from "@/db/types";
+import type { ProviderProtocol } from "@nekusora/db/types";
 import type { FormDataSerializableAction } from "@/features/providers/types";
 import Modal from "@/shared/ui/Modal";
 import KeyBundleEditor, { type EditorRow, type KeyBundleEditorHandle, type TestKeyAction } from "@/features/providers/KeyBundleEditor";

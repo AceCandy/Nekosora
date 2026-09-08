@@ -6,7 +6,7 @@
  */
 import { sql, and, gte, eq, desc, lte, isNotNull, ilike, or, type SQL } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
-import type { ReasoningLevel } from "@/db/types";
+import type { ReasoningLevel } from "@nekusora/db/types";
 
 export type TimeRange = "24h" | "7d" | "30d";
 

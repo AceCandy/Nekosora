@@ -1,4 +1,4 @@
-import type { ProviderProtocol } from "@/db/types";
+import type { ProviderProtocol } from "@nekusora/db/types";
 import type { GatewayAttemptAdapter, GatewayOperation } from "./types";
 
 const MEDIA_PROTOCOLS: Partial<Record<GatewayOperation, readonly ProviderProtocol[]>> = {

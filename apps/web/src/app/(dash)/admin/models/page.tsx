@@ -22,7 +22,7 @@ import ModelsManager, {
 import { getTranslations } from "next-intl/server";
 import { Boxes } from "lucide-react";
 import { PageHeader } from "@/shared/components/PageHeader";
-import type { ProviderProtocol, RouteApiFormat } from "@/db/types";
+import type { ProviderProtocol, RouteApiFormat } from "@nekusora/db/types";
 
 export default async function ModelsPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   const tn = await getTranslations("nav");

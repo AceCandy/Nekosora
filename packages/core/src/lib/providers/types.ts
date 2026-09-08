@@ -11,7 +11,7 @@ import type {
   RouteApiFormat,
   ModelCapabilities,
   ReasoningLevel,
-} from "@/db/types";
+} from "@nekusora/db/types";
 import type { WeightedKey } from "./keys";
 
 /** 上游 provider 的运行时配置(从数据库解密后得到)。 */

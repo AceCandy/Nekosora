@@ -1,4 +1,4 @@
-import type { ReasoningLevel } from "@/db/types";
+import type { ReasoningLevel } from "@nekusora/db/types";
 import { resolveReasoningForModel } from "@/lib/reasoning";
 import type { ModelOption } from "./types";
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { routeApiFormatForModel } from "@/db/types";
+import { routeApiFormatForModel } from "@nekusora/db/types";
 
 describe("routeApiFormatForModel", () => {
   it.each([
