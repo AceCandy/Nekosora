@@ -1825,3 +1825,25 @@ Completed local and production environment examples, aligned both production Com
 ### Status
 
 [OK] **Completed**
+
+
+## Session 144: 数据库访问类型收敛
+<!-- trellis-session: v=2 fp=d4f2f81749caf90f -->
+
+**Date**: 2026-09-08
+**Task**: 数据库访问类型收敛
+**Branch**: `main`
+
+### Summary
+
+恢复数据库工厂真实类型并收敛直接调用方；完成全量质量门禁与测试验证。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9e4ac67` | refactor: restore typed database access |
+
+### Status
+
+[OK] **Completed**
