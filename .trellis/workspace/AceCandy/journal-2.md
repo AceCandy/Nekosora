@@ -1847,3 +1847,25 @@ Completed local and production environment examples, aligned both production Com
 ### Status
 
 [OK] **Completed**
+
+
+## Session 145: 数据库包导入边界收敛
+<!-- trellis-session: v=2 fp=a8b817d04a435650 -->
+
+**Date**: 2026-09-08
+**Task**: 数据库包导入边界收敛
+**Branch**: `main`
+
+### Summary
+
+数据库消费者改用公开包导出，删除重复源码别名并完成工作区质量门禁与三应用构建验证。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4c4e4c7` | refactor: use database package exports |
+
+### Status
+
+[OK] **Completed**
