@@ -7,9 +7,9 @@
 ## Overview
 
 - **ORM**: Drizzle ORM,**仅 PostgreSQL**(+pgvector)。
-- **连接工厂**:`src/lib/infra/db/index.ts` 导出 `getDb / getSchema / closeDb`,惰性初始化 pg 池(`max` 由 `DB_POOL_MAX` 配置,缺省 20;主进程 Next.js 与 worker 各持独立 pool,总连接 = 各进程 max 之和,须低于 PG `max_connections` 余量)。业务代码统一 `import { getDb, getSchema, closeDb } from "@/lib/infra/db"`,**禁止**直接 import schema 或驱动模块。
-- **Schema 单份**:`src/db/schema/pg.ts`(pg-core)。Better Auth 表由 `src/db/auth-schema.ts`(dialect 中立描述)在 pg.ts 具象化。
-- **迁移单份**:`drizzle/pg/`,启动时 `bootstrapDatabase()` 自动 `migrate({ migrationsFolder: "drizzle/pg" })`。
+- **连接工厂**:`packages/db/src/index.ts` 导出 `getDb / getSchema / closeDb`，Core 的 `packages/core/src/lib/infra/db/index.ts` 转发。惰性初始化 pg 池（`max` 由 `DB_POOL_MAX` 配置，缺省 20；Web、Gateway、Worker 各进程持独立 pool，总连接上限之和须低于 PG `max_connections` 余量）。业务代码统一 `import { getDb, getSchema, closeDb } from "@/lib/infra/db"`，**禁止**直接运行时 import schema 或驱动模块。
+- **Schema 单份**:`packages/db/src/schema.ts`（pg-core），Better Auth 表也在该文件定义。
+- **迁移单份**:`apps/web/drizzle/pg/`,启动时 `bootstrapDatabase()` 自动 `migrate({ migrationsFolder: "drizzle/pg" })`。
 - 已移除 SQLite / better-sqlite3 / sqlite-vec 双 dialect 回退(2026-07 收敛)。不再有 `isPg` / `dbDialect` / `DB_DIALECT` / `SQLITE_PATH`。
 
 ## Scenario: Next Instrumentation Runtime Isolation
@@ -144,10 +144,64 @@ if (job) void dispatchConversationTitleJob(job.id);
 
 ## Query Patterns
 
-- `getDb()` 返回 `any`(drizzle 跨表联合时 query builder 类型不互通,弱化类型换取可调用性)。业务通过 schema 表引用驱动查询。
+- `getDb()` 返回保留实际 Schema 的 PostgreSQL Drizzle 数据库类型；查询结果优先由表与投影推断，不用 `any` 擦除。
 - `getSchema()` 同步访问已加载 schema(必须先 `await getDb()`)。
 - 查询用 drizzle 的 `eq/and/inArray/gte/lte/desc` 等。大小写不敏感 LIKE 用 `ilike`(pg)。
 - 向量检索用 pgvector `<=>` 余弦距离算子,`distanceToSimilarity(d) = 1 - d/2` 还原相似度 [0,1]。
+
+### Typed PostgreSQL Factory
+
+#### 1. Scope / Trigger
+
+适用于工厂和直接调用方；无关历史强转另批治理。
+
+#### 2. Signatures
+
+- 工厂内 `Schema = typeof import("./schema")`。
+- `getDb(): Promise<NodePgDatabase<Schema> & { $client: Pool }>`。
+- `getSchema(): Schema`；`closeDb(): Promise<void>`。
+
+#### 3. Contracts
+
+- 类型用 `import type`；保留字面量动态加载、环境校验与连接生命周期。
+- 事务参数由回调推断，不标 `typeof db`：事务没有 `$client`。
+- SQL 使用 `SQL` 或推断；外部未知结果在边界解码。
+
+#### 4. Validation & Error Matrix
+
+| 条件 | 结果 |
+| --- | --- |
+| 初始化前调用 `getSchema()` | 抛出未初始化错误 |
+| 缺少 `DATABASE_URL` | 初始化失败，不创建 Pool；修正后可重试 |
+| `DB_POOL_MAX` 不是正整数 | 初始化失败，不创建 Pool |
+| 并发调用 `getDb()` | 复用同一初始化 Promise 和 Pool |
+| 初始化期间调用 `closeDb()` | 等待初始化后关闭并清空缓存；再次获取可重新初始化 |
+
+#### 5. Good / Base / Bad Cases
+
+- Good：Schema 与投影推断行类型。
+- Base：原查询语义不变。
+- Bad：强转或错误事务签名绕过检查。
+
+#### 6. Tests Required
+
+- `packages/core/src/lib/infra/db/index.test.ts`：非 `any`、Schema/Pool 类型、并发、配置失败重试、关闭与重新初始化。
+- `pnpm check` 检查类型，`pnpm test` 检查运行时；mock 不替代真实 PG 或构建验证。
+
+#### 7. Wrong vs Correct
+
+```typescript
+// Wrong: 类型擦除与错误事务签名。
+const s = getSchema() as any;
+await db.transaction(async (tx: typeof db) => { /* ... */ });
+
+// Correct: 保留入口类型和事务推断。
+const db = await getDb();
+const s = getSchema();
+await db.transaction(async (tx) => {
+  await tx.select({ id: s.apiKeys.id }).from(s.apiKeys);
+});
+```
 
 ## Transactions
 

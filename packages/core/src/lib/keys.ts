@@ -57,8 +57,7 @@ function makeKeyPreview(rawKey: string): string {
 /** 创建主 Key；已有已撤销记录时原位轮换。返回明文(仅此一次)。 */
 export async function createMasterKey(userId: string, name = "主密钥"): Promise<string> {
   const db = await getDb();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const s = getSchema() as any;
+  const s = getSchema();
 
   // 每个用户只保留一条主 key 记录，撤销后原位轮换。
   const existing = await db
@@ -106,8 +105,7 @@ export async function createSubKey(
   name: string,
 ): Promise<string> {
   const db = await getDb();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const s = getSchema() as any;
+  const s = getSchema();
 
   // 子 key 仅在该用户有可用主 key 时创建。
   const keys = await db

@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 
 const WINDOW_MS = 10 * 60 * 1000;
 const BLOCK_MS = 10 * 60 * 1000;
@@ -20,7 +20,7 @@ function rowsOf(result: unknown): RateLimitRow[] {
 
 /** 密码计算前检查客户端桶和分享全局桶。 */
 export async function getShareUnlockRetryAfter(
-  db: { execute: (query: unknown) => Promise<unknown> },
+  db: { execute: (query: SQL) => Promise<unknown> },
   shareId: string,
   clientFingerprint: string,
   now = new Date(),
@@ -40,7 +40,7 @@ export async function getShareUnlockRetryAfter(
 }
 
 async function incrementBucket(
-  tx: { execute: (query: unknown) => Promise<unknown> },
+  tx: { execute: (query: SQL) => Promise<unknown> },
   shareId: string,
   scope: "client" | "global",
   fingerprint: string,
@@ -75,7 +75,7 @@ async function incrementBucket(
 
 /** 同一事务记录客户端与全局失败桶，避免多实例读改写竞态。 */
 export async function recordShareUnlockFailure(
-  db: { transaction: <T>(callback: (tx: { execute: (query: unknown) => Promise<unknown> }) => Promise<T>) => Promise<T> },
+  db: { transaction: <T>(callback: (tx: { execute: (query: SQL) => Promise<unknown> }) => Promise<T>) => Promise<T> },
   shareId: string,
   clientFingerprint: string,
   now = new Date(),
@@ -88,7 +88,7 @@ export async function recordShareUnlockFailure(
 
 /** 成功后只清当前客户端桶；全局桶保留分布式攻击历史。 */
 export async function clearShareUnlockClientFailures(
-  db: { execute: (query: unknown) => Promise<unknown> },
+  db: { execute: (query: SQL) => Promise<unknown> },
   shareId: string,
   clientFingerprint: string,
 ): Promise<void> {

@@ -1,0 +1,2 @@
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"数据库动态加载、事务、时间与迁移语义约束"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"严格类型、零警告与测试约束"}

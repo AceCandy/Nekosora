@@ -74,7 +74,7 @@ export async function writeFallbackTitle(
     ...(chatModelId ? { chatModelId } : {}),
   };
 
-  return db.transaction(async (tx: typeof db) => {
+  return db.transaction(async (tx) => {
     const updated = await tx
       .update(s.conversations)
       .set({ title: fallback })
@@ -210,7 +210,7 @@ export async function generateConversationTitle(job: ConversationTitleJob): Prom
   const title = sanitizeTitle(result.text);
   if (!title) throw new ConversationTitleGenerationError();
 
-  return db.transaction(async (tx: typeof db) => {
+  return db.transaction(async (tx) => {
     // 与 fallback 事务保持相同的 conversations -> outbox 锁顺序，避免交叉等待。
     const [lockedConversation] = await tx
       .select({ title: s.conversations.title })

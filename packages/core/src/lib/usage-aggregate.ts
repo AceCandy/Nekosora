@@ -37,7 +37,7 @@ function rangeStart(range: TimeRange): Date {
 }
 
 /** PG date_trunc 时间桶表达式(返回列名 "bucket")。 */
-function bucketExpr(range: TimeRange): unknown {
+function bucketExpr(range: TimeRange) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
   const col = s.gatewayExecutions.createdAt;

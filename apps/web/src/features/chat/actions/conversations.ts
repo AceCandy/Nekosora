@@ -160,22 +160,23 @@ function routedModelIds(db: Awaited<ReturnType<typeof getDb>>) {
 export async function getVisibleModels() {
   const user = await requireSession();
   const db = await getDb();
+  const s = getSchema();
   const routedIds = routedModelIds(db);
   const rows = await db
     .with(routedIds)
-    .select({ model: S().models, capabilities: S().modelCatalog.capabilities })
-    .from(S().models)
-    .innerJoin(S().modelCatalog, eq(S().models.catalogId, S().modelCatalog.id))
-    .innerJoin(routedIds, eq(routedIds.modelId, S().models.id))
+    .select({ model: s.models, capabilities: s.modelCatalog.capabilities })
+    .from(s.models)
+    .innerJoin(s.modelCatalog, eq(s.models.catalogId, s.modelCatalog.id))
+    .innerJoin(routedIds, eq(routedIds.modelId, s.models.id))
     .where(
       and(
-        or(eq(S().models.visibility, "public"), eq(S().models.ownerUserId, user.id)),
-        eq(S().models.enabled, true),
+        or(eq(s.models.visibility, "public"), eq(s.models.ownerUserId, user.id)),
+        eq(s.models.enabled, true),
       ),
     )
-    .orderBy(asc(S().models.sortOrder), asc(S().models.createdAt));
+    .orderBy(asc(s.models.sortOrder), asc(s.models.createdAt));
   // private 排在前(public 在后)
-  const models = rows.map((row: { model: Record<string, unknown>; capabilities: unknown }) => ({
+  const models = rows.map((row) => ({
     ...row.model,
     capabilities: row.capabilities,
   }));

@@ -9,6 +9,7 @@ import {
   lte,
   or,
   sql,
+  type SQL,
 } from "drizzle-orm";
 import { getDb, getSchema } from "@/lib/infra/db";
 import {
@@ -70,7 +71,7 @@ function ownedWhere(
   schema: ProcessingSchema,
   lease: FileProcessingLease,
   statuses: readonly ActiveFileProcessingStatus[],
-  clock: unknown,
+  clock: SQL,
 ) {
   return and(
     eq(schema.fileObjects.id, lease.fileId),
@@ -239,7 +240,7 @@ async function replaceChunksAndComplete(
   chunks: FileProcessingChunk[],
 ): Promise<void> {
   const { db, schema } = await databaseContext();
-  await db.transaction(async (tx: typeof db) => {
+  await db.transaction(async (tx) => {
     const [locked] = await tx
       .select({ id: schema.fileObjects.id })
       .from(schema.fileObjects)

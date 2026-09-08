@@ -1,0 +1,2 @@
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"复核驱动加载、事务与SQL语义未变化"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"复核类型回归、门禁和未验证项"}

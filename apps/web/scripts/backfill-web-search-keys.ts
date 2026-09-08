@@ -73,7 +73,7 @@ async function main(): Promise<void> {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = getSchema() as any;
-  await db.transaction(async (tx: typeof db) => {
+  await db.transaction(async (tx) => {
     for (const update of updates) {
       await tx
         .update(s.userSettings)

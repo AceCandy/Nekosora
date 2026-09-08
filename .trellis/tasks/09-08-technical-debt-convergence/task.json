@@ -19,7 +19,8 @@
   "pr_url": null,
   "subtasks": [],
   "children": [
-    "09-08-quality-gate-convergence"
+    "09-08-quality-gate-convergence",
+    "09-08-database-type-convergence"
   ],
   "parent": null,
   "relatedFiles": [],

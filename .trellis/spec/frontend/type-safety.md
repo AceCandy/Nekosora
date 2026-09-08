@@ -8,7 +8,7 @@
 
 - 类型系统：TypeScript（strict）。Next.js / React 19 类型。
 - 校验库：`zod`（v4）。用于请求体校验、env 解析、外部数据边界。
-- DB 行类型：因 drizzle 跨表联合时 query builder 类型不互通，**统一收敛为 `Record<string, unknown>` / `any`**，在服务边界转成显式 DTO。
+- DB 行类型：保留实际 Drizzle Schema 与查询投影的推断；服务边界需要稳定契约时映射为 DTO，不统一擦除为 `Record<string, unknown>` / `any`。
 
 ---
 
@@ -28,24 +28,23 @@
 - 外部输入（API 请求体、Server Action 入参、env 变量）用 zod schema 解析，失败抛 `REQUEST_INVALID_JSON` 等约定错误码。
 - 内部数据不重复校验。
 
-DB schema 文件（`src/db/schema/`、`src/db/auth-schema.ts`）是 drizzle 定义，不直接当运行时校验器。
+DB schema 文件（`packages/db/src/schema.ts`，含 Better Auth 表）是 drizzle 定义，不直接当运行时校验器。
 
 ---
 
 ## Common Patterns
 
-**DB 行 `unknown` 收敛**：因 `getSchema()` 返回联合 schema，直接拿到的行是 `Record<string, unknown>`。统一处理方式：
+**保留 DB 查询推断**：`getSchema()` 返回实际 PostgreSQL Schema，必须在 `await getDb()` 后访问。
 
 ```ts
-// service / action 里：在返回边界断言成 DTO
-const rows = await db.select().from(S().globalModels).where(...);
-return rows as Record<string, unknown>[];
-
-// 渲染层：unknown 不能作为 ReactNode，用 String() / as string 包裹
-<span>{String(row.name as string)}</span>
+// service / action 内推断 id、name 的实际列类型。
+const db = await getDb();
+const s = getSchema();
+const rows = await db.select({ id: s.apiKeys.id, name: s.apiKeys.name }).from(s.apiKeys);
+return rows;
 ```
 
-`as any` 在 ORM schema 取用点（`const S = () => getSchema() as any`）是约定用法，必须配 `// eslint-disable-next-line @typescript-eslint/no-explicit-any`。
+不要新增 `getSchema() as any` 或手写宽泛行类型覆盖推断。历史强转分批收敛，不作为新代码模板；真正的外部 `unknown` 在信任边界校验后使用。
 
 **显式 interface 定义 props**：组件 props 用具名 interface，不用 inline 对象类型；Server→Client 传数据确保可序列化（不传 Date / 函数）。
 
@@ -53,7 +52,7 @@ return rows as Record<string, unknown>[];
 
 ## Forbidden Patterns
 
-- **不要给业务逻辑加 `any`**：仅 ORM schema 取用点（`getSchema() as any`）允许，其余 `any` 改用 `unknown` + 边界断言。
+- **不要给业务逻辑或 ORM schema 加 `any`**：内部数据优先推断；外部未知数据用 `unknown` + 边界校验。
 - **不要把 `unknown` 直接插值进 JSX**：会报「`unknown` 不能作为 ReactNode」。用 `String(x)` 或显式断言。
 - **不要在多个地方重复定义同一 DTO**：DTO 由所属 service 唯一导出，其他地方 `import` 复用。
 - **不要用 zod 校验内部数据流**：校验只在信任边界（外部输入）做一次。

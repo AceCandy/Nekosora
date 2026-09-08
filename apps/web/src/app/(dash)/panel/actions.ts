@@ -91,7 +91,8 @@ export async function getBindings(keyId: string) {
   const user = await requireSession();
   const db = await getDb();
   await requireOwnedKey(db, user.id, keyId);
-  return db.select().from(S().keyModelBindings).where(eq(S().keyModelBindings.keyId, keyId));
+  const s = getSchema();
+  return db.select().from(s.keyModelBindings).where(eq(s.keyModelBindings.keyId, keyId));
 }
 
 export async function bindModels(keyId: string, inputModelIds: string[]) {

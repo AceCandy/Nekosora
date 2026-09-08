@@ -458,7 +458,7 @@ export async function selectMessageVersion(messagePublicId: string): Promise<voi
   const db = await getDb();
   const s = S();
 
-  await db.transaction(async (tx: typeof db) => {
+  await db.transaction(async (tx) => {
     const [message] = await tx
       .select()
       .from(s.messages)

@@ -9,40 +9,38 @@
  * 永远不直接 import schema 或驱动模块。
  */
 
-// db 类型弱化为 any:drizzle 的查询构建器签名在跨表联合时类型不互通,
-// 业务代码统一通过 schema 表引用驱动查询,故此处保留 any 换取可调用性。
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyDb = any;
-let _db: AnyDb | null = null;
-let _pool: unknown | null = null;
+import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import type { Pool } from "pg";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnySchema = Record<string, any>;
-let _schema: AnySchema | null = null;
+type Schema = typeof import("./schema");
+type Database = NodePgDatabase<Schema> & { $client: Pool };
+let _db: Database | null = null;
+let _pool: Pool | null = null;
+let _schema: Schema | null = null;
 // in-flight guard:并发调用 getDb()/loadSchema() 时复用同一个 promise,
 // 避免 double-init 导致的连接池泄漏。
-let _schemaPromise: Promise<AnySchema> | null = null;
-let _dbPromise: Promise<AnyDb> | null = null;
+let _schemaPromise: Promise<Schema> | null = null;
+let _dbPromise: Promise<Database> | null = null;
 
-function loadSchema(): Promise<AnySchema> {
+function loadSchema(): Promise<Schema> {
   if (_schemaPromise) return _schemaPromise;
   _schemaPromise = (async () => {
     if (_schema) return _schema;
     const mod = await import("./schema");
-    _schema = mod as unknown as AnySchema;
+    _schema = mod;
     return _schema;
   })();
   return _schemaPromise;
 }
 
 /** 获取已加载的业务 schema(必须先调用过 getDb)。 */
-export function getSchema(): AnySchema {
+export function getSchema(): Schema {
   if (!_schema) throw new Error("schema 尚未加载,请先 await getDb()");
   return _schema;
 }
 
 /** 获取 db 实例(惰性初始化,驱动与 schema 懒加载,in-flight guard 防并发 double-init)。 */
-export function getDb(): Promise<AnyDb> {
+export function getDb(): Promise<Database> {
   if (_dbPromise) return _dbPromise;
   _dbPromise = (async () => {
     if (_db) return _db;
@@ -61,7 +59,7 @@ export function getDb(): Promise<AnyDb> {
     }
     const Pool = pg.Pool;
     _pool = new Pool({ connectionString: url, max: poolMax });
-    _db = drizzlePg({ client: _pool as never, schema });
+    _db = drizzlePg({ client: _pool, schema });
     return _db;
   })().catch((e) => {
     // init 失败要清掉 in-flight 标记,否则后续调用会一直拿到 rejected promise。
@@ -85,8 +83,8 @@ export async function closeDb(): Promise<void> {
       // init 本身就失败了,无需再关闭。
     }
   }
-  if (_pool && typeof (_pool as { end?: () => Promise<void> }).end === "function") {
-    await (_pool as { end: () => Promise<void> }).end();
+  if (_pool && typeof _pool.end === "function") {
+    await _pool.end();
   }
   _db = null;
   _pool = null;
