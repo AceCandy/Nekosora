@@ -295,12 +295,18 @@ describe("multimodal audio adapter redaction", () => {
     vi.mocked(operation)
       .mockRejectedValueOnce(Object.assign(new Error("temporary upstream failure"), {
         statusCode: 503,
-      }))
-      .mockResolvedValueOnce(
-        operation === generateSpeech
-          ? { audio: { uint8Array: new Uint8Array([7]) } }
-          : { text: "backup text" },
-      );
+      }));
+    if (operation === generateSpeech) {
+      vi.mocked(generateSpeech).mockResolvedValueOnce({
+        audio: { uint8Array: new Uint8Array([7]), base64: "Bw==", mediaType: "audio/mpeg", format: "mp3" },
+        warnings: [], responses: [], providerMetadata: {},
+      });
+    } else {
+      vi.mocked(transcribe).mockResolvedValueOnce({
+        text: "backup text", segments: [], language: undefined, durationInSeconds: undefined,
+        warnings: [], responses: [], providerMetadata: {},
+      });
+    }
 
     const result = await invoke();
 

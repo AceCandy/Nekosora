@@ -195,7 +195,7 @@ function pooledMigrationDb(
 
 function migrationLedgerDb(
   ledger: Array<{ id: number; hash: string; created_at: number }>,
-  mutationResult: unknown | ((text: string) => unknown) = { rows: [], rowCount: 1 },
+  mutationResult: { rows?: unknown[]; rowCount?: number } | ((text: string) => unknown) = { rows: [], rowCount: 1 },
   options: PooledMigrationDbOptions = {},
 ) {
   return pooledMigrationDb((text) => {

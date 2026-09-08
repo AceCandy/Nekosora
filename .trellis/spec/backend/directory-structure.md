@@ -10,26 +10,28 @@
 apps/
   web/
     src/app/                Next.js pages, control-plane routes/actions, and thin rollback handlers
-    src/worker.ts           Transitional Worker entry; moves in the worker-boundary task
   gateway/
     src/main.ts             Environment/bootstrap/listen/shutdown entry
     src/server.ts           Fastify adapter, health checks, limits, cancellation, resource close
     src/handlers.ts         Route-name to framework-neutral Core handler map
+  worker/
+    src/main.ts             Independent Worker bootstrap and process lifecycle entry
 packages/
   contracts/src/routes.ts   Data-plane route matrix shared by Gateway and Web rewrites
+  contracts/src/queue.ts    Queue names, payloads, policies, and safe retry messages
   core/src/http/            Framework-neutral Request -> Response handlers
   core/src/lib/             Routing, providers, chat, RAG, memory, and Worker domain logic
   db/src/                   Drizzle schema and process-local PostgreSQL access
   observability/src/        Metrics, usage, and safe logging
-  queue/src/                Typed catalog and pg-boss adapter
+  queue/src/                pg-boss adapter and catalog compatibility export
 ```
 
 ## Module Organization
 
 - **Dependency direction**: application adapters may import workspace packages; workspace packages must not import `apps/*`. Shared packages must not accept `NextRequest`/`FastifyRequest` or return `NextResponse`/`FastifyReply`.
 - **HTTP ownership**: `packages/contracts/src/routes.ts` is the route matrix. `apps/gateway` adapts those routes to Core handlers; Web route files are thin exports retained only for transition rollback.
-- **Queue catalog**: `packages/queue/src/catalog.ts` is the only source for queue names, payloads, finite policies, and safe retry messages. It must not import the pg-boss driver, Worker runtime, or domain handlers.
-- **Worker ownership**: `packages/core/src/lib/worker/definitions.ts` owns domain registration; `runtime.ts` owns ordering, recovery timers, rollback, signal shutdown, and drain. `apps/web/src/worker.ts` remains a thin transitional entry until `apps/worker` is created.
+- **Queue catalog**: `packages/contracts/src/queue.ts` is the only source for queue names, payloads, finite policies, and safe retry messages. It must not import the pg-boss driver, Worker runtime, or domain handlers. `packages/queue/src/catalog.ts` and `packages/core/src/lib/jobs/catalog.ts` only re-export this contract.
+- **Worker ownership**: `packages/core/src/lib/worker/definitions.ts` owns domain registration; `runtime.ts` owns ordering, recovery timers, rollback, signal shutdown, and drain. `apps/worker/src/main.ts` is the application entry; Web does not own the Worker process.
 - **Server Actions**: each Web page group keeps `actions.ts` or `{feature}-actions.ts`, marks it with `"use server"`, and calls shared domain code.
 - **Node-only dependencies**: isolate DB/queue/storage drivers behind explicit package exports. Each application bundler decides whether a workspace package is bundled and which third-party modules remain runtime externals.
 - **Streaming**: WebChat and API gateway calls share `packages/core/src/lib/stream.ts`; adapters must not call the AI SDK directly.

@@ -59,7 +59,8 @@ vi.mock("@/lib/system-settings/ua", () => ({ getProbeHeaders: vi.fn(async () => 
 
 vi.mock("@/lib/infra/db", () => {
   type Condition =
-    | { type: "eq" | "ne"; col: string; value: unknown }
+    | { type: "eq"; col: string; value: unknown }
+    | { type: "ne"; col: string; value: unknown }
     | { type: "and" | "or"; conditions: Condition[] };
 
   function matches(row: Record<string, unknown>, condition: Condition | undefined): boolean {

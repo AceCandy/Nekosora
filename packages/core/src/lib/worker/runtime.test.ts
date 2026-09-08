@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import type { QueueDefinition } from "@/lib/jobs/catalog";
+import type { QueueAdapter, QueueDefinition } from "@/lib/jobs/catalog";
 import {
   createWorkerRuntime,
   startRecoveryScheduler,
   type MaintenanceDefinition,
+  type RuntimeDefinition,
   type WorkerDefinition,
   type WorkerTimers,
 } from "./runtime";
@@ -173,7 +174,8 @@ describe("worker runtime", () => {
       stop: vi.fn(async () => { calls.push("queue.stop"); }),
     };
     const titleStop = deferred<void>();
-    const schedulerFactory = vi.fn((item: WorkerDefinition) => {
+    const schedulerFactory = vi.fn((item: RuntimeDefinition) => {
+      if (!("job" in item)) throw new Error("expected worker definition");
       calls.push(`recovery.start:${item.job.name}`);
       return {
         stop: vi.fn(async () => {
@@ -310,13 +312,9 @@ describe("worker runtime", () => {
     item.handle
       .mockResolvedValueOnce("completed")
       .mockRejectedValueOnce(rawError);
-    let registeredHandler!: (payload: object) => Promise<unknown>;
     const queue = {
       start: vi.fn().mockResolvedValue(undefined),
-      work: vi.fn(async (
-        _job: QueueDefinition<object>,
-        handler: (payload: object) => Promise<unknown>,
-      ) => { registeredHandler = handler; }),
+      work: vi.fn<QueueAdapter["work"]>().mockResolvedValue(undefined),
       stop: vi.fn().mockResolvedValue(undefined),
     };
     const logger = { log: vi.fn(), error: vi.fn() };
@@ -329,6 +327,7 @@ describe("worker runtime", () => {
     });
     await runtime.start();
 
+    const registeredHandler = queue.work.mock.calls[0][1];
     await expect(registeredHandler({ id: "payload-id-1" })).resolves.toBe("completed");
     await expect(registeredHandler({ id: "payload-id-1" })).rejects.toBe(rawError);
 
@@ -420,7 +419,8 @@ describe("worker runtime", () => {
       ];
       const stopped: string[] = [];
       let index = 0;
-      const schedulerFactory = vi.fn((item: WorkerDefinition) => {
+      const schedulerFactory = vi.fn((item: RuntimeDefinition) => {
+        if (!("job" in item)) throw new Error("expected worker definition");
         if (index++ === failureIndex) throw startupError;
         return {
           stop: vi.fn(async () => { stopped.push(item.job.name); }),

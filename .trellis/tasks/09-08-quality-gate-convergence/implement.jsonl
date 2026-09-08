@@ -1,0 +1,2 @@
+{"file":".trellis/spec/backend/ci-container-publishing.md","reason":"沿用工作区质量门禁和显式 PostgreSQL 集成入口"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"现有测试、类型与 lint 约定"}

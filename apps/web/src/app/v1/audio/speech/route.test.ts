@@ -158,7 +158,7 @@ describe("POST /v1/audio/speech", () => {
   });
 
   it("无健康路由时保留 routing.no_healthy_route 和 503", async () => {
-    mocks.synthesizeViaRoute.mockRejectedValueOnce(new RoutingError("no_healthy_route"));
+    mocks.synthesizeViaRoute.mockRejectedValueOnce(new RoutingError("no_healthy_route", "无健康路由"));
 
     const response = await POST(request({ model: "tts-1", input: "hello" }));
 

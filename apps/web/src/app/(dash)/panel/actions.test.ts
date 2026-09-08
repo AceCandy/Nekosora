@@ -35,7 +35,8 @@ vi.mock("@/lib/keys", () => ({
 
 vi.mock("@/lib/infra/db", () => {
   type Condition =
-    | { type: "eq" | "ne"; col: string; value: unknown }
+    | { type: "eq"; col: string; value: unknown }
+    | { type: "ne"; col: string; value: unknown }
     | { type: "and"; conditions: Condition[] };
 
   function matches(row: Record<string, unknown>, condition: Condition | undefined): boolean {
@@ -178,12 +179,15 @@ vi.mock("@/lib/infra/db", () => {
         return { returning: async () => [{ id }] };
       },
     }),
-    transaction: async (callback: (tx: typeof db) => Promise<unknown>) => {
+  };
+  const transactionalDb = {
+    ...db,
+    transaction: async <T>(callback: (tx: typeof db) => Promise<T>) => {
       return await callback(db);
     },
   };
 
-  return { getDb: async () => db, getSchema: () => schema, isPg: false };
+  return { getDb: async () => transactionalDb, getSchema: () => schema, isPg: false };
 });
 
 import { attachMyProviderModelRoute, createMyModel, createMyProvider, createMyRoute, reorderMyModels, updateMyModel, updateMyProvider, updateMyRoute, checkMyProviderHealth, testMyProviderModel, testMyKeyDirect, testMyRoute, getBindableModels } from "./actions";

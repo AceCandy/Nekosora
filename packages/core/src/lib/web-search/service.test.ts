@@ -110,7 +110,7 @@ describe("有序外接搜索", () => {
       .mockReturnValueOnce(secondFallbackTimeout.signal);
     let markStarted!: () => void;
     const started = new Promise<void>((resolve) => { markStarted = resolve; });
-    const first = vi.fn((_query, options) => new Promise((_, reject) => {
+    const first = vi.fn<ResolvedExternalSearchBackend["provider"]["search"]>((_query, options) => new Promise<never>((_, reject) => {
       markStarted();
       options?.signal?.addEventListener("abort", () => reject(options.signal?.reason), { once: true });
     }));
@@ -159,7 +159,7 @@ describe("有序外接搜索", () => {
     const now = vi.spyOn(Date, "now").mockReturnValue(0);
     let markStarted!: () => void;
     const started = new Promise<void>((resolve) => { markStarted = resolve; });
-    const first = vi.fn((_query, options) => new Promise((_, reject) => {
+    const first = vi.fn<ResolvedExternalSearchBackend["provider"]["search"]>((_query, options) => new Promise<never>((_, reject) => {
       markStarted();
       options?.signal?.addEventListener("abort", () => reject(options.signal?.reason), { once: true });
     }));
@@ -198,7 +198,7 @@ describe("有序外接搜索", () => {
     const now = vi.spyOn(Date, "now").mockReturnValue(0);
     let markStarted!: () => void;
     const started = new Promise<void>((resolve) => { markStarted = resolve; });
-    const first = vi.fn((_query, options) => new Promise((_, reject) => {
+    const first = vi.fn<ResolvedExternalSearchBackend["provider"]["search"]>((_query, options) => new Promise<never>((_, reject) => {
       markStarted();
       options?.signal?.addEventListener("abort", () => reject(options.signal?.reason), { once: true });
     }));
@@ -429,7 +429,7 @@ describe("有序外接搜索", () => {
     const controller = new AbortController();
     let markStarted!: () => void;
     const started = new Promise<void>((resolve) => { markStarted = resolve; });
-    const search = vi.fn((_query, options) => new Promise((_, reject) => {
+    const search = vi.fn<ResolvedExternalSearchBackend["provider"]["search"]>((_query, options) => new Promise<never>((_, reject) => {
       markStarted();
       options?.signal?.addEventListener("abort", () => reject(options.signal?.reason), { once: true });
     }));

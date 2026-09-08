@@ -295,6 +295,7 @@ describe("pg-boss queue adapter", () => {
     expect(rejection).not.toBe(taskError);
     expect(rejection).toMatchObject({ message: "会话标题生成失败" });
     expect(rejection).not.toHaveProperty("cause");
+    if (!(rejection instanceof Error)) throw new Error("Expected handler rejection");
     expect(rejection.message).toBe(CONVERSATION_TITLE_QUEUE.retryMessage);
     const serialized = `${rejection.message}\n${rejection.stack ?? ""}`;
     for (const secret of [

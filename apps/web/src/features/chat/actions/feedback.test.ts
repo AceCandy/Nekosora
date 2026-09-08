@@ -51,7 +51,7 @@ function makeDb(opts: {
 }) {
   const queue = [...opts.selectRows];
   const onConflictDoUpdate = vi.fn().mockResolvedValue(undefined);
-  const values = vi.fn(() => ({ onConflictDoUpdate }));
+  const values = vi.fn((_row: Record<string, unknown>) => ({ onConflictDoUpdate }));
   const insert = opts.insert ?? vi.fn(() => ({ values }));
   const deleteWhere = opts.deleteWhere ?? vi.fn().mockResolvedValue(undefined);
   const del = vi.fn(() => ({ where: deleteWhere }));
@@ -110,7 +110,7 @@ describe("setMessageFeedback", () => {
       }),
     );
     // 不把回答正文写入反馈
-    const inserted = values.mock.calls[0]?.[0] as Record<string, unknown>;
+    const inserted = values.mock.calls[0]?.[0];
     expect(inserted).not.toHaveProperty("content");
   });
 

@@ -82,17 +82,17 @@ describe("protocol encoders", () => {
       "/v1/test",
     );
     expect(response.status).toBe(200);
-    const body = await response.json() as Record<string, any>;
+    const body = await response.json() as Record<string, unknown>;
 
     if (protocol === "openai-chat") {
-      expect(body.choices[0]).toMatchObject({
+      expect(body).toMatchObject({ choices: [{
         message: {
           content: "answer",
           reasoning_content: "think",
           tool_calls: [{ function: { name: "weather", arguments: "{\"city\":\"SH\"}" } }],
         },
         finish_reason: "tool_calls",
-      });
+      }] });
       expect(body.usage).toMatchObject({ prompt_tokens: 3, completion_tokens: 5, total_tokens: 8 });
     } else if (protocol === "openai-responses") {
       expect(body.status).toBe("completed");
@@ -110,12 +110,14 @@ describe("protocol encoders", () => {
       expect(body.stop_reason).toBe("tool_use");
       expect(body.usage).toMatchObject({ input_tokens: 3, output_tokens: 5, cache_read_input_tokens: 1 });
     } else {
-      expect(body.candidates[0]).toMatchObject({ finishReason: "STOP" });
-      expect(body.candidates[0].content.parts).toEqual(expect.arrayContaining([
-        { text: "think", thought: true },
-        { text: "answer" },
-        { functionCall: { id: "call-1", name: "weather", args: { city: "SH" } } },
-      ]));
+      expect(body).toMatchObject({ candidates: [{
+        finishReason: "STOP",
+        content: { parts: expect.arrayContaining([
+          { text: "think", thought: true },
+          { text: "answer" },
+          { functionCall: { id: "call-1", name: "weather", args: { city: "SH" } } },
+        ]) },
+      }] });
       expect(body.usageMetadata).toMatchObject({ promptTokenCount: 3, candidatesTokenCount: 5, totalTokenCount: 8 });
     }
   });
@@ -133,7 +135,7 @@ describe("protocol encoders", () => {
       { parameter: "input[0].type" },
     );
     expect(response.status).toBe(400);
-    const body = await response.json() as Record<string, any>;
+    const body = await response.json() as Record<string, unknown>;
     expect(JSON.stringify(body)).toContain("Unsupported parameter: 'input[0].type'.");
     if (protocol.startsWith("openai")) {
       expect(body.error).toMatchObject({
@@ -170,7 +172,7 @@ describe("protocol encoders", () => {
       expect(response.status).toBe(429);
       expect(response.headers.get("Retry-After")).toBe("3");
       expect(response.headers.get("X-Gateway-Error-Code")).toBe(code);
-      const body = await response.json() as Record<string, any>;
+      const body = await response.json() as Record<string, unknown>;
       if (protocol.startsWith("openai")) {
         expect(body.error).toMatchObject({ code, type: "rate_limit_exceeded" });
       } else if (protocol === "anthropic") {
@@ -190,7 +192,7 @@ describe("protocol encoders", () => {
     const response = protocolErrorResponse(protocol, ErrorCode.ROUTING_NO_HEALTHY_ROUTE);
 
     expect(response.status).toBe(503);
-    const body = await response.json() as Record<string, any>;
+    const body = await response.json() as Record<string, unknown>;
     if (protocol.startsWith("openai")) {
       expect(body.error).toMatchObject({
         code: ErrorCode.ROUTING_NO_HEALTHY_ROUTE,
@@ -208,9 +210,15 @@ describe("protocol encoders", () => {
     const frames = parseSse(await (await streamProtocolResponse(
       "openai-chat", ctx, request, new AbortController().signal, "/v1/chat/completions",
     )).text());
-    const json = frames.filter((frame) => frame.data !== "[DONE]").map((frame) => frame.data) as Record<string, any>[];
-    expect(json.some((chunk) => chunk.choices?.[0]?.delta?.reasoning_content === "think")).toBe(true);
-    expect(json.some((chunk) => chunk.choices?.[0]?.delta?.tool_calls?.[0]?.function?.arguments === "{\"city\":\"SH\"}")).toBe(true);
+    const json = frames.filter((frame) => frame.data !== "[DONE]").map((frame) => frame.data);
+    expect(json).toContainEqual(expect.objectContaining({
+      choices: [expect.objectContaining({ delta: expect.objectContaining({ reasoning_content: "think" }) })],
+    }));
+    expect(json).toContainEqual(expect.objectContaining({
+      choices: [expect.objectContaining({ delta: expect.objectContaining({
+        tool_calls: [expect.objectContaining({ function: expect.objectContaining({ arguments: "{\"city\":\"SH\"}" }) })],
+      }) })],
+    }));
     expect(json.at(-1)).toMatchObject({ choices: [{ finish_reason: "tool_calls" }], usage: { total_tokens: 8 } });
     expect(frames.at(-1)?.data).toBe("[DONE]");
   });
@@ -233,7 +241,7 @@ describe("protocol encoders", () => {
     ]));
     const sequenceNumbers = frames.map((frame) => (frame.data as { sequence_number?: number }).sequence_number);
     expect(sequenceNumbers).toEqual(sequenceNumbers.map((_, index) => index));
-    expect((frames.at(-1)?.data as Record<string, any>).response).toMatchObject({
+    expect((frames.at(-1)?.data as Record<string, unknown>).response).toMatchObject({
       status: "completed",
       usage: { total_tokens: 8 },
     });
@@ -244,8 +252,10 @@ describe("protocol encoders", () => {
     const frames = parseSse(await (await streamProtocolResponse(
       "anthropic", ctx, request, new AbortController().signal, "/v1/messages",
     )).text());
-    const starts = frames.filter((frame) => frame.event === "content_block_start").map((frame) => frame.data as Record<string, any>);
-    const stops = frames.filter((frame) => frame.event === "content_block_stop").map((frame) => frame.data as Record<string, any>);
+    const starts = frames.filter((frame) => frame.event === "content_block_start")
+      .map((frame) => frame.data as { index: number; content_block: { type: string } });
+    const stops = frames.filter((frame) => frame.event === "content_block_stop")
+      .map((frame) => frame.data as { index: number });
     expect(starts.map((frame) => frame.content_block.type)).toEqual(["thinking", "text", "tool_use"]);
     expect(new Set(starts.map((frame) => frame.index)).size).toBe(3);
     expect(stops.map((frame) => frame.index).sort()).toEqual(starts.map((frame) => frame.index).sort());
@@ -257,7 +267,9 @@ describe("protocol encoders", () => {
     const frames = parseSse(await (await streamProtocolResponse(
       "gemini", ctx, request, new AbortController().signal, "/v1beta/models/model-a:streamGenerateContent",
     )).text());
-    const parts = frames.flatMap((frame) => (frame.data as Record<string, any>).candidates?.[0]?.content?.parts ?? []);
+    const parts = frames.flatMap((frame) => (frame.data as {
+      candidates?: { content?: { parts?: unknown[] } }[];
+    }).candidates?.[0]?.content?.parts ?? []);
     expect(parts).toEqual(expect.arrayContaining([
       { text: "think", thought: true },
       { text: "answer" },

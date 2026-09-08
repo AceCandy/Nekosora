@@ -130,6 +130,9 @@ vi.mock("@/lib/infra/db", () => {
           rows.splice(0, rows.length, ...retained);
         },
       }),
+    };
+    return {
+      ...db,
       transaction: async <T>(callback: (tx: typeof db) => Promise<T>) => {
         const conversations = structuredClone(mockData.conversations);
         const titleJobs = structuredClone(mockData.titleJobs);
@@ -142,7 +145,6 @@ vi.mock("@/lib/infra/db", () => {
         }
       },
     };
-    return db;
   }
 
   return {

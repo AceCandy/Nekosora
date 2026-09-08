@@ -74,7 +74,6 @@
   "exclude": [
     "node_modules",
     "docs",
-    "vitest.config.ts",
-    "src/**/*.test.ts"
+    "vitest.config.ts"
   ]
 }

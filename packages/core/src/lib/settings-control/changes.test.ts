@@ -50,9 +50,11 @@ describe("settings change canonical helpers", () => {
       after: { name: "新名", systemPrompt: "new" },
     });
 
+    const change = edited[0];
+    if (change.resource !== "output_mode") throw new Error("expected output mode change");
     expect(mergeSettingsChange(edited, {
       ...original,
-      before: edited[0]!.after,
+      before: change.after,
       after: original.before,
     })).toEqual([]);
   });

@@ -93,11 +93,8 @@ async function consume<TEvent, TResult>(generator: AsyncGenerator<TEvent, TResul
   }
 }
 
-function deferred<T>(): {
-  promise: Promise<T>;
-  resolve(value?: T): void;
-} {
-  let resolve!: (value?: T) => void;
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
   const promise = new Promise<T>((next) => {
     resolve = next;
   });

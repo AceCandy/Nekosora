@@ -171,7 +171,7 @@ describePg("processFile PostgreSQL lease", () => {
       [fileId, userId, "locked.txt", "text/plain", `${userId}/locked.txt`, 12],
     );
     const locker = await pool.connect();
-    let processing: Promise<void> | undefined;
+    let processing: ReturnType<typeof processFile> | undefined;
 
     try {
       await locker.query("BEGIN");

@@ -14,7 +14,7 @@ describe("ChatProcessRecorder", () => {
     const recorder = new ChatProcessRecorder({
       runId: "run-1",
       now: advancingClock(),
-      emit: (event) => events.push(event),
+      emit: (event) => { events.push(event); },
     });
 
     await recorder.start();
@@ -56,7 +56,7 @@ describe("ChatProcessRecorder", () => {
     const recorder = new ChatProcessRecorder({
       runId: "run-2",
       now: advancingClock(),
-      emit: (event) => events.push(event),
+      emit: (event) => { events.push(event); },
     });
 
     await recorder.recordStep({ id: "rag", kind: "rag", status: "running" });

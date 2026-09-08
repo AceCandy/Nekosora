@@ -63,7 +63,7 @@ describe("logUsage", () => {
     await logUsage({
       ctx: { userId: "u1", keyKind: null, source: "chat" },
       runId: "run_success",
-      modelType: null,
+      model: "demo",
       usage: { inputTokens: 3, outputTokens: 5 },
       latencyMs: 20,
       status: "success",

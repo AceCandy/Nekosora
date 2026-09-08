@@ -9,7 +9,7 @@
     "./types": "./src/types.ts"
   },
   "scripts": {
-    "lint": "eslint src --config ../../eslint.config.mjs",
+    "lint": "eslint src --config ../../eslint.config.mjs --max-warnings 0",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

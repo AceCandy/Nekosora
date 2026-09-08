@@ -10,8 +10,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/providers/registry", () => ({
-  buildLanguageModelWithKey: (...args: unknown[]) =>
-    mocks.buildLanguageModelWithKey(...args),
+  buildLanguageModelWithKey: mocks.buildLanguageModelWithKey,
 }));
 
 import { generateText, streamText } from "ai";
@@ -444,7 +443,7 @@ describe("fetchUpstreamModels 脱敏边界", () => {
           cancel,
           releaseLock,
         }),
-      } as unknown as ReadableStream<Uint8Array>,
+      } as unknown as Response["body"],
     }));
 
     await expect(fetchUpstreamModels(baseOpts)).rejects.toThrow("body failed");

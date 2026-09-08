@@ -13,7 +13,7 @@
 - **状态**:zustand(全局客户端状态,按业务域切片),不引入 React Query / SWR。
 - **样式**:Tailwind v4 utility-first,品牌色用 `globals.css` `@theme` 注册的语义 token。
 - **校验**:zod(边界校验)。
-- **质量门槛**:`pnpm lint` + `pnpm typecheck` + `pnpm test`(vitest)。
+- **质量门槛**:根目录 `pnpm check`(工作区覆盖 + 零警告 lint + 含测试的 typecheck) 与 `pnpm test`。
 
 设计主线「星枢天流」与品牌色详见根目录 `DESIGN.md`。
 
@@ -34,7 +34,7 @@
 
 | Guide | Description | Status |
 |-------|-------------|--------|
-| [Directory Structure](./directory-structure.md) | 三层职责 + 特性内聚 + 路径别名 | Filled |
+| [Directory Structure](./directory-structure.md) | Web/Core 职责 + 特性内聚 + 路径别名 | Filled |
 | [Component Guidelines](./component-guidelines.md) | Server/Client 模式、props、样式 token、UI 原语、流式 UI | Filled |
 | [Hook Guidelines](./hook-guidelines.md) | 运行时适配层 / 交互控制器 / 资源收集器三类 hook | Filled |
 | [State Management](./state-management.md) | zustand 多实例隔离、selector 稳定引用、server state | Filled |
@@ -52,8 +52,8 @@
 提交前至少跑通:
 
 ```bash
-pnpm check    # = lint + typecheck
-pnpm test     # vitest 单测
+pnpm check    # = quality:workspace + lint + typecheck
+pnpm test     # 根脚本测试 + 各工作区 Vitest 测试
 ```
 
 改动触及以下核心契约时,必须补/更对应单测:流式解析(`stream.ts`)、错误码映射(`errors.ts`、`i18n`)、token 估算(`tokens.ts`)、路由决策(`routing.ts` 经 `repositories/`)。

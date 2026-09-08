@@ -19,8 +19,11 @@ describe("conversation share unlock rate limit", () => {
 
   it("同一事务递增客户端桶与分享全局桶", async () => {
     const execute = vi.fn().mockResolvedValue({ rows: [] });
-    const transaction = vi.fn(async (callback: (tx: { execute: typeof execute }) => Promise<void>) => callback({ execute }));
-    await recordShareUnlockFailure({ transaction }, "share-1", "client-1", new Date());
+    const db: Parameters<typeof recordShareUnlockFailure>[0] = {
+      transaction: async (callback) => callback({ execute }),
+    };
+    const transaction = vi.spyOn(db, "transaction");
+    await recordShareUnlockFailure(db, "share-1", "client-1", new Date());
     expect(transaction).toHaveBeenCalledOnce();
     expect(execute).toHaveBeenCalledTimes(2);
   });

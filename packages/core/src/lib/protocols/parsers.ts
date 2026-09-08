@@ -2,7 +2,6 @@ import type {
   IRContentPart,
   IRMessage,
   IRReasoningSummary,
-  IRRequest,
   IRResponseFormat,
   IRToolCall,
   IRToolChoice,

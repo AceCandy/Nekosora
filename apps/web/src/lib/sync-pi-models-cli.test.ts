@@ -6,7 +6,7 @@ import {
   resolveSyncSource,
   SyncCliError,
 } from "../../scripts/sync-pi-models";
-import type { SyncPlan } from "./sync-pi-models";
+import type { SyncPlan } from "@/lib/sync-pi-models";
 
 describe("model catalog sync CLI policy", () => {
   it("只接受默认 dry-run 与 --write", () => {

@@ -182,7 +182,7 @@ describe("handleProtocolRequest boundary telemetry", () => {
       request(),
       "openai-responses",
       "/v1/responses",
-      () => ({ request: parsedRequest, stream: false }),
+      () => ({ protocol: "openai-responses", request: parsedRequest, stream: false }),
     )).rejects.toThrow("engine-owned failure");
 
     expect(mocks.logUsage).not.toHaveBeenCalled();
@@ -221,7 +221,7 @@ describe("handleProtocolRequest boundary telemetry", () => {
   });
 
   it("acquires the concurrency lease before semantic parsing", async () => {
-    const parse = vi.fn(() => ({ request: parsedRequest, stream: false }));
+    const parse = vi.fn(() => ({ protocol: "openai-responses" as const, request: parsedRequest, stream: false }));
 
     await handleProtocolRequest(
       request(),

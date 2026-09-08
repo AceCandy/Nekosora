@@ -70,15 +70,11 @@ describe("isKeyAuthError", () => {
 describe("isRetryableForKey", () => {
   // 模拟 AI SDK RetryError:lastError 带 statusCode
   function makeRetryError(statusCode: number, message: string): Error {
-    const err = new Error(message);
-    (err as Record<string, unknown>).lastError = { statusCode };
-    return err;
+    return Object.assign(new Error(message), { lastError: { statusCode } });
   }
   // 模拟 AI_APICallError:带 statusCode
   function makeApiError(statusCode: number, message: string): Error {
-    const err = new Error(message);
-    (err as Record<string, unknown>).statusCode = statusCode;
-    return err;
+    return Object.assign(new Error(message), { statusCode });
   }
 
   it("认证类(401/403)换 key", () => {
@@ -147,11 +143,12 @@ describe("isToolUnsupportedError", () => {
   });
 
   it("识别 RetryError 的 lastError，但不误判普通错误", () => {
-    const retryError = new Error("request failed");
-    (retryError as Record<string, unknown>).lastError = {
-      statusCode: 422,
-      responseBody: { error: { message: "function calls are unsupported" } },
-    };
+    const retryError = Object.assign(new Error("request failed"), {
+      lastError: {
+        statusCode: 422,
+        responseBody: { error: { message: "function calls are unsupported" } },
+      },
+    });
     expect(isToolUnsupportedError(retryError)).toBe(true);
     expect(isToolUnsupportedError(makeApiError(400, "Bad Request"))).toBe(false);
     expect(isToolUnsupportedError(makeApiError(400, "tool execution failed"))).toBe(false);
@@ -176,21 +173,23 @@ describe("isStreamOptionsUnsupportedError", () => {
   });
 
   it("识别 RetryError 的 lastError", () => {
-    const error = new Error("request failed");
-    (error as Record<string, unknown>).lastError = {
-      statusCode: 400,
-      data: { error: { message: "stream_options is not supported" } },
-    };
+    const error = Object.assign(new Error("request failed"), {
+      lastError: {
+        statusCode: 400,
+        data: { error: { message: "stream_options is not supported" } },
+      },
+    });
 
     expect(isStreamOptionsUnsupportedError(error)).toBe(true);
   });
 
   it("不把外层 RetryError 文案与无关的 lastError 400 混合匹配", () => {
-    const error = new Error("stream_options is unsupported");
-    (error as Record<string, unknown>).lastError = {
-      statusCode: 400,
-      data: { error: { message: "temperature must be between 0 and 2" } },
-    };
+    const error = Object.assign(new Error("stream_options is unsupported"), {
+      lastError: {
+        statusCode: 400,
+        data: { error: { message: "temperature must be between 0 and 2" } },
+      },
+    });
 
     expect(isStreamOptionsUnsupportedError(error)).toBe(false);
   });
@@ -378,15 +377,11 @@ describe("separateSystem", () => {
 describe("classifyStreamError", () => {
   // 模拟 AI SDK RetryError:Error 子类,lastError 是 AI_APICallError(带 statusCode)
   function makeRetryError(statusCode: number, message: string): Error {
-    const err = new Error(message);
-    (err as Record<string, unknown>).lastError = { statusCode };
-    return err;
+    return Object.assign(new Error(message), { lastError: { statusCode } });
   }
   // 模拟 AI_APICallError:Error 子类,带 statusCode
   function makeApiError(statusCode: number, message: string): Error {
-    const err = new Error(message);
-    (err as Record<string, unknown>).statusCode = statusCode;
-    return err;
+    return Object.assign(new Error(message), { statusCode });
   }
 
   it("429 RetryError -> rate_limited / 429", () => {
@@ -427,8 +422,7 @@ describe("classifyStreamError", () => {
   });
 
   it("RetryError 取 lastError.statusCode(err 本身无 statusCode)", () => {
-    const err = new Error("retry failed");
-    (err as Record<string, unknown>).lastError = { statusCode: 429 };
+    const err = Object.assign(new Error("retry failed"), { lastError: { statusCode: 429 } });
     expect(classifyStreamError(err)).toMatchObject({ statusCode: 429, errorCode: "rate_limited" });
   });
 

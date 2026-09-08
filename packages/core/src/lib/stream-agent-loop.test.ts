@@ -33,7 +33,7 @@ vi.mock("@/lib/repositories/route-repository", async (importOriginal) => {
   return { ...actual, markRouteToolsUnsupported: markRouteToolsUnsupportedMock };
 });
 
-const logUsage = vi.fn(async () => undefined);
+const logUsage = vi.fn<typeof import("@/lib/usage").logUsage>(async () => undefined);
 const telemetry = vi.hoisted(() => ({
   startExecution: vi.fn(async () => undefined),
   recordAttempt: vi.fn(async () => undefined),
@@ -43,7 +43,7 @@ vi.mock("@/lib/usage", async () => {
   const actual = await vi.importActual<typeof import("@/lib/usage")>("@/lib/usage");
   return {
     ...actual,
-    logUsage: (...args: unknown[]) => logUsage(...args),
+    logUsage: (...args: Parameters<typeof logUsage>) => logUsage(...args),
   };
 });
 vi.mock("@/lib/gateway-execution", async (importOriginal) => {

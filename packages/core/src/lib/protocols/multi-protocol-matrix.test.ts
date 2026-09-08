@@ -133,12 +133,12 @@ const ingressCases: IngressCase[] = [
   },
 ];
 
-const egressCases: Array<{ name: string; apiFormat: RouteApiFormat }> = [
+const egressCases = [
   { name: "OpenAI Chat", apiFormat: "openai-chat" },
   { name: "OpenAI Responses", apiFormat: "openai-responses" },
   { name: "Anthropic Messages", apiFormat: "anthropic-messages" },
   { name: "Gemini GenerateContent", apiFormat: "gemini-generate-content" },
-];
+] as const satisfies ReadonlyArray<{ name: string; apiFormat: RouteApiFormat }>;
 
 function routeFor(apiFormat: RouteApiFormat): ResolvedRoute {
   return {
@@ -271,7 +271,7 @@ function upstreamResponse(apiFormat: RouteApiFormat): Response {
   }
 }
 
-function expectEndpoint(apiFormat: RouteApiFormat, url: URL): void {
+function expectEndpoint(apiFormat: typeof egressCases[number]["apiFormat"], url: URL): void {
   if (apiFormat === "gemini-generate-content") {
     expect(url.pathname).toBe(`/v1beta/models/${UPSTREAM_MODEL}:streamGenerateContent`);
     expect(url.searchParams.get("alt")).toBe("sse");
@@ -338,7 +338,7 @@ function expectUpstreamBody(
   expect(JSON.stringify(body)).toContain(INPUT_TEXT);
 }
 
-function expectIngressResponse(protocol: GatewayProtocol, body: Record<string, any>): void {
+function expectIngressResponse(protocol: GatewayProtocol, body: Record<string, unknown>): void {
   if (protocol === "openai-chat") {
     expect(body).toMatchObject({
       object: "chat.completion",
@@ -358,9 +358,9 @@ function expectIngressResponse(protocol: GatewayProtocol, body: Record<string, a
       content: expect.arrayContaining([expect.objectContaining({ type: "text", text: OUTPUT_TEXT })]),
     });
   } else {
-    expect(body.candidates?.[0]?.content?.parts).toEqual(
-      expect.arrayContaining([expect.objectContaining({ text: OUTPUT_TEXT })]),
-    );
+    expect(body).toMatchObject({ candidates: [{ content: {
+      parts: expect.arrayContaining([expect.objectContaining({ text: OUTPUT_TEXT })]),
+    } }] });
   }
 }
 
@@ -419,7 +419,7 @@ describe("multi-protocol gateway matrix", () => {
         ingress.parse,
       );
 
-      const responseBody = await response.json() as Record<string, any>;
+      const responseBody = await response.json() as Record<string, unknown>;
       expect(response.status, JSON.stringify(responseBody)).toBe(200);
       expect(captured).toHaveLength(1);
       expectEndpoint(egress.apiFormat, captured[0].url);

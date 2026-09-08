@@ -158,7 +158,7 @@ describe("consumeChatSSE", () => {
 
   it("收到可靠 DONE 后立即结束，不等待网络 EOF", async () => {
     const onDelta = vi.fn();
-    let controllerRef: ReadableStreamDefaultController<Uint8Array> | null = null;
+    let controllerRef!: ReadableStreamDefaultController<Uint8Array>;
     const body = new ReadableStream<Uint8Array>({
       start(controller) {
         controllerRef = controller;
@@ -175,7 +175,7 @@ describe("consumeChatSSE", () => {
 
     expect(onDelta).toHaveBeenCalledWith("完成");
     expect(controllerRef).not.toBeNull();
-    controllerRef?.close();
+    controllerRef.close();
   });
 
   it("失败 terminal 是正常协议终态而不是成功", async () => {

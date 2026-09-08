@@ -6,7 +6,7 @@
 
 ## Overview
 
-Nekusora is a pnpm TypeScript workspace. `apps/web` is the Next.js control plane, while `apps/gateway` is an independently runnable Fastify data plane. Framework-neutral HTTP and domain logic lives in workspace packages. The legacy Worker entry remains under Web until the worker-boundary task moves it into its own application.
+Nekusora is a pnpm TypeScript workspace. `apps/web` is the Next.js control plane, `apps/gateway` is the Fastify data plane, and `apps/worker` runs background jobs independently. Framework-neutral HTTP and domain logic lives in workspace packages.
 
 ---
 
@@ -19,7 +19,7 @@ Nekusora is a pnpm TypeScript workspace. `apps/web` is the Next.js control plane
 | [Queue And Worker Lifecycle](./queue-lifecycle.md) | typed job catalog、pg-boss generation、recovery scheduler、shutdown drain | Filled |
 | [Error Handling](./error-handling.md) | 统一 API 错误契约、ErrorCode、i18n、工具函数 | Filled |
 | [Auth Guidelines](./auth-guidelines.md) | Better Auth 配置、Origin 信任模型、dev 局域网联调 | Filled |
-| [Quality Guidelines](./quality-guidelines.md) | Code standards, forbidden patterns | To fill |
+| [Quality Guidelines](./quality-guidelines.md) | Workspace gates, typed tests, zero-warning lint, review checks | Filled |
 | [Logging Guidelines](./logging-guidelines.md) | 网关调用日志双表模型、logUsage 分流、TTFT、错误分类、数据层脱敏 | Filled |
 | [Chat Generation Params](./chat-generation-params.md) | WebChat 默认生成参数边界 + reasoning providerOptions 映射 | Filled |
 | [Chat Run Metadata](./chat-run-metadata.md) | assistant run 的完成时序、SSE/历史投影、隐私与迁移契约 | Filled |

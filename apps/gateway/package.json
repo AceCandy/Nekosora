@@ -10,7 +10,7 @@
     "dev": "tsx watch --env-file-if-exists=../../.env.local src/main.ts",
     "build": "tsup",
     "start": "node dist/main.js",
-    "lint": "eslint src",
+    "lint": "eslint src --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

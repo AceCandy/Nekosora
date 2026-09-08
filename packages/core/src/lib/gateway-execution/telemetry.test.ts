@@ -37,7 +37,7 @@ const initial: StartExecutionTelemetry = {
   executionId: "execution-1",
   requestId: "request-1",
   operation: "chat.stream",
-  ctx: { userId: "user-1", apiKeyId: "api-key-1", keyKind: "primary", source: "gateway" },
+  ctx: { userId: "user-1", apiKeyId: "api-key-1", keyKind: "master", source: "gateway" },
   model: "demo",
   modelId: "model-1",
   requestPath: "/v1/chat/completions",

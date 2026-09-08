@@ -12,10 +12,10 @@
     "baseUrl": ".",
     "paths": {
       "@/auth": ["src/auth.ts"],
+      "@/db/schema/pg": ["../db/src/schema.ts"],
       "@/db/*": ["../db/src/*"],
       "@/lib/*": ["src/lib/*"]
     }
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["src/**/*.test.ts"]
+  "include": ["src/**/*.ts"]
 }

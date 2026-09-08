@@ -202,7 +202,7 @@ describe("maybeCompact 链式摘要", () => {
     expect(result.compacted).toBe(true);
     expect(result.fallbackLevel).toBe("L3");
     // prompt 含旧摘要(链式合并)
-    const call = vi.mocked(streamChat).mock.calls[0][0] as { request: { messages: { content: string }[] } };
+    const call = vi.mocked(streamChat).mock.calls[0][0];
     const prompt = call.request.messages[1].content;
     expect(prompt).toContain("[先前对话摘要]");
     expect(prompt).toContain(PREV_SUMMARY);

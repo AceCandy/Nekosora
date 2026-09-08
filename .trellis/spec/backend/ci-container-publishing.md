@@ -38,6 +38,9 @@ published image names, Registry credentials, or deployment documentation.
   have `typecheck`; applications have lint/test/build; Core and Queue have lint/test.
   Contracts, DB, and Observability may omit tests only while their named exception
   remains accurate. Do not add no-op test scripts.
+- `pnpm check` runs workspace coverage, lint, and type checking. Every existing lint
+  script uses `--max-warnings 0`; each package's `tsc --noEmit` includes its existing
+  TypeScript tests. Vitest execution is a separate gate, not a type-check substitute.
 - GHCR is mandatory for schedule, `v*` push tag, and manual publish events. DockerHub
   is an independent optional copy after GHCR and must never change GHCR success.
 - DockerHub credentials enter through job environment variables. Conditions use only
@@ -85,6 +88,7 @@ published image names, Registry credentials, or deployment documentation.
 | --- | --- |
 | Unregistered workspace or missing declared script | `pnpm quality:workspace` fails |
 | Workflow syntax or expression error | `pnpm lint:workflows` fails |
+| Any ESLint warning or source/test TypeScript error | `pnpm check` fails |
 | Any source quality/build command fails | Docker validation and publishing do not run |
 | Unified PR/main Docker build fails | Quality workflow fails; no image is pushed |
 | Either native GHCR platform build fails | No tagged manifest is created; DockerHub is not attempted |
@@ -112,6 +116,7 @@ published image names, Registry credentials, or deployment documentation.
   Registry outage then changes the mandatory publish result.
 - Bad: put `always()` on DockerHub's job condition; it can bypass a failed dependency.
 - Bad: use `--if-present` as the only evidence that every workspace is covered.
+- Bad: exclude `*.test.ts` from tsc or allow lint warnings to make a failing gate green.
 - Bad: point the API key script at the current migration directory and select an old
   numeric index; a squashed baseline may already contain the schema change.
 
@@ -119,6 +124,8 @@ published image names, Registry credentials, or deployment documentation.
 
 - `scripts/workspace-quality.test.mjs`: registered policy, unknown workspace, missing
   script, and stale no-test exception coverage.
+- When changing TypeScript includes/excludes, verify each workspace's existing TS/TSX
+  tests appear in its parsed compiler file set; run both `pnpm check` and `pnpm test`.
 - `scripts/actionlint.test.mjs`: pinned version/checksum, download failure, and damaged
   archive rejection before extraction.
 - `scripts/ci-workflows.test.mjs`: triggers, `needs`, permissions, native platform

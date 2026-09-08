@@ -90,7 +90,7 @@ describe("conversation navigation schema", () => {
     expect(navigationIndex?.config.columns.map((column) => "name" in column ? column.name : null))
       .toEqual(["user_id", null, "updated_at", "id"]);
     expect(navigationIndex?.config.columns.slice(2).every(
-      (column) => "indexConfig" in column && column.indexConfig.order === "desc",
+      (column) => "indexConfig" in column && column.indexConfig?.order === "desc",
     ))
       .toBe(true);
   });
@@ -123,7 +123,7 @@ describe("memory extraction jobs schema", () => {
 
     const config = getTableConfig(memoryExtractionJobs);
     const foreignTables = config.foreignKeys.map((foreignKey) =>
-      foreignKey.reference().foreignTable[Symbol.for("drizzle:Name")]
+      getTableConfig(foreignKey.reference().foreignTable).name
     );
     expect(foreignTables).toEqual(expect.arrayContaining(["runs", "conversations", "user"]));
 

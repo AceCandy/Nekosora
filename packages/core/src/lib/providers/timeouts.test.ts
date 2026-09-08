@@ -133,11 +133,7 @@ describe("provider timeout policy", () => {
   it("收到响应头后清 connect timer，但继续传播上层取消", async () => {
     vi.useFakeTimers();
     const caller = new AbortController();
-    let receivedSignal: AbortSignal | null = null;
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
-      receivedSignal = init?.signal ?? null;
-      return new Response("ok");
-    });
+    const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("ok"));
     const providerFetch = createProviderFetch({
       connectTimeoutMs: PROVIDER_TIMEOUT_LIMITS.connectTimeoutMs.defaultMs,
       userAgent: "Nekusora/Test",
@@ -145,6 +141,7 @@ describe("provider timeout policy", () => {
 
     await providerFetch("https://example.test/v1/models", { signal: caller.signal });
 
+    const receivedSignal = fetch.mock.calls[0][1]?.signal;
     expect(vi.getTimerCount()).toBe(0);
     expect(receivedSignal?.aborted).toBe(false);
     caller.abort();

@@ -1,4 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import type { GatewayTelemetryPort } from "./gateway-execution/types";
 
 vi.mock("ai", () => ({
   generateText: vi.fn(),
@@ -9,8 +10,8 @@ vi.mock("ai", () => ({
 const mocks = vi.hoisted(() => ({
   logUsage: vi.fn(async () => undefined),
   startExecution: vi.fn(async () => undefined),
-  recordAttempt: vi.fn(async () => undefined),
-  finalizeExecution: vi.fn(async () => undefined),
+  recordAttempt: vi.fn<GatewayTelemetryPort["recordAttempt"]>(async () => undefined),
+  finalizeExecution: vi.fn<GatewayTelemetryPort["finalizeExecution"]>(async () => undefined),
   markProviderStreamUsageUnsupported: vi.fn(async () => undefined),
 }));
 
@@ -18,7 +19,7 @@ vi.mock("@/lib/usage", async () => {
   const actual = await vi.importActual<typeof import("@/lib/usage")>("@/lib/usage");
   return {
     ...actual,
-    logUsage: (...args: unknown[]) => mocks.logUsage(...args),
+    logUsage: mocks.logUsage,
   };
 });
 vi.mock("@/lib/gateway-execution", async (importOriginal) => {
@@ -439,12 +440,8 @@ describe("chat generation circuit breaker reporting", () => {
     expect(mocks.finalizeExecution).toHaveBeenCalledWith(expect.objectContaining({
       outcome: expect.objectContaining({ status: "failed" }),
     }));
-    const finalTelemetry = mocks.finalizeExecution.mock.calls[0]?.[0] as {
-      firstTokenLatencyMs?: number;
-    };
-    const attemptTelemetry = mocks.recordAttempt.mock.calls[0]?.[0] as {
-      firstTokenLatencyMs?: number;
-    };
+    const finalTelemetry = mocks.finalizeExecution.mock.calls[0][0];
+    const attemptTelemetry = mocks.recordAttempt.mock.calls[0][0];
     if (isVisibleText) {
       expect(attemptTelemetry.firstTokenLatencyMs).toEqual(expect.any(Number));
       expect(finalTelemetry.firstTokenLatencyMs).toEqual(expect.any(Number));
