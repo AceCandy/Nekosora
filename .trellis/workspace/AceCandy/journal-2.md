@@ -1803,3 +1803,25 @@ Completed local and production environment examples, aligned both production Com
 ### Status
 
 [OK] **Completed**
+
+
+## Session 143: 质量门禁与规范收敛
+<!-- trellis-session: v=2 fp=48a6398fd9263784 -->
+
+**Date**: 2026-09-08
+**Task**: 质量门禁与规范收敛
+**Branch**: `main`
+
+### Summary
+
+将209个现有TS/TSX测试文件纳入类型检查，清零12条lint警告并启用零警告门禁，同步实际目录与质量规范。pnpm check通过，pnpm test为1837通过/42跳过，独立复核无阻断项；最终测试helper精简后check和28项定向测试再次通过。用户确认后在main提交，未推送。未验证真实PostgreSQL、浏览器、生产构建、Docker和远程CI。第一批已归档，总路线图保留数据库类型、包边界与聊天SSE重复逻辑等后续批次。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a4b77a9` | chore: enforce typed tests and zero-warning lint |
+
+### Status
+
+[OK] **Completed**
