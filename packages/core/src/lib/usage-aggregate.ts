@@ -7,6 +7,7 @@
 import { sql, and, gte, eq, desc, lte, isNotNull, ilike, or, type SQL } from "drizzle-orm";
 import { getDb, getSchema } from "./infra/db/index";
 import type { ReasoningLevel } from "@nekusora/db/types";
+import type { gatewayExecutions } from "@nekusora/db/schema";
 
 export type TimeRange = "24h" | "7d" | "30d";
 
@@ -38,8 +39,7 @@ function rangeStart(range: TimeRange): Date {
 
 /** PG date_trunc 时间桶表达式(返回列名 "bucket")。 */
 function bucketExpr(range: TimeRange) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const s = getSchema() as any;
+  const s = getSchema();
   const col = s.gatewayExecutions.createdAt;
   const unit = range === "24h" ? "hour" : "day";
   return sql`date_trunc(${unit}, ${col})`.as("bucket");
@@ -48,8 +48,7 @@ function bucketExpr(range: TimeRange) {
 /** 时间序列(按桶聚合 calls + tokens)。可选 userId 限定为某用户。 */
 export async function getTimeSeries(range: TimeRange, userId?: string, bounds?: Pick<UsageLogFilters, "startAt" | "endAt">): Promise<TimeSeriesPoint[]> {
   const db = await getDb();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const s = getSchema() as any;
+  const s = getSchema();
   const where = buildUsageWhere({ userId, filters: bounds ?? { startAt: rangeStart(range) } });
 
   const rows = await db
@@ -64,7 +63,7 @@ export async function getTimeSeries(range: TimeRange, userId?: string, bounds?: 
     .groupBy(sql`bucket`)
     .orderBy(sql`bucket`);
 
-  return (rows as Record<string, unknown>[]).map((r) => ({
+  return rows.map((r) => ({
     bucket: String(r.bucket),
     calls: Number(r.calls),
     promptTokens: Number(r.promptTokens),
@@ -75,8 +74,7 @@ export async function getTimeSeries(range: TimeRange, userId?: string, bounds?: 
 /** 模型分布(范围内)。可选 userId 限定为某用户。 */
 export async function getModelBreakdown(range: TimeRange, userId?: string, bounds?: Pick<UsageLogFilters, "startAt" | "endAt">): Promise<ModelBreakdownRow[]> {
   const db = await getDb();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const s = getSchema() as any;
+  const s = getSchema();
   const where = buildUsageWhere({ userId, filters: bounds ?? { startAt: rangeStart(range) } });
 
   const rows = await db
@@ -91,7 +89,7 @@ export async function getModelBreakdown(range: TimeRange, userId?: string, bound
     .groupBy(s.gatewayExecutions.model)
     .orderBy(sql`count(*) DESC`);
 
-  return (rows as Record<string, unknown>[]).map((r) => ({
+  return rows.map((r) => ({
     model: String(r.model),
     calls: Number(r.calls),
     promptTokens: Number(r.promptTokens),
@@ -102,8 +100,7 @@ export async function getModelBreakdown(range: TimeRange, userId?: string, bound
 /** 来源分布(chat vs gateway)。可选 userId 限定为某用户。 */
 export async function getSourceBreakdown(range: TimeRange, userId?: string, bounds?: Pick<UsageLogFilters, "startAt" | "endAt">): Promise<SourceBreakdownRow[]> {
   const db = await getDb();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const s = getSchema() as any;
+  const s = getSchema();
   const where = buildUsageWhere({ userId, filters: bounds ?? { startAt: rangeStart(range) } });
 
   const rows = await db
@@ -116,7 +113,7 @@ export async function getSourceBreakdown(range: TimeRange, userId?: string, boun
     .groupBy(s.gatewayExecutions.source)
     .orderBy(sql`count(*) DESC`);
 
-  return (rows as Record<string, unknown>[]).map((r) => ({
+  return rows.map((r) => ({
     source: String(r.source),
     calls: Number(r.calls),
   }));
@@ -193,8 +190,7 @@ export interface ListUsageLogsResult {
 
 /** 组装 where 条件(list 与 count 复用)。 */
 function buildUsageWhere(opts: Pick<ListUsageLogsOptions, "userId" | "filters">): SQL | undefined {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const s = getSchema() as any;
+  const s = getSchema();
   const t = s.gatewayExecutions;
   const conds: SQL[] = [eq(t.status, "success")];
   if (opts.userId) conds.push(eq(t.userId, opts.userId));
@@ -215,8 +211,7 @@ function buildUsageWhere(opts: Pick<ListUsageLogsOptions, "userId" | "filters">)
 
 /** 把 drizzle 原始行收敛为 UsageLogRow DTO。apiKeyName 来自 LEFT JOIN apiKeys。 */
 function toUsageRow(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  r: any,
+  r: typeof gatewayExecutions.$inferSelect,
   meta: { apiKeyName?: string | null; userName?: string | null; userEmail?: string | null } = {},
 ): UsageLogRow {
   return {
@@ -257,8 +252,7 @@ export async function listUsageLogs(
   opts: ListUsageLogsOptions,
 ): Promise<ListUsageLogsResult> {
   const db = await getDb();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const s = getSchema() as any;
+  const s = getSchema();
   const t = s.gatewayExecutions;
   const where = buildUsageWhere(opts);
   const page = Math.max(1, opts.page);
@@ -279,8 +273,7 @@ export async function listUsageLogs(
     db.select({ count: sql<number>`count(*)` }).from(t).where(where),
   ]);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const rows = (rowsRaw as any[]).map(({ row, apiKeyName, userName, userEmail }) =>
+  const rows = rowsRaw.map(({ row, apiKeyName, userName, userEmail }) =>
     toUsageRow(row, { apiKeyName, userName, userEmail }),
   );
   return { rows, total: Number(countRows[0]?.count ?? 0) };
@@ -309,8 +302,7 @@ export interface UsageFilterOptions {
  */
 export async function listUsageFilterOptions(userId?: string): Promise<UsageFilterOptions> {
   const db = await getDb();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const s = getSchema() as any;
+  const s = getSchema();
   const t = s.gatewayExecutions;
   const userCond = userId ? eq(t.userId, userId) : undefined;
   const successCond = eq(t.status, "success");
@@ -341,13 +333,13 @@ export async function listUsageFilterOptions(userId?: string): Promise<UsageFilt
         .where(and(successCond, isNotNull(t.userId)))
         .limit(100);
 
-  const users = (userRows as { id: string | null; name: string | null; email: string | null }[])
+  const users = userRows
     .filter((u) => u.id)
     .map((u) => ({ id: String(u.id), name: String(u.name ?? ""), email: String(u.email ?? "") }));
   return {
-    models: (modelRows as { v: string | null }[]).map((r) => String(r.v ?? "")).filter(Boolean),
-    providers: (providerRows as { v: string | null }[]).map((r) => (r.v ? String(r.v) : "")).filter(Boolean),
-    routes: (routeRows as { v: string | null }[]).map((r) => (r.v ? String(r.v) : "")).filter(Boolean),
+    models: modelRows.map((r) => String(r.v ?? "")).filter(Boolean),
+    providers: providerRows.map((r) => (r.v ? String(r.v) : "")).filter(Boolean),
+    routes: routeRows.map((r) => (r.v ? String(r.v) : "")).filter(Boolean),
     users,
   };
 }
@@ -376,7 +368,7 @@ export interface SearchUsageCandidatesOpts {
 }
 
 /** 大小写不敏感 LIKE。 */
-function iLike(col: SQL, q: string): SQL {
+function iLike(col: Parameters<typeof ilike>[0], q: string): SQL {
   return ilike(col, `%${q}%`);
 }
 
@@ -390,8 +382,7 @@ function iLike(col: SQL, q: string): SQL {
  */
 export async function searchUsageCandidates(opts: SearchUsageCandidatesOpts): Promise<UsageCandidate[]> {
   const db = await getDb();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const s = getSchema() as any;
+  const s = getSchema();
   const t = s.gatewayExecutions;
   const limit = Math.min(opts.limit ?? 30, 50);
   const q = opts.q?.trim();
@@ -399,49 +390,49 @@ export async function searchUsageCandidates(opts: SearchUsageCandidatesOpts): Pr
   const providerCond = opts.providerName ? eq(t.providerName, opts.providerName) : undefined;
 
   if (opts.type === "users") {
-    const rows = (await db
+    const rows = await db
       .selectDistinct({ id: t.userId, name: s.user.name, email: s.user.email })
       .from(t)
       .leftJoin(s.user, eq(t.userId, s.user.id))
       .where(and(eq(t.status, "success"), isNotNull(t.userId), q ? or(iLike(s.user.name, q), iLike(s.user.email, q)) : undefined))
-      .limit(limit)) as { id: string | null; name: string | null; email: string | null }[];
+      .limit(limit);
     return rows
       .filter((u) => u.id)
       .map((u) => ({ id: String(u.id), label: String(u.name || u.email || u.id), sub: u.email ?? undefined }));
   }
   if (opts.type === "keys") {
-    const rows = (await db
+    const rows = await db
       .selectDistinct({ id: t.apiKeyId, name: s.apiKeys.name })
       .from(t)
       .leftJoin(s.apiKeys, eq(t.apiKeyId, s.apiKeys.id))
       .where(and(eq(t.status, "success"), isNotNull(t.apiKeyId), userCond, q ? iLike(s.apiKeys.name, q) : undefined))
-      .limit(limit)) as { id: string | null; name: string | null }[];
+      .limit(limit);
     return rows.filter((r) => r.id).map((r) => ({ id: String(r.id), label: String(r.name ?? r.id) }));
   }
   if (opts.type === "providers") {
-    const rows = (await db
+    const rows = await db
       .selectDistinct({ v: t.providerName })
       .from(t)
       .where(and(eq(t.status, "success"), isNotNull(t.providerName), userCond, q ? iLike(t.providerName, q) : undefined))
       .orderBy(t.providerName)
-      .limit(limit)) as { v: string | null }[];
-    return rows.map((r) => r.v).filter(Boolean).map((v) => ({ id: v as string, label: v as string }));
+      .limit(limit);
+    return rows.map((r) => r.v).filter((v): v is string => Boolean(v)).map((v) => ({ id: v, label: v }));
   }
   if (opts.type === "models") {
-    const rows = (await db
+    const rows = await db
       .selectDistinct({ v: t.model })
       .from(t)
       .where(and(eq(t.status, "success"), userCond, providerCond, q ? iLike(t.model, q) : undefined))
       .orderBy(t.model)
-      .limit(limit)) as { v: string | null }[];
-    return rows.map((r) => r.v).filter(Boolean).map((v) => ({ id: v as string, label: v as string }));
+      .limit(limit);
+    return rows.map((r) => r.v).filter((v): v is string => Boolean(v)).map((v) => ({ id: v, label: v }));
   }
   // upstreamKeys
-  const rows = (await db
+  const rows = await db
     .selectDistinct({ v: t.upstreamKeyMasked })
     .from(t)
     .where(and(eq(t.status, "success"), isNotNull(t.upstreamKeyMasked), userCond, providerCond, q ? iLike(t.upstreamKeyMasked, q) : undefined))
     .orderBy(t.upstreamKeyMasked)
-    .limit(limit)) as { v: string | null }[];
-  return rows.map((r) => r.v).filter(Boolean).map((v) => ({ id: v as string, label: v as string }));
+    .limit(limit);
+  return rows.map((r) => r.v).filter((v): v is string => Boolean(v)).map((v) => ({ id: v, label: v }));
 }

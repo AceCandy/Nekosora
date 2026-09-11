@@ -1,0 +1,30 @@
+{
+  "id": "technical-debt-convergence-v3",
+  "name": "technical-debt-convergence-v3",
+  "title": "第三轮技术债收敛",
+  "description": "明确聊天加载失败并恢复任务生命周期和用量统计类型保护",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "AceCandy",
+  "assignee": "AceCandy",
+  "createdAt": "2026-09-11",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "09-11-chat-load-failures",
+    "09-11-run-lifecycle-types",
+    "09-11-usage-query-types"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}
