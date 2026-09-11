@@ -5,31 +5,39 @@
  *   - 生产:DrizzleRouteRepository(默认,读真实 DB)
  *   - 测试:可注入内存 mock,验证路由决策逻辑而无需 DB
  *
- * 返回类型用 `any`(原始 schema 行),保持与现有代码一致的灵活性,
- * 避免为每个表生成精确类型(那是 schema 层的职责)。
+ * 查询边界从 schema 推导路由实际消费的字段，避免字段变更被宽泛字典掩盖。
  */
 import type { CallContext } from "../providers/types";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Row = Record<string, any>;
+import type { models, modelCatalog, routes, providers } from "@nekusora/db/schema";
+
+/** 路由授权与额度预留所需模型字段；能力与限制来自目录。 */
+export type RouteModel = Pick<typeof models.$inferSelect, "id" | "name" | "ownerUserId" | "visibility" | "enabled">
+  & Pick<typeof modelCatalog.$inferSelect, "capabilities" | "contextWindow" | "maxOutputTokens">;
+/** 上游路由配置投影。 */
+export type RepositoryRoute = Pick<typeof routes.$inferSelect,
+  "id" | "modelId" | "providerId" | "upstreamModelName" | "apiFormat" | "priority" | "weight" | "supportsTools" | "headersJson" | "enabled">;
+/** Provider 连接配置；仅服务端持有加密密钥。 */
+export type RepositoryProvider = Pick<typeof providers.$inferSelect,
+  "id" | "name" | "protocol" | "baseUrl" | "apiKeysEnc" | "connectTimeoutMs" | "readTimeoutMs" | "streamIdleTimeoutMs" | "headersJson" | "supportsStreamUsage" | "enabled">;
 
 export interface RouteRepository {
   /** 按 id 查找已启用模型(单条,无歧义)。 */
-  findEnabledModelById(modelId: string): Promise<Row | null>;
+  findEnabledModelById(modelId: string): Promise<RouteModel | null>;
 
   /** 按 name + ownerUserId 查找已启用模型(网关 owner-only 路径)。 */
   findEnabledModelByNameForOwner(
     modelName: string,
     userId: string,
-  ): Promise<Row | null>;
+  ): Promise<RouteModel | null>;
 
   /** 查找模型的路由链(join providers,按 priority 升序)。 */
   findEnabledRoutes(
     modelId: string,
-  ): Promise<Array<{ route: Row; provider: Row }>>;
+  ): Promise<Array<{ route: RepositoryRoute; provider: RepositoryProvider }>>;
 
   /** 按 id 查找已启用 provider。 */
-  findEnabledProvider(providerId: string): Promise<Row | null>;
+  findEnabledProvider(providerId: string): Promise<RepositoryProvider | null>;
 
   /** 查找 sub key 绑定的模型 ID 集合(用于绑定校验)。 */
   findKeyModelBindings(keyId: string): Promise<{ modelIds: Set<string> }>;
@@ -41,10 +49,9 @@ import { eq, and, asc } from "drizzle-orm";
 import { getDb, getSchema } from "../infra/db/index";
 
 export class DrizzleRouteRepository implements RouteRepository {
-  async findEnabledModelById(modelId: string): Promise<Row | null> {
+  async findEnabledModelById(modelId: string): Promise<RouteModel | null> {
     const db = await getDb();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const s = getSchema() as any;
+    const s = getSchema();
     const [row] = await db
       .select({
         model: s.models,
@@ -67,10 +74,9 @@ export class DrizzleRouteRepository implements RouteRepository {
   async findEnabledModelByNameForOwner(
     modelName: string,
     userId: string,
-  ): Promise<Row | null> {
+  ): Promise<RouteModel | null> {
     const db = await getDb();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const s = getSchema() as any;
+    const s = getSchema();
     const [row] = await db
       .select({
         model: s.models,
@@ -98,10 +104,9 @@ export class DrizzleRouteRepository implements RouteRepository {
 
   async findEnabledRoutes(
     modelId: string,
-  ): Promise<Array<{ route: Row; provider: Row }>> {
+  ): Promise<Array<{ route: RepositoryRoute; provider: RepositoryProvider }>> {
     const db = await getDb();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const s = getSchema() as any;
+    const s = getSchema();
     return db
       .select({
         route: s.routes,
@@ -119,10 +124,9 @@ export class DrizzleRouteRepository implements RouteRepository {
       .orderBy(asc(s.routes.priority));
   }
 
-  async findEnabledProvider(providerId: string): Promise<Row | null> {
+  async findEnabledProvider(providerId: string): Promise<RepositoryProvider | null> {
     const db = await getDb();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const s = getSchema() as any;
+    const s = getSchema();
     const [row] = await db
       .select()
       .from(s.providers)
@@ -133,15 +137,14 @@ export class DrizzleRouteRepository implements RouteRepository {
 
   async findKeyModelBindings(keyId: string): Promise<{ modelIds: Set<string> }> {
     const db = await getDb();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const s = getSchema() as any;
+    const s = getSchema();
     const bindings = await db
       .select()
       .from(s.keyModelBindings)
       .where(eq(s.keyModelBindings.keyId, keyId));
     return {
       modelIds: new Set(
-        bindings.filter((b: Row) => b.modelId).map((b: Row) => b.modelId),
+        bindings.filter((b) => b.modelId).map((b) => b.modelId),
       ),
     };
   }
@@ -150,8 +153,7 @@ export class DrizzleRouteRepository implements RouteRepository {
 /** 将仍标记为支持工具的具体路由降级为不支持；并发人工修改时不覆盖已关闭状态。 */
 export async function markRouteToolsUnsupported(routeId: string): Promise<void> {
   const db = await getDb();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const s = getSchema() as any;
+  const s = getSchema();
   await db
     .update(s.routes)
     .set({ supportsTools: false })
@@ -167,8 +169,7 @@ export async function markProviderStreamUsageUnsupported(
   baseUrl: string,
 ): Promise<void> {
   const db = await getDb();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const s = getSchema() as any;
+  const s = getSchema();
   await db
     .update(s.providers)
     .set({ supportsStreamUsage: false })

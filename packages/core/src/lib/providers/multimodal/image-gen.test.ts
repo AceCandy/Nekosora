@@ -41,12 +41,11 @@ import {
   setRouteRepository,
   resetRouteRepository,
   type RouteRepository,
+  type RepositoryRoute,
+  type RepositoryProvider,
 } from "../../repositories/route-repository";
 import { encrypt } from "../../infra/crypto";
 import type { CallContext } from "../types";
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Row = Record<string, any>;
 
 const ENC_KEY_PLAIN = JSON.stringify({ keys: [{ key: "sk-test-fake", weight: 1 }] });
 let ENC_KEY = "";
@@ -72,7 +71,7 @@ interface MockRoute {
 interface MockProvider {
   id: string;
   name: string;
-  protocol: string;
+  protocol: RepositoryProvider["protocol"];
   baseUrl: string;
   apiKeysEnc: string;
   headersJson?: Record<string, string>;
@@ -89,25 +88,40 @@ interface MockData {
 
 function makeMockRepo(data: MockData): RouteRepository {
   return {
-    findEnabledModelById: async (modelId) =>
-      (data.models.find((m) => m.id === modelId && m.enabled) as Row) ?? null,
-    findEnabledModelByNameForOwner: async (modelName, userId) =>
-      (data.models.find(
+    findEnabledModelById: async (modelId) => {
+      const model = data.models.find((m) => m.id === modelId && m.enabled);
+      return model ? { capabilities: {}, contextWindow: null, maxOutputTokens: null, ...model } : null;
+    },
+    findEnabledModelByNameForOwner: async (modelName, userId) => {
+      const model = data.models.find(
         (m) => m.name === modelName && m.ownerUserId === userId && m.enabled,
-      ) as Row) ?? null,
+      );
+      return model ? { capabilities: {}, contextWindow: null, maxOutputTokens: null, ...model } : null;
+    },
     findEnabledRoutes: async (modelId) => {
-      const out: Array<{ route: Row; provider: Row }> = [];
+      const out: Array<{ route: RepositoryRoute; provider: RepositoryProvider }> = [];
       for (const r of data.routes) {
         if (r.modelId !== modelId || !r.enabled) continue;
         const p = data.providers.find((pp) => pp.id === r.providerId && pp.enabled);
         if (!p) continue;
-        out.push({ route: r as Row, provider: p as Row });
+        out.push({
+          route: { apiFormat: "openai-chat", headersJson: null, supportsTools: false, ...r },
+          provider: {
+            connectTimeoutMs: null, readTimeoutMs: null, streamIdleTimeoutMs: null,
+            headersJson: null, supportsStreamUsage: null, ...p,
+          },
+        });
       }
       out.sort((a, b) => a.route.priority - b.route.priority);
       return out;
     },
-    findEnabledProvider: async (providerId) =>
-      (data.providers.find((p) => p.id === providerId && p.enabled) as Row) ?? null,
+    findEnabledProvider: async (providerId) => {
+      const provider = data.providers.find((p) => p.id === providerId && p.enabled);
+      return provider ? {
+        connectTimeoutMs: null, readTimeoutMs: null, streamIdleTimeoutMs: null,
+        headersJson: null, supportsStreamUsage: null, ...provider,
+      } : null;
+    },
     findKeyModelBindings: async (keyId) => ({
       modelIds: new Set(data.bindings.get(keyId) ?? new Set<string>()),
     }),

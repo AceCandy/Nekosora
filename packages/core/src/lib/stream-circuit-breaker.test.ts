@@ -65,6 +65,8 @@ function makeSingleRouteRepository(): RouteRepository {
       name: "test-model",
       ownerUserId: "user-a",
       visibility: "public",
+      contextWindow: null,
+      maxOutputTokens: null,
       enabled: true,
       capabilities: {},
     }) : null,
@@ -73,12 +75,17 @@ function makeSingleRouteRepository(): RouteRepository {
       name: "test-model",
       ownerUserId: "user-a",
       visibility: "private",
+      contextWindow: null,
+      maxOutputTokens: null,
       enabled: true,
       capabilities: {},
     }),
     findEnabledRoutes: async () => [{
       route: {
         id: "route-a",
+        apiFormat: "openai-chat",
+        headersJson: null,
+        supportsTools: false,
         modelId: "model-a",
         providerId: "provider-a",
         upstreamModelName: "upstream-model",
@@ -88,6 +95,9 @@ function makeSingleRouteRepository(): RouteRepository {
       },
       provider: {
         id: "provider-a",
+        connectTimeoutMs: null,
+        readTimeoutMs: null,
+        supportsStreamUsage: null,
         name: "Provider A",
         protocol: "openai",
         baseUrl: "https://example.com/v1",
@@ -111,6 +121,9 @@ function makeTwoRouteRepository(): RouteRepository {
       {
         route: {
           id: "route-b",
+          apiFormat: "openai-chat",
+          headersJson: null,
+          supportsTools: false,
           modelId: "model-a",
           providerId: "provider-b",
           upstreamModelName: "fallback-model",
@@ -120,6 +133,10 @@ function makeTwoRouteRepository(): RouteRepository {
         },
         provider: {
           id: "provider-b",
+          connectTimeoutMs: null,
+          readTimeoutMs: null,
+          streamIdleTimeoutMs: null,
+          supportsStreamUsage: null,
           name: "Provider B",
           protocol: "openai",
           baseUrl: "https://fallback.example.com/v1",

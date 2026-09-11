@@ -24,7 +24,7 @@ import {
   getProviderAvailability,
   recordNoHealthyRoute,
 } from "./circuit-breaker";
-import { getRouteRepository } from "./repositories/route-repository";
+import { getRouteRepository, type RouteModel, type RepositoryProvider } from "./repositories/route-repository";
 import type {
   ResolvedRoute,
   ResolvedProvider,
@@ -38,8 +38,7 @@ function resolveProviderKeys(encBundle: string) {
 }
 
 /** 把 provider 行规整为运行时 ResolvedProvider。密钥列统一为 apiKeysEnc。 */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function toResolvedProvider(row: any): ResolvedProvider {
+function toResolvedProvider(row: RepositoryProvider): ResolvedProvider {
   const keys = resolveProviderKeys(row.apiKeysEnc);
   return {
     id: row.id,
@@ -51,7 +50,7 @@ function toResolvedProvider(row: any): ResolvedProvider {
     connectTimeoutMs: row.connectTimeoutMs ?? undefined,
     readTimeoutMs: row.readTimeoutMs ?? undefined,
     streamIdleTimeoutMs: row.streamIdleTimeoutMs ?? undefined,
-    headers: (row.headersJson as Record<string, string>) ?? undefined,
+    headers: row.headersJson ?? undefined,
     supportsStreamUsage: row.supportsStreamUsage ?? null,
   };
 }
@@ -129,8 +128,7 @@ export async function resolveRoutesById(
 
 /** 模型 → 有序路由链(查 routes join providers,按 priority/weight)。 */
 async function resolveModelRoutes(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  model: any,
+  model: RouteModel,
 ): Promise<ResolvedRoute[]> {
   const repo = getRouteRepository();
 
@@ -145,18 +143,18 @@ async function resolveModelRoutes(
     model.visibility === "public" ? "global" : "byo";
 
   const resolved: ResolvedRoute[] = routes.map(
-    (row: { route: Record<string, unknown>; provider: Record<string, unknown> }) => ({
+    (row) => ({
       modelName: model.name,
-      upstreamModelName: row.route.upstreamModelName as string,
-      apiFormat: row.route.apiFormat as ResolvedRoute["apiFormat"],
+      upstreamModelName: row.route.upstreamModelName,
+      apiFormat: row.route.apiFormat,
       // Provider protocol 只保留为连接类型；普通聊天 wire format 读取 apiFormat。
-      protocol: row.provider.protocol as ResolvedRoute["protocol"],
+      protocol: row.provider.protocol,
       provider: toResolvedProvider(row.provider),
-      headers: (row.route.headersJson as Record<string, string>) ?? undefined,
-      priority: row.route.priority as number,
-      weight: row.route.weight as number,
+      headers: row.route.headersJson ?? undefined,
+      priority: row.route.priority,
+      weight: row.route.weight,
       source,
-      routeId: row.route.id as string,
+      routeId: row.route.id,
       modelId: model.id,
       capabilities: model.capabilities,
       supportsTools: row.route.supportsTools === true,
