@@ -629,7 +629,7 @@ export async function getConversationComposerState(
     .where(eq(S().conversations.id, conversationId))
     .limit(1);
   if (!conv || conv.userId !== user.id) {
-    return { title: "新会话", modelName: null, outputModeId: null, renderStyleId: null, webSearch: false, cardIds: [], reasoningByModelId: {} };
+    throw new Error("会话不存在或无权访问");
   }
   const composer = (conv.composerState as { cardIds?: string[]; reasoningByModelId?: Record<string, ReasoningLevel> } | null) ?? {};
   return {

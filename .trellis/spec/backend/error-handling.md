@@ -413,6 +413,53 @@ return protocolErrorResponse(protocol, error.code, error.message, error.details)
 
 ---
 
+## Chat Page Load Boundary
+
+### 1. Scope / Trigger
+
+聊天页面的消息、输入状态与可选配置读取。不得把核心读取失败显示成正常空会话。
+此约定不改变同层 chat/layout.tsx 的必需读取；chat/error.tsx 不捕获同层 layout 错误。
+
+### 2. Signatures
+
+`loadChatData<T>(operation: string, request: Promise<T>, fallback?: () => T): Promise<T>`
+位于 apps/web/src/features/chat/lib/load-data.ts；operation 必须是代码中的固定操作名。
+
+### 3. Contracts
+
+messages、composer-state 不传 fallback；artifacts、模式、样式、联网保留空对象/数组/false 降级。
+getConversationComposerState 对缺失和非属主统一拒绝，只有属主真实空状态可以使用缺省值。
+日志仅记录操作名；不记录原异常、cause、SQL 参数、正文、Cookie 或数据库 URL。
+
+### 4. Validation & Error Matrix
+
+- 成功：原值返回；真正空消息仍可渲染聊天。
+- 核心普通异常：新的固定安全错误进入聊天错误页，不挂载正常输入区。
+- 可选普通异常：固定操作日志后返回 fallback。
+- Next redirect/notFound 等控制流：先 unstable_rethrow，禁止日志或降级吞掉。
+
+### 5. Good / Base / Bad Cases
+
+Good：消息读取故障显示通用文案；恢复后重新读取真实消息及状态。
+Base：可选模式故障不阻断聊天。Bad：数据库失败被当作空消息。
+
+### 6. Tests Required
+
+load-data.test.ts 覆盖原值、失败、降级、安全日志及真实 Next 控制流信号；
+chat/[id]/page.test.tsx 覆盖核心失败拒绝与再次读取恢复；
+conversations.test.ts 覆盖缺失/非属主拒绝与合法缺省状态；
+chat/error.test.tsx 覆盖安全文案、alert、pending 和 refresh/reset 调用。
+这些单元测试不能代替浏览器对 Next 错误边界重试恢复的运行时验证。
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong: 把故障变成正常空会话。
+getVisibleBranch(id).catch(() => [])
+// Correct: 核心读取不提供降级值。
+loadChatData("messages", getVisibleBranch(id))
+```
+
 ## Common Mistakes
 
 ### WebChat And MCP Input Boundaries

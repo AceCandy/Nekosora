@@ -126,6 +126,8 @@
     "suggestCode": "用 Python 写一个斐波那契函数",
     "renderFailed": "该内容渲染失败",
     "retry": "重试",
+    "loadFailed": "暂时无法加载对话",
+    "loadFailedHint": "对话数据未能读取，请重试或从侧栏选择其他会话。",
     "composerSyncFailed": "输入区设置未同步",
     "showRaw": "查看原始内容",
     "hideRaw": "收起",

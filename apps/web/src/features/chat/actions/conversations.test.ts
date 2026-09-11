@@ -44,6 +44,7 @@ vi.mock("@nekusora/core/conversation-title/service", () => ({
 }));
 
 import {
+  getConversationComposerState,
   getConversationNavigationItem,
   getConversationGroupSummary,
   getConversationTitleStateAction,
@@ -90,6 +91,25 @@ function queryReturning(rows: Record<string, unknown>[]) {
   };
   return query;
 }
+
+describe("会话输入区读取边界", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.requireSession.mockResolvedValue({ id: "user-1" });
+    mocks.getSchema.mockReturnValue(schema);
+  });
+  it.each([{ rows: [] }, { rows: [{ userId: "another-user", title: "private" }] }])("缺失或非属主不能伪装成新会话", async ({ rows }) => {
+    mocks.getDb.mockResolvedValue({ select: () => queryReturning(rows) });
+    await expect(getConversationComposerState("conversation")).rejects.toThrow("会话不存在或无权访问");
+  });
+  it("属主的空设置仍按原缺省值回填", async () => {
+    mocks.getDb.mockResolvedValue({ select: () => queryReturning([{ userId: "user-1", title: "真实会话", composerState: null }]) });
+    expect(await getConversationComposerState("conversation")).toEqual({
+      title: "真实会话", modelName: null, outputModeId: null, renderStyleId: null,
+      webSearch: false, cardIds: [], reasoningByModelId: {},
+    });
+  });
+});
 
 describe("会话 generating 派生", () => {
   beforeEach(() => {

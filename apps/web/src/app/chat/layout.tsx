@@ -1,4 +1,5 @@
 import { getTranslations } from "next-intl/server";
+import { loadChatData } from "@/features/chat/lib/load-data";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/session";
@@ -23,7 +24,7 @@ export default async function ChatLayout({ children }: { children: React.ReactNo
     getGeneratingStatuses(),
   ]);
   // 聚合所有启用输出样式的 CSS,注入聊天页;切换样式时只需改容器 class,无需刷新
-  const renderStyles = await listEnabledRenderStyles().catch(() => []);
+  const renderStyles = await loadChatData("render-styles", listEnabledRenderStyles(), () => []);
   const aggregatedStyleCss = (renderStyles as { css: string }[]).map((s) => s.css).join("\n");
 
   async function handleSignOut() {

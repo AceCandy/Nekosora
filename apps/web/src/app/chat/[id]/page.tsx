@@ -1,4 +1,5 @@
 import { getTranslations } from "next-intl/server";
+import { loadChatData } from "@/features/chat/lib/load-data";
 import { getVisibleModels, getArtifactsByConversation, getConversationComposerState } from "@/features/chat/actions/conversations";
 import { getVisibleBranch } from "@/features/chat/actions/branch";
 import { createShare, listConversationShares, revokeShare, type CreateShareInput } from "@/features/chat/actions/share";
@@ -21,22 +22,14 @@ export default async function ChatConversationPage({
   void getTranslations("chat"); // 保持命名空间预热,与 chat/page 行为一致
   const user = await requireSession();
   const [visibleModels, branch, artifactsMap, cards, outputModes, renderStyles, composerState, webSearchAvailable] = await Promise.all([
-    getVisibleModels(),
-    getVisibleBranch(id).catch(() => ({ messages: [], versionMap: {} })),
-    getArtifactsByConversation(id).catch(() => ({})),
-    listMyCards(),
-    listEnabledOutputModes().catch(() => []),
-    listEnabledRenderStyles().catch(() => []),
-    getConversationComposerState(id).catch(() => ({
-      title: "新会话",
-      modelName: null,
-      outputModeId: null,
-      renderStyleId: null,
-      webSearch: false,
-      cardIds: [],
-      reasoningByModelId: {},
-    })),
-    isWebSearchEnabled(user.id).catch(() => false),
+    loadChatData("models", getVisibleModels()),
+    loadChatData("messages", getVisibleBranch(id)),
+    loadChatData("artifacts", getArtifactsByConversation(id), () => ({})),
+    loadChatData("cards", listMyCards()),
+    loadChatData("output-modes", listEnabledOutputModes(), () => []),
+    loadChatData("render-styles", listEnabledRenderStyles(), () => []),
+    loadChatData("composer-state", getConversationComposerState(id)),
+    loadChatData("web-search", isWebSearchEnabled(user.id), () => false),
   ]);
   const msgs = branch.messages;
   const versionMap = branch.versionMap as Record<string, { current: number; total: number }>;

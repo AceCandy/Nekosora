@@ -1,4 +1,5 @@
 import { getTranslations } from "next-intl/server";
+import { loadChatData } from "@/features/chat/lib/load-data";
 import { getVisibleModels } from "@/features/chat/actions/conversations";
 import { listMyCards } from "@/features/panel/cards/actions";
 import { listEnabledOutputModes } from "@/lib/output-modes/service";
@@ -19,11 +20,11 @@ export default async function ChatPage({
   void getTranslations("chat");
   const user = await requireSession();
   const [visibleModels, cards, outputModes, renderStyles, webSearchAvailable] = await Promise.all([
-    getVisibleModels(),
-    listMyCards(),
-    listEnabledOutputModes().catch(() => []),
-    listEnabledRenderStyles().catch(() => []),
-    isWebSearchEnabled(user.id).catch(() => false),
+    loadChatData("models", getVisibleModels()),
+    loadChatData("cards", listMyCards()),
+    loadChatData("output-modes", listEnabledOutputModes(), () => []),
+    loadChatData("render-styles", listEnabledRenderStyles(), () => []),
+    loadChatData("web-search", isWebSearchEnabled(user.id), () => false),
   ]);
   const { models, modes, styles } = toComposerOptions(visibleModels, outputModes, renderStyles);
 

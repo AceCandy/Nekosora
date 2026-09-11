@@ -126,6 +126,8 @@
     "suggestCode": "Write a Fibonacci function in Python",
     "renderFailed": "This content failed to render",
     "retry": "Retry",
+    "loadFailed": "Unable to load this conversation",
+    "loadFailedHint": "Conversation data could not be loaded. Retry or choose another conversation from the sidebar.",
     "composerSyncFailed": "Composer settings are not synced",
     "showRaw": "Show raw",
     "hideRaw": "Hide",
