@@ -91,5 +91,16 @@ describe("模型选择", () => {
     const off = renderToStaticMarkup(<ModelControlMenu {...props} />);
     expect(off).toContain('--progress:0');
     expect(off).toContain('data-off="true"');
+    expect(elements(panel).filter((el) => el.props.children === "reasoningOffShort")).toHaveLength(0);
+    expect(off).toContain('aria-valuetext="reasoningOffShort"');
+  });
+
+  it("档位独立放在选中行末尾，滑条只保留无障碍标签并共享档位配色", () => {
+    renderToStaticMarkup(<ModelControlMenu {...props} reasoning="high" />);
+    const selected = elements(panel).find((el) => el.props["aria-selected"] === true)!;
+    const lastChild = React.Children.toArray(selected.props.children as React.ReactNode).at(-1);
+    expect(React.isValidElement<{ children: string }>(lastChild) && lastChild.props.children).toBe("reasoningHighShort");
+    expect(elements(panel).filter((el) => el.props.children === "reasoningLevel")).toHaveLength(0);
+    expect(elements(panel).find((el) => el.props.role === "dialog")?.props["data-level"]).toBe("high");
   });
 });

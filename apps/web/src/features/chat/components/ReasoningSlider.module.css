@@ -1,11 +1,37 @@
+/* Noto Sans SC 900：仅收录中英文推理档位，新增标签时同步更新子集。 */
+@font-face {
+  font-family: "Reasoning Black";
+  src: url("../../../fonts/ReasoningBlack-900.ttf") format("truetype");
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+.theme {
+  --reasoning-color: var(--color-reasoning-purple);
+}
+
+.theme[data-level="off"] { --reasoning-color: var(--color-ink-tertiary); }
+.theme[data-level="minimal"] { --reasoning-color: color-mix(in oklch, var(--color-reasoning-purple) 65%, var(--color-ink-secondary)); }
+.theme[data-level="low"] { --reasoning-color: color-mix(in oklch, var(--color-reasoning-purple) 80%, var(--color-ink-secondary)); }
+.theme[data-level="high"] { --reasoning-color: color-mix(in oklch, var(--color-reasoning-purple) 92%, var(--color-space-ink)); }
+.theme[data-level="xhigh"] { --reasoning-color: color-mix(in oklch, var(--color-reasoning-purple) 84%, var(--color-space-ink)); }
+.theme[data-level="max"] { --reasoning-color: color-mix(in oklch, var(--color-reasoning-purple) 76%, var(--color-space-ink)); }
+
+.label {
+  font-family: "Reasoning Black", var(--font-cjk), sans-serif;
+  color: var(--reasoning-color);
+  transition: color 200ms ease-out;
+}
+
 .slider {
   position: relative;
-  height: 44px;
+  height: 32px;
 }
 
 .track {
   position: absolute;
-  inset: 6px 0;
+  inset: 4px 0;
   overflow: hidden;
   border-radius: 999px;
   background: var(--color-morning-mist);
@@ -15,38 +41,51 @@
 .fill {
   position: absolute;
   inset: 0 auto 0 0;
-  width: calc(16px + (100% - 32px) * var(--progress));
+  width: calc(12px + (100% - 24px) * var(--progress));
   overflow: hidden;
-  background: color-mix(in oklch, var(--color-sora-blue) 65%, var(--color-chart-3));
+  background: color-mix(in srgb, var(--reasoning-color) 50%, var(--color-nebula-white));
 }
 
-.fill::before,
-.fill::after {
+.slider[data-off="false"] .track {
+  background: color-mix(in srgb, var(--reasoning-color) 22%, var(--color-nebula-white));
+}
+
+.track::before,
+.track::after {
   content: "";
   position: absolute;
-  inset: -70% -40%;
-  background: radial-gradient(ellipse at 35% 40%, color-mix(in oklch, var(--color-nebula-white) 38%, transparent), transparent 55%);
-  animation: shimmer 6s ease-in-out infinite alternate;
+  inset: 0 -64px;
+  background:
+    radial-gradient(circle at 8px 6px, var(--reasoning-color) 0.6px, transparent 2px),
+    radial-gradient(circle at 28px 17px, var(--reasoning-color) 1px, transparent 2.5px),
+    radial-gradient(circle at 48px 11px, var(--reasoning-color) 0.6px, transparent 2px);
+  background-size: 64px 24px;
+  opacity: 0.85;
+  will-change: transform;
+  animation: drift 1.5s linear infinite;
 }
 
-.fill::after {
-  background: radial-gradient(ellipse at 65% 70%, color-mix(in oklch, var(--color-nebula-white) 26%, transparent), transparent 45%);
+.track::after {
+  top: 3px;
+  opacity: 0.5;
+  animation-duration: 2.2s;
   animation-delay: -3s;
-  animation-direction: alternate-reverse;
+  animation-direction: reverse;
 }
 
 .slider[data-off="true"] .fill {
   visibility: hidden;
 }
 
-.slider[data-off="true"] .fill::before,
-.slider[data-off="true"] .fill::after {
+.slider[data-off="true"] .track::before,
+.slider[data-off="true"] .track::after {
+  visibility: hidden;
   animation: none;
 }
 
 .stops {
   position: absolute;
-  inset: 0 16px;
+  inset: 0 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -61,7 +100,7 @@
 }
 
 .stops span[data-filled="true"] {
-  background: var(--color-nebula-white);
+  background: var(--reasoning-color);
 }
 
 .input {
@@ -69,7 +108,7 @@
   display: block;
   appearance: none;
   width: 100%;
-  height: 44px;
+  height: 100%;
   margin: 0;
   background: transparent;
   border-radius: 999px;
@@ -78,19 +117,19 @@
 }
 
 .input::-webkit-slider-runnable-track {
-  height: 32px;
+  height: 24px;
   background: transparent;
 }
 
 .input::-moz-range-track {
-  height: 32px;
+  height: 24px;
   background: transparent;
 }
 
 .input::-webkit-slider-thumb {
   appearance: none;
-  width: 32px;
-  height: 32px;
+  width: 24px;
+  height: 24px;
   border: 1px solid var(--color-ink-tertiary);
   border-radius: 50%;
   background: var(--color-nebula-white);
@@ -98,8 +137,8 @@
 
 .input::-moz-range-thumb {
   box-sizing: border-box;
-  width: 32px;
-  height: 32px;
+  width: 24px;
+  height: 24px;
   border: 1px solid var(--color-ink-tertiary);
   border-radius: 50%;
   background: var(--color-nebula-white);
@@ -110,14 +149,19 @@
   outline-offset: 2px;
 }
 
-@keyframes shimmer {
-  from { transform: translateX(-16%) rotate(-8deg); opacity: 0.55; }
-  to { transform: translateX(16%) rotate(8deg); opacity: 1; }
+@keyframes drift {
+  from { transform: translateX(0); }
+  to { transform: translateX(64px); }
+}
+
+@media (pointer: coarse) {
+  .slider { height: 44px; }
+  .track { inset-block: 10px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .fill::before,
-  .fill::after {
+  .track::before,
+  .track::after {
     animation: none;
   }
 }

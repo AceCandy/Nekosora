@@ -397,22 +397,25 @@ function ModelConfigPicker(props: ModelConfigPickerProps) {
         <button
           type="button"
           onClick={() => { if (props.modelPickerOpen) close(); else props.onModelPickerToggle(); }}
-          className={clsx(TOOLBAR_CHIP, "cursor-pointer text-neutral-700 ")}
+          className={clsx(TOOLBAR_CHIP, styles.theme, "cursor-pointer text-neutral-700 ")}
+          data-level={props.reasoning}
           aria-label={t("modelSettings")}
           aria-haspopup="dialog"
           aria-expanded={props.modelPickerOpen}
         >
-          <span className="truncate">{props.current?.displayName ?? props.current?.name ?? t("selectModel")}</span>
-          {statusLabel && (
-            <span className="hidden shrink-0 text-neutral-600 sm:inline">
-              · {statusLabel}
-            </span>
-          )}
+          <span className="inline-flex min-w-0 items-baseline gap-1">
+            <span className="truncate">{props.current?.displayName ?? props.current?.name ?? t("selectModel")}</span>
+            {statusLabel && (fixed || props.reasoning !== "off") && (
+              <span className={clsx(styles.label, "shrink-0 font-black")}>
+                {statusLabel}
+              </span>
+            )}
+          </span>
           <ChevronDown className="h-3 w-3 shrink-0 opacity-60" aria-hidden="true" />
         </button>
       }
     >
-      <div role="dialog" aria-label={t("modelSettings")}>
+      <div role="dialog" aria-label={t("modelSettings")} className={styles.theme} data-level={props.reasoning}>
         <div className="relative border-b border-morning-mist p-2 ">
           <Search className="pointer-events-none absolute left-4 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-400" aria-hidden="true" />
           <input
@@ -450,7 +453,9 @@ function ModelConfigPicker(props: ModelConfigPickerProps) {
               >
                 <Check className={clsx("h-3.5 w-3.5 shrink-0", selected ? "opacity-100" : "opacity-0")} aria-hidden="true" />
                 <span className="min-w-0 flex-1">
-                  <span className="block break-words">{item.displayName ?? item.name}</span>
+                  <span className="block break-words">
+                    {item.displayName ?? item.name}
+                  </span>
                   <span className="block text-ui-caption font-normal text-neutral-600">
                     {[
                       item.capabilities?.vision && t("modelVision"),
@@ -459,6 +464,9 @@ function ModelConfigPicker(props: ModelConfigPickerProps) {
                     ].filter(Boolean).join(" · ")}
                   </span>
                 </span>
+                {selected && statusLabel && (fixed || props.reasoning !== "off") && (
+                  <span className={clsx(styles.label, "shrink-0 text-ui-heading font-black leading-none")}>{statusLabel}</span>
+                )}
               </button>
             );
               })}
@@ -470,42 +478,34 @@ function ModelConfigPicker(props: ModelConfigPickerProps) {
           )}
         </div>
 
-        {reasoningVisible && (
-          <div className="border-t border-morning-mist bg-neutral-50/80 p-3">
-            <div className="flex items-center justify-between gap-3">
-              <span className="inline-flex items-center gap-2 text-ui-caption font-medium text-neutral-700">
-                <Brain className="h-3.5 w-3.5" aria-hidden="true" />
-                {t("reasoningLevel")}
-              </span>
-              <span className="text-ui-caption font-medium text-neutral-700">{statusLabel}</span>
-            </div>
-            {!fixed && (
-              <div
-                className={clsx(styles.slider, "mt-2")}
-                data-off={props.reasoning === "off"}
-                style={{ "--progress": reasoningIndex / Math.max(1, levels.length - 1) } as React.CSSProperties}
-              >
-                <div className={styles.track} aria-hidden="true">
-                  <div className={styles.fill} />
-                  <div className={styles.stops}>
-                    {levels.map((level, index) => (
-                      <span key={level} data-filled={index < reasoningIndex} />
-                    ))}
-                  </div>
+        {reasoningVisible && !fixed && (
+          <div className="flex items-center gap-3 border-t border-morning-mist bg-neutral-50/80 px-3">
+            <Brain className={clsx(styles.label, "h-4 w-4 shrink-0")} aria-hidden="true" />
+            <div
+              className={clsx(styles.slider, "min-w-0 flex-1")}
+              data-off={props.reasoning === "off"}
+              style={{ "--progress": reasoningIndex / Math.max(1, levels.length - 1) } as React.CSSProperties}
+            >
+              <div className={styles.track} aria-hidden="true">
+                <div className={styles.fill} />
+                <div className={styles.stops}>
+                  {levels.map((level, index) => (
+                    <span key={level} data-filled={index < reasoningIndex} />
+                  ))}
                 </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={levels.length - 1}
-                  step={1}
-                  value={reasoningIndex}
-                  onChange={(event) => commitReasoning(levels[Number(event.target.value)])}
-                  aria-label={t("reasoningLevel")}
-                  aria-valuetext={statusLabel ?? undefined}
-                  className={styles.input}
-                />
               </div>
-            )}
+              <input
+                type="range"
+                min={0}
+                max={levels.length - 1}
+                step={1}
+                value={reasoningIndex}
+                onChange={(event) => commitReasoning(levels[Number(event.target.value)])}
+                aria-label={t("reasoningLevel")}
+                aria-valuetext={statusLabel ?? undefined}
+                className={styles.input}
+              />
+            </div>
           </div>
         )}
       </div>

@@ -19,6 +19,7 @@
      信息性文字禁止再用 neutral-400 或半透明墨色(不达标)。 */
   --color-ink-secondary: oklch(0.46 0.013 250);
   --color-ink-tertiary: oklch(0.52 0.012 250);
+  --color-reasoning-purple: oklch(0.5 0.18 305);
 
   /* 语义状态色:文字与实心按钮同值达标(白字压色 ≥4.5:1)。amber 系文字一律用 warning,
      neku-amber 只做大面积装饰底色,不用于文字。 */
