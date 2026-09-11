@@ -189,7 +189,7 @@ export default function DashSidebar({
             : "md:w-60 md:min-w-60 md:max-w-60 md:p-3",
         )}
       >
-        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto">
+        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-y-none">
           <div className={clsx("flex items-center", collapsed ? "flex-col gap-1" : "justify-between gap-1 px-1 py-1")}>
             <Link
               href={chatHref}

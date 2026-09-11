@@ -100,6 +100,12 @@ body {
   overflow-x: hidden;
 }
 
+/* 后台由导航与正文独立滚动，根视口不滚动或越界回弹。 */
+html:has(#dash-main-content) {
+  overflow-y: hidden;
+  overscroll-behavior-y: none;
+}
+
 body {
   color: var(--foreground);
   background: var(--background);
