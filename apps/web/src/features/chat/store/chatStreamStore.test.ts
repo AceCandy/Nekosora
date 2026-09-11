@@ -668,6 +668,61 @@ describe("chatStreamStore terminal 状态收敛", () => {
     expect(message?.content).toBe(action === "continue" ? "partialfinal answer" : "final answer");
   });
 
+  it.each(actions)("%s 回填同一 assistant 的标识、增量与元数据并清理运行态", async (action) => {
+    useChatStreamStore.getState().hydrate("conversation-other", [
+      { role: "assistant", publicId: "other-assistant", content: "untouched" },
+    ]);
+    const other = useChatStreamStore.getState().runtimes["conversation-other"];
+    const createdAt = "2026-09-11T00:00:00.000Z";
+    mocks.consumeChatSSE.mockImplementationOnce(async (
+      _body: ReadableStream<Uint8Array>,
+      handlers: SSEHandlers,
+    ) => {
+      handlers.onAssistantMessage?.("assistant-real", createdAt);
+      handlers.onAssistantMessage?.("assistant-real");
+      handlers.onDelta("answer");
+      handlers.onReasoning?.("reasoning");
+      handlers.onFinish?.(finishMetadata);
+      return "success" as const;
+    });
+
+    await invokeAction(action);
+
+    const runtime = useChatStreamStore.getState().runtimes[key];
+    expect(runtime.messages.at(-1)).toMatchObject({
+      publicId: "assistant-real",
+      createdAt,
+      content: action === "continue" ? "partialanswer" : "answer",
+      reasoning: "reasoning",
+      runMetadata: finishMetadata,
+      status: "success",
+    });
+    expect(runtime.streaming).toBe(false);
+    expect(runtime.abortController).toBeNull();
+    expect(useChatStreamStore.getState().runtimes["conversation-other"]).toBe(other);
+  });
+
+  it.each(actions)("%s 在缓冲正文之后只追加一次错误，即使随后协议异常", async (action) => {
+    mocks.consumeChatSSE.mockImplementationOnce(async (
+      _body: ReadableStream<Uint8Array>,
+      handlers: SSEHandlers,
+    ) => {
+      handlers.onDelta("buffered answer");
+      handlers.onError?.("upstream failed");
+      throw new Error("missing terminal");
+    });
+
+    await invokeAction(action);
+
+    const runtime = useChatStreamStore.getState().runtimes[key];
+    expect(runtime.messages.at(-1)).toMatchObject({
+      content: `${action === "continue" ? "partial" : ""}buffered answer\n\n[错误] upstream failed`,
+      status: "interrupted",
+    });
+    expect(runtime.streaming).toBe(false);
+    expect(runtime.abortController).toBeNull();
+  });
+
   it.each(actions)("%s 按 toolCallId 收敛同名搜索并保存引用", async (action) => {
     mocks.consumeChatSSE.mockImplementationOnce(async (
       _body: ReadableStream<Uint8Array>,

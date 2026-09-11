@@ -537,9 +537,38 @@ function applyProcessEventAt(key: string, idx: number, event: ChatProcessEvent):
   });
 }
 
-/** 四种生成动作共享同一套工具与搜索事件投影。 */
-function toolAndSearchHandlers(key: string, assistantIdx: number): Partial<SSEHandlers> {
-  return {
+/** 四种生成动作共享事件投影与终态回填；请求准备、回滚和版本选择仍由动作负责。 */
+async function consumeAssistantStream(
+  body: ReadableStream<Uint8Array>,
+  key: string,
+  assistantIdx: number,
+  handlers: Pick<SSEHandlers, "onError" | "onAssistantMessage" | "onUserMessage" | "onTitleUpdated">,
+): Promise<void> {
+  const terminalStatus = await consumeChatSSE(body, {
+    onDelta: (text) => enqueueDelta(key, assistantIdx, "content", text),
+    onReasoning: (text) => enqueueDelta(key, assistantIdx, "reasoning", text),
+    onError: (error) => {
+      handlers.onError?.(error);
+      // 先写完缓冲正文，再追加错误；动作 catch 据此避免重复追加协议错误。
+      flushDeltasNow();
+      appendContentAt(key, assistantIdx, `\n\n[错误] ${error}`);
+    },
+    onFinish: (metadata) => setRunMetadataAt(key, assistantIdx, metadata),
+    onAssistantMessage: (publicId, createdAt) => {
+      handlers.onAssistantMessage?.(publicId, createdAt);
+      useChatStreamStore.setState((state) => patchRuntime(state, key, (runtime) => {
+        if (assistantIdx < 0 || assistantIdx >= runtime.messages.length) return runtime;
+        const messages = [...runtime.messages];
+        messages[assistantIdx] = {
+          ...messages[assistantIdx],
+          publicId,
+          createdAt: createdAt ?? messages[assistantIdx].createdAt,
+        };
+        return { ...runtime, messages };
+      }));
+    },
+    onUserMessage: handlers.onUserMessage,
+    onTitleUpdated: handlers.onTitleUpdated,
     onTrace: (event) => applyProcessEventAt(key, assistantIdx, event),
     onContentRetract: (text) => {
       flushDeltasNow();
@@ -584,7 +613,9 @@ function toolAndSearchHandlers(key: string, assistantIdx: number): Partial<SSEHa
       ),
     // 兼容同版本部署期间的旧搜索结果帧。
     onSearchResult: (results) => mergeSearchResultsAt(key, assistantIdx, results),
-  };
+  });
+  flushDeltasNow();
+  setCompletionStatusAt(key, assistantIdx, terminalStatus);
 }
 
 export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
@@ -744,17 +775,10 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
       hooks?.onAttachmentsConsumed?.(fileIds);
       if (newConvId) startConversationTitlePoll(newConvId);
 
-      const terminalStatus = await consumeChatSSE(res.body, {
-        ...toolAndSearchHandlers(activeKey, assistantIdx),
-        onDelta: (t) => enqueueDelta(activeKey, assistantIdx, "content", t),
-        onReasoning: (t) => enqueueDelta(activeKey, assistantIdx, "reasoning", t),
-        onError: (err) => {
+      await consumeAssistantStream(res.body, activeKey, assistantIdx, {
+        onError: () => {
           streamErrorReceived = true;
-          // 先 flush 缓冲正文再追加错误,保证"正文在前、错误在后";改覆盖为追加,避免丢已生成正文。
-          flushDeltasNow();
-          appendContentAt(activeKey, assistantIdx, `\n\n[错误] ${err}`);
         },
-        onFinish: (metadata) => setRunMetadataAt(activeKey, assistantIdx, metadata),
         onUserMessage: (publicId, createdAt) => {
           set((s) => patchRuntime(s, activeKey, (r) => {
             if (userMsgIdx >= r.messages.length) return r;
@@ -769,19 +793,6 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
           }));
           hooks?.onUserMessagePublicId?.(publicId);
         },
-        onAssistantMessage: (publicId, createdAt) => {
-          // 回填 assistant 占位的 publicId,使生成期间即可显示操作按钮(无需刷新)
-          set((s) => patchRuntime(s, activeKey, (r) => {
-            if (assistantIdx < 0 || assistantIdx >= r.messages.length) return r;
-            const updated = [...r.messages];
-            updated[assistantIdx] = {
-              ...updated[assistantIdx],
-              publicId,
-              createdAt: createdAt ?? updated[assistantIdx].createdAt,
-            };
-            return { ...r, messages: updated };
-          }));
-        },
         onTitleUpdated: (title, conversationId) => {
           // 保留 SSE 标题事件兼容路径；后台 worker 的最终标题由独立短轮询收敛。
           const opt = get().optimisticConversation;
@@ -791,8 +802,6 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
           hooks?.onTitleUpdated?.();
         },
       });
-      flushDeltasNow();
-      setCompletionStatusAt(activeKey, assistantIdx, terminalStatus);
     } catch (err) {
       // 先 flush 缓冲的限速正文,再追加错误/停止标记,否则标记会落在 finally flushDeltasNow 的残留正文之前,夹在正文中间。
       flushDeltasNow();
@@ -865,34 +874,16 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
         throw new Error("请求失败");
       }
 
-      const terminalStatus = await consumeChatSSE(res.body, {
-        ...toolAndSearchHandlers(key, assistantIdx),
-        onDelta: (t) => enqueueDelta(key, assistantIdx, "content", t),
-        onReasoning: (t) => enqueueDelta(key, assistantIdx, "reasoning", t),
-        onError: (error) => {
+      await consumeAssistantStream(res.body, key, assistantIdx, {
+        onError: () => {
           streamErrorReceived = true;
-          flushDeltasNow();
-          appendContentAt(key, assistantIdx, `\n\n[错误] ${error}`);
         },
-        onFinish: (metadata) => setRunMetadataAt(key, assistantIdx, metadata),
         // 回填后端真实 publicId,覆盖 retryFromMessage 生成的占位 UUID;
         // 否则生成结束后 refreshVersionInfo 拿占位 id 查不到兄弟,版本切换器无法显示。
-        onAssistantMessage: (publicId, createdAt) => {
+        onAssistantMessage: (publicId) => {
           generatedAssistantPublicId = publicId;
-          set((s) => patchRuntime(s, key, (r) => {
-            if (assistantIdx < 0 || assistantIdx >= r.messages.length) return r;
-            const copy = [...r.messages];
-            copy[assistantIdx] = {
-              ...copy[assistantIdx],
-              publicId,
-              createdAt: createdAt ?? copy[assistantIdx].createdAt,
-            };
-            return { ...r, messages: copy };
-          }));
         },
       });
-      flushDeltasNow();
-      setCompletionStatusAt(key, assistantIdx, terminalStatus);
       if (generatedAssistantPublicId) {
         try {
           await selectMessageVersion(generatedAssistantPublicId);
@@ -992,31 +983,11 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
       });
       if (!res.ok || !res.body) throw new Error("请求失败");
 
-      const terminalStatus = await consumeChatSSE(res.body, {
-        ...toolAndSearchHandlers(key, assistantIdx),
-        onDelta: (t) => enqueueDelta(key, assistantIdx, "content", t),
-        onReasoning: (t) => enqueueDelta(key, assistantIdx, "reasoning", t),
-        onError: (error) => {
+      await consumeAssistantStream(res.body, key, assistantIdx, {
+        onError: () => {
           streamErrorReceived = true;
-          flushDeltasNow();
-          appendContentAt(key, assistantIdx, `\n\n[错误] ${error}`);
-        },
-        onFinish: (metadata) => setRunMetadataAt(key, assistantIdx, metadata),
-        onAssistantMessage: (publicId, createdAt) => {
-          set((s) => patchRuntime(s, key, (r) => {
-            if (assistantIdx < 0 || assistantIdx >= r.messages.length) return r;
-            const copy = [...r.messages];
-            copy[assistantIdx] = {
-              ...copy[assistantIdx],
-              publicId,
-              createdAt: createdAt ?? copy[assistantIdx].createdAt,
-            };
-            return { ...r, messages: copy };
-          }));
         },
       });
-      flushDeltasNow();
-      setCompletionStatusAt(key, assistantIdx, terminalStatus);
     } catch (err) {
       flushDeltasNow();
       const { content } = handleStreamError(err, "网络错误");
@@ -1078,32 +1049,11 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
       if (!res.ok || !res.body) throw new Error("请求失败");
 
       // 续写:delta 追加到既有 assistant 消息内容末尾(不清空原内容)
-      const terminalStatus = await consumeChatSSE(res.body, {
-        ...toolAndSearchHandlers(key, assistantIdx),
-        // 续写增量同样走合批:流式期间该 idx 消息 publicId 稳定(switchVersion 被 streaming 阻止),可省 publicId 校验。
-        onDelta: (t) => enqueueDelta(key, assistantIdx, "content", t),
-        onReasoning: (t) => enqueueDelta(key, assistantIdx, "reasoning", t),
-        onError: (error) => {
+      await consumeAssistantStream(res.body, key, assistantIdx, {
+        onError: () => {
           streamErrorReceived = true;
-          flushDeltasNow();
-          appendContentAt(key, assistantIdx, `\n\n[错误] ${error}`);
-        },
-        onFinish: (metadata) => setRunMetadataAt(key, assistantIdx, metadata),
-        onAssistantMessage: (publicId, createdAt) => {
-          set((s) => patchRuntime(s, key, (r) => {
-            if (assistantIdx < 0 || assistantIdx >= r.messages.length) return r;
-            const copy = [...r.messages];
-            copy[assistantIdx] = {
-              ...copy[assistantIdx],
-              publicId,
-              createdAt: createdAt ?? copy[assistantIdx].createdAt,
-            };
-            return { ...r, messages: copy };
-          }));
         },
       });
-      flushDeltasNow();
-      setCompletionStatusAt(key, assistantIdx, terminalStatus);
     } catch (err) {
       flushDeltasNow();
       const { content } = handleStreamError(err, "网络错误");

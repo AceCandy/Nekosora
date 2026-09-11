@@ -294,7 +294,8 @@ const onSubmit = (event: FormEvent<HTMLFormElement>) => {
 ### 2. Signatures
 
 - `consumeChatSSE(body, handlers): Promise<ChatTerminalStatus>`。
-- `ChatTerminalStatus = "success" | "failed" | "interrupted"`，唯一 owner 为 `src/lib/chat/sse-contract.ts`。
+- `ChatTerminalStatus = "success" | "failed" | "interrupted"`，唯一 owner 为 `packages/core/src/lib/chat/sse-contract.ts`。
+- Store 内 `consumeAssistantStream(body, key, assistantIdx, handlers): Promise<void>` 统一消费 parser 并回填终态。
 - `ChatMessage.status?: "success" | "interrupted"`；缺省只用于历史完整消息兼容。
 - 内部正文撤回帧：`{ type: "content_retract"; text: string }`；对应 Core 事件为 `{ type: "text-retract"; text: string }`。
 
@@ -303,6 +304,7 @@ const onSubmit = (event: FormEvent<HTMLFormElement>) => {
 - 内部成功 tail 固定为 `finish(metadata) -> terminal(success) -> [DONE]`；失败/中断为已有 error frame -> terminal(status) -> DONE。
 - Parser 只在收到合法 DONE 时返回 terminal status。DONE 缺 terminal、success 缺 finish、矛盾/重复 terminal 或 EOF 缺 DONE 必须抛协议错误。
 - 四条 Store 流式动作必须消费 parser 返回值：terminal success 写 message success；failed/interrupted 写 message interrupted；协议异常 catch 也写 interrupted。
+- 四个动作通过 `consumeAssistantStream` 共享正文/思考合批、assistant 标识/时间、finish 元数据、工具/搜索/trace、错误追加与成功返回后的 flush/终态写入。请求准备、预流式回滚、标题/附件回调和重生成版本选择仍归动作；不要把这些差异塞进通用请求状态机。
 - `stopGeneration` 在本地 Abort 时立即写 interrupted。取消后的 wire 写入由服务端抑制，不等待 terminal。
 - `onError` 必须先 `flushDeltasNow()` 再向当前稳定 assistant index 追加一次错误。若 error frame 后又发生协议异常，catch 不得追加第二份错误。
 - 模型在同一 step 先输出正文、随后调用工具时，Core 发送该 step 已输出正文的精确撤回后缀。Store 的 `onContentRetract` 必须先 `flushDeltasNow()`，再仅当当前正文以该文本结尾时删除后缀；不得清空整条消息。工具调用后的同 step 正文不再透传。
@@ -337,6 +339,7 @@ const onSubmit = (event: FormEvent<HTMLFormElement>) => {
 - Store table tests cover success/failed/interrupted plus protocol rejection for all four actions.
 - Assert failed/interrupted retain content, write interrupted, and contain one error marker; success preserves finish metadata and writes success.
 - Keep local Abort/stopGeneration and delta-before-error ordering regressions green.
+- 四动作参数化回归断言标识/时间回填、元数据、续写前缀、其他会话状态不变与运行态清理；错误帧后协议异常仍只追加一次错误且位于缓冲正文之后。
 - Retraction tests cover parser dispatch and send/regenerate/edit/continue Store paths, including pending
   delta flush, unmatched suffix no-op, persisted Core content, and preservation of continue-generation prefix.
 

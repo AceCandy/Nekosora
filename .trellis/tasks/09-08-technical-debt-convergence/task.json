@@ -21,7 +21,9 @@
   "children": [
     "09-08-quality-gate-convergence",
     "09-08-database-type-convergence",
-    "09-08-db-package-boundary"
+    "09-08-db-package-boundary",
+    "09-11-core-package-boundary",
+    "09-11-chat-sse-convergence"
   ],
   "parent": null,
   "relatedFiles": [],
