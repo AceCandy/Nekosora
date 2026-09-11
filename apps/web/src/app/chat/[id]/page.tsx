@@ -5,8 +5,8 @@ import { createShare, listConversationShares, revokeShare, type CreateShareInput
 import { listMyCards } from "@/features/panel/cards/actions";
 import { listEnabledOutputModes } from "@/lib/output-modes/service";
 import { listEnabledRenderStyles } from "@/lib/render-styles/service";
-import ChatComposer, { type ModelOption } from "@/features/chat/components/ChatComposer";
-import type { ModelCapabilities } from "@nekusora/db/types";
+import ChatComposer from "@/features/chat/components/ChatComposer";
+import { toComposerOptions } from "@/features/chat/model/composerOptions";
 import type { ChatMessage } from "@/features/chat/model/types";
 import { toMessageCreatedAtIso } from "@/features/chat/model/messageTime";
 import { requireSession } from "@/lib/session";
@@ -40,14 +40,7 @@ export default async function ChatConversationPage({
   ]);
   const msgs = branch.messages;
   const versionMap = branch.versionMap as Record<string, { current: number; total: number }>;
-  // getVisibleModels 已返回扁平数组且 private 排序在前,直接映射为 ModelOption[](带 capabilities)。
-  const models: ModelOption[] = (visibleModels as Record<string, unknown>[]).map((m) => ({
-    modelId: m.id as string,
-    name: m.name as string,
-    displayName: (m.displayName as string | undefined) ?? undefined,
-    capabilities: (m.capabilities as ModelCapabilities | undefined) ?? undefined,
-    source: m.visibility === "public" ? ("global" as const) : ("byo" as const),
-  }));
+  const { models, modes, styles } = toComposerOptions(visibleModels, outputModes, renderStyles);
 
   // Convert messages to ChatComposer format(P1-B:关联 artifacts; 历史 toolCalls 由 getVisibleBranch 按 runId 回填; P2-A: feedback)
   const artifactsByMsg = artifactsMap as Record<string, { id: string; kind: string; title: string; language: string | null; content: string }[]>;
@@ -78,20 +71,6 @@ export default async function ChatConversationPage({
       | undefined,
   }));
 
-  const modes = (outputModes as { id: string; name: string; description?: string | null; icon?: string | null }[]).map((m) => ({
-    id: m.id,
-    name: m.name,
-    description: m.description,
-    icon: m.icon,
-  }));
-  const styles = (renderStyles as { id: string; cssClass: string; renderer: "streamdown" | "custom"; name: string; description?: string | null; icon?: string | null }[]).map((s) => ({
-    id: s.id,
-    cssClass: s.cssClass,
-    renderer: s.renderer,
-    name: s.name,
-    description: s.description,
-    icon: s.icon,
-  }));
 
   // Server action wrapper for sharing
   async function handleCreateShare(input: CreateShareInput) {

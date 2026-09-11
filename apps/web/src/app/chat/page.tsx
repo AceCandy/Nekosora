@@ -3,9 +3,9 @@ import { getVisibleModels } from "@/features/chat/actions/conversations";
 import { listMyCards } from "@/features/panel/cards/actions";
 import { listEnabledOutputModes } from "@/lib/output-modes/service";
 import { listEnabledRenderStyles } from "@/lib/render-styles/service";
-import ChatComposer, { type ModelOption } from "@/features/chat/components/ChatComposer";
+import ChatComposer from "@/features/chat/components/ChatComposer";
 import { createShare, listConversationShares, revokeShare, type CreateShareInput } from "@/features/chat/actions/share";
-import type { ModelCapabilities } from "@nekusora/db/types";
+import { toComposerOptions } from "@/features/chat/model/composerOptions";
 import { newConversationKey } from "@/features/chat/model/newConversationNavigation";
 import { requireSession } from "@/lib/session";
 import { isWebSearchEnabled } from "@nekusora/core/web-search/registry";
@@ -25,28 +25,7 @@ export default async function ChatPage({
     listEnabledRenderStyles().catch(() => []),
     isWebSearchEnabled(user.id).catch(() => false),
   ]);
-  // getVisibleModels 已返回扁平数组且 private 排序在前,直接映射为 ModelOption[]。
-  const models: ModelOption[] = (visibleModels as Record<string, unknown>[]).map((m) => ({
-    modelId: m.id as string,
-    name: m.name as string,
-    displayName: (m.displayName as string | undefined) ?? undefined,
-    capabilities: (m.capabilities as ModelCapabilities | undefined) ?? undefined,
-    source: m.visibility === "public" ? ("global" as const) : ("byo" as const),
-  }));
-  const modes = (outputModes as { id: string; name: string; description?: string | null; icon?: string | null }[]).map((m) => ({
-    id: m.id,
-    name: m.name,
-    description: m.description,
-    icon: m.icon,
-  }));
-  const styles = (renderStyles as { id: string; cssClass: string; renderer: "streamdown" | "custom"; name: string; description?: string | null; icon?: string | null }[]).map((s) => ({
-    id: s.id,
-    cssClass: s.cssClass,
-    renderer: s.renderer,
-    name: s.name,
-    description: s.description,
-    icon: s.icon,
-  }));
+  const { models, modes, styles } = toComposerOptions(visibleModels, outputModes, renderStyles);
 
   async function handleCreateShare(input: CreateShareInput) {
     "use server";

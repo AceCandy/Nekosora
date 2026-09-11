@@ -31,13 +31,12 @@ export interface RenderStyle {
 export async function listAllRenderStyles(): Promise<RenderStyle[]> {
   await requireAdmin();
   const db = await getDb();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const s = getSchema() as any;
+  const s = getSchema();
   const rows = await db
     .select()
     .from(s.renderStyles)
     .orderBy(asc(s.renderStyles.sortOrder), asc(s.renderStyles.createdAt));
-  return rows as RenderStyle[];
+  return rows.map((row) => ({ ...row, renderer: row.renderer as RenderStyle["renderer"] }));
 }
 
 /** 用户:列出启用的输出样式(供 chat 工具栏选择)。全局共享,带缓存。 */
@@ -46,8 +45,7 @@ export async function listEnabledRenderStyles(): Promise<RenderStyle[]> {
   const revision = await getSettingsRevision();
   return cacheWrap(`${ENABLED_RENDER_STYLES_KEY}:${revision}`, async () => {
     const db = await getDb();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const s = getSchema() as any;
+    const s = getSchema();
     const rows = await db
       .select({
         id: s.renderStyles.id,
@@ -64,7 +62,7 @@ export async function listEnabledRenderStyles(): Promise<RenderStyle[]> {
       .from(s.renderStyles)
       .where(eq(s.renderStyles.enabled, true))
       .orderBy(asc(s.renderStyles.sortOrder), asc(s.renderStyles.createdAt));
-    return rows as RenderStyle[];
+    return rows.map((row) => ({ ...row, renderer: row.renderer as RenderStyle["renderer"] }));
   });
 }
 
@@ -75,8 +73,7 @@ export async function invalidateRenderStylesCache(revision: number): Promise<voi
 /** 读取单个输出样式(用于聊天页聚合注入 CSS)。不鉴权(内部调用,layout 已在受保护路由下)。 */
 export async function getRenderStyle(id: string): Promise<RenderStyle | null> {
   const db = await getDb();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const s = getSchema() as any;
+  const s = getSchema();
   const [row] = await db.select().from(s.renderStyles).where(eq(s.renderStyles.id, id)).limit(1);
-  return (row as RenderStyle | undefined) ?? null;
+  return row ? { ...row, renderer: row.renderer as RenderStyle["renderer"] } : null;
 }

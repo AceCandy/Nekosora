@@ -1,17 +1,17 @@
 import type { MessageVersionSelections } from "@nekusora/db/types";
 
-export interface VisibleBranchResult {
-  messages: Record<string, unknown>[];
+export interface VisibleBranchResult<T extends Record<string, unknown> = Record<string, unknown>> {
+  messages: T[];
   versionMap: Record<string, { current: number; total: number }>;
 }
 
 const ROOT_SIBLING_KEY = "__root__";
 
 /** 从有序消息树解析当前主线，并应用已持久化的 assistant 版本选择。 */
-export function resolveVisibleBranch(
-  allMessages: Record<string, unknown>[],
+export function resolveVisibleBranch<T extends Record<string, unknown>>(
+  allMessages: T[],
   selections: MessageVersionSelections | null | undefined,
-): VisibleBranchResult {
+): VisibleBranchResult<T> {
   if (allMessages.length === 0) return { messages: [], versionMap: {} };
 
   const parentIds = new Set(
@@ -32,7 +32,7 @@ export function resolveVisibleBranch(
     cursor = (byId.get(cursor)?.parentId as string | null) ?? null;
   }
 
-  const siblingsByParent = new Map<string, Record<string, unknown>[]>();
+  const siblingsByParent = new Map<string, T[]>();
   for (const message of allMessages) {
     if (message.role !== "assistant") continue;
     const key = (message.parentId as string | null) ?? ROOT_SIBLING_KEY;

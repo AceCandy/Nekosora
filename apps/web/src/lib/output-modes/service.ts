@@ -20,13 +20,12 @@ const ENABLED_OUTPUT_MODES_KEY = "chat:output-modes:enabled";
 export async function listAllOutputModes(): Promise<OutputMode[]> {
   await requireAdmin();
   const db = await getDb();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const s = getSchema() as any;
+  const s = getSchema();
   const rows = await db
     .select()
     .from(s.outputModes)
     .orderBy(asc(s.outputModes.sortOrder), asc(s.outputModes.createdAt));
-  return rows as OutputMode[];
+  return rows;
 }
 
 /** 用户:列出启用的输出模式(供 chat 工具栏选择)。全局共享,带缓存。 */
@@ -35,8 +34,7 @@ export async function listEnabledOutputModes(): Promise<OutputMode[]> {
   const revision = await getSettingsRevision();
   return cacheWrap(`${ENABLED_OUTPUT_MODES_KEY}:${revision}`, async () => {
     const db = await getDb();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const s = getSchema() as any;
+    const s = getSchema();
     const rows = await db
       .select({
         id: s.outputModes.id,
@@ -50,7 +48,7 @@ export async function listEnabledOutputModes(): Promise<OutputMode[]> {
       .from(s.outputModes)
       .where(eq(s.outputModes.enabled, true))
       .orderBy(asc(s.outputModes.sortOrder), asc(s.outputModes.createdAt));
-    return rows as OutputMode[];
+    return rows;
   });
 }
 

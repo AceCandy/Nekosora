@@ -82,13 +82,10 @@ export type UnlockShareResult =
   | { ok: true }
   | { ok: false; reason: "invalid" | "rate_limited"; retryAfter?: number };
 
-interface CurrentShareMessage extends ConversationShareMessageSnapshot {
-  deletedAt: Date | null;
-}
-
-// Drizzle 跨表动态 schema/query builder 的公共边界与项目数据库规范一致。
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type DrizzleBoundary = any;
+type Database = Awaited<ReturnType<typeof getDb>>;
+type Schema = ReturnType<typeof getSchema>;
+type ShareRow = Schema["conversationShares"]["$inferSelect"];
+type MessageRow = Schema["messages"]["$inferSelect"];
 
 function toExpiration(expiration: z.output<typeof expirationSchema>, now: Date): Date | null {
   if (expiration.kind === "forever") return null;
@@ -96,13 +93,13 @@ function toExpiration(expiration: z.output<typeof expirationSchema>, now: Date):
   return new Date(now.getTime() + expiration.days * 24 * 60 * 60 * 1000);
 }
 
-function toListItem(share: Record<string, unknown>, now: Date): ConversationShareListItem {
+function toListItem(share: Pick<ShareRow, "status" | "revokedAt" | "expiresAt" | "shareId" | "mode" | "createdAt" | "passwordVerifier">, now: Date): ConversationShareListItem {
   const revoked = share.status !== "active" || Boolean(share.revokedAt);
-  const expiresAt = share.expiresAt ? new Date(share.expiresAt as string | Date) : null;
+  const expiresAt = share.expiresAt ? new Date(share.expiresAt) : null;
   return {
-    shareId: share.shareId as string,
-    mode: (share.mode as ConversationShareMode | null) ?? "legacy",
-    createdAt: new Date(share.createdAt as string | Date),
+    shareId: share.shareId,
+    mode: share.mode ?? "legacy",
+    createdAt: new Date(share.createdAt),
     expiresAt,
     status: revoked ? "revoked" : expiresAt && expiresAt <= now ? "expired" : "active",
     hasPassword: Boolean(share.passwordVerifier),
@@ -110,13 +107,13 @@ function toListItem(share: Record<string, unknown>, now: Date): ConversationShar
 }
 
 function snapshotMessages(
-  messages: Record<string, unknown>[],
+  messages: MessageRow[],
   runMetadataByRunId: Map<string, MessageRunMetadata>,
 ): ConversationShareMessageSnapshot[] {
   return messages.map((message) => {
     const snapshot: ConversationShareMessageSnapshot = {
-      publicId: message.publicId as string,
-      role: message.role as string,
+      publicId: message.publicId,
+      role: message.role,
       content: message.content,
     };
     const createdAt = toMessageCreatedAtIso(message.createdAt);
@@ -159,18 +156,18 @@ function normalizeMessages(
   });
 }
 
-async function loadVisibleMessages(db: DrizzleBoundary, s: DrizzleBoundary, conversationId: string, selections: MessageVersionSelections | null) {
+async function loadVisibleMessages(db: Database, s: Schema, conversationId: string, selections: MessageVersionSelections | null) {
   const allMessages = await db
     .select()
     .from(s.messages)
     .where(and(eq(s.messages.conversationId, conversationId), isNull(s.messages.deletedAt)))
     .orderBy(s.messages.createdAt);
-  return resolveVisibleBranch(allMessages as Record<string, unknown>[], selections).messages;
+  return resolveVisibleBranch(allMessages, selections).messages;
 }
 
 async function loadVisibleMessageSnapshots(
-  db: DrizzleBoundary,
-  s: DrizzleBoundary,
+  db: Database,
+  s: Schema,
   conversationId: string,
   selections: MessageVersionSelections | null,
 ): Promise<ConversationShareMessageSnapshot[]> {
@@ -183,8 +180,8 @@ async function loadVisibleMessageSnapshots(
 }
 
 async function loadRenderStyleSnapshot(
-  db: DrizzleBoundary,
-  s: DrizzleBoundary,
+  db: Database,
+  s: Schema,
   renderStyleId: string | null | undefined,
   strict = true,
 ): Promise<ConversationShareRenderStyleSnapshot | null> {
@@ -213,7 +210,7 @@ export async function createShare(input: CreateShareInput): Promise<Conversation
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "分享配置无效");
   const user = await requireSession();
   const db = await getDb();
-  const s = getSchema() as DrizzleBoundary;
+  const s = getSchema();
   const now = new Date();
 
   const [conversation] = await db.select().from(s.conversations)
@@ -224,7 +221,7 @@ export async function createShare(input: CreateShareInput): Promise<Conversation
     db,
     s,
     conversation.id,
-    conversation.messageVersionSelections as MessageVersionSelections | null,
+    conversation.messageVersionSelections,
   );
   if (messageSnapshots.length === 0) throw new Error("当前会话没有可分享内容");
 
@@ -240,7 +237,7 @@ export async function createShare(input: CreateShareInput): Promise<Conversation
     : null;
   const shareId = crypto.randomUUID();
 
-  await db.transaction(async (tx: DrizzleBoundary) => {
+  await db.transaction(async (tx) => {
     await tx.insert(s.conversationShares).values({
       shareId,
       conversationId: conversation.id,
@@ -271,7 +268,7 @@ export async function createShare(input: CreateShareInput): Promise<Conversation
 export async function listConversationShares(conversationId: string): Promise<ConversationShareListItem[]> {
   const user = await requireSession();
   const db = await getDb();
-  const s = getSchema() as DrizzleBoundary;
+  const s = getSchema();
   const [conversation] = await db.select().from(s.conversations)
     .where(eq(s.conversations.id, conversationId)).limit(1);
   if (!conversation || conversation.userId !== user.id) throw new Error("无权操作");
@@ -286,11 +283,11 @@ export async function listConversationShares(conversationId: string): Promise<Co
   }).from(s.conversationShares)
     .where(eq(s.conversationShares.conversationId, conversationId))
     .orderBy(s.conversationShares.createdAt);
-  return (rows as Record<string, unknown>[]).map((share) => toListItem(share, new Date())).reverse();
+  return rows.map((share) => toListItem(share, new Date())).reverse();
 }
 
-async function loadLegacyMessages(db: DrizzleBoundary, s: DrizzleBoundary, share: Record<string, unknown>) {
-  const messageIds = (share.messageIdsJson ?? []) as string[];
+async function loadLegacyMessages(db: Database, s: Schema, share: ShareRow) {
+  const messageIds = share.messageIdsJson ?? [];
   if (messageIds.length === 0) return [];
   const allMessages = await db.select({
     publicId: s.messages.publicId,
@@ -301,18 +298,18 @@ async function loadLegacyMessages(db: DrizzleBoundary, s: DrizzleBoundary, share
     eq(s.messages.conversationId, share.conversationId),
     inArray(s.messages.publicId, messageIds),
   ));
-  const current = allMessages as CurrentShareMessage[];
+  const current = allMessages;
   const byPublicId = new Map(current.map((message) => [message.publicId, message]));
-  const snapshots = share.messageSnapshotsJson as ConversationShareMessageSnapshot[] | null;
+  const snapshots = share.messageSnapshotsJson;
   return snapshots
     ? snapshots.filter((message) => !byPublicId.get(message.publicId)?.deletedAt)
-    : messageIds.map((id) => byPublicId.get(id)).filter((message): message is CurrentShareMessage => Boolean(message && !message.deletedAt));
+    : messageIds.map((id) => byPublicId.get(id)).filter((message): message is typeof current[number] => Boolean(message && !message.deletedAt));
 }
 
 /** 公开读取；锁定与不可用状态永不携带私密元数据。 */
 export async function getShare(shareId: string): Promise<PublicShareState> {
   const db = await getDb();
-  const s = getSchema() as DrizzleBoundary;
+  const s = getSchema();
   const [share] = await db.select().from(s.conversationShares)
     .where(eq(s.conversationShares.shareId, shareId)).limit(1);
   const now = new Date();
@@ -327,7 +324,7 @@ export async function getShare(shareId: string): Promise<PublicShareState> {
   }
 
   let title = share.titleSnapshot ?? "分享的对话";
-  let renderStyle = (share.renderStyleSnapshot ?? null) as ConversationShareRenderStyleSnapshot | null;
+  let renderStyle = share.renderStyleSnapshot ?? null;
   let messages: ConversationShareMessageSnapshot[];
 
   if (share.mode === "live") {
@@ -339,11 +336,11 @@ export async function getShare(shareId: string): Promise<PublicShareState> {
       db,
       s,
       conversation.id,
-      conversation.messageVersionSelections as MessageVersionSelections | null,
+      conversation.messageVersionSelections,
     );
     renderStyle = await loadRenderStyleSnapshot(db, s, conversation.renderStyleId, false);
   } else if (share.mode === "snapshot") {
-    messages = (share.messageSnapshotsJson ?? []) as ConversationShareMessageSnapshot[];
+    messages = share.messageSnapshotsJson ?? [];
   } else {
     messages = await loadLegacyMessages(db, s, share);
     renderStyle = null;
@@ -369,7 +366,7 @@ export async function unlockShare(shareId: string, password: string): Promise<Un
     return { ok: false, reason: "invalid" };
   }
   const db = await getDb();
-  const s = getSchema() as DrizzleBoundary;
+  const s = getSchema();
   const now = new Date();
   const [share] = await db.select().from(s.conversationShares)
     .where(eq(s.conversationShares.shareId, shareId)).limit(1);
@@ -406,7 +403,7 @@ export async function unlockShare(shareId: string, password: string): Promise<Un
 export async function revokeShare(shareId: string): Promise<void> {
   const user = await requireSession();
   const db = await getDb();
-  const s = getSchema() as DrizzleBoundary;
+  const s = getSchema();
   const [share] = await db.select().from(s.conversationShares)
     .where(eq(s.conversationShares.shareId, shareId)).limit(1);
   if (!share) throw new Error("分享不存在");
