@@ -38,7 +38,7 @@
 - `/panel/*` 与 `/admin/*` 的设置入口统一由 `shared/nav-config.ts` 提供；搜索只处理 `DashLayout` 按角色过滤后的 `NavGroup[]`，不得另建权限表或让普通用户发现管理员目标。
 - `(dash)` 共享 layout 会按目标路径重新执行；只放 `(dash)/loading.tsx` 不会在同组子页导航时及时替换旧内容。设置中心的路由加载反馈必须由 `panel/loading.tsx` 与 `admin/loading.tsx` 在实际子段复用同一骨架，浏览器验证应观察到目标数据返回前右侧内容区出现 fallback，不能用内容返回后的 template 入场动画代替。
 - 系统设置使用 `tab` + `view` 的 URL 子视图，一次只取数并渲染一个具体工作区；调整参数时必须保留 `resolveSettingsSelection` 中的旧 alias 与稳定字段锚点。
-- `settings-control` 的 revision、乐观并发、历史与回滚仍是底层契约；常规编辑界面只表达“待发布草稿”，revision 仅在历史或冲突诊断中展示。
+- 系统设置仅保留点击保存后立即生效；不提供草稿、修改记录、审核发布或回滚入口，也不保留对应后台接口与历史存储。`settings-control` 的 revision 只用于并发校验和缓存代际，不作为用户可见的版本历史。
 
 ## 侧边栏收起(chat + dash 后台)
 

@@ -4,7 +4,6 @@
  * pgvector 用于向量检索(文件 RAG)。
  */
 import {
-  type AnyPgColumn,
   pgTable,
   text,
   boolean,
@@ -885,15 +884,7 @@ export const userSettings = pgTable(
   (t) => [uniqueIndex("user_settings_unique_idx").on(t.userId, t.key)],
 );
 
-export const settingsChangeSetStatus = pgEnum("settings_change_set_status", [
-  "draft",
-  "applied",
-  "abandoned",
-]);
-
-export const settingsChangeSetKind = pgEnum("settings_change_set_kind", ["edit", "rollback"]);
-
-/** 全局设置发布的串行化锁点与缓存代际。 */
+/** 全局设置保存的串行化锁点与缓存代际。 */
 export const settingsControlState = pgTable(
   "settings_control_state",
   {
@@ -904,61 +895,6 @@ export const settingsControlState = pgTable(
   (t) => [
     check("settings_control_state_singleton_check", sql`${t.id} = 'global'`),
     check("settings_control_state_revision_check", sql`${t.currentRevision} >= 0`),
-  ],
-);
-
-/** 设置草稿与不可变发布历史；changes 仅保存 canonical 资源快照。 */
-export const settingsChangeSets = pgTable(
-  "settings_change_sets",
-  {
-    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
-    status: settingsChangeSetStatus("status").notNull().default("draft"),
-    kind: settingsChangeSetKind("kind").notNull().default("edit"),
-    rollbackOf: text("rollback_of").references(
-      (): AnyPgColumn => settingsChangeSets.id,
-      { onDelete: "restrict" },
-    ),
-    actorId: text("actor_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "restrict" }),
-    baseRevision: bigint("base_revision", { mode: "number" }).notNull(),
-    appliedRevision: bigint("applied_revision", { mode: "number" }),
-    version: integer("version").notNull().default(1),
-    changes: jsonb("changes").$type<unknown[]>().notNull().default([]),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-    appliedAt: timestamp("applied_at", { withTimezone: true }),
-    abandonedAt: timestamp("abandoned_at", { withTimezone: true }),
-  },
-  (t) => [
-    uniqueIndex("settings_change_sets_single_draft_idx")
-      .on(t.status)
-      .where(sql`${t.status} = 'draft'`),
-    uniqueIndex("settings_change_sets_applied_revision_idx").on(t.appliedRevision),
-    index("settings_change_sets_applied_at_idx").on(t.appliedAt),
-    check("settings_change_sets_base_revision_check", sql`${t.baseRevision} >= 0`),
-    check("settings_change_sets_version_check", sql`${t.version} > 0`),
-    check("settings_change_sets_changes_array_check", sql`jsonb_typeof(${t.changes}) = 'array'`),
-    check(
-      "settings_change_sets_rollback_check",
-      sql`(${t.kind} = 'edit' and ${t.rollbackOf} is null)
-        or (${t.kind} = 'rollback' and ${t.rollbackOf} is not null)`,
-    ),
-    check(
-      "settings_change_sets_status_check",
-      sql`(${t.status} = 'draft'
-          and ${t.appliedRevision} is null
-          and ${t.appliedAt} is null
-          and ${t.abandonedAt} is null)
-        or (${t.status} = 'applied'
-          and ${t.appliedRevision} is not null
-          and ${t.appliedAt} is not null
-          and ${t.abandonedAt} is null)
-        or (${t.status} = 'abandoned'
-          and ${t.appliedRevision} is null
-          and ${t.appliedAt} is null
-          and ${t.abandonedAt} is not null)`,
-    ),
   ],
 );
 

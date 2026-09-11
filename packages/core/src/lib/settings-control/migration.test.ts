@@ -5,32 +5,37 @@ import { describe, expect, it } from "vitest";
 const migrationDir = join(process.cwd(), "drizzle/pg");
 
 describe("settings control PostgreSQL migration", () => {
-  it("creates revision, immutable history and private hourly aggregates", () => {
+  it("keeps revision and hourly aggregates while removing settings history", () => {
     const migration = readFileSync(
       join(migrationDir, "0000_baseline.sql"),
       "utf8",
     );
     const snapshot = JSON.parse(
-      readFileSync(join(migrationDir, "meta/0000_snapshot.json"), "utf8"),
+      readFileSync(join(migrationDir, "meta/0002_snapshot.json"), "utf8"),
     ) as {
+      enums: Record<string, unknown>;
       tables: Record<string, {
-        columns?: Record<string, unknown>;
+        columns?: Record<string, { notNull?: boolean }>;
         indexes?: Record<string, { isUnique?: boolean; where?: string }>;
       }>;
     };
 
+    const journal = JSON.parse(
+      readFileSync(join(migrationDir, "meta/_journal.json"), "utf8"),
+    ) as { entries: Array<{ idx: number; tag: string }> };
+    expect(journal.entries[2]).toMatchObject({ idx: 2, tag: "0002_remove_settings_history" });
+
     expect(migration).toContain(
       `INSERT INTO "settings_control_state" ("id", "current_revision") VALUES ('global', 0)`,
     );
-    expect(migration).toContain('CREATE TRIGGER "settings_change_sets_applied_immutable"');
-    expect(migration).toContain("IF OLD.\"status\" = 'applied'");
-
-    const changeSets = snapshot.tables["public.settings_change_sets"];
-    expect(changeSets?.columns).toHaveProperty("changes");
-    expect(changeSets?.indexes?.settings_change_sets_single_draft_idx).toMatchObject({
-      isUnique: true,
-      where: `"settings_change_sets"."status" = 'draft'`,
-    });
+    const cleanup = readFileSync(join(migrationDir, "0002_remove_settings_history.sql"), "utf8");
+    expect(cleanup).toContain('DROP TABLE "settings_change_sets"');
+    expect(cleanup).toContain('DROP FUNCTION "prevent_applied_settings_change_set_mutation"()');
+    expect(cleanup).not.toContain("CASCADE");
+    expect(snapshot.tables).not.toHaveProperty("public.settings_change_sets");
+    expect(snapshot.enums).not.toHaveProperty("public.settings_change_set_kind");
+    expect(snapshot.tables["public.settings_control_state"].columns).toHaveProperty("current_revision");
+    expect(snapshot.tables).toHaveProperty("public.system_settings");
 
     const hourly = snapshot.tables["public.gateway_governance_hourly"];
     expect(hourly?.indexes?.gateway_governance_hourly_bucket_scope_idx?.isUnique).toBe(true);

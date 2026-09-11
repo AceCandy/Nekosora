@@ -6,7 +6,7 @@ import type { SettingsSaveResult } from "@nekusora/core/settings-control/service
 export async function refreshSettings(saved: SettingsSaveResult): Promise<boolean> {
   let warning = false;
   try {
-    if (saved.changeSetId !== null) {
+    if (saved.changed) {
       warning = await invalidateSettingsRuntime(saved.revision - 1);
     }
   } catch {

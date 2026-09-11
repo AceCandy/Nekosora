@@ -2,7 +2,7 @@
 import { useRef, useState } from "react";
 import UpstreamModelPicker, { type FetchModelsAction } from "@/features/models/UpstreamModelPicker";
 import { Button } from "@/shared/ui/Button";
-import { useDraftAction } from "./useDraftAction";
+import { useSettingsAction } from "./useSettingsAction";
 
 /** embedding 模型名启发式:上游 /models 不返回模型类型,只能靠名称识别 embedding 类。 */
 const EMBEDDING_NAME_RE = /embed/i;
@@ -45,7 +45,7 @@ export default function EmbeddingConfigForm({
   const [providerId, setProviderId] = useState(initialProviderId);
   const [model, setModel] = useState(initialModel);
   const modelInputRef = useRef<HTMLInputElement>(null);
-  const { onSubmit, pending, status } = useDraftAction(action);
+  const { onSubmit, pending, status } = useSettingsAction(action);
 
   return (
     <form

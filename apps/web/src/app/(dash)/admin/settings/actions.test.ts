@@ -9,7 +9,7 @@ const mockData = vi.hoisted(() => ({
 
 const mockFunctions = vi.hoisted(() => ({
   revalidatePath: vi.fn(),
-  saveSystemSettings: vi.fn().mockResolvedValue({ revision: 5, changeSetId: "save-1" }),
+  saveSystemSettings: vi.fn().mockResolvedValue({ revision: 5, changed: true }),
 }));
 
 vi.mock("drizzle-orm", () => ({

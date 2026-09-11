@@ -68,10 +68,10 @@ export function parseSettingsChanges(input: unknown): SettingsChange[] {
   const changes = settingsChangesSchema.parse(input);
   const keys = new Set<string>();
   for (const change of changes) {
-    if (keys.has(change.resourceKey)) throw new Error("设置草稿包含重复资源");
+    if (keys.has(change.resourceKey)) throw new Error("设置变更包含重复资源");
     keys.add(change.resourceKey);
     validateResourceKey(change);
-    if (sameSnapshot(change.before, change.after)) throw new Error("设置草稿包含空变更");
+    if (sameSnapshot(change.before, change.after)) throw new Error("设置变更包含空变更");
   }
   return changes;
 }
@@ -80,7 +80,7 @@ export function mergeSettingsChange(
   changes: readonly SettingsChange[],
   next: SettingsChange,
 ): SettingsChange[] {
-  // 清空不存在的设置是无操作；暂存后再清空的新设置也应从草稿移除。
+  // 清空不存在的设置或恢复原值时，不记录变更。
   if (next.before !== null || next.after !== null) validateResourceKey(next);
   const index = changes.findIndex((change) => change.resourceKey === next.resourceKey);
   const before = index >= 0 ? changes[index]!.before : next.before;
@@ -93,47 +93,6 @@ export function mergeSettingsChange(
     : changes.map((change, itemIndex) => itemIndex === index ? merged : change);
 }
 
-export function changedFields(change: SettingsChange): string[] {
-  if (!change.before || !change.after) return ["*"];
-  const before = recordOf(change.before);
-  const after = recordOf(change.after);
-  return Object.keys(before).filter((key) => !sameSnapshot(before[key], after[key]));
-}
-
-export function settingsChangesOverlap(a: SettingsChange, b: SettingsChange): boolean {
-  if (a.resourceKey !== b.resourceKey) return false;
-  const left = changedFields(a);
-  const right = changedFields(b);
-  return left.includes("*") || right.includes("*") || left.some((field) => right.includes(field));
-}
-
-export function reverseSettingsChange(
-  target: SettingsChange,
-  current: SettingsSnapshot | null,
-): SettingsChange {
-  const fields = changedFields(target);
-  const after = fields.includes("*")
-    ? target.before
-    : patchFields(current, target.before, fields);
-  return {
-    ...target,
-    before: current,
-    after,
-  } as SettingsChange;
-}
-
-export function snapshotMatchesChangedFields(
-  current: SettingsSnapshot | null,
-  expected: SettingsSnapshot | null,
-  fields: readonly string[],
-): boolean {
-  if (fields.includes("*")) return sameSnapshot(current, expected);
-  if (!current || !expected) return false;
-  const currentRecord = recordOf(current);
-  const expectedRecord = recordOf(expected);
-  return fields.every((field) => sameSnapshot(currentRecord[field], expectedRecord[field]));
-}
-
 export function sameSnapshot(a: unknown, b: unknown): boolean {
   if (Object.is(a, b)) return true;
   if (!a || !b || typeof a !== "object" || typeof b !== "object") return false;
@@ -142,18 +101,6 @@ export function sameSnapshot(a: unknown, b: unknown): boolean {
   const keys = Object.keys(left);
   return keys.length === Object.keys(right).length
     && keys.every((key) => key in right && sameSnapshot(left[key], right[key]));
-}
-
-function patchFields(
-  current: SettingsSnapshot | null,
-  source: SettingsSnapshot | null,
-  fields: readonly string[],
-): SettingsSnapshot | null {
-  if (!current || !source) return source;
-  const patched = { ...recordOf(current) };
-  const sourceRecord = recordOf(source);
-  for (const field of fields) patched[field] = sourceRecord[field];
-  return patched as SettingsSnapshot;
 }
 
 function validateResourceKey(change: SettingsChange): void {

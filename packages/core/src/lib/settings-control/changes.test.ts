@@ -1,10 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  changedFields,
   mergeSettingsChange,
   parseSettingsChanges,
-  reverseSettingsChange,
-  settingsChangesOverlap,
   type SettingsChange,
 } from "./changes";
 
@@ -59,23 +56,4 @@ describe("settings change canonical helpers", () => {
     })).toEqual([]);
   });
 
-  it("reverses only the target update fields and preserves unrelated later values", () => {
-    const current = { ...original.after!, systemPrompt: "later unrelated" };
-    expect(changedFields(original)).toEqual(["name"]);
-    expect(reverseSettingsChange(original, current).after).toEqual({
-      ...current,
-      name: "原名",
-    });
-  });
-
-  it("treats create/delete as entity-wide conflicts and updates as field conflicts", () => {
-    const laterDescription = {
-      ...original,
-      before: original.after,
-      after: { ...original.after!, description: "later" },
-    } as SettingsChange;
-    const creation = { ...original, before: null } as SettingsChange;
-    expect(settingsChangesOverlap(original, laterDescription)).toBe(false);
-    expect(settingsChangesOverlap(creation, laterDescription)).toBe(true);
-  });
 });

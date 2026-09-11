@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@/shared/ui/Button";
-import { useDraftAction } from "./useDraftAction";
+import { useSettingsAction } from "./useSettingsAction";
 
 interface BasicSettingsFormProps {
   action: (formData: FormData) => Promise<void>;
@@ -23,7 +23,7 @@ interface BasicSettingsFormProps {
 }
 
 export default function BasicSettingsForm(props: BasicSettingsFormProps) {
-  const { onSubmit, pending, status } = useDraftAction(props.action);
+  const { onSubmit, pending, status } = useSettingsAction(props.action);
 
   return (
     <form autoComplete="off" onSubmit={onSubmit} className="space-y-3 rounded-lg border border-neutral-200 bg-white p-5">

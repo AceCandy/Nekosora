@@ -6,7 +6,7 @@ import {
 
 const mockFunctions = vi.hoisted(() => ({
   requireAdmin: vi.fn(),
-  saveSystemSettings: vi.fn().mockResolvedValue({ revision: 5, changeSetId: "save-1" }),
+  saveSystemSettings: vi.fn().mockResolvedValue({ revision: 5, changed: true }),
   revalidatePath: vi.fn(),
 }));
 
@@ -39,7 +39,7 @@ const FORM_FIELDS: readonly [keyof GatewayScopeLimits, string][] = [
 beforeEach(() => {
   vi.clearAllMocks();
   mockFunctions.requireAdmin.mockResolvedValue({ id: "admin-a", role: "admin" });
-  mockFunctions.saveSystemSettings.mockResolvedValue({ revision: 5, changeSetId: "save-1" });
+  mockFunctions.saveSystemSettings.mockResolvedValue({ revision: 5, changed: true });
 });
 
 describe("saveGatewayGovernancePolicy", () => {

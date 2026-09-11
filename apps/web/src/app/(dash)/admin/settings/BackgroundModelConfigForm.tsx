@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/shared/ui/Button";
-import { useDraftAction } from "./useDraftAction";
+import { useSettingsAction } from "./useSettingsAction";
 
 interface BackgroundModelOption {
   id: string;
@@ -41,7 +41,7 @@ export default function BackgroundModelConfigForm({
   action,
 }: BackgroundModelConfigFormProps) {
   const [modelId, setModelId] = useState(initialModelId);
-  const { onSubmit, pending, status } = useDraftAction(action);
+  const { onSubmit, pending, status } = useSettingsAction(action);
 
   return (
     <form

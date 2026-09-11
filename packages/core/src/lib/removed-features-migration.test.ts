@@ -19,13 +19,13 @@ describe("removed template and knowledge features migration", () => {
     const journal = JSON.parse(
       readFileSync(join(migrationDir, "meta/_journal.json"), "utf8"),
     ) as { entries: Array<{ idx: number; tag: string }> };
-    expect(journal.entries).toEqual([{
+    expect(journal.entries[0]).toEqual({
       idx: 0,
       version: "7",
       when: expect.any(Number),
       tag: "0000_baseline",
       breakpoints: true,
-    }]);
+    });
 
     const snapshot = JSON.parse(
       readFileSync(join(migrationDir, "meta/0000_snapshot.json"), "utf8"),

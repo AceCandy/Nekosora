@@ -3,13 +3,8 @@ import { sql } from "drizzle-orm";
 import { getDb } from "../infra/db/index";
 import { parseGatewayGovernancePolicy } from "../gateway-governance/policy";
 import {
-  changedFields,
   mergeSettingsChange,
   parseSettingsChanges,
-  reverseSettingsChange,
-  sameSnapshot,
-  settingsChangesOverlap,
-  snapshotMatchesChangedFields,
   type OutputModeSnapshot,
   type RenderStyleSnapshot,
   type SettingsChange,
@@ -40,63 +35,21 @@ interface SettingsDatabase extends SqlExecutor {
   transaction<T>(callback: (tx: SqlExecutor) => Promise<T>): Promise<T>;
 }
 
-interface ChangeSetRow {
-  id: string;
-  status: "draft" | "applied" | "abandoned";
-  kind: "edit" | "rollback";
-  rollback_of: string | null;
-  actor_id: string;
-  base_revision: number | string;
-  applied_revision: number | string | null;
-  version: number | string;
-  changes: unknown;
-  created_at: Date | string;
-  updated_at: Date | string;
-  applied_at: Date | string | null;
-}
-
-export interface SettingsDraftExpectation {
-  changeSetId: string | null;
-  version: number | null;
-}
-
 export interface SettingsSaveResult {
   revision: number;
-  changeSetId: string | null;
-}
-
-export interface SettingsDraftView {
-  id: string;
-  kind: "edit" | "rollback";
-  rollbackOf: string | null;
-  baseRevision: number;
-  version: number;
-  changes: SettingsChange[];
-  updatedAt: Date;
+  changed: boolean;
 }
 
 export interface SettingsControlView {
   currentRevision: number;
-  draft: SettingsDraftView | null;
 }
 
-export interface SettingsHistoryEntry extends SettingsDraftView {
-  actorId: string;
-  appliedRevision: number;
-  appliedAt: Date;
-}
-
-export interface SettingsRollbackConflict {
-  resourceKey: string;
-  fields: string[];
-}
-
-export class SettingsDraftConflictError extends Error {
-  readonly code = "settings_draft_conflict";
+export class SettingsConflictError extends Error {
+  readonly code = "settings_conflict";
 
   constructor(message = "设置已变化，请刷新后核对再保存") {
     super(message);
-    this.name = "SettingsDraftConflictError";
+    this.name = "SettingsConflictError";
   }
 }
 
@@ -109,38 +62,8 @@ export class SettingsValidationError extends Error {
   }
 }
 
-export class SettingsRollbackConflictError extends Error {
-  readonly code = "settings_rollback_conflict";
-  readonly conflicts: SettingsRollbackConflict[];
-
-  constructor(conflicts: SettingsRollbackConflict[]) {
-    super("指定发布与后续设置变更冲突");
-    this.name = "SettingsRollbackConflictError";
-    this.conflicts = conflicts;
-  }
-}
-
 export async function getSettingsControlView(): Promise<SettingsControlView> {
-  const db = await getSettingsDb();
-  const stateResult = await db.execute(sql`
-    SELECT "current_revision"
-      FROM "settings_control_state"
-     WHERE "id" = ${CONTROL_STATE_ID}
-  `);
-  const [state] = rowsOf<{ current_revision: number | string }>(stateResult);
-  if (!state) throw new Error("设置控制状态不存在");
-  const draftResult = await db.execute(sql`
-    SELECT "id", "status", "kind", "rollback_of", "actor_id", "base_revision",
-           "applied_revision", "version", "changes", "created_at", "updated_at", "applied_at"
-      FROM "settings_change_sets"
-     WHERE "status" = 'draft'
-     LIMIT 1
-  `);
-  const draft = rowsOf<ChangeSetRow>(draftResult)[0];
-  return {
-    currentRevision: integerValue(state.current_revision),
-    draft: draft ? draftView(draft) : null,
-  };
+  return { currentRevision: await getSettingsRevision() };
 }
 
 export async function getSettingsRevision(): Promise<number> {
@@ -351,119 +274,6 @@ export async function saveRenderStyleReorder(input: {
   });
 }
 
-export async function abandonSettingsDraft(input: {
-  actorId: string;
-  expected: SettingsDraftExpectation;
-}): Promise<void> {
-  const db = await getSettingsDb();
-  await db.transaction(async (tx) => {
-    await lockControlState(tx);
-    const draft = await lockActiveDraft(tx);
-    assertDraftExpectation(draft, input.expected, input.actorId);
-    const result = await tx.execute(sql`
-      UPDATE "settings_change_sets"
-         SET "status" = 'abandoned',
-             "abandoned_at" = statement_timestamp(),
-             "updated_at" = statement_timestamp()
-       WHERE "id" = ${draft!.id}
-         AND "status" = 'draft'
-         AND "version" = ${integerValue(draft!.version)}
-       RETURNING "id"
-    `);
-    if (rowsOf(result).length !== 1) throw new SettingsDraftConflictError();
-  });
-}
-
-export async function applySettingsDraft(input: {
-  actorId: string;
-  expected: SettingsDraftExpectation;
-}): Promise<{ revision: number; changeSetId: string }> {
-  const db = await getSettingsDb();
-  return db.transaction(async (tx) => {
-    const revision = await lockControlState(tx);
-    const draft = await lockActiveDraft(tx);
-    assertDraftExpectation(draft, input.expected, input.actorId);
-    const changes = parseSettingsChanges(draft!.changes);
-    if (changes.length === 0) throw new SettingsValidationError("活动草稿没有可发布变更");
-
-    for (const change of changes) {
-      const current = await loadProductionSnapshot(tx, change);
-      if (!sameSnapshot(current, change.before)) {
-        throw new SettingsDraftConflictError(`生产设置 ${change.resourceKey} 已变化`);
-      }
-    }
-    const nextRevision = await applyChanges(tx, input.actorId, revision, changes);
-    const applied = await tx.execute(sql`
-      UPDATE "settings_change_sets"
-         SET "status" = 'applied',
-             "applied_revision" = ${nextRevision},
-             "applied_at" = statement_timestamp(),
-             "updated_at" = statement_timestamp()
-       WHERE "id" = ${draft!.id}
-         AND "status" = 'draft'
-         AND "version" = ${integerValue(draft!.version)}
-       RETURNING "id"
-    `);
-    if (rowsOf(applied).length !== 1) throw new SettingsDraftConflictError();
-    return { revision: nextRevision, changeSetId: draft!.id };
-  });
-}
-
-export async function listSettingsHistory(limit = 50): Promise<SettingsHistoryEntry[]> {
-  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
-    throw new SettingsValidationError("历史查询条数必须在 1-100 之间");
-  }
-  const db = await getSettingsDb();
-  const result = await db.execute(sql`
-    SELECT "id", "status", "kind", "rollback_of", "actor_id", "base_revision",
-           "applied_revision", "version", "changes", "created_at", "updated_at", "applied_at"
-      FROM "settings_change_sets"
-     WHERE "status" = 'applied'
-     ORDER BY "applied_revision" DESC
-     LIMIT ${limit}
-  `);
-  return rowsOf<ChangeSetRow>(result).map(historyView);
-}
-
-export async function rollbackSettings(input: {
-  actorId: string;
-  expected: number;
-  targetChangeSetId: string;
-}): Promise<SettingsSaveResult> {
-  requireActor(input.actorId);
-  requireRevision(input.expected);
-  const db = await getSettingsDb();
-  return db.transaction(async (tx) => {
-    const revision = await lockControlState(tx);
-    if (revision !== input.expected) throw new SettingsDraftConflictError();
-    const target = await loadAppliedChangeSet(tx, input.targetChangeSetId);
-    const later = await loadLaterAppliedChangeSets(tx, integerValue(target.applied_revision!));
-    const targetChanges = parseSettingsChanges(target.changes);
-    const laterChanges = later.flatMap((row) => parseSettingsChanges(row.changes));
-    const conflicts: SettingsRollbackConflict[] = [];
-    const reversed: SettingsChange[] = [];
-
-    for (const targetChange of targetChanges) {
-      const fields = changedFields(targetChange);
-      const overlap = laterChanges.filter((change) => settingsChangesOverlap(targetChange, change));
-      const current = await loadProductionSnapshot(tx, targetChange);
-      if (overlap.length > 0
-        || !snapshotMatchesChangedFields(current, targetChange.after, fields)) {
-        conflicts.push({ resourceKey: targetChange.resourceKey, fields });
-        continue;
-      }
-      reversed.push(reverseSettingsChange(targetChange, current));
-    }
-    if (conflicts.length > 0) throw new SettingsRollbackConflictError(conflicts);
-
-    const changes = parseSettingsChanges(reversed.filter((change) => (
-      !sameSnapshot(change.before, change.after)
-    )));
-    if (changes.length === 0) throw new SettingsValidationError("目标发布没有可撤销变更");
-    return commitSettings(tx, input.actorId, revision, changes, target.id);
-  });
-}
-
 async function mutateOutputMode(
   input: { actorId: string; expected: number; id: string },
   mutate: (current: OutputModeSnapshot) => OutputModeSnapshot | null,
@@ -506,7 +316,7 @@ async function mutateRenderStyle(
   });
 }
 
-/** 日常保存只基于生产值，旧草稿不参与本次提交。 */
+/** 保存基于当前生效值，在同一事务内更新配置与并发版本。 */
 async function mutateSettings(
   actorId: string,
   expected: number,
@@ -517,34 +327,11 @@ async function mutateSettings(
   const db = await getSettingsDb();
   return db.transaction(async (tx) => {
     const revision = await lockControlState(tx);
-    if (revision !== expected) throw new SettingsDraftConflictError();
+    if (revision !== expected) throw new SettingsConflictError();
     const changes = parseSettingsChanges(await mutate(tx, []));
-    if (changes.length === 0) return { revision, changeSetId: null };
-    return commitSettings(tx, actorId, revision, changes);
+    if (changes.length === 0) return { revision, changed: false };
+    return { revision: await applyChanges(tx, actorId, revision, changes), changed: true };
   });
-}
-
-/** 配置、并发版本和不可变历史必须在调用方的同一事务内提交。 */
-async function commitSettings(
-  tx: SqlExecutor,
-  actorId: string,
-  revision: number,
-  changes: SettingsChange[],
-  rollbackOf: string | null = null,
-): Promise<SettingsSaveResult> {
-  const nextRevision = await applyChanges(tx, actorId, revision, changes);
-  const id = randomUUID();
-  await tx.execute(sql`
-    INSERT INTO "settings_change_sets" (
-      "id", "status", "kind", "rollback_of", "actor_id", "base_revision",
-      "applied_revision", "version", "changes", "applied_at"
-    ) VALUES (
-      ${id}, 'applied', ${rollbackOf ? "rollback" : "edit"}, ${rollbackOf},
-      ${actorId}, ${revision}, ${nextRevision}, 1,
-      ${JSON.stringify(changes)}::jsonb, statement_timestamp()
-    )
-  `);
-  return { revision: nextRevision, changeSetId: id };
 }
 
 async function applyChanges(
@@ -571,7 +358,7 @@ async function applyChanges(
      WHERE "id" = ${CONTROL_STATE_ID} AND "current_revision" = ${revision}
      RETURNING "id"
   `);
-  if (rowsOf(result).length !== 1) throw new SettingsDraftConflictError();
+  if (rowsOf(result).length !== 1) throw new SettingsConflictError();
   return nextRevision;
 }
 
@@ -759,20 +546,6 @@ async function writeSettingsChange(tx: SqlExecutor, change: SettingsChange): Pro
   }
 }
 
-async function loadProductionSnapshot(
-  tx: SqlExecutor,
-  change: SettingsChange,
-): Promise<SettingsSnapshot | null> {
-  if (change.resource === "system_setting") {
-    const snapshot = change.after ?? change.before!;
-    return loadSystemSetting(tx, snapshot.namespace, snapshot.key);
-  }
-  const snapshot = change.after ?? change.before!;
-  return change.resource === "output_mode"
-    ? loadOutputMode(tx, snapshot.id)
-    : loadRenderStyle(tx, snapshot.id);
-}
-
 async function loadSystemSetting(
   tx: SqlExecutor,
   namespace: string,
@@ -815,73 +588,6 @@ async function lockControlState(tx: SqlExecutor): Promise<number> {
   const [row] = rowsOf<{ current_revision: number | string }>(result);
   if (!row) throw new Error("设置控制状态不存在");
   return integerValue(row.current_revision);
-}
-
-async function lockActiveDraft(tx: SqlExecutor): Promise<ChangeSetRow | null> {
-  const result = await tx.execute(sql`
-    SELECT "id", "status", "kind", "rollback_of", "actor_id", "base_revision",
-           "applied_revision", "version", "changes", "created_at", "updated_at", "applied_at"
-      FROM "settings_change_sets"
-     WHERE "status" = 'draft'
-     LIMIT 1
-     FOR UPDATE
-  `);
-  return rowsOf<ChangeSetRow>(result)[0] ?? null;
-}
-
-async function loadAppliedChangeSet(tx: SqlExecutor, id: string): Promise<ChangeSetRow> {
-  const result = await tx.execute(sql`
-    SELECT "id", "status", "kind", "rollback_of", "actor_id", "base_revision",
-           "applied_revision", "version", "changes", "created_at", "updated_at", "applied_at"
-      FROM "settings_change_sets"
-     WHERE "id" = ${id} AND "status" = 'applied'
-     LIMIT 1
-  `);
-  const [row] = rowsOf<ChangeSetRow>(result);
-  if (!row) throw new SettingsValidationError("指定发布不存在");
-  return row;
-}
-
-async function loadLaterAppliedChangeSets(
-  tx: SqlExecutor,
-  revision: number,
-): Promise<ChangeSetRow[]> {
-  const result = await tx.execute(sql`
-    SELECT "id", "status", "kind", "rollback_of", "actor_id", "base_revision",
-           "applied_revision", "version", "changes", "created_at", "updated_at", "applied_at"
-      FROM "settings_change_sets"
-     WHERE "status" = 'applied' AND "applied_revision" > ${revision}
-     ORDER BY "applied_revision" ASC
-  `);
-  return rowsOf<ChangeSetRow>(result);
-}
-
-function assertDraftExpectation(
-  draft: ChangeSetRow | null,
-  expected: SettingsDraftExpectation,
-  actorId: string,
-): void {
-  requireActor(actorId);
-  requireExpectation(expected);
-  if (!draft) {
-    if (expected.changeSetId !== null) throw new SettingsDraftConflictError();
-    return;
-  }
-  if (draft.actor_id !== actorId
-    || draft.id !== expected.changeSetId
-    || integerValue(draft.version) !== expected.version) {
-    throw new SettingsDraftConflictError();
-  }
-}
-
-function requireExpectation(expected: SettingsDraftExpectation): void {
-  if ((expected.changeSetId === null) !== (expected.version === null)) {
-    throw new SettingsValidationError("草稿标识与版本必须同时提交");
-  }
-  if (expected.version !== null
-    && (!Number.isSafeInteger(expected.version) || expected.version < 1)) {
-    throw new SettingsValidationError("草稿版本非法");
-  }
 }
 
 function requireActor(actorId: string): void {
@@ -934,30 +640,6 @@ function renderStyleFromRow(row: Record<string, unknown>): RenderStyleSnapshot {
   };
 }
 
-function draftView(row: ChangeSetRow): SettingsDraftView {
-  return {
-    id: row.id,
-    kind: row.kind,
-    rollbackOf: row.rollback_of,
-    baseRevision: integerValue(row.base_revision),
-    version: integerValue(row.version),
-    changes: parseSettingsChanges(row.changes),
-    updatedAt: dateValue(row.updated_at),
-  };
-}
-
-function historyView(row: ChangeSetRow): SettingsHistoryEntry {
-  if (row.applied_revision === null || row.applied_at === null) {
-    throw new Error("已发布设置记录缺少 revision 或时间");
-  }
-  return {
-    ...draftView(row),
-    actorId: row.actor_id,
-    appliedRevision: integerValue(row.applied_revision),
-    appliedAt: dateValue(row.applied_at),
-  };
-}
-
 function requireExactOrder(existingIds: string[], orderedIds: string[]): void {
   requireUniqueIds(orderedIds, "排序包含重复资源");
   if (existingIds.length !== orderedIds.length
@@ -991,12 +673,6 @@ function rowsOf<T>(result: unknown): T[] {
 function integerValue(value: unknown): number {
   const parsed = typeof value === "number" ? value : Number(value);
   if (!Number.isSafeInteger(parsed)) throw new Error("设置控制数值非法");
-  return parsed;
-}
-
-function dateValue(value: Date | string): Date {
-  const parsed = value instanceof Date ? value : new Date(value);
-  if (!Number.isFinite(parsed.getTime())) throw new Error("设置控制时间非法");
   return parsed;
 }
 

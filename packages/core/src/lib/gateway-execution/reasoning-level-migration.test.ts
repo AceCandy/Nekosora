@@ -20,7 +20,7 @@ describe("gateway execution reasoning level migration", () => {
     };
 
     expect(migration).toContain('"reasoning_level" text');
-    expect(journal.entries).toEqual([expect.objectContaining({ idx: 0, tag: "0000_baseline" })]);
+    expect(journal.entries[0]).toMatchObject({ idx: 0, tag: "0000_baseline" });
     expect(snapshot.tables["public.gateway_executions"].columns.reasoning_level)
       .toMatchObject({ type: "text", notNull: false });
   });

@@ -97,7 +97,7 @@ quota metering, media usage telemetry, or the governance PostgreSQL schema.
   than 90 days are deleted in batches by the existing Gateway retention claim.
 - Policy form input is a complete, strict, bounded safe-integer object. The
   Server Action authenticates with `requireAdmin`, parses the whole group, and
-  stages the canonical JSON into the active settings draft. Invalid stored JSON
+  saves the canonical JSON through the immediate settings transaction. Invalid stored JSON
   uses the safe defaults and surfaces a configuration warning.
 
 ### 4. Validation & Error Matrix

@@ -16,13 +16,13 @@ beforeEach(() => {
 
 describe("refreshSettings", () => {
   it("invalidates the previous generation only after a real save", async () => {
-    expect(await refreshSettings({ revision: 4, changeSetId: "save-4" })).toBe(false);
+    expect(await refreshSettings({ revision: 4, changed: true })).toBe(false);
     expect(mocks.invalidate).toHaveBeenCalledWith(3);
     expect(mocks.revalidate).toHaveBeenCalledWith("/admin/settings");
   });
 
   it("does not invalidate caches for an unchanged save", async () => {
-    expect(await refreshSettings({ revision: 4, changeSetId: null })).toBe(false);
+    expect(await refreshSettings({ revision: 4, changed: false })).toBe(false);
     expect(mocks.invalidate).not.toHaveBeenCalled();
   });
 
@@ -30,10 +30,10 @@ describe("refreshSettings", () => {
     const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
       mocks.invalidate.mockRejectedValueOnce(new Error("cache unavailable"));
-      expect(await refreshSettings({ revision: 4, changeSetId: "save-4" })).toBe(true);
+      expect(await refreshSettings({ revision: 4, changed: true })).toBe(true);
       expect(mocks.revalidate).toHaveBeenCalled();
       mocks.revalidate.mockImplementationOnce(() => { throw new Error("refresh unavailable"); });
-      expect(await refreshSettings({ revision: 5, changeSetId: "save-5" })).toBe(true);
+      expect(await refreshSettings({ revision: 5, changed: true })).toBe(true);
     } finally {
       warning.mockRestore();
     }

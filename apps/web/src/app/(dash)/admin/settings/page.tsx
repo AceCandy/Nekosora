@@ -16,7 +16,6 @@ import ModelConfigSection from "./ModelConfigSection";
 import OutputModesSection from "./OutputModesSection";
 import RenderStylesSection from "./RenderStylesSection";
 import { getSettingsControlView } from "@nekusora/core/settings-control/service";
-import SettingsChangeControl from "./SettingsChangeControl";
 import type { GovernanceHistoryRange } from "@nekusora/core/gateway-governance/analytics";
 
 export const dynamic = "force-dynamic";
@@ -89,16 +88,6 @@ export default async function SettingsPage({
             view={selection.view === "history" ? "history" : "policy"}
           />
         )}
-
-        <SettingsChangeControl
-          key={control.draft?.id ?? "settings"}
-          draft={control.draft ? {
-            id: control.draft.id,
-            kind: control.draft.kind,
-            version: control.draft.version,
-            changes: control.draft.changes,
-          } : null}
-        />
       </div>
     </div>
   );
