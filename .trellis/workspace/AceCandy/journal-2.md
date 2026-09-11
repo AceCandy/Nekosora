@@ -1917,3 +1917,27 @@ Completed local and production environment examples, aligned both production Com
 ### Status
 
 [OK] **Completed**
+
+
+## Session 148: 第三轮技术债收敛与提交
+<!-- trellis-session: v=2 fp=1d350d3d06f79b1a -->
+
+**Date**: 2026-09-11
+**Task**: 第三轮技术债收敛与提交
+**Branch**: `main`
+
+### Summary
+
+完成聊天核心读取失败边界与安全日志、生成任务生命周期和用量查询类型收敛，补齐回归与规范并完成独立复核。pnpm check 及三个应用构建通过；测试 1910 通过、42 跳过。浏览器重试恢复与真实 PostgreSQL 尚未验证，风险记录于各任务 check.md。按用户确认分三批提交，直接在 main 工作、无 PR，归档使用非 PR 分支校验豁免；未推送。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b31b359` | fix(chat): 明确加载失败并提供重试 |
+| `fd9e404` | refactor(core): 恢复生成任务生命周期类型约束 |
+| `5510713` | refactor(core): 恢复用量查询与结果类型 |
+
+### Status
+
+[OK] **Completed**
