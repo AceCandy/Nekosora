@@ -4,10 +4,10 @@
  * 供 WebChat 和网关统一调用,带来源、身份、token 拆分归属。
  * 失败不抛错(日志记录不应阻断主流程)。
  */
-import { withBestEffortTimeout } from "@/lib/best-effort";
-import { getDb, getSchema } from "@/lib/infra/db";
-import { redactErrorMessage, redactSensitiveText } from "@/lib/redaction";
-import type { CallContext, IRUsage } from "@/lib/providers/types";
+import { withBestEffortTimeout } from "./best-effort";
+import { getDb, getSchema } from "./infra/db/index";
+import { redactErrorMessage, redactSensitiveText } from "./redaction";
+import type { CallContext, IRUsage } from "./providers/types";
 
 export interface LogUsageParams {
   ctx: CallContext;
@@ -114,7 +114,7 @@ async function logUsageInternal(params: LogUsageParams): Promise<void> {
     // skipMetrics=true 时跳过(中间失败重试记录:一次请求只在最终结果埋一次点)。
     if (!params.skipMetrics) {
       try {
-        const { observeRequest } = await import("@/lib/infra/metrics");
+        const { observeRequest } = await import("./infra/metrics");
         observeRequest({
           source: params.ctx.source,
           // Legacy usage only records pre-routing boundary failures, before catalog resolution.

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   connectMcpClient,
   withConnectionTimeout,
-} from "@/lib/mcp/connection";
+} from "./connection";
 
 describe("MCP connection lifecycle", () => {
   afterEach(() => {

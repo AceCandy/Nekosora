@@ -18,18 +18,18 @@
  * audioTranscription / audioSynthesis)解析路由,供图像/语音端点复用路由链与故障转移。
  */
 import { eq, and, or } from "drizzle-orm";
-import { getDb, getSchema } from "@/lib/infra/db";
-import { parseKeyBundle, pickWeightedKey } from "@/lib/providers/keys";
+import { getDb, getSchema } from "./infra/db/index";
+import { parseKeyBundle, pickWeightedKey } from "./providers/keys";
 import {
   getProviderAvailability,
   recordNoHealthyRoute,
-} from "@/lib/circuit-breaker";
-import { getRouteRepository } from "@/lib/repositories/route-repository";
+} from "./circuit-breaker";
+import { getRouteRepository } from "./repositories/route-repository";
 import type {
   ResolvedRoute,
   ResolvedProvider,
   CallContext,
-} from "@/lib/providers/types";
+} from "./providers/types";
 import type { ModelCapabilities } from "@nekusora/db/types";
 
 /** 解析加密 key bundle,返回加权 key 列表(已向后兼容历史格式)。 */

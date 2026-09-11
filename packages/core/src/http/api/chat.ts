@@ -12,28 +12,28 @@
  */
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { getDb, getSchema } from "@/lib/infra/db";
-import { getSessionFromHeaders } from "@/lib/session-request";
-import { writeFallbackTitle } from "@/lib/conversation-title/service";
-import { dispatchConversationTitleJob } from "@/lib/conversation-title/dispatch";
-import { prepareChatContext } from "@/lib/chat/orchestrator";
-import type { CompactionResult } from "@/lib/compact/service";
+import { getDb, getSchema } from "../../lib/infra/db/index";
+import { getSessionFromHeaders } from "../../lib/session-request";
+import { writeFallbackTitle } from "../../lib/conversation-title/service";
+import { dispatchConversationTitleJob } from "../../lib/conversation-title/dispatch";
+import { prepareChatContext } from "../../lib/chat/orchestrator";
+import type { CompactionResult } from "../../lib/compact/service";
 import {
   findConversationMessage,
   withConversationMessageWrite,
-} from "@/lib/chat/message-reference";
+} from "../../lib/chat/message-reference";
 import {
   createRunId,
-} from "@/lib/chat/run-lifecycle";
+} from "../../lib/chat/run-lifecycle";
 import {
   executeChatCompletion,
   type ChatCompletionEvent,
   type ChatCompletionOutcomeKind,
-} from "@/lib/chat/completion-coordinator";
-import { ChatProcessRecorder } from "@/lib/chat/process-trace";
-import type { ChatTerminalStatus } from "@/lib/chat/sse-contract";
-import { redactErrorMessage } from "@/lib/redaction";
-import type { IRRequest } from "@/lib/providers/types";
+} from "../../lib/chat/completion-coordinator";
+import { ChatProcessRecorder } from "../../lib/chat/process-trace";
+import type { ChatTerminalStatus } from "../../lib/chat/sse-contract";
+import { redactErrorMessage } from "../../lib/redaction";
+import type { IRRequest } from "../../lib/providers/types";
 import type { ProcessTrace, ReasoningLevel, WebSearchTraceCall } from "@nekusora/db/types";
 import {
   isChatProcessSnapshot,
@@ -48,7 +48,7 @@ import {
   normalizeAttachmentFileIds,
   resolveChatImageAttachments,
   type ResolvedChatImage,
-} from "@/lib/chat/message-attachments";
+} from "../../lib/chat/message-attachments";
 
 const chatComposerSnapshotSchema = z.object({
   outputModeId: z.string().min(1).nullable().optional(),

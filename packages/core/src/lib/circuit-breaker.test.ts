@@ -5,7 +5,7 @@ import {
   recordFailure,
   resetAllBreakers,
   snapshotBreakers,
-} from "@/lib/circuit-breaker";
+} from "./circuit-breaker";
 
 describe("provider circuit breaker", () => {
   beforeEach(() => {

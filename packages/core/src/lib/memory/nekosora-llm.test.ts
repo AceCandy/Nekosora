@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockGenerateChat = vi.hoisted(() => vi.fn());
-vi.mock("@/lib/stream", () => ({ generateChat: mockGenerateChat }));
+vi.mock("../stream", () => ({ generateChat: mockGenerateChat }));
 
 import { createNekosoraLLM, toIRMessages } from "./nekosora-llm";
 

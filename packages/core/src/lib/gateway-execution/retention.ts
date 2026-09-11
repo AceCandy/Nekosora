@@ -1,9 +1,9 @@
 import { sql } from "drizzle-orm";
-import { getDb } from "@/lib/infra/db";
+import { getDb } from "../infra/db/index";
 import {
   observeGatewayRetentionClaim,
   observeGatewayRetentionRun,
-} from "@/lib/infra/metrics";
+} from "../infra/metrics";
 
 export const GATEWAY_RETENTION_BATCH_SIZE = 1_000;
 

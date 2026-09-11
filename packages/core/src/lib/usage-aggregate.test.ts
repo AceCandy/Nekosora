@@ -3,7 +3,7 @@ import { pgTable, text, timestamp, integer, PgDialect } from "drizzle-orm/pg-cor
 import type { SQL } from "drizzle-orm";
 
 const mocks = vi.hoisted(() => ({ getDb: vi.fn(), getSchema: vi.fn(), where: vi.fn() }));
-vi.mock("@/lib/infra/db", () => ({ getDb: mocks.getDb, getSchema: mocks.getSchema }));
+vi.mock("./infra/db/index", () => ({ getDb: mocks.getDb, getSchema: mocks.getSchema }));
 import { getTimeSeries, getModelBreakdown, getSourceBreakdown } from "./usage-aggregate";
 
 const executions = pgTable("gateway_executions", {

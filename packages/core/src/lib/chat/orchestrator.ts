@@ -12,24 +12,24 @@
  *   ③ assemble 后置(等齐全部)。并行后各步兜底行为与 trace 产出与原串行实现等价。
  */
 import { eq, and, or, inArray, isNull } from "drizzle-orm";
-import type { IRRequest } from "@/lib/providers/types";
+import type { IRRequest } from "../providers/types";
 import type { ProcessTrace } from "@nekusora/db/types";
-import { buildMultimodalUserMessage } from "@/lib/multimodal/assemble";
-import { buildMessagesWithFileContext } from "@/lib/rag/context";
-import { getMemories } from "@/lib/memory/service";
-import { recallMemories } from "@/lib/memory/recall";
-import { maybeCompact, type CompactionResult } from "@/lib/compact/service";
-import { getOutputMode } from "@/lib/output-modes/read";
-import { getCardsByIds, renderCardContext, incUseCount as incCardUseCount } from "@/lib/instruction-cards/service";
-import { assembleContext } from "@/lib/context-assembler";
-import { buildTrace } from "@/lib/trace";
-import { redactErrorMessage } from "@/lib/redaction";
-import { BestEffortTimeoutError, withBestEffortTimeout } from "@/lib/best-effort";
+import { buildMultimodalUserMessage } from "../multimodal/assemble";
+import { buildMessagesWithFileContext } from "../rag/context";
+import { getMemories } from "../memory/service";
+import { recallMemories } from "../memory/recall";
+import { maybeCompact, type CompactionResult } from "../compact/service";
+import { getOutputMode } from "../output-modes/read";
+import { getCardsByIds, renderCardContext, incUseCount as incCardUseCount } from "../instruction-cards/service";
+import { assembleContext } from "../context-assembler";
+import { buildTrace } from "../trace";
+import { redactErrorMessage } from "../redaction";
+import { BestEffortTimeoutError, withBestEffortTimeout } from "../best-effort";
 import {
   assertVisionModel,
   type ResolvedChatImage,
-} from "@/lib/chat/message-attachments";
-import type { ChatProcessRecorder } from "@/lib/chat/process-trace";
+} from "./message-attachments";
+import type { ChatProcessRecorder } from "./process-trace";
 
 /** 兼容默认:model_catalog 缺失时的上下文窗口与输出上限。 */
 const DEFAULT_CONTEXT_WINDOW = 32_000;

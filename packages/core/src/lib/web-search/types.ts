@@ -1,6 +1,6 @@
 /** 联网搜索公共类型。 */
 
-import type { CallContext } from "@/lib/providers/types";
+import type { CallContext } from "../providers/types";
 import type {
   ProviderProtocol,
   WebSearchFormat,

@@ -9,18 +9,18 @@ const mocks = vi.hoisted(() => ({
   isEmbeddingAvailable: vi.fn(),
 }));
 
-vi.mock("@/lib/rag/extract", () => ({ extractText: mocks.extractText }));
-vi.mock("@/lib/rag/chunk", () => ({ chunkText: mocks.chunkText }));
-vi.mock("@/lib/rag/embedding", () => ({
+vi.mock("./extract", () => ({ extractText: mocks.extractText }));
+vi.mock("./chunk", () => ({ chunkText: mocks.chunkText }));
+vi.mock("./embedding", () => ({
   embedTexts: mocks.embedTexts,
   isEmbeddingAvailable: mocks.isEmbeddingAvailable,
 }));
 
-import { closeDb } from "@/lib/infra/db";
-import { processFile } from "@/lib/rag/processing-coordinator";
-import { replaceFileChunksAndComplete } from "@/lib/rag/processing-repository";
-import { FileProcessingLeaseLostError } from "@/lib/rag/processing-state";
-import { recoverStaleFileProcessing } from "@/lib/rag/recovery";
+import { closeDb } from "../infra/db/index";
+import { processFile } from "./processing-coordinator";
+import { replaceFileChunksAndComplete } from "./processing-repository";
+import { FileProcessingLeaseLostError } from "./processing-state";
+import { recoverStaleFileProcessing } from "./recovery";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const expectedDatabase = process.env.FILE_PROCESSING_PG_TEST_DATABASE;

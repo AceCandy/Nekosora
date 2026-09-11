@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import { LocalDriver } from "@/lib/infra/storage/local";
+import { LocalDriver } from "./local";
 
 describe("LocalDriver.get", () => {
   let rootDir: string;

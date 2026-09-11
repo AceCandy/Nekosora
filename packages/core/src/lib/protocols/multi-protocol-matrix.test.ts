@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RouteApiFormat } from "@nekusora/db/types";
-import { DEFAULT_GATEWAY_GOVERNANCE_POLICY } from "@/lib/gateway-governance/policy";
-import type { CallContext, ResolvedRoute } from "@/lib/providers/types";
+import { DEFAULT_GATEWAY_GOVERNANCE_POLICY } from "../gateway-governance/policy";
+import type { CallContext, ResolvedRoute } from "../providers/types";
 import { handleProtocolRequest } from "./handler";
 import {
   parseAnthropicMessages,
@@ -29,11 +29,11 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("./auth", () => ({ authenticateGatewayRequest: mocks.authenticate }));
-vi.mock("@/lib/routing", () => ({
+vi.mock("../routing", () => ({
   resolveRoutes: mocks.resolveRoutes,
   resolveRoutesById: vi.fn(),
 }));
-vi.mock("@/lib/circuit-breaker", () => ({
+vi.mock("../circuit-breaker", () => ({
   gatewayBreaker: {
     acquire: vi.fn(() => ({
       recordSuccess: mocks.recordSuccess,
@@ -43,28 +43,28 @@ vi.mock("@/lib/circuit-breaker", () => ({
     recordNoHealthyRoute: vi.fn(),
   },
 }));
-vi.mock("@/lib/gateway-execution", async (importOriginal) => ({
-  ...await importOriginal<typeof import("@/lib/gateway-execution")>(),
+vi.mock("../gateway-execution/index", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../gateway-execution/index")>(),
   gatewayTelemetry: {
     startExecution: mocks.startExecution,
     recordAttempt: mocks.recordAttempt,
     finalizeExecution: mocks.finalizeExecution,
   },
 }));
-vi.mock("@/lib/infra/metrics", () => ({
+vi.mock("../infra/metrics", () => ({
   acquireStream: vi.fn(),
   releaseStream: vi.fn(),
 }));
-vi.mock("@/lib/gateway-governance/lifecycle", () => ({
+vi.mock("../gateway-governance/lifecycle", () => ({
   consumeGatewayGovernanceRate: mocks.consumeRate,
   acquireGatewayGovernanceLease: mocks.acquireLease,
 }));
-vi.mock("@/lib/repositories/route-repository", () => ({
+vi.mock("../repositories/route-repository", () => ({
   getRouteRepository: () => ({ findEnabledModelByNameForOwner: mocks.findModel }),
   markProviderStreamUsageUnsupported: vi.fn(),
   markRouteToolsUnsupported: vi.fn(),
 }));
-vi.mock("@/lib/system-settings/ua", () => ({
+vi.mock("../system-settings/ua", () => ({
   getChatUA: async () => "matrix-test",
   getGatewayUA: async () => "matrix-test",
 }));

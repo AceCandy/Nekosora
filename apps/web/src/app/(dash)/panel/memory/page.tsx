@@ -8,7 +8,7 @@ import {
   clearMemories,
   type MemoryScope,
   type UserMemory,
-} from "@/lib/memory/service";
+} from "@nekusora/core/memory/service";
 import { requireSession } from "@/lib/session";
 import { Trash2, Plus, BrainCircuit, Eraser } from "lucide-react";
 import { clsx } from "clsx";

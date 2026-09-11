@@ -27,7 +27,7 @@ import { clsx } from "clsx";
 import { Button } from "@/shared/ui/Button";
 import StatusSwitch from "@/shared/ui/StatusSwitch";
 import { formatDateTimeLocal } from "@/shared/lib/format";
-import { rankSimilarModels } from "@/lib/model-catalog";
+import { rankSimilarModels } from "@nekusora/core/model-catalog";
 
 // 协议徽标统一中性莫兰迪灰调(管理侧元数据不使用彩色区分),协议名文字本身即区分。
 

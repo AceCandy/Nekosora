@@ -10,7 +10,7 @@
  * 设计为单一来源:stream.ts / gateway route.ts 失败落库前都调 classifyError。
  * 优先级:已知 errorCode 精确匹配 > httpStatus 推断 > errorMessage 关键字 > 兜底。
  */
-import { ErrorCode } from "@/lib/errors";
+import { ErrorCode } from "./errors";
 import type { ErrorPhase } from "@nekusora/db/types";
 
 /** 错误粗分类(前端 i18n key 后缀)。 */

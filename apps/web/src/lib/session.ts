@@ -1,9 +1,9 @@
 /** 会话辅助 —— 在 Server Components / Route Handlers 中读取当前登录用户。 */
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { getSessionFromHeaders, type SessionUser } from "@/lib/session-request";
+import { getSessionFromHeaders, type SessionUser } from "@nekusora/core/session-request";
 
-export type { SessionUser } from "@/lib/session-request";
+export type { SessionUser } from "@nekusora/core/session-request";
 
 /** 获取当前会话(未登录返回 null)。 */
 export async function getSession(): Promise<SessionUser | null> {

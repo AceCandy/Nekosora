@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { getDb } from "@/lib/infra/db";
+import { getDb } from "../infra/db/index";
 import type { GatewayGovernancePolicy } from "./policy";
 import type { GatewayQuotaKind, GovernanceScope } from "./repository";
 

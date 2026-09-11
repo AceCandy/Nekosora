@@ -3,13 +3,13 @@
  * DB 连接、迁移或管理员初始化失败时应阻断启动;pgvector 初始化失败由 bootstrap 自行降级。
  */
 export async function registerNodeInstrumentation(): Promise<void> {
-  const { installGlobalErrorGuards } = await import("@/lib/infra/process-guards");
+  const { installGlobalErrorGuards } = await import("@nekusora/core/process-guards");
   installGlobalErrorGuards();
 
-  const { validateEnv } = await import("@/lib/infra/env");
+  const { validateEnv } = await import("@nekusora/core/env");
   validateEnv();
 
-  const { configureQueueProvider } = await import("@/lib/infra/queue");
+  const { configureQueueProvider } = await import("@nekusora/core/queue");
   configureQueueProvider(async () => {
     const { getQueue } = await import("@nekusora/queue");
     return getQueue();
@@ -21,7 +21,7 @@ export async function registerNodeInstrumentation(): Promise<void> {
       `Queue=producer | Worker=需独立运行`,
   );
 
-  const { bootstrapDatabase } = await import("@/lib/infra/db/bootstrap");
+  const { bootstrapDatabase } = await import("@nekusora/core/bootstrap");
   await bootstrapDatabase();
   console.log("[instrumentation] ✅ 数据库 bootstrap 完成");
 }

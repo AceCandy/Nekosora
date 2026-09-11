@@ -5,11 +5,11 @@
  * 复用 generateImageViaRoute + StorageDriver(url 模式存图)。
  */
 import { eq } from "drizzle-orm";
-import { getDb, getSchema } from "@/lib/infra/db";
-import { getSessionFromHeaders } from "@/lib/session-request";
-import { generateImageViaRoute } from "@/lib/providers/multimodal/image-gen";
-import { getStorage } from "@/lib/infra/storage";
-import { redactErrorMessage } from "@/lib/redaction";
+import { getDb, getSchema } from "../../lib/infra/db/index";
+import { getSessionFromHeaders } from "../../lib/session-request";
+import { generateImageViaRoute } from "../../lib/providers/multimodal/image-gen";
+import { getStorage } from "../../lib/infra/storage/index";
+import { redactErrorMessage } from "../../lib/redaction";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

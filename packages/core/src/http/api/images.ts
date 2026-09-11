@@ -3,8 +3,8 @@
  * 返回当前用户的 image_jobs(倒序,限 50 条)。
  */
 import { eq, desc } from "drizzle-orm";
-import { getDb, getSchema } from "@/lib/infra/db";
-import { getSessionFromHeaders } from "@/lib/session-request";
+import { getDb, getSchema } from "../../lib/infra/db/index";
+import { getSessionFromHeaders } from "../../lib/session-request";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

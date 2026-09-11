@@ -8,10 +8,10 @@
  */
 import { desc, sql } from "drizzle-orm";
 import { getTranslations } from "next-intl/server";
-import { getDb, getSchema } from "@/lib/infra/db";
+import { getDb, getSchema } from "@nekusora/core/infra/db";
 import { requireAdmin } from "@/lib/session";
-import { getEnvInfo } from "@/lib/infra/env";
-import { metricsOutput } from "@/lib/infra/metrics";
+import { getEnvInfo } from "@nekusora/core/env";
+import { metricsOutput } from "@nekusora/core/infra/metrics";
 import { Activity } from "lucide-react";
 import { PageHeader } from "@/shared/components/PageHeader";
 

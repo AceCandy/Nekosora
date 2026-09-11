@@ -1,6 +1,6 @@
-import { extractBearer, verifyKey } from "@/lib/keys";
-import { ErrorCode } from "@/lib/errors";
-import type { CallContext } from "@/lib/providers/types";
+import { extractBearer, verifyKey } from "../keys";
+import { ErrorCode } from "../errors";
+import type { CallContext } from "../providers/types";
 import type { GatewayProtocol } from "./types";
 import { GatewayRequestError, UnsupportedParameterError } from "./validation";
 

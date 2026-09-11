@@ -3,18 +3,18 @@ import { getTranslations } from "next-intl/server";
 import {
   GATEWAY_GOVERNANCE_POLICY_BOUNDS,
   loadGatewayGovernancePolicy,
-} from "@/lib/gateway-governance/policy";
+} from "@nekusora/core/gateway-governance/policy";
 import { requireAdmin } from "@/lib/session";
-import { getSettings } from "@/lib/system-settings/service";
+import { getSettings } from "@nekusora/core/system-settings/service";
 import {
   type SettingsControlView,
-} from "@/lib/settings-control/service";
+} from "@nekusora/core/settings-control/service";
 import GovernanceSettingsForm from "./GovernanceSettingsForm";
 import { saveGatewayGovernancePolicy } from "./governance-actions";
 import {
   getGatewayGovernanceInsights,
   type GovernanceHistoryRange,
-} from "@/lib/gateway-governance/analytics";
+} from "@nekusora/core/gateway-governance/analytics";
 import GovernanceHistoryPanel from "./GovernanceHistoryPanel";
 
 export default async function GovernanceSettingsSection({

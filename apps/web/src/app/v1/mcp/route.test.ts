@@ -13,18 +13,18 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("drizzle-orm", () => ({ eq: mocks.eq, and: mocks.and }));
-vi.mock("@/lib/keys", () => ({
+vi.mock("@nekusora/core/keys", () => ({
   extractBearer: mocks.extractBearer,
   verifyKey: mocks.verifyKey,
 }));
-vi.mock("@/lib/infra/db", () => ({
+vi.mock("@nekusora/core/infra/db", () => ({
   getDb: mocks.getDb,
   getSchema: mocks.getSchema,
 }));
-vi.mock("@/lib/rag/retrieve", () => ({ retrieve: vi.fn() }));
-vi.mock("@/lib/routing", () => ({ resolveRoutesByCapability: vi.fn() }));
-vi.mock("@/lib/gateway-governance/lifecycle", async (importOriginal) => ({
-  ...await importOriginal<typeof import("@/lib/gateway-governance/lifecycle")>(),
+vi.mock("@nekusora/core/rag/retrieve", () => ({ retrieve: vi.fn() }));
+vi.mock("@nekusora/core/routing", () => ({ resolveRoutesByCapability: vi.fn() }));
+vi.mock("@nekusora/core/gateway-governance/lifecycle", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@nekusora/core/gateway-governance/lifecycle")>(),
   consumeGatewayGovernanceRate: mocks.consumeGatewayGovernanceRate,
   acquireGatewayGovernanceLease: mocks.acquireGatewayGovernanceLease,
 }));

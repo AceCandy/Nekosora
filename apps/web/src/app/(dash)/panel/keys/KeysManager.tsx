@@ -8,7 +8,7 @@ import Input from "@/shared/ui/Input";
 import Badge from "@/shared/ui/Badge";
 import OptionPicker from "@/shared/ui/OptionPicker";
 import { copyToClipboard } from "@/shared/lib/clipboard";
-import type { ApiKeyListItem } from "@/lib/keys";
+import type { ApiKeyListItem } from "@nekusora/core/keys";
 import type { BindableModels } from "../actions";
 
 export interface KeyModelBindingRecord {

@@ -1,26 +1,26 @@
-import { classifyError } from "@/lib/error-classify";
+import { classifyError } from "../error-classify";
 import {
   describeGatewayGovernanceLimitError,
   ERROR_META,
   ErrorCode,
   type ErrorCodeValue,
-} from "@/lib/errors";
+} from "../errors";
 import {
   acquireGatewayGovernanceLease,
   consumeGatewayGovernanceRate,
   type GatewayGovernanceHandle,
-} from "@/lib/gateway-governance/lifecycle";
-import { calculateChatReservation } from "@/lib/gateway-governance/metering";
+} from "../gateway-governance/lifecycle";
+import { calculateChatReservation } from "../gateway-governance/metering";
 import {
   GovernanceRejectedError,
   GovernanceStateError,
   type GatewayGovernanceOperation,
-} from "@/lib/gateway-governance/repository";
-import { resolveLocale, translateError } from "@/lib/i18n";
-import type { CallContext } from "@/lib/providers/types";
-import { redactErrorMessage } from "@/lib/redaction";
-import { getRouteRepository } from "@/lib/repositories/route-repository";
-import { logUsage } from "@/lib/usage";
+} from "../gateway-governance/repository";
+import { resolveLocale, translateError } from "../i18n/index";
+import type { CallContext } from "../providers/types";
+import { redactErrorMessage } from "../redaction";
+import { getRouteRepository } from "../repositories/route-repository";
+import { logUsage } from "../usage";
 import type { ParsedGatewayRequest, GatewayProtocol } from "./types";
 import { authenticateGatewayRequest } from "./auth";
 import {

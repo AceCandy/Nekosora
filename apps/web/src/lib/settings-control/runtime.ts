@@ -1,8 +1,8 @@
-import { resetCompactModelConfig } from "@/lib/compact/service";
-import { resetTitleModelConfig } from "@/lib/conversation-title/service";
-import { resetMemoryClient } from "@/lib/memory/mem0";
-import { resetEmbeddingConfig } from "@/lib/rag/embedding";
-import { resetUAConfig } from "@/lib/system-settings/ua";
+import { resetCompactModelConfig } from "@nekusora/core/compact/service";
+import { resetTitleModelConfig } from "@nekusora/core/conversation-title/service";
+import { resetMemoryClient } from "@nekusora/core/memory/mem0";
+import { resetEmbeddingConfig } from "@nekusora/core/rag/embedding";
+import { resetUAConfig } from "@nekusora/core/system-settings/ua";
 import { invalidateOutputModesCache } from "@/lib/output-modes/service";
 import { invalidateRenderStylesCache } from "@/lib/render-styles/service";
 

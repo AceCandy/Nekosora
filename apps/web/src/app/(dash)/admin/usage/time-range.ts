@@ -4,7 +4,7 @@
  * 支持预设(today/yesterday/24h/7d/30d)+ 自定义起止(start/end)。
  * 返回列表过滤用的 startAt/endAt + 图表 bucket 粒度 chartRange。默认今天。
  */
-import type { TimeRange } from "@/lib/usage-aggregate";
+import type { TimeRange } from "@nekusora/core/usage-aggregate";
 
 /** admin 用户筛选「全部」内部哨兵(不在下拉显示);×清空时写入,查询不限定 userId。 */
 export const ALL_USERS = "__all__";

@@ -13,7 +13,7 @@ vi.mock("drizzle-orm", () => ({
   asc: vi.fn(),
 }));
 
-vi.mock("@/lib/infra/db", () => ({
+vi.mock("../infra/db/index", () => ({
   getDb: vi.fn(async () => ({
     update: vi.fn(() => ({ set: mocks.set })),
   })),

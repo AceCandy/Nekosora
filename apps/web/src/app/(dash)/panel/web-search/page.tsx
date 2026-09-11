@@ -9,8 +9,8 @@ import {
   loadConfig,
   saveWebSearchConfig,
   toWebSearchConfigDto,
-} from "@/lib/web-search/registry";
-import { searchBackendKey, type SearchBackend, type WebSearchProviderConfig } from "@/lib/web-search/types";
+} from "@nekusora/core/web-search/registry";
+import { searchBackendKey, type SearchBackend, type WebSearchProviderConfig } from "@nekusora/core/web-search/types";
 import WebSearchManager, { type WebSearchProviderInput } from "@/features/web-search/WebSearchManager";
 import { Globe } from "lucide-react";
 import { PageHeader } from "@/shared/components/PageHeader";

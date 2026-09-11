@@ -4,7 +4,7 @@ import { useTranslations } from "next-intl";
 import { Zap } from "lucide-react";
 import { Button } from "@/shared/ui/Button";
 import Badge from "@/shared/ui/Badge";
-import type { ProbeResult } from "@/lib/providers/probe";
+import type { ProbeResult } from "@nekusora/core/providers/probe";
 
 /** server action 签名:接收路由/模型 id,返回探测结果。 */
 export type RouteTestAction = (id: string) => Promise<ProbeResult>;

@@ -12,7 +12,7 @@ import {
   SettingsRollbackConflictError,
   SettingsValidationError,
   type SettingsDraftExpectation,
-} from "@/lib/settings-control/service";
+} from "@nekusora/core/settings-control/service";
 import { refreshSettings } from "./refresh-settings";
 import type { SettingsControlActionState } from "./settings-control-state";
 

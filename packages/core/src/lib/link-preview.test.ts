@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ requestPublicResponse: vi.fn() }));
 
-vi.mock("@/lib/web-search/public-http", () => ({
+vi.mock("./web-search/public-http", () => ({
   requestPublicResponse: mocks.requestPublicResponse,
 }));
 

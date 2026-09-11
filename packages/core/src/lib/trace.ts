@@ -8,7 +8,7 @@
  * 这里按分隔符拆块,推断 kind(基于内容前缀标记)。
  */
 import type { ProcessTrace, ProcessTraceBlock } from "@nekusora/db/types";
-import { estimateTokens } from "@/lib/tokens";
+import { estimateTokens } from "./tokens";
 
 const BLOCK_SEPARATOR = "\n\n---\n\n";
 

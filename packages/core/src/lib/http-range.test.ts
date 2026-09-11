@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseByteRange } from "@/lib/http-range";
+import { parseByteRange } from "./http-range";
 
 describe("parseByteRange", () => {
   it("解析明确的起止字节并返回闭区间", () => {

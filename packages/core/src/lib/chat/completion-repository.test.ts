@@ -15,11 +15,11 @@ vi.mock("drizzle-orm", () => ({
   eq: mocks.eq,
   isNull: mocks.isNull,
 }));
-vi.mock("@/lib/infra/db", () => ({
+vi.mock("../infra/db/index", () => ({
   getDb: mocks.getDb,
   getSchema: mocks.getSchema,
 }));
-vi.mock("@/lib/chat/message-reference", () => ({
+vi.mock("./message-reference", () => ({
   findConversationMessage: mocks.findConversationMessage,
   withConversationMessageWrite: mocks.withConversationMessageWrite,
 }));
@@ -27,7 +27,7 @@ vi.mock("@/lib/chat/message-reference", () => ({
 import {
   CompletionConflictError,
   persistChatCompletion,
-} from "@/lib/chat/completion-repository";
+} from "./completion-repository";
 
 const schema = {
   conversations: {

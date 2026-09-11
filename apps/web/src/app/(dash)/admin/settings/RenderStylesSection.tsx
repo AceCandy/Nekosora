@@ -15,7 +15,7 @@ import {
   saveRenderStyleReorder,
   saveRenderStyleUpdate,
   type SettingsControlView,
-} from "@/lib/settings-control/service";
+} from "@nekusora/core/settings-control/service";
 import RenderStylesManager from "@/features/render-styles/RenderStylesManager";
 
 export default async function RenderStylesSection({ control }: { control: SettingsControlView }) {

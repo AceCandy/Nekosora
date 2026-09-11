@@ -57,16 +57,15 @@ src/
 
 | 别名 | 指向 | 用途 |
 |------|------|------|
-| `@/auth` | `packages/core/src/auth.ts` | 共享服务端认证 |
-| `@/lib/*` | `packages/core/src/lib/*` | 共享领域逻辑；下述精确别名优先 |
 | `@/*` | `apps/web/src/*` | 其他 Web 本地模块 |
 | `@shared/*` | `src/shared/*` | 复用 UI 与工具 |
 | `@features/*` | `src/features/*` | 跨特性引用 |
 
 `@/lib/session`、`@/lib/auth-client`、`@/lib/output-modes/service`、
-`@/lib/render-styles/service`、`@/lib/settings-control/runtime` 精确映射 Web
-本地 `src/lib/`。表中 workspace 路径相对仓库根目录，`src/shared` 与
-`src/features` 相对 `apps/web`；不要把 `@/lib/*` 一概理解为 Web 本地源码。
+`@/lib/render-styles/service`、`@/lib/settings-control/runtime` 通过本地 `@/*`
+映射到 Web `src/lib/`。共享服务使用 `@nekusora/core/<subpath>` 的显式包导出，
+服务端认证使用 `@nekusora/core/auth`；不要新增直达 Core 源码的应用别名。
+`src/shared` 与 `src/features` 均相对 `apps/web`。
 
 新增 import 时按被引用对象的归属选择前缀；同特性内部用相对路径即可。
 

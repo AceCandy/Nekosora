@@ -10,11 +10,11 @@ vi.mock("ai", async (importOriginal) => {
   const actual = await importOriginal<typeof import("ai")>();
   return { ...actual, streamText: mocks.streamText };
 });
-vi.mock("@/lib/gateway-execution", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/gateway-execution")>();
+vi.mock("../gateway-execution/index", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../gateway-execution/index")>();
   return { ...actual, executeAtomicGateway: mocks.executeAtomicGateway };
 });
-vi.mock("@/lib/system-settings/ua", () => ({ getChatUA: mocks.getChatUA }));
+vi.mock("../system-settings/ua", () => ({ getChatUA: mocks.getChatUA }));
 
 import {
   buildHostedSearchPrompt,

@@ -1,7 +1,7 @@
 /** 一次性脚本:给 seed 管理员签发主 key(若已有则打印提示)。 */
 import { eq } from "drizzle-orm";
-import { getDb, getSchema, closeDb } from "@/lib/infra/db";
-import { createMasterKey } from "@/lib/keys";
+import { getDb, getSchema, closeDb } from "@nekusora/core/infra/db";
+import { createMasterKey } from "@nekusora/core/keys";
 
 async function main() {
   const db = await getDb();

@@ -2,7 +2,7 @@ import { getTranslations } from "next-intl/server";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/session";
-import { getAuth } from "@/auth";
+import { getAuth } from "@nekusora/core/auth";
 import { listConversations, togglePinnedConversation, toggleArchivedConversation, deleteConversation, getGeneratingStatuses, getConversationNavigationItem, getConversationGroupSummary, listConversationGroup, renameConversation } from "@/features/chat/actions/conversations";
 import { listEnabledRenderStyles } from "@/lib/render-styles/service";
 import Sidebar from "@/features/chat/components/Sidebar";

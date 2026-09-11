@@ -35,11 +35,11 @@ vi.mock("drizzle-orm", () => ({
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/session", () => ({ requireSession: mocks.requireSession }));
-vi.mock("@/lib/infra/db", () => ({
+vi.mock("@nekusora/core/infra/db", () => ({
   getDb: mocks.getDb,
   getSchema: mocks.getSchema,
 }));
-vi.mock("@/lib/conversation-title/service", () => ({
+vi.mock("@nekusora/core/conversation-title/service", () => ({
   getConversationTitleState: mocks.getConversationTitleState,
 }));
 

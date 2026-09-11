@@ -54,8 +54,8 @@ import {
   splitStructuredSegments,
   stripPseudoToolCallBlocks,
 } from "./customRenderer";
-import { resolvePreviewableKind, type PreviewableKind } from "@/lib/artifacts/previewable";
-import { resolveStructuredKind } from "@/lib/artifacts/structured";
+import { resolvePreviewableKind, type PreviewableKind } from "@nekusora/core/artifacts/previewable";
+import { resolveStructuredKind } from "@nekusora/core/artifacts/structured";
 import { copyToClipboard } from "@/shared/lib/clipboard";
 import { StructuredInlineView } from "@/shared/components/structured-blocks";
 import { MermaidDiagram } from "@/shared/components/mermaid/MermaidDiagram";

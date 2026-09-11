@@ -11,12 +11,7 @@
     "allowSyntheticDefaultImports": true,
     "resolveJsonModule": true,
     "verbatimModuleSyntax": true,
-    "jsx": "react-jsx",
-    "paths": {
-      "@/auth": ["../../packages/core/src/auth.ts"],
-      "@/lib/*": ["../../packages/core/src/lib/*"],
-      "@/*": ["../../packages/core/src/*"]
-    }
+    "jsx": "react-jsx"
   },
   "include": ["src/**/*.ts", "tsup.config.ts", "vitest.config.ts"]
 }

@@ -10,25 +10,25 @@ const mocks = vi.hoisted(() => ({
   runGatewayRetention: vi.fn(),
 }));
 
-vi.mock("@/lib/rag/processing-coordinator", () => ({
+vi.mock("../rag/processing-coordinator", () => ({
   processFile: mocks.processFile,
 }));
-vi.mock("@/lib/rag/recovery", () => ({
+vi.mock("../rag/recovery", () => ({
   recoverStaleFileProcessing: mocks.recoverStaleFileProcessing,
 }));
-vi.mock("@/lib/memory/jobs", () => ({
+vi.mock("../memory/jobs", () => ({
   processMemoryExtractionJob: mocks.processMemoryExtractionJob,
 }));
-vi.mock("@/lib/memory/dispatch", () => ({
+vi.mock("../memory/dispatch", () => ({
   recoverMemoryExtractionJobs: mocks.recoverMemoryExtractionJobs,
 }));
-vi.mock("@/lib/conversation-title/service", () => ({
+vi.mock("../conversation-title/service", () => ({
   processConversationTitleJob: mocks.processConversationTitleJob,
 }));
-vi.mock("@/lib/conversation-title/dispatch", () => ({
+vi.mock("../conversation-title/dispatch", () => ({
   recoverConversationTitleJobs: mocks.recoverConversationTitleJobs,
 }));
-vi.mock("@/lib/gateway-execution/retention", () => ({
+vi.mock("../gateway-execution/retention", () => ({
   runGatewayRetention: mocks.runGatewayRetention,
 }));
 
@@ -36,7 +36,7 @@ import {
   CONVERSATION_TITLE_QUEUE,
   FILE_PROCESS_QUEUE,
   MEMORY_EXTRACTION_QUEUE,
-} from "@/lib/jobs/catalog";
+} from "../jobs/catalog";
 import { WORKER_DEFINITIONS } from "./definitions";
 
 beforeEach(() => {

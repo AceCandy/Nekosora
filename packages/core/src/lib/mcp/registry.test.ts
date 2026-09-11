@@ -6,7 +6,7 @@ import {
   toIRTools,
   type McpClientHandle,
   type ResolvedMcpServer,
-} from "@/lib/mcp/registry";
+} from "./registry";
 
 function makeServer(name: string, id = name): {
   server: ResolvedMcpServer;

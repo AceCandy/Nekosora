@@ -13,7 +13,7 @@ vi.mock("drizzle-orm", () => ({
   and: mocks.and,
 }));
 vi.mock("@/lib/session", () => ({ requireSession: mocks.requireSession }));
-vi.mock("@/lib/infra/db", () => ({ getDb: mocks.getDb, getSchema: mocks.getSchema }));
+vi.mock("@nekusora/core/infra/db", () => ({ getDb: mocks.getDb, getSchema: mocks.getSchema }));
 
 import { setMessageFeedback } from "./feedback";
 

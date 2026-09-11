@@ -1,12 +1,12 @@
 import { and, eq, isNull } from "drizzle-orm";
 import type { ProcessTrace, TokenUsage } from "@nekusora/db/types";
-import type { MemoryExtractionJob } from "@/lib/memory/jobs";
-import { getDb, getSchema } from "@/lib/infra/db";
+import type { MemoryExtractionJob } from "../memory/jobs";
+import { getDb, getSchema } from "../infra/db/index";
 import {
   findConversationMessage,
   withConversationMessageWrite,
-} from "@/lib/chat/message-reference";
-import type { RunTerminalStatus } from "@/lib/chat/run-lifecycle";
+} from "./message-reference";
+import type { RunTerminalStatus } from "./run-lifecycle";
 
 export type AssistantWrite =
   | {

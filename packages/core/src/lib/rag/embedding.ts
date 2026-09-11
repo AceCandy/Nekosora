@@ -10,10 +10,10 @@
 import { embedMany } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { eq, and } from "drizzle-orm";
-import { getDb, getSchema } from "@/lib/infra/db";
-import { parseKeyBundle, pickWeightedKey } from "@/lib/providers/keys";
-import type { Vector } from "@/lib/infra/vector";
-import { getSettingsRevision } from "@/lib/settings-control/service";
+import { getDb, getSchema } from "../infra/db/index";
+import { parseKeyBundle, pickWeightedKey } from "../providers/keys";
+import type { Vector } from "../infra/vector";
+import { getSettingsRevision } from "../settings-control/service";
 
 export const EMBEDDING_DIM = 1024;
 

@@ -1,4 +1,4 @@
-import type { CallContext, IRUsage, ResolvedRoute } from "@/lib/providers/types";
+import type { CallContext, IRUsage, ResolvedRoute } from "../providers/types";
 import type { ReasoningLevel } from "@nekusora/db/types";
 
 export type GatewayOperation =

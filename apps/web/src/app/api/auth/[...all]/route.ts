@@ -1,5 +1,5 @@
 /** Better Auth route handler —— 所有 /api/auth/* 请求转给 Better Auth。 */
-import { getAuth } from "@/auth";
+import { getAuth } from "@nekusora/core/auth";
 import { toNextJsHandler } from "better-auth/next-js";
 
 // Better Auth 实例惰性初始化,handler 包装一层。

@@ -1,11 +1,11 @@
 import { refreshSettings } from "./refresh-settings";
 import { eq, and } from "drizzle-orm";
-import { getDb, getSchema } from "@/lib/infra/db";
-import { getSettings } from "@/lib/system-settings/service";
+import { getDb, getSchema } from "@nekusora/core/infra/db";
+import { getSettings } from "@nekusora/core/system-settings/service";
 import {
   saveSystemSettings,
   type SettingsControlView,
-} from "@/lib/settings-control/service";
+} from "@nekusora/core/settings-control/service";
 import { requireAdmin } from "@/lib/session";
 import EmbeddingConfigForm from "./EmbeddingConfigForm";
 import BackgroundModelConfigForm from "./BackgroundModelConfigForm";

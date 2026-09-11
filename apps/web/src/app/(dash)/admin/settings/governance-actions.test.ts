@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_GATEWAY_GOVERNANCE_POLICY,
   type GatewayScopeLimits,
-} from "@/lib/gateway-governance/policy";
+} from "@nekusora/core/gateway-governance/policy";
 
 const mockFunctions = vi.hoisted(() => ({
   requireAdmin: vi.fn(),
@@ -15,7 +15,7 @@ vi.mock("@/lib/settings-control/runtime", () => ({
 }));
 vi.mock("next/cache", () => ({ revalidatePath: mockFunctions.revalidatePath }));
 vi.mock("@/lib/session", () => ({ requireAdmin: mockFunctions.requireAdmin }));
-vi.mock("@/lib/settings-control/service", () => ({
+vi.mock("@nekusora/core/settings-control/service", () => ({
   saveSystemSettings: mockFunctions.saveSystemSettings,
 }));
 

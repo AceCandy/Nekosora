@@ -15,16 +15,16 @@ vi.mock("drizzle-orm", () => ({
   sql: (strings: TemplateStringsArray) => strings.join(""),
 }));
 
-vi.mock("@/lib/system-settings/service", () => ({
+vi.mock("../system-settings/service", () => ({
   getSetting: vi.fn(async (namespace: string, key: string) =>
     mockData.settings[namespace + "." + key] ?? null),
 }));
 
-vi.mock("@/lib/stream", () => ({
+vi.mock("../stream", () => ({
   generateChat: vi.fn(async () => ({ text: "最终标题", usage: {} })),
 }));
 
-vi.mock("@/lib/infra/db", () => {
+vi.mock("../infra/db/index", () => {
   function matches(row: Record<string, unknown>, cond: unknown): boolean {
     const c = cond as { type?: string; col?: string; val?: unknown; conds?: unknown[] } | undefined;
     if (!c?.type) return true;
@@ -153,7 +153,7 @@ vi.mock("@/lib/infra/db", () => {
   };
 });
 
-import { generateChat } from "@/lib/stream";
+import { generateChat } from "../stream";
 import {
   generateConversationTitle,
   getConversationTitleState,

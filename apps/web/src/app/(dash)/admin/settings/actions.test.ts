@@ -22,11 +22,11 @@ vi.mock("@/lib/settings-control/runtime", () => ({
 }));
 vi.mock("next/cache", () => ({ revalidatePath: mockFunctions.revalidatePath }));
 vi.mock("@/lib/session", () => ({ requireAdmin: vi.fn(async () => mockData.admin) }));
-vi.mock("@/lib/settings-control/service", () => ({
+vi.mock("@nekusora/core/settings-control/service", () => ({
   saveSystemSettings: mockFunctions.saveSystemSettings,
 }));
 
-vi.mock("@/lib/infra/db", () => {
+vi.mock("@nekusora/core/infra/db", () => {
   type Condition =
     | { type: "eq"; col: string; value: unknown }
     | { type: "and"; conditions: Condition[] };

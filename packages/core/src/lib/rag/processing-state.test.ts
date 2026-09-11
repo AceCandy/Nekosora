@@ -7,7 +7,7 @@ import {
   normalizeUnsupportedReason,
   type ActiveFileProcessingStatus,
   type FileProcessingTransitionCommand,
-} from "@/lib/rag/processing-state";
+} from "./processing-state";
 
 describe("file processing state contract", () => {
   it.each<{

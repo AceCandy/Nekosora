@@ -23,7 +23,7 @@ vi.mock("next/headers", () => ({
   headers: mocks.headers,
 }));
 vi.mock("@/lib/session", () => ({ requireSession: mocks.requireSession }));
-vi.mock("@/lib/infra/db", () => ({ getDb: mocks.getDb, getSchema: mocks.getSchema }));
+vi.mock("@nekusora/core/infra/db", () => ({ getDb: mocks.getDb, getSchema: mocks.getSchema }));
 vi.mock("@/features/chat/lib/share-security", () => ({
   hashSharePassword: mocks.hashSharePassword,
   verifySharePassword: mocks.verifySharePassword,
@@ -37,7 +37,7 @@ vi.mock("@/features/chat/lib/share-rate-limit", () => ({
   recordShareUnlockFailure: mocks.recordShareUnlockFailure,
   clearShareUnlockClientFailures: mocks.clearShareUnlockClientFailures,
 }));
-vi.mock("@/lib/chat/run-metadata", () => ({
+vi.mock("@nekusora/core/chat/run-metadata", () => ({
   loadRunMetadataByRunIds: mocks.loadRunMetadataByRunIds,
 }));
 

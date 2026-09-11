@@ -8,7 +8,7 @@ import Select from "@/shared/ui/Select";
 import { Button } from "@/shared/ui/Button";
 import Modal from "@/shared/ui/Modal";
 import UnsavedChangesDialog, { useUnsavedChanges } from "@/shared/ui/UnsavedChangesDialog";
-import type { ProbeResult } from "@/lib/providers/probe";
+import type { ProbeResult } from "@nekusora/core/providers/probe";
 
 export interface EditorRow {
   key: string;

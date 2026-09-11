@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ErrorCode } from "@/lib/errors";
+import { ErrorCode } from "../errors";
 import { executeGateway } from "./engine";
 import type {
   AttemptTelemetry,
@@ -8,7 +8,7 @@ import type {
   GatewayBreakerPort,
   GatewayTelemetryPort,
 } from "./types";
-import type { ResolvedRoute } from "@/lib/providers/types";
+import type { ResolvedRoute } from "../providers/types";
 
 interface Event { text: string }
 interface Result { text: string }

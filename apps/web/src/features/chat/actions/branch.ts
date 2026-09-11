@@ -1,12 +1,12 @@
 "use server";
 import { eq, inArray, and, isNull } from "drizzle-orm";
-import { getDb, getSchema } from "@/lib/infra/db";
-import { loadRunMetadataByRunIds } from "@/lib/chat/run-metadata";
+import { getDb, getSchema } from "@nekusora/core/infra/db";
+import { loadRunMetadataByRunIds } from "@nekusora/core/chat/run-metadata";
 import { requireSession } from "@/lib/session";
 import {
   findConversationMessage,
   withConversationMessageWrite,
-} from "@/lib/chat/message-reference";
+} from "@nekusora/core/chat/message-reference";
 import {
   normalizeMessageFeedback,
   type MessageFeedback,
@@ -35,7 +35,7 @@ import {
   replaceMessageAttachments,
   resolveChatImageAttachments,
   toChatMessageAttachments,
-} from "@/lib/chat/message-attachments";
+} from "@nekusora/core/chat/message-attachments";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const S = () => getSchema() as any;

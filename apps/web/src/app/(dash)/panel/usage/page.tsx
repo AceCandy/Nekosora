@@ -1,6 +1,6 @@
 import { sql, eq, and, gte, lte } from "drizzle-orm";
 import { getTranslations } from "next-intl/server";
-import { getDb, getSchema } from "@/lib/infra/db";
+import { getDb, getSchema } from "@nekusora/core/infra/db";
 import { requireSession } from "@/lib/session";
 import {
   getTimeSeries,
@@ -8,9 +8,9 @@ import {
   getSourceBreakdown,
   listUsageLogs,
   type UsageLogFilters,
-} from "@/lib/usage-aggregate";
-import { listErrorLogs, listAttemptsByRequestIds, type ErrorLogFilters, type ErrorLogRow } from "@/lib/repositories/error-log-repository";
-import { classifyError } from "@/lib/error-classify";
+} from "@nekusora/core/usage-aggregate";
+import { listErrorLogs, listAttemptsByRequestIds, type ErrorLogFilters, type ErrorLogRow } from "@nekusora/core/repositories/error-log-repository";
+import { classifyError } from "@nekusora/core/error-classify";
 import { UsageDashboard, UsageSummary } from "@/app/(dash)/admin/usage/UsageDashboard";
 import { CollapsibleStats } from "@/app/(dash)/admin/usage/CollapsibleStats";
 import { UsageTabs } from "@/app/(dash)/admin/usage/UsageTabs";

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { getDb } from "@/lib/infra/db";
-import { parseGatewayGovernancePolicy } from "@/lib/gateway-governance/policy";
+import { getDb } from "../infra/db/index";
+import { parseGatewayGovernancePolicy } from "../gateway-governance/policy";
 import {
   changedFields,
   mergeSettingsChange,

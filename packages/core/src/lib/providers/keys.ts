@@ -13,7 +13,7 @@
  * 选择策略:按 weight 加权随机(无状态,无需跨 worker 共享计数)。
  * 失败转移:调用方(stream.ts)在同一 provider 内换 key 重试,见 orderedWeightedKeys。
  */
-import { decrypt, encrypt } from "@/lib/infra/crypto";
+import { decrypt, encrypt } from "../infra/crypto";
 
 /** 一个加权 key 条目。 */
 export interface WeightedKey {

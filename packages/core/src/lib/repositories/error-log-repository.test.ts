@@ -22,7 +22,7 @@ vi.mock("drizzle-orm", () => ({
   or: mocks.passthrough,
   sql: mocks.sql,
 }));
-vi.mock("@/lib/infra/db", () => ({
+vi.mock("../infra/db/index", () => ({
   getDb: mocks.getDb,
   getSchema: mocks.getSchema,
 }));

@@ -14,18 +14,18 @@
  * 见 src/lib/infra/storage。storage_path 列存 driver 无关的 key。
  */
 import { and, eq } from "drizzle-orm";
-import { getDb, getSchema } from "@/lib/infra/db";
-import { getSessionFromHeaders } from "@/lib/session-request";
-import { getQueue } from "@/lib/infra/queue";
-import { FILE_PROCESS_QUEUE } from "@/lib/jobs/catalog";
-import { getStorage } from "@/lib/infra/storage";
-import { processFile } from "@/lib/rag/processing-coordinator";
-import { formatFileProcessingError } from "@/lib/rag/processing-state";
-import { apiError, ErrorCode } from "@/lib/errors";
+import { getDb, getSchema } from "../../lib/infra/db/index";
+import { getSessionFromHeaders } from "../../lib/session-request";
+import { getQueue } from "../../lib/infra/queue";
+import { FILE_PROCESS_QUEUE } from "../../lib/jobs/catalog";
+import { getStorage } from "../../lib/infra/storage/index";
+import { processFile } from "../../lib/rag/processing-coordinator";
+import { formatFileProcessingError } from "../../lib/rag/processing-state";
+import { apiError, ErrorCode } from "../../lib/errors";
 import {
   parseBoundedMultipartFormData,
   RequestBodyTooLargeError,
-} from "@/lib/multipart";
+} from "../../lib/multipart";
 import {
   MAX_UPLOAD_BODY_BYTES,
   MAX_UPLOAD_FILE_BYTES,

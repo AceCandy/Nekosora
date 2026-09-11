@@ -24,12 +24,12 @@ vi.mock("drizzle-orm", () => ({
   inArray: mocks.inArray,
 }));
 vi.mock("@/lib/session", () => ({ requireSession: mocks.requireSession }));
-vi.mock("@/lib/infra/db", () => ({ getDb: mocks.getDb, getSchema: mocks.getSchema }));
-vi.mock("@/lib/chat/message-reference", () => ({
+vi.mock("@nekusora/core/infra/db", () => ({ getDb: mocks.getDb, getSchema: mocks.getSchema }));
+vi.mock("@nekusora/core/chat/message-reference", () => ({
   findConversationMessage: mocks.findConversationMessage,
   withConversationMessageWrite: mocks.withConversationMessageWrite,
 }));
-vi.mock("@/lib/chat/message-attachments", () => ({
+vi.mock("@nekusora/core/chat/message-attachments", () => ({
   assertVisionModel: mocks.assertVisionModel,
   loadMessageAttachmentsByMessageIds: mocks.loadMessageAttachmentsByMessageIds,
   replaceMessageAttachments: mocks.replaceMessageAttachments,

@@ -6,10 +6,10 @@
  */
 import assert from "node:assert";
 import { eq } from "drizzle-orm";
-import { getDb, getSchema, closeDb } from "@/lib/infra/db";
-import { encrypt } from "@/lib/infra/crypto";
-import { resolveRoutes, resolveRoutesById, RoutingError } from "@/lib/routing";
-import type { CallContext } from "@/lib/providers/types";
+import { getDb, getSchema, closeDb } from "@nekusora/core/infra/db";
+import { encrypt } from "@nekusora/core/infra/crypto";
+import { resolveRoutes, resolveRoutesById, RoutingError } from "@nekusora/core/routing";
+import type { CallContext } from "@nekusora/core/providers/types";
 
 (process.env as Record<string, string>).NODE_ENV = "development";
 // 依赖 DATABASE_URL(PostgreSQL);运行前需 docker compose up postgres + pnpm db:migrate:pg。

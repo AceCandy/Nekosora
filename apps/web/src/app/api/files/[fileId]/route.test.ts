@@ -13,12 +13,12 @@ const mocks = vi.hoisted(() => ({
 vi.mock("drizzle-orm", () => ({
   eq: vi.fn(() => ({})),
 }));
-vi.mock("@/lib/session-request", () => ({ getSessionFromHeaders: mocks.getSession }));
-vi.mock("@/lib/infra/db", () => ({
+vi.mock("@nekusora/core/session-request", () => ({ getSessionFromHeaders: mocks.getSession }));
+vi.mock("@nekusora/core/infra/db", () => ({
   getDb: mocks.getDb,
   getSchema: mocks.getSchema,
 }));
-vi.mock("@/lib/infra/storage", () => ({ getStorage: mocks.getStorage }));
+vi.mock("@nekusora/core/infra/storage", () => ({ getStorage: mocks.getStorage }));
 
 import { GET } from "@/app/api/files/[fileId]/route";
 

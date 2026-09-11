@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import type { SettingsChange } from "@/lib/settings-control/changes";
+import type { SettingsChange } from "@nekusora/core/settings-control/changes";
 
 vi.mock("next-intl", () => ({
   useLocale: () => "zh-CN",

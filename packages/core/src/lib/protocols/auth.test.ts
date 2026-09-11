@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ErrorCode } from "@/lib/errors";
-import type { CallContext } from "@/lib/providers/types";
+import { ErrorCode } from "../errors";
+import type { CallContext } from "../providers/types";
 import { authenticateGatewayRequest } from "./auth";
 import type { GatewayProtocol } from "./types";
 import { GatewayRequestError, UnsupportedParameterError } from "./validation";
 
 const verifyKey = vi.hoisted(() => vi.fn());
 
-vi.mock("@/lib/keys", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/keys")>();
+vi.mock("../keys", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../keys")>();
   return { ...actual, verifyKey };
 });
 

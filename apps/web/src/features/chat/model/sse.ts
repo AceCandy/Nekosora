@@ -36,7 +36,7 @@ import {
   isChatTerminalStatus,
   type ChatTerminalEvent,
   type ChatTerminalStatus,
-} from "@/lib/chat/sse-contract";
+} from "@nekusora/core/chat/sse-contract";
 
 export interface SSEEvent {
   type:

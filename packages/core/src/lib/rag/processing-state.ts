@@ -1,5 +1,5 @@
-import { redactErrorMessage } from "@/lib/redaction";
-import { FILE_PROCESS_QUEUE } from "@/lib/jobs/catalog";
+import { redactErrorMessage } from "../redaction";
+import { FILE_PROCESS_QUEUE } from "../jobs/catalog";
 
 export const FILE_PROCESSING_RETRYABLE_MESSAGE = FILE_PROCESS_QUEUE.retryMessage;
 const MAX_FILE_PROCESSING_ERROR_LENGTH = 200;

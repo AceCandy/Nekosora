@@ -4,9 +4,9 @@ const mocks = vi.hoisted(() => ({
   getStorage: vi.fn(),
 }));
 
-vi.mock("@/lib/infra/storage", () => ({ getStorage: mocks.getStorage }));
+vi.mock("../infra/storage/index", () => ({ getStorage: mocks.getStorage }));
 
-import { buildMultimodalUserMessage } from "@/lib/multimodal/assemble";
+import { buildMultimodalUserMessage } from "./assemble";
 
 describe("多模态图片组装", () => {
   beforeEach(() => {

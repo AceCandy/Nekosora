@@ -1,15 +1,15 @@
 import { streamText } from "ai";
-import { gatewayBreaker } from "@/lib/circuit-breaker";
+import { gatewayBreaker } from "../circuit-breaker";
 import {
   executeAtomicGateway,
   gatewayTelemetry,
   type GatewayAttemptAdapter,
-} from "@/lib/gateway-execution";
-import { buildHostedSearchRuntime } from "@/lib/providers/registry";
-import type { CallContext, IRUsage } from "@/lib/providers/types";
-import { resolveRoutesById } from "@/lib/routing";
-import { getChatUA } from "@/lib/system-settings/ua";
-import { resolveProviderTimeouts } from "@/lib/providers/timeouts";
+} from "../gateway-execution/index";
+import { buildHostedSearchRuntime } from "../providers/registry";
+import type { CallContext, IRUsage } from "../providers/types";
+import { resolveRoutesById } from "../routing";
+import { getChatUA } from "../system-settings/ua";
+import { resolveProviderTimeouts } from "../providers/timeouts";
 import type { SearchResult, SearchTimeRange } from "./types";
 
 const HOSTED_SEARCH_IDLE_TIMEOUT_MS = 30_000;

@@ -5,7 +5,7 @@ import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { eq } from "drizzle-orm";
-import { closeDb, getDb, getSchema } from "@/lib/infra/db";
+import { closeDb, getDb, getSchema } from "@nekusora/core/infra/db";
 import {
   buildCatalogSyncSql,
   CatalogSyncInputError,
@@ -17,7 +17,7 @@ import {
   type DrizzleSnapshot,
   type JournalEntry,
   type SyncPlan,
-} from "@/lib/sync-pi-models";
+} from "@nekusora/core/sync-pi-models";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const DEFAULT_PI_MODELS_URL = "https://pi.dev/api/models";

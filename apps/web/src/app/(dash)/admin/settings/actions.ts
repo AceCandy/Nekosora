@@ -1,12 +1,12 @@
 "use server";
 
 import { refreshSettings } from "./refresh-settings";
-import { getDb } from "@/lib/infra/db";
-import { requireOwnedProvider } from "@/lib/providers/ownership";
+import { getDb } from "@nekusora/core/infra/db";
+import { requireOwnedProvider } from "@nekusora/core/providers/ownership";
 import { requireAdmin } from "@/lib/session";
 import {
   saveSystemSettings,
-} from "@/lib/settings-control/service";
+} from "@nekusora/core/settings-control/service";
 
 /** 保存系统级 Embedding Provider 与模型配置。 */
 export async function saveEmbedding(

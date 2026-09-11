@@ -13,11 +13,11 @@ const mocks = vi.hoisted(() => ({
   governanceSignal: new AbortController().signal,
 }));
 
-vi.mock("@/lib/keys", () => ({
+vi.mock("@nekusora/core/keys", () => ({
   extractBearer: mocks.extractBearer,
   verifyKey: mocks.verifyKey,
 }));
-vi.mock("@/lib/providers/multimodal/audio-tts", () => ({
+vi.mock("@nekusora/core/providers/multimodal/audio-tts", () => ({
   RoutingError: class RoutingError extends Error {
     constructor(readonly code: string) {
       super(code);
@@ -25,14 +25,14 @@ vi.mock("@/lib/providers/multimodal/audio-tts", () => ({
   },
   synthesizeViaRoute: mocks.synthesizeViaRoute,
 }));
-vi.mock("@/lib/usage", () => ({ logUsage: mocks.logUsage }));
-vi.mock("@/lib/gateway-governance/lifecycle", async (importOriginal) => ({
-  ...await importOriginal<typeof import("@/lib/gateway-governance/lifecycle")>(),
+vi.mock("@nekusora/core/usage", () => ({ logUsage: mocks.logUsage }));
+vi.mock("@nekusora/core/gateway-governance/lifecycle", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@nekusora/core/gateway-governance/lifecycle")>(),
   beginGatewayGovernance: mocks.beginGatewayGovernance,
 }));
 
-import { GovernanceStateError } from "@/lib/gateway-governance/repository";
-import { RoutingError } from "@/lib/providers/multimodal/audio-tts";
+import { GovernanceStateError } from "@nekusora/core/gateway-governance/repository";
+import { RoutingError } from "@nekusora/core/providers/multimodal/audio-tts";
 import { POST } from "@/app/v1/audio/speech/route";
 
 function request(body: Record<string, unknown>, language = "en") {

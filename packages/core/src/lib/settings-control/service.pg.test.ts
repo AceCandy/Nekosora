@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { closeDb } from "@/lib/infra/db";
+import { closeDb } from "../infra/db/index";
 import {
   abandonSettingsDraft,
   applySettingsDraft,

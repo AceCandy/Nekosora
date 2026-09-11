@@ -4,8 +4,8 @@
  * 运行:pnpm tsx scripts/smoke/rag.smoke.ts
  */
 import assert from "node:assert";
-import { chunkText } from "@/lib/rag/chunk";
-import { estimateTokens } from "@/lib/tokens";
+import { chunkText } from "@nekusora/core/rag/chunk";
+import { estimateTokens } from "@nekusora/core/tokens";
 
 function cosineSim(a: number[], b: number[]): number {
   if (a.length !== b.length || a.length === 0) return 0;

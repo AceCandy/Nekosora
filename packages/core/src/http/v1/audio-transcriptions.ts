@@ -9,27 +9,27 @@
  *
  * 响应:{ text: "..." }(默认 response_format=text/json)。
  */
-import { verifyKey, extractBearer } from "@/lib/keys";
-import { transcribeViaRoute, RoutingError } from "@/lib/providers/multimodal/audio-stt";
+import { verifyKey, extractBearer } from "../../lib/keys";
+import { transcribeViaRoute, RoutingError } from "../../lib/providers/multimodal/audio-stt";
 import {
   apiErrorLocalized,
   ErrorCode,
   routingCodeToErrorCode,
   ERROR_META,
-} from "@/lib/errors";
-import { classifyError } from "@/lib/error-classify";
+} from "../../lib/errors";
+import { classifyError } from "../../lib/error-classify";
 import {
   beginGatewayGovernance,
   runWithGatewayGovernance,
-} from "@/lib/gateway-governance/lifecycle";
-import { measureSttSeconds } from "@/lib/gateway-governance/metering";
-import { redactErrorMessage } from "@/lib/redaction";
-import { logUsage } from "@/lib/usage";
-import type { CallContext } from "@/lib/providers/types";
+} from "../../lib/gateway-governance/lifecycle";
+import { measureSttSeconds } from "../../lib/gateway-governance/metering";
+import { redactErrorMessage } from "../../lib/redaction";
+import { logUsage } from "../../lib/usage";
+import type { CallContext } from "../../lib/providers/types";
 import {
   parseBoundedMultipartFormData,
   RequestBodyTooLargeError,
-} from "@/lib/multipart";
+} from "../../lib/multipart";
 import {
   MAX_TRANSCRIPTION_BODY_BYTES,
   MAX_TRANSCRIPTION_FILE_BYTES,

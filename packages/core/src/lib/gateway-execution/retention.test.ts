@@ -11,8 +11,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("drizzle-orm", () => ({ sql: mocks.sql }));
-vi.mock("@/lib/infra/db", () => ({ getDb: mocks.getDb }));
-vi.mock("@/lib/infra/metrics", () => ({
+vi.mock("../infra/db/index", () => ({ getDb: mocks.getDb }));
+vi.mock("../infra/metrics", () => ({
   observeGatewayRetentionClaim: mocks.observeGatewayRetentionClaim,
   observeGatewayRetentionRun: mocks.observeGatewayRetentionRun,
 }));

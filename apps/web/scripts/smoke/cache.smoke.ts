@@ -9,7 +9,7 @@ import {
   cacheSet,
   cacheWrap,
   __resetCacheForTest,
-} from "@/lib/infra/cache";
+} from "@nekusora/core/infra/cache";
 
 async function run() {
   // 强制内存模式:清空 REDIS_URL 并重置单例。

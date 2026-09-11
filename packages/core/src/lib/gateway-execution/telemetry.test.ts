@@ -9,11 +9,11 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("drizzle-orm", () => ({ eq: mocks.eq }));
-vi.mock("@/lib/infra/db", () => ({
+vi.mock("../infra/db/index", () => ({
   getDb: mocks.getDb,
   getSchema: mocks.getSchema,
 }));
-vi.mock("@/lib/infra/metrics", () => ({
+vi.mock("../infra/metrics", () => ({
   observeGatewayAttempt: mocks.observeGatewayAttempt,
   observeGatewayExecution: mocks.observeGatewayExecution,
 }));

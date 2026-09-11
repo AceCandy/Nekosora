@@ -11,9 +11,9 @@
  * 大图压缩:用 sharp(已在 onlyBuiltDependencies)压缩到 ≤512KB 后内联,
  * 避免 base64 膨胀 token 上限。
  */
-import { getStorage } from "@/lib/infra/storage";
-import type { IRMessage } from "@/lib/providers/types";
-import type { ResolvedChatImage } from "@/lib/chat/message-attachments";
+import { getStorage } from "../infra/storage/index";
+import type { IRMessage } from "../providers/types";
+import type { ResolvedChatImage } from "../chat/message-attachments";
 
 /** 内联 base64 的体积上限(压缩目标,字节)。 */
 const MAX_INLINE_BYTES = 512 * 1024;

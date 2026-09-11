@@ -15,15 +15,15 @@ const mocks = vi.hoisted(() => ({
   markProviderStreamUsageUnsupported: vi.fn(async () => undefined),
 }));
 
-vi.mock("@/lib/usage", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/usage")>("@/lib/usage");
+vi.mock("./usage", async () => {
+  const actual = await vi.importActual<typeof import("./usage")>("./usage");
   return {
     ...actual,
     logUsage: mocks.logUsage,
   };
 });
-vi.mock("@/lib/gateway-execution", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/gateway-execution")>();
+vi.mock("./gateway-execution/index", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./gateway-execution/index")>();
   return {
     ...actual,
     gatewayTelemetry: {
@@ -33,8 +33,8 @@ vi.mock("@/lib/gateway-execution", async (importOriginal) => {
     },
   };
 });
-vi.mock("@/lib/repositories/route-repository", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/repositories/route-repository")>();
+vi.mock("./repositories/route-repository", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./repositories/route-repository")>();
   return {
     ...actual,
     markProviderStreamUsageUnsupported: mocks.markProviderStreamUsageUnsupported,
@@ -42,19 +42,19 @@ vi.mock("@/lib/repositories/route-repository", async (importOriginal) => {
 });
 
 import { generateText, streamText } from "ai";
-import { generateChat, streamChat } from "@/lib/stream";
+import { generateChat, streamChat } from "./stream";
 import {
   resetRouteRepository,
   setRouteRepository,
   type RouteRepository,
-} from "@/lib/repositories/route-repository";
-import { encrypt } from "@/lib/infra/crypto";
+} from "./repositories/route-repository";
+import { encrypt } from "./infra/crypto";
 import {
   getProviderAvailability,
   recordFailure,
   resetAllBreakers,
   snapshotBreakers,
-} from "@/lib/circuit-breaker";
+} from "./circuit-breaker";
 
 let encryptedKeys = "";
 

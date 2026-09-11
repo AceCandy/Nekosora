@@ -3,8 +3,8 @@
  * 默认 dry-run；仅显式传入 --apply 时在单事务中写库。
  */
 import { and, eq } from "drizzle-orm";
-import { closeDb, getDb, getSchema } from "@/lib/infra/db";
-import { planWebSearchConfigBackfill } from "@/lib/web-search/registry";
+import { closeDb, getDb, getSchema } from "@nekusora/core/infra/db";
+import { planWebSearchConfigBackfill } from "@nekusora/core/web-search/registry";
 
 const APPLY = process.argv.includes("--apply");
 const WEB_SEARCH_KEY = "web_search";

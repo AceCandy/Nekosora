@@ -3,17 +3,17 @@
  * 返回该 key 可用的模型列表(网关 owner-only:主 key 列调用者自己的全部 enabled 模型;子 key 仅列绑定的)。
  */
 import { eq, and } from "drizzle-orm";
-import { getDb, getSchema } from "@/lib/infra/db";
-import { apiErrorLocalized, ErrorCode } from "@/lib/errors";
-import { consumeGatewayGovernanceRate } from "@/lib/gateway-governance/lifecycle";
-import { resolveLocale, translateError } from "@/lib/i18n";
-import type { CallContext } from "@/lib/providers/types";
-import { authenticateGatewayRequest } from "@/lib/protocols/auth";
-import { protocolErrorResponse } from "@/lib/protocols/encoders";
+import { getDb, getSchema } from "../../lib/infra/db/index";
+import { apiErrorLocalized, ErrorCode } from "../../lib/errors";
+import { consumeGatewayGovernanceRate } from "../../lib/gateway-governance/lifecycle";
+import { resolveLocale, translateError } from "../../lib/i18n/index";
+import type { CallContext } from "../../lib/providers/types";
+import { authenticateGatewayRequest } from "../../lib/protocols/auth";
+import { protocolErrorResponse } from "../../lib/protocols/encoders";
 import {
   GatewayRequestError,
   UnsupportedParameterError,
-} from "@/lib/protocols/validation";
+} from "../../lib/protocols/validation";
 import {
   gatewayGovernanceErrorResponse,
   gatewayGovernanceIdentity,

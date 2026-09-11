@@ -10,7 +10,7 @@
  * 读时缓存(60s),写入后主动失效(design §6)。
  */
 import { getMemory } from "./mem0";
-import { cacheWrap, cacheDel } from "@/lib/infra/cache";
+import { cacheWrap, cacheDel } from "../infra/cache";
 
 const PREFERENCE_CAP_CHARS = 400;
 

@@ -1,7 +1,7 @@
 import { and, asc, eq, lte, sql } from "drizzle-orm";
-import { getDb, getSchema } from "@/lib/infra/db";
-import { getQueue } from "@/lib/infra/queue";
-import { MEMORY_EXTRACTION_QUEUE } from "@/lib/jobs/catalog";
+import { getDb, getSchema } from "../infra/db/index";
+import { getQueue } from "../infra/queue";
+import { MEMORY_EXTRACTION_QUEUE } from "../jobs/catalog";
 
 const DATABASE_NOW = sql`now()`;
 const NEXT_DISPATCH_AT = sql`now() + interval '15 minutes'`;

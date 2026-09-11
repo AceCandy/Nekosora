@@ -6,13 +6,13 @@
  */
 import { generateSpeech as generateSpeech } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
-import type { CallContext } from "@/lib/providers/types";
-import { resolveRoutesByCapability, RoutingError } from "@/lib/routing";
-import { gatewayBreaker } from "@/lib/circuit-breaker";
-import { executeAtomicGateway, gatewayTelemetry, type GatewayAttemptAdapter } from "@/lib/gateway-execution";
-import { selectMediaAdapter } from "@/lib/gateway-execution/media-registry";
-import { countUnicodeCodePoints } from "@/lib/gateway-governance/metering";
-import { createProviderFetch } from "@/lib/providers/timeouts";
+import type { CallContext } from "../types";
+import { resolveRoutesByCapability, RoutingError } from "../../routing";
+import { gatewayBreaker } from "../../circuit-breaker";
+import { executeAtomicGateway, gatewayTelemetry, type GatewayAttemptAdapter } from "../../gateway-execution/index";
+import { selectMediaAdapter } from "../../gateway-execution/media-registry";
+import { countUnicodeCodePoints } from "../../gateway-governance/metering";
+import { createProviderFetch } from "../timeouts";
 
 export interface SynthesizeOptions {
   text: string;

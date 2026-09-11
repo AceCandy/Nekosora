@@ -6,7 +6,7 @@
  * 未配置时回退 Nekusora/{version}。保存后调 resetUAConfig 清缓存即时生效。
  */
 import { getSetting } from "./service";
-import { getSettingsRevision } from "@/lib/settings-control/service";
+import { getSettingsRevision } from "../settings-control/service";
 import pkg from "../../../package.json";
 
 export const DEFAULT_UA = `Nekusora/${pkg.version}`;

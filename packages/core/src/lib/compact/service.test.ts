@@ -30,7 +30,7 @@ vi.mock("drizzle-orm", () => ({
 
 // ---- mock @/lib/infra/db ----
 // 链式 query builder:select(fields).from(table).where().orderBy().limit() 可在任意节点 await。
-vi.mock("@/lib/infra/db", () => {
+vi.mock("../infra/db/index", () => {
   function matches(row: Record<string, unknown>, cond: unknown): boolean {
     if (!cond) return true;
     const c = cond as { type: string; col?: string; val?: unknown; conds?: unknown[] };
@@ -114,20 +114,20 @@ vi.mock("@/lib/infra/db", () => {
 });
 
 // ---- mock @/lib/system-settings/service ----
-vi.mock("@/lib/system-settings/service", () => ({
+vi.mock("../system-settings/service", () => ({
   getSetting: vi.fn(async (_ns: string, key: string) =>
     key === "compact_model_id" ? mockData.compactModelIdSetting : mockData.compactModelSetting),
 }));
 
 // ---- mock @/lib/stream:返回配置好的 LLM 响应 ----
-vi.mock("@/lib/stream", () => ({
+vi.mock("../stream", () => ({
   streamChat: vi.fn(async function* () {
     yield { type: "text-delta", text: mockData.llmResponse };
   }),
 }));
 
 import { maybeCompact, resetCompactModelConfig, retainRecentTurns } from "./service";
-import { streamChat } from "@/lib/stream";
+import { streamChat } from "../stream";
 
 beforeEach(() => {
   mockData.snapshots = [];

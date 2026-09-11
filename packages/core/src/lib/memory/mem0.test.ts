@@ -15,7 +15,7 @@ vi.mock("drizzle-orm", () => ({
   and: (...conditions: Array<{ column: string; value: unknown }>) => conditions,
 }));
 
-vi.mock("@/lib/infra/db", () => ({
+vi.mock("../infra/db/index", () => ({
   getSchema: () => ({
     models: { id: "id", name: "name", enabled: "enabled", visibility: "visibility" },
   }),
@@ -32,14 +32,14 @@ vi.mock("@/lib/infra/db", () => ({
   }),
 }));
 
-vi.mock("@/lib/routing", () => ({ resolveRoutesById: mocks.resolveRoutesById }));
-vi.mock("@/lib/settings-control/service", () => ({
+vi.mock("../routing", () => ({ resolveRoutesById: mocks.resolveRoutesById }));
+vi.mock("../settings-control/service", () => ({
   getSettingsRevision: async () => mocks.settingsRevision,
 }));
-vi.mock("@/lib/system-settings/service", () => ({
+vi.mock("../system-settings/service", () => ({
   getSetting: async (namespace: string, key: string) => mocks.settings[`${namespace}.${key}`] ?? null,
 }));
-vi.mock("@/lib/rag/embedding", () => ({
+vi.mock("../rag/embedding", () => ({
   getEmbeddingConfig: async () => ({ apiKey: "test", baseUrl: "https://example.test", model: "embed" }),
 }));
 vi.mock("./nekosora-llm", () => ({ createNekosoraLLM: mocks.createNekosoraLLM }));

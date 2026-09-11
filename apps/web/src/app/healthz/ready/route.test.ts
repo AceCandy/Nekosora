@@ -8,12 +8,12 @@ const mocks = vi.hoisted(() => ({
   getEnvInfo: vi.fn(),
 }));
 
-vi.mock("@/lib/infra/db", () => ({
+vi.mock("@nekusora/core/infra/db", () => ({
   getDb: mocks.getDb,
   getSchema: mocks.getSchema,
 }));
-vi.mock("@/lib/infra/storage", () => ({ getStorage: mocks.getStorage }));
-vi.mock("@/lib/infra/env", () => ({ getEnvInfo: mocks.getEnvInfo }));
+vi.mock("@nekusora/core/infra/storage", () => ({ getStorage: mocks.getStorage }));
+vi.mock("@nekusora/core/env", () => ({ getEnvInfo: mocks.getEnvInfo }));
 
 import { GET } from "@/app/healthz/ready/route";
 

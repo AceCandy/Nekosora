@@ -9,8 +9,8 @@
  *   2. 显示但单一强度 ⇒ 开且不可调(levels 恰好 1 个非 off 档)
  *   3. 显示 ⇒ 可调,只显示真实拥有的强度档
  */
-import { getSupportedReasoningLevels } from "@/lib/reasoning";
-import { getMainstreamModelFamily } from "@/lib/mainstream-models";
+import { getSupportedReasoningLevels } from "./reasoning";
+import { getMainstreamModelFamily } from "./mainstream-models";
 import type { ModelCapabilities, ThinkingFormat, WebSearchFormat } from "@nekusora/db/types";
 
 /** pi 模型条目的最小结构(pi.dev/api/models 子集)。 */

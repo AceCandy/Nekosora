@@ -24,44 +24,44 @@ const toIRTools = vi.fn(
       })),
     ),
 );
-vi.mock("@/lib/mcp/registry", () => ({
+vi.mock("./mcp/registry", () => ({
   toIRTools: (...args: unknown[]) => toIRTools(...args as Parameters<typeof toIRTools>),
   callMcpTool: (...args: unknown[]) => callMcpTool(...args),
 }));
-vi.mock("@/lib/repositories/route-repository", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/repositories/route-repository")>();
+vi.mock("./repositories/route-repository", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./repositories/route-repository")>();
   return { ...actual, markRouteToolsUnsupported: markRouteToolsUnsupportedMock };
 });
 
-const logUsage = vi.fn<typeof import("@/lib/usage").logUsage>(async () => undefined);
+const logUsage = vi.fn<typeof import("./usage").logUsage>(async () => undefined);
 const telemetry = vi.hoisted(() => ({
   startExecution: vi.fn(async () => undefined),
   recordAttempt: vi.fn(async () => undefined),
   finalizeExecution: vi.fn(async () => undefined),
 }));
-vi.mock("@/lib/usage", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/usage")>("@/lib/usage");
+vi.mock("./usage", async () => {
+  const actual = await vi.importActual<typeof import("./usage")>("./usage");
   return {
     ...actual,
     logUsage: (...args: Parameters<typeof logUsage>) => logUsage(...args),
   };
 });
-vi.mock("@/lib/gateway-execution", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/gateway-execution")>();
+vi.mock("./gateway-execution/index", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./gateway-execution/index")>();
   return { ...actual, gatewayTelemetry: telemetry };
 });
 
 import { generateText, streamText } from "ai";
-import { streamChatWithTools } from "@/lib/stream";
+import { streamChatWithTools } from "./stream";
 import {
   resetRouteRepository,
   setRouteRepository,
   markRouteToolsUnsupported,
   type RouteRepository,
-} from "@/lib/repositories/route-repository";
-import { encrypt } from "@/lib/infra/crypto";
-import { resetAllBreakers } from "@/lib/circuit-breaker";
-import type { StreamEvent } from "@/lib/providers/types";
+} from "./repositories/route-repository";
+import { encrypt } from "./infra/crypto";
+import { resetAllBreakers } from "./circuit-breaker";
+import type { StreamEvent } from "./providers/types";
 
 let encryptedKeys = "";
 

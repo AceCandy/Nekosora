@@ -5,11 +5,11 @@
  * 最终更新带标题条件，避免后台任务覆盖用户手动改名。
  */
 import { and, eq, or, sql } from "drizzle-orm";
-import { getDb, getSchema } from "@/lib/infra/db";
-import type { JobOutcome } from "@/lib/jobs/catalog";
-import { generateChat } from "@/lib/stream";
-import { getSetting } from "@/lib/system-settings/service";
-import type { IRRequest } from "@/lib/providers/types";
+import { getDb, getSchema } from "../infra/db/index";
+import type { JobOutcome } from "../jobs/catalog";
+import { generateChat } from "../stream";
+import { getSetting } from "../system-settings/service";
+import type { IRRequest } from "../providers/types";
 
 const DEFAULT_TITLE = "新会话";
 const TITLE_MODEL_FALLBACK = "gpt-4o-mini";

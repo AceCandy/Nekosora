@@ -27,7 +27,7 @@ export interface BootstrapDatabaseOptions {
 export async function bootstrapDatabase(
   options: BootstrapDatabaseOptions = {},
 ): Promise<void> {
-  const { getDb, getSchema } = await import("@/lib/infra/db");
+  const { getDb, getSchema } = await import("./index");
   const db = await getDb();
 
   // --- 步骤 1:连通性探测(执行真实查询),失败即阻断 ---
@@ -708,11 +708,11 @@ async function ensureFirstAdmin(
     return;
   }
 
-  const { resolveSeedAdminCredentials } = await import("@/lib/infra/seed-admin");
+  const { resolveSeedAdminCredentials } = await import("../seed-admin");
   const { email, password, name } = resolveSeedAdminCredentials(process.env);
 
   console.log(`[bootstrap] 无用户,创建首个管理员 ${email} ...`);
-  const { getAuth } = await import("@/auth");
+  const { getAuth } = await import("../../../auth");
   const auth = await getAuth();
   if (!auth) throw new Error("[bootstrap] auth 初始化失败");
 

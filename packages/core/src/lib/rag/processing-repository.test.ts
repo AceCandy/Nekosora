@@ -17,7 +17,7 @@ const mocks = vi.hoisted(() => ({
   })),
 }));
 
-vi.mock("@/lib/infra/db", () => ({
+vi.mock("../infra/db/index", () => ({
   getDb: mocks.getDb,
   getSchema: mocks.getSchema,
 }));
@@ -41,8 +41,8 @@ import {
   renewFileProcessingLease,
   replaceFileChunksAndComplete,
   transitionFileProcessing,
-} from "@/lib/rag/processing-repository";
-import { FileProcessingLeaseLostError } from "@/lib/rag/processing-state";
+} from "./processing-repository";
+import { FileProcessingLeaseLostError } from "./processing-state";
 
 const schema = {
   fileObjects: {

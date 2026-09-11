@@ -25,22 +25,22 @@ vi.mock("drizzle-orm", () => ({
   and: mocks.and,
   isNull: mocks.isNull,
 }));
-vi.mock("@/lib/infra/db", () => ({ getDb: mocks.getDb, getSchema: mocks.getSchema }));
-vi.mock("@/lib/session-request", () => ({ getSessionFromHeaders: mocks.getSession }));
-vi.mock("@/lib/conversation-title/service", () => ({
+vi.mock("@nekusora/core/infra/db", () => ({ getDb: mocks.getDb, getSchema: mocks.getSchema }));
+vi.mock("@nekusora/core/session-request", () => ({ getSessionFromHeaders: mocks.getSession }));
+vi.mock("@nekusora/core/conversation-title/service", () => ({
   writeFallbackTitle: mocks.writeFallbackTitle,
 }));
-vi.mock("@/lib/conversation-title/dispatch", () => ({
+vi.mock("@nekusora/core/conversation-title/dispatch", () => ({
   dispatchConversationTitleJob: mocks.dispatchConversationTitleJob,
 }));
-vi.mock("@/lib/chat/orchestrator", () => ({ prepareChatContext: mocks.prepareChatContext }));
-vi.mock("@/lib/chat/run-lifecycle", () => ({ createRunId: mocks.createRunId }));
-vi.mock("@/lib/chat/completion-coordinator", () => ({
+vi.mock("@nekusora/core/chat/orchestrator", () => ({ prepareChatContext: mocks.prepareChatContext }));
+vi.mock("@nekusora/core/chat/run-lifecycle", () => ({ createRunId: mocks.createRunId }));
+vi.mock("@nekusora/core/chat/completion-coordinator", () => ({
   executeChatCompletion: mocks.executeChatCompletion,
 }));
-vi.mock("@/lib/redaction", () => ({ redactErrorMessage: mocks.redactErrorMessage }));
-vi.mock("@/lib/chat/message-attachments", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/chat/message-attachments")>();
+vi.mock("@nekusora/core/redaction", () => ({ redactErrorMessage: mocks.redactErrorMessage }));
+vi.mock("@nekusora/core/chat/message-attachments", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@nekusora/core/chat/message-attachments")>();
   return {
     ...actual,
     assertVisionModel: mocks.assertVisionModel,
@@ -52,7 +52,7 @@ vi.mock("@/lib/chat/message-attachments", async (importOriginal) => {
 });
 
 import { POST } from "./route";
-import type { ExecuteChatCompletionInput } from "@/lib/chat/completion-coordinator";
+import type { ExecuteChatCompletionInput } from "@nekusora/core/chat/completion-coordinator";
 
 const schema = {
   conversations: {
@@ -552,7 +552,7 @@ describe("POST /api/chat coordinator adapter", () => {
       select: selectQueue([[{ id: "conversation-1", userId: "user-1", outputModeId: null }]]),
       transaction,
     });
-    const { ChatAttachmentError } = await import("@/lib/chat/message-attachments");
+    const { ChatAttachmentError } = await import("@nekusora/core/chat/message-attachments");
     mocks.resolveChatImageAttachments.mockRejectedValue(new ChatAttachmentError("图片附件无效"));
 
     const response = await POST(request({

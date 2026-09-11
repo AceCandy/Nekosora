@@ -11,11 +11,11 @@
  * RetrieveStatus 驱动上层回退逻辑。
  */
 import { eq, and, inArray } from "drizzle-orm";
-import { getDb, getSchema } from "@/lib/infra/db";
-import { DEFAULT_MIN_SIMILARITY, type Vector } from "@/lib/infra/vector";
-import { redactErrorMessage } from "@/lib/redaction";
+import { getDb, getSchema } from "../infra/db/index";
+import { DEFAULT_MIN_SIMILARITY, type Vector } from "../infra/vector";
+import { redactErrorMessage } from "../redaction";
 import { embedText } from "./embedding";
-import { estimateTokens } from "@/lib/tokens";
+import { estimateTokens } from "../tokens";
 
 export const DEFAULT_TOP_K = 5;
 export const DEFAULT_RAG_TOKEN_BUDGET = 2000;

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { BEST_EFFORT_TIMEOUT_MS } from "@/lib/best-effort";
+import { BEST_EFFORT_TIMEOUT_MS } from "./best-effort";
 
 const mocks = vi.hoisted(() => ({
   getDb: vi.fn(),
@@ -7,15 +7,15 @@ const mocks = vi.hoisted(() => ({
   observeRequest: vi.fn(),
 }));
 
-vi.mock("@/lib/infra/db", () => ({
+vi.mock("./infra/db/index", () => ({
   getDb: mocks.getDb,
   getSchema: mocks.getSchema,
 }));
-vi.mock("@/lib/infra/metrics", () => ({
+vi.mock("./infra/metrics", () => ({
   observeRequest: mocks.observeRequest,
 }));
 
-import { logUsage, maskKey } from "@/lib/usage";
+import { logUsage, maskKey } from "./usage";
 
 afterEach(() => {
   vi.useRealTimers();

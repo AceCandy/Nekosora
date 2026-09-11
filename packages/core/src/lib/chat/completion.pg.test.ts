@@ -7,13 +7,13 @@ const mocks = vi.hoisted(() => ({
   getSchema: vi.fn(),
 }));
 
-vi.mock("@/lib/infra/db", () => ({
+vi.mock("../infra/db/index", () => ({
   getDb: mocks.getDb,
   getSchema: mocks.getSchema,
 }));
 
 import * as schema from "@nekusora/db/schema";
-import { persistChatCompletion } from "@/lib/chat/completion-repository";
+import { persistChatCompletion } from "./completion-repository";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const expectedDatabase = process.env.CHAT_COMPLETION_PG_TEST_DATABASE;

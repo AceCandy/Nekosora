@@ -1,4 +1,4 @@
-import { ErrorCode, type ErrorCodeValue } from "@/lib/errors";
+import { ErrorCode, type ErrorCodeValue } from "../errors";
 
 export type JsonObject = Record<string, unknown>;
 

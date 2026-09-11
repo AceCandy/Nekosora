@@ -16,10 +16,10 @@
  * 仅文件属主可访问(非公开分享场景;分享走 message 文本快照,不涉及文件)。
  */
 import { eq } from "drizzle-orm";
-import { getDb, getSchema } from "@/lib/infra/db";
-import { getSessionFromHeaders } from "@/lib/session-request";
-import { getStorage } from "@/lib/infra/storage";
-import { parseByteRange } from "@/lib/http-range";
+import { getDb, getSchema } from "../../lib/infra/db/index";
+import { getSessionFromHeaders } from "../../lib/session-request";
+import { getStorage } from "../../lib/infra/storage/index";
+import { parseByteRange } from "../../lib/http-range";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

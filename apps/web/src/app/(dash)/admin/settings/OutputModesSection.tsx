@@ -15,7 +15,7 @@ import {
   saveOutputModeReorder,
   saveOutputModeUpdate,
   type SettingsControlView,
-} from "@/lib/settings-control/service";
+} from "@nekusora/core/settings-control/service";
 import OutputModesManager from "@/features/output-modes/OutputModesManager";
 
 export default async function OutputModesSection({ control }: { control: SettingsControlView }) {

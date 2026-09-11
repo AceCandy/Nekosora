@@ -1,12 +1,12 @@
-import { orderedWeightedKeys } from "@/lib/providers/keys";
-import { maskKey } from "@/lib/usage";
-import { ErrorCode } from "@/lib/errors";
-import type { ResolvedRoute } from "@/lib/providers/types";
+import { orderedWeightedKeys } from "../providers/keys";
+import { maskKey } from "../usage";
+import { ErrorCode } from "../errors";
+import type { ResolvedRoute } from "../providers/types";
 import {
   createProviderTimeoutScope,
   isProviderTimeoutError,
   resolveProviderTimeouts,
-} from "@/lib/providers/timeouts";
+} from "../providers/timeouts";
 import {
   classifyGatewayError,
   isAbortError,
@@ -472,7 +472,7 @@ function interruptedOutcome<TResult>(
   return { executionId, status: "interrupted", usage: {}, route, upstreamKeyMasked, committed };
 }
 
-function snapshotRoute(route: import("@/lib/providers/types").ResolvedRoute): GatewayRouteSnapshot {
+function snapshotRoute(route: import("../providers/types").ResolvedRoute): GatewayRouteSnapshot {
   return {
     modelName: route.modelName,
     upstreamModelName: route.upstreamModelName,

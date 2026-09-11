@@ -7,7 +7,7 @@ import type {
   GatewayGovernancePolicy,
   GatewayGovernancePolicyBounds,
   GatewayScopeLimits,
-} from "@/lib/gateway-governance/policy";
+} from "@nekusora/core/gateway-governance/policy";
 import { Button } from "@/shared/ui/Button";
 import { Input } from "@/shared/ui/Input";
 import type { GovernanceSettingsActionState } from "./governance-actions";

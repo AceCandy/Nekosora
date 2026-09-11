@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
   or: vi.fn((...conditions: unknown[]) => ({ op: "or", conditions })),
 }));
 
-vi.mock("@/lib/infra/db", () => ({
+vi.mock("../infra/db/index", () => ({
   getDb: mocks.getDb,
   getSchema: mocks.getSchema,
 }));

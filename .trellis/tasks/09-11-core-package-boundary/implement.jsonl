@@ -1,0 +1,2 @@
+{"file":".trellis/spec/backend/directory-structure.md","reason":"包边界与依赖方向"}
+{"file":".trellis/spec/frontend/directory-structure.md","reason":"Web 专属适配与共享模块"}

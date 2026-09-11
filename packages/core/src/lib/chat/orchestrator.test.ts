@@ -16,12 +16,12 @@ vi.mock("drizzle-orm", () => ({
   inArray: vi.fn((left, values) => ({ op: "inArray", left, values })),
   isNull: vi.fn((value) => ({ op: "isNull", value })),
 }));
-vi.mock("@/lib/memory/service", () => ({ getMemories: mocks.getMemories }));
-vi.mock("@/lib/memory/recall", () => ({ recallMemories: mocks.recallMemories }));
-vi.mock("@/lib/compact/service", () => ({ maybeCompact: mocks.maybeCompact }));
-vi.mock("@/lib/context-assembler", () => ({ assembleContext: mocks.assembleContext }));
-vi.mock("@/lib/trace", () => ({ buildTrace: mocks.buildTrace }));
-vi.mock("@/lib/rag/context", () => ({
+vi.mock("../memory/service", () => ({ getMemories: mocks.getMemories }));
+vi.mock("../memory/recall", () => ({ recallMemories: mocks.recallMemories }));
+vi.mock("../compact/service", () => ({ maybeCompact: mocks.maybeCompact }));
+vi.mock("../context-assembler", () => ({ assembleContext: mocks.assembleContext }));
+vi.mock("../trace", () => ({ buildTrace: mocks.buildTrace }));
+vi.mock("../rag/context", () => ({
   buildMessagesWithFileContext: mocks.buildMessagesWithFileContext,
 }));
 
@@ -30,8 +30,8 @@ import {
   prepareChatContext,
   resolveModelGenerationSettings,
   selectCurrentBranchMessages,
-} from "@/lib/chat/orchestrator";
-import { BEST_EFFORT_TIMEOUT_MS } from "@/lib/best-effort";
+} from "./orchestrator";
+import { BEST_EFFORT_TIMEOUT_MS } from "../best-effort";
 
 beforeEach(() => {
   vi.clearAllMocks();

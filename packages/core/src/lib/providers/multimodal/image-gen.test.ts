@@ -21,8 +21,8 @@ vi.mock("@ai-sdk/openai", () => ({
     image: vi.fn().mockReturnValue({ modelId: "mock-image-model" }),
   }),
 }));
-vi.mock("@/lib/gateway-execution", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/gateway-execution")>();
+vi.mock("../../gateway-execution/index", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../gateway-execution/index")>();
   return {
     ...actual,
     gatewayTelemetry: {
@@ -35,15 +35,15 @@ vi.mock("@/lib/gateway-execution", async (importOriginal) => {
 
 import { generateImage } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
-import { gatewayTelemetry } from "@/lib/gateway-execution";
-import { generateImageViaRoute, RoutingError } from "@/lib/providers/multimodal/image-gen";
+import { gatewayTelemetry } from "../../gateway-execution/index";
+import { generateImageViaRoute, RoutingError } from "./image-gen";
 import {
   setRouteRepository,
   resetRouteRepository,
   type RouteRepository,
-} from "@/lib/repositories/route-repository";
-import { encrypt } from "@/lib/infra/crypto";
-import type { CallContext } from "@/lib/providers/types";
+} from "../../repositories/route-repository";
+import { encrypt } from "../../infra/crypto";
+import type { CallContext } from "../types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>;

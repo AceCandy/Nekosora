@@ -6,10 +6,10 @@
  * 全局配置(管理员域),所有用户共享;用户在 chat 工具栏选用,写入 conversations.renderStyleId。
  */
 import { eq, asc } from "drizzle-orm";
-import { getDb, getSchema } from "@/lib/infra/db";
-import { cacheWrap, cacheDel } from "@/lib/infra/cache";
+import { getDb, getSchema } from "@nekusora/core/infra/db";
+import { cacheWrap, cacheDel } from "@nekusora/core/infra/cache";
 import { requireSession, requireAdmin } from "@/lib/session";
-import { getSettingsRevision } from "@/lib/settings-control/service";
+import { getSettingsRevision } from "@nekusora/core/settings-control/service";
 
 /** chat 工具栏读取的启用输出样式缓存键(全局共享;admin 写操作主动失效,TTL 兜底)。 */
 const ENABLED_RENDER_STYLES_KEY = "chat:render-styles:enabled";

@@ -10,24 +10,24 @@
  *
  * 模型需在 capabilities 标 imageGeneration:true,且 protocol=openai-images。
  */
-import { verifyKey, extractBearer } from "@/lib/keys";
-import { generateImageViaRoute, RoutingError } from "@/lib/providers/multimodal/image-gen";
-import { getStorage } from "@/lib/infra/storage";
-import { logUsage } from "@/lib/usage";
+import { verifyKey, extractBearer } from "../../lib/keys";
+import { generateImageViaRoute, RoutingError } from "../../lib/providers/multimodal/image-gen";
+import { getStorage } from "../../lib/infra/storage/index";
+import { logUsage } from "../../lib/usage";
 import {
   apiErrorLocalized,
   ErrorCode,
   routingCodeToErrorCode,
   ERROR_META,
-} from "@/lib/errors";
-import { classifyError } from "@/lib/error-classify";
+} from "../../lib/errors";
+import { classifyError } from "../../lib/error-classify";
 import {
   beginGatewayGovernance,
   runWithGatewayGovernance,
-} from "@/lib/gateway-governance/lifecycle";
-import { parseImageCount } from "@/lib/gateway-governance/metering";
-import { redactErrorMessage } from "@/lib/redaction";
-import type { CallContext } from "@/lib/providers/types";
+} from "../../lib/gateway-governance/lifecycle";
+import { parseImageCount } from "../../lib/gateway-governance/metering";
+import { redactErrorMessage } from "../../lib/redaction";
+import type { CallContext } from "../../lib/providers/types";
 import {
   gatewayGovernanceErrorResponse,
   gatewayGovernanceIdentity,

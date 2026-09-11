@@ -5,7 +5,7 @@
  * 时间桶粒度:hour(24h 范围)/ day(7d/30d 范围)。
  */
 import { sql, and, gte, eq, desc, lte, isNotNull, ilike, or, type SQL } from "drizzle-orm";
-import { getDb, getSchema } from "@/lib/infra/db";
+import { getDb, getSchema } from "./infra/db/index";
 import type { ReasoningLevel } from "@nekusora/db/types";
 
 export type TimeRange = "24h" | "7d" | "30d";

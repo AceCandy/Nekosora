@@ -5,14 +5,14 @@ const mocks = vi.hoisted(() => ({
   processFile: vi.fn(),
 }));
 
-vi.mock("@/lib/rag/processing-repository", () => ({
+vi.mock("./processing-repository", () => ({
   findRecoverableFileIds: mocks.findRecoverableFileIds,
 }));
-vi.mock("@/lib/rag/processing-coordinator", () => ({
+vi.mock("./processing-coordinator", () => ({
   processFile: mocks.processFile,
 }));
 
-import { recoverStaleFileProcessing } from "@/lib/rag/recovery";
+import { recoverStaleFileProcessing } from "./recovery";
 
 describe("file processing recovery scheduler", () => {
   beforeEach(() => {

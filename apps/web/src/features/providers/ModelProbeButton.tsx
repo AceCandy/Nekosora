@@ -1,7 +1,7 @@
 "use client";
 import { useTranslations } from "next-intl";
 import { Zap, Check, X, Loader2 } from "lucide-react";
-import type { ProbeResult } from "@/lib/providers/probe";
+import type { ProbeResult } from "@nekusora/core/providers/probe";
 
 /** server action 签名:用 provider 的 testModel 发极小生成,验证 model+key+协议全链路。 */
 export type ModelProbeAction = (providerId: string) => Promise<ProbeResult>;

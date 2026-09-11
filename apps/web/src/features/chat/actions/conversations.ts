@@ -2,9 +2,9 @@
 import { eq, and, or, desc, isNull, isNotNull, asc, gt, lt, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { getDb, getSchema } from "@/lib/infra/db";
+import { getDb, getSchema } from "@nekusora/core/infra/db";
 import { requireSession } from "@/lib/session";
-import { getConversationTitleState } from "@/lib/conversation-title/service";
+import { getConversationTitleState } from "@nekusora/core/conversation-title/service";
 import type { ReasoningLevel } from "@nekusora/db/types";
 import {
   CONVERSATION_GROUP_KEYS,

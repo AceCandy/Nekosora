@@ -34,8 +34,8 @@ vi.mock("@ai-sdk/xai", () => ({ createXai: mocks.createXai }));
 import {
   buildHostedSearchRuntime,
   buildLanguageModelWithKey,
-} from "@/lib/providers/registry";
-import type { ResolvedRoute } from "@/lib/providers/types";
+} from "./registry";
+import type { ResolvedRoute } from "./types";
 
 const route: ResolvedRoute = {
   modelName: "gemini-test",

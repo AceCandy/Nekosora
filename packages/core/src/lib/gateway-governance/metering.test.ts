@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { estimateMessagesTokens } from "@/lib/tokens";
+import { estimateMessagesTokens } from "../tokens";
 import {
   calculateChatReservation,
   countUnicodeCodePoints,

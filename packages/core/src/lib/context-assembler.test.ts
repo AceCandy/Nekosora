@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { assembleContext } from "@/lib/context-assembler";
-import type { UserMemory } from "@/lib/memory/service";
-import type { CompactionResult } from "@/lib/compact/service";
+import { assembleContext } from "./context-assembler";
+import type { UserMemory } from "./memory/service";
+import type { CompactionResult } from "./compact/service";
 
 const noCompaction: CompactionResult = {
   compacted: false,

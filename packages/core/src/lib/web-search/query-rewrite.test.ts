@@ -6,8 +6,8 @@ const mocks = vi.hoisted(() => ({
   listWebSearchQueryModelCandidates: vi.fn(),
 }));
 
-vi.mock("@/lib/stream", () => ({ generateChat: mocks.generateChat }));
-vi.mock("@/lib/web-search/registry", () => ({
+vi.mock("../stream", () => ({ generateChat: mocks.generateChat }));
+vi.mock("./registry", () => ({
   loadConfig: mocks.loadConfig,
   listWebSearchQueryModelCandidates: mocks.listWebSearchQueryModelCandidates,
 }));

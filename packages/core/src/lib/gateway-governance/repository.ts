@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { ErrorCode } from "@/lib/errors";
+import { ErrorCode } from "../errors";
 import type {
   GatewayGovernancePolicy,
   GatewayPolicySource,
@@ -492,7 +492,7 @@ export class GatewayGovernanceRepository {
 }
 
 export async function createGatewayGovernanceRepository(): Promise<GatewayGovernanceRepository> {
-  const { getDb } = await import("@/lib/infra/db");
+  const { getDb } = await import("../infra/db/index");
   return new GatewayGovernanceRepository(await getDb());
 }
 

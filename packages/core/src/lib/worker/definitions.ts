@@ -5,14 +5,14 @@ import {
   type JobOutcome,
   type QueueDefinition,
   type QueuePayload,
-} from "@/lib/jobs/catalog";
-import { processFile } from "@/lib/rag/processing-coordinator";
-import { recoverStaleFileProcessing } from "@/lib/rag/recovery";
-import { processMemoryExtractionJob } from "@/lib/memory/jobs";
-import { recoverMemoryExtractionJobs } from "@/lib/memory/dispatch";
-import { processConversationTitleJob } from "@/lib/conversation-title/service";
-import { recoverConversationTitleJobs } from "@/lib/conversation-title/dispatch";
-import { runGatewayRetention } from "@/lib/gateway-execution/retention";
+} from "../jobs/catalog";
+import { processFile } from "../rag/processing-coordinator";
+import { recoverStaleFileProcessing } from "../rag/recovery";
+import { processMemoryExtractionJob } from "../memory/jobs";
+import { recoverMemoryExtractionJobs } from "../memory/dispatch";
+import { processConversationTitleJob } from "../conversation-title/service";
+import { recoverConversationTitleJobs } from "../conversation-title/dispatch";
+import { runGatewayRetention } from "../gateway-execution/retention";
 import type {
   RuntimeDefinition,
   RecoveryDefinition,

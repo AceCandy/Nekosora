@@ -9,9 +9,9 @@
  */
 import { and, eq, inArray } from "drizzle-orm";
 import type { RagSource } from "@nekusora/contracts/chat";
-import { getDb, getSchema } from "@/lib/infra/db";
+import { getDb, getSchema } from "../infra/db/index";
 import { retrieve, type RetrieveStatus } from "./retrieve";
-import { estimateTokens } from "@/lib/tokens";
+import { estimateTokens } from "../tokens";
 
 const FULL_CONTEXT_TOKEN_LIMIT = 4000; // full_context 模式的注入上限
 const AUTO_FULL_THRESHOLD = 1500; // auto 模式下,文件 ≤ 此 token 数则全文注入

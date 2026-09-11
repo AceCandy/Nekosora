@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { QueueAdapter, QueueDefinition } from "@/lib/jobs/catalog";
+import type { QueueAdapter, QueueDefinition } from "../jobs/catalog";
 import {
   createWorkerRuntime,
   startRecoveryScheduler,

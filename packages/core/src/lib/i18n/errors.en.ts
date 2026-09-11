@@ -9,7 +9,7 @@
  *
  * 新增 locale:复制本文件改后缀,翻译 message,在 index.ts 注册。
  */
-import type { ErrorCodeValue } from "@/lib/errors";
+import type { ErrorCodeValue } from "../errors";
 
 export const errorsEn: Record<ErrorCodeValue, string> = {
   // auth.*

@@ -12,23 +12,23 @@
  * 借鉴 DEEIX:run_id 标识一次生成;用量含 cache 拆分。
  */
 import { streamText, generateText, jsonSchema, Output, type ModelMessage, type ToolSet } from "ai";
-import { resolveRoutes, resolveRoutesById } from "@/lib/routing";
+import { resolveRoutes, resolveRoutesById } from "./routing";
 import {
   markProviderStreamUsageUnsupported,
   markRouteToolsUnsupported,
-} from "@/lib/repositories/route-repository";
-import { buildLanguageModelWithKey, resolveRouteApiFormat } from "@/lib/providers/registry";
-import { resolveProviderTimeouts } from "@/lib/providers/timeouts";
-import { getChatUA } from "@/lib/system-settings/ua";
-import { gatewayBreaker } from "@/lib/circuit-breaker";
-import type { LogUsageParams } from "@/lib/usage";
-import { classifyError } from "@/lib/error-classify";
-import { redactErrorMessage } from "@/lib/redaction";
+} from "./repositories/route-repository";
+import { buildLanguageModelWithKey, resolveRouteApiFormat } from "./providers/registry";
+import { resolveProviderTimeouts } from "./providers/timeouts";
+import { getChatUA } from "./system-settings/ua";
+import { gatewayBreaker } from "./circuit-breaker";
+import type { LogUsageParams } from "./usage";
+import { classifyError } from "./error-classify";
+import { redactErrorMessage } from "./redaction";
 import {
   buildReasoningProviderOptions,
   clampReasoningLevel,
   getDefaultReasoningLevel,
-} from "@/lib/reasoning";
+} from "./reasoning";
 import type {
   CallContext,
   IRRequest,
@@ -37,7 +37,7 @@ import type {
   StreamEvent,
   IRUsage,
   ResolvedRoute,
-} from "@/lib/providers/types";
+} from "./providers/types";
 import type { ProviderProtocol, ReasoningLevel } from "@nekusora/db/types";
 import {
   executeAtomicGateway,
@@ -50,7 +50,7 @@ import {
   type GatewayExecutionOutcome,
   type GatewayTelemetryPort,
   type StartExecutionTelemetry,
-} from "@/lib/gateway-execution";
+} from "./gateway-execution/index";
 
 export {
   classifyStreamError,
@@ -60,7 +60,7 @@ export {
   isStreamOptionsUnsupportedError,
   isToolUnsupportedError,
   isRetryableForKey,
-} from "@/lib/gateway-execution";
+} from "./gateway-execution/index";
 
 export interface StreamChatOptions {
   ctx: CallContext;
@@ -111,7 +111,7 @@ export async function* streamChat(
   const { ctx, request, runId = `run_${crypto.randomUUID()}` } = opts;
   let releaseStream: () => void = () => {};
   try {
-    const metrics = await import("@/lib/infra/metrics");
+    const metrics = await import("./infra/metrics");
     metrics.acquireStream();
     releaseStream = metrics.releaseStream;
   } catch {
@@ -740,7 +740,7 @@ export interface StreamChatWithToolsOptions extends StreamChatOptions {
   /** 允许的最大工具调用轮数(默认 5)。 */
   maxSteps?: number;
   /** 已解析的 MCP server(含工具清单 + 连接)。 */
-  mcpServers?: import("@/lib/mcp/registry").ResolvedMcpServer[];
+  mcpServers?: import("./mcp/registry").ResolvedMcpServer[];
   /** WebChat 内置的唯一逻辑搜索工具；网关请求不传。 */
   webSearchTool?: {
     definition: IRToolDef;
@@ -763,7 +763,7 @@ export interface StreamChatWithToolsOptions extends StreamChatOptions {
  */
 export async function* streamChatWithTools(
   opts: StreamChatWithToolsOptions,
-): AsyncGenerator<import("@/lib/providers/types").StreamEvent, void, unknown> {
+): AsyncGenerator<import("./providers/types").StreamEvent, void, unknown> {
   const { maxSteps = 5, mcpServers = [] } = opts;
   const agentRunId = opts.runId ?? `run_${crypto.randomUUID()}`;
   const startedAt = Date.now();
@@ -796,7 +796,7 @@ export async function* streamChatWithTools(
       tools = [...(tools ?? []), opts.webSearchTool.definition];
     }
     if (mcpServers.length > 0) {
-      const { toIRTools } = await import("@/lib/mcp/registry");
+      const { toIRTools } = await import("./mcp/registry");
       tools = [...(tools ?? []), ...toIRTools(mcpServers)];
     }
     if (!tools || tools.length === 0) {
@@ -806,7 +806,7 @@ export async function* streamChatWithTools(
     }
 
     shouldLogAgentUsage = true;
-    const { callMcpTool } = await import("@/lib/mcp/registry");
+    const { callMcpTool } = await import("./mcp/registry");
     messages = [...opts.request.messages];
     for (let step = 0; step < maxSteps; step++) {
     const pendingToolCalls: {

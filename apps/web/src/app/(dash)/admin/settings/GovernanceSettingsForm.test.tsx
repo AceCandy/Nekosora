@@ -5,7 +5,7 @@ import zhMessages from "../../../../../messages/zh-CN.json";
 import {
   DEFAULT_GATEWAY_GOVERNANCE_POLICY,
   GATEWAY_GOVERNANCE_POLICY_BOUNDS,
-} from "@/lib/gateway-governance/policy";
+} from "@nekusora/core/gateway-governance/policy";
 import GovernanceSettingsForm from "./GovernanceSettingsForm";
 import type { GovernanceSettingsActionState } from "./governance-actions";
 

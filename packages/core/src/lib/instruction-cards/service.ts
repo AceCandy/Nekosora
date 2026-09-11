@@ -14,7 +14,7 @@
  *   - renderCardContext      渲染选中卡为 system prompt 片段(I-12b 调用)
  */
 import { eq, and, inArray } from "drizzle-orm";
-import { getDb, getSchema } from "@/lib/infra/db";
+import { getDb, getSchema } from "../infra/db/index";
 
 /** 指令卡实体(与 DB 行对应,布尔/可空字段已规范化)。 */
 export interface InstructionCard {

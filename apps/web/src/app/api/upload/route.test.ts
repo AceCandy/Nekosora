@@ -23,21 +23,21 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("drizzle-orm", () => ({ eq: mocks.eq, and: mocks.and }));
-vi.mock("@/lib/session-request", () => ({ getSessionFromHeaders: mocks.getSession }));
-vi.mock("@/lib/multipart", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/multipart")>();
+vi.mock("@nekusora/core/session-request", () => ({ getSessionFromHeaders: mocks.getSession }));
+vi.mock("@nekusora/core/multipart", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@nekusora/core/multipart")>();
   return { ...actual, parseBoundedMultipartFormData: mocks.parseFormData };
 });
-vi.mock("@/lib/infra/storage", () => ({ getStorage: mocks.getStorage }));
-vi.mock("@/lib/infra/db", () => ({
+vi.mock("@nekusora/core/infra/storage", () => ({ getStorage: mocks.getStorage }));
+vi.mock("@nekusora/core/infra/db", () => ({
   getDb: mocks.getDb,
   getSchema: mocks.getSchema,
 }));
-vi.mock("@/lib/infra/queue", () => ({ getQueue: mocks.getQueue }));
-vi.mock("@/lib/rag/processing-coordinator", () => ({ processFile: mocks.processFile }));
+vi.mock("@nekusora/core/queue", () => ({ getQueue: mocks.getQueue }));
+vi.mock("@nekusora/core/rag/processing-coordinator", () => ({ processFile: mocks.processFile }));
 
-import { RequestBodyTooLargeError } from "@/lib/multipart";
-import { FILE_PROCESS_QUEUE } from "@/lib/jobs/catalog";
+import { RequestBodyTooLargeError } from "@nekusora/core/multipart";
+import { FILE_PROCESS_QUEUE } from "@nekusora/core/jobs/catalog";
 import {
   MAX_UPLOAD_BODY_BYTES,
   MAX_UPLOAD_FILE_BYTES,

@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
   buildLanguageModelWithKey: vi.fn(() => ({})),
 }));
 
-vi.mock("@/lib/providers/registry", () => ({
+vi.mock("./registry", () => ({
   buildLanguageModelWithKey: mocks.buildLanguageModelWithKey,
 }));
 

@@ -15,14 +15,14 @@
  * 加密 envEnc 在此解密(仅运行时持有)。
  */
 import { eq, or, isNull, and } from "drizzle-orm";
-import { getDb, getSchema } from "@/lib/infra/db";
-import { decrypt } from "@/lib/infra/crypto";
+import { getDb, getSchema } from "../infra/db/index";
+import { decrypt } from "../infra/crypto";
 import {
   connectMcpClient,
   withConnectionTimeout,
-} from "@/lib/mcp/connection";
-import type { CallContext } from "@/lib/providers/types";
-import type { IRToolDef } from "@/lib/providers/types";
+} from "./connection";
+import type { CallContext } from "../providers/types";
+import type { IRToolDef } from "../providers/types";
 
 /** 连接超时(毫秒)。超时则用 cachedTools 兜底。 */
 const CONNECT_TIMEOUT_MS = Number(process.env.MCP_CONNECT_TIMEOUT_MS ?? 5000);

@@ -11,7 +11,7 @@ import {
   sql,
   type SQL,
 } from "drizzle-orm";
-import { getDb, getSchema } from "@/lib/infra/db";
+import { getDb, getSchema } from "../infra/db/index";
 import {
   FileProcessingLeaseLostError,
   buildFileProcessingTransition,

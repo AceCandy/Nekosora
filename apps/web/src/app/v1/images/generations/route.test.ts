@@ -14,11 +14,11 @@ const mocks = vi.hoisted(() => ({
   governanceSignal: new AbortController().signal,
 }));
 
-vi.mock("@/lib/keys", () => ({
+vi.mock("@nekusora/core/keys", () => ({
   extractBearer: mocks.extractBearer,
   verifyKey: mocks.verifyKey,
 }));
-vi.mock("@/lib/providers/multimodal/image-gen", () => ({
+vi.mock("@nekusora/core/providers/multimodal/image-gen", () => ({
   RoutingError: class RoutingError extends Error {
     constructor(readonly code: string) {
       super(code);
@@ -26,15 +26,15 @@ vi.mock("@/lib/providers/multimodal/image-gen", () => ({
   },
   generateImageViaRoute: mocks.generateImageViaRoute,
 }));
-vi.mock("@/lib/infra/storage", () => ({ getStorage: mocks.getStorage }));
-vi.mock("@/lib/usage", () => ({ logUsage: mocks.logUsage }));
-vi.mock("@/lib/gateway-governance/lifecycle", async (importOriginal) => ({
-  ...await importOriginal<typeof import("@/lib/gateway-governance/lifecycle")>(),
+vi.mock("@nekusora/core/infra/storage", () => ({ getStorage: mocks.getStorage }));
+vi.mock("@nekusora/core/usage", () => ({ logUsage: mocks.logUsage }));
+vi.mock("@nekusora/core/gateway-governance/lifecycle", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@nekusora/core/gateway-governance/lifecycle")>(),
   beginGatewayGovernance: mocks.beginGatewayGovernance,
 }));
 
-import { GovernanceRejectedError } from "@/lib/gateway-governance/repository";
-import { RoutingError } from "@/lib/providers/multimodal/image-gen";
+import { GovernanceRejectedError } from "@nekusora/core/gateway-governance/repository";
+import { RoutingError } from "@nekusora/core/providers/multimodal/image-gen";
 import { POST } from "@/app/v1/images/generations/route";
 
 function request(body: Record<string, unknown>, language = "en") {

@@ -26,7 +26,7 @@ vi.mock("@aws-sdk/s3-request-presigner", () => ({
   getSignedUrl: aws.getSignedUrl,
 }));
 
-import { S3Driver } from "@/lib/infra/storage/s3";
+import { S3Driver } from "./s3";
 
 function makeDriver(publicBaseUrl?: string) {
   return new S3Driver({

@@ -1,9 +1,9 @@
 /** mem0 客户端工厂：Embedding 与 LLM 使用独立配置，LLM 走统一模型执行核心。 */
 import type { Memory } from "mem0ai/oss";
 import { and, eq } from "drizzle-orm";
-import { getDb, getSchema } from "@/lib/infra/db";
-import { resolveRoutesById } from "@/lib/routing";
-import { getSettingsRevision } from "@/lib/settings-control/service";
+import { getDb, getSchema } from "../infra/db/index";
+import { resolveRoutesById } from "../routing";
+import { getSettingsRevision } from "../settings-control/service";
 import { createNekosoraLLM } from "./nekosora-llm";
 
 /** Mem0 抽取的软约束；确定性角色与内容边界由调用方负责。 */
@@ -47,8 +47,8 @@ async function modelById(id: string): Promise<ModelReference | null> {
 
 async function resolveConfiguredModel(): Promise<ModelReference> {
   const [{ getSetting }, { getEmbeddingConfig }] = await Promise.all([
-    import("@/lib/system-settings/service"),
-    import("@/lib/rag/embedding"),
+    import("../system-settings/service"),
+    import("../rag/embedding"),
   ]);
   const [modelId, modelName, titleModelId, titleModel, embedding] = await Promise.all([
     getSetting("rag", "mem0_llm_model_id"),
@@ -74,7 +74,7 @@ async function resolveConfiguredModel(): Promise<ModelReference> {
 async function initialize(model: ModelReference, revision: number): Promise<Memory> {
   const [{ Memory }, { getEmbeddingConfig }] = await Promise.all([
     import("mem0ai/oss"),
-    import("@/lib/rag/embedding"),
+    import("../rag/embedding"),
   ]);
   const emb = await getEmbeddingConfig();
   if (!emb) throw new Error("mem0 初始化失败:未配置 embedding provider/model(rag.embedding_*)");

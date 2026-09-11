@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { getDb, getSchema } from "@/lib/infra/db";
+import { getDb, getSchema } from "../infra/db/index";
 
 export interface OutputMode {
   id: string;

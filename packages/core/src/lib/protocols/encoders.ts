@@ -1,19 +1,19 @@
-import { streamChat } from "@/lib/stream";
-import { getGatewayUA } from "@/lib/system-settings/ua";
-import { settleChatUsage } from "@/lib/gateway-governance/metering";
+import { streamChat } from "../stream";
+import { getGatewayUA } from "../system-settings/ua";
+import { settleChatUsage } from "../gateway-governance/metering";
 import {
   GatewayGovernanceHandle,
-} from "@/lib/gateway-governance/lifecycle";
-import { GovernanceStateError } from "@/lib/gateway-governance/repository";
+} from "../gateway-governance/lifecycle";
+import { GovernanceStateError } from "../gateway-governance/repository";
 import {
   ERROR_META,
   ErrorCode,
   errorResponse,
   routingCodeToErrorCode,
   type ErrorCodeValue,
-} from "@/lib/errors";
-import type { CallContext, IRRequest, IRUsage, StreamEvent } from "@/lib/providers/types";
-import { redactErrorMessage } from "@/lib/redaction";
+} from "../errors";
+import type { CallContext, IRRequest, IRUsage, StreamEvent } from "../providers/types";
+import { redactErrorMessage } from "../redaction";
 import type { GatewayProtocol } from "./types";
 
 interface ToolCallState {

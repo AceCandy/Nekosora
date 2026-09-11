@@ -8,10 +8,10 @@
  */
 import { customAlphabet } from "nanoid";
 import { and, eq, or } from "drizzle-orm";
-import { getDb, getSchema } from "@/lib/infra/db";
-import { hashSecret, safeEqual, encrypt } from "@/lib/infra/crypto";
-import { getEnvInfo } from "@/lib/infra/env";
-import type { CallContext } from "@/lib/providers/types";
+import { getDb, getSchema } from "./infra/db/index";
+import { hashSecret, safeEqual, encrypt } from "./infra/crypto";
+import { getEnvInfo } from "./infra/env";
+import type { CallContext } from "./providers/types";
 
 // 排除易混字符的字母表。
 const alphabet = "0123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";

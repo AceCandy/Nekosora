@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { resolveLocale, translateError, DEFAULT_LOCALE, SUPPORTED_LOCALES } from "@/lib/i18n";
-import { ErrorCode, type ErrorCodeValue } from "@/lib/errors";
+import { resolveLocale, translateError, DEFAULT_LOCALE, SUPPORTED_LOCALES } from "./index";
+import { ErrorCode, type ErrorCodeValue } from "../errors";
 
 describe("resolveLocale", () => {
   it("空值/null → 默认 locale(zh-cn)", () => {

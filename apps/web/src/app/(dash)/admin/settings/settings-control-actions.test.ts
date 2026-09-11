@@ -16,8 +16,8 @@ vi.mock("@/lib/session", () => ({ requireAdmin: mocks.requireAdmin }));
 vi.mock("@/lib/settings-control/runtime", () => ({
   invalidateSettingsRuntime: mocks.invalidateSettingsRuntime,
 }));
-vi.mock("@/lib/settings-control/service", async (importOriginal) => {
-  const original = await importOriginal<typeof import("@/lib/settings-control/service")>();
+vi.mock("@nekusora/core/settings-control/service", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@nekusora/core/settings-control/service")>();
   return {
     ...original,
     applySettingsDraft: mocks.applySettingsDraft,
@@ -28,7 +28,7 @@ vi.mock("@/lib/settings-control/service", async (importOriginal) => {
   };
 });
 
-import { SettingsDraftConflictError } from "@/lib/settings-control/service";
+import { SettingsDraftConflictError } from "@nekusora/core/settings-control/service";
 import * as settingsControlActions from "./settings-control-actions";
 import { INITIAL_SETTINGS_CONTROL_ACTION_STATE } from "./settings-control-state";
 

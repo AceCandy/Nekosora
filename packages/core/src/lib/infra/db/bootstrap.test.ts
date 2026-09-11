@@ -4,7 +4,7 @@ const ENV_BACKUP = { ...process.env };
 
 afterEach(async () => {
   try {
-    const { closeDb } = await import("@/lib/infra/db");
+    const { closeDb } = await import("./index");
     await closeDb();
   } catch {
     // 测试可能在 db 模块导入前失败,此时无需关闭连接。
@@ -262,14 +262,14 @@ describe("bootstrapDatabase", () => {
       insert: vi.fn(),
       delete: vi.fn(),
     };
-    vi.doMock("@/lib/infra/db", () => ({
+    vi.doMock("./index", () => ({
       getDb: vi.fn().mockResolvedValue(db),
       getSchema: vi.fn(() => schema),
     }));
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
     try {
-      const { bootstrapDatabase } = await import("@/lib/infra/db/bootstrap");
+      const { bootstrapDatabase } = await import("./bootstrap");
       await bootstrapDatabase();
     } finally {
       logSpy.mockRestore();
@@ -283,18 +283,18 @@ describe("bootstrapDatabase", () => {
     process.env.NODE_ENV = "production";
     delete process.env.SEED_ADMIN_PASSWORD;
     const getAuth = vi.fn();
-    vi.doMock("@/lib/infra/db", () => ({
+    vi.doMock("./index", () => ({
       getDb: vi.fn().mockResolvedValue({
         execute: vi.fn().mockResolvedValue({ rows: [] }),
       }),
       getSchema: vi.fn(() => ({})),
     }));
-    vi.doMock("@/auth", () => ({ getAuth }));
+    vi.doMock("../../../auth", () => ({ getAuth }));
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
     try {
-      const { bootstrapDatabase } = await import("@/lib/infra/db/bootstrap");
+      const { bootstrapDatabase } = await import("./bootstrap");
       await expect(bootstrapDatabase({ seedAdmin: false })).resolves.toBeUndefined();
     } finally {
       logSpy.mockRestore();
@@ -318,7 +318,7 @@ describe("runMigrations", () => {
     ];
     const { db, client, executedSql } = migrationLedgerDb(ledger);
 
-    const { runMigrations } = await import("@/lib/infra/db/bootstrap");
+    const { runMigrations } = await import("./bootstrap");
 
     await expect(runMigrations(db)).resolves.toBeUndefined();
     expect(executedSql).toContain(
@@ -344,7 +344,7 @@ describe("runMigrations", () => {
       { id: 1, hash: TEST_MIGRATION_HASHES[0], created_at: 100 },
       { id: 3, hash: TEST_MIGRATION_HASHES[2], created_at: 250 },
     ]);
-    const { runMigrations } = await import("@/lib/infra/db/bootstrap");
+    const { runMigrations } = await import("./bootstrap");
 
     await expect(runMigrations(db)).rejects.toThrow("迁移账本存在断层:index=1");
     expect(executedSql.some((text) => text.startsWith("update drizzle.__drizzle_migrations"))).toBe(false);
@@ -359,7 +359,7 @@ describe("runMigrations", () => {
       { id: 1, hash: TEST_MIGRATION_HASHES[0], created_at: 100 },
       { id: 2, hash: "d".repeat(64), created_at: 200 },
     ]);
-    const { runMigrations } = await import("@/lib/infra/db/bootstrap");
+    const { runMigrations } = await import("./bootstrap");
 
     await expect(runMigrations(db)).rejects.toThrow("迁移账本 hash 与 journal 不一致:index=1");
     expect(executedSql.some((text) => text.startsWith("update drizzle.__drizzle_migrations"))).toBe(false);
@@ -373,7 +373,7 @@ describe("runMigrations", () => {
     const { db, client, executedSql } = migrationLedgerDb([
       { id: 1, hash: "d".repeat(64), created_at: 100 },
     ]);
-    const { runMigrations } = await import("@/lib/infra/db/bootstrap");
+    const { runMigrations } = await import("./bootstrap");
 
     await expect(runMigrations(db)).rejects.toThrow("迁移账本 hash 与 journal 不一致:index=0");
     expect(executedSql.some((text) => text.startsWith("update drizzle.__drizzle_migrations"))).toBe(false);
@@ -398,7 +398,7 @@ describe("runMigrations", () => {
         ? (text.match(/,/g)?.length ?? 0) + 1
         : 1,
     }));
-    const { runMigrations } = await import("@/lib/infra/db/bootstrap");
+    const { runMigrations } = await import("./bootstrap");
 
     await expect(runMigrations(db)).resolves.toBeUndefined();
     expect(executedSql).toContain(
@@ -426,7 +426,7 @@ describe("runMigrations", () => {
       rows: [],
       rowCount: text.startsWith("delete from") ? 5 : 1,
     }));
-    const { runMigrations } = await import("@/lib/infra/db/bootstrap");
+    const { runMigrations } = await import("./bootstrap");
 
     await expect(runMigrations(db)).resolves.toBeUndefined();
     expect(executedSql).toContain(
@@ -451,7 +451,7 @@ describe("runMigrations", () => {
       rows: [],
       rowCount: text.startsWith("delete from") ? 5 : 1,
     }));
-    const { runMigrations } = await import("@/lib/infra/db/bootstrap");
+    const { runMigrations } = await import("./bootstrap");
 
     await expect(runMigrations(db)).resolves.toBeUndefined();
     expect(migrate).toHaveBeenNthCalledWith(1, db, {
@@ -467,7 +467,7 @@ describe("runMigrations", () => {
     const ledger = preSquashLedger();
     ledger[10].hash = "e".repeat(64);
     const { db, executedSql } = migrationLedgerDb(ledger);
-    const { runMigrations } = await import("@/lib/infra/db/bootstrap");
+    const { runMigrations } = await import("./bootstrap");
 
     await expect(runMigrations(db)).rejects.toThrow("迁移账本 hash 与 journal 不一致:index=0");
     expect(executedSql.some((text) => text.startsWith("delete from"))).toBe(false);
@@ -482,7 +482,7 @@ describe("runMigrations", () => {
       rows: [],
       rowCount: text.startsWith("delete from") ? 14 : 1,
     }));
-    const { runMigrations } = await import("@/lib/infra/db/bootstrap");
+    const { runMigrations } = await import("./bootstrap");
 
     await expect(runMigrations(db)).rejects.toThrow("旧迁移账本尾部归并失败");
     expect(migrate).not.toHaveBeenCalled();
@@ -495,7 +495,7 @@ describe("runMigrations", () => {
     const { db, executedSql } = migrationLedgerDb([
       { id: 1, hash: PRE_SQUASH_MIGRATION_HASHES[0], created_at: 100 },
     ]);
-    const { runMigrations } = await import("@/lib/infra/db/bootstrap");
+    const { runMigrations } = await import("./bootstrap");
 
     await expect(runMigrations(db)).rejects.toThrow("迁移账本 hash 与 journal 不一致:index=0");
     expect(executedSql.some((text) => text.startsWith("update drizzle.__drizzle_migrations"))).toBe(false);
@@ -511,7 +511,7 @@ describe("runMigrations", () => {
       { id: 2, hash: TEST_MIGRATION_HASHES[1], created_at: 200 },
       { id: 3, hash: TEST_MIGRATION_HASHES[2], created_at: 250 },
     ], { rows: [] });
-    const { runMigrations } = await import("@/lib/infra/db/bootstrap");
+    const { runMigrations } = await import("./bootstrap");
 
     await expect(runMigrations(db)).rejects.toThrow("迁移账本并发变化,协调失败");
     expect(migrate).not.toHaveBeenCalled();
@@ -526,7 +526,7 @@ describe("runMigrations", () => {
       { id: 2, hash: TEST_MIGRATION_HASHES[1], created_at: 200 },
       { id: 3, hash: TEST_MIGRATION_HASHES[2], created_at: 250 },
     ], { rows: [], rowCount: 0 });
-    const { runMigrations } = await import("@/lib/infra/db/bootstrap");
+    const { runMigrations } = await import("./bootstrap");
 
     await expect(runMigrations(db)).rejects.toThrow("迁移账本并发变化,协调失败");
     expect(migrate).not.toHaveBeenCalled();
@@ -542,7 +542,7 @@ describe("runMigrations", () => {
     const migrate = vi.fn(async () => undefined);
     vi.doMock("drizzle-orm/node-postgres/migrator", () => ({ migrate }));
     const { db } = migrationLedgerDb([]);
-    const { runMigrations } = await import("@/lib/infra/db/bootstrap");
+    const { runMigrations } = await import("./bootstrap");
 
     await expect(runMigrations(db)).rejects.toThrow("迁移 journal 时间必须严格递增:index=1");
     expect(migrate).not.toHaveBeenCalled();
@@ -558,7 +558,7 @@ describe("runMigrations", () => {
     const migrate = vi.fn(async () => undefined);
     vi.doMock("drizzle-orm/node-postgres/migrator", () => ({ migrate }));
     const { db } = migrationLedgerDb([]);
-    const { runMigrations } = await import("@/lib/infra/db/bootstrap");
+    const { runMigrations } = await import("./bootstrap");
 
     await expect(runMigrations(db)).rejects.toThrow("迁移 journal 存在重复 hash");
     expect(migrate).not.toHaveBeenCalled();
@@ -594,7 +594,7 @@ describe("runMigrations", () => {
     const migrate = vi.fn(async () => undefined);
     vi.doMock("drizzle-orm/node-postgres/migrator", () => ({ migrate }));
     const { db } = migrationLedgerDb(ledger);
-    const { runMigrations } = await import("@/lib/infra/db/bootstrap");
+    const { runMigrations } = await import("./bootstrap");
 
     await expect(runMigrations(db)).rejects.toThrow(message);
     expect(migrate).not.toHaveBeenCalled();
@@ -608,7 +608,7 @@ describe("runMigrations", () => {
       { id: 1, hash: TEST_MIGRATION_HASHES[0], created_at: 100 },
       { id: 2, hash: TEST_MIGRATION_HASHES[1], created_at: 300 },
     ]);
-    const { runMigrations } = await import("@/lib/infra/db/bootstrap");
+    const { runMigrations } = await import("./bootstrap");
 
     await expect(runMigrations(db)).rejects.toThrow("迁移旧时间占用当前 journal:index=1");
     expect(migrate).not.toHaveBeenCalled();
@@ -623,7 +623,7 @@ describe("runMigrations", () => {
       { id: 2, hash: TEST_MIGRATION_HASHES[1], created_at: 200 },
       { id: 9, hash: "e".repeat(64), created_at: 250 },
     ]);
-    const { runMigrations } = await import("@/lib/infra/db/bootstrap");
+    const { runMigrations } = await import("./bootstrap");
 
     await expect(runMigrations(db)).rejects.toThrow("迁移账本存在未知记录");
     expect(executedSql.some((text) => text.startsWith("update drizzle.__drizzle_migrations"))).toBe(false);
@@ -638,7 +638,7 @@ describe("runMigrations", () => {
       { id: 1, hash: TEST_MIGRATION_HASHES[0], created_at: 100 },
       { id: 2, hash: TEST_MIGRATION_HASHES[1], created_at: 200 },
     ]);
-    const { runMigrations } = await import("@/lib/infra/db/bootstrap");
+    const { runMigrations } = await import("./bootstrap");
 
     await expect(runMigrations(db)).resolves.toBeUndefined();
     expect(executedSql.some((text) => text.startsWith("update drizzle.__drizzle_migrations"))).toBe(false);
@@ -650,7 +650,7 @@ describe("runMigrations", () => {
     const migrate = vi.fn(async () => undefined);
     vi.doMock("drizzle-orm/node-postgres/migrator", () => ({ migrate }));
     const { db, client, executedSql } = migrationLedgerDb([]);
-    const { runMigrations } = await import("@/lib/infra/db/bootstrap");
+    const { runMigrations } = await import("./bootstrap");
 
     await expect(runMigrations(db)).resolves.toBeUndefined();
     expect(executedSql.some((text) => text.startsWith("update drizzle.__drizzle_migrations"))).toBe(false);
@@ -665,7 +665,7 @@ describe("runMigrations", () => {
       () => ({ rows: [] }),
       { drizzleError: new Error("driver setup failed") },
     );
-    const { runMigrations } = await import("@/lib/infra/db/bootstrap");
+    const { runMigrations } = await import("./bootstrap");
 
     await expect(runMigrations(db)).rejects.toThrow("driver setup failed");
     expect(client.release).toHaveBeenCalledWith(false);
@@ -679,7 +679,7 @@ describe("runMigrations", () => {
       () => ({ rows: [] }),
       { lockError: new Error("lock failed") },
     );
-    const { runMigrations } = await import("@/lib/infra/db/bootstrap");
+    const { runMigrations } = await import("./bootstrap");
 
     await expect(runMigrations(db)).rejects.toThrow("lock failed");
     expect(executedSql.some((text) => text.includes("pg_advisory_unlock"))).toBe(false);
@@ -694,7 +694,7 @@ describe("runMigrations", () => {
     });
     vi.doMock("drizzle-orm/node-postgres/migrator", () => ({ migrate }));
     const { db, client, executedSql } = migrationLedgerDb([]);
-    const { runMigrations } = await import("@/lib/infra/db/bootstrap");
+    const { runMigrations } = await import("./bootstrap");
 
     await expect(runMigrations(db)).rejects.toThrow("migrate failed");
     expect(executedSql.some((text) => text.includes("pg_advisory_unlock"))).toBe(true);
@@ -710,7 +710,7 @@ describe("runMigrations", () => {
       undefined,
       { unlockResult: { rows: [{ unlocked: false }] } },
     );
-    const { runMigrations } = await import("@/lib/infra/db/bootstrap");
+    const { runMigrations } = await import("./bootstrap");
 
     await expect(runMigrations(db)).rejects.toThrow("迁移锁释放失败");
     expect(client.release).toHaveBeenCalledWith(true);
@@ -725,7 +725,7 @@ describe("runMigrations", () => {
       undefined,
       { unlockError: new Error("unlock query failed") },
     );
-    const { runMigrations } = await import("@/lib/infra/db/bootstrap");
+    const { runMigrations } = await import("./bootstrap");
 
     await expect(runMigrations(db)).rejects.toThrow("unlock query failed");
     expect(client.release).toHaveBeenCalledWith(true);
@@ -751,7 +751,7 @@ describe("runMigrations", () => {
       return { rows: [] };
     });
 
-    const { runMigrations } = await import("@/lib/infra/db/bootstrap");
+    const { runMigrations } = await import("./bootstrap");
 
     await expect(runMigrations(db)).resolves.toBeUndefined();
 
@@ -783,7 +783,7 @@ describe("runMigrations", () => {
       return { rows: [] };
     });
 
-    const { runMigrations } = await import("@/lib/infra/db/bootstrap");
+    const { runMigrations } = await import("./bootstrap");
 
     await expect(runMigrations(db)).rejects.toThrow(
       "PG 基线表存在但关键列不完整",
@@ -808,7 +808,7 @@ describe("runMigrations", () => {
       return { rows: [] };
     });
 
-    const { runMigrations } = await import("@/lib/infra/db/bootstrap");
+    const { runMigrations } = await import("./bootstrap");
 
     await expect(runMigrations(db)).resolves.toBeUndefined();
     expect(migrate).toHaveBeenCalledWith(db, { migrationsFolder: "drizzle/pg" });
@@ -831,7 +831,7 @@ describe("runMigrations", () => {
       return { rows: [] };
     });
 
-    const { runMigrations } = await import("@/lib/infra/db/bootstrap");
+    const { runMigrations } = await import("./bootstrap");
 
     await expect(runMigrations(db)).rejects.toThrow("PG 已存在部分基线对象但没有 Drizzle 迁移记录");
     expect(migrate).not.toHaveBeenCalled();

@@ -12,23 +12,23 @@ const mocks = vi.hoisted(() => ({
   governanceSignal: new AbortController().signal,
 }));
 
-vi.mock("@/lib/keys", () => ({
+vi.mock("../../lib/keys", () => ({
   extractBearer: mocks.extractBearer,
   verifyKey: mocks.verifyKey,
 }));
-vi.mock("@/lib/infra/db", () => ({
+vi.mock("../../lib/infra/db/index", () => ({
   getDb: mocks.getDb,
   getSchema: mocks.getSchema,
 }));
-vi.mock("@/lib/routing", () => ({ resolveRoutesByCapability: vi.fn() }));
-vi.mock("@/lib/rag/retrieve", () => ({ retrieve: mocks.retrieve }));
-vi.mock("@/lib/gateway-governance/lifecycle", async (importOriginal) => ({
-  ...await importOriginal<typeof import("@/lib/gateway-governance/lifecycle")>(),
+vi.mock("../../lib/routing", () => ({ resolveRoutesByCapability: vi.fn() }));
+vi.mock("../../lib/rag/retrieve", () => ({ retrieve: mocks.retrieve }));
+vi.mock("../../lib/gateway-governance/lifecycle", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../../lib/gateway-governance/lifecycle")>(),
   consumeGatewayGovernanceRate: mocks.consumeGatewayGovernanceRate,
   acquireGatewayGovernanceLease: mocks.acquireGatewayGovernanceLease,
 }));
 
-import { GovernanceRejectedError } from "@/lib/gateway-governance/repository";
+import { GovernanceRejectedError } from "../../lib/gateway-governance/repository";
 import { GET, POST } from "./mcp";
 
 const policy = { version: 1 };

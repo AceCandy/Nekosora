@@ -9,18 +9,18 @@ const mocks = vi.hoisted(() => ({
   bootstrapDatabase: vi.fn(),
 }));
 
-vi.mock("@/lib/infra/process-guards", () => ({
+vi.mock("@nekusora/core/process-guards", () => ({
   installGlobalErrorGuards: mocks.installGlobalErrorGuards,
 }));
-vi.mock("@/lib/infra/env", () => ({ validateEnv: mocks.validateEnv }));
-vi.mock("@/lib/infra/queue", () => ({
+vi.mock("@nekusora/core/env", () => ({ validateEnv: mocks.validateEnv }));
+vi.mock("@nekusora/core/queue", () => ({
   configureQueueProvider: mocks.configureQueueProvider,
 }));
 vi.mock("@nekusora/queue", () => {
   mocks.loadQueueModule();
   return { getQueue: mocks.getQueue };
 });
-vi.mock("@/lib/infra/db/bootstrap", () => ({
+vi.mock("@nekusora/core/bootstrap", () => ({
   bootstrapDatabase: mocks.bootstrapDatabase,
 }));
 

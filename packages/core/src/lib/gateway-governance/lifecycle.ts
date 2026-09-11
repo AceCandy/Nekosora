@@ -8,7 +8,7 @@ import {
   observeGatewayGovernanceFailure,
   observeGatewayGovernanceRejection,
   observeGatewayGovernanceSettlement,
-} from "@/lib/infra/metrics";
+} from "../infra/metrics";
 import {
   createGatewayGovernanceRepository,
   GatewayGovernanceRepository,

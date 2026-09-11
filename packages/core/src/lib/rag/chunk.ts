@@ -3,7 +3,7 @@
  *
  * 不依赖外部库;对内部团队规模够用。chunkSize/overlap 可配。
  */
-import { estimateTokens } from "@/lib/tokens";
+import { estimateTokens } from "../tokens";
 
 export interface Chunk {
   index: number;

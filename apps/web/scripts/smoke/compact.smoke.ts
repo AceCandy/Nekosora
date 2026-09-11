@@ -3,7 +3,7 @@
  * 运行:pnpm tsx scripts/smoke/compact.smoke.ts
  */
 import assert from "node:assert";
-import { coveragePathHash, extendCoveragePathHash, type HashableMessage } from "@/lib/compact/coverage";
+import { coveragePathHash, extendCoveragePathHash, type HashableMessage } from "@nekusora/core/compact/coverage";
 
 function mk(id: string, publicId: string, parentId: string | null, role: string): HashableMessage {
   return { id, publicId, parentId, role };

@@ -1,8 +1,8 @@
-import { classifyError, NETWORK_KEYWORDS } from "@/lib/error-classify";
-import { ErrorCode } from "@/lib/errors";
-import { redactSensitiveText } from "@/lib/redaction";
-import type { ResolvedRoute } from "@/lib/providers/types";
-import { isProviderTimeoutError } from "@/lib/providers/timeouts";
+import { classifyError, NETWORK_KEYWORDS } from "../error-classify";
+import { ErrorCode } from "../errors";
+import { redactSensitiveText } from "../redaction";
+import type { ResolvedRoute } from "../providers/types";
+import { isProviderTimeoutError } from "../providers/timeouts";
 import type { SafeGatewayError } from "./types";
 
 const TOOL_REFERENCE = /\b(?:tools?|tool[_ -]?choice|function[_ -]?calls?)\b/i;

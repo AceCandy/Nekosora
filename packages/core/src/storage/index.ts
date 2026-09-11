@@ -6,7 +6,7 @@
  *   2. 未配置或显式 local → LocalDriver(零配置,写仓库根 uploads)
  *   3. 非法配置或远端初始化失败 → 抛错,不静默改写存储位置
  *
- * 业务代码统一 import { getStorage } from "@/lib/infra/storage";
+ * 应用通过 import { getStorage } from "@nekusora/core/storage" 访问。
  * 永远不直接 import 具体 driver 模块。
  */
 import type { StorageDriver, StorageKind } from "./driver";

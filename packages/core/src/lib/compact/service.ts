@@ -9,11 +9,11 @@
  *   - 熔断器:连续失败自动降级(TS 单线程用普通计数器)
  */
 import { eq, and, desc } from "drizzle-orm";
-import { getDb, getSchema } from "@/lib/infra/db";
+import { getDb, getSchema } from "../infra/db/index";
 import { coveragePathHash, type HashableMessage } from "./coverage";
-import { estimateMessagesTokens } from "@/lib/tokens";
-import { streamChat } from "@/lib/stream";
-import { getSetting } from "@/lib/system-settings/service";
+import { estimateMessagesTokens } from "../tokens";
+import { streamChat } from "../stream";
+import { getSetting } from "../system-settings/service";
 
 const DEFAULT_MAX_TURNS = 16;
 const DEFAULT_COMPACT_TRIGGER_TOKENS = 12000;

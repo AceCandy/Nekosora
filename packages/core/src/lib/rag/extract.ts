@@ -12,7 +12,7 @@
  * 入参 key 为 StorageDriver 无关的 key(见 src/lib/infra/storage)。
  * 旧记录的绝对路径仍兼容(LocalDriver 内部处理)。
  */
-import { getStorage } from "@/lib/infra/storage";
+import { getStorage } from "../infra/storage/index";
 
 const TEXT_EXTS = new Set([
   ".txt", ".md", ".markdown", ".csv", ".tsv", ".json", ".jsonl",

@@ -20,8 +20,8 @@ vi.mock("drizzle-orm", () => ({
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/session", () => ({ requireSession: mocks.requireSession }));
-vi.mock("@/lib/infra/db", () => ({ getDb: mocks.getDb, getSchema: mocks.getSchema }));
-vi.mock("@/lib/keys", () => ({
+vi.mock("@nekusora/core/infra/db", () => ({ getDb: mocks.getDb, getSchema: mocks.getSchema }));
+vi.mock("@nekusora/core/keys", () => ({
   createMasterKey: vi.fn(),
   createSubKey: vi.fn(),
   listKeys: vi.fn(),

@@ -15,9 +15,9 @@ import GovernanceSettingsSection from "./GovernanceSettingsSection";
 import ModelConfigSection from "./ModelConfigSection";
 import OutputModesSection from "./OutputModesSection";
 import RenderStylesSection from "./RenderStylesSection";
-import { getSettingsControlView } from "@/lib/settings-control/service";
+import { getSettingsControlView } from "@nekusora/core/settings-control/service";
 import SettingsChangeControl from "./SettingsChangeControl";
-import type { GovernanceHistoryRange } from "@/lib/gateway-governance/analytics";
+import type { GovernanceHistoryRange } from "@nekusora/core/gateway-governance/analytics";
 
 export const dynamic = "force-dynamic";
 

@@ -5,13 +5,13 @@ import type {
   ChatProcessTerminalPhase,
   MessageRunMetadata,
 } from "@nekusora/contracts/chat";
-import { extractArtifacts } from "@/lib/artifacts/extract";
-import type { AssistantWrite } from "@/lib/chat/completion-repository";
-import { persistChatCompletion } from "@/lib/chat/completion-repository";
+import { extractArtifacts } from "../artifacts/extract";
+import type { AssistantWrite } from "./completion-repository";
+import { persistChatCompletion } from "./completion-repository";
 import {
   appendChatProcessRun,
   ChatProcessRecorder,
-} from "@/lib/chat/process-trace";
+} from "./process-trace";
 import {
   finalizeRun,
   heartbeatRun,
@@ -20,25 +20,25 @@ import {
   recordToolCallStart,
   startRunStrict,
   type RunTerminalStatus,
-} from "@/lib/chat/run-lifecycle";
-import { withBestEffortTimeout } from "@/lib/best-effort";
-import { getDb, getSchema } from "@/lib/infra/db";
-import { dispatchMemoryExtractionJob } from "@/lib/memory/dispatch";
-import { createMemoryExtractionJob } from "@/lib/memory/jobs";
-import { resolveMcpServers } from "@/lib/mcp/registry";
-import type { CallContext, IRRequest, IRUsage, StreamEvent } from "@/lib/providers/types";
-import { redactErrorMessage } from "@/lib/redaction";
-import { streamChat, streamChatWithTools } from "@/lib/stream";
-import { getChatUA } from "@/lib/system-settings/ua";
-import { searchWeb } from "@/lib/web-search/service";
-import { rewriteSearchQuery } from "@/lib/web-search/query-rewrite";
+} from "./run-lifecycle";
+import { withBestEffortTimeout } from "../best-effort";
+import { getDb, getSchema } from "../infra/db/index";
+import { dispatchMemoryExtractionJob } from "../memory/dispatch";
+import { createMemoryExtractionJob } from "../memory/jobs";
+import { resolveMcpServers } from "../mcp/registry";
+import type { CallContext, IRRequest, IRUsage, StreamEvent } from "../providers/types";
+import { redactErrorMessage } from "../redaction";
+import { streamChat, streamChatWithTools } from "../stream";
+import { getChatUA } from "../system-settings/ua";
+import { searchWeb } from "../web-search/service";
+import { rewriteSearchQuery } from "../web-search/query-rewrite";
 import {
   createFreshnessTimeRange,
   type SearchBackendIdentity,
   type SearchToolResult,
   type SearchTimeRange,
-} from "@/lib/web-search/types";
-import type { IRToolDef } from "@/lib/providers/types";
+} from "../web-search/types";
+import type { IRToolDef } from "../providers/types";
 import { z } from "zod";
 
 const RUN_HEARTBEAT_INTERVAL_MS = 30_000;

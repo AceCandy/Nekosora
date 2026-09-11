@@ -1,7 +1,7 @@
 "use server";
 
 import { and, eq } from "drizzle-orm";
-import { getDb, getSchema } from "@/lib/infra/db";
+import { getDb, getSchema } from "@nekusora/core/infra/db";
 import { requireSession } from "@/lib/session";
 import {
   isFeedbackRating,

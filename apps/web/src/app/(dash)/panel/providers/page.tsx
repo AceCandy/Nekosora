@@ -12,7 +12,7 @@ import {
   testMyProviderModel,
   attachMyProviderModelRoute,
 } from "../actions";
-import { revealKeyBundle } from "@/lib/providers/keys";
+import { revealKeyBundle } from "@nekusora/core/providers/keys";
 import type { ProviderKeyResult } from "@nekusora/db/schema";
 import ProvidersManager, {
   type ProviderItem,

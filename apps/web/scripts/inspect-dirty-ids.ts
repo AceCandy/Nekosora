@@ -8,7 +8,7 @@
  * 避免对象字段读取问题。脏数据判定:id = bug 产生的字面量。
  */
 import { sql } from "drizzle-orm";
-import { getDb, closeDb } from "@/lib/infra/db";
+import { getDb, closeDb } from "@nekusora/core/infra/db";
 
 const DIRTY = "(gen_random_uuid())";
 

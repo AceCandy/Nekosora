@@ -2,7 +2,7 @@
  * 对象存储统一接口 —— 抽象本地磁盘 / S3 / R2 / MinIO 等后端。
  *
  * 设计对标项目其他降级基建(db / cache / queue):
- *   - 业务代码统一 import { getStorage } from "@/lib/infra/storage";
+ *   - 应用通过 import { getStorage } from "@nekusora/core/storage" 访问。
  *   - 具体后端由 STORAGE_DRIVER 环境变量选择,默认 LocalDriver(零配置兜底)。
  *
  * key 约定:driver 无关的相对路径,如 "userId/fileId-name.png"。

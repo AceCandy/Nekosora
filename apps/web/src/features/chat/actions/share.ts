@@ -25,8 +25,8 @@ import {
   getShareUnlockRetryAfter,
   recordShareUnlockFailure,
 } from "@/features/chat/lib/share-rate-limit";
-import { getDb, getSchema } from "@/lib/infra/db";
-import { loadRunMetadataByRunIds } from "@/lib/chat/run-metadata";
+import { getDb, getSchema } from "@nekusora/core/infra/db";
+import { loadRunMetadataByRunIds } from "@nekusora/core/chat/run-metadata";
 import { requireSession } from "@/lib/session";
 
 const expirationSchema = z.discriminatedUnion("kind", [

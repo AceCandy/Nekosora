@@ -1,5 +1,5 @@
-import { generateChat } from "@/lib/stream";
-import type { IRMessage } from "@/lib/providers/types";
+import { generateChat } from "../stream";
+import type { IRMessage } from "../providers/types";
 
 type LangChainMessage = {
   content?: unknown;

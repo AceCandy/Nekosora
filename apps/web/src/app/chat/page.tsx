@@ -8,7 +8,7 @@ import { createShare, listConversationShares, revokeShare, type CreateShareInput
 import type { ModelCapabilities } from "@nekusora/db/types";
 import { newConversationKey } from "@/features/chat/model/newConversationNavigation";
 import { requireSession } from "@/lib/session";
-import { isWebSearchEnabled } from "@/lib/web-search/registry";
+import { isWebSearchEnabled } from "@nekusora/core/web-search/registry";
 
 export default async function ChatPage({
   searchParams,

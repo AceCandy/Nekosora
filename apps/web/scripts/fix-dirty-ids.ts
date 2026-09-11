@@ -17,7 +17,7 @@
  */
 import crypto from "node:crypto";
 import { sql } from "drizzle-orm";
-import { getDb, closeDb } from "@/lib/infra/db";
+import { getDb, closeDb } from "@nekusora/core/infra/db";
 
 const DIRTY = "(gen_random_uuid())";
 const APPLY = process.argv.includes("--apply");

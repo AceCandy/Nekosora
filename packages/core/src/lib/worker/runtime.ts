@@ -1,8 +1,8 @@
-import type { QueueAdapter } from "@/lib/infra/queue";
+import type { QueueAdapter } from "../infra/queue";
 import type {
   JobOutcome,
   QueueDefinition,
-} from "@/lib/jobs/catalog";
+} from "../jobs/catalog";
 
 export interface RecoveryDefinition {
   readonly intervalMs: number;

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   parseBoundedMultipartFormData,
   RequestBodyTooLargeError,
-} from "@/lib/multipart";
+} from "./multipart";
 
 function requestWithStream(
   stream: ReadableStream<Uint8Array>,

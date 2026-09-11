@@ -9,26 +9,26 @@
  *
  * 响应:音频字节流(对应 Content-Type)。直接 pipe 到 Response。
  */
-import { verifyKey, extractBearer } from "@/lib/keys";
-import { synthesizeViaRoute, RoutingError } from "@/lib/providers/multimodal/audio-tts";
+import { verifyKey, extractBearer } from "../../lib/keys";
+import { synthesizeViaRoute, RoutingError } from "../../lib/providers/multimodal/audio-tts";
 import {
   apiErrorLocalized,
   ErrorCode,
   routingCodeToErrorCode,
   ERROR_META,
-} from "@/lib/errors";
-import { classifyError } from "@/lib/error-classify";
+} from "../../lib/errors";
+import { classifyError } from "../../lib/error-classify";
 import {
   beginGatewayGovernance,
   runWithGatewayGovernance,
-} from "@/lib/gateway-governance/lifecycle";
+} from "../../lib/gateway-governance/lifecycle";
 import {
   MAX_TTS_CODE_POINTS,
   parseTtsInput,
-} from "@/lib/gateway-governance/metering";
-import { redactErrorMessage } from "@/lib/redaction";
-import { logUsage } from "@/lib/usage";
-import type { CallContext } from "@/lib/providers/types";
+} from "../../lib/gateway-governance/metering";
+import { redactErrorMessage } from "../../lib/redaction";
+import { logUsage } from "../../lib/usage";
+import type { CallContext } from "../../lib/providers/types";
 import {
   gatewayGovernanceErrorResponse,
   gatewayGovernanceIdentity,

@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { getSchema } from "@/lib/infra/db";
+import { getSchema } from "../infra/db/index";
 import {
   routeApiFormatForModel,
   type ModelType,

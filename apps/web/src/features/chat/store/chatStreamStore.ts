@@ -12,7 +12,7 @@ import {
   handleStreamError,
   type SSEHandlers,
 } from "@/features/chat/model/sse";
-import type { ChatTerminalStatus } from "@/lib/chat/sse-contract";
+import type { ChatTerminalStatus } from "@nekusora/core/chat/sse-contract";
 import type {
   ChatMessage,
   ChatMessageAttachment,

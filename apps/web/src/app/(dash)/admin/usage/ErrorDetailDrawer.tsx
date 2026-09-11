@@ -12,7 +12,7 @@ import Badge from "@/shared/ui/Badge";
 import { clsx } from "clsx";
 import { useTranslations } from "next-intl";
 import { formatDateTimeLocal, formatDuration } from "@/shared/lib/format";
-import { type ErrorCategory } from "@/lib/error-classify";
+import { type ErrorCategory } from "@nekusora/core/error-classify";
 import type { ErrorLogClientRow } from "./ErrorLogsTable";
 
 interface ErrorDetailDrawerProps {

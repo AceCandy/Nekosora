@@ -1,6 +1,6 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { getAuth } from "@/auth";
+import { getAuth } from "@nekusora/core/auth";
 import type { SessionUser } from "@/lib/session";
 import type { NavGroup } from "@/shared/nav-config";
 import DashSidebar from "@/shared/components/DashSidebar";

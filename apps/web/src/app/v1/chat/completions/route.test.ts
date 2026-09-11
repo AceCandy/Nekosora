@@ -15,19 +15,19 @@ const mocks = vi.hoisted(() => ({
   findModel: vi.fn(),
 }));
 
-vi.mock("@/lib/keys", () => ({
+vi.mock("@nekusora/core/keys", () => ({
   extractBearer: mocks.extractBearer,
   verifyKey: mocks.verifyKey,
 }));
-vi.mock("@/lib/stream", () => ({ streamChat: mocks.streamChat }));
-vi.mock("@/lib/system-settings/ua", () => ({ getGatewayUA: mocks.getGatewayUA }));
-vi.mock("@/lib/web-search/registry", () => ({ loadConfig: mocks.loadWebSearchConfig }));
-vi.mock("@/lib/gateway-governance/lifecycle", async (importOriginal) => ({
-  ...await importOriginal<typeof import("@/lib/gateway-governance/lifecycle")>(),
+vi.mock("@nekusora/core/stream", () => ({ streamChat: mocks.streamChat }));
+vi.mock("@nekusora/core/system-settings/ua", () => ({ getGatewayUA: mocks.getGatewayUA }));
+vi.mock("@nekusora/core/web-search/registry", () => ({ loadConfig: mocks.loadWebSearchConfig }));
+vi.mock("@nekusora/core/gateway-governance/lifecycle", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@nekusora/core/gateway-governance/lifecycle")>(),
   consumeGatewayGovernanceRate: mocks.consumeRate,
   acquireGatewayGovernanceLease: mocks.acquireLease,
 }));
-vi.mock("@/lib/repositories/route-repository", () => ({
+vi.mock("@nekusora/core/repositories/route-repository", () => ({
   getRouteRepository: () => ({ findEnabledModelByNameForOwner: mocks.findModel }),
 }));
 

@@ -1,6 +1,6 @@
 import type { IAudioMetadata } from "music-metadata";
-import type { IRRequest, IRUsage } from "@/lib/providers/types";
-import { estimateMessagesTokens } from "@/lib/tokens";
+import type { IRRequest, IRUsage } from "../providers/types";
+import { estimateMessagesTokens } from "../tokens";
 
 const DEFAULT_CONTEXT_WINDOW = 32_000;
 const DEFAULT_MAX_OUTPUT_TOKENS = 16_384;

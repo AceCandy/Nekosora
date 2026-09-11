@@ -1,12 +1,12 @@
 import { z } from "zod";
-import { apiError, ErrorCode } from "@/lib/errors";
+import { apiError, ErrorCode } from "../../lib/errors";
 import {
   fetchLinkMetadata,
   fetchLinkPreviewImage,
   probeLink,
-} from "@/lib/link-preview";
-import { getSessionFromHeaders } from "@/lib/session-request";
-import { PublicHttpError } from "@/lib/web-search/public-http";
+} from "../../lib/link-preview";
+import { getSessionFromHeaders } from "../../lib/session-request";
+import { PublicHttpError } from "../../lib/web-search/public-http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { estimateMessagesTokens, estimateTokens, trimToTokenBudget } from "@/lib/tokens";
+import { estimateMessagesTokens, estimateTokens, trimToTokenBudget } from "./tokens";
 
 describe("estimateTokens", () => {
   it("中文按 CJK 规则估算", () => {

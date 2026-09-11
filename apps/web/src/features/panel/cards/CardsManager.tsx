@@ -13,7 +13,7 @@ import {
   updateMyCard,
   deleteMyCard,
 } from "@/features/panel/cards/actions";
-import type { InstructionCard } from "@/lib/instruction-cards/service";
+import type { InstructionCard } from "@nekusora/core/instruction-cards/service";
 
 /**
  * 指令卡管理器 —— /panel/cards 的主组件。

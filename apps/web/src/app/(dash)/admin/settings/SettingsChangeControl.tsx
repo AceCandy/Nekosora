@@ -2,7 +2,7 @@
 
 import { useActionState, useState, useTransition } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { changedFields, type SettingsChange } from "@/lib/settings-control/changes";
+import { changedFields, type SettingsChange } from "@nekusora/core/settings-control/changes";
 import { Button } from "@/shared/ui/Button";
 import Modal from "@/shared/ui/Modal";
 import {

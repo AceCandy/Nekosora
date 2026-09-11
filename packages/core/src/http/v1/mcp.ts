@@ -13,18 +13,18 @@
  * 这是最小实现:支持 initialize / tools/list / tools/call 三个核心方法。
  * 不实现完整 session 管理(每次请求独立)。
  */
-import { verifyKey, extractBearer } from "@/lib/keys";
+import { verifyKey, extractBearer } from "../../lib/keys";
 import { eq, and } from "drizzle-orm";
-import { getDb, getSchema } from "@/lib/infra/db";
+import { getDb, getSchema } from "../../lib/infra/db/index";
 import {
   acquireGatewayGovernanceLease,
   consumeGatewayGovernanceRate,
   runWithGatewayGovernance,
-} from "@/lib/gateway-governance/lifecycle";
-import type { GatewayGovernancePolicy } from "@/lib/gateway-governance/policy";
-import type { GovernanceIdentity } from "@/lib/gateway-governance/repository";
-import { retrieve } from "@/lib/rag/retrieve";
-import type { CallContext } from "@/lib/providers/types";
+} from "../../lib/gateway-governance/lifecycle";
+import type { GatewayGovernancePolicy } from "../../lib/gateway-governance/policy";
+import type { GovernanceIdentity } from "../../lib/gateway-governance/repository";
+import { retrieve } from "../../lib/rag/retrieve";
+import type { CallContext } from "../../lib/providers/types";
 import {
   gatewayGovernanceErrorResponse,
   gatewayGovernanceIdentity,
@@ -159,7 +159,7 @@ async function handleToolCall(
 ): Promise<{ content: unknown[]; isError?: boolean }> {
   switch (name) {
     case "list_models": {
-      const { resolveRoutesByCapability } = await import("@/lib/routing");
+      const { resolveRoutesByCapability } = await import("../../lib/routing");
       void resolveRoutesByCapability; // 占位:实际列出可见模型可走专用查询
       const db = await getDb();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

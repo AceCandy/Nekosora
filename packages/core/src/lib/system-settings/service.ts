@@ -5,7 +5,7 @@
  * 写入后调用方应清除对应 registry 的内存缓存以即时生效。
  */
 import { and, eq } from "drizzle-orm";
-import { getDb, getSchema } from "@/lib/infra/db";
+import { getDb, getSchema } from "../infra/db/index";
 
 /** 读取某个 namespace 下全部键值对。 */
 export async function getSettings(namespace: string): Promise<Record<string, string>> {

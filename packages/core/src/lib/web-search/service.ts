@@ -1,5 +1,5 @@
-import { cacheGet, cacheSet } from "@/lib/infra/cache";
-import { hashSecret } from "@/lib/infra/crypto";
+import { cacheGet, cacheSet } from "../infra/cache";
+import { hashSecret } from "../infra/crypto";
 import { executeHostedModelSearch } from "./hosted-model";
 import { loadConfig, resolveExternalSearchBackends } from "./registry";
 import type {

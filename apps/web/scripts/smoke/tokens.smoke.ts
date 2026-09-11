@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import { estimateTokens, estimateMessagesTokens, trimToTokenBudget } from "@/lib/tokens";
+import { estimateTokens, estimateMessagesTokens, trimToTokenBudget } from "@nekusora/core/tokens";
 
 function run() {
   // CJK 估算:中文每字约 1.33 token(2/3)

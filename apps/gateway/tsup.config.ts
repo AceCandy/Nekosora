@@ -1,4 +1,3 @@
-import { resolve } from "node:path";
 import { defineConfig } from "tsup";
 
 export default defineConfig({
@@ -12,11 +11,4 @@ export default defineConfig({
   clean: true,
   sourcemap: true,
   splitting: false,
-  esbuildOptions(options) {
-    options.alias = {
-      "@/auth": resolve(import.meta.dirname, "../../packages/core/src/auth.ts"),
-      "@/lib": resolve(import.meta.dirname, "../../packages/core/src/lib"),
-      "@": resolve(import.meta.dirname, "../../packages/core/src"),
-    };
-  },
 });

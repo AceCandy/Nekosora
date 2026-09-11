@@ -15,15 +15,15 @@ const mocks = vi.hoisted(() => ({
   governanceSignal: new AbortController().signal,
 }));
 
-vi.mock("@/lib/keys", () => ({
+vi.mock("@nekusora/core/keys", () => ({
   extractBearer: mocks.extractBearer,
   verifyKey: mocks.verifyKey,
 }));
-vi.mock("@/lib/multipart", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/multipart")>();
+vi.mock("@nekusora/core/multipart", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@nekusora/core/multipart")>();
   return { ...actual, parseBoundedMultipartFormData: mocks.parseFormData };
 });
-vi.mock("@/lib/providers/multimodal/audio-stt", () => ({
+vi.mock("@nekusora/core/providers/multimodal/audio-stt", () => ({
   RoutingError: class RoutingError extends Error {
     constructor(readonly code: string) {
       super(code);
@@ -31,18 +31,18 @@ vi.mock("@/lib/providers/multimodal/audio-stt", () => ({
   },
   transcribeViaRoute: mocks.transcribeViaRoute,
 }));
-vi.mock("@/lib/usage", () => ({ logUsage: mocks.logUsage }));
-vi.mock("@/lib/gateway-governance/lifecycle", async (importOriginal) => ({
-  ...await importOriginal<typeof import("@/lib/gateway-governance/lifecycle")>(),
+vi.mock("@nekusora/core/usage", () => ({ logUsage: mocks.logUsage }));
+vi.mock("@nekusora/core/gateway-governance/lifecycle", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@nekusora/core/gateway-governance/lifecycle")>(),
   beginGatewayGovernance: mocks.beginGatewayGovernance,
 }));
-vi.mock("@/lib/gateway-governance/metering", async (importOriginal) => ({
-  ...await importOriginal<typeof import("@/lib/gateway-governance/metering")>(),
+vi.mock("@nekusora/core/gateway-governance/metering", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@nekusora/core/gateway-governance/metering")>(),
   measureSttSeconds: mocks.measureSttSeconds,
 }));
 
-import { RequestBodyTooLargeError } from "@/lib/multipart";
-import { RoutingError } from "@/lib/providers/multimodal/audio-stt";
+import { RequestBodyTooLargeError } from "@nekusora/core/multipart";
+import { RoutingError } from "@nekusora/core/providers/multimodal/audio-stt";
 import {
   MAX_TRANSCRIPTION_BODY_BYTES,
   MAX_TRANSCRIPTION_FILE_BYTES,

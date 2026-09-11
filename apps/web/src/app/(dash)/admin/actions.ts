@@ -2,29 +2,29 @@
 import { eq, ne, and, or, asc, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
-import { getAuth } from "@/auth";
-import { getDb, getSchema } from "@/lib/infra/db";
-import { encryptKeyBundle, parseKeyBundle } from "@/lib/providers/keys";
-import type { WeightedKey } from "@/lib/providers/keys";
-import { probeProviderKey, fetchUpstreamModels, type ProbeResult, type UpstreamModel } from "@/lib/providers/probe";
-import { getProbeHeaders } from "@/lib/system-settings/ua";
-import { normalizeBaseUrl } from "@/lib/providers/defaults";
+import { getAuth } from "@nekusora/core/auth";
+import { getDb, getSchema } from "@nekusora/core/infra/db";
+import { encryptKeyBundle, parseKeyBundle } from "@nekusora/core/providers/keys";
+import type { WeightedKey } from "@nekusora/core/providers/keys";
+import { probeProviderKey, fetchUpstreamModels, type ProbeResult, type UpstreamModel } from "@nekusora/core/providers/probe";
+import { getProbeHeaders } from "@nekusora/core/system-settings/ua";
+import { normalizeBaseUrl } from "@nekusora/core/providers/defaults";
 import {
   parseProviderTimeoutFormData,
   pickProviderTimeoutConfig,
   type ProviderTimeoutConfig,
-} from "@/lib/providers/timeouts";
-import { requireOwnedProvider } from "@/lib/providers/ownership";
+} from "@nekusora/core/providers/timeouts";
+import { requireOwnedProvider } from "@nekusora/core/providers/ownership";
 import {
   resolveCatalogRouteApiFormat,
   resolveModelRouteApiFormat,
-} from "@/lib/providers/route-api-format";
-import { recordSuccess, recordFailure } from "@/lib/circuit-breaker";
-import { pickWeightedKey } from "@/lib/providers/keys";
+} from "@nekusora/core/providers/route-api-format";
+import { recordSuccess, recordFailure } from "@nekusora/core/circuit-breaker";
+import { pickWeightedKey } from "@nekusora/core/providers/keys";
 import type { ProviderProtocol, RouteApiFormat } from "@nekusora/db/types";
 import type { ProviderKeyResult } from "@nekusora/db/schema";
 import { requireAdmin } from "@/lib/session";
-import { pickDisplayName } from "@/lib/model-catalog";
+import { pickDisplayName } from "@nekusora/core/model-catalog";
 import { z } from "zod";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

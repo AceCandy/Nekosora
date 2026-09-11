@@ -4,11 +4,11 @@ import { refreshSettings } from "./refresh-settings";
 import {
   parseGatewayGovernancePolicyForm,
   type GatewayGovernancePolicy,
-} from "@/lib/gateway-governance/policy";
+} from "@nekusora/core/gateway-governance/policy";
 import { requireAdmin } from "@/lib/session";
 import {
   saveSystemSettings,
-} from "@/lib/settings-control/service";
+} from "@nekusora/core/settings-control/service";
 
 export interface GovernanceSettingsActionState {
   status: "idle" | "success" | "error";

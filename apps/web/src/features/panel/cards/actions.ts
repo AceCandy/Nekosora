@@ -2,14 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/session";
-import { cacheWrap, cacheDel } from "@/lib/infra/cache";
+import { cacheWrap, cacheDel } from "@nekusora/core/infra/cache";
 import {
   listCards,
   createCard,
   updateCard,
   deleteCard,
   type InstructionCard,
-} from "@/lib/instruction-cards/service";
+} from "@nekusora/core/instruction-cards/service";
 
 /**
  * 指令卡管理 server actions(供 /panel/cards 调用)。

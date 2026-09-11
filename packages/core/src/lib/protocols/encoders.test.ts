@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ErrorCode, gatewayGovernanceErrorHeaders } from "@/lib/errors";
-import type { CallContext, IRRequest, StreamEvent } from "@/lib/providers/types";
+import { ErrorCode, gatewayGovernanceErrorHeaders } from "../errors";
+import type { CallContext, IRRequest, StreamEvent } from "../providers/types";
 import {
   nonStreamProtocolResponse,
   protocolErrorResponse,
@@ -10,8 +10,8 @@ import type { GatewayProtocol } from "./types";
 
 const streamChat = vi.hoisted(() => vi.fn());
 
-vi.mock("@/lib/stream", () => ({ streamChat }));
-vi.mock("@/lib/system-settings/ua", () => ({ getGatewayUA: async () => "test-gateway" }));
+vi.mock("../stream", () => ({ streamChat }));
+vi.mock("../system-settings/ua", () => ({ getGatewayUA: async () => "test-gateway" }));
 
 const ctx: CallContext = {
   userId: "user-1",

@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ErrorCode } from "@/lib/errors";
-import { DEFAULT_GATEWAY_GOVERNANCE_POLICY } from "@/lib/gateway-governance/policy";
-import { GovernanceRejectedError } from "@/lib/gateway-governance/repository";
-import type { CallContext, IRRequest } from "@/lib/providers/types";
+import { ErrorCode } from "../errors";
+import { DEFAULT_GATEWAY_GOVERNANCE_POLICY } from "../gateway-governance/policy";
+import { GovernanceRejectedError } from "../gateway-governance/repository";
+import type { CallContext, IRRequest } from "../providers/types";
 import { handleProtocolRequest } from "./handler";
 import { parseResponses } from "./parsers";
 import { GatewayRequestError, UnsupportedParameterError } from "./validation";
@@ -21,12 +21,12 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("./auth", () => ({ authenticateGatewayRequest: mocks.authenticate }));
-vi.mock("@/lib/usage", () => ({ logUsage: mocks.logUsage }));
-vi.mock("@/lib/gateway-governance/lifecycle", () => ({
+vi.mock("../usage", () => ({ logUsage: mocks.logUsage }));
+vi.mock("../gateway-governance/lifecycle", () => ({
   consumeGatewayGovernanceRate: mocks.consumeRate,
   acquireGatewayGovernanceLease: mocks.acquireLease,
 }));
-vi.mock("@/lib/repositories/route-repository", () => ({
+vi.mock("../repositories/route-repository", () => ({
   getRouteRepository: () => ({ findEnabledModelByNameForOwner: mocks.findModel }),
 }));
 vi.mock("./encoders", async (importOriginal) => ({

@@ -20,16 +20,16 @@
  *   - gemini:       key 在 query param,GET {base}/models?key=...(chat 端点要带 model 路径,退回 /models)
  */
 import { generateText, streamText } from "ai";
-import { buildLanguageModelWithKey } from "@/lib/providers/registry";
-import { isKeyAuthError } from "@/lib/stream";
-import { redactErrorMessage } from "@/lib/redaction";
-import type { ResolvedRoute } from "@/lib/providers/types";
+import { buildLanguageModelWithKey } from "./registry";
+import { isKeyAuthError } from "../stream";
+import { redactErrorMessage } from "../redaction";
+import type { ResolvedRoute } from "./types";
 import {
   createProviderFetch,
   createProviderTimeoutScope,
   resolveProviderTimeouts,
   type ProviderTimeoutConfig,
-} from "@/lib/providers/timeouts";
+} from "./timeouts";
 import type { ProviderProtocol, RouteApiFormat } from "@nekusora/db/types";
 
 /** 探测结果。ok=false 时 errorKind 区分认证/网络/未知,供 UI 分类展示。 */

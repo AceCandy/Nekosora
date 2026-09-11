@@ -25,7 +25,7 @@ const mockData = vi.hoisted(() => ({
   lastSearch: null as null | { query: string; config: unknown },
 }));
 
-vi.mock("@/lib/memory/mem0", () => ({
+vi.mock("./mem0", () => ({
   getMemory: vi.fn(async () => {
     mockData.getMemoryCalls += 1;
     return {

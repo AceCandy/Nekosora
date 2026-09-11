@@ -19,21 +19,21 @@ vi.mock("drizzle-orm", () => ({
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/session", () => ({ requireSession: vi.fn(async () => mockData.user) }));
-vi.mock("@/lib/providers/keys", () => ({
+vi.mock("@nekusora/core/providers/keys", () => ({
   encryptKeyBundle: vi.fn(),
   parseKeyBundle: vi.fn(),
   pickWeightedKey: vi.fn(),
 }));
-vi.mock("@/lib/providers/probe", () => ({ probeProviderKey: vi.fn(), fetchUpstreamModels: vi.fn() }));
-vi.mock("@/lib/circuit-breaker", () => ({ recordSuccess: vi.fn(), recordFailure: vi.fn() }));
-vi.mock("@/lib/keys", () => ({
+vi.mock("@nekusora/core/providers/probe", () => ({ probeProviderKey: vi.fn(), fetchUpstreamModels: vi.fn() }));
+vi.mock("@nekusora/core/circuit-breaker", () => ({ recordSuccess: vi.fn(), recordFailure: vi.fn() }));
+vi.mock("@nekusora/core/keys", () => ({
   createMasterKey: vi.fn(),
   createSubKey: vi.fn(),
   listKeys: vi.fn(),
   setKeyEnabled: vi.fn(),
 }));
 
-vi.mock("@/lib/infra/db", () => {
+vi.mock("@nekusora/core/infra/db", () => {
   type Condition =
     | { type: "eq"; col: string; value: unknown }
     | { type: "ne"; col: string; value: unknown }
@@ -191,8 +191,8 @@ vi.mock("@/lib/infra/db", () => {
 });
 
 import { attachMyProviderModelRoute, createMyModel, createMyProvider, createMyRoute, reorderMyModels, updateMyModel, updateMyProvider, updateMyRoute, checkMyProviderHealth, testMyProviderModel, testMyKeyDirect, testMyRoute, getBindableModels } from "./actions";
-import { fetchUpstreamModels, probeProviderKey } from "@/lib/providers/probe";
-import { parseKeyBundle, pickWeightedKey } from "@/lib/providers/keys";
+import { fetchUpstreamModels, probeProviderKey } from "@nekusora/core/providers/probe";
+import { parseKeyBundle, pickWeightedKey } from "@nekusora/core/providers/keys";
 
 beforeEach(() => {
   mockData.user = { id: "admin-a", role: "admin" };

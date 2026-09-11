@@ -29,6 +29,7 @@ packages/
 ## Module Organization
 
 - **Dependency direction**: application adapters may import workspace packages; workspace packages must not import `apps/*`. Shared packages must not accept `NextRequest`/`FastifyRequest` or return `NextResponse`/`FastifyReply`.
+- **Core imports**: use relative paths inside Core and explicit `@nekusora/core/<subpath>` exports from applications. Add exports only for actual consumers; do not expose all source files with a wildcard or restore consumer-side Core source aliases. Migrate test mocks with imports and verify typecheck, Vitest, and all application builds. Web-specific session/cache adapters remain local.
 - **HTTP ownership**: `packages/contracts/src/routes.ts` is the route matrix. `apps/gateway` adapts those routes to Core handlers; Web route files are thin exports retained only for transition rollback.
 - **Queue catalog**: `packages/contracts/src/queue.ts` is the only source for queue names, payloads, finite policies, and safe retry messages. It must not import the pg-boss driver, Worker runtime, or domain handlers. `packages/queue/src/catalog.ts` and `packages/core/src/lib/jobs/catalog.ts` only re-export this contract.
 - **Worker ownership**: `packages/core/src/lib/worker/definitions.ts` owns domain registration; `runtime.ts` owns ordering, recovery timers, rollback, signal shutdown, and drain. `apps/worker/src/main.ts` is the application entry; Web does not own the Worker process.

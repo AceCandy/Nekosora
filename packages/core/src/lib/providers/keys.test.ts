@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { encrypt } from "@/lib/infra/crypto";
+import { encrypt } from "../infra/crypto";
 import { encryptKeyBundle, parseKeyBundle } from "./keys";
 
 beforeAll(() => {

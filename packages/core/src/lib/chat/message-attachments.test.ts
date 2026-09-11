@@ -16,7 +16,7 @@ import {
   normalizeAttachmentFileIds,
   replaceMessageAttachments,
   resolveChatImageAttachments,
-} from "@/lib/chat/message-attachments";
+} from "./message-attachments";
 
 const schema = {
   fileObjects: {

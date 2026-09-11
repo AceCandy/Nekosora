@@ -6,7 +6,7 @@ import type {
   IRToolCall,
   IRToolChoice,
   IRToolDef,
-} from "@/lib/providers/types";
+} from "../providers/types";
 import type { ReasoningLevel } from "@nekusora/db/types";
 import type { ParsedGatewayRequest } from "./types";
 import {

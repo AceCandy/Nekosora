@@ -14,7 +14,7 @@
  * METRICS_ENABLED=false 时返回 404。
  */
 import { NextResponse } from "next/server";
-import { metricsEnabled, metricsOutput } from "@/lib/infra/metrics";
+import { metricsEnabled, metricsOutput } from "@nekusora/core/infra/metrics";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

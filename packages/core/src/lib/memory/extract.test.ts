@@ -21,7 +21,7 @@ const mockData = vi.hoisted(() => ({
 }));
 
 // mock @/lib/memory/mem0:getMemory 返回受控 memory 实例(add 记录调用)
-vi.mock("@/lib/memory/mem0", () => ({
+vi.mock("./mem0", () => ({
   getMemory: vi.fn(async () => {
     mockData.getMemoryCalls += 1;
     if (mockData.getMemoryImpl) return mockData.getMemoryImpl();
@@ -37,13 +37,13 @@ vi.mock("@/lib/memory/mem0", () => ({
 }));
 
 // mock @/lib/memory/service:invalidateMemoryCache + toProjectExpirationDate(固定日期便于断言)
-vi.mock("@/lib/memory/service", () => ({
+vi.mock("./service", () => ({
   invalidateMemoryCache: vi.fn().mockResolvedValue(undefined),
   toProjectExpirationDate: vi.fn(() => "2026-01-08"),
 }));
 
 // mock cache:cacheWrap 首次缓存 fetcher 结果,cacheSet 覆盖(对齐真实 cacheWrap 语义)
-vi.mock("@/lib/infra/cache", () => ({
+vi.mock("../infra/cache", () => ({
   cacheWrap: vi.fn(async (key: string, fetcher: () => Promise<unknown>, _ttl?: number) => {
     if (mockData.cacheStore.has(key)) return mockData.cacheStore.get(key);
     const v = await fetcher();

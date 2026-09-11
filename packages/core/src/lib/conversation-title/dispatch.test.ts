@@ -14,11 +14,11 @@ vi.mock("drizzle-orm", () => ({
   sql: (strings: TemplateStringsArray) => strings.join(""),
 }));
 
-vi.mock("@/lib/infra/queue", () => ({
+vi.mock("../infra/queue", () => ({
   getQueue: mocks.getQueue,
 }));
 
-vi.mock("@/lib/infra/db", () => {
+vi.mock("../infra/db/index", () => {
   function matches(row: Record<string, unknown>, cond: unknown): boolean {
     const value = cond as { type?: string; col?: string; val?: unknown; conds?: unknown[] };
     if (value.type === "and") return value.conds!.every((item) => matches(row, item));
@@ -86,7 +86,7 @@ import {
   dispatchConversationTitleJob,
   recoverConversationTitleJobs,
 } from "./dispatch";
-import { CONVERSATION_TITLE_QUEUE } from "@/lib/jobs/catalog";
+import { CONVERSATION_TITLE_QUEUE } from "../jobs/catalog";
 
 function job(id: string, dispatchAfter = -1, createdAt = 0) {
   return {

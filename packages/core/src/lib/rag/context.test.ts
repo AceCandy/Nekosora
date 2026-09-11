@@ -9,11 +9,11 @@ const mocks = vi.hoisted(() => ({
   and: vi.fn(),
 }));
 
-vi.mock("@/lib/infra/db", () => ({ getDb: mocks.getDb, getSchema: mocks.getSchema }));
-vi.mock("@/lib/rag/retrieve", () => ({ retrieve: mocks.retrieve }));
+vi.mock("../infra/db/index", () => ({ getDb: mocks.getDb, getSchema: mocks.getSchema }));
+vi.mock("./retrieve", () => ({ retrieve: mocks.retrieve }));
 vi.mock("drizzle-orm", () => ({ eq: mocks.eq, inArray: mocks.inArray, and: mocks.and }));
 
-import { buildMessagesWithFileContext } from "@/lib/rag/context";
+import { buildMessagesWithFileContext } from "./context";
 
 const schema = {
   fileObjects: { id: "files.id", userId: "files.userId" },

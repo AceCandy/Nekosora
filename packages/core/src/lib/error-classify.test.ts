@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { classifyError } from "@/lib/error-classify";
-import { ErrorCode } from "@/lib/errors";
+import { classifyError } from "./error-classify";
+import { ErrorCode } from "./errors";
 
 describe("classifyError - 已知 errorCode 精确匹配", () => {
   it("auth 类错误 → phase=auth, category=auth(点分码)", () => {

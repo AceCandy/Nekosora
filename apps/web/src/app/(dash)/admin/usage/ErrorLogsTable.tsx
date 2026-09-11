@@ -17,7 +17,7 @@ import { clsx } from "clsx";
 import Badge from "@/shared/ui/Badge";
 import { Pagination } from "@/shared/ui/Pagination";
 import { formatDateTimeLocal, formatDuration } from "@/shared/lib/format";
-import { type ErrorCategory } from "@/lib/error-classify";
+import { type ErrorCategory } from "@nekusora/core/error-classify";
 import { ErrorFilterBar, type ErrorFilterValues } from "./ErrorFilterBar";
 import { ErrorDetailDrawer } from "./ErrorDetailDrawer";
 import { getTaskKindMessageKey } from "./task-kind";

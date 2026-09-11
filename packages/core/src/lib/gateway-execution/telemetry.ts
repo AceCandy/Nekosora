@@ -1,8 +1,8 @@
 import { eq } from "drizzle-orm";
-import { withBestEffortTimeout } from "@/lib/best-effort";
-import { getDb, getSchema } from "@/lib/infra/db";
-import { observeGatewayAttempt, observeGatewayExecution } from "@/lib/infra/metrics";
-import { redactErrorMessage, redactSensitiveText } from "@/lib/redaction";
+import { withBestEffortTimeout } from "../best-effort";
+import { getDb, getSchema } from "../infra/db/index";
+import { observeGatewayAttempt, observeGatewayExecution } from "../infra/metrics";
+import { redactErrorMessage, redactSensitiveText } from "../redaction";
 import type {
   AttemptTelemetry,
   GatewayTelemetryPort,

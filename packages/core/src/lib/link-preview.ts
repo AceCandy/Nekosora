@@ -1,5 +1,5 @@
 import { parse, type DefaultTreeAdapterTypes } from "parse5";
-import { requestPublicResponse } from "@/lib/web-search/public-http";
+import { requestPublicResponse } from "./web-search/public-http";
 
 const HTML_LIMIT = 256 * 1024;
 const IMAGE_LIMIT = 3 * 1024 * 1024;

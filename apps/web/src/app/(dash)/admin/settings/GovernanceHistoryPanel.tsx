@@ -5,7 +5,7 @@ import type {
   GatewayGovernanceQuotaReplay,
   GatewayGovernanceReplay,
   GovernanceHistoryRange,
-} from "@/lib/gateway-governance/analytics";
+} from "@nekusora/core/gateway-governance/analytics";
 
 interface GovernanceHistoryPanelProps {
   range: GovernanceHistoryRange;

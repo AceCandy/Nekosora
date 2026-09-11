@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { buildTrace } from "@/lib/trace";
-import { estimateTokens } from "@/lib/tokens";
+import { buildTrace } from "./trace";
+import { estimateTokens } from "./tokens";
 
 describe("buildTrace", () => {
   it("mode 固定为 standard", () => {

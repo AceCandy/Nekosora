@@ -12,7 +12,7 @@ import {
   releaseStream,
   metricsOutput,
   registry,
-} from "@/lib/infra/metrics";
+} from "@nekusora/core/infra/metrics";
 
 async function run() {
   // 注意:不调用 registry.resetMetrics() —— prom-client 的 resetMetrics 会从 registry

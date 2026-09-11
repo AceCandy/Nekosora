@@ -1,5 +1,5 @@
-import { handleProtocolRequest } from "@/lib/protocols/handler";
-import { parseChatCompletions } from "@/lib/protocols/parsers";
+import { handleProtocolRequest } from "../../lib/protocols/handler";
+import { parseChatCompletions } from "../../lib/protocols/parsers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

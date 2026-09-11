@@ -22,11 +22,11 @@ import {
   type RouteApiFormat,
 } from "@nekusora/db/types";
 import type { ReasoningLevel } from "@nekusora/db/types";
-import { applyReasoningToCompatibleBody } from "@/lib/reasoning";
+import { applyReasoningToCompatibleBody } from "../reasoning";
 import {
   isHostedSearchRouteCompatible,
   type SearchTimeRange,
-} from "@/lib/web-search/types";
+} from "../web-search/types";
 import { createProviderFetch } from "./timeouts";
 
 /** 从 ResolvedRoute 构造 AI SDK LanguageModel(V4,兼容 ai@7)。 */

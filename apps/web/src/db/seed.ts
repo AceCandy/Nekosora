@@ -10,9 +10,9 @@
  * 幂等:已有用户则跳过。
  */
 import { eq } from "drizzle-orm";
-import { getDb, getSchema, closeDb } from "@/lib/infra/db";
-import { getAuth } from "@/auth";
-import { resolveSeedAdminCredentials } from "@/lib/infra/seed-admin";
+import { getDb, getSchema, closeDb } from "@nekusora/core/infra/db";
+import { getAuth } from "@nekusora/core/auth";
+import { resolveSeedAdminCredentials } from "@nekusora/core/infra/seed-admin";
 
 async function main() {
   const db = await getDb();

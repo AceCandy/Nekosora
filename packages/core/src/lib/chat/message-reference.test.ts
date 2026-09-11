@@ -11,7 +11,7 @@ vi.mock("drizzle-orm", () => ({ eq: mocks.eq, and: mocks.and, isNull: mocks.isNu
 import {
   findConversationMessage,
   withConversationMessageWrite,
-} from "@/lib/chat/message-reference";
+} from "./message-reference";
 
 const schema = {
   conversations: {

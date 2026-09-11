@@ -26,27 +26,6 @@
       }
     ],
     "paths": {
-      "@/auth": [
-        "../../packages/core/src/auth.ts"
-      ],
-      "@/lib/session": [
-        "./src/lib/session.ts"
-      ],
-      "@/lib/auth-client": [
-        "./src/lib/auth-client.ts"
-      ],
-      "@/lib/output-modes/service": [
-        "./src/lib/output-modes/service.ts"
-      ],
-      "@/lib/render-styles/service": [
-        "./src/lib/render-styles/service.ts"
-      ],
-      "@/lib/settings-control/runtime": [
-        "./src/lib/settings-control/runtime.ts"
-      ],
-      "@/lib/*": [
-        "../../packages/core/src/lib/*"
-      ],
       "@/*": [
         "./src/*"
       ],

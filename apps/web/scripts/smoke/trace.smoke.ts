@@ -3,7 +3,7 @@
  * 运行:pnpm tsx scripts/smoke/trace.smoke.ts
  */
 import assert from "node:assert";
-import { buildTrace } from "@/lib/trace";
+import { buildTrace } from "@nekusora/core/trace";
 
 function run() {
   // 1. 纯 system + user 消息 → 2 blocks

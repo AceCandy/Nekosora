@@ -5,7 +5,7 @@
  * 避免 Turbopack 在 Edge instrumentation 编译时把 pg 打包
  * (其依赖 util/types 在 bundler 下解析失败)。
  *
- * 业务代码统一 import { getDb, getSchema, closeDb } from "@/lib/infra/db";
+ * 业务代码通过 import { getDb, getSchema, closeDb } from "@nekusora/db" 访问。
  * 永远不直接 import schema 或驱动模块。
  */
 

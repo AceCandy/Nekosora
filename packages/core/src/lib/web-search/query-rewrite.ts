@@ -1,5 +1,5 @@
-import { generateChat } from "@/lib/stream";
-import type { CallContext } from "@/lib/providers/types";
+import { generateChat } from "../stream";
+import type { CallContext } from "../providers/types";
 import { listWebSearchQueryModelCandidates, loadConfig } from "./registry";
 
 const REWRITE_INPUT_LIMIT = 4_000;

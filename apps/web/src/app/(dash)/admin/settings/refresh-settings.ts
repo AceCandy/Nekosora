@@ -1,6 +1,6 @@
 import { revalidatePath } from "next/cache";
 import { invalidateSettingsRuntime } from "@/lib/settings-control/runtime";
-import type { SettingsSaveResult } from "@/lib/settings-control/service";
+import type { SettingsSaveResult } from "@nekusora/core/settings-control/service";
 
 /** 提交后的缓存刷新不能将已生效的保存误报为失败。 */
 export async function refreshSettings(saved: SettingsSaveResult): Promise<boolean> {

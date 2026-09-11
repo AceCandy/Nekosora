@@ -5,13 +5,13 @@
  * 全局配置(管理员域),所有用户共享;用户在 chat 工具栏选用,写入 conversations.outputModeId。
  */
 import { eq, asc } from "drizzle-orm";
-import { getDb, getSchema } from "@/lib/infra/db";
-import { cacheWrap, cacheDel } from "@/lib/infra/cache";
+import { getDb, getSchema } from "@nekusora/core/infra/db";
+import { cacheWrap, cacheDel } from "@nekusora/core/infra/cache";
 import { requireSession, requireAdmin } from "@/lib/session";
-import type { OutputMode } from "@/lib/output-modes/read";
-import { getSettingsRevision } from "@/lib/settings-control/service";
+import type { OutputMode } from "@nekusora/core/output-modes/read";
+import { getSettingsRevision } from "@nekusora/core/settings-control/service";
 
-export { getOutputMode, type OutputMode } from "@/lib/output-modes/read";
+export { getOutputMode, type OutputMode } from "@nekusora/core/output-modes/read";
 
 /** chat 工具栏读取的启用输出模式缓存键(全局共享;admin 写操作主动失效,TTL 兜底)。 */
 const ENABLED_OUTPUT_MODES_KEY = "chat:output-modes:enabled";

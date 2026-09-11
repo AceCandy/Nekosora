@@ -9,7 +9,7 @@
  * 不依赖 next-intl 的 React 层(网关是纯 API)。
  * UI 文案国际化(I-11)再接入 next-intl。
  */
-import type { ErrorCodeValue } from "@/lib/errors";
+import type { ErrorCodeValue } from "../errors";
 import { errorsEn } from "./errors.en";
 import { errorsZhCN } from "./errors.zh-CN";
 

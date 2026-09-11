@@ -8,7 +8,7 @@
  * 返回类型用 `any`(原始 schema 行),保持与现有代码一致的灵活性,
  * 避免为每个表生成精确类型(那是 schema 层的职责)。
  */
-import type { CallContext } from "@/lib/providers/types";
+import type { CallContext } from "../providers/types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>;
@@ -38,7 +38,7 @@ export interface RouteRepository {
 // ===== Drizzle 默认实现 =====
 
 import { eq, and, asc } from "drizzle-orm";
-import { getDb, getSchema } from "@/lib/infra/db";
+import { getDb, getSchema } from "../infra/db/index";
 
 export class DrizzleRouteRepository implements RouteRepository {
   async findEnabledModelById(modelId: string): Promise<Row | null> {

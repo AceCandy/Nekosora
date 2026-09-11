@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("next/headers", () => ({ headers: mocks.headers }));
-vi.mock("@/auth", () => ({ getAuth: mocks.getAuth }));
+vi.mock("@nekusora/core/auth", () => ({ getAuth: mocks.getAuth }));
 
 import { getSession } from "./session";
 

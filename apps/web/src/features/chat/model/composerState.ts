@@ -1,5 +1,5 @@
 import type { ReasoningLevel } from "@nekusora/db/types";
-import { resolveReasoningForModel } from "@/lib/reasoning";
+import { resolveReasoningForModel } from "@nekusora/core/reasoning";
 import type { ModelOption } from "./types";
 
 export interface ComposerSelectionState {

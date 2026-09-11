@@ -10,12 +10,12 @@ const mocks = vi.hoisted(() => ({
   and: vi.fn(),
 }));
 
-vi.mock("@/lib/infra/db", () => ({ getDb: mocks.getDb, getSchema: mocks.getSchema }));
-vi.mock("@/lib/rag/embedding", () => ({ embedText: mocks.embedText }));
-vi.mock("@/lib/tokens", () => ({ estimateTokens: mocks.estimateTokens }));
+vi.mock("../infra/db/index", () => ({ getDb: mocks.getDb, getSchema: mocks.getSchema }));
+vi.mock("./embedding", () => ({ embedText: mocks.embedText }));
+vi.mock("../tokens", () => ({ estimateTokens: mocks.estimateTokens }));
 vi.mock("drizzle-orm", () => ({ eq: mocks.eq, inArray: mocks.inArray, and: mocks.and }));
 
-import { retrieve } from "@/lib/rag/retrieve";
+import { retrieve } from "./retrieve";
 
 const schema = {
   fileChunks: { fileId: "chunks.fileId" },

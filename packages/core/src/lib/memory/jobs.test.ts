@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("drizzle-orm", () => ({ eq: mocks.eq }));
-vi.mock("@/lib/infra/db", () => ({ getDb: mocks.getDb, getSchema: mocks.getSchema }));
+vi.mock("../infra/db/index", () => ({ getDb: mocks.getDb, getSchema: mocks.getSchema }));
 vi.mock("./extract", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./extract")>();
   return { ...actual, extractMemories: mocks.extractMemories };

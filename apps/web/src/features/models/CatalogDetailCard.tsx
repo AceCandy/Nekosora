@@ -5,7 +5,7 @@ import { clsx } from "clsx";
 import { Wrench, Eye, MessageSquare, Image as ImageIcon, Mic, Volume2 } from "lucide-react";
 import type { ModelCatalogOption } from "@/features/models/ModelsManager";
 import type { ReasoningLevel } from "@nekusora/db/types";
-import { getSupportedReasoningLevels } from "@/lib/reasoning";
+import { getSupportedReasoningLevels } from "@nekusora/core/reasoning";
 import Badge from "@/shared/ui/Badge";
 
 /** 全部推理档位,供逐档可视化高亮支持的档位。 */

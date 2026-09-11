@@ -6,8 +6,8 @@
  * HTML/class/style,不做过滤,不属于 XSS 净化边界;仅由管理员在模型与内容来源可控时启用。
  */
 
-import { resolveStructuredKind } from "@/lib/artifacts/structured";
-import { resolvePreviewableKind } from "@/lib/artifacts/previewable";
+import { resolveStructuredKind } from "@nekusora/core/artifacts/structured";
+import { resolvePreviewableKind } from "@nekusora/core/artifacts/previewable";
 import type { StructuredKind } from "@/shared/components/structured-blocks/schema";
 import { getProxiedMarkdownImageUrl } from "./linkPreview";
 

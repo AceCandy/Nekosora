@@ -3,7 +3,7 @@
  *
  * 与 errors.en.ts 一一对应。message 应简短、面向开发者/API 使用者。
  */
-import type { ErrorCodeValue } from "@/lib/errors";
+import type { ErrorCodeValue } from "../errors";
 
 export const errorsZhCN: Record<ErrorCodeValue, string> = {
   // auth.*

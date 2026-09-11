@@ -21,7 +21,7 @@ const metrics = vi.hoisted(() => ({
   observeGatewayGovernanceSettlement: vi.fn(),
 }));
 
-vi.mock("@/lib/infra/metrics", () => metrics);
+vi.mock("../infra/metrics", () => metrics);
 
 beforeEach(() => {
   vi.clearAllMocks();

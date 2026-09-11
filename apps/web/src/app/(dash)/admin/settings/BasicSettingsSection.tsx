@@ -1,12 +1,12 @@
 import { refreshSettings } from "./refresh-settings";
 import { getTranslations } from "next-intl/server";
-import { getSettings } from "@/lib/system-settings/service";
-import { DEFAULT_UA, getChatUA, getGatewayUA } from "@/lib/system-settings/ua";
+import { getSettings } from "@nekusora/core/system-settings/service";
+import { DEFAULT_UA, getChatUA, getGatewayUA } from "@nekusora/core/system-settings/ua";
 import { requireAdmin } from "@/lib/session";
 import {
   saveSystemSettings,
   type SettingsControlView,
-} from "@/lib/settings-control/service";
+} from "@nekusora/core/settings-control/service";
 import BasicSettingsForm from "./BasicSettingsForm";
 
 /**

@@ -1,4 +1,4 @@
-import type { IRRequest } from "@/lib/providers/types";
+import type { IRRequest } from "../providers/types";
 
 /** 对外网关支持的四种调用协议。 */
 export type GatewayProtocol = "openai-chat" | "openai-responses" | "anthropic" | "gemini";

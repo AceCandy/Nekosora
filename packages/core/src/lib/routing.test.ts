@@ -8,19 +8,19 @@ import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vite
 import {
   resolveRoutes,
   resolveRoutesById,
-} from "@/lib/routing";
+} from "./routing";
 import {
   setRouteRepository,
   resetRouteRepository,
   type RouteRepository,
-} from "@/lib/repositories/route-repository";
-import { encrypt } from "@/lib/infra/crypto";
-import type { CallContext } from "@/lib/providers/types";
+} from "./repositories/route-repository";
+import { encrypt } from "./infra/crypto";
+import type { CallContext } from "./providers/types";
 import {
   acquireProviderPermit,
   recordFailure,
   resetAllBreakers,
-} from "@/lib/circuit-breaker";
+} from "./circuit-breaker";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>;

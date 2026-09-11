@@ -19,7 +19,7 @@ describe("Better Auth user fields", () => {
   });
 
   it("将用户状态声明为服务端只读字段", async () => {
-    const { getAuth } = await import("@/auth");
+    const { getAuth } = await import("@nekusora/core/auth");
 
     await getAuth();
 

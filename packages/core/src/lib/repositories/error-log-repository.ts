@@ -7,7 +7,7 @@
  *   - panel 用户端:必传 userId(只看自己的)
  */
 import { eq, and, gte, lte, desc, sql, isNotNull, ilike, or, inArray, type SQL } from "drizzle-orm";
-import { getDb, getSchema } from "@/lib/infra/db";
+import { getDb, getSchema } from "../infra/db/index";
 
 /** 错误请求明细行(DTO,服务边界收敛成显式类型供前端消费)。 */
 export interface ErrorLogRow {

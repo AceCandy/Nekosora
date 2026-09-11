@@ -2,7 +2,7 @@ import { getTranslations } from "next-intl/server";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/session";
-import { getAuth } from "@/auth";
+import { getAuth } from "@nekusora/core/auth";
 import {
   listConversations,
   togglePinnedConversation,

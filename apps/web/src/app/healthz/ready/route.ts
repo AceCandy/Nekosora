@@ -7,9 +7,9 @@
  * 检查项有超时保护(单项 2s),避免探针阻塞。
  */
 import { NextResponse } from "next/server";
-import { getDb, getSchema } from "@/lib/infra/db";
-import { getStorage } from "@/lib/infra/storage";
-import { getEnvInfo } from "@/lib/infra/env";
+import { getDb, getSchema } from "@nekusora/core/infra/db";
+import { getStorage } from "@nekusora/core/infra/storage";
+import { getEnvInfo } from "@nekusora/core/env";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

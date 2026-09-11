@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { getSchema } from "@/lib/infra/db";
+import { getSchema } from "../infra/db/index";
 import type { ProviderProtocol } from "@nekusora/db/types";
 
 /** 获取指定属主拥有的服务商，不向调用方泄露其他服务商是否存在。 */

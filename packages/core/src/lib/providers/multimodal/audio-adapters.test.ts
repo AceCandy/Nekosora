@@ -14,13 +14,13 @@ vi.mock("@ai-sdk/openai", () => ({
     transcription: vi.fn(() => ({ modelId: "transcription-model" })),
   })),
 }));
-vi.mock("@/lib/routing", () => ({
+vi.mock("../../routing", () => ({
   resolveRoutesByCapability: (...args: unknown[]) =>
     mocks.resolveRoutesByCapability(...args),
   RoutingError: class RoutingError extends Error {},
 }));
-vi.mock("@/lib/gateway-execution", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/gateway-execution")>();
+vi.mock("../../gateway-execution/index", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../gateway-execution/index")>();
   return {
     ...actual,
     gatewayTelemetry: {
@@ -33,10 +33,10 @@ vi.mock("@/lib/gateway-execution", async (importOriginal) => {
 
 import { generateSpeech, transcribe } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
-import { gatewayTelemetry } from "@/lib/gateway-execution";
-import { transcribeViaRoute } from "@/lib/providers/multimodal/audio-stt";
-import { synthesizeViaRoute } from "@/lib/providers/multimodal/audio-tts";
-import type { CallContext, ResolvedRoute } from "@/lib/providers/types";
+import { gatewayTelemetry } from "../../gateway-execution/index";
+import { transcribeViaRoute } from "./audio-stt";
+import { synthesizeViaRoute } from "./audio-tts";
+import type { CallContext, ResolvedRoute } from "../types";
 
 const ctx: CallContext = { userId: "user-a", keyKind: null, source: "gateway" };
 const route: ResolvedRoute = {

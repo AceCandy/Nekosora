@@ -16,8 +16,8 @@ import {
   getStorageKind,
   resolveStorageKind,
   __resetStorageForTest,
-} from "@/lib/infra/storage";
-import { getEnvInfo } from "@/lib/infra/env";
+} from "@nekusora/core/infra/storage";
+import { getEnvInfo } from "@nekusora/core/env";
 
 async function run() {
   // 强制 Local 模式:清空 STORAGE_DRIVER + S3_* 并重置单例。

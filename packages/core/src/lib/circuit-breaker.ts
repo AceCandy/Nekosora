@@ -16,11 +16,11 @@
 import {
   observeGatewayCircuitBreakerEvent,
   type GatewayCircuitBreakerEvent,
-} from "@/lib/infra/metrics";
+} from "./infra/metrics";
 import type {
   GatewayBreakerPermit,
   GatewayBreakerPort,
-} from "@/lib/gateway-execution/types";
+} from "./gateway-execution/types";
 
 export type ProviderAvailability = "closed" | "probe_ready" | "open" | "probe_busy";
 

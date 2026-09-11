@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
   isEmbeddingAvailable: vi.fn(),
 }));
 
-vi.mock("@/lib/rag/processing-repository", () => ({
+vi.mock("./processing-repository", () => ({
   claimFileProcessing: mocks.claimFileProcessing,
   completeFileProcessingWithoutChunks: mocks.completeFileProcessingWithoutChunks,
   renewFileProcessingLease: mocks.renewFileProcessingLease,
@@ -21,19 +21,19 @@ vi.mock("@/lib/rag/processing-repository", () => ({
   failFileProcessing: mocks.failFileProcessing,
   replaceFileChunksAndComplete: mocks.replaceFileChunksAndComplete,
 }));
-vi.mock("@/lib/rag/extract", () => ({ extractText: mocks.extractText }));
-vi.mock("@/lib/rag/chunk", () => ({ chunkText: mocks.chunkText }));
-vi.mock("@/lib/rag/embedding", () => ({
+vi.mock("./extract", () => ({ extractText: mocks.extractText }));
+vi.mock("./chunk", () => ({ chunkText: mocks.chunkText }));
+vi.mock("./embedding", () => ({
   embedTexts: mocks.embedTexts,
   isEmbeddingAvailable: mocks.isEmbeddingAvailable,
 }));
 
-import { processFile } from "@/lib/rag/processing-coordinator";
+import { processFile } from "./processing-coordinator";
 import {
   FILE_PROCESSING_RETRYABLE_MESSAGE,
   FileProcessingLeaseLostError,
   RetryableFileProcessingError,
-} from "@/lib/rag/processing-state";
+} from "./processing-state";
 
 const lease = { fileId: "file-1", token: "lease-token" };
 const claimed = {

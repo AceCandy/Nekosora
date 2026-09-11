@@ -1,7 +1,7 @@
 import { chunkText } from "./chunk";
 import { embedTexts, isEmbeddingAvailable } from "./embedding";
 import { extractText } from "./extract";
-import type { JobOutcome } from "@/lib/jobs/catalog";
+import type { JobOutcome } from "../jobs/catalog";
 import {
   claimFileProcessing,
   completeFileProcessingWithoutChunks,

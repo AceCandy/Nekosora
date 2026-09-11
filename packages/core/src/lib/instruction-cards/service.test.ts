@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("drizzle-orm", () => ({ eq: mocks.eq, and: mocks.and, inArray: mocks.inArray }));
-vi.mock("@/lib/infra/db", () => ({ getDb: mocks.getDb, getSchema: mocks.getSchema }));
+vi.mock("../infra/db/index", () => ({ getDb: mocks.getDb, getSchema: mocks.getSchema }));
 
 import { deleteCard, getCardsByIds, listCards, updateCard } from "./service";
 

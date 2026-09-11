@@ -15,7 +15,7 @@ import type {
 } from "@/features/chat/model/types";
 import type { UploadFileItem } from "@/features/chat/model/types";
 import type { PreviewableFile } from "@/shared/components/file-preview/FilePreviewModal";
-import { getSupportedReasoningLevels } from "@/lib/reasoning";
+import { getSupportedReasoningLevels } from "@nekusora/core/reasoning";
 import { useClickOutside } from "@/shared/lib/useClickOutside";
 import styles from "./ReasoningSlider.module.css";
 

@@ -3,7 +3,7 @@
  * 运行:pnpm tsx scripts/smoke/crypto.smoke.ts
  */
 import assert from "node:assert";
-import { decrypt, encrypt, hashSecret, safeEqual } from "@/lib/infra/crypto";
+import { decrypt, encrypt, hashSecret, safeEqual } from "@nekusora/core/infra/crypto";
 
 // 测试环境:dev + 使用一个固定的非弱 key(避开生产弱 key 拦截)。
 (process.env as Record<string, string>).NODE_ENV = "development";

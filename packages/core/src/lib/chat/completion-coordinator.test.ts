@@ -21,7 +21,7 @@ const mocks = vi.hoisted(() => ({
   rewriteSearchQuery: vi.fn(),
 }));
 
-vi.mock("@/lib/chat/run-lifecycle", () => ({
+vi.mock("./run-lifecycle", () => ({
   startRunStrict: mocks.startRunStrict,
   heartbeatRun: mocks.heartbeatRun,
   finalizeRun: mocks.finalizeRun,
@@ -29,28 +29,28 @@ vi.mock("@/lib/chat/run-lifecycle", () => ({
   recordToolCallStart: mocks.recordToolCallStart,
   recordToolCallResult: mocks.recordToolCallResult,
 }));
-vi.mock("@/lib/stream", () => ({
+vi.mock("../stream", () => ({
   streamChat: mocks.streamChat,
   streamChatWithTools: mocks.streamChatWithTools,
 }));
-vi.mock("@/lib/mcp/registry", () => ({ resolveMcpServers: mocks.resolveMcpServers }));
-vi.mock("@/lib/system-settings/ua", () => ({ getChatUA: mocks.getChatUA }));
-vi.mock("@/lib/chat/completion-repository", () => ({
+vi.mock("../mcp/registry", () => ({ resolveMcpServers: mocks.resolveMcpServers }));
+vi.mock("../system-settings/ua", () => ({ getChatUA: mocks.getChatUA }));
+vi.mock("./completion-repository", () => ({
   persistChatCompletion: mocks.persistChatCompletion,
 }));
-vi.mock("@/lib/memory/jobs", () => ({
+vi.mock("../memory/jobs", () => ({
   createMemoryExtractionJob: mocks.createMemoryExtractionJob,
 }));
-vi.mock("@/lib/memory/dispatch", () => ({
+vi.mock("../memory/dispatch", () => ({
   dispatchMemoryExtractionJob: mocks.dispatchMemoryExtractionJob,
 }));
-vi.mock("@/lib/artifacts/extract", () => ({ extractArtifacts: mocks.extractArtifacts }));
-vi.mock("@/lib/infra/db", () => ({ getDb: mocks.getDb, getSchema: mocks.getSchema }));
-vi.mock("@/lib/web-search/service", () => ({ searchWeb: mocks.searchWeb }));
-vi.mock("@/lib/web-search/query-rewrite", () => ({ rewriteSearchQuery: mocks.rewriteSearchQuery }));
+vi.mock("../artifacts/extract", () => ({ extractArtifacts: mocks.extractArtifacts }));
+vi.mock("../infra/db/index", () => ({ getDb: mocks.getDb, getSchema: mocks.getSchema }));
+vi.mock("../web-search/service", () => ({ searchWeb: mocks.searchWeb }));
+vi.mock("../web-search/query-rewrite", () => ({ rewriteSearchQuery: mocks.rewriteSearchQuery }));
 
-import { executeChatCompletion } from "@/lib/chat/completion-coordinator";
-import { ChatProcessRecorder } from "@/lib/chat/process-trace";
+import { executeChatCompletion } from "./completion-coordinator";
+import { ChatProcessRecorder } from "./process-trace";
 
 const completedAt = new Date("2026-07-30T00:00:00.000Z");
 const memoryJob = {

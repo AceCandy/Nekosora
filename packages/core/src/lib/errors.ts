@@ -1,4 +1,4 @@
-import { translateError, DEFAULT_LOCALE } from "@/lib/i18n";
+import { translateError, DEFAULT_LOCALE } from "./i18n/index";
 
 /**
  * 全站错误码体系 —— 统一 API 错误响应契约。
@@ -377,7 +377,7 @@ export async function apiErrorLocalized(
   details?: unknown,
   headers?: HeadersInit,
 ) {
-  const { resolveLocale } = await import("@/lib/i18n");
+  const { resolveLocale } = await import("./i18n/index");
   const locale = resolveLocale(req.headers.get("accept-language"));
   const message = translateError(code, locale);
   return apiError(code, details, message, headers);

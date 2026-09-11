@@ -9,9 +9,9 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("drizzle-orm", () => ({ eq: mocks.eq, and: mocks.and, or: mocks.or }));
-vi.mock("@/lib/infra/db", () => ({ getDb: mocks.getDb, getSchema: mocks.getSchema }));
+vi.mock("./infra/db/index", () => ({ getDb: mocks.getDb, getSchema: mocks.getSchema }));
 
-import { hashSecret } from "@/lib/infra/crypto";
+import { hashSecret } from "./infra/crypto";
 import { createMasterKey, createSubKey, listKeys, setKeyEnabled, verifyKey } from "./keys";
 
 const schema = {

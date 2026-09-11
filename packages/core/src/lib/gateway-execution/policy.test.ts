@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ProviderTimeoutError } from "@/lib/providers/timeouts";
+import { ProviderTimeoutError } from "../providers/timeouts";
 import { classifyGatewayError, isAbortError } from "./policy";
 
 describe("gateway timeout policy", () => {

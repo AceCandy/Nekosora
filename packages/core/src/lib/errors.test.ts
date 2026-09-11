@@ -7,7 +7,7 @@ import {
   errorResponse,
   gatewayGovernanceErrorHeaders,
   routingCodeToErrorCode,
-} from "@/lib/errors";
+} from "./errors";
 
 describe("ERROR_META 完整性", () => {
   it("每个 ErrorCode 都有对应映射", () => {

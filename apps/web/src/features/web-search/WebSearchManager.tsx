@@ -24,8 +24,8 @@ import type {
   WebSearchModelCandidate,
   WebSearchProviderDto,
   WebSearchProviderType,
-} from "@/lib/web-search/types";
-import { searchBackendKey } from "@/lib/web-search/types";
+} from "@nekusora/core/web-search/types";
+import { searchBackendKey } from "@nekusora/core/web-search/types";
 import { Input } from "@/shared/ui/Input";
 import { Select } from "@/shared/ui/Select";
 import { Button } from "@/shared/ui/Button";

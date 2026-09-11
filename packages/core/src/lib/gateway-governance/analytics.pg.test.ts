@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { closeDb } from "@/lib/infra/db";
+import { closeDb } from "../infra/db/index";
 import { getGatewayGovernanceInsights } from "./analytics";
 import { DEFAULT_GATEWAY_GOVERNANCE_POLICY } from "./policy";
 

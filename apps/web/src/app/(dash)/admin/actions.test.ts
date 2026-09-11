@@ -32,7 +32,7 @@ vi.mock("drizzle-orm", () => ({
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/headers", () => ({ headers: vi.fn(async () => new Headers({ cookie: "session=test" })) }));
-vi.mock("@/auth", () => ({
+vi.mock("@nekusora/core/auth", () => ({
   getAuth: vi.fn(async () => ({
     api: {
       removeUser: mockFunctions.removeUser,
@@ -42,22 +42,22 @@ vi.mock("@/auth", () => ({
   })),
 }));
 vi.mock("@/lib/session", () => ({ requireAdmin: mockFunctions.requireAdmin }));
-vi.mock("@/lib/providers/keys", () => ({
+vi.mock("@nekusora/core/providers/keys", () => ({
   encryptKeyBundle: vi.fn(),
   parseKeyBundle: mockFunctions.parseKeyBundle,
   pickWeightedKey: mockFunctions.pickWeightedKey,
 }));
-vi.mock("@/lib/providers/probe", () => ({
+vi.mock("@nekusora/core/providers/probe", () => ({
   probeProviderKey: mockFunctions.probeProviderKey,
   fetchUpstreamModels: mockFunctions.fetchUpstreamModels,
 }));
-vi.mock("@/lib/circuit-breaker", () => ({
+vi.mock("@nekusora/core/circuit-breaker", () => ({
   recordSuccess: mockFunctions.recordSuccess,
   recordFailure: mockFunctions.recordFailure,
 }));
-vi.mock("@/lib/system-settings/ua", () => ({ getProbeHeaders: vi.fn(async () => ({})) }));
+vi.mock("@nekusora/core/system-settings/ua", () => ({ getProbeHeaders: vi.fn(async () => ({})) }));
 
-vi.mock("@/lib/infra/db", () => {
+vi.mock("@nekusora/core/infra/db", () => {
   type Condition =
     | { type: "eq"; col: string; value: unknown }
     | { type: "ne"; col: string; value: unknown }
@@ -190,7 +190,7 @@ import {
   deleteUser,
   resetUserPassword,
 } from "./actions";
-import { encryptKeyBundle } from "@/lib/providers/keys";
+import { encryptKeyBundle } from "@nekusora/core/providers/keys";
 import { revalidatePath } from "next/cache";
 
 beforeEach(() => {

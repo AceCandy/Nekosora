@@ -1,4 +1,4 @@
-import { getAuth } from "@/auth";
+import { getAuth } from "../auth";
 
 export interface SessionUser {
   id: string;

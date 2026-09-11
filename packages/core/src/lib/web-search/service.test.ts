@@ -18,7 +18,7 @@ vi.mock("./hosted-model", () => ({
   executeHostedModelSearch: mocks.executeHostedModelSearch,
 }));
 
-vi.mock("@/lib/infra/cache", () => ({
+vi.mock("../infra/cache", () => ({
   cacheGet: mocks.cacheGet,
   cacheSet: mocks.cacheSet,
 }));

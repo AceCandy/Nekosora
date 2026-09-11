@@ -10,7 +10,7 @@ import type { ModelCapabilities } from "@nekusora/db/types";
 import type { ChatMessage } from "@/features/chat/model/types";
 import { toMessageCreatedAtIso } from "@/features/chat/model/messageTime";
 import { requireSession } from "@/lib/session";
-import { isWebSearchEnabled } from "@/lib/web-search/registry";
+import { isWebSearchEnabled } from "@nekusora/core/web-search/registry";
 
 export default async function ChatConversationPage({
   params,

@@ -9,8 +9,8 @@ import {
   isToolUnsupportedError,
   separateSystem,
   classifyStreamError,
-} from "@/lib/stream";
-import type { IRRequest } from "@/lib/providers/types";
+} from "./stream";
+import type { IRRequest } from "./providers/types";
 
 describe("isFailoverableError", () => {
   it("确定性错误不转移:model_not_found", () => {

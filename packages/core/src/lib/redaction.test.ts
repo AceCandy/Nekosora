@@ -3,7 +3,7 @@ import {
   isSensitiveFieldName,
   redactErrorMessage,
   redactSensitiveText,
-} from "@/lib/redaction";
+} from "./redaction";
 
 describe("isSensitiveFieldName", () => {
   it("统一识别常见凭据字段且不误伤相似业务字段", () => {

@@ -6,8 +6,8 @@ import {
   normalizeCatalogModelId,
   normalizeComparableModelId,
   rankSimilarModels,
-} from "@/lib/model-catalog";
-import { passesInvariants } from "@/lib/sync-pi-models";
+} from "./model-catalog";
+import { passesInvariants } from "./sync-pi-models";
 import type { ModelCapabilities } from "@nekusora/db/types";
 
 const entries = [

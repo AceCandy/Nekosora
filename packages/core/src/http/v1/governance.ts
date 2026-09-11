@@ -2,15 +2,15 @@ import {
   apiErrorLocalized,
   describeGatewayGovernanceLimitError,
   ErrorCode,
-} from "@/lib/errors";
+} from "../../lib/errors";
 import {
   GovernanceRejectedError,
   GovernanceStateError,
-} from "@/lib/gateway-governance/repository";
-import { resolveLocale, translateError } from "@/lib/i18n";
-import { protocolErrorResponse } from "@/lib/protocols/encoders";
-import type { GatewayProtocol } from "@/lib/protocols/types";
-import type { CallContext } from "@/lib/providers/types";
+} from "../../lib/gateway-governance/repository";
+import { resolveLocale, translateError } from "../../lib/i18n/index";
+import { protocolErrorResponse } from "../../lib/protocols/encoders";
+import type { GatewayProtocol } from "../../lib/protocols/types";
+import type { CallContext } from "../../lib/providers/types";
 
 export function gatewayGovernanceIdentity(
   ctx: CallContext,

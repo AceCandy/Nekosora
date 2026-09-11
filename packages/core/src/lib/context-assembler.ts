@@ -17,10 +17,10 @@ import {
   DEFAULT_PRESERVE_RECENT,
   retainRecentTurns,
   type CompactionResult,
-} from "@/lib/compact/service";
-import type { UserMemory } from "@/lib/memory/service";
-import { buildPreferencePrompt, buildProfilePrompt, buildProjectPrompt } from "@/lib/memory/service";
-import { estimateMessagesTokens, trimToTokenBudget } from "@/lib/tokens";
+} from "./compact/service";
+import type { UserMemory } from "./memory/service";
+import { buildPreferencePrompt, buildProfilePrompt, buildProjectPrompt } from "./memory/service";
+import { estimateMessagesTokens, trimToTokenBudget } from "./tokens";
 
 /** 预算裁剪时强制保留的最近非 system 消息条数(与 tokens.trimToTokenBudget 默认一致)。 */
 const DEFAULT_PRESERVE_RECENT_MESSAGES = 8;

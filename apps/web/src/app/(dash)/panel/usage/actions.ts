@@ -10,12 +10,12 @@ import {
   searchUsageCandidates,
   type SearchUsageCandidatesOpts,
   type UsageCandidate,
-} from "@/lib/usage-aggregate";
+} from "@nekusora/core/usage-aggregate";
 import {
   searchErrorCandidates,
   type SearchErrorCandidatesOpts,
   type ErrorCandidate,
-} from "@/lib/repositories/error-log-repository";
+} from "@nekusora/core/repositories/error-log-repository";
 
 /** 用量明细 typeahead 候选(panel,userId 强制自己)。 */
 export async function searchPanelUsageCandidatesAction(

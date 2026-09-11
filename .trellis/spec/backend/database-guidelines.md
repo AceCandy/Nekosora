@@ -7,7 +7,7 @@
 ## Overview
 
 - **ORM**: Drizzle ORM,**仅 PostgreSQL**(+pgvector)。
-- **连接工厂**:`packages/db/src/index.ts` 导出 `getDb / getSchema / closeDb`，Core 的 `packages/core/src/lib/infra/db/index.ts` 转发。惰性初始化 pg 池（`max` 由 `DB_POOL_MAX` 配置，缺省 20；Web、Gateway、Worker 各进程持独立 pool，总连接上限之和须低于 PG `max_connections` 余量）。业务代码统一 `import { getDb, getSchema, closeDb } from "@/lib/infra/db"`，**禁止**直接运行时 import schema 或驱动模块。
+- **连接工厂**:`packages/db/src/index.ts` 导出 `getDb / getSchema / closeDb`，Core 的 `packages/core/src/lib/infra/db/index.ts` 转发。惰性初始化 pg 池（`max` 由 `DB_POOL_MAX` 配置，缺省 20；Web、Gateway、Worker 各进程持独立 pool，总连接上限之和须低于 PG `max_connections` 余量）。使用 `@nekusora/db` 或 Core 转发导出，**禁止**直接运行时 import schema 或驱动模块。
 - **Schema 单份**:`packages/db/src/schema.ts`（pg-core），Better Auth 表也在该文件定义。
 - **迁移单份**:`apps/web/drizzle/pg/`,启动时 `bootstrapDatabase()` 自动 `migrate({ migrationsFolder: "drizzle/pg" })`。
 - 已移除 SQLite / better-sqlite3 / sqlite-vec 双 dialect 回退(2026-07 收敛)。不再有 `isPg` / `dbDialect` / `DB_DIALECT` / `SQLITE_PATH`。
