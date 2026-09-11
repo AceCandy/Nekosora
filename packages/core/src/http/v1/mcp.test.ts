@@ -72,6 +72,28 @@ describe("POST /v1/mcp", () => {
     });
   });
 
+  it.each([null, [], 1, {}, { jsonrpc: "1.0", method: "tools/list" },
+    { jsonrpc: "2.0", method: 1 }, { jsonrpc: "2.0", method: "tools/list", id: {} },
+  ])("拒绝非法 JSON-RPC envelope：%j", async (body) => {
+    const response = await POST(new Request("http://localhost/v1/mcp", {
+      method: "POST", body: JSON.stringify(body),
+    }));
+    expect(await response.json()).toMatchObject({ id: null, error: { code: -32600 } });
+    expect(mocks.getDb).not.toHaveBeenCalled();
+    expect(mocks.retrieve).not.toHaveBeenCalled();
+    expect(mocks.acquireGatewayGovernanceLease).not.toHaveBeenCalled();
+  });
+
+  it.each([{}, { name: 1 }, { name: "list_models", arguments: [] },
+    { name: "search_knowledge", arguments: { query: {} } },
+  ])("拒绝非法工具参数：%j", async (params) => {
+    const response = await POST(request("tools/call", params));
+    expect(await response.json()).toMatchObject({ id: 1, error: { code: -32602 } });
+    expect(mocks.getDb).not.toHaveBeenCalled();
+    expect(mocks.retrieve).not.toHaveBeenCalled();
+    expect(mocks.acquireGatewayGovernanceLease).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["initialize", undefined],
     ["tools/list", undefined],

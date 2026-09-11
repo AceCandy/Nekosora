@@ -34,6 +34,7 @@ import { ChatProcessRecorder } from "../../lib/chat/process-trace";
 import type { ChatTerminalStatus } from "../../lib/chat/sse-contract";
 import { redactErrorMessage } from "../../lib/redaction";
 import type { IRRequest } from "../../lib/providers/types";
+import { parseChatCompletions } from "../../lib/protocols/parsers";
 import type { ProcessTrace, ReasoningLevel, WebSearchTraceCall } from "@nekusora/db/types";
 import {
   isChatProcessSnapshot,
@@ -56,6 +57,21 @@ const chatComposerSnapshotSchema = z.object({
   webSearch: z.boolean().optional(),
 });
 
+const chatRequestSchema = z.object({
+  conversationId: z.string().min(1),
+  model: z.string().min(1),
+  modelId: z.string().min(1).optional(),
+  messages: z.array(z.unknown()).min(1),
+  fileIds: z.unknown().optional(),
+  parentPublicId: z.string().optional(),
+  sourcePublicId: z.string().optional(),
+  branchReason: z.string().optional(),
+  /** 编辑/重试复用既有用户消息；续写复用 assistant，均由后续属主检查授权。 */
+  userPublicId: z.string().optional(),
+  continueFromPublicId: z.string().optional(),
+  instructionCardIds: z.array(z.string().min(1)).optional(),
+});
+
 const TERMINAL_STATUS_BY_OUTCOME = {
   cancelled_before_start: "interrupted",
   start_failed: "failed",
@@ -75,51 +91,27 @@ export async function POST(req: Request) {
     return Response.json({ error: "未登录" }, { status: 401 });
   }
 
-  let body: {
-    conversationId: string;
-    model: string;
-    /** 模型 id(WebChat byId 路由解析;缺省则回退 by name)。 */
-    modelId?: string;
-    messages: IRRequest["messages"];
-    fileIds?: unknown;
-    // 分支支持:可选指定父消息/源消息的 publicId(retry/edit 时)
-    parentPublicId?: string;
-    sourcePublicId?: string;
-    branchReason?: string;
-    /**
-     * 本轮 user 消息的 publicId。
-     * - send 流程不传:由后端生成并插入新 user 消息。
-     * - edit/retry 流程传入:跳过 user 消息插入(编辑已原地改写 / 重生成复用原 user),
-     *   仅用于 finally 关联 assistant 消息的 parentId。
-     */
-    userPublicId?: string;
-    // 续写:在指定 assistant 消息内容末尾继续生成(复用其 publicId,update 同一行)。
-    continueFromPublicId?: string;
-    // I-12b:指令卡 ID 列表(用户在 chat 勾选的指令卡,渲染为 system 上下文注入)。
-    instructionCardIds?: string[];
-    // P1-6:联网搜索开关(前端 toggle)。on/off。
-    webSearch?: boolean;
-    /** WebChat 点击发送时的 Composer 快照；缺省兼容旧客户端并回退会话行。 */
-    outputModeId?: unknown;
-    reasoning?: unknown;
-  };
+  let raw: unknown;
   try {
-    body = await req.json();
+    raw = await req.json();
   } catch {
     return Response.json({ error: "请求体非法" }, { status: 400 });
   }
-  if (
-    !body.conversationId ||
-    !body.model ||
-    !Array.isArray(body.messages) ||
-    body.messages.length === 0
-  ) {
+  const parsed = chatRequestSchema.safeParse(raw);
+  if (!parsed.success) {
     return Response.json({ error: "缺少 conversationId/model/messages" }, { status: 400 });
   }
-  const composerSnapshot = chatComposerSnapshotSchema.safeParse(body);
+  const composerSnapshot = chatComposerSnapshotSchema.safeParse(raw);
   if (!composerSnapshot.success) {
     return Response.json({ error: "输入区状态非法" }, { status: 400 });
   }
+  let messages: IRRequest["messages"];
+  try {
+    messages = parseChatCompletions({ model: parsed.data.model, messages: parsed.data.messages }).request.messages;
+  } catch {
+    return Response.json({ error: "消息格式非法" }, { status: 400 });
+  }
+  const body = { ...parsed.data, messages };
 
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -134,7 +126,7 @@ export async function POST(req: Request) {
   if (!conv || conv.userId !== user.id) {
     return Response.json({ error: "会话不存在或无权访问" }, { status: 403 });
   }
-  const effectiveWebSearch = body.webSearch ?? conv.webSearch ?? false;
+  const effectiveWebSearch = composerSnapshot.data.webSearch ?? conv.webSearch ?? false;
 
   // 取最后一条 user 消息保存
   const lastUserMsg = [...body.messages].reverse().find((m) => m.role === "user");

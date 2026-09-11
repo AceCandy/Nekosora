@@ -186,6 +186,21 @@ beforeEach(() => {
 });
 
 describe("POST /api/chat coordinator adapter", () => {
+  it.each([null, [], 1, { conversationId: {}, model: "m", messages: [] },
+    ...[
+      { model: 1 }, { messages: [null] }, { messages: [{ role: "user", content: {} }] },
+      { messages: [{ role: "user", content: [{ type: "image_url", image_url: {} }] }] },
+      { parentPublicId: {} }, { instructionCardIds: [1] },
+    ].map((patch) => ({ conversationId: "c", model: "m", messages: [{ role: "user", content: "hi" }], ...patch })),
+  ])("非法请求在访问数据库前返回 400：%j", async (body) => {
+    const response = await POST(new Request("http://localhost/api/chat", {
+      method: "POST", body: JSON.stringify(body),
+    }));
+    expect(response.status).toBe(400);
+    expect(mocks.getDb).not.toHaveBeenCalled();
+    expect(mocks.executeChatCompletion).not.toHaveBeenCalled();
+  });
+
   it("显式 Composer 请求快照优先于数据库且保留 null/off", async () => {
     mocks.getDb.mockResolvedValue({
       select: selectQueue([
@@ -356,6 +371,27 @@ describe("POST /api/chat coordinator adapter", () => {
         prefixText: "prefix",
       },
     }));
+  });
+
+  it("合法多模态和工具消息通过入口并保留消息顺序", async () => {
+    mockContinuationDb();
+    const messages = [
+      { role: "user", content: [
+        { type: "text", text: "看图" },
+        { type: "image_url", image_url: { url: "https://example.com/image.png" } },
+      ] },
+      { role: "assistant", content: "", tool_calls: [
+        { id: "call-1", type: "function", function: { name: "search", arguments: "{}" } },
+      ] },
+      { role: "tool", content: "result", tool_call_id: "call-1", name: "search" },
+    ];
+    const response = await POST(request({
+      conversationId: "conversation-1", model: "model-1", messages,
+      continueFromPublicId: "assistant-public-1",
+    }));
+    await response.text();
+    expect(response.status).toBe(200);
+    expect(mocks.prepareChatContext).toHaveBeenCalledWith(expect.objectContaining({ messages }));
   });
 
   it("续写把原 assistant 的搜索 trace 带入新一轮持久化", async () => {

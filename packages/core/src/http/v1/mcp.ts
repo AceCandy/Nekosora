@@ -14,6 +14,7 @@
  * 不实现完整 session 管理(每次请求独立)。
  */
 import { verifyKey, extractBearer } from "../../lib/keys";
+import { z } from "zod";
 import { eq, and } from "drizzle-orm";
 import { getDb, getSchema } from "../../lib/infra/db/index";
 import {
@@ -33,12 +34,16 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-interface JsonRpcRequest {
-  jsonrpc: "2.0";
-  id?: string | number;
-  method: string;
-  params?: Record<string, unknown>;
-}
+const jsonRpcRequestSchema = z.object({
+  jsonrpc: z.literal("2.0"),
+  id: z.union([z.string(), z.number()]).nullable().optional(),
+  method: z.string().min(1),
+  params: z.record(z.string(), z.unknown()).optional(),
+});
+const toolCallSchema = z.object({
+  name: z.string().min(1),
+  arguments: z.record(z.string(), z.unknown()).optional(),
+});
 
 interface McpGovernanceContext {
   identity: GovernanceIdentity;
@@ -69,12 +74,15 @@ export async function POST(req: Request) {
   }
 
   // 2. 解析 JSON-RPC 请求
-  let rpc: JsonRpcRequest;
+  let raw: unknown;
   try {
-    rpc = (await req.json()) as JsonRpcRequest;
+    raw = await req.json();
   } catch {
     return jsonRpcError(null, -32700, "Parse error");
   }
+  const parsed = jsonRpcRequestSchema.safeParse(raw);
+  if (!parsed.success) return jsonRpcError(null, -32600, "Invalid Request");
+  const rpc = parsed.data;
 
   // 3. 派发方法
   const { method, params } = rpc;
@@ -100,8 +108,13 @@ export async function POST(req: Request) {
         });
 
       case "tools/call": {
-        const toolName = params?.name as string;
-        const args = (params?.arguments ?? {}) as Record<string, unknown>;
+        const toolCall = toolCallSchema.safeParse(params);
+        if (!toolCall.success) return jsonRpcError(id, -32602, "Invalid params");
+        const toolName = toolCall.data.name;
+        const args = toolCall.data.arguments ?? {};
+        if (toolName === "search_knowledge" && args.query !== undefined && typeof args.query !== "string") {
+          return jsonRpcError(id, -32602, "Invalid params");
+        }
         const result = await handleToolCall(ctx, toolName, args, {
           identity,
           policy,

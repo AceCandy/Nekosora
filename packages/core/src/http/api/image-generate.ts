@@ -5,6 +5,7 @@
  * 复用 generateImageViaRoute + StorageDriver(url 模式存图)。
  */
 import { eq } from "drizzle-orm";
+import { z } from "zod";
 import { getDb, getSchema } from "../../lib/infra/db/index";
 import { getSessionFromHeaders } from "../../lib/session-request";
 import { generateImageViaRoute } from "../../lib/providers/multimodal/image-gen";
@@ -14,21 +15,31 @@ import { redactErrorMessage } from "../../lib/redaction";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const imageRequestSchema = z.object({
+  model: z.string().min(1),
+  modelId: z.string().min(1).optional(),
+  prompt: z.string().min(1),
+  n: z.number().int().nullish().transform((n) => Math.min(Math.max(n ?? 1, 1), 4)),
+  size: z.enum(["256x256", "512x512", "1024x1024", "1792x1024", "1024x1792"]).optional(),
+});
+
 export async function POST(req: Request) {
   const user = await getSessionFromHeaders(req.headers);
   if (!user) {
     return Response.json({ error: "未登录" }, { status: 401 });
   }
 
-  let body: { model: string; modelId?: string; prompt: string; n?: number; size?: string };
+  let raw: unknown;
   try {
-    body = await req.json();
+    raw = await req.json();
   } catch {
     return Response.json({ error: "请求体非法" }, { status: 400 });
   }
-  if (!body.model || !body.prompt) {
-    return Response.json({ error: "缺少 model/prompt" }, { status: 400 });
+  const parsed = imageRequestSchema.safeParse(raw);
+  if (!parsed.success) {
+    return Response.json({ error: "图像生成参数非法" }, { status: 400 });
   }
+  const body = parsed.data;
 
   const db = await getDb();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -41,7 +52,7 @@ export async function POST(req: Request) {
       userId: user.id,
       model: body.model,
       prompt: body.prompt,
-      n: Math.min(Math.max(body.n ?? 1, 1), 4),
+      n: body.n,
       size: body.size ?? null,
       status: "pending",
     })
@@ -51,8 +62,8 @@ export async function POST(req: Request) {
   try {
     const result = await generateImageViaRoute(ctx, body.model, {
       prompt: body.prompt,
-      n: Math.min(Math.max(body.n ?? 1, 1), 4),
-      size: body.size as "256x256" | "512x512" | "1024x1024" | "1792x1024" | "1024x1792" | undefined,
+      n: body.n,
+      size: body.size,
       responseFormat: "url",
     }, body.modelId);
 

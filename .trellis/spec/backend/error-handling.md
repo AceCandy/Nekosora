@@ -415,6 +415,22 @@ return protocolErrorResponse(protocol, error.code, error.message, error.details)
 
 ## Common Mistakes
 
+### WebChat And MCP Input Boundaries
+
+- Scope: internal `/api/chat`, `/api/images/generate`, and `/v1/mcp` JSON bodies.
+- Validate decoded `unknown` before reading fields or entering business database work.
+  Chat reuses `parseChatCompletions` for IR messages; Composer null/off defaults remain unchanged.
+- Preserve these endpoints' existing envelopes: internal Chat/image `{ error: string }`
+  with HTTP 400, MCP JSON-RPC errors with `id` and numeric `code`.
+- Invalid JSON: retain existing parse errors (MCP -32700). Invalid MCP envelope: -32600;
+  invalid tools/call params: -32602. Missing search query and unknown tool retain tool-level `isError`.
+- Image `n`: missing/null defaults to 1; integer inputs clamp to 1–4 once and feed both
+  task persistence and upstream. Reject strings/fractions and unsupported size values.
+- Good: reject null body/null message before `getDb`; valid multimodal/tool messages retain order.
+  Bad: `await req.json() as RequestBody` followed by unchecked property access.
+- Tests: exported POST must prove 400/RPC errors without business DB, generation, or RAG lease;
+  preserve authentication/rate order, Composer errors, valid messages, and image count consistency.
+
 - **不要硬编码错误字符串进响应** → 走 `ErrorCode` + i18n,保证前端可按 code 分支。
 - **不要让调用方随意设 HTTP status** → status 由 `ERROR_META[code].status` 决定。
 - **新增错误码只改了 `ErrorCode` 没补 `ERROR_META`** → 编译/运行会缺映射。
