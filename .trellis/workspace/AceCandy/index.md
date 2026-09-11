@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 145
-- **Last Active**: 2026-09-08
+- **Total Sessions**: 146
+- **Last Active**: 2026-09-11
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~1871 | Active |
+| `journal-2.md` | ~1894 | Active |
 | `journal-1.md` | ~1981 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 146 | 2026-09-11 | Core 包边界与聊天 SSE 收敛 | `c8cb4a8`, `6ad37b9` | `main` |
 | 145 | 2026-09-08 | 数据库包导入边界收敛 | `4c4e4c7` | `main` |
 | 144 | 2026-09-08 | 数据库访问类型收敛 | `9e4ac67` | `main` |
 | 143 | 2026-09-08 | 质量门禁与规范收敛 | `a4b77a9` | `main` |

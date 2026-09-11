@@ -1869,3 +1869,26 @@ Completed local and production environment examples, aligned both production Com
 ### Status
 
 [OK] **Completed**
+
+
+## Session 146: Core 包边界与聊天 SSE 收敛
+<!-- trellis-session: v=2 fp=6fd8b3924955c086 -->
+
+**Date**: 2026-09-11
+**Task**: Core 包边界与聊天 SSE 收敛
+**Branch**: `main`
+
+### Summary
+
+完成 Core 显式包导出与内部相对导入，统一四种聊天动作的 SSE 事件消费；质量门禁、1853 项测试与三个应用构建通过，路线图归档。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c8cb4a8` | refactor: enforce core package import boundaries |
+| `6ad37b9` | refactor: unify chat stream event handling |
+
+### Status
+
+[OK] **Completed**
