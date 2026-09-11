@@ -3,7 +3,7 @@
   "name": "technical-debt-audit-v2",
   "title": "第二轮技术债审计与收敛",
   "description": "基于当前代码建立有证据的技术债清单，分批实施并独立验证",
-  "status": "in_progress",
+  "status": "completed",
   "dev_type": null,
   "scope": null,
   "package": null,
@@ -11,11 +11,11 @@
   "creator": "AceCandy",
   "assignee": "AceCandy",
   "createdAt": "2026-09-11",
-  "completedAt": null,
+  "completedAt": "2026-09-11",
   "branch": null,
   "base_branch": "main",
   "worktree_path": null,
-  "commit": null,
+  "commit": "10e2990,9b2a08d,5017dc4,09468a3",
   "pr_url": null,
   "subtasks": [],
   "children": [
@@ -26,6 +26,6 @@
   ],
   "parent": null,
   "relatedFiles": [],
-  "notes": "本轮实现、独立复核与验收已完成，等待分批提交计划确认后提交及归档。",
+  "notes": "实现、独立复核与验收完成，工作提交已完成，按用户确认归档。",
   "meta": {}
 }
