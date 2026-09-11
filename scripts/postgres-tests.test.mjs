@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
 
 const read = (path) => readFileSync(path, "utf8");
@@ -11,7 +11,7 @@ test("PostgreSQL integration scripts keep isolated local databases and explicit 
 
   assert.equal(
     rootManifest.scripts["test:pg"],
-    "pnpm --filter @nekusora/web test:core-pg && pnpm --filter @nekusora/web test:api-key-pg",
+    "pnpm --filter @nekusora/web test:core-pg && pnpm --filter @nekusora/web test:api-key-pg && pnpm --filter @nekusora/worker test:queue-pg",
   );
   assert.match(webManifest.scripts["test:core-pg"], /test-file-processing-lease-pg\.ts$/);
   assert.match(coreScript, /nekusora_core_pg_test_/);
@@ -24,6 +24,7 @@ test("PostgreSQL integration scripts keep isolated local databases and explicit 
   ]) assert.match(coreScript, new RegExp(name));
   for (const file of [
     "gateway-governance/repository.pg.test.ts",
+    "gateway-governance/analytics.pg.test.ts",
     "settings-control/service.pg.test.ts",
     "gateway-execution/retention.pg.test.ts",
     "chat/completion.pg.test.ts",
@@ -39,6 +40,27 @@ test("PostgreSQL integration scripts keep isolated local databases and explicit 
   assert.match(coreScript, /pg_terminate_backend/);
   assert.match(coreScript, /DROP DATABASE/);
   assert.match(coreScript, /\[REDACTED\]/);
+});
+
+test("every Core PostgreSQL suite is wired into the isolated runner", () => {
+  const coreScript = read("apps/web/scripts/test-file-processing-lease-pg.ts");
+  const suites = readdirSync("packages/core/src", { recursive: true })
+    .filter((file) => file.endsWith(".pg.test.ts"));
+  assert.ok(suites.length > 0);
+  for (const file of suites) {
+    assert.ok(coreScript.includes(`"src/${file}"`), `PG suite missing from runner: ${file}`);
+  }
+});
+
+test("queue lifecycle runner keeps local-only guarded database cleanup", () => {
+  const worker = JSON.parse(read("apps/worker/package.json"));
+  const script = read("apps/worker/scripts/test-queue-lifecycle-pg.ts");
+  assert.match(worker.scripts["test:queue-pg"], /test-queue-lifecycle-pg\.ts$/);
+  assert.match(script, /\["localhost", "127\.0\.0\.1", "::1"\]/);
+  assert.match(script, /nekusora_queue_lifecycle_test_/);
+  assert.match(script, /DROP DATABASE \$\{quoteDatabaseName\(databaseName\)\}/);
+  assert.match(script, /pg_terminate_backend/);
+  assert.match(script, /process\.exitCode = 1/);
 });
 
 test("API key migration test uses the audited historical fixture", () => {

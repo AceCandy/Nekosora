@@ -16,10 +16,12 @@ published image names, Registry credentials, or deployment documentation.
 - `pnpm check`
 - `pnpm test`
 - `pnpm test:pg`
+- `pnpm --filter @nekusora/worker test:queue-pg`
 - PostgreSQL admin input: `DATABASE_URL`
 - Core isolated database: `nekusora_core_pg_test_<16 lowercase hex>` with
   `TEST_DATABASE_URL` plus all four `*_PG_TEST_DATABASE` expectation variables
 - API key isolated database: `nekusora_api_key_data_test_<16 lowercase hex>`
+- Queue lifecycle isolated database: `nekusora_queue_lifecycle_test_<16 lowercase hex>`
 - `pnpm build`, `pnpm build:gateway`, `pnpm build:worker`
 - PR/main Docker target: unified `nekusora`, `linux/amd64`, `push=false`
 - Publish Docker target: unified `nekusora`, native `linux/amd64` and `linux/arm64` builds, `push=true`
@@ -81,6 +83,9 @@ published image names, Registry credentials, or deployment documentation.
   key data-path suite stays separate because it applies an audited pre-parent-removal
   fixture before the historical index/column migration. Do not truncate the current
   squashed migration journal to emulate that old schema.
+- The root PG command also runs the Worker queue lifecycle harness after the Web
+  suites. Every Core `*.pg.test.ts` must appear in the isolated runner; a filesystem
+  coverage assertion prevents newly added suites from silently skipping in CI.
 
 ### 4. Validation & Error Matrix
 
@@ -108,8 +113,8 @@ published image names, Registry credentials, or deployment documentation.
 - Good: a Tag creates semver/latest/sha tags for one manifest containing both platforms.
 - Base: a manual publish sends sha, and edge only for main, to GHCR; DockerHub is not
   applicable even if the selected ref is a Tag.
-- Good: Core reports four passed test files with no skipped tests, then the API key
-  fixture reports its migration tests, and both random databases are removed.
+- Good: all six Core files and the API key fixture pass without skips, then queue
+  clean/timeout drain pass; every random test database is removed.
 - Base: normal `pnpm test` keeps PG files skipped; only the explicit `pnpm test:pg`
   entrypoint owns database setup and proves they executed.
 - Bad: combine GHCR and DockerHub in one multi-Registry push, because an optional
@@ -132,11 +137,11 @@ published image names, Registry credentials, or deployment documentation.
   runners, atomic manifest creation, push behavior, Action SHAs, secret conditions,
   schedule fail-open behavior, image names, Compose commands, private environment
   exclusions, isolated runtime lock, and Dependabot schedule.
-- `scripts/postgres-tests.test.mjs`: root/Web command wiring, local-only guard, all four
-  Core suite variables/files, cleanup/redaction, and the audited API key fixture journal
+- `scripts/postgres-tests.test.mjs`: root/Web/Worker command wiring, local-only guard, all four
+  Core suite variables, complete Core PG file coverage, cleanup/redaction, and the audited API key fixture journal
   and SQL transition.
-- Run `pnpm test:pg` against a real `pgvector/pgvector:pg17`; assert four Core files and
-  the API key file pass with no skipped tests, then verify no prefixed database remains.
+- Run `pnpm test:pg` against a real `pgvector/pgvector:pg17`; assert all Core files and
+  the API key file pass with no skips, both queue drain scenarios pass, and no prefixed database remains.
 - Run `pnpm install --frozen-lockfile`, `pnpm check`, `pnpm test`, all three application
   builds, and the unified amd64 Docker build before merging. Verify the image is no
   larger than 1.5 GB and both runtime entrypoints resolve their declared dependencies.

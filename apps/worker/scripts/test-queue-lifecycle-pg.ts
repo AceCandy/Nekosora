@@ -61,6 +61,9 @@ async function main(): Promise<void> {
   if (parsedAdminUrl.protocol !== "postgres:" && parsedAdminUrl.protocol !== "postgresql:") {
     throw new Error("DATABASE_URL 不是 PostgreSQL URL");
   }
+  if (!["localhost", "127.0.0.1", "::1"].includes(parsedAdminUrl.hostname)) {
+    throw new Error("队列生命周期测试只允许连接本机数据库");
+  }
 
   const databaseName = `${DATABASE_PREFIX}${randomBytes(8).toString("hex")}`;
   const quotedDatabaseName = quoteDatabaseName(databaseName);
