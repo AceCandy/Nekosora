@@ -182,8 +182,7 @@ export class RunStartError extends Error {
 
 async function insertRunningRun(params: StartRunParams): Promise<void> {
   const db = await getDb();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const s = getSchema() as any;
+  const s = getSchema();
   await db.insert(s.runs).values({
     runId: params.runId,
     conversationId: params.conversationId,
@@ -210,8 +209,7 @@ export async function startRunStrict(params: StartRunParams): Promise<void> {
 export async function heartbeatRun(runId: string): Promise<void> {
   try {
     const db = await getDb();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const s = getSchema() as any;
+    const s = getSchema();
     await db
       .update(s.runs)
       .set({ leaseExpiresAt: RUN_LEASE_EXPIRES_AT })
@@ -239,8 +237,7 @@ export async function finalizeRun(params: FinalizeRunParams): Promise<void> {
     "finalizeRun",
     async () => {
       const db = await getDb();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const s = getSchema() as any;
+      const s = getSchema();
       await db
         .update(s.runs)
         .set({
@@ -274,8 +271,7 @@ export async function recordToolCallStart(
     "recordToolCallStart",
     async () => {
       const db = await getDb();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const s = getSchema() as any;
+      const s = getSchema();
       await db.insert(s.toolCalls).values({
         runId: params.runId,
         toolCallId: params.toolCallId,
@@ -304,8 +300,7 @@ export async function recordToolCallResult(
     "recordToolCallResult",
     async () => {
       const db = await getDb();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const s = getSchema() as any;
+      const s = getSchema();
       const isError = Boolean(params.isError);
       const patch = isError
         ? {
