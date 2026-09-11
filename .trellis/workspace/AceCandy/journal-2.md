@@ -1892,3 +1892,28 @@ Completed local and production environment examples, aligned both production Com
 ### Status
 
 [OK] **Completed**
+
+
+## Session 147: 第二轮技术债收敛完成
+<!-- trellis-session: v=2 fp=84e668d36eb8dc25 -->
+
+**Date**: 2026-09-11
+**Task**: 第二轮技术债收敛完成
+**Branch**: `main`
+
+### Summary
+
+完成 PG 测试入口、HTTP 输入边界、路由仓储类型和聊天分享读模型四批收敛，并独立复核。pnpm check、1893 项测试、隔离 PostgreSQL 测试及 Web/Gateway/Worker 构建通过；42 项默认跳过的 PG 用例已在隔离库验证，临时容器已清理。未验证浏览器、真实上游或线上环境；其他领域类型逃逸和静默降级保留。四批提交及五任务归档完成，未推送。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `10e2990` | fix: cover all PostgreSQL suites in test entrypoint |
+| `9b2a08d` | fix: validate chat image and MCP request boundaries |
+| `5017dc4` | refactor: preserve route repository query types |
+| `09468a3` | refactor: type chat read models and share option mapping |
+
+### Status
+
+[OK] **Completed**
