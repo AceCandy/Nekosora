@@ -6,4 +6,4 @@
 - [x] 验证：node --test scripts/*.test.mjs；pnpm check；pnpm test；隔离本机 PostgreSQL 可用时 pnpm test:pg。
 - [x] 使用 trellis-check，独立复核权限、返回字段与 diff。
 - [x] 记录环境缺口、更新任务验收项。
-- [ ] 等待本轮分批提交计划确认后提交、归档。
+- [x] 分批提交计划获确认，工作提交已完成；归档见任务状态。
