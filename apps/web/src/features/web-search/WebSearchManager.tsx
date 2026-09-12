@@ -30,6 +30,8 @@ import { Input } from "@/shared/ui/Input";
 import { Select } from "@/shared/ui/Select";
 import { Button } from "@/shared/ui/Button";
 import ConfirmDialog from "@/shared/ui/ConfirmDialog";
+import Modal from "@/shared/ui/Modal";
+import UnsavedChangesDialog, { useUnsavedChanges } from "@/shared/ui/UnsavedChangesDialog";
 import SortableControls, { moveItemToTop } from "@/shared/ui/SortableControls";
 import { Edit2, Plus, Search, Trash2 } from "lucide-react";
 
@@ -81,12 +83,14 @@ export default function WebSearchManager({
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   );
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
   const [type, setType] = useState<WebSearchProviderType>("tavily");
   const [name, setName] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [selectedModelId, setSelectedModelId] = useState("");
   const [pendingModelId, setPendingModelId] = useState<string | null>(null);
@@ -100,8 +104,12 @@ export default function WebSearchManager({
     config.backends.flatMap((backend) => backend.type === "model" ? [backend.modelId] : []),
   );
   const availableModels = modelCandidates.filter((model) => !configuredModelIds.has(model.id));
+  const { contentRef, requestClose, dialogProps } = useUnsavedChanges<HTMLFormElement>(() => {
+    if (!saving) setFormOpen(false);
+  });
 
   function resetForm() {
+    setFormError(null);
     setEditingId(null);
     setType("tavily");
     setName("");
@@ -111,18 +119,21 @@ export default function WebSearchManager({
   }
 
   function startEdit(provider: WebSearchProviderDto) {
+    setFormError(null);
     setEditingId(provider.id);
     setType(provider.type);
     setName(provider.name);
     setApiKey("");
     setModel(provider.model ?? "");
     setBaseUrl(provider.baseUrl ?? "");
+    setFormOpen(true);
   }
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (!name.trim()) return;
     setSaving(true);
+    setFormError(null);
     try {
       const input: WebSearchProviderInput = {
         type,
@@ -134,6 +145,9 @@ export default function WebSearchManager({
       if (editingId) await updateAction(editingId, input);
       else await createAction(input);
       resetForm();
+      setFormOpen(false);
+    } catch {
+      setFormError(t("saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -327,96 +341,102 @@ export default function WebSearchManager({
       </section>
 
       <section className="space-y-4" aria-labelledby="search-providers-heading">
-        <div>
-          <h2 id="search-providers-heading" className="text-ui-title font-semibold text-neutral-900 ">
-            {t("providersTitle")}
-          </h2>
-          <p className="mt-1 text-ui-body text-neutral-600 ">{t("providersDesc")}</p>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 id="search-providers-heading" className="text-ui-title font-semibold text-neutral-900 ">
+              {t("providersTitle")}
+            </h2>
+            <p className="mt-1 text-ui-body text-neutral-600 ">{t("providersDesc")}</p>
+          </div>
+          <Button variant="primary" size="sm" className="font-semibold" onClick={() => { resetForm(); setFormOpen(true); }}>
+            <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+            <span>{t("addTitle")}</span>
+          </Button>
         </div>
 
-        <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
-          <div className="space-y-3 lg:col-span-2">
-            {config.providers.length === 0 && (
-              <div className="rounded-lg border border-dashed border-morning-mist p-10 text-center text-ui-body text-neutral-500  ">
-                {t("empty")}
-              </div>
-            )}
-            {config.providers.map((provider) => (
-              <div key={provider.id} className="rounded-lg border border-morning-mist bg-white p-4  ">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-ui-body font-semibold text-neutral-900 ">{provider.name}</span>
-                      <span className="rounded px-1.5 py-0.5 text-ui-caption font-medium text-neutral-600 bg-neutral-100  ">
-                        {t(`type_${provider.type}`)}
-                      </span>
-                    </div>
-                    <p className="mt-1 break-all text-ui-caption text-neutral-500 ">
-                      {provider.type === "searxng"
-                        ? provider.baseUrl
-                        : provider.hasApiKey ? t("keyConfigured") : t("keyMissing")}
-                    </p>
+        <div className="space-y-3">
+          {config.providers.length === 0 && (
+            <div className="rounded-lg border border-dashed border-morning-mist p-10 text-center text-ui-body text-neutral-500  ">
+              {t("empty")}
+            </div>
+          )}
+          {config.providers.map((provider) => (
+            <div key={provider.id} className="rounded-lg border border-morning-mist bg-white p-4  ">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-ui-body font-semibold text-neutral-900 ">{provider.name}</span>
+                    <span className="rounded px-1.5 py-0.5 text-ui-caption font-medium text-neutral-600 bg-neutral-100  ">
+                      {t(`type_${provider.type}`)}
+                    </span>
                   </div>
-                  <div className="flex shrink-0 items-center gap-1">
-                    <Button size="xs" variant="ghost" onClick={() => startEdit(provider)} disabled={Boolean(pendingId)} aria-label={t("editTitle")} title={t("editTitle")}>
-                      <Edit2 className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button size="xs" variant="ghost" onClick={() => setDeleteTarget(provider)} disabled={Boolean(pendingId)} aria-label={t("deleteBtn")} title={t("deleteBtn")}>
-                      <Trash2 className="h-3.5 w-3.5 text-danger" />
-                    </Button>
-                  </div>
+                  <p className="mt-1 break-all text-ui-caption text-neutral-500 ">
+                    {provider.type === "searxng"
+                      ? provider.baseUrl
+                      : provider.hasApiKey ? t("keyConfigured") : t("keyMissing")}
+                  </p>
                 </div>
-                <div className="mt-3 flex justify-end border-t border-neutral-100 pt-3 ">
-                  <Button size="xs" variant={provider.enabled ? "secondary" : "ghost"} onClick={() => handleToggle(provider)} disabled={Boolean(pendingId)} loading={pendingId === provider.id}>
-                    {provider.enabled ? t("disableBtn") : t("enableBtn")}
+                <div className="flex shrink-0 items-center gap-1">
+                  <Button size="xs" variant="ghost" onClick={() => startEdit(provider)} disabled={Boolean(pendingId)} aria-label={t("editTitle")} title={t("editTitle")}>
+                    <Edit2 className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button size="xs" variant="ghost" onClick={() => setDeleteTarget(provider)} disabled={Boolean(pendingId)} aria-label={t("deleteBtn")} title={t("deleteBtn")}>
+                    <Trash2 className="h-3.5 w-3.5 text-danger" />
                   </Button>
                 </div>
               </div>
-            ))}
-          </div>
+              <div className="mt-3 flex justify-end border-t border-neutral-100 pt-3 ">
+                <Button size="xs" variant={provider.enabled ? "secondary" : "ghost"} onClick={() => handleToggle(provider)} disabled={Boolean(pendingId)} loading={pendingId === provider.id}>
+                  {provider.enabled ? t("disableBtn") : t("enableBtn")}
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
 
-          <form onSubmit={handleSubmit} className="space-y-3 rounded-lg border border-morning-mist bg-white p-5  ">
-            <h3 className="flex items-center gap-2 text-ui-body font-semibold text-neutral-900 ">
-              {editingId ? <Edit2 className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-              {editingId ? t("editTitle") : t("addTitle")}
-            </h3>
-            <label className="block space-y-1">
-              <span className="text-ui-caption font-medium text-neutral-700 ">{t("typeLabel")}</span>
-              <Select value={type} onChange={(event) => setType(event.target.value as WebSearchProviderType)} className="w-full">
-                {TYPES.map((value) => <option key={value} value={value}>{t(`type_${value}`)}</option>)}
-              </Select>
-              <span className="block text-ui-caption text-neutral-500 ">{t(`hint_${type}`)}</span>
-            </label>
-            <label className="block space-y-1">
-              <span className="text-ui-caption font-medium text-neutral-700 ">{t("nameLabel")}</span>
-              <Input value={name} onChange={(event) => setName(event.target.value)} placeholder={t("namePlaceholder")} />
-            </label>
-            {type !== "searxng" && (
+        <Modal open={formOpen} onClose={saving ? () => {} : requestClose} title={editingId ? t("editTitle") : t("addTitle")} bodyClassName="max-h-[80vh] overflow-y-auto px-5 py-4">
+          <form ref={contentRef} onSubmit={handleSubmit} className="space-y-3">
+            <fieldset disabled={saving} className="space-y-3">
               <label className="block space-y-1">
-                <span className="text-ui-caption font-medium text-neutral-700 ">{t("apiKeyLabel")}</span>
-                <Input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder={editingId ? t("apiKeyKeepPlaceholder") : t("apiKeyPlaceholder")} autoComplete="new-password" />
+                <span className="text-ui-caption font-medium text-neutral-700 ">{t("typeLabel")}</span>
+                <Select value={type} onChange={(event) => setType(event.target.value as WebSearchProviderType)} className="w-full">
+                  {TYPES.map((value) => <option key={value} value={value}>{t(`type_${value}`)}</option>)}
+                </Select>
+                <span className="block text-ui-caption text-neutral-500 ">{t(`hint_${type}`)}</span>
               </label>
-            )}
-            {type === "zhipu" && (
               <label className="block space-y-1">
-                <span className="text-ui-caption font-medium text-neutral-700 ">{t("modelLabel")}</span>
-                <Input value={model} onChange={(event) => setModel(event.target.value)} placeholder={t("modelPlaceholder")} />
+                <span className="text-ui-caption font-medium text-neutral-700 ">{t("nameLabel")}</span>
+                <Input value={name} onChange={(event) => setName(event.target.value)} placeholder={t("namePlaceholder")} required />
               </label>
-            )}
-            {type === "searxng" && (
-              <label className="block space-y-1">
-                <span className="text-ui-caption font-medium text-neutral-700 ">{t("baseUrlLabel")}</span>
-                <Input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} placeholder={t("baseUrlPlaceholder")} />
-              </label>
-            )}
-            <div className="flex gap-2 pt-1">
-              <Button type="submit" variant="contrast" size="sm" loading={saving} className="flex-1">
+              {type !== "searxng" && (
+                <label className="block space-y-1">
+                  <span className="text-ui-caption font-medium text-neutral-700 ">{t("apiKeyLabel")}</span>
+                  <Input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder={editingId ? t("apiKeyKeepPlaceholder") : t("apiKeyPlaceholder")} autoComplete="new-password" />
+                </label>
+              )}
+              {type === "zhipu" && (
+                <label className="block space-y-1">
+                  <span className="text-ui-caption font-medium text-neutral-700 ">{t("modelLabel")}</span>
+                  <Input value={model} onChange={(event) => setModel(event.target.value)} placeholder={t("modelPlaceholder")} />
+                </label>
+              )}
+              {type === "searxng" && (
+                <label className="block space-y-1">
+                  <span className="text-ui-caption font-medium text-neutral-700 ">{t("baseUrlLabel")}</span>
+                  <Input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} placeholder={t("baseUrlPlaceholder")} />
+                </label>
+              )}
+            </fieldset>
+            {formError && <p role="alert" className="text-ui-body text-danger">{formError}</p>}
+            <div className="flex justify-end gap-2 border-t border-morning-mist pt-3">
+              <Button type="button" variant="secondary" size="sm" onClick={requestClose} disabled={saving}>{t("cancelBtn")}</Button>
+              <Button type="submit" variant="primary" size="sm" loading={saving}>
                 {editingId ? t("saveBtn") : t("addBtn")}
               </Button>
-              {editingId && <Button type="button" variant="secondary" size="sm" onClick={resetForm}>{t("cancelBtn")}</Button>}
             </div>
           </form>
-        </div>
+        </Modal>
+        <UnsavedChangesDialog {...dialogProps} />
       </section>
 
       <ConfirmDialog

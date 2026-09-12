@@ -39,8 +39,8 @@ export default function CardsManager({ initialCards }: { initialCards: Instructi
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
-        <Button onClick={() => setCreating(true)} disabled={pending}>
-          <Plus className="w-4 h-4 mr-1" />
+        <Button variant="primary" size="sm" className="font-semibold" onClick={() => setCreating(true)} disabled={pending}>
+          <Plus className="w-3.5 h-3.5" aria-hidden="true" />
           {t("create")}
         </Button>
       </div>
