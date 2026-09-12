@@ -103,7 +103,7 @@ function parsePublicHttpUrl(input: string): URL {
   }
   if (url.hash) throw new PublicHttpError("invalid_url", "SearXNG 地址不能包含片段");
 
-  const hostname = url.hostname.toLowerCase();
+  const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
   if (
     hostname === "localhost" ||
     hostname.endsWith(".localhost") ||
@@ -121,10 +121,11 @@ export async function resolvePublicHttpUrl(
   signal?: AbortSignal,
 ): Promise<{ url: URL; address: LookupAddress }> {
   const url = parsePublicHttpUrl(String(input));
-  const literalFamily = isIP(url.hostname);
+  const hostname = url.hostname.replace(/^\[|\]$/g, "");
+  const literalFamily = isIP(hostname);
   const addresses = literalFamily
-    ? [{ address: url.hostname, family: literalFamily } as LookupAddress]
-    : await withAbortSignal(resolver(url.hostname, signal), signal);
+    ? [{ address: hostname, family: literalFamily } as LookupAddress]
+    : await withAbortSignal(resolver(hostname, signal), signal);
   if (addresses.length === 0 || addresses.some((item) => !isPublicIp(item.address))) {
     throw new PublicHttpError("blocked_url", "SearXNG 地址解析到了非公网 IP");
   }
@@ -192,7 +193,7 @@ export async function requestPublicResponse(
       port: url.port || undefined,
       path: `${url.pathname}${url.search}`,
       method: options.method ?? "GET",
-      servername: url.protocol === "https:" ? url.hostname : undefined,
+      servername: url.protocol === "https:" && !url.hostname.startsWith("[") ? url.hostname : undefined,
       headers: { ...options.headers, Host: url.host },
       signal: options.signal,
     }, (res) => {

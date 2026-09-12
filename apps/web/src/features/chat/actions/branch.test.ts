@@ -1222,6 +1222,7 @@ describe("getMessageSiblings 版本切换 toolCalls 回填", () => {
         parentId: "parent-user",
         role: "assistant",
         content: "v1 answer",
+        status: "success",
         reasoning: "think-1",
         branchReason: null,
         runId: "run_v1",
@@ -1263,6 +1264,7 @@ describe("getMessageSiblings 版本切换 toolCalls 回填", () => {
         parentId: "parent-user",
         role: "assistant",
         content: "v2 answer",
+        status: "interrupted",
         reasoning: "think-2",
         branchReason: "retry",
         runId: "run_v2",
@@ -1341,12 +1343,15 @@ describe("getMessageSiblings 版本切换 toolCalls 回填", () => {
 
     const result = await getMessageSiblings("pub-v1");
 
+    expect(result.siblings.map((message) => message.status)).toEqual(["success", "interrupted"]);
+
     expect(result.current).toEqual({ publicId: "pub-v1", parentId: "parent-user" });
     // 仅 assistant,且保持 createdAt 升序
     expect(result.siblings.map((s) => s.publicId)).toEqual(["pub-v1", "pub-v2"]);
     expect(result.siblings[0]).toEqual({
       publicId: "pub-v1",
       content: "v1 answer",
+      status: "success",
       createdAt: "2026-07-25T00:00:01.000Z",
       reasoning: "think-1",
       branchReason: null,
@@ -1383,6 +1388,7 @@ describe("getMessageSiblings 版本切换 toolCalls 回填", () => {
     expect(result.siblings[1]).toEqual({
       publicId: "pub-v2",
       content: "v2 answer",
+      status: "interrupted",
       createdAt: "2026-07-25T00:00:02.000Z",
       reasoning: "think-2",
       branchReason: "retry",

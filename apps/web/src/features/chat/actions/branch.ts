@@ -329,6 +329,7 @@ export async function getMessageSiblings(messagePublicId: string): Promise<{
   siblings: {
     publicId: string;
     content: string;
+    status?: ChatMessage["status"];
     createdAt?: string;
     reasoning: string | null;
     branchReason: string | null;
@@ -370,6 +371,7 @@ export async function getMessageSiblings(messagePublicId: string): Promise<{
     publicId: string;
     parentId: string | null;
     content: string;
+    status?: unknown;
     reasoning: string | null;
     role: string;
     branchReason: string | null;
@@ -412,6 +414,7 @@ export async function getMessageSiblings(messagePublicId: string): Promise<{
     const base: {
       publicId: string;
       content: string;
+      status?: ChatMessage["status"];
       createdAt?: string;
       reasoning: string | null;
       branchReason: string | null;
@@ -427,6 +430,7 @@ export async function getMessageSiblings(messagePublicId: string): Promise<{
       reasoning: m.reasoning,
       branchReason: m.branchReason,
     };
+    if (m.status === "success" || m.status === "interrupted") base.status = m.status;
     const createdAt = toMessageCreatedAtIso(m.createdAt);
     if (createdAt) base.createdAt = createdAt;
     if (typeof m.runId === "string") {

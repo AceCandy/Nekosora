@@ -1098,6 +1098,27 @@ describe("chatStreamStore switchVersion toolCalls", () => {
     seedAssistant();
   });
 
+  it.each([
+    ["success", "interrupted"],
+    ["interrupted", "success"],
+    ["interrupted", undefined],
+  ] as const)("切换版本时将完成状态从 %s 更新为 %s", async (before, after) => {
+    seedAssistant({ status: before });
+    mocks.getMessageSiblings.mockResolvedValue({
+      current: { publicId: "pub-v1", parentId: "user-1" },
+      siblings: [
+        { publicId: "pub-v1", content: "version 1", status: before },
+        { publicId: "pub-v2", content: "version 2", status: after },
+      ],
+    });
+
+    await useChatStreamStore.getState().switchVersion(key, "pub-v1", "next");
+
+    const message = useChatStreamStore.getState().runtimes[key].messages[0];
+    expect(message.publicId).toBe("pub-v2");
+    expect(message.status).toBe(after);
+  });
+
   it("目标版本带 toolCalls 时恢复到 assistant", async () => {
     mocks.getMessageSiblings.mockResolvedValue({
       current: { publicId: "pub-v1", parentId: "user-1" },

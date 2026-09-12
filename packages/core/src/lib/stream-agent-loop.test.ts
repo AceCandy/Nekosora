@@ -220,7 +220,7 @@ describe("streamChatWithTools agent loop finish signal", () => {
     });
   });
 
-  it("将 IR 工具数组转换为 AI SDK ToolSet", async () => {
+  it.each([true, false, undefined])("将 IR 工具数组及 strict=%s 转换为 AI SDK ToolSet", async (strict) => {
     vi.mocked(streamText).mockReturnValue(mockStreamResult([], "stop"));
 
     await collect(streamChatWithTools({
@@ -232,6 +232,7 @@ describe("streamChatWithTools agent loop finish signal", () => {
           function: {
             name: "web_search",
             description: "Search the web",
+            strict,
             parameters: {
               type: "object",
               properties: { query: { type: "string" } },
@@ -254,6 +255,7 @@ describe("streamChatWithTools agent loop finish signal", () => {
     expect(request.tools).not.toHaveProperty("0");
     expect(request.tools?.web_search).toMatchObject({
       description: "Search the web",
+      strict,
       inputSchema: {
         jsonSchema: {
           type: "object",
@@ -263,6 +265,7 @@ describe("streamChatWithTools agent loop finish signal", () => {
       },
     });
     expect(request.tools?.web_search).not.toHaveProperty("execute");
+    expect(vi.mocked(streamText).mock.calls[0]?.[0]?.experimental_download).toBeTypeOf("function");
   });
 
   it("带工具的请求跳过未验证工具能力的路由", async () => {

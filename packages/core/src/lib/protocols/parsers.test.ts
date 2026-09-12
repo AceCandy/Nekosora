@@ -19,6 +19,30 @@ function expectUnsupported(run: () => unknown, parameter: string) {
 }
 
 describe("multi-protocol parsers", () => {
+  it.each([true, false, undefined, null])("两个 OpenAI 入口保留工具 strict=%s", (strict) => {
+    const definition = { name: "weather", parameters: { type: "object" }, strict };
+    for (const parsed of [
+      parseChatCompletions({ model: "m", messages: [{ role: "user", content: "hi" }], tools: [{ type: "function", function: definition }] }),
+      parseResponses({ model: "m", input: "hi", tools: [{ type: "function", ...definition }] }),
+    ]) {
+      expect(parsed.request.tools?.[0].function).toEqual({
+        name: "weather",
+        parameters: { type: "object" },
+        ...(strict == null ? {} : { strict }),
+      });
+    }
+  });
+
+  it.each(["true", 1, {}])("两个 OpenAI 入口拒绝非法工具 strict=%j", (strict) => {
+    const definition = { name: "weather", strict };
+    expect(() => parseChatCompletions({
+      model: "m", messages: [{ role: "user", content: "hi" }], tools: [{ type: "function", function: definition }],
+    })).toThrow("tools[0].function.strict");
+    expect(() => parseResponses({
+      model: "m", input: "hi", tools: [{ type: "function", ...definition }],
+    })).toThrow("tools[0].strict");
+  });
+
   it("Chat Completions 解析文本、图片、工具和 JSON Schema", () => {
     const parsed = parseChatCompletions({
       model: "model-a",

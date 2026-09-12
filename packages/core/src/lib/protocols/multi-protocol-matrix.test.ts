@@ -26,8 +26,10 @@ const mocks = vi.hoisted(() => ({
   markProviderStarted: vi.fn(),
   finalizeGovernance: vi.fn(),
   findModel: vi.fn(),
+  lookup: vi.fn(),
 }));
 
+vi.mock("node:dns/promises", () => ({ lookup: mocks.lookup }));
 vi.mock("./auth", () => ({ authenticateGatewayRequest: mocks.authenticate }));
 vi.mock("../routing", () => ({
   resolveRoutes: mocks.resolveRoutes,
@@ -368,6 +370,7 @@ describe("multi-protocol gateway matrix", () => {
   beforeEach(() => {
     mocks.authenticate.mockReset().mockResolvedValue(ctx);
     mocks.resolveRoutes.mockReset();
+    mocks.lookup.mockReset();
     mocks.startExecution.mockReset().mockResolvedValue(undefined);
     mocks.recordAttempt.mockReset().mockResolvedValue(undefined);
     mocks.finalizeExecution.mockReset().mockResolvedValue(undefined);
@@ -392,6 +395,33 @@ describe("multi-protocol gateway matrix", () => {
   });
 
   afterEach(() => vi.unstubAllGlobals());
+
+  it.each([false, true].flatMap((stream) =>
+    (["openai-chat", "gemini-generate-content"] as const).map((apiFormat) => ({ stream, apiFormat }))))(
+    "$apiFormat stream=$stream 的真实 SDK 图片下载拒绝私网 DNS，且不请求模型",
+    async ({ stream, apiFormat }) => {
+      mocks.resolveRoutes.mockResolvedValue([routeFor(apiFormat)]);
+      mocks.lookup.mockResolvedValue([{ address: "127.0.0.1", family: 4 }]);
+      const fetchMock = vi.fn();
+      vi.stubGlobal("fetch", fetchMock);
+      const ingress = ingressCases[0];
+      const response = await handleProtocolRequest(new Request(`https://gateway.test${ingress.path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          ...ingress.body,
+          stream,
+          messages: [{ role: "user", content: [{ type: "image_url", image_url: { url: "https://images.example/private" } }] }],
+        }),
+      }), ingress.protocol, ingress.path, ingress.parse);
+      const body = await response.text();
+      if (stream) expect(response.status).toBe(200);
+      else expect(response.status, body).toBeGreaterThanOrEqual(400);
+      expect(body).toContain("gateway.generation_failed");
+      expect(mocks.lookup).toHaveBeenCalledWith("images.example", { all: true, verbatim: true });
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
 
   it.each(ingressCases.flatMap((ingress) => egressCases.map((egress) => ({ ingress, egress }))))(
     "$ingress.name ingress -> $egress.name upstream",
@@ -441,6 +471,38 @@ describe("multi-protocol gateway matrix", () => {
       expect(mocks.finalizeGovernance).toHaveBeenCalledOnce();
     },
   );
+
+  it.each([true, false])("真实 SDK 上游请求保留工具 strict=%s", async (strict) => {
+    for (const apiFormat of ["openai-chat", "openai-responses", "anthropic-messages", "gemini-generate-content"] as const) {
+      const route = routeFor(apiFormat);
+      if (apiFormat === "anthropic-messages") route.upstreamModelName = "claude-sonnet-4-5";
+      mocks.resolveRoutes.mockResolvedValue([route]);
+      let body: Record<string, unknown> = {};
+      vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        body = JSON.parse(await new Request(input, init).text()) as Record<string, unknown>;
+        return upstreamResponse(apiFormat);
+      }));
+      const ingress = ingressCases[0];
+      const response = await handleProtocolRequest(
+        new Request(`https://gateway.test${ingress.path}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            ...ingress.body,
+            tools: [{ type: "function", function: { name: "weather", parameters: { type: "object", properties: {} }, strict } }],
+          }),
+        }), ingress.protocol, ingress.path, ingress.parse,
+      );
+      expect(response.status, JSON.stringify(await response.json())).toBe(200);
+      if (apiFormat === "gemini-generate-content") {
+        expect(body).toMatchObject({ toolConfig: { functionCallingConfig: { mode: strict ? "VALIDATED" : "AUTO" } } });
+      } else {
+        expect(body.tools).toEqual([expect.objectContaining(apiFormat === "openai-chat"
+          ? { function: expect.objectContaining({ strict }) }
+          : { strict })]);
+      }
+    }
+  });
 
   it("已学习不支持流式 usage 的 Provider 不发送 stream_options", async () => {
     const ingress = ingressCases[0];

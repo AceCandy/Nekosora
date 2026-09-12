@@ -19,6 +19,7 @@ import {
 } from "./repositories/route-repository";
 import { buildLanguageModelWithKey, resolveRouteApiFormat } from "./providers/registry";
 import { resolveProviderTimeouts } from "./providers/timeouts";
+import { createModelDownload } from "./providers/download";
 import { getChatUA } from "./system-settings/ua";
 import { gatewayBreaker } from "./circuit-breaker";
 import type { LogUsageParams } from "./usage";
@@ -413,6 +414,7 @@ function toModelTools(tools?: IRToolDef[]): ToolSet | undefined {
       {
         type: "function" as const,
         description: definition.description,
+        strict: definition.strict,
         inputSchema: jsonSchema(
           (definition.parameters ?? {
             type: "object",
@@ -464,7 +466,9 @@ export function separateSystem(request: IRRequest): {
   }
   const system =
     systemMessages
-      .map((m) => (typeof m.content === "string" ? m.content : ""))
+      .map((m) => typeof m.content === "string"
+        ? m.content
+        : m.content.filter((part) => part.type === "text").map((part) => part.text ?? "").join(""))
       .filter(Boolean)
       .join("\n\n") || undefined;
   return { system, messages: toModelMessages(dialogueMessages) };
@@ -527,6 +531,7 @@ async function* streamWithRoute(
 
   const generationOptions = {
     model,
+    experimental_download: createModelDownload(abortSignal),
     // 禁用 AI SDK 自动重试(默认 2 次):429/quota 不被重试放大 TPM,5xx 不加重上游压力;
     // 故障转移由上层 streamChat 的多 key + 多路由 + 熔断接管。
     maxRetries: 0,
@@ -694,6 +699,7 @@ export async function generateChat(opts: GenerateChatOptions): Promise<GenerateC
     const { system, messages } = separateSystem(request);
     const result = await generateText({
       model,
+      experimental_download: createModelDownload(abortSignal),
       maxRetries: 0,
       instructions: system,
       messages,

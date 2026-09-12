@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { SQL, sql } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
 
 const mocks = vi.hoisted(() => ({
   and: vi.fn((...conditions: unknown[]) => ({ op: "and", conditions })),
@@ -10,7 +12,8 @@ const mocks = vi.hoisted(() => ({
   withConversationMessageWrite: vi.fn(),
 }));
 
-vi.mock("drizzle-orm", () => ({
+vi.mock("drizzle-orm", async (importOriginal) => ({
+  ...await importOriginal<typeof import("drizzle-orm")>(),
   and: mocks.and,
   eq: mocks.eq,
   isNull: mocks.isNull,
@@ -40,6 +43,7 @@ const schema = {
     role: "messages.role",
     deletedAt: "messages.deletedAt",
     content: "messages.content",
+    reasoning: sql.identifier("reasoning"),
   },
   memoryExtractionJobs: { id: "memory_jobs.id" },
   runs: {
@@ -197,6 +201,13 @@ describe("persistChatCompletion", () => {
     expect(operations).toEqual(["assistant", "conversation", "run"]);
     expect(mocks.eq).toHaveBeenCalledWith(schema.messages.content, "before ");
     expect(mocks.isNull).toHaveBeenCalledWith(schema.messages.deletedAt);
+    const reasoning = tx.update.mock.results[0].value.set.mock.calls[0][0].reasoning;
+    expect(reasoning).toBeInstanceOf(SQL);
+    if (!(reasoning instanceof SQL)) throw new Error("续写必须追加数据库已有思考");
+    expect(new PgDialect().sqlToQuery(reasoning)).toMatchObject({
+      sql: 'nullif(coalesce("reasoning", \'\') || $1, \'\')',
+      params: [baseInput.assistantReasoning],
+    });
   });
 
   it("父消息内容变化时在任何写入前拒绝", async () => {

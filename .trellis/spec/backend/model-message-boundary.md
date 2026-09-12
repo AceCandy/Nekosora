@@ -10,6 +10,7 @@ Apply this contract whenever OpenAI-compatible request IR is passed to AI SDK `s
 toModelMessages(messages: IRMessage[]): ModelMessage[]
 toModelTools(tools?: IRToolDef[]): ToolSet | undefined
 separateSystem(request: IRRequest): { system: string | undefined; messages: ModelMessage[] }
+createModelDownload(signal?: AbortSignal): Experimental_DownloadFunction
 ```
 
 Both generation paths must consume the `messages` returned by `separateSystem`.
@@ -17,15 +18,19 @@ Both generation paths must consume the `messages` returned by `separateSystem`.
 ## 3. Contracts
 
 - Preserve plain string messages that already match `ModelMessage`.
+- Flatten system/developer text parts in order without inserting separators between parts; keep `\n\n` between separate instruction messages.
 - Convert user `{ type: "text", text }` parts to AI SDK text parts.
 - Convert user `{ type: "image_url", image_url: { url } }` parts to `{ type: "file", data: new URL(url), mediaType: "image" }`.
 - Keep OpenAI `image_url` in the shared IR and gateway API; conversion belongs only at the AI SDK boundary.
 - A `data:` URL is passed as a `URL` so AI SDK extracts its concrete media type and base64 content. Remote URLs remain URL-backed file parts.
+- Both generation paths install `experimental_download: createModelDownload(abortSignal)`. Server-side downloads reuse `requestPublicResponse`: validate every DNS answer, pin the connection IP, revalidate redirects, propagate cancellation, and cap each file at 100 MiB. IPv6 literals are unwrapped for IP checks/connection, retain brackets in Host, and omit SNI.
+- Return `null` when the SDK reports `isUrlSupportedByModel`; the upstream receives the URL without a local download. Inline `data:` decoding remains owned by the SDK.
 - Convert OpenAI assistant `tool_calls` to AI SDK assistant content parts with `type: "tool-call"`, `toolCallId`, `toolName`, and parsed `input`.
 - Convert OpenAI `role: "tool"` messages to AI SDK tool content parts with `type: "tool-result"`, the matching call ID/name, and a text `output`.
 - Keep the Agent loop's working history in the shared OpenAI IR. Perform the conversion only when a generation request crosses into AI SDK.
 - Convert the OpenAI `IRToolDef[]` array into an AI SDK `ToolSet` record keyed by `function.name`; an array cast produces numeric tool names such as `"0"`.
 - Wrap each `function.parameters` value with AI SDK `jsonSchema()`. Missing parameters use an empty object schema.
+- Preserve explicit `function.strict: true | false` through Chat/Responses parsing, IR, and SDK tools. Omitted/null values remain unset; the installed provider SDK owns provider-specific support and wire translation.
 - Do not add `execute` to converted tools because the project Agent loop executes logical and MCP tools. AI SDK 7 therefore also requires an `outputSchema`, although only the input schema is sent upstream.
 
 ## 4. Validation & Error Matrix
@@ -42,10 +47,15 @@ Both generation paths must consume the `messages` returned by `separateSystem`.
 | Raw OpenAI `tool_calls` / `tool_call_id` reaches AI SDK | Runtime `ModelMessage[]` schema validation fails |
 | `IRToolDef[]` is cast directly to `ToolSet` | AI SDK enumerates array indexes, so the provider receives tool name `"0"` and an empty schema |
 | Tool parameters are absent | Use an empty object input schema |
+| Remote download resolves or redirects to a non-public IP | Reject before connecting to that target |
+| Download is cancelled, exceeds 100 MiB, or returns non-2xx | Fail generation; never send partial bytes to the model |
+| Tool strict is a non-null, non-boolean value | Reject at the ingress parser |
 
 ## 5. Good / Base / Bad Cases
 
 - Good: mixed text plus remote and inline images converts without changing order.
+- Good: system text parts and explicit `strict: false` survive the SDK boundary unchanged.
+- Bad: validating only the URL string, then letting the SDK resolve/download an unchecked hostname.
 - Good: one assistant turn containing one or more tool calls is followed by matching AI SDK tool-result messages.
 - Base: a string user message remains unchanged.
 - Bad: passing OpenAI image or tool-message IR directly to AI SDK fails runtime schema validation.
@@ -59,6 +69,8 @@ Both generation paths must consume the `messages` returned by `separateSystem`.
 - Assert the second Agent-loop generation receives AI SDK `tool-call` and `tool-result` content parts, including multiple calls in one turn.
 - Assert `streamText` receives a non-array `ToolSet` whose keys are the original function names.
 - Assert a `web_search` definition preserves its `query` input schema and has no `execute` handler.
+- Cover DNS private/mixed answers, private redirects, IP/Host/SNI pinning, IPv6 literals, cancellation, size limits, and URL passthrough in download/public-http tests; the real-SDK protocol matrix must reject private DNS without an upstream call.
+- Assert ordered system/developer text parts and strict true/false/unset; verify strict on real SDK wire bodies rather than only mocked ToolSet input.
 
 ## 7. Wrong vs Correct
 

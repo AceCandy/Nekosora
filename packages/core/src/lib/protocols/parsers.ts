@@ -113,12 +113,16 @@ function parseOpenAITools(value: unknown, path = "tools"): IRToolDef[] | undefin
     if (object.function !== undefined) {
       assertAllowed(definition, ["name", "description", "parameters", "strict"], `${itemPath}.function`);
     }
+    if (definition.strict != null && typeof definition.strict !== "boolean") {
+      invalid(`${itemPath}${object.function === undefined ? "" : ".function"}.strict 必须是布尔值`);
+    }
     return {
       type: "function",
       function: {
         name: stringAt(definition.name, `${itemPath}.name`),
         ...(typeof definition.description === "string" ? { description: definition.description } : {}),
         ...(definition.parameters !== undefined ? { parameters: definition.parameters } : {}),
+        ...(typeof definition.strict === "boolean" ? { strict: definition.strict } : {}),
       },
     };
   });

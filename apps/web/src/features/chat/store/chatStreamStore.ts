@@ -1084,6 +1084,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
           ...r.messages[idx],
           publicId: target.publicId,
           content: target.content,
+          status: target.status,
           createdAt: target.createdAt ?? r.messages[idx].createdAt,
           reasoning: target.reasoning ?? undefined,
           runMetadata: target.runMetadata,

@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import type { ProcessTrace, TokenUsage } from "@nekusora/db/types";
 import type { MemoryExtractionJob } from "../memory/jobs";
 import { getDb, getSchema } from "../infra/db/index";
@@ -174,7 +174,7 @@ async function writeAssistant(
       .update(s.messages)
       .set({
         content: input.assistant.prefixText + input.assistantText,
-        reasoning: input.assistantReasoning || null,
+        reasoning: sql`nullif(coalesce(${s.messages.reasoning}, '') || ${input.assistantReasoning}, '')`,
         status: messageStatus,
         processTrace: input.processTrace,
         runId: input.runId,

@@ -11,6 +11,8 @@ import {
   classifyStreamError,
 } from "./stream";
 import type { IRRequest } from "./providers/types";
+import { parseChatCompletions, parseResponses } from "./protocols/parsers";
+import { createModelDownload } from "./providers/download";
 
 describe("isFailoverableError", () => {
   it("确定性错误不转移:model_not_found", () => {
@@ -203,6 +205,23 @@ describe("isStreamOptionsUnsupportedError", () => {
 });
 
 describe("separateSystem", () => {
+  it.each(["system", "developer"])("保留 %s 文本块与相邻字符串提示词的顺序", (role) => {
+    const messages = [
+      { role: "system", content: "规则一" },
+      { role, content: [{ type: "text", text: "规则" }, { type: "text", text: "二" }] },
+      { role: "user", content: "问题" },
+    ];
+    for (const parsed of [
+      parseChatCompletions({ model: "test", messages }),
+      parseResponses({ model: "test", input: messages }),
+    ]) {
+      expect(separateSystem(parsed.request)).toEqual({
+        system: "规则一\n\n规则二",
+        messages: [{ role: "user", content: "问题" }],
+      });
+    }
+  });
+
   it("抽出 system 消息并从对话中移除", () => {
     const request: IRRequest = {
       model: "gpt-4",
@@ -285,7 +304,7 @@ describe("separateSystem", () => {
       },
     });
 
-    await generateText({ model, messages });
+    await generateText({ model, messages, experimental_download: createModelDownload() });
 
     expect(model.doGenerateCalls[0].prompt).toEqual([
       {

@@ -26,6 +26,7 @@ Apply this contract when changing authenticated `/api/chat` generation, `runs`, 
 - Stop heartbeat before the short completion transaction. Never keep a database transaction open across model generation.
 - Lock order is conversation `FOR UPDATE`, active message/CAS validation, assistant write, conversation time, optional memory intent, then terminal run update.
 - Continue updates require the original assistant content in the SQL predicate. Parent and source references are re-read inside the locked transaction.
+- Continue reasoning appends the new delta to the database value in that same update: `nullif(coalesce(messages.reasoning, '') || assistantReasoning, '')`. Empty deltas preserve existing reasoning; never trust a client-supplied reasoning prefix.
 - Compute `completedAt` and `durationMs` once before the completion call. The committed result, historical projection, and live finish metadata reuse those values.
 - Only a committed `success` can emit domain finish. The route adapter maps the returned `ChatCompletionOutcomeKind` exhaustively to `terminal(success|failed|interrupted)`, then sends `[DONE]` as a transport-completion marker. Failed/interrupted outcomes never emit finish, but an open transport still receives terminal + DONE.
 - The WebChat parser accepts success only when finish precedes terminal(success), and accepts any outcome only when terminal precedes DONE. DONE without terminal, success without finish, contradictory/duplicate terminal, or EOF before DONE is a protocol error.
@@ -35,6 +36,7 @@ Apply this contract when changing authenticated `/api/chat` generation, `runs`, 
 - A stream owns the nested gateway execution lifecycle: its `finally` requests nested engine closure on consumer `return()` without blocking the consumer, and runs any deferred final-usage callback from that same cleanup path. Final usage must not depend on code after the generator `finally` block.
 - Memory intent creation is part of the completion transaction. Immediate queue dispatch and artifact persistence are post-commit optimizations and cannot change the core outcome.
 - Public share DTOs never expose `MessageRunMetadata`. Historical loaders remain conversation-scoped and serialize dates as ISO strings.
+- `getMessageSiblings` projects optional `ChatMessage["status"]` only for persisted `success/interrupted` values. Version switching explicitly assigns `status: target.status`, including `undefined`, so no previous version's status leaks into the target.
 
 ## 4. Validation & Error Matrix
 
@@ -52,11 +54,14 @@ Apply this contract when changing authenticated `/api/chat` generation, `runs`, 
 | Memory intent insert fails | Entire completion transaction rolls back | Persistence error, terminal(failed), DONE |
 | Terminal run update returns zero rows | Entire completion transaction rolls back | Persistence error, terminal(failed), DONE |
 | Completion commit succeeds | Assistant, conversation time, intent, and run are visible together | One finish, terminal(success), DONE |
+| Continue has no new reasoning | Keep the existing reasoning (empty overall value is null) | No synthetic reasoning delta |
 
 ## 5. Good / Base / Bad Cases
 
 - Good: a successful assistant, run terminal metadata, conversation time, and memory intent become visible in the same commit.
 - Good: two concurrent continues serialize on the conversation row; only one original-content CAS and run terminal update succeeds.
+- Good: switching from an interrupted reply to a successful sibling clears the interrupted state; an unknown legacy target status clears the previous status as well.
+- Bad: replacing old reasoning with only the continuation delta or retaining the previous version's status via object spread.
 - Good: an Agent tool chain exposes one outer finish whose usage includes every model step.
 - Good: the fifth tool round executes once, then one tool-disabled request summarizes all accumulated results.
 - Good: an ordinary provider failure preserves its error frame, then sends terminal(failed) and DONE without emitting finish.
@@ -72,6 +77,7 @@ Apply this contract when changing authenticated `/api/chat` generation, `runs`, 
 - Run lifecycle tests: strict start waits for insert confirmation, rejects generically, and never exposes database details.
 - Repository unit tests: insert/continue fields, reference validation, fixed write order, intent failure, run zero-row, and ownership fencing.
 - Isolated PostgreSQL tests: concurrent continue has one winner; memory insert failure and terminal-run conflict roll back assistant, conversation time, intent, and run changes.
+- Continue tests cover old+new reasoning, empty new reasoning, null old reasoning, and interrupted partial reasoning; branch DTO/store tests cover both status directions and undefined clearing.
 - Coordinator tests: finish-before-Abort, Abort-before-finish, error-before-late-finish, natural EOF, duplicate terminal events, commit failure, an Abort-ignoring iterator, and one-step iterator settlement after finish/error.
 - Agent-loop tests: one outer finish, one shared run ID, aggregate usage, one aggregate telemetry finalization, exhausted-round summary with `tools: undefined`, post-tool empty-finish retry, no repeated tool execution, `maxSteps=0`, summary error/EOF, and Abort beating a late finish.
 - Stream telemetry tests: natural final-usage callback and consumer Abort/`return()` finalization of the nested execution.

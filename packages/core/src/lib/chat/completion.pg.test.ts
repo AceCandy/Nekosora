@@ -129,6 +129,42 @@ describePg("chat completion PostgreSQL transaction", () => {
     expect(intents.rows[0]?.count).toBe("0");
   });
 
+  it.each([
+    ["已有思考", "新增思考", "已有思考新增思考"],
+    ["已有思考", "", "已有思考"],
+    [null, "新增思考", "新增思考"],
+    [null, "", null],
+  ])("续写思考 %s + %s 刷新后为 %s", async (before, delta, expected) => {
+    const messageId = randomUUID();
+    const runId = `run_${randomUUID()}`;
+    await pool.query(
+      `INSERT INTO "messages" ("id", "conversation_id", "public_id", "parent_id", "role", "content", "reasoning")
+       VALUES ($1, $2, $3, $4, 'assistant', '"prefix"'::jsonb, $5)`,
+      [messageId, conversationId, randomUUID(), userMessageId, before],
+    );
+    await pool.query(
+      `INSERT INTO "runs" ("run_id", "conversation_id", "user_id", "status") VALUES ($1, $2, $3, 'running')`,
+      [runId, conversationId, userId],
+    );
+    await persistChatCompletion({
+      conversationId, userId, runId,
+      userMessageInternalId: userMessageId,
+      userContent: "question",
+      assistant: { kind: "continue", internalId: messageId, publicId: "unused", prefixText: "prefix" },
+      assistantText: "-suffix",
+      assistantReasoning: delta ?? "",
+      processTrace: { mode: "integration" },
+      terminalStatus: delta ? "success" : "interrupted",
+      tokenUsage: null,
+      durationMs: 10,
+      completedAt: new Date(),
+    });
+    const message = await pool.query<{ content: string; reasoning: string | null }>(
+      'SELECT "content", "reasoning" FROM "messages" WHERE "id" = $1', [messageId],
+    );
+    expect(message.rows[0]).toEqual({ content: "prefix-suffix", reasoning: expected });
+  });
+
   it("memory intent 主键冲突时回滚 assistant、conversation 与 run", async () => {
     const blockerRunId = `run_${randomUUID()}`;
     const runId = `run_${randomUUID()}`;

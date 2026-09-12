@@ -118,7 +118,7 @@ export interface IRRequest {
 
 export interface IRToolDef {
   type: "function";
-  function: { name: string; description?: string; parameters?: unknown };
+  function: { name: string; description?: string; parameters?: unknown; strict?: boolean };
 }
 
 export type IRToolChoice = "auto" | "none" | "required" | {
