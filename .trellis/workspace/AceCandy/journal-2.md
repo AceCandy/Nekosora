@@ -1941,3 +1941,38 @@ Completed local and production environment examples, aligned both production Com
 ### Status
 
 [OK] **Completed**
+
+
+## Session 149: Chat 与网关审查修复收尾
+<!-- trellis-session: v=2 fp=29dcd1cb0f61593c -->
+
+**Date**: 2026-09-12
+**Task**: Chat 与网关审查修复收尾
+**Branch**: `main`
+
+### Summary
+
+完成五项缺陷修复、独立复核与任务归档。
+
+### Main Changes
+
+- 修复图片下载 DNS SSRF、系统文本块和工具 strict 丢失、版本状态残留、续写思考覆盖，并补充公网 IPv6 兼容与边界规范。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `55f7509` | fix: 修复 Chat 与网关五项审查缺陷 |
+
+### Testing
+
+- [OK] pnpm check、pnpm test、隔离 PostgreSQL 6 个套件共 42 项测试通过；独立复核通过。
+- [OK] 未执行生产构建、浏览器及真实上游联调；临时数据库容器已清理。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 按需执行生产构建和浏览器、真实上游联调；本次未推送或部署。

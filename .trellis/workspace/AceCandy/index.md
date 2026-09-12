@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 148
-- **Last Active**: 2026-09-11
+- **Total Sessions**: 149
+- **Last Active**: 2026-09-12
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~1943 | Active |
+| `journal-2.md` | ~1978 | Active |
 | `journal-1.md` | ~1981 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 149 | 2026-09-12 | Chat 与网关审查修复收尾 | `55f7509` | `main` |
 | 148 | 2026-09-11 | 第三轮技术债收敛与提交 | `b31b359`, `fd9e404`, `5510713` | `main` |
 | 147 | 2026-09-11 | 第二轮技术债收敛完成 | `10e2990`, `9b2a08d`, `5017dc4`, `09468a3` | `main` |
 | 146 | 2026-09-11 | Core 包边界与聊天 SSE 收敛 | `c8cb4a8`, `6ad37b9` | `main` |
