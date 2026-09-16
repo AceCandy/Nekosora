@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { AudioLines, Square } from "lucide-react";
 import { AIArrowUpIcon } from "@/shared/components/animated-icons";
@@ -17,6 +17,8 @@ interface ChatInputBoxProps {
   hasAttachments?: boolean;
   /** 流式中（显示停止按钮、关闭斜杠命令；输入框保持可输入，Enter 转为排队）。 */
   disabled: boolean;
+  /** 等待发送的文本数量，用于说明停止当前回答的后续行为。 */
+  queuedCount?: number;
   /** 停止生成。 */
   onStop: () => void;
   /** 粘贴图片文件时触发（传入图片 File 数组）。 */
@@ -45,6 +47,7 @@ export function ChatInputBox({
   onSend,
   hasAttachments = false,
   disabled,
+  queuedCount = 0,
   onStop,
   onPasteFiles,
   onDropFiles,
@@ -56,7 +59,9 @@ export function ChatInputBox({
 }: ChatInputBoxProps) {
   const t = useTranslations("chat");
   const locale = useLocale();
-  const canSend = value.trim().length > 0 || hasAttachments;
+  const queueHintId = useId();
+  const canSend = value.trim().length > 0 || (!disabled && hasAttachments);
+  const stopLabel = t(queuedCount > 0 ? "queueStopContinue" : "stopGeneration");
 
   // 语音输入:确认句追加到输入框末尾(自动补空格);不支持时主位回退为禁用 send
   const appendTranscript = useCallback((text: string) => {
@@ -134,8 +139,8 @@ export function ChatInputBox({
         type="button"
         onClick={onStop}
         className="group touch-target pointer-events-auto inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-transparent text-danger transition-[background-color,color,transform] duration-200 ease-out hover:-translate-y-px hover:bg-red-500/10 hover:text-danger-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 active:translate-y-0 active:scale-95 motion-reduce:transition-none motion-reduce:hover:transform-none   "
-        title={t("stopGeneration")}
-        aria-label={t("stopGeneration")}
+        title={stopLabel}
+        aria-label={stopLabel}
       >
         <Square strokeWidth={2.5} className="h-4 w-4 transition-transform duration-200 ease-out group-hover:scale-90 motion-reduce:transition-none motion-reduce:group-hover:transform-none" aria-hidden="true" />
       </button>
@@ -272,6 +277,7 @@ export function ChatInputBox({
           }}
           onDragOver={(e) => e.preventDefault()}
           onKeyDown={(e) => {
+            if (e.nativeEvent.isComposing || e.keyCode === 229) return;
             // 斜杠命令激活时拦截导航键,Enter/Tab 选中而非发送或移焦
             if (slashMatches.length > 0) {
               if (e.key === "ArrowDown") {
@@ -301,13 +307,14 @@ export function ChatInputBox({
               if (canSend) onSend();
             }
           }}
-          placeholder={t("placeholder")}
+          placeholder={t(disabled ? "queuePlaceholder" : "placeholder")}
           rows={1}
           className={clsx(
             "scrollbar-hidden block h-full w-full resize-none overflow-y-auto border-0 bg-transparent py-3 text-ui-reading leading-6 text-neutral-800 outline-none placeholder-ink-tertiary focus:ring-0 focus-visible:outline-none focus-visible:ring-0",
             layout.multiline ? "px-3 pb-12" : "px-3 pb-12 sm:pb-3 sm:pl-12 sm:pr-72",
           )}
           aria-label={t("composerInputLabel")}
+          aria-describedby={disabled ? queueHintId : undefined}
         />
         </div>
 
@@ -318,6 +325,12 @@ export function ChatInputBox({
           {mainButton}
         </div>
       </div>
+      {disabled && (
+        <p id={queueHintId} className="px-3 pb-2 text-ui-caption text-ink-tertiary">
+          {t("queueInputHint")}
+          {hasAttachments && <span className="block">{t("queueTextOnly")}</span>}
+        </p>
+      )}
     </div>
   );
 }

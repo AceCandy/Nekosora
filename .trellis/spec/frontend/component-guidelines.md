@@ -107,6 +107,7 @@
 - 共享交互原语必须显式提供 `focus-visible` 状态，不能只写 `outline-none`。
 - `globals.css` 为没有显式 `focus-visible:ring` 的原生 `a/button/input/select/textarea/summary` 提供 2px `sora-blue` outline 兜底；新增组件不要覆盖或移除该兜底，除非同时提供对比度不低于 3:1 的替代焦点样式。
 - 表单 label 必须通过 `htmlFor` / `id` 关联字段；动态错误用稳定 id + `aria-describedby`，需要即时播报时使用 `role="alert"`。
+- 选段追问等从正文转移到输入框的操作，必须先清除正文选区，再提交草稿、聚焦并设置光标；在 textarea 聚焦后调用 `window.getSelection()?.removeAllRanges()` 会让 Chromium 将光标重置到开头，须用浏览器验证操作顺序与最终光标位置。
 
 ```tsx
 // Wrong:视觉 label 与输入框没有程序化关联,且清掉焦点后无替代。

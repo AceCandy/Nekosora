@@ -228,7 +228,7 @@ export default function Sidebar({
   const activeConversationId = useChatStreamStore((s) => s.activeConversationId);
   const optimisticConversation = useChatStreamStore((s) => s.optimisticConversation);
   const welcomeMode = useChatStreamStore((s) => s.welcomeMode);
-  const pollingGeneratingIds = mergeConversationIds(initialGeneratingIds, streamingConvIds, [...generatingIds]);
+  const pollingGeneratingIds = mergeConversationIds(streamingConvIds, [...generatingIds]);
   const pollingGeneratingKey = JSON.stringify(pollingGeneratingIds);
   const streamingGeneratingKey = JSON.stringify(mergeConversationIds(streamingConvIds));
 
@@ -244,7 +244,7 @@ export default function Sidebar({
       generation: current.generation + 1,
     }));
     setGroupLoads({});
-    setGeneratingIds(new Set(pollingGeneratingIds));
+    setGeneratingIds(new Set(mergeConversationIds(initialGeneratingIds, streamingConvIds)));
   }
 
   // 高亮优先路由解析(导航后即时正确);replaceState 后 Next pathname 暂未更新时回落到 store 活跃 id。
@@ -273,7 +273,7 @@ export default function Sidebar({
       .then((summary) => { if (!cancelled) setGroupSummary(summary); })
       .catch(() => undefined);
     return () => { cancelled = true; };
-  }, [boundaries, getGroupSummaryAction, summaryVersion]);
+  }, [boundaries, getGroupSummaryAction, summaryVersion, optimisticConversation?.id]);
 
   // 后台会话完成蓝点:轮询各会话 generating 状态,记录上一轮「生成中」的集合;
   // 当某会话从「生成中」变为「已完成」且不是当前会话,标记蓝点;点击该会话项清除。
@@ -340,12 +340,9 @@ export default function Sidebar({
             return next;
           });
         }
-        const changed = [...previousGenerating].some((id) => !nowGenerating.has(id));
         previousGenerating = nowGenerating;
-        // 本轮查询反映出生成状态变化(有会话刚完成,或已无任何生成中会话):
-        // 刷新 SSR 同步 generating 字段,使 hasGenerating 收敛、轮询自然停止,
-        // 并让侧栏转圈及时消失。
-        if (nowGenerating.size === 0 || changed) router.refresh();
+        // generating 已由上面的局部状态同步；整页 refresh 会在新会话静默换 URL 后
+        // 重挂 Composer，丢失尚未发送的队列和草稿。
         shouldContinue = nowGenerating.size > 0 || locallyStreaming.size > 0;
       } catch {
         /* 轮询失败静默,下轮重试 */
@@ -361,7 +358,7 @@ export default function Sidebar({
     // activeConvId 进依赖:切换会话时立即重算(避免刚完成的当前会话残留蓝点)
     // 两个 key 都按内容稳定，避免 RSC refresh 只因数组引用变化重建轮询。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasGenerating, pollingGeneratingKey, streamingGeneratingKey, activeConvId, getGeneratingStatusesAction, router]);
+  }, [hasGenerating, pollingGeneratingKey, streamingGeneratingKey, activeConvId, getGeneratingStatusesAction]);
 
   // 全文搜索:query 非空时防抖(300ms)调 searchMessages 跨会话搜消息内容
   useEffect(() => {

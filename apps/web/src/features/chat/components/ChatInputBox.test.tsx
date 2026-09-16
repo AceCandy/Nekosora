@@ -85,6 +85,44 @@ const toolbarProps: ChatToolbarProps = {
 };
 
 describe("ChatInputBox attachments", () => {
+  it("names the stop action explicitly when messages are queued", () => {
+    const html = renderToStaticMarkup(<ChatInputBox
+      value=""
+      onChange={noop}
+      onSend={noop}
+      disabled
+      queuedCount={2}
+      onStop={noop}
+      onPasteFiles={noop}
+      onDropFiles={noop}
+    />);
+    expect(html).toContain('aria-label="queueStopContinue"');
+    expect(zhMessages.chat.queueStopContinue).toContain("发送队列下一条");
+    expect(enMessages.chat.queueStopContinue).toContain("send the next queued message");
+  });
+
+  it.each([false, true])("shows queue guidance only while generating (streaming=%s)", (streaming) => {
+    const html = renderToStaticMarkup(<ChatInputBox
+      value="下一条问题"
+      onChange={noop}
+      onSend={noop}
+      disabled={streaming}
+      onStop={noop}
+      onPasteFiles={noop}
+      onDropFiles={noop}
+      hasAttachments
+    />);
+    expect(html.includes("queueInputHint")).toBe(streaming);
+    expect(html.includes("queueTextOnly")).toBe(streaming);
+    expect(html.includes("queuePlaceholder")).toBe(streaming);
+    expect(html.includes("aria-describedby=")).toBe(streaming);
+    for (const catalog of [zhMessages, enMessages]) {
+      expect(catalog.chat.queueInputHint).toBeTruthy();
+      expect(catalog.chat.queueTextOnly).toBeTruthy();
+      expect(catalog.chat.queueSettings).toBeTruthy();
+    }
+  });
+
   it("联网搜索控件在所有 locale 都有 chat 文案", () => {
     expect(zhMessages.chat.webSearch).toBe("联网搜索");
     expect(enMessages.chat.webSearch).toBe("Web Search");

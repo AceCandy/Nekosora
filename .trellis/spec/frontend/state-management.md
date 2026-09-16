@@ -69,7 +69,19 @@ const { messages, streaming } = useChatStreamStore(
 
 ## Composer 局部协调状态
 
-Chat Composer 的六类生成选择由 `ComposerStateMachine` 持有一个完整 `ComposerSelectionState`。组件只通过领域 transition 更新；普通发送和选区追问必须在事件发生时调用同步 `getSnapshot()`，不得从多个 render closure 拼装请求参数。
+Chat Composer 的六类生成选择由 `ComposerStateMachine` 持有一个完整 `ComposerSelectionState`。组件只通过领域 transition 更新；普通发送与队列实际发送必须在事件发生时调用同步 `getSnapshot()`，不得从多个 render closure 拼装请求参数。选区追问只回填草稿，用户提交时再读取设置。
+
+### 消息队列与停止边界
+
+- 生成期间 Enter 只将非空文本加入本地队列，IME 组合输入中的 Enter 不发送或入队；队列明确提示使用实际发送时的模型和设置。
+- 排队出队通过 `useChatRuntime.send` 的 `includeAttachments: false` 关闭 `hasAttachments`、`uploadAttachments` 与 `onAttachmentsConsumed`；普通发送默认保留附件路径，队列不能消费正在编辑的草稿附件。
+- 当前停止行为保持为停止本轮并继续发送队列；停止按钮与队列说明必须明确这一点。空闲时的“发送这条”直接出队，不依赖不存在的 streaming 状态翻转。
+- `send`、`regenerate`、`editAndResend` 与 `continueGeneration` 的 finally 仅在 runtime 的 `abortController` 仍等于本次 controller 时清理运行态。`abort()` 不代表异步收尾已结束，旧请求不得清空新请求的 controller 或将其 streaming 置为 false。
+- 回归测试必须覆盖：入队不立即发送、发送时读取最新设置、队列隔离草稿附件、拒绝时恢复文本，以及四类旧请求停止后延迟结束时保留新请求运行态。
+- Sidebar 的生成状态轮询只更新 `generatingIds` 与列表中的 `generating`，不得调用整页 `router.refresh()`：新会话静默切换 URL 后，整页刷新可能跨路由段重挂 Composer，清空本地队列和草稿。此约束适用于前台建会期间服务端 run 尚不可见、后台 run 完成等轮询结果，不只约束 `useChatRuntime`。
+- 服务端 `initialGeneratingIds` 只在初始化或新的 RSC 导航快照到来时注入；后续轮询以最新返回值和本地 streaming 为准，不得每轮重新并入旧 SSR 列表，否则已结束任务会反复唤醒轮询。没有服务端 run 但本地仍在生成时继续轮询；两者均空时停止。
+- 该边界除轮询单测外，必须在真实新会话页面验证：首次请求过程中排队、自动建会、流结束出队，全程草稿保留且原输入 DOM 未被重挂；只用隔离 Composer 的 mock runtime 无法覆盖 Sidebar 与 App Router 的联动。
+- `createConversation` 返回 ID 后由 store 乐观项同步侧栏，不调用 `revalidatePath('/chat', 'layout')`；建会响应中的整页 RSC 重验同样会破坏当前 Composer 生命周期。乐观 ID 变化时单独查询分组摘要，使计数与加载更多边界更新。回归需覆盖登录后立刻发送，而不只是已登录后直接打开 `/chat`。
 
 ```ts
 interface ComposerSelectionState {
@@ -186,7 +198,7 @@ store 的 `migrate(临时key → 真实id)` 先于回写执行，活动 id 一�
 
 **乐观项标题的异步刷新**：新会话乐观项的初始标题是首条消息截断（store 内 `titleFrom`）。标题由独立 worker 写库，聊天 SSE 与 worker 不共享请求生命周期，因此 `/api/chat` 成功响应后由 store 按 `conversationId` 每秒短轮询标题状态，最多一分钟；标题 settled 后匹配 `optimisticConversation.id` 覆盖其 `title`，Sidebar 订阅即异步刷新。轮询任务属于 store 模块生命周期，不随会话切换或组件重挂取消，查询异常也只在窗口内重试；唯一停止条件是标题 settled 或达到一分钟上限。现有 SSE `title_updated(title, conversationId)` 保留为兼容消费路径，但不能作为后台 worker 完成通知的唯一机制。历史会话收到兼容事件时，仍由上层 `hooks.onTitleUpdated` 的 `router.refresh()` 走 SSR 刷新。
 
-> **Gotcha（Sidebar 合并）**：合并 SSR `conversations` 与乐观项时，若 SSR 已含同 id 会话，**不要整个 `return conversations` 忽略乐观项**。`createConversation` 的 `revalidatePath("/chat","layout")` 会让 SSR 很快带上新会话（此时 DB title 还是 `"新会话"`），而新会话场景跳过了 `router.refresh()`，SSR 不会自动追上 `maybeGenerateTitle` 写入的真实标题。必须用乐观项 title 覆盖 SSR 同 id 会话的 title，否则侧栏停在 `"新会话"`/旧值直到整页刷新。
+> **Gotcha（Sidebar 合并）**：合并 SSR `conversations` 与乐观项时，若 SSR 已含同 id 会话，**不要整个 `return conversations` 忽略乐观项**。导航或单条查询可能在标题 worker 完成前读到 `"新会话"`，新会话场景不会通过整页刷新追赶真实标题。必须用乐观项 title 覆盖同 id 会话的 title，否则侧栏停在旧值直到整页刷新。
 
 > **Gotcha**：`usePathname()` **不会**跟随 `window.history.replaceState`（Next 路由状态与原生 history API 不同步）。凡用 `usePathname` 解析当前会话做高亮的 UI（如 `Sidebar`），在乐观建会期间不会立即更新，要等下一次真实路由导航。若需即时跟随，改用由 store 维护的 `activeConversationId` 驱动，而非 `usePathname`。
 

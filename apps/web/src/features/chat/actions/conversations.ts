@@ -423,7 +423,7 @@ export async function createConversation(modelName?: string, options?: CreateCon
         : null,
     })
     .returning({ id: S().conversations.id });
-  revalidatePath("/chat", "layout");
+  // 侧栏由建会后的乐观项同步；整页重验可能重挂正在输入的 Composer。
   return row.id as string;
 }
 

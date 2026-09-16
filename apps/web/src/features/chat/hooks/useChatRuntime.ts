@@ -111,13 +111,18 @@ export function useChatRuntime({
           reasoning?: ReasoningLevel;
           reasoningByModelId?: Record<string, ReasoningLevel>;
         },
-        lifecycle?: { onAccepted?: () => void; onRejected?: (message: string) => void },
+        lifecycle?: {
+          onAccepted?: () => void;
+          onRejected?: (message: string) => void;
+          /** 队列仅发送文本，不消费输入区中另行准备的附件。 */
+          includeAttachments?: boolean;
+        },
       ) => {
         const opts: SendOptions = { model: modelName, modelId, instructionCardIds, webSearch, createOptions };
         void actions.send(key, text, opts, {
-          hasAttachments,
-          uploadAttachments,
-          onAttachmentsConsumed,
+          hasAttachments: lifecycle?.includeAttachments !== false && hasAttachments,
+          uploadAttachments: lifecycle?.includeAttachments === false ? undefined : uploadAttachments,
+          onAttachmentsConsumed: lifecycle?.includeAttachments === false ? undefined : onAttachmentsConsumed,
           onRequestAccepted: lifecycle?.onAccepted,
           onRequestRejected: (reason) => {
             onRequestRejected?.(reason);

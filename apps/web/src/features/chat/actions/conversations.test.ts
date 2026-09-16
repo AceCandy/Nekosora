@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   isNotNull: vi.fn(),
   asc: vi.fn((field: unknown) => ({ op: "asc", field })),
   getConversationTitleState: vi.fn(),
+  revalidatePath: vi.fn(),
   sql: vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => ({
     op: "sql",
     text: strings.join("?"),
@@ -33,7 +34,7 @@ vi.mock("drizzle-orm", () => ({
   asc: mocks.asc,
   sql: mocks.sql,
 }));
-vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }));
 vi.mock("@/lib/session", () => ({ requireSession: mocks.requireSession }));
 vi.mock("@nekusora/core/infra/db", () => ({
   getDb: mocks.getDb,
@@ -44,6 +45,7 @@ vi.mock("@nekusora/core/conversation-title/service", () => ({
 }));
 
 import {
+  createConversation,
   getConversationComposerState,
   getConversationNavigationItem,
   getConversationGroupSummary,
@@ -91,6 +93,17 @@ function queryReturning(rows: Record<string, unknown>[]) {
   };
   return query;
 }
+
+it("建会返回真实 ID，不通过整页重验打断当前 Composer", async () => {
+  vi.clearAllMocks();
+  mocks.requireSession.mockResolvedValue({ id: "user-1" });
+  mocks.getSchema.mockReturnValue(schema);
+  const values = vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: "created" }]) });
+  mocks.getDb.mockResolvedValue({ insert: vi.fn().mockReturnValue({ values }) });
+  expect(await createConversation("test-model")).toBe("created");
+  expect(values).toHaveBeenCalledWith(expect.objectContaining({ userId: "user-1", modelName: "test-model" }));
+  expect(mocks.revalidatePath).not.toHaveBeenCalled();
+});
 
 describe("会话输入区读取边界", () => {
   beforeEach(() => {

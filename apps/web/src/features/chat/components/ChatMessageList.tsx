@@ -78,7 +78,7 @@ interface ChatMessageListProps {
   models?: ModelOption[];
   /** 选中文本「引用」：插入输入框。 */
   onQuote?: (text: string) => void;
-  /** 选中文本「追问」：以该文本为新问题发送。 */
+  /** 选中文本「追问」：引用到输入框并聚焦，等待用户补充问题。 */
   onAsk?: (text: string) => void;
 }
 
@@ -695,7 +695,7 @@ export function ChatMessageList({
               <button
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => { onAsk(selection.text); setSelection(null); window.getSelection()?.removeAllRanges(); }}
+                onClick={() => { setSelection(null); window.getSelection()?.removeAllRanges(); onAsk(selection.text); }}
                 className="inline-flex items-center gap-1 rounded px-2 py-1 text-ui-caption font-semibold text-sora-blue hover:bg-sora-blue/[0.06] cursor-pointer"
                 title={t("askFollowup")}
               >

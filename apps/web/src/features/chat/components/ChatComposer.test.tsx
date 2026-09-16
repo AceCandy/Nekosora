@@ -13,7 +13,29 @@ const mocks = vi.hoisted(() => ({
   send: vi.fn(),
   handleUpload: vi.fn(),
   translate: vi.fn<(key: string) => string>(),
+  draft: null as string | null,
+  queue: null as string[] | null,
+  streaming: false,
+  stopGeneration: vi.fn(),
 }));
+
+vi.mock("react", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react")>();
+  return {
+    ...actual,
+    useState: (initial: unknown) => {
+      const state = actual.useState(initial);
+      if (Array.isArray(initial) && mocks.queue !== null) {
+        return [mocks.queue, (next: string[]) => { mocks.queue = next; }];
+      }
+      if (initial !== "" || mocks.draft === null) return state;
+      return [mocks.draft, (next: React.SetStateAction<string>) => {
+        mocks.draft = typeof next === "function" ? next(mocks.draft ?? "") : next;
+      }];
+    },
+    useRef: (initial: unknown) => actual.useRef(Array.isArray(initial) && mocks.queue !== null ? mocks.queue : initial),
+  };
+});
 
 interface CapturedToolbarProps {
   onUploadFiles: (files: FileList | File[] | null) => void;
@@ -61,6 +83,7 @@ let capturedRuntimeOptions: CapturedRuntimeOptions | null = null;
 let coordinatorState: ComposerSelectionState;
 let currentSnapshot: ComposerSelectionState;
 let syncStatus: "idle" | "saving" | "error" = "idle";
+let capturedComposerTree: React.ReactNode;
 
 vi.mock("next/image", () => ({
   default: () => React.createElement("span", { "data-image": "true" }),
@@ -88,7 +111,7 @@ vi.mock("@/features/chat/hooks/useChatRuntime", () => ({
     capturedRuntimeOptions = options;
     return {
       messages: [],
-      streaming: false,
+      streaming: mocks.streaming,
       send: mocks.send,
       regenerate: vi.fn(),
       editAndResend: vi.fn(),
@@ -96,7 +119,7 @@ vi.mock("@/features/chat/hooks/useChatRuntime", () => ({
       continueGeneration: vi.fn(),
       switchVersion: vi.fn(),
       setMessageFeedbackLocal: vi.fn(),
-      stopGeneration: vi.fn(),
+      stopGeneration: mocks.stopGeneration,
     };
   },
 }));
@@ -180,8 +203,12 @@ function renderComposer(
   webSearchAvailable = false,
   renderStyles?: RenderStyleOption[],
 ): string {
+  function CaptureComposer(props: React.ComponentProps<typeof ChatComposer>) {
+    capturedComposerTree = ChatComposer(props);
+    return capturedComposerTree;
+  }
   return renderToStaticMarkup(
-    <ChatComposer
+    <CaptureComposer
       models={models}
       conversationId={conversationId}
       webSearchAvailable={webSearchAvailable}
@@ -195,6 +222,9 @@ function renderComposer(
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.draft = null;
+  mocks.queue = null;
+  mocks.streaming = false;
   mocks.translate.mockImplementation((key) => ({
     browserOffline: "当前网络已断开，请联网后重试",
     composerSyncFailed: "输入区设置未同步",
@@ -217,6 +247,43 @@ beforeEach(() => {
 });
 
 describe("ChatComposer coordinator integration", () => {
+  it("queues text while generating without sending it immediately", () => {
+    mocks.streaming = true;
+    mocks.queue = ["先前问题"];
+    mocks.draft = " 下一条问题 ";
+    const html = renderComposer("conversation-a");
+
+    capturedInputBox?.onSend();
+
+    expect(mocks.queue).toEqual(["先前问题", "下一条问题"]);
+    expect(mocks.draft).toBe("");
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(html).toContain("queueSettings");
+    expect(html).toContain("queueStopHint");
+  });
+
+  it("sends a waiting queue item with current settings and leaves draft attachments alone", () => {
+    mocks.queue = ["第一条", "第二条"];
+    mocks.draft = "正在编辑";
+    const html = renderComposer("conversation-a");
+    currentSnapshot = { ...currentSnapshot, modelId: "model-b", webSearch: true };
+    const buttons = collectElements(capturedComposerTree).filter((node) => node.props["aria-label"] === "queueSendNow");
+    expect(buttons).toHaveLength(2);
+    (buttons[1].props.onClick as () => void)();
+
+    expect(html).toContain("queueWaitingHint");
+    expect(mocks.queue).toEqual(["第一条"]);
+    expect(mocks.stopGeneration).not.toHaveBeenCalled();
+    expect(mocks.send).toHaveBeenCalledExactlyOnceWith(
+      "第二条", "provider/model-b", "model-b", ["card-initial"], true,
+      expect.any(Object), expect.objectContaining({ includeAttachments: false, onRejected: expect.any(Function) }),
+    );
+    expect(mocks.draft).toBe("正在编辑");
+    const onRejected = mocks.send.mock.calls[0][6].onRejected as () => void;
+    onRejected();
+    expect(mocks.draft).toBe("正在编辑\n第二条");
+  });
+
   it("renders the style menu after the title and keeps the plus menu", () => {
     const html = renderComposer();
 
@@ -270,7 +337,7 @@ describe("ChatComposer coordinator integration", () => {
     ]);
   });
 
-  it("send and selection ask read the latest synchronous snapshot", () => {
+  it("send reads the latest synchronous snapshot", () => {
     renderComposer("conversation-a");
     currentSnapshot = {
       ...coordinatorState,
@@ -282,7 +349,6 @@ describe("ChatComposer coordinator integration", () => {
     };
 
     capturedInputBox?.onSend();
-    capturedMessageList?.onAsk?.("selected text");
 
     const expectedOptions = {
       outputModeId: null,
@@ -300,16 +366,17 @@ describe("ChatComposer coordinator integration", () => {
       expectedOptions,
       expect.objectContaining({ onAccepted: expect.any(Function), onRejected: expect.any(Function) }),
     );
-    expect(mocks.send).toHaveBeenNthCalledWith(
-      2,
-      "selected text",
-      "provider/model-a",
-      "model-a",
-      ["card-latest"],
-      true,
-      expectedOptions,
-      undefined,
-    );
+    expect(mocks.send).toHaveBeenCalledOnce();
+  });
+
+  it.each(["", "已有问题"])("selection ask appends a multiline quote to draft %j without sending", (draft) => {
+    mocks.draft = draft;
+    renderComposer("conversation-a");
+
+    capturedMessageList?.onAsk?.("第一行\r\n第二行\n\n第三行");
+
+    expect(mocks.draft).toBe(`${draft ? `${draft}\n\n` : ""}> 第一行\n> 第二行\n> \n> 第三行\n\n`);
+    expect(mocks.send).not.toHaveBeenCalled();
   });
 
   it("adopts a new conversation with the exact snapshot used to create it", () => {

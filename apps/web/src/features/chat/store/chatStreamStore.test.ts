@@ -602,6 +602,33 @@ describe("chatStreamStore terminal 状态收敛", () => {
     }
   }
 
+  it.each(actions)("%s 停止后的延迟收尾不能清空下一条请求的运行态", async (action) => {
+    const firstStarted = Promise.withResolvers<void>();
+    const first = Promise.withResolvers<"interrupted">();
+    const second = Promise.withResolvers<"success">();
+    mocks.consumeChatSSE
+      .mockImplementationOnce(() => { firstStarted.resolve(); return first.promise; })
+      .mockImplementationOnce(() => second.promise);
+
+    const previous = invokeAction(action);
+    await firstStarted.promise;
+    useChatStreamStore.getState().stopGeneration(key);
+    const next = useChatStreamStore.getState().send(key, "queued message", sendOptions);
+    const controller = useChatStreamStore.getState().runtimes[key].abortController;
+    expect(controller).not.toBeNull();
+
+    first.resolve("interrupted");
+    await previous;
+    try {
+      const current = useChatStreamStore.getState().runtimes[key];
+      expect(current.streaming).toBe(true);
+      expect(current.abortController).toBe(controller);
+    } finally {
+      second.resolve("success");
+      await next;
+    }
+  });
+
   it.each(cases)("%s 收到 terminal(%s) 后写入对应消息完整性状态", async (action, status) => {
     const message = await runAction(action, status);
 

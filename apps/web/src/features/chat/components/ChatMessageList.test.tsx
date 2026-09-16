@@ -1,6 +1,6 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatMessage } from "@/features/chat/model/types";
 import type { PreviewableFile } from "@/shared/components/file-preview/FilePreviewModal";
 
@@ -12,13 +12,31 @@ const capturedItems = vi.hoisted(() => [] as Array<{
   onPreviewFile?: (file: PreviewableFile) => void;
 }>);
 
+const selectionTest = vi.hoisted(() => ({ active: false, injected: false }));
+let capturedTree: React.ReactNode;
+vi.mock("react", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react")>();
+  return {
+    ...actual,
+    useState: (initial: unknown) => {
+      const state = actual.useState(initial);
+      if (initial !== null || !selectionTest.active || selectionTest.injected) return state;
+      selectionTest.injected = true;
+      return [{ text: "选中的正文", top: 100, left: 100 }, state[1]];
+    },
+  };
+});
+
 vi.mock("next-intl", () => ({
   useTranslations: () => (key: string) => key,
 }));
 
 vi.mock("@shadcn/react/message-scroller", () => ({
   MessageScroller: {
-    Provider: ({ children }: { children: React.ReactNode }) => children,
+    Provider: ({ children }: { children: React.ReactNode }) => {
+      capturedTree = children;
+      return children;
+    },
     Root: ({ children }: { children: React.ReactNode }) => children,
     Viewport: ({ children }: { children: React.ReactNode }) => children,
     Content: ({ children, className }: { children: React.ReactNode; className?: string }) => (
@@ -64,9 +82,34 @@ import { ChatMessageList } from "./ChatMessageList";
 
 beforeEach(() => {
   capturedItems.length = 0;
+  selectionTest.active = false;
+  selectionTest.injected = false;
 });
+afterEach(() => vi.unstubAllGlobals());
 
 describe("ChatMessageList render style boundary", () => {
+  it("clears the source selection before the follow-up callback moves the input caret", () => {
+    selectionTest.active = true;
+    const calls: string[] = [];
+    vi.stubGlobal("window", { getSelection: () => ({ removeAllRanges: () => calls.push("clear") }) });
+    renderToStaticMarkup(<ChatMessageList
+      messages={[]}
+      streaming={false}
+      model="model-a"
+      onRegenerate={() => undefined}
+      onOpenArtifact={() => undefined}
+      onAsk={(text) => calls.push(text)}
+    />);
+    const collect = (node: React.ReactNode): React.ReactElement<{ children?: React.ReactNode; title?: string; onClick?: () => void }>[] => {
+      if (!React.isValidElement<{ children?: React.ReactNode; title?: string; onClick?: () => void }>(node)) return [];
+      return [node, ...React.Children.toArray(node.props.children).flatMap(collect)];
+    };
+    const button = collect(capturedTree).find((node) => node.props.title === "askFollowup");
+    expect(button).toBeDefined();
+    button?.props.onClick?.();
+    expect(calls).toEqual(["clear", "选中的正文"]);
+  });
+
   it("scopes CSS per assistant and keeps all style props away from user messages", () => {
     const onPreviewFile = vi.fn();
     const html = renderToStaticMarkup(

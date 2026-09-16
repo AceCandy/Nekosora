@@ -25,7 +25,7 @@ Apply this contract when changing Chat context preparation, reasoning/tool/searc
 - The SSE parser validates trace frames once with the shared guard and preserves the existing `finish -> terminal(success) -> [DONE]` contract.
 - If a best-effort terminal trace is lost, the validated SSE terminal locally converges the client runtime to the same terminal phase.
 - UI projects raw steps into user-facing research stages (`understand/context/reasoning/search/read`). When the canonical phase enters `answering`, the research summary immediately becomes completed before the first text delta is rendered; its duration is `startedAt -> firstContentAt` and no longer changes during answer streaming. It never adds a redundant answer-generation stage or renders prompt construction, hidden reasoning, raw tool names/arguments, or provider attempt paths.
-- The disclosure is collapsed by default: while active its summary shows only the current stage, safe query, and source count; a run transition to terminal collapses it once. Sources are a separate disclosure below the semantic timeline, never an execution step.
+- The disclosure is collapsed by default: while active its summary shows only the current stage, safe query, and source count. Preserve the user's expanded state through answering and terminal phases within the same run; only a new run resets it. Legacy messages without a run ID must not use changing content lengths or source counts as disclosure identity. Sources are a separate disclosure below the semantic timeline, never an execution step.
 - RAG sources use real file buttons and the existing `FilePreviewModal -> /api/files/{fileId}` owner-authorized path. Core and Web step cloning must copy both the `sources` array and each source object so live state, snapshots, and sibling versions do not share mutable references.
 
 ## 4. Validation & Error Matrix
@@ -61,7 +61,7 @@ Apply this contract when changing Chat context preparation, reasoning/tool/searc
 - Store tests cover send, regenerate, edit-and-resend, continue, multi-run preservation, Abort, and failure.
 - History/version tests assert snapshot round-trip and selected-version isolation.
 - RAG tests assert full-context budget admission, packed-hit deduplication, strict source allowlisting, SSE preservation, nested clone isolation, history/version round-trip, and owner-preview callback wiring.
-- Component/model tests cover semantic step grouping, hidden internal details, `answering` completing research at `firstContentAt`, frozen research duration during answer streaming, current-stage summaries, terminal auto-collapse, partial-source warning, legacy fallback, independent sources, keyboard disclosure, and reduced motion.
+- Component/model tests cover semantic step grouping, hidden internal details, `answering` completing research at `firstContentAt`, frozen research duration during answer streaming, current-stage summaries, preserved expansion through terminal phases, new-run reset, partial-source warning, legacy fallback, independent sources, keyboard disclosure, and reduced motion.
 
 ## 7. Wrong vs Correct
 

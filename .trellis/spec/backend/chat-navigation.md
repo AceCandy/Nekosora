@@ -56,6 +56,8 @@ The PostgreSQL navigation index is ordered by `user_id`, rank ascending, `update
 - Every list, deep-link projection, and active-run query is isolated by the authenticated user. A missing or foreign deep-link item returns `null`.
 - A deep-linked current item outside the loaded window is fetched by ID and merged by the full sort key. Message search remains an independent server query.
 - Sidebar polling starts from the union of server-reported active runs and client streaming runtimes. Polling uses a single recursive timeout and stops scheduling after both sources are empty.
+- Poll responses update local generating state without refreshing the whole route. Initial SSR run IDs are adopted only on initialization or a new navigation snapshot, not merged back into every poll.
+- Conversation creation returns the ID without invalidating the Chat layout. The stream store supplies the optimistic sidebar item; an optimistic-ID change separately reloads group totals. Whole-layout revalidation during creation can remount the Composer and discard queued text and drafts.
 - RSC refresh replaces the local window and advances its generation; late page responses from an older generation are ignored.
 
 ## 4. Validation & Error Matrix
@@ -70,7 +72,7 @@ The PostgreSQL navigation index is ordered by `user_id`, rank ascending, `update
 | Browser reports offline or group request exceeds 10 seconds | Preserve loaded rows, mark only that group retryable, and ignore a late result |
 | Invalid/unsorted group boundaries or malformed group cursor | Reject before querying |
 | RSC refresh races with page request | Discard the stale page response |
-| Active-run poll returns no rows | Clear generating state, refresh once, and stop the timer |
+| Active-run poll returns no rows | Clear server generating state locally; continue only while local streaming exists; never refresh the route |
 
 ## 5. Good / Base / Bad Cases
 

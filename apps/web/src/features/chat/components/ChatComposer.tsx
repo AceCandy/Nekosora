@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useRef, useCallback, useDeferredValue } from "react";
+import { flushSync } from "react-dom";
 import Image from "next/image";
 import { useTranslations } from "next-intl";
 import { AlertCircle, Code, Cpu, Lightbulb, PenLine, RefreshCw, SkipForward } from "lucide-react";
@@ -224,7 +225,7 @@ export default function ChatComposer({
   );
   const sendWithCurrentSnapshot = (
     text: string,
-    lifecycle?: { onAccepted?: () => void; onRejected?: (message: string) => void },
+    lifecycle?: Parameters<typeof runtime.send>[6],
   ) => {
     const selection = composer.getSnapshot();
     const snapshot = resolveComposerSnapshot(selection, models);
@@ -246,10 +247,22 @@ export default function ChatComposer({
   };
 
   // ===== 消息排队:流式期间 Enter 压入队列,流结束自动按序发出 =====
-  // sendWithCurrentSnapshot 的最新引用,供 drain effect 在流结束时刻调用
-  const sendRef = useRef(sendWithCurrentSnapshot);
+  const sendNextQueuedMessage = () => {
+    const [next, ...rest] = queueRef.current;
+    if (next === undefined) return;
+    queueRef.current = rest;
+    setQueue(rest);
+    sendWithCurrentSnapshot(next, {
+      includeAttachments: false,
+      onRejected: () => {
+        setInput((current) => (current.trim() ? `${current}\n${next}` : next));
+      },
+    });
+  };
+  // 自动发送和手动插队共用出队逻辑，并在发送时读取当前设置。
+  const sendRef = useRef(sendNextQueuedMessage);
   useEffect(() => {
-    sendRef.current = sendWithCurrentSnapshot;
+    sendRef.current = sendNextQueuedMessage;
   });
   useEffect(() => {
     queueRef.current = queue;
@@ -260,17 +273,7 @@ export default function ChatComposer({
     const wasStreaming = prevStreamingRef.current;
     prevStreamingRef.current = runtime.streaming;
     if (!wasStreaming || runtime.streaming) return;
-    const raf = requestAnimationFrame(() => {
-      const [next, ...rest] = queueRef.current;
-      if (next === undefined) return;
-      queueRef.current = rest;
-      setQueue(rest);
-      sendRef.current(next, {
-        onRejected: () => {
-          setInput((current) => (current.trim() ? `${current}\n${next}` : next));
-        },
-      });
-    });
+    const raf = requestAnimationFrame(() => sendRef.current());
     return () => cancelAnimationFrame(raf);
   }, [runtime.streaming]);
 
@@ -290,7 +293,8 @@ export default function ChatComposer({
     const next = [text, ...queueRef.current.filter((_, i) => i !== index)];
     queueRef.current = next;
     setQueue(next);
-    runtime.stopGeneration();
+    if (runtime.streaming) runtime.stopGeneration();
+    else sendRef.current();
   };
   const removeQueueItem = (index: number) => {
     const next = queueRef.current.filter((_, i) => i !== index);
@@ -326,11 +330,15 @@ export default function ChatComposer({
 
   // 选中文本「引用」:以 Markdown 引用块插入输入框末尾
   const handleSelectionQuote = (text: string) => {
-    setInput((prev) => (prev.trim() ? `${prev}\n\n> ${text}\n\n` : `> ${text}\n\n`));
+    const quote = `> ${text.replace(/\r?\n/g, "\n> ")}\n\n`;
+    setInput((prev) => (prev.trim() ? `${prev}\n\n${quote}` : quote));
   };
-  // 选中文本「追问」:以选中文本为新问题直接发送(继续当前会话,不走分支)
+  // 先提交引用再同步聚焦，保留草稿并让光标落在引用后的问题位置。
   const handleSelectionAsk = (text: string) => {
-    sendWithCurrentSnapshot(text);
+    flushSync(() => handleSelectionQuote(text));
+    const textarea = composerRef.current?.querySelector("textarea");
+    textarea?.focus();
+    textarea?.setSelectionRange(textarea.value.length, textarea.value.length);
   };
 
   // 推理级别按「会话 + 具体模型」持久化,切换模型时恢复各自档位。
@@ -487,6 +495,15 @@ export default function ChatComposer({
             {/* 排队条:流式期间 Enter 压入的待发送消息;点文本取回编辑,⏭ 插队到队首并停止当前生成,× 移除 */}
             {queue.length > 0 && (
               <div className="menu-pop rounded-xl border border-morning-mist bg-nebula-silver/25 px-2 py-1.5">
+                <p role="status" className="px-1.5 py-1 text-ui-caption font-medium text-ink-secondary">
+                  {t("queueCount", { count: queue.length })}
+                </p>
+                <p className="px-1.5 pb-1 text-ui-caption text-ink-tertiary">
+                  {t("queueSettings")}
+                </p>
+                <p className="px-1.5 pb-1 text-ui-caption text-ink-tertiary">
+                  {t(runtime.streaming ? "queueStopHint" : "queueWaitingHint")}
+                </p>
                 {queue.map((text, i) => (
                   <div key={`${i}-${text.slice(0, 12)}`} className="group/queue flex items-center gap-2 rounded-md px-1.5 py-1">
                     <span className="w-4 shrink-0 text-center font-mono text-ui-micro tabular-nums text-ink-tertiary">{i + 1}</span>
@@ -501,8 +518,8 @@ export default function ChatComposer({
                     <button
                       type="button"
                       onClick={() => guideQueueItem(i)}
-                      title={t("queueGuide")}
-                      aria-label={t("queueGuide")}
+                      title={t(runtime.streaming ? "queueGuide" : "queueSendNow")}
+                      aria-label={t(runtime.streaming ? "queueGuide" : "queueSendNow")}
                       className="touch-target inline-flex h-6 w-6 items-center justify-center rounded text-ink-tertiary hover:text-sora-blue hover:bg-sora-blue/[0.08] cursor-pointer"
                     >
                       <SkipForward className="h-3 w-3" aria-hidden="true" />
@@ -526,6 +543,7 @@ export default function ChatComposer({
               onChange={setInput}
               onSend={handleSend}
               disabled={runtime.streaming}
+              queuedCount={queue.length}
               onStop={runtime.stopGeneration}
               onPasteFiles={handleUpload}
               onDropFiles={handleUpload}

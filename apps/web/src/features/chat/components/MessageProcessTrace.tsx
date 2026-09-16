@@ -128,23 +128,18 @@ export function MessageProcessTrace({
   });
   const runId = processRuntime?.runId
     ?? historicalRun?.runId
-    ?? `legacy:${toolCalls?.length ?? 0}:${searchResults?.length ?? 0}:${content.length}`;
+    ?? "legacy";
   const [expanded, setExpanded] = useState(false);
   const panelId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const currentRunRef = useRef(runId);
-  const wasRunningRef = useRef(research.status === "running");
 
   useEffect(() => {
     if (currentRunRef.current !== runId) {
       currentRunRef.current = runId;
-      wasRunningRef.current = research.status === "running";
       setExpanded(false);
-      return;
     }
-    if (wasRunningRef.current && research.status !== "running") setExpanded(false);
-    wasRunningRef.current = research.status === "running";
-  }, [research.status, runId]);
+  }, [runId]);
 
   useEffect(() => {
     if (!expanded) return;

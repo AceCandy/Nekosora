@@ -816,7 +816,9 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
     } finally {
       // 流式结束前同步 flush 残留 delta,避免最后一帧积压丢失,再置 streaming:false。
       flushDeltasNow();
-      set((s) => patchRuntime(s, activeKey, (r) => ({ ...r, streaming: false, abortController: null })));
+      // 停止后下一条请求可能已开始，旧请求只能清理自己的运行态。
+      set((s) => patchRuntime(s, activeKey, (r) => r.abortController === controller
+        ? { ...r, streaming: false, abortController: null } : r));
     }
   },
 
@@ -903,7 +905,8 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
       }
     } finally {
       flushDeltasNow();
-      set((s) => patchRuntime(s, key, (r) => ({ ...r, streaming: false, abortController: null })));
+      set((s) => patchRuntime(s, key, (r) => r.abortController === controller
+        ? { ...r, streaming: false, abortController: null } : r));
     }
   },
 
@@ -996,7 +999,8 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
       setCompletionStatusAt(key, assistantIdx, "interrupted");
     } finally {
       flushDeltasNow();
-      set((s) => patchRuntime(s, key, (r) => ({ ...r, streaming: false, abortController: null })));
+      set((s) => patchRuntime(s, key, (r) => r.abortController === controller
+        ? { ...r, streaming: false, abortController: null } : r));
     }
   },
 
@@ -1062,7 +1066,8 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
       setCompletionStatusAt(key, assistantIdx, "interrupted");
     } finally {
       flushDeltasNow();
-      set((s) => patchRuntime(s, key, (r) => ({ ...r, streaming: false, abortController: null })));
+      set((s) => patchRuntime(s, key, (r) => r.abortController === controller
+        ? { ...r, streaming: false, abortController: null } : r));
     }
   },
 
