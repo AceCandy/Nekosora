@@ -77,6 +77,8 @@ Chat Composer 的六类生成选择由 `ComposerStateMachine` 持有一个完整
 - 排队出队通过 `useChatRuntime.send` 的 `includeAttachments: false` 关闭 `hasAttachments`、`uploadAttachments` 与 `onAttachmentsConsumed`；普通发送默认保留附件路径，队列不能消费正在编辑的草稿附件。
 - 当前停止行为保持为停止本轮并继续发送队列；停止按钮与队列说明必须明确这一点。空闲时的“发送这条”直接出队，不依赖不存在的 streaming 状态翻转。
 - `send`、`regenerate`、`editAndResend` 与 `continueGeneration` 的 finally 仅在 runtime 的 `abortController` 仍等于本次 controller 时清理运行态。`abort()` 不代表异步收尾已结束，旧请求不得清空新请求的 controller 或将其 streaming 置为 false。
+- 停止时以 `pendingRunId` 保留尚待确认的 run；四种生成动作必须先调用 `waitForChatRunCompletion` 确认回复已落库并回填 publicId，再准备请求、上传附件或修改乐观消息。客户端 fetch/finally 结束不能替代服务端提交确认；不得用固定延时或放宽父消息归属校验规避竞态。
+- 确认失败时保留 pending run 和原消息，通过拒绝回调恢复待发送文本；等待期间再次停止后，迟到的确认不得触发请求。测试同时覆盖旧客户端已结束而数据库未提交、四类后续动作等待、确认失败及等待中再次停止。
 - 回归测试必须覆盖：入队不立即发送、发送时读取最新设置、队列隔离草稿附件、拒绝时恢复文本，以及四类旧请求停止后延迟结束时保留新请求运行态。
 - Sidebar 的生成状态轮询只更新 `generatingIds` 与列表中的 `generating`，不得调用整页 `router.refresh()`：新会话静默切换 URL 后，整页刷新可能跨路由段重挂 Composer，清空本地队列和草稿。此约束适用于前台建会期间服务端 run 尚不可见、后台 run 完成等轮询结果，不只约束 `useChatRuntime`。
 - 服务端 `initialGeneratingIds` 只在初始化或新的 RSC 导航快照到来时注入；后续轮询以最新返回值和本地 streaming 为准，不得每轮重新并入旧 SSR 列表，否则已结束任务会反复唤醒轮询。没有服务端 run 但本地仍在生成时继续轮询；两者均空时停止。

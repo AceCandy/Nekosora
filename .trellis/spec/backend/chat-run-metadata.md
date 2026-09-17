@@ -7,6 +7,7 @@ Apply this contract when changing authenticated `/api/chat` generation, `runs`, 
 ## 2. Signatures
 
 - `startRunStrict(input): Promise<void>` confirms a `running` run before any model call.
+- `waitForChatRunCompletion(conversationId, runId): Promise<string>` confirms a stopped run's persisted assistant public ID for the authenticated WebChat client.
 - `executeChatCompletion(input): Promise<ChatCompletionOutcome>` owns streaming, first-terminal-cause, heartbeat, tool audit, completion commit, and the unique domain finish.
 - `streamChatWithTools({ maxSteps = 5, ... })` permits at most `maxSteps` tool-execution rounds, followed by at most one forced summary request with `tools: undefined` when the last allowed round still produced tool calls.
 - `persistChatCompletion(input): Promise<PersistChatCompletionResult>` commits assistant, conversation time, optional memory intent, and terminal run in one PostgreSQL transaction.
@@ -31,6 +32,7 @@ Apply this contract when changing authenticated `/api/chat` generation, `runs`, 
 - Only a committed `success` can emit domain finish. The route adapter maps the returned `ChatCompletionOutcomeKind` exhaustively to `terminal(success|failed|interrupted)`, then sends `[DONE]` as a transport-completion marker. Failed/interrupted outcomes never emit finish, but an open transport still receives terminal + DONE.
 - The WebChat parser accepts success only when finish precedes terminal(success), and accepts any outcome only when terminal precedes DONE. DONE without terminal, success without finish, contradictory/duplicate terminal, or EOF before DONE is a protocol error.
 - Abort during commit closes transport intent but does not cancel the database transaction or downgrade a finish already latched as success. The committed database outcome remains authoritative.
+- The completion-wait action validates both IDs, fences run and conversation by the current user, and joins only a non-deleted assistant in the same run/conversation. It polls a running run every 100 ms within a five-second query-wait budget. A terminal run plus assistant returns the public ID; a missing/inaccessible run or terminal run without assistant rejects immediately with a generic error. Assistant and terminal state commit atomically; fallback failed finalization after a failed commit does not guarantee an assistant exists. The timeout releases the caller but does not cancel an in-flight database query. Do not revalidate the chat layout from this read-only action.
 - `iterator.next()` races Abort. A provider that ignores its AbortSignal cannot indefinitely block coordinator convergence; iterator return is requested without awaiting an unresponsive provider.
 - After consuming a provider `finish` or `error`, the coordinator advances the stream iterator once so the plain stream or Agent loop can run its own telemetry/finally cleanup before completion persistence. The Abort path keeps non-blocking iterator return semantics.
 - A stream owns the nested gateway execution lifecycle: its `finally` requests nested engine closure on consumer `return()` without blocking the consumer, and runs any deferred final-usage callback from that same cleanup path. Final usage must not depend on code after the generator `finally` block.
@@ -75,6 +77,7 @@ Apply this contract when changing authenticated `/api/chat` generation, `runs`, 
 ## 6. Tests Required
 
 - Run lifecycle tests: strict start waits for insert confirmation, rejects generically, and never exposes database details.
+- Completion-wait tests: running-to-committed transition, ownership and same-conversation/non-deleted assistant predicates, missing run, terminal without assistant, running timeout, and a hung query timeout.
 - Repository unit tests: insert/continue fields, reference validation, fixed write order, intent failure, run zero-row, and ownership fencing.
 - Isolated PostgreSQL tests: concurrent continue has one winner; memory insert failure and terminal-run conflict roll back assistant, conversation time, intent, and run changes.
 - Continue tests cover old+new reasoning, empty new reasoning, null old reasoning, and interrupted partial reasoning; branch DTO/store tests cover both status directions and undefined clearing.

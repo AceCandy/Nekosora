@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   requireSession: vi.fn(),
@@ -54,6 +54,7 @@ import {
   listConversations,
   listConversationGroup,
   saveConversationComposerState,
+  waitForChatRunCompletion,
 } from "./conversations";
 
 const schema = {
@@ -72,9 +73,18 @@ const schema = {
     composerState: "conversations.composerState",
   },
   runs: {
+    runId: "runs.runId",
+    userId: "runs.userId",
     conversationId: "runs.conversationId",
     status: "runs.status",
     leaseExpiresAt: "runs.leaseExpiresAt",
+  },
+  messages: {
+    runId: "messages.runId",
+    conversationId: "messages.conversationId",
+    publicId: "messages.publicId",
+    role: "messages.role",
+    deletedAt: "messages.deletedAt",
   },
 };
 
@@ -83,6 +93,7 @@ function queryReturning(rows: Record<string, unknown>[]) {
     from: vi.fn(() => query),
     where: vi.fn(() => query),
     innerJoin: vi.fn(() => query),
+    leftJoin: vi.fn(() => query),
     groupBy: vi.fn(() => Promise.resolve(rows)),
     orderBy: vi.fn(() => query),
     limit: vi.fn(() => Promise.resolve(rows)),
@@ -93,6 +104,70 @@ function queryReturning(rows: Record<string, unknown>[]) {
   };
   return query;
 }
+
+describe("停止后确认 run 与回复提交", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    mocks.requireSession.mockResolvedValue({ id: "user-1" });
+    mocks.getSchema.mockReturnValue(schema);
+  });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it("只等待当前用户、当前会话的 run，且回复已提交才返回 ID", async () => {
+    const query = queryReturning([]);
+    query.limit.mockResolvedValueOnce([{ status: "running", publicId: null }])
+      .mockResolvedValueOnce([{ status: "interrupted", publicId: "assistant-saved" }]);
+    mocks.getDb.mockResolvedValue({ select: () => query });
+    const result = waitForChatRunCompletion("conversation-1", "run-1");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(query.limit).toHaveBeenCalledTimes(1);
+    expect(query.where).toHaveBeenCalledWith({ op: "and", conditions: [
+      { op: "eq", left: "runs.runId", right: "run-1" },
+      { op: "eq", left: "runs.conversationId", right: "conversation-1" },
+      { op: "eq", left: "runs.userId", right: "user-1" },
+    ] });
+    expect(query.innerJoin).toHaveBeenCalledWith(schema.conversations, { op: "and", conditions: [
+      { op: "eq", left: "conversations.id", right: "runs.conversationId" },
+      { op: "eq", left: "conversations.userId", right: "user-1" },
+    ] });
+    expect(query.leftJoin).toHaveBeenCalledWith(schema.messages, { op: "and", conditions: [
+      { op: "eq", left: "messages.runId", right: "runs.runId" },
+      { op: "eq", left: "messages.conversationId", right: "runs.conversationId" },
+      { op: "eq", left: "messages.role", right: "assistant" },
+      mocks.isNull.mock.results[0].value,
+    ] });
+    expect(mocks.isNull).toHaveBeenCalledWith("messages.deletedAt");
+    await vi.advanceTimersByTimeAsync(100);
+    await expect(result).resolves.toBe("assistant-saved");
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each([
+    { rows: [] },
+    { rows: [{ status: "failed", publicId: null }] },
+  ])("缺失、无权或未提交回复时不能放行", async ({ rows }) => {
+    mocks.getDb.mockResolvedValue({ select: () => queryReturning(rows) });
+    await expect(waitForChatRunCompletion("conversation-1", "run-1"))
+      .rejects.toThrow("上一轮回复尚未保存");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each(["running", "query-hung"])("%s 在五秒预算后结束等待", async (kind) => {
+    const query = queryReturning([{ status: "running", publicId: null }]);
+    const hung = Promise.withResolvers<Record<string, unknown>[]>();
+    if (kind === "query-hung") query.limit.mockReturnValue(hung.promise);
+    mocks.getDb.mockResolvedValue({ select: () => query });
+    const result = expect(waitForChatRunCompletion("conversation-1", "run-1"))
+      .rejects.toThrow("上一轮回复尚未保存");
+    await vi.advanceTimersByTimeAsync(5_000);
+    await result;
+    hung.resolve([]);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+});
 
 it("建会返回真实 ID，不通过整页重验打断当前 Composer", async () => {
   vi.clearAllMocks();

@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   handleStreamError: vi.fn(),
   createConversation: vi.fn(),
   getConversationTitleStateAction: vi.fn(),
+  waitForChatRunCompletion: vi.fn(),
   retryFromMessage: vi.fn(),
   editMessage: vi.fn(),
   continueMessage: vi.fn(),
@@ -19,6 +20,7 @@ vi.mock("@/features/chat/model/sse", () => ({
 vi.mock("@/features/chat/actions/conversations", () => ({
   createConversation: mocks.createConversation,
   getConversationTitleStateAction: mocks.getConversationTitleStateAction,
+  waitForChatRunCompletion: mocks.waitForChatRunCompletion,
 }));
 vi.mock("@/features/chat/actions/branch", () => ({
   retryFromMessage: mocks.retryFromMessage,
@@ -627,6 +629,91 @@ describe("chatStreamStore terminal 状态收敛", () => {
       second.resolve("success");
       await next;
     }
+  });
+
+  it.each(actions)("%s 停止后，下一条发送须等待服务端提交而非客户端收尾", async (action) => {
+    const started = Promise.withResolvers<void>();
+    const first = Promise.withResolvers<"interrupted">();
+    const committed = Promise.withResolvers<string>();
+    mocks.waitForChatRunCompletion.mockReturnValueOnce(committed.promise);
+    mocks.consumeChatSSE
+      .mockImplementationOnce((_body: ReadableStream<Uint8Array>, handlers: SSEHandlers) => {
+        handlers.onTrace?.({
+          type: "trace", version: 1, action: "phase", runId: "run-stopped",
+          seq: 1, at: "2026-09-17T00:00:00.000Z", phase: "processing",
+        });
+        handlers.onAssistantMessage?.("pending-assistant");
+        started.resolve();
+        return first.promise;
+      })
+      .mockResolvedValueOnce("success");
+
+    const previous = invokeAction(action);
+    await started.promise;
+    useChatStreamStore.getState().stopGeneration(key);
+    const next = useChatStreamStore.getState().send(key, "queued message", sendOptions);
+    try {
+      expect(mocks.waitForChatRunCompletion).toHaveBeenCalledWith(key, "run-stopped");
+      expect(fetch).toHaveBeenCalledTimes(1);
+      first.resolve("interrupted");
+      await previous;
+      expect(fetch).toHaveBeenCalledTimes(1);
+      committed.resolve("pending-assistant");
+      await next;
+      const request = vi.mocked(fetch).mock.calls[1][1];
+      expect(JSON.parse(String(request?.body))).toMatchObject({ parentPublicId: "pending-assistant" });
+    } finally {
+      first.resolve("interrupted");
+      committed.resolve("pending-assistant");
+      await Promise.all([previous, next]);
+    }
+  });
+
+  it.each(actions)("等待停止持久化期间，%s 不执行请求准备和乐观消息写入", async (action) => {
+    const rt = useChatStreamStore.getState().runtimes[key];
+    useChatStreamStore.setState({ runtimes: { [key]: { ...rt, pendingRunId: "run-stopped" } } });
+    const committed = Promise.withResolvers<string>();
+    mocks.waitForChatRunCompletion.mockReturnValueOnce(committed.promise);
+    mocks.consumeChatSSE.mockResolvedValueOnce("success");
+    const next = invokeAction(action);
+    try {
+      expect(useChatStreamStore.getState().runtimes[key].messages).toBe(rt.messages);
+      expect(fetch).not.toHaveBeenCalled();
+      expect(mocks.retryFromMessage).not.toHaveBeenCalled();
+      expect(mocks.editMessage).not.toHaveBeenCalled();
+      expect(mocks.continueMessage).not.toHaveBeenCalled();
+    } finally {
+      committed.resolve("assistant-1");
+      await next;
+    }
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it("确认失败时退回发送文本，保留消息和待确认 run 以便重试", async () => {
+    const rt = useChatStreamStore.getState().runtimes[key];
+    useChatStreamStore.setState({ runtimes: { [key]: { ...rt, pendingRunId: "run-stopped" } } });
+    const onRequestRejected = vi.fn();
+    mocks.waitForChatRunCompletion.mockRejectedValueOnce(new Error("上一轮回复尚未保存"));
+    await useChatStreamStore.getState().send(key, "queued", sendOptions, { onRequestRejected });
+    expect(onRequestRejected).toHaveBeenCalledWith("上一轮回复尚未保存");
+    expect(fetch).not.toHaveBeenCalled();
+    expect(useChatStreamStore.getState().runtimes[key]).toMatchObject({
+      messages: rt.messages, streaming: false, pendingRunId: "run-stopped",
+    });
+  });
+
+  it("等待确认时再次停止，不得在迟到确认后发出请求", async () => {
+    const rt = useChatStreamStore.getState().runtimes[key];
+    useChatStreamStore.setState({ runtimes: { [key]: { ...rt, pendingRunId: "run-stopped" } } });
+    const committed = Promise.withResolvers<string>();
+    mocks.waitForChatRunCompletion.mockReturnValueOnce(committed.promise);
+    const onRequestRejected = vi.fn();
+    const next = useChatStreamStore.getState().send(key, "queued", sendOptions, { onRequestRejected });
+    useChatStreamStore.getState().stopGeneration(key);
+    committed.resolve("assistant-1");
+    await next;
+    expect(fetch).not.toHaveBeenCalled();
+    expect(onRequestRejected).toHaveBeenCalledWith("已停止发送");
   });
 
   it.each(cases)("%s 收到 terminal(%s) 后写入对应消息完整性状态", async (action, status) => {

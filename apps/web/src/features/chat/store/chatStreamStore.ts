@@ -4,6 +4,7 @@ import { create } from "zustand";
 import {
   createConversation,
   getConversationTitleStateAction,
+  waitForChatRunCompletion,
   type CreateConversationOptions,
 } from "@/features/chat/actions/conversations";
 import { retryFromMessage, editMessage, getMessageSiblings, selectMessageVersion, softDeleteMessage, continueMessage } from "@/features/chat/actions/branch";
@@ -46,6 +47,8 @@ interface ConversationRuntime {
   messages: ChatMessage[];
   streaming: boolean;
   abortController: AbortController | null;
+  /** 本地停止后尚未确认持久化的 run；后续生成须先确认消息引用。 */
+  pendingRunId?: string;
 }
 
 type RequestRejected = (reason: string) => void;
@@ -140,6 +143,31 @@ function rejectOfflineRequest(onRequestRejected?: RequestRejected): boolean {
   if (!isBrowserOffline()) return false;
   onRequestRejected?.(BROWSER_OFFLINE_REASON);
   return true;
+}
+
+async function confirmStoppedRun(
+  key: string,
+  runId: string,
+  signal: AbortSignal,
+  onRequestRejected?: RequestRejected,
+): Promise<boolean> {
+  try {
+    const publicId = await waitForChatRunCompletion(key, runId);
+    signal.throwIfAborted();
+    useChatStreamStore.setState((state) => patchRuntime(state, key, (runtime) => {
+      if (runtime.pendingRunId !== runId) return runtime;
+      return {
+        ...runtime,
+        pendingRunId: undefined,
+        messages: runtime.messages.map((message) => message.processRuntime?.runId === runId
+          ? { ...message, publicId } : message),
+      };
+    }));
+    return true;
+  } catch (error) {
+    onRequestRejected?.(signal.aborted ? "已停止发送" : error instanceof Error ? error.message : "上一轮回复尚未保存，请稍后重试");
+    return false;
+  }
 }
 
 /** 不可变更新某会话运行时。 */
@@ -678,6 +706,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
     let streamErrorReceived = false;
 
     try {
+      if (rt.pendingRunId && !await confirmStoppedRun(key, rt.pendingRunId, controller.signal, hooks?.onRequestRejected)) return;
       let resolvedConvId = convId;
       if (!resolvedConvId) {
         const createOpts: CreateConversationOptions = {
@@ -835,6 +864,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
     let assistantIdx = -1;
 
     try {
+      if (rt.pendingRunId && !await confirmStoppedRun(key, rt.pendingRunId, controller.signal, onRequestRejected)) return;
       let generatedAssistantPublicId: string | null = null;
       const result = await retryFromMessage(key, assistantPublicId);
       assistantIdx = (() => {
@@ -934,6 +964,7 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
     let assistantIdx = -1;
 
     try {
+      if (rt.pendingRunId && !await confirmStoppedRun(key, rt.pendingRunId, controller.signal, onRequestRejected)) return;
       const result = await editMessage(
         key,
         userPublicId,
@@ -1028,15 +1059,19 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
     set((s) => patchRuntime(s, key, (r) => ({
       ...r,
       streaming: true,
-      messages: r.messages.map((message, index) =>
-        index === assistantIdx ? { ...message, runMetadata: undefined } : message,
-      ),
     })));
     const controller = new AbortController();
     set((s) => patchRuntime(s, key, (r) => ({ ...r, abortController: controller })));
     let streamErrorReceived = false;
 
     try {
+      if (rt.pendingRunId && !await confirmStoppedRun(key, rt.pendingRunId, controller.signal, onRequestRejected)) return;
+      set((s) => patchRuntime(s, key, (r) => ({
+        ...r,
+        messages: r.messages.map((message, index) =>
+          index === assistantIdx ? { ...message, runMetadata: undefined } : message,
+        ),
+      })));
       const result = await continueMessage(key, assistantPublicId);
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -1153,7 +1188,13 @@ export const useChatStreamStore = create<ChatStreamState>((set, get) => ({
           break;
         }
       }
-      return { ...r, messages: msgs, streaming: false, abortController: null };
+      return {
+        ...r,
+        messages: msgs,
+        pendingRunId: r.pendingRunId ?? (rt.abortController ? msgs.at(-1)?.processRuntime?.runId : undefined),
+        streaming: false,
+        abortController: null,
+      };
     }));
   },
 }));

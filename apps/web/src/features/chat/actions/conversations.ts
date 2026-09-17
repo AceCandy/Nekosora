@@ -674,6 +674,58 @@ export async function renameConversation(id: string, title: string) {
   revalidatePath("/chat", "layout");
 }
 
+/** 等待已中止的 run 提交回复；断开流连接本身不代表消息已落库。 */
+export async function waitForChatRunCompletion(conversationId: string, runId: string): Promise<string> {
+  const parsedConversationId = z.string().min(1).max(200).parse(conversationId);
+  const parsedRunId = z.string().min(1).max(200).parse(runId);
+  const user = await requireSession();
+  const db = await getDb();
+  const s = getSchema();
+  const failure = () => new Error("上一轮回复尚未保存，请稍后重试");
+  const deadline = Date.now() + 5_000;
+  const poll = async (): Promise<string> => {
+    while (Date.now() < deadline) {
+      const [run] = await db
+        .select({ status: s.runs.status, publicId: s.messages.publicId })
+        .from(s.runs)
+        .innerJoin(s.conversations, and(
+          eq(s.conversations.id, s.runs.conversationId),
+          eq(s.conversations.userId, user.id),
+        ))
+        .leftJoin(s.messages, and(
+          eq(s.messages.runId, s.runs.runId),
+          eq(s.messages.conversationId, s.runs.conversationId),
+          eq(s.messages.role, "assistant"),
+          isNull(s.messages.deletedAt),
+        ))
+        .where(and(
+          eq(s.runs.runId, parsedRunId),
+          eq(s.runs.conversationId, parsedConversationId),
+          eq(s.runs.userId, user.id),
+        ))
+        .limit(1);
+      if (!run) throw failure();
+      if (run.status !== "running") {
+        if (run.publicId) return run.publicId;
+        throw failure();
+      }
+      await new Promise<void>((resolve) => setTimeout(resolve, 100));
+    }
+    throw failure();
+  };
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      poll(),
+      new Promise<never>((_, reject) => { timer = setTimeout(() => reject(failure()), 5_000); }),
+    ]);
+  } catch {
+    throw failure();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** 获取会话的消息(沿当前分支)。 */
 export async function getMessages(conversationId: string) {
   const user = await requireSession();
