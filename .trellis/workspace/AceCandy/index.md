@@ -7,8 +7,8 @@
 ## Current Status
 
 <!-- @@@auto:current-status -->
-- **Active File**: `journal-2.md`
-- **Total Sessions**: 150
+- **Active File**: `journal-3.md`
+- **Total Sessions**: 151
 - **Last Active**: 2026-09-17
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,8 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~2000 | Active |
+| `journal-3.md` | ~29 | Active |
+| `journal-2.md` | ~2000 | Archived |
 | `journal-1.md` | ~1981 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +31,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 151 | 2026-09-17 | 归档聊天阅读连续性任务 | `8ed0ef4` | `main` |
 | 150 | 2026-09-17 | 聊天队列停止续发修复收尾 | `96f1333` | `main` |
 | 149 | 2026-09-12 | Chat 与网关审查修复收尾 | `55f7509` | `main` |
 | 148 | 2026-09-11 | 第三轮技术债收敛与提交 | `b31b359`, `fd9e404`, `5510713` | `main` |
