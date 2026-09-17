@@ -1976,3 +1976,25 @@ Completed local and production environment examples, aligned both production Com
 ### Next Steps
 
 - 按需执行生产构建和浏览器、真实上游联调；本次未推送或部署。
+
+
+## Session 150: 聊天队列停止续发修复收尾
+<!-- trellis-session: v=2 fp=188563e0adf6fe88 -->
+
+**Date**: 2026-09-17
+**Task**: 聊天队列停止续发修复收尾
+**Branch**: `main`
+
+### Summary
+
+修复停止生成后父消息尚未落库导致首条队列被拒绝的竞态，补充四种生成动作的持久化确认与回归测试。全量测试、检查、生产构建及真实队列续发验收通过，草稿和刷新历史完整。长回复重复标点确认为上游原始输出，短回复场景继续使用，未更改上游配置。独立 PostgreSQL 集成套件与 Safari 未验证。仅归档队列任务，保留阅读连续性任务；未推送。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `96f1333` | fix(web): 修复停止生成后队列续发的消息落库竞态 |
+
+### Status
+
+[OK] **Completed**
