@@ -192,6 +192,8 @@ document.documentElement.classList.remove("dark");
 
 ## Streaming UI 关键
 
+- **消息入场由列表追加事件驱动，而不是消息组件挂载驱动**：`ChatMessageList` 在 layout effect 比较上次消息数量与会话 ID，仅 streaming 期间新增的稳定 `[data-message-id]` 行执行 200ms WAAPI；初始历史、真实会话切换、版本载入不播放，`undefined -> id` 建会回填允许追加。`ChatMessageItem` 内部 publicId key 可能重挂，禁止重新添加无条件 CSS 入场。测试覆盖首屏、追加、ID 回填、截断再发与 reduced-motion。
+- **欢迎内容不参与输入器高度测量**：标题与建议入口绝对定位于输入器上下方，用 `data-welcome` 控制淡出和 `inert`/`aria-hidden`；不可因发送条件切换而重挂输入框。浏览器验收至少比较首次发送前后 textarea DOM 身份、焦点，以及减弱动效的最终可见状态。
 - **流式状态驻留全局 zustand store**(`chatStreamStore`),不在组件本地 state;多会话用 `runtimes: Record<conversationId, Runtime>` 隔离,切路由不断流(详见 state-management)。
 - **SSE 解析**:`fetch` + `ReadableStream` reader,帧解析逻辑抽到 `features/chat/model/sse.ts`(`consumeChatSSE` / `handleStreamError`),组件不直接拼帧。
 - **增量更新**:store 内按 conversationId 找到目标消息,对副本 `content += delta` 后整体替换 `runtimes`,配 `AbortController` 支持中断。

@@ -479,6 +479,21 @@ export function ChatMessageList({
   // 视口 ref:供选区检测判断选区是否落在消息区内
   const viewportRef = useRef<HTMLDivElement>(null);
   const scrollPositionRestorerRef = useRef<ScrollPositionRestorerHandle>(null);
+  const entryRef = useRef({ conversationId, messageCount: messages.length });
+  useLayoutEffect(() => {
+    const previous = entryRef.current;
+    entryRef.current = { conversationId, messageCount: messages.length };
+    // 首屏/历史切换不入场；临时会话 ID 回填不算切换。动画挂在稳定行上，避免 publicId 回填重播。
+    if (!streaming || messages.length <= previous.messageCount
+      || (previous.conversationId !== undefined && previous.conversationId !== conversationId)
+      || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    for (let index = previous.messageCount; index < messages.length; index++) {
+      viewportRef.current?.querySelector<HTMLElement>(`[data-message-id="msg-${index}"]`)?.animate(
+        [{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "translateY(0)" }],
+        { duration: 200, easing: "cubic-bezier(0.16, 1, 0.3, 1)" },
+      );
+    }
+  }, [conversationId, messages.length, streaming]);
 
   // ===== 会话滚动位置记忆 =====
   // 进入会话时固定读取一次记忆,避免本会话后续 scroll 事件改变恢复动作。
@@ -530,7 +545,7 @@ export function ChatMessageList({
       scrollEdgeThreshold={CHAT_SCROLL_EDGE_THRESHOLD}
     >
       {/* Root 即消息区外层容器,对话大纲/回到最新按钮锚定其内 */}
-      <MessageScroller.Root className="relative flex-1 min-h-0 animate-in fade-in slide-in-from-bottom-2 duration-200">
+      <MessageScroller.Root className="relative flex-1 min-h-0">
         <MessageScroller.Viewport
           ref={viewportRef}
           onScroll={handleViewportScroll}
@@ -556,7 +571,7 @@ export function ChatMessageList({
                       key={i}
                       messageId={`msg-${i}`}
                       scrollAnchor={m.role === "user"}
-                      className="py-4"
+                      className={clsx("pb-3", i === 0 ? "pt-4" : m.role === "user" ? "pt-8" : "pt-3")}
                     >
                       <MessageTimeSeparator
                         createdAt={m.createdAt}
@@ -711,7 +726,7 @@ export function ChatMessageList({
           style={{ bottom: (bottomInset ?? 8) + 8 }}
           className="touch-target absolute left-1/2 -translate-x-1/2 z-20 inline-flex items-center gap-1.5 rounded-full border border-morning-mist  bg-white  px-3 py-1.5 text-ui-caption font-semibold text-neutral-600  shadow-sm hover:bg-neutral-50  transition-[background-color,opacity,transform] duration-300 ease-out data-[active=false]:pointer-events-none data-[active=false]:opacity-0 data-[active=false]:translate-y-4 data-[active=false]:scale-95 data-[active=true]:opacity-100 data-[active=true]:translate-y-0 data-[active=true]:scale-100"
         >
-          <ChevronDown className="w-3.5 h-3.5 animate-[scroll-hint_1.6s_ease-in-out_infinite]" aria-hidden="true" />
+          <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
           <span>{t("scrollToLatest")}</span>
         </MessageScroller.Button>
       </MessageScroller.Root>

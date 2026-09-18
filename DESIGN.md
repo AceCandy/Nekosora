@@ -136,8 +136,8 @@ components:
 - **流星 (Shooting Star)** (`shooting-star`, 14s 周期、仅前 1.4s 可见): 偶发的天空记忆点，自左上向右下 18° 划过；仅品牌门面可开启。
 - **面板浮出 (Menu Pop)** (`menu-pop`, 180ms expo 缓出): 下拉菜单、Popover 面板与小号上下文菜单的入场（4px 上浮 + 0.97 缩放 + 淡入），全站状态反馈通用。
 - **弹窗沉降 (Modal Pop)** (`modal-pop`, 200ms): Modal 面板微缩放淡入，`::backdrop` 同步淡入。
-- **消息入场 (Message Enter)** (tw-animate-css `animate-in fade-in slide-in-from-bottom-2 duration-200`): 新消息挂载时淡入 + 轻微上浮；流式更新不重新触发。
-- **输入器归位 (Composer Dock)** (`composer-welcome-lift` 摘除时的 transform 过渡, 500ms expo): 空会话欢迎态输入器居于视觉中心，首条消息发出后滑回底部锚点；作为门面退场编排的一部分，是门面限定规则 250ms 上限的显式例外。
+- **消息入场 (Message Enter)** (`ChatMessageList` + WAAPI, 200ms expo): 仅当前生成期间追加的消息行淡入 + 6px 上浮；初始历史、会话切换、版本切换与流式更新不重播。动画位于稳定的 MessageScroller 行，不受 publicId 回填引起的内部重挂影响；reduced-motion 直接跳过。
+- **输入器归位 (Composer Dock)** (`composer-welcome-lift` 摘除时的 transform 过渡, 500ms expo): 空会话欢迎态输入器居于视觉中心，首条消息发出后滑回底部锚点；标题和建议入口绝对定位、不参与输入器测量，160ms 淡出且立即 inert，不卸载输入框、不延迟请求。作为门面退场编排的一部分，是门面限定规则 250ms 上限的显式例外。
 - **门面入场 (Welcome Rise)** (`welcome-rise`, 0.55s `cubic-bezier(0.22,1,0.36,1)` both): 淡入 + 12px 上浮 + 5px 模糊收敛，配合 0/140/260ms 三拍 `animationDelay`；仅登录页与聊天欢迎区使用。
 - **图标微交互 (Icon Micro-motion)** (`shared/components/animated-icons.tsx` + `.ai-trigger` 触发协议, 0.2–0.5s `cubic-bezier(0.16,1,0.3,1)`): 动作图标在宿主 hover 时的部件级位移/旋转（复制前后框揭开、重新生成旋转 200°、删除桶盖掀起、发送箭头上跃等），用 transition 表达、悬停撤出自动平滑回位；属状态反馈型，工作区与管理界面通用，不限门面。
 - **标题换字 (Animated Title Swap)** (`shared/components/AnimatedText.tsx` + `ai-text-in`/`ai-text-out`, 180ms `cubic-bezier(0.16,1,0.3,1)`): 会话标题等单行短文本变更时，旧文本上滑淡出、新文本自下方淡入，双层共存一拍后离场层卸载；状态反馈型，通用。
@@ -177,6 +177,7 @@ components:
 - **Background:** 纯白 (`#ffffff`)。
 - **Border:** 1px 的 Morning Mist (`#e2e8f0`) 边框，无投影。
 - **Internal Padding:** 对话气泡使用 8px 16px，通用配置面板卡片使用 24px (`p-6`)。
+- **Chat 用户气泡:** 使用 Nebula Silver 浅底与 Space Ink 正文，16px 圆角；编辑态与展开渐隐同步使用此配色，只读消息复用共享气泡样式。同轮问答间距小于轮间间距，不用额外分隔线。
 
 ### Inputs / Fields
 - **Style:** 1px 的 Morning Mist 边框，圆角为 8px (`rounded-lg`)。

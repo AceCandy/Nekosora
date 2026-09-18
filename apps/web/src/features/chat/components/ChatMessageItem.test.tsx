@@ -63,6 +63,17 @@ function renderAssistantMessage(metadata: MessageRunMetadata) {
 }
 
 describe("ChatMessageItem render style", () => {
+  it("uses a light user bubble and does not replay entrance on message mounts", () => {
+    const html = renderToStaticMarkup(<ChatMessageItem
+      message={{ role: "user", content: "Question", publicId: "user-1" }}
+      isLast isStreaming={false} model="model-a" onRegenerate={vi.fn()} onOpenArtifact={vi.fn()}
+    />);
+    expect(html).toContain("bg-nebula-silver text-space-ink");
+    expect(html).not.toContain("bg-neutral-900");
+    expect(html).not.toContain("animate-in");
+    expect(renderAssistantMessage({})).not.toContain("slide-in-from-bottom");
+  });
+
   it("forwards renderer and only maps the paper flag to Markdown's legacy style prop", () => {
     capturedMarkdownProps.length = 0;
     const paperHtml = renderToStaticMarkup(

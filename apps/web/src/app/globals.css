@@ -448,17 +448,6 @@ body {
   border-top: 0;
 }
 
-/* 「回到最新」按钮箭头持续轻弹:向下指向可滚动方向,克制 2px 幅度避免喧宾夺主。 */
-@keyframes scroll-hint {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(2px);
-  }
-}
-
 /* 返回聊天入口周期性轻推两次；交互位移由内层箭头单独承担。 */
 @keyframes back-to-chat-hint {
   0%,
@@ -600,17 +589,26 @@ body {
   }
 }
 
-/* 空会话欢迎态:输入器以 transform 上提至视觉中心(42%,md 44%),首条消息发出后过渡回底部锚点。
+/* 空会话欢迎态:仅输入器参与定位，标题与建议悬于两侧；首条发送后保持自身尺寸归位。
    vh/dvh 双写做旧浏览器回退;translate 百分比相对输入器自身高度。 */
 .composer-welcome-lift {
-  transform: translateY(calc(50% - 58vh));
-  transform: translateY(calc(50% - 58dvh));
+  transform: translateY(calc(50% - 48vh));
+  transform: translateY(calc(50% - 48dvh));
 }
 @media (min-width: 768px) {
   .composer-welcome-lift {
-    transform: translateY(calc(50% - 56vh));
-    transform: translateY(calc(50% - 56dvh));
+    transform: translateY(calc(50% - 46vh));
+    transform: translateY(calc(50% - 46dvh));
   }
+}
+
+.chat-welcome-decoration {
+  transition: opacity 160ms ease-out, visibility 160ms;
+}
+[data-welcome="false"] .chat-welcome-decoration {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 /* 菜单/弹出层面板入场:4px 上浮 + 0.97 缩放 + 淡入,180ms expo 缓出(状态反馈型,工作区可用)。 */

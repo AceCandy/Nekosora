@@ -13,11 +13,26 @@ const capturedItems = vi.hoisted(() => [] as Array<{
 }>);
 
 const selectionTest = vi.hoisted(() => ({ active: false, injected: false }));
+const motionTest = vi.hoisted(() => ({
+  active: false,
+  entryRef: null as { current: { conversationId?: string; messageCount: number } } | null,
+  effects: [] as React.EffectCallback[],
+}));
 let capturedTree: React.ReactNode;
 vi.mock("react", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react")>();
   return {
     ...actual,
+    useRef: (initial: unknown) => {
+      const ref = actual.useRef(initial);
+      if (!motionTest.active || !initial || typeof initial !== "object" || !("messageCount" in initial)) return ref;
+      motionTest.entryRef ??= ref as NonNullable<typeof motionTest.entryRef>;
+      return motionTest.entryRef;
+    },
+    useLayoutEffect: (effect: React.EffectCallback, deps?: React.DependencyList) => {
+      actual.useLayoutEffect(effect, deps);
+      if (motionTest.active) motionTest.effects.push(effect);
+    },
     useState: (initial: unknown) => {
       const state = actual.useState(initial);
       if (initial !== null || !selectionTest.active || selectionTest.injected) return state;
@@ -42,8 +57,10 @@ vi.mock("@shadcn/react/message-scroller", () => ({
     Content: ({ children, className }: { children: React.ReactNode; className?: string }) => (
       <div className={className}>{children}</div>
     ),
-    Item: ({ children }: { children: React.ReactNode }) => children,
-    Button: () => null,
+    Item: ({ children, className, messageId }: { children: React.ReactNode; className?: string; messageId: string }) => (
+      <div className={className} data-message-id={messageId}>{children}</div>
+    ),
+    Button: ({ children }: { children: React.ReactNode }) => <button>{children}</button>,
   },
   useMessageScroller: () => ({
     scrollToEnd: vi.fn(),
@@ -84,10 +101,65 @@ beforeEach(() => {
   capturedItems.length = 0;
   selectionTest.active = false;
   selectionTest.injected = false;
+  motionTest.active = false;
+  motionTest.entryRef = null;
+  motionTest.effects = [];
 });
 afterEach(() => vi.unstubAllGlobals());
 
 describe("ChatMessageList render style boundary", () => {
+  it("groups question/answer spacing and leaves the latest arrow still", () => {
+    const html = renderToStaticMarkup(<ChatMessageList
+      messages={[{ role: "user", content: "Q" }, { role: "assistant", content: "A" }, { role: "user", content: "Q2" }]}
+      streaming={false} model="model-a" onRegenerate={vi.fn()} onOpenArtifact={vi.fn()}
+    />);
+    expect(html).toContain('class="pb-3 pt-4" data-message-id="msg-0"');
+    expect(html).toContain('class="pb-3 pt-3" data-message-id="msg-1"');
+    expect(html).toContain('class="pb-3 pt-8" data-message-id="msg-2"');
+    expect(html).not.toContain("infinite");
+  });
+
+  it("animates only appended live rows, not history, ID backfill, versions or reduced motion", () => {
+    motionTest.active = true;
+    const animate = vi.fn();
+    const querySelector = vi.fn((_selector: string) => ({ animate }));
+    let reduced = false;
+    vi.stubGlobal("window", { matchMedia: () => ({ matches: reduced }) });
+    const render = (messages: ChatMessage[], streaming: boolean, conversationId?: string) => {
+      motionTest.effects = [];
+      renderToStaticMarkup(<ChatMessageList messages={messages} streaming={streaming} conversationId={conversationId}
+        model="model-a" onRegenerate={vi.fn()} onOpenArtifact={vi.fn()} />);
+      const root = capturedTree as React.ReactElement<{ children: React.ReactNode }>;
+      const viewport = React.Children.toArray(root.props.children).find((node) =>
+        React.isValidElement<{ preserveScrollOnPrepend?: boolean }>(node) && node.props.preserveScrollOnPrepend,
+      ) as React.ReactElement<{ ref: React.RefObject<unknown> }>;
+      viewport.props.ref.current = { querySelector };
+      motionTest.effects[0]();
+    };
+    const pair: ChatMessage[] = [{ role: "user", content: "Q" }, { role: "assistant", content: "" }];
+    render([], false);
+    render(pair, true, "created-id");
+    expect(animate).toHaveBeenCalledTimes(2);
+    expect(querySelector.mock.calls.map((call) => call[0])).toEqual([
+      '[data-message-id="msg-0"]', '[data-message-id="msg-1"]',
+    ]);
+    render(pair.map((message, index) => ({ ...message, publicId: `id-${index}`, content: "updated" })), true, "created-id");
+    expect(animate).toHaveBeenCalledTimes(2);
+    render([...pair, ...pair], false, "created-id"); // 历史版本包含更多后续消息
+    render([...pair, ...pair, ...pair], true, "another-id"); // 返回后台仍在生成的会话
+    expect(animate).toHaveBeenCalledTimes(2);
+    render(pair, false, "another-id"); // 删除/截断之后仍可发送新轮
+    render([...pair, ...pair], true, "another-id");
+    expect(animate).toHaveBeenCalledTimes(4);
+    reduced = true;
+    render([...pair, ...pair, ...pair], true, "another-id");
+    expect(animate).toHaveBeenCalledTimes(4);
+    motionTest.entryRef = null;
+    reduced = false;
+    render(pair, true, "another-id"); // 初次挂载的流式历史也不入场
+    expect(animate).toHaveBeenCalledTimes(4);
+  });
+
   it("clears the source selection before the follow-up callback moves the input caret", () => {
     selectionTest.active = true;
     const calls: string[] = [];

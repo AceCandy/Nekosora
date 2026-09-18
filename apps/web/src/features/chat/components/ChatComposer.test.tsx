@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReasoningLevel } from "@nekusora/db/types";
 import type { ComposerSelectionState, ComposerTransition } from "@/features/chat/model/composerState";
-import type { ModelOption, RenderStyleOption } from "@/features/chat/model/types";
+import type { ChatMessage, ModelOption, RenderStyleOption } from "@/features/chat/model/types";
 import type { PreviewableFile } from "@/shared/components/file-preview/FilePreviewModal";
 
 const mocks = vi.hoisted(() => ({
@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   draft: null as string | null,
   queue: null as string[] | null,
   streaming: false,
+  messages: [] as ChatMessage[],
   stopGeneration: vi.fn(),
 }));
 
@@ -110,7 +111,7 @@ vi.mock("@/features/chat/hooks/useChatRuntime", () => ({
   useChatRuntime: (options: CapturedRuntimeOptions) => {
     capturedRuntimeOptions = options;
     return {
-      messages: [],
+      messages: mocks.messages,
       streaming: mocks.streaming,
       send: mocks.send,
       regenerate: vi.fn(),
@@ -233,6 +234,7 @@ beforeEach(() => {
     welcomeTitle: "Nekusora",
   })[key] ?? key);
   capturedToolbar = null;
+  mocks.messages = [];
   capturedInputBox = null;
   capturedMessageList = null;
   capturedHeader = null;
@@ -247,6 +249,28 @@ beforeEach(() => {
 });
 
 describe("ChatComposer coordinator integration", () => {
+  it("keeps welcome decorations outside the measured input flow and inert after sending", () => {
+    const welcome = renderComposer();
+    const before = collectElements(capturedComposerTree);
+    const decorations = before.filter((node) => String(node.props.className).includes("chat-welcome-decoration"));
+    expect(decorations).toHaveLength(2);
+    expect(decorations.every((node) => node.props.inert === false)).toBe(true);
+    expect(decorations.every((node) => String(node.props.className).includes("absolute"))).toBe(true);
+    expect(welcome).toContain('data-welcome="true"');
+    mocks.messages = [{ role: "user", content: "Q" }, { role: "assistant", content: "" }];
+    const chatting = renderComposer("conversation-a");
+    const after = collectElements(capturedComposerTree);
+    const hidden = after.filter((node) => String(node.props.className).includes("chat-welcome-decoration"));
+    expect(hidden).toHaveLength(2);
+    expect(hidden.every((node) => node.props.inert === true && node.props["aria-hidden"] === true)).toBe(true);
+    expect(chatting).toContain('data-welcome="false"');
+    expect(chatting).not.toContain("composer-welcome-lift");
+    const inputBefore = before.find((node) => node.props.onSend);
+    const inputAfter = after.find((node) => node.props.onSend);
+    expect(inputBefore?.type).toBe(inputAfter?.type);
+    expect(inputBefore?.key).toBe(inputAfter?.key);
+  });
+
   it("queues text while generating without sending it immediately", () => {
     mocks.streaming = true;
     mocks.queue = ["先前问题"];

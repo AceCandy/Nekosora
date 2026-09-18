@@ -469,6 +469,7 @@ export default function ChatComposer({
         {/* 输入器始终锚定底部;空会话欢迎态以 transform 上提至视觉中心(composer-welcome-lift),
             首条消息发出后 500ms expo 滑回底部——门面退场编排的签名动效。 */}
         <div
+          data-welcome={isEmptyConversation}
           className={clsx(
             "absolute inset-x-0 bottom-0 z-10 pointer-events-none transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none",
             isEmptyConversation && "composer-welcome-lift",
@@ -476,22 +477,18 @@ export default function ChatComposer({
         >
           <div
             ref={composerRef}
-            className={clsx(
-              "pointer-events-auto mx-auto w-[calc(100%_-_2rem)] max-w-[75ch] space-y-2 pb-[env(safe-area-inset-bottom)]",
-              !isEmptyConversation && "mb-4",
-            )}
+            className="relative pointer-events-auto mx-auto mb-4 w-[calc(100%_-_2rem)] max-w-[75ch] space-y-2 pb-[env(safe-area-inset-bottom)]"
           >
-            {isEmptyConversation && (
-              <>
-                <div className="welcome-rise mb-10 flex flex-col items-center text-center">
+            {/* 欢迎装饰脱离输入器测量，不因发送卸载而改变归位起点；隐藏时退出交互与无障碍树。 */}
+            <div className="chat-welcome-decoration absolute inset-x-0 bottom-full pb-10" inert={!isEmptyConversation} aria-hidden={!isEmptyConversation}>
+                <div className={clsx("flex flex-col items-center text-center", isEmptyConversation && "welcome-rise")}>
                   <Image src="/icon.svg" alt="" width={64} height={64} className="brightness-0" priority />
                   <h1 className="mt-6 text-ui-facade font-extrabold tracking-[-0.03em] text-space-ink [text-wrap:balance]">
                     {t("welcomeTitle")}
                   </h1>
                   <p className="mt-3 text-ui-reading text-ink-secondary">{t("welcomeSubtitle")}</p>
                 </div>
-              </>
-            )}
+            </div>
             {/* 排队条:流式期间 Enter 压入的待发送消息;点文本取回编辑,⏭ 插队到队首并停止当前生成,× 移除 */}
             {queue.length > 0 && (
               <div className="menu-pop rounded-xl border border-morning-mist bg-nebula-silver/25 px-2 py-1.5">
@@ -580,8 +577,8 @@ export default function ChatComposer({
             />
             </div>
             {/* 建议提示词:空会话的教学式入口,点击填充输入框(不直接发送,交给用户确认) */}
-            {isEmptyConversation && (
-              <div className="welcome-rise flex flex-wrap items-center justify-center gap-2 pt-4" style={{ animationDelay: "260ms" }}>
+            <div className="chat-welcome-decoration absolute inset-x-0 top-full pt-4" inert={!isEmptyConversation} aria-hidden={!isEmptyConversation}>
+              <div className={clsx("flex flex-wrap items-center justify-center gap-2", isEmptyConversation && "welcome-rise")} style={isEmptyConversation ? { animationDelay: "260ms" } : undefined}>
                 {([
                   { key: "suggestExplain", Icon: Lightbulb },
                   { key: "suggestWrite", Icon: PenLine },
@@ -598,7 +595,7 @@ export default function ChatComposer({
                   </button>
                 ))}
               </div>
-            )}
+            </div>
           </div>
         </div>
       </div>

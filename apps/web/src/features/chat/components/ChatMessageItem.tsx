@@ -373,7 +373,7 @@ function ChatMessageItemContent({
   const canShowMenu = canEdit || canDelete;
 
   return (
-    <div id={domId} className={clsx("group/message relative flex animate-in fade-in slide-in-from-bottom-2 duration-200 motion-reduce:animate-none scroll-mt-4", role === "user" ? "justify-end" : "justify-start")}>
+    <div id={domId} className={clsx("group/message relative flex scroll-mt-4", role === "user" ? "justify-end" : "justify-start")}>
       {role === "assistant" && showScrollTopTrigger && (
         <div className="absolute inset-y-0 -left-11 hidden w-7 @min-[54rem]:block">
           <button
@@ -405,7 +405,7 @@ function ChatMessageItemContent({
                 if (e.key === "Escape") setEditing(false);
               }}
               rows={Math.min(8, Math.max(2, draft.split("\n").length))}
-              className="w-full rounded-2xl bg-neutral-900 text-white   px-4 py-2.5 text-ui-reading leading-7 resize-none border border-sora-blue/40 focus:outline-none focus:border-sora-blue"
+              className="w-full rounded-2xl bg-nebula-silver text-space-ink px-4 py-2.5 text-ui-reading leading-7 resize-none border border-sora-blue/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sora-blue"
               autoFocus
             />
             <MessageImageAttachments
@@ -424,7 +424,7 @@ function ChatMessageItemContent({
                   setDraftAttachments(attachments);
                   setEditing(false);
                 }}
-                className="ai-trigger inline-flex items-center gap-1 text-ui-caption font-semibold text-neutral-400 hover:text-neutral-600  transition-colors cursor-pointer"
+                className="ai-trigger inline-flex items-center gap-1 text-ui-caption font-semibold text-ink-secondary hover:text-space-ink transition-colors cursor-pointer"
               >
                 <AIXIcon className="w-3 h-3" />
                 <span>{t("editCancel")}</span>
@@ -474,11 +474,11 @@ function ChatMessageItemContent({
                 {userMsgCanCollapse && !userMsgExpanded ? (
                   /* 折叠态:底部渐隐带内嵌居中「展开」按钮。渐变层 pointer-events-none 让气泡其余区域
                      仍可点击切换;按钮自身恢复指针事件并 stopPropagation,避免与气泡 onClick 双触发。 */
-                  <div className="pointer-events-none absolute inset-x-0 bottom-0 flex h-16 items-end justify-center bg-gradient-to-b from-transparent via-neutral-900/80 to-neutral-900 pb-1.5">
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 flex h-16 items-end justify-center bg-gradient-to-b from-transparent via-nebula-silver/80 to-nebula-silver pb-1.5">
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setUserMsgExpanded(true); }}
-                      className="pointer-events-auto flex items-center gap-1 rounded-md px-2 py-0.5 text-ui-caption font-semibold text-white/70 hover:text-white transition-colors cursor-pointer"
+                      className="pointer-events-auto flex items-center gap-1 rounded-md bg-nebula-silver px-2 py-0.5 text-ui-caption font-semibold text-ink-secondary hover:text-space-ink transition-colors cursor-pointer"
                       aria-expanded={userMsgExpanded}
                     >
                       <ChevronDown className="w-3 h-3" aria-hidden="true" />
@@ -491,7 +491,7 @@ function ChatMessageItemContent({
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setUserMsgExpanded(false); }}
-                      className="flex items-center gap-1 rounded-md px-2 py-0.5 text-ui-caption font-semibold text-white/70 hover:text-white transition-colors cursor-pointer"
+                      className="flex items-center gap-1 rounded-md px-2 py-0.5 text-ui-caption font-semibold text-ink-secondary hover:text-space-ink transition-colors cursor-pointer"
                       aria-expanded={userMsgExpanded}
                     >
                       <ChevronUp className="w-3 h-3" aria-hidden="true" />
