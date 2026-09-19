@@ -2,282 +2,223 @@
 
 # Nekusora · 星枢
 
-**AI 聊天工作台 + OpenAI / Anthropic / Gemini 兼容模型网关**
+**把 AI 聊天、文件问答、图像创作和模型管理放进同一个工作台。**
 
-「猫与星空」的治愈感 × 「高可用网关」的精密工程 — 一个融合 claude.ai / chatgpt 式对话体验与 sub2api / CLIProxyAPI 式 API 网关的混合型全栈平台。
+在网页里使用不同模型，也能把接入的模型提供给你常用的应用。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-3b82f6.svg)](./LICENSE)
-[![Next.js](https://img.shields.io/badge/Next.js%2016-App%20Router-000000.svg)](https://nextjs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178c6.svg)](https://www.typescriptlang.org/)
-[![Drizzle ORM](https://img.shields.io/badge/Drizzle%20ORM-PostgreSQL-d6f334.svg)](https://orm.drizzle.team/)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-f59e0b.svg)](.)
 
-**设计主线 · 星枢天流 (The Astral Skyline)** — 天空蓝与星云纯白
+[能做什么](#能做什么) · [界面预览](#界面预览) · [开始使用](#开始使用) · [部署自己的星枢](#部署自己的星枢)
 
 </div>
 
----
+![星枢聊天工作台：会话侧栏、提问输入框、联网搜索与模型选择](./assets/readme/chat-workspace.webp)
 
-![Nekusora 星枢 AI 聊天工作台与高可用模型网关产品总览](./assets/readme/product-overview.webp)
+Nekusora（星枢）是一款可以自行部署的 **AI 聊天工作台与模型网关**。你可以用它写作、学习、整理资料，也可以把多个服务商的模型集中管理，通过一个统一的地址和密钥供其他客户端调用。
 
-## 概述
+适合想拥有个人 AI 工作台的用户，也适合需要管理多个模型账号、为团队或应用提供模型入口的人。
 
-Nekusora(星枢,取自 Neku 猫 / Sora 天空)把两件事揉进了同一个产品里:
+> 星枢本身不提供模型额度。可用模型由管理员开放，或由你接入自己的模型服务；图片理解、推理、联网搜索和图像生成等能力取决于所选模型及相关配置。
 
-1. **AI 聊天工作台** —— 类 claude.ai / chatgpt 的流式对话界面,面向终端用户与提示词工程师。
-2. **多协议兼容模型网关** —— 通过 `base_url + sk-*` 接入,兼容 OpenAI / Anthropic / Gemini 请求格式,带**主-子密钥层级**、**每子密钥多模型绑定**、加权负载均衡与故障转移,面向开发者与团队。
+## 能做什么
 
-现有 OpenAI SDK 客户端可**零改动**接入网关,只需替换 `base_url` 与 `api_key`。
-
-## 产品预览
-
-### 高可用模型网关
-
-![Nekusora 模型网关的多上游路由、故障转移与加权负载界面](./assets/readme/model-gateway.webp)
-
-### 图像工作区
-
-![Nekusora 图像工作区的模型选择、生成控制与结果管理界面](./assets/readme/image-workspace.webp)
-
----
-
-## ✨ 特性
-
-### AI 聊天工作台
-- 流式对话(SSE)、多模型选择、多会话管理
-- CJK 感知的 token 估算 + 上下文窗口裁剪(防止历史过长)
-- 全局模型 + 用户 BYO 模型统一选择
-- 按模型能力选择推理档位、输出模式与输出样式
-- **联网搜索**:支持 Tavily / Exa / Bocha / 智谱 / SearXNG
-- **Artifacts**:代码 / 文档类回答的可视化渲染面板
-- **会话分享**:生成只读分享链接(`/share/:id`)
-- **多模态**:图片输入、文件上传与解析
-- **图像工作区**:独立的模型选择、生成与结果管理界面(`/image`)
-- **记忆 (Memory)**:长期用户画像与偏好记忆
-- **RAG**:基于 pgvector 的检索增强,过程面板展示可预览的文件来源
-- **指令卡**:可复用并按会话组合的 System Prompt
-
-### 多协议兼容 API 网关
-- `POST /v1/chat/completions`(流式 + 非流式,严格 OpenAI 格式)
-- `POST /v1/responses` —— OpenAI Responses API
-- `POST /v1/messages` —— Anthropic Messages API
-- `POST /v1beta/models/:model:generateContent` —— Gemini API(含流式入口)
-- `POST /v1/images/generations` —— 图像生成
-- `POST /v1/audio/speech` —— TTS 语音合成
-- `POST /v1/audio/transcriptions` —— 语音转写
-- `GET/POST /v1/mcp` —— MCP(Model Context Protocol)桥接端点
-- `GET /v1/models`(返回该 key 可用模型)
-- 按优先级、权重与健康状态进行负载均衡和故障转移
-
-### 主-子密钥层级
-- **主 Key**(每用户唯一):可调用该用户全部已启用模型
-- **子 Key**(多个):可批量绑定多个模型,仅能调用该用户已启用且显式绑定的模型
-- WebChat 可使用系统公开模型与用户自有模型;网关 Key 仅访问所属用户的模型
-
-### 基础设施
-- **数据库**:PostgreSQL(+pgvector)
-- **缓存**:Redis ↔ 进程内内存 LRU 自动降级
-- **队列**:pg-boss(PostgreSQL)
-- **对象存储**:未配置时使用本地磁盘；显式选择 S3 / R2 / MinIO 后配置错误会阻断启动，不回退本地
-
-### 管理
-- 管理员后台:用户管理、运维监控、系统模型、输出模式 / 样式与请求治理
-- 用户面板:主/子 Key、Provider / Model / Route、联网搜索、指令卡、记忆、用量与错误日志
-
----
-
-## 🛠 技术栈
-
-| 层 | 选型 |
+| 你想做的事 | 在星枢里怎么做 |
 |---|---|
-| 框架 | Next.js 16 App Router + TypeScript + Turbopack |
-| ORM | Drizzle ORM(PostgreSQL) |
-| 缓存 | cache-manager v6 + Keyv + Redis |
-| 队列 | pg-boss(PostgreSQL) |
-| 认证 | Better Auth + admin 插件 + Drizzle 适配器 |
-| AI | Vercel AI SDK 7(`@ai-sdk/openai` / `anthropic` / `google`) |
-| 向量 | pgvector(PostgreSQL) |
-| 协议 | OpenAI / Anthropic / Gemini 兼容 API + MCP SDK |
-| 监控 | prom-client + `/metrics` 端点 |
-| UI | TailwindCSS v4 + `@shadcn/react` + Lucide |
-| 加密 | AES-256-GCM(所有 provider key 加密入库) |
+| 写邮件、做计划、解释概念 | 新建对话，选择模型，直接提问并继续追问 |
+| 读文件、看图片、整理资料 | 上传附件，围绕内容提问；需要时开启联网搜索并查看来源 |
+| 切换不同模型 | 在同一个输入框选择共享模型或个人模型，按模型能力调整推理强度 |
+| 少写重复的提示词 | 把常用要求保存为指令卡，把希望跨会话保留的偏好加入长期记忆 |
+| 创作图片 | 在图像工作区输入描述，选择尺寸与张数，查看历史结果并下载 |
+| 整理和分享成果 | 搜索、置顶、归档对话，或生成只读分享链接 |
+| 在其他应用里使用模型 | 接入服务商，配置模型，再创建供客户端使用的 API 密钥 |
+| 了解使用情况 | 查看调用记录、模型用量、响应耗时和错误请求 |
 
----
+## 界面预览
 
-## 🚀 快速开始
+以下聊天与管理页面为当前界面截图，账号、会话标题、服务商地址与密钥等信息已脱敏。图像工作区单独使用示意图；截图中的模型列表不代表部署后自带这些服务。
 
-### 本地开发(PostgreSQL + 内存缓存)
+### 聊天：从提问到整理成果
 
-要求 Node.js 24+、pnpm 10.34.5 与 Docker Compose。
+输入框集中提供附件上传、回答方式、联网搜索和模型选择。历史对话按时间分组，常用内容可以置顶，也可以通过全文搜索找回。
 
-```bash
-pnpm install
-cp .env.example .env.local    # 按需修改本地配置与密钥
-docker compose up -d          # 启动 PostgreSQL(+pgvector)与 Redis
-PORT=3500 pnpm dev            # Web: http://localhost:3500
-GATEWAY_PORT=3502 pnpm dev:gateway # 另开终端，Gateway: http://localhost:3502
-WORKER_HEALTH_PORT=3501 pnpm worker # 另开终端，Worker 健康端口: 3501
-```
+- **模型选择**：共享模型与个人模型集中展示，能否看图、调用工具、调整推理强度一目了然。
+- **回答与阅读**：选择已启用的回答方式、切换阅读样式；代码、文档等内容可打开独立预览面板，复制或下载。
+- **分享对话**：可以分享当前快照或实时同步后续内容，并设置访问密码和有效期。
 
-> 首次启动会**自动**创建首个管理员账号(读 `.env.local` 的 `SEED_ADMIN_*`)。
-> PG 模式下连建表也会自动跑(`drizzle migrate`),无需手动 migrate。
-> `pnpm seed` 仅用于手动重置管理员。
-> 生产环境的空库必须显式设置唯一强 `SEED_ADMIN_PASSWORD`;缺失、空白或公开默认值会阻断创建。
+![模型选择面板：共享与个人模型、能力提示，以及当前模型的推理强度](./assets/readme/chat-model-picker.webp)
 
-首次登录:用 `.env.local` 里配置的 `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` 登录 `/login`。
+### 图像：描述想法，保存结果
 
-### 配置上游 Provider
+选择图像模型，填写画面描述，再设置尺寸和张数。生成结果与历史记录都在同一页面，可直接下载。
 
-1. 登录后进入 `/panel/providers` 添加 Provider(base_url + key,加密存储)
-2. 进入 `/panel/models` 创建模型与路由,选择对应 API wire format
-3. 进入 `/panel/keys` 生成主密钥,或创建子密钥并绑定模型
+![图像工作区示意：提示词、尺寸和张数设置，以及生成结果展示](./assets/readme/image-workspace.webp)
 
-### 同步 pi 模型目录
+*上图为图像工作区示意，展示内容为演示素材。使用前需配置可用的图像模型与路由。*
 
-同步前需在 `.env.local` 中配置 `DATABASE_URL`。默认从 pi 拉取数据并仅输出审计报告:
+### 模型管理：把多个来源放在一起
 
-```bash
-pnpm sync:pi-models
-```
+为模型设置便于识别的名称，连接一个或多个服务商。需要时配置主备顺序和分流比例，让同一个模型入口拥有多个可用来源；路由也可以单独测试、启用或停用。
 
-离线审计或生成迁移时，必须显式指定已审查的本地 JSON snapshot。`--write` 会把 planner 接受的已有模型 direct 更新和缺失主流模型新增写入下一条 PostgreSQL migration:
+![模型管理：个人模型列表，以及展开后的多服务商路由配置](./assets/readme/model-routes.webp)
 
-```bash
-PI_MODELS_FILE=/path/to/pi-models.json pnpm sync:pi-models
-PI_MODELS_FILE=/path/to/pi-models.json pnpm sync:pi-models -- --write
-pnpm --filter @nekusora/web exec vitest run src/lib/reasoning.test.ts src/lib/sync-pi-models.test.ts src/lib/sync-pi-models-cli.test.ts src/lib/model-catalog.test.ts
-```
+<details>
+<summary>查看服务商管理：添加账号、检测连接、拉取模型</summary>
 
-人工审查新生成的 `drizzle/pg/*.sql`、source digest、`meta/_journal.json` 和新 snapshot 一致后应用:
+集中维护服务商的接口地址与密钥，查看连接状态和可用模型，再将需要的模型接入工作台。
 
-```bash
-pnpm db:migrate:pg
-```
+![服务商管理：接口地址、密钥状态、上游模型列表与启停操作](./assets/readme/providers.webp)
 
-主流家族及官方 Provider 规则集中在 `packages/core/src/lib/mainstream-models.ts`。新增候选默认启用并具备 tools/system prompt；vision、reasoning 和 token 元数据必须在迁移发布前核对官方资料。同步器不直接 apply，也不创建 Provider、模型实例或路由；聚合商、区域/专项变体和模糊匹配不会自动新增。
+</details>
 
-### 调用网关(OpenAI 兼容)
+### 密钥管理：给不同应用分配可用模型
 
-```bash
-# 列出可用模型
-curl https://your-host/v1/models \
-  -H "Authorization: Bearer sk-your-master-key"
+主密钥用于访问你自己已启用的全部模型；子密钥只开放你为它绑定的模型。可以为写作助手、开发测试等用途分别创建子密钥，按需停用。
 
-# 对话(流式)
-curl https://your-host/v1/chat/completions \
-  -H "Authorization: Bearer sk-your-master-key" \
-  -H "Content-Type: application/json" \
-  -d '{"model":"gpt-4o","messages":[{"role":"user","content":"你好"}],"stream":true}'
-```
+![密钥管理：主密钥、按用途命名的子密钥，以及子密钥的模型绑定](./assets/readme/api-keys.webp)
 
-Python / Node OpenAI SDK 零改动接入:
+### 用量查询：知道用了什么、哪里出了问题
 
-```python
-from openai import OpenAI
-client = OpenAI(base_url="https://your-host/v1", api_key="sk-your-master-key")
-resp = client.chat.completions.create(
-    model="gpt-4o",
-    messages=[{"role": "user", "content": "你好"}],
-)
-```
+在“用量明细”中查看调用量、输入输出用量和耗时，按时间、来源、密钥、服务商或模型筛选记录；调用失败时切换到“错误请求”排查。管理员还可查看其他用户的使用情况。
 
-### 生产多进程部署
+![用量查询：时间与来源筛选、调用汇总，以及模型调用明细](./assets/readme/usage.webp)
 
-生产环境使用 Web、Gateway、Worker 和 edge-router 分离的编排，只有 edge-router 发布应用端口。完整的健康依赖、路由边界、共享上传卷、连接预算和回滚步骤见 [`deploy/production.md`](./deploy/production.md)。
+## 开始使用
+
+已经有可用站点和账号，可以直接从下面的流程开始。自己搭建则先看[部署说明](#部署自己的星枢)。
+
+### 1. 发起第一段对话
+
+1. 登录后进入聊天页 `/chat`，点击“新对话”。
+2. 点击输入框右侧的“模型配置”，选择一个可用模型；支持推理的模型会显示对应的强度设置。
+3. 输入问题并发送。需要补充材料时，点击 **＋ → 上传文件**，也可以拖拽或粘贴附件。
+4. 继续追问，或在侧栏将这段对话重命名、置顶、归档，方便以后找回。
+
+可以从这些具体任务试起：
+
+> “把这份会议记录整理成待办清单，列出负责人和截止时间。”
+>
+> “解释这张图里的信息，并告诉我哪些地方需要进一步核实。”
+>
+> “帮我把这段文字改得更简洁，保留原来的语气。”
+
+想查近期资料时，先开启输入框旁的“联网搜索”；回答提供来源时，可打开查看。图片理解需要选择支持图片输入的模型。
+
+### 2. 让常用要求复用起来
+
+- **指令卡**：在设置中的“指令卡”保存常用要求，例如“先给结论，再列行动项”。聊天时输入 `/` 选择，也可以组合多张卡片。
+- **长期记忆**：在“长期记忆”中添加希望跨会话保留的偏好，例如“优先使用中文，回答简洁”。可以随时查看和管理。
+- **分享成果**：在对话中打开分享设置，选择快照或实时同步，再按需设置密码、有效期，把链接交给阅读者。
+
+### 3. 生成一张图片
+
+1. 点击侧栏“图像”，进入 `/image`。
+2. 选择图像模型，描述主体、风格和画面要求。
+3. 设置尺寸与张数，点击“生成”；完成后下载结果，或在历史记录中找回。
+
+例如：“一只坐在窗边看星空的白猫，柔和的蓝色调，简洁插画，横向构图。”
+
+如果页面提示没有可用的图像模型，先在“模型管理”中添加图像模型并配置路由，或联系管理员开放共享图像模型。
+
+### 4. 接入自己的模型服务
+
+如果管理员已经开放了共享模型，可以直接聊天；想使用自己的账号，按以下顺序配置：
+
+| 顺序 | 页面 | 要做的事 |
+|---|---|---|
+| ① 添加来源 | 服务商管理 `/panel/providers` | 点击“添加上游服务商”，填写服务商提供的接口类型、地址和 API 密钥 |
+| ② 确认可用 | 服务商管理 | 拉取模型列表，按需检测连接或模型是否可用 |
+| ③ 添加模型 | 模型管理 `/panel/models` | 创建模型，添加路由，选择服务商及对应的上游模型 |
+| ④ 开始使用 | 聊天 `/chat` | 确认服务商、模型与路由已启用，回到聊天页选择模型 |
+
+同一个模型可以添加多条路由。管理员还可以将模型设为“全局公开”，供站内其他用户聊天使用。
+
+### 5. 在其他客户端里使用
+
+进入 **密钥管理** `/panel/keys`：生成主密钥，或创建子密钥并绑定允许调用的模型。密钥明文只在创建时展示一次，请及时保存。
+
+星枢支持 OpenAI、Anthropic、Gemini 兼容接口。以支持自定义地址的 OpenAI 兼容客户端为例：
+
+| 客户端设置 | 填写内容 |
+|---|---|
+| 接口地址 / Base URL | `https://你的站点域名/v1` |
+| API Key | 在星枢“密钥管理”中创建的密钥 |
+| 模型名称 | “模型管理”中的对外名，或客户端拉取到的可用模型 |
+
+更多调用示例可以直接展开“密钥管理”页面的 **API 调用示例**。使用后，在“用量查询”查看记录。
+
+> 网页聊天可使用管理员开放的共享模型与自己的模型；API 密钥只能调用密钥所属用户自己的模型，子密钥还需显式绑定。共享模型不会自动成为你的 API 可用模型。
+
+## 常见问题
+
+**登录后没有模型可选？**
+
+请管理员开放共享模型，或接入自己的服务商和模型。模型需要启用，并至少配置一条启用的路由。
+
+**为什么看不到联网搜索或推理强度？**
+
+联网搜索需要先在设置中配置可用后端；推理选项随模型能力变化，只支持固定推理的模型不能自由调整档位。
+
+**只有聊天，没有调用 API，也要创建密钥吗？**
+
+不需要。站内聊天直接使用账号可见的模型，API 密钥用于其他客户端或应用接入。
+
+**调用失败去哪里看？**
+
+先到“用量查询 → 错误请求”查看记录，再到“服务商管理”检测连接，或在“模型管理”中测试对应路由。
+
+## 部署自己的星枢
+
+推荐使用 Docker Compose。准备好 Docker 与 Compose，在项目目录中复制配置模板：
 
 ```bash
 cp deploy/production.env.example deploy/production.env
-# 内置 PostgreSQL 17(+pgvector)与 Redis
+```
+
+编辑 `deploy/production.env`，按模板填写数据库密码、加密与登录密钥、站点地址和首个管理员账号，并选择要部署的镜像版本。**不要保留模板中的占位值。** 然后启动：
+
+```bash
 docker compose --env-file deploy/production.env -f compose.production.yml up -d --pull always --no-build
 ```
 
-`deploy/production.env` 中的 `IMAGE_TAG` 固定部署版本；示例使用 `0.1.0`，升级时改为新的版本标签，也可使用滚动更新的 `latest`。
+首次启动会自动初始化数据库并创建配置中的管理员账号。访问配置的站点地址（本机默认端口为 `3000`），在 `/login` 登录，再按上面的步骤接入模型。
 
-外接已有 PostgreSQL/Redis 时，将 `DATABASE_URL`、`REDIS_URL` 改为容器可访问的外部地址，直接使用外接版 Compose：
+完整配置、外接数据库、升级、备份注意事项与停止方式见 [生产部署指南](./deploy/production.md)。已有 PostgreSQL 16 部署请先按指南完成数据库升级，勿直接复用旧数据卷启动 PostgreSQL 17。
 
-```bash
-docker compose --env-file deploy/production.env -f compose.production.external.yml up -d --pull always --no-build
-```
+<details>
+<summary>从源码本地运行</summary>
 
-内置模式中，现有 PostgreSQL 16 数据目录不能直接由 PostgreSQL 17 启动；升级前请按 [`deploy/production.md`](./deploy/production.md) 完成大版本迁移。
-
----
-
-## ⚙️ 环境变量
-
-见 [`.env.example`](./.env.example)。关键项:
-
-| 变量 | 说明 | 默认 |
-|---|---|---|
-| `DATABASE_URL` | PostgreSQL 连接串 | 必填 |
-| `REDIS_URL` | Redis 连接串;留空走内存 | - |
-| `DATA_ENCRYPTION_KEY` | AES-256-GCM 主密钥(64 位 hex) | 必填 |
-| `BETTER_AUTH_SECRET` | 认证密钥 | 必填 |
-| `BETTER_AUTH_URL` | 应用对外根 URL | `http://localhost:3000` |
-| `SEED_ADMIN_PASSWORD` | 空库创建首管理员的密码;生产必须显式设置 | 开发兼容默认值 |
-| `SK_PREFIX` | 签发 API key 前缀 | `sk-` |
-| `STORAGE_DRIVER` | `local` / `s3` / `r2` / `minio` | `local` |
-| `METRICS_ENABLED` | `/metrics` 端点开关 | `true` |
-
----
-
-## 🐳 Docker 部署
-
-Web、Gateway、Worker 三个容器共用同一生产镜像。GHCR 每 12h 检查 main，有更新时发布 `edge`；`v*` tag 发布版本标签并在配置了凭据时同步到 DockerHub：
+需要 Node.js 24+、pnpm 10.34.5 与 Docker Compose。
 
 ```bash
-docker pull ghcr.io/acecandy/nekusora:edge
-
-docker pull acecandy/nekusora:latest             # v* tag，可选 DockerHub 同步
+pnpm install
+cp .env.example .env.local
 ```
 
-旧的 `nekusora-web`、`nekusora-gateway`、`nekusora-worker` 镜像地址不再更新。统一镜像仍应通过生产 Compose 启动三个独立容器，不要在一个容器内同时运行三个进程。
-
-或仅在本地构建镜像:
+按 [环境配置模板](./.env.example) 编辑 `.env.local`，设置登录与加密密钥、管理员账号，并让 `BETTER_AUTH_URL` 与访问地址一致。然后启动本地数据库：
 
 ```bash
-docker build -t nekusora .
+docker compose up -d
 ```
 
-`compose.production.yml` 自带 PostgreSQL/Redis，内置 PostgreSQL 数据保存在 `postgres-data` 卷；`compose.production.external.yml` 不创建基础设施容器，只连接 `DATABASE_URL`、`REDIS_URL` 指向的外部服务。
+分别在三个终端运行：
 
----
-
-## 📁 项目结构
-
-```
-apps/
-  web/                       Next.js 聊天工作台与管理界面
-  gateway/                   Fastify API 数据面
-  worker/                    pg-boss 后台任务进程
-packages/
-  core/                      协议适配、Provider、路由与核心业务
-  db/                        Drizzle schema 与数据库类型
-  queue/                     队列目录与运行时
-  contracts/                 跨进程共享契约
-  observability/             指标与可观测性
-drizzle/pg/                   PostgreSQL 迁移(仓库级唯一副本)
-edge/                         生产入口路由
-deploy/                       生产部署文档与环境模板
+```bash
+PORT=3500 pnpm dev
+GATEWAY_PORT=3502 pnpm dev:gateway
+WORKER_HEALTH_PORT=3501 pnpm worker
 ```
 
----
+打开 `http://localhost:3500`，用 `.env.local` 中的 `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` 登录。本地直接调用网关时，使用 `http://localhost:3502/v1`。
 
-## 🔒 安全
+</details>
 
-- 所有 provider `api_key` 用 **AES-256-GCM** 加密入库(`DATA_ENCRYPTION_KEY`)
-- 对外 `sk-*` 只存 sha256 hash,明文仅创建时一次性展示
-- 启动时校验关键密钥非弱 / 非默认
-- `internal` 范围模型不对外暴露(仅系统任务用)
+## 更多资料
 
----
+- [生产部署指南](./deploy/production.md)：安装配置、外接服务、升级与回滚。
+- [环境配置模板](./.env.example)：本地运行与可选能力的配置项。
+- [模型目录维护](./docs/model-catalog.md)：维护者同步和更新模型模板的方法。
+- [产品定位](./PRODUCT.md) · [设计规范](./DESIGN.md)。
 
-## 🎨 设计
-
-Nekusora 遵循自研设计系统「**星枢天流 (The Astral Skyline)**」:天空蓝与星云纯白的单亮色体系 —— 聊天侧温和治愈、管理侧莫兰迪灰调严谨专业。完整设计参数见 [DESIGN.md](./DESIGN.md),产品定位见 [PRODUCT.md](./PRODUCT.md)。
-
----
-
-## 📄 License
+## 开源许可
 
 [MIT](./LICENSE) © Nekusora Contributors
