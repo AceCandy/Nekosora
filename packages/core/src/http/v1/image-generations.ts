@@ -11,7 +11,7 @@
  * 模型需在 capabilities 标 imageGeneration:true,且 protocol=openai-images。
  */
 import { verifyKey, extractBearer } from "../../lib/keys";
-import { generateImageViaRoute, RoutingError } from "../../lib/providers/multimodal/image-gen";
+import { generateImageViaRoute, RoutingError, type ImageGenOptions } from "../../lib/providers/multimodal/image-gen";
 import { getStorage } from "../../lib/infra/storage/index";
 import { logUsage } from "../../lib/usage";
 import {
@@ -190,10 +190,6 @@ export async function POST(req: Request) {
     );
   }
 }
-
-type ImageGenOptions = {
-  size?: "256x256" | "512x512" | "1792x1024" | "1024x1792";
-};
 
 /**
  * 记录一条发生在执行引擎之外的 route 层失败请求。

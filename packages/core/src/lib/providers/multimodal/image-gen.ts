@@ -1,17 +1,16 @@
 /**
  * 图像生成适配器 —— P1-D。
  *
- * 复用路由器拿路由链:WebChat 传 modelId 走 resolveRoutesById(public ∪ owner 可见),
- * 网关缺省 modelId 走 resolveRoutes(owner-only);再调 AI SDK v5 的 generateImage。
- * OpenAI Images API 兼容(DALL-E / gpt-image-1);其他 OpenAI 兼容上游同理。
+ * WebChat 按 modelId 解析可见路由，网关按模型名解析 owner-only 路由。
+ * 目录出图方式决定使用 Images 接口或 Responses 绘图工具。
  *
  * response_format:
  *   - b64_json:直接返回 base64(默认)
  *   - url:存到 StorageDriver(P2-A),返回公网/签名 URL
  *
- * 故障转移:逐条路由尝试,首条失败抛出(图像生成多为单次调用,不做 key 级重试)。
+ * 超时、取消与故障转移复用网关执行引擎。
  */
-import { generateImage as generateImage } from "ai";
+import { generateImage, generateText } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import type { CallContext } from "../types";
 import { resolveRoutes, resolveRoutesById, RoutingError } from "../../routing";
@@ -23,11 +22,13 @@ import {
 } from "../../gateway-execution/index";
 import { selectMediaAdapter } from "../../gateway-execution/media-registry";
 import { createProviderFetch } from "../timeouts";
+import { getImageGenerationSettings } from "../../model-catalog";
+import { ErrorCode } from "../../errors";
 
 export interface ImageGenOptions {
   prompt: string;
   n?: number; // 生成数量(默认 1)
-  size?: "256x256" | "512x512" | "1024x1024" | "1792x1024" | "1024x1792";
+  size?: "256x256" | "512x512" | "1024x1024" | "1792x1024" | "1024x1792" | "1024x1536" | "1536x1024";
   responseFormat?: "b64_json" | "url";
   abortSignal?: AbortSignal;
   onProviderStart?: () => Promise<void>;
@@ -43,7 +44,7 @@ export interface GeneratedImage {
 
 export interface ImageGenResult {
   images: GeneratedImage[];
-  /** 图像生成无 token 计费概念，执行用量按实际返回张数记录。 */
+  /** 命中服务商。 */
   providerRef?: string;
   /** 可读服务商名快照(用量日志展示)。 */
   providerName?: string;
@@ -78,6 +79,31 @@ export async function generateImageViaRoute(
       headers: route.provider.headers,
       fetch: createProviderFetch({ connectTimeoutMs: route.provider.connectTimeoutMs }),
     });
+    if (getImageGenerationSettings(route.capabilities).format === "openai-responses") {
+      const size = opts.size;
+      if (size && size !== "1024x1024" && size !== "1024x1536" && size !== "1536x1024") {
+        throw new Error("invalid_request: Responses 不支持该图片尺寸");
+      }
+      const result = await generateText({
+        model: provider.responses(route.upstreamModelName),
+        prompt: opts.prompt,
+        tools: { imageGeneration: provider.tools.imageGeneration({ outputFormat: "png", size }) },
+        toolChoice: { type: "tool", toolName: "imageGeneration" },
+        maxRetries: 0,
+        abortSignal,
+      });
+      const images = result.toolResults.flatMap((tool) =>
+        !tool.dynamic && tool.toolName === "imageGeneration" && tool.output.result
+          ? [{ base64: tool.output.result }] : [],
+      );
+      if (!images.length) throw new Error("图像生成未返回图片");
+      return { value: images, usage: {
+        imageCount: images.length,
+        inputTokens: result.totalUsage.inputTokens,
+        outputTokens: result.totalUsage.outputTokens,
+        totalTokens: result.totalUsage.totalTokens,
+      } };
+    }
     const result = await generateImage({
       model: provider.image(route.upstreamModelName),
       prompt: opts.prompt,
@@ -92,6 +118,7 @@ export async function generateImageViaRoute(
       }
       return [];
     });
+    if (!images.length) throw new Error("图像生成未返回图片");
     return { value: images, usage: { imageCount: images.length } };
   };
   const outcome = await executeAtomicGateway({
@@ -114,7 +141,25 @@ export async function generateImageViaRoute(
       }
       return routes;
     },
-    selectAdapter: (route) => selectMediaAdapter("image.generate", route.protocol, adapter),
+    selectAdapter: (route) => {
+      const settings = getImageGenerationSettings(route.capabilities);
+      if (settings.format === "openai-responses") {
+        if (!["openai", "openai-compatible"].includes(route.protocol)) return null;
+        if (route.capabilities?.tools !== true || route.supportsTools !== true) {
+          return { kind: "rejected", error: {
+            code: "capability_not_supported", phase: "routing",
+            message: "Responses 绘图要求模型目录及路由均启用工具调用",
+          } };
+        }
+        if ((opts.n ?? 1) !== 1 || (opts.size && !settings.sizes.some((size) => size === opts.size))) {
+          return { kind: "rejected", error: {
+            code: ErrorCode.REQUEST_UNSUPPORTED_PARAMETER, phase: "request", httpStatus: 400,
+            message: "Responses 绘图仅支持单张及 1024x1024、1024x1536、1536x1024 尺寸",
+          } };
+        }
+      }
+      return selectMediaAdapter("image.generate", route.protocol, adapter);
+    },
     onProviderStart: opts.onProviderStart,
     telemetry: gatewayTelemetry,
     breaker: gatewayBreaker,

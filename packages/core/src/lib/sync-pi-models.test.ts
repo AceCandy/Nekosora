@@ -19,6 +19,22 @@ const row = (over: Partial<CatalogRow>): CatalogRow => ({
   ...over,
 });
 
+describe("手动图像生成能力", () => {
+  it.each([true, false])("同步视觉与推理属性时保留 imageGeneration=%s", (imageGeneration) => {
+    const plan = planCatalogSync([
+      row({ canonicalModelId: "gpt-4o", capabilities: { imageGeneration, imageGenerationFormat: "openai-responses", tools: true } }),
+    ], {
+      openai: { "gpt-4o": pi({ id: "gpt-4o", input: ["text", "image"], reasoning: false }) },
+    });
+    expect(plan.changes).toHaveLength(1);
+    expect(plan.changes[0].nextCapabilities).toMatchObject({ imageGeneration, imageGenerationFormat: "openai-responses", tools: true, vision: true });
+    expect(plan.changes[0].operations).not.toContainEqual(expect.objectContaining({ key: "imageGeneration" }));
+    const sql = buildCatalogSyncSql(plan).join("\n");
+    expect(sql).toContain('"capabilities" ||');
+    expect(sql).not.toContain("imageGeneration");
+  });
+});
+
 describe("match", () => {
   const PI = {
     zai: { "glm-5.2": pi({ id: "glm-5.2", compat: { thinkingFormat: "zai" } }) },

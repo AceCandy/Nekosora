@@ -1,3 +1,13 @@
+import type { ModelCapabilities } from "@nekusora/db/types";
+
+/** 出图控件与执行层共用的协议约束；旧目录默认使用 Images。 */
+export function getImageGenerationSettings(capabilities?: ModelCapabilities) {
+  const format = capabilities?.imageGenerationFormat ?? "openai-images";
+  return format === "openai-responses"
+    ? { format, sizes: ["1024x1024", "1024x1536", "1536x1024"] as const, maxImages: 1 }
+    : { format, sizes: ["1024x1024", "1792x1024", "1024x1792"] as const, maxImages: 4 };
+}
+
 export interface CatalogMatchEntry {
   id: string;
   canonicalModelId: string;

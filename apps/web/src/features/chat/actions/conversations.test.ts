@@ -46,6 +46,8 @@ vi.mock("@nekusora/core/conversation-title/service", () => ({
 
 import {
   createConversation,
+  getImageModels,
+  getVisibleModels,
   getConversationComposerState,
   getConversationNavigationItem,
   getConversationGroupSummary,
@@ -483,5 +485,37 @@ describe("Composer 完整快照 action", () => {
     })).rejects.toThrow("无权操作");
 
     expect(update).toHaveBeenCalledOnce();
+  });
+});
+
+describe("双能力模型入口", () => {
+  it.each([true, false])("图像生成标记为 %s 时聊天入口始终保留，绘图入口按能力筛选", async (imageGeneration) => {
+    vi.clearAllMocks();
+    mocks.requireSession.mockResolvedValue({ id: "user-1" });
+    mocks.getSchema.mockReturnValue({
+      models: { id: "id", catalogId: "catalogId", visibility: "visibility", ownerUserId: "ownerUserId", enabled: "enabled" },
+      modelCatalog: { id: "catalogId", capabilities: "capabilities" },
+      routes: { modelId: "modelId", enabled: "enabled" },
+    });
+    const model = { id: "dual", name: "dual", visibility: "private", modelType: "chat" };
+    const query = queryReturning([{ model, capabilities: { imageGeneration, vision: true } }]);
+    const cte = { modelId: "modelId" };
+    const db = {
+      $with: () => ({ as: () => cte }),
+      select: () => query,
+      with: () => ({ select: () => query }),
+    };
+    mocks.getDb.mockResolvedValue(db);
+
+    expect(await getVisibleModels()).toEqual([{ ...model, capabilities: { imageGeneration, vision: true } }]);
+    const images = await getImageModels();
+    expect(images).toEqual(imageGeneration ? [{ ...model, capabilities: { imageGeneration, vision: true } }] : []);
+    expect(query.where).toHaveBeenCalledWith({ op: "and", conditions: [
+      { op: "or", conditions: [
+        { op: "eq", left: "visibility", right: "public" },
+        { op: "eq", left: "ownerUserId", right: "user-1" },
+      ] },
+      { op: "eq", left: "enabled", right: true },
+    ] });
   });
 });

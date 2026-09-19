@@ -178,7 +178,7 @@ export default function ModelFormDialog({
                   </button>
                 }
               >
-                {previewCatalog && <CatalogDetailCard catalog={previewCatalog} />}
+                {previewCatalog && <CatalogDetailCard key={previewCatalog.id} catalog={previewCatalog} editable={isAdmin} />}
               </Popover>
             </div>
             {formError && (

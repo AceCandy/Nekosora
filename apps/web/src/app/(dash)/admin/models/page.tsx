@@ -23,16 +23,18 @@ import { getTranslations } from "next-intl/server";
 import { Boxes } from "lucide-react";
 import { PageHeader } from "@/shared/components/PageHeader";
 import type { ProviderProtocol, RouteApiFormat } from "@nekusora/db/types";
+import { listModelCatalog } from "../../panel/actions";
 
 export default async function ModelsPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   const tn = await getTranslations("nav");
   const t = await getTranslations("admin.models");
   const query = (await searchParams) ?? {};
   const queryValue = (key: string) => (Array.isArray(query[key]) ? query[key]?.[0] : query[key]) ?? "";
-  const [models, providers, routes] = await Promise.all([
+  const [models, providers, routes, catalog] = await Promise.all([
     listModels(),
     listProviders(),
     listRoutes(),
+    listModelCatalog(),
   ]);
 
   // —— 映射数据形状,适配 ModelsManager ——
@@ -106,6 +108,7 @@ export default async function ModelsPage({ searchParams }: { searchParams?: Prom
         models={modelItems}
         routes={routeItems}
         providers={providerOptions}
+        catalog={catalog}
         createAction={createModel}
         updateActions={updateActions}
         deleteActions={deleteActions}

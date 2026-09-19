@@ -118,6 +118,20 @@ describe("ImageStudio", () => {
     expect(signal?.aborted).toBe(true);
   });
 
+  it("Responses 模型不会携带之前 Images 模型的多图数量和尺寸", async () => {
+    stateValues[2] = 4;
+    stateValues[3] = "1792x1024";
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ urls: [] }) });
+    vi.stubGlobal("fetch", fetchMock);
+    const elements = collectElements(ImageStudio({ models: [{
+      modelId: "responses", name: "chat-model", capabilities: { imageGenerationFormat: "openai-responses" },
+    }] }));
+    const selects = elements.filter((element) => element.type === "select");
+    expect(selects.map((element) => element.props.value)).toEqual(["responses", 1, "1024x1024"]);
+    await elements.find((element) => element.type === Button)?.props.onClick?.();
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({ n: 1, size: "1024x1024" });
+  });
+
   it("keeps a stale history response from overwriting a refresh", async () => {
     const initial = deferred<{ ok: boolean; json: () => Promise<{ jobs: unknown[] }> }>();
     const freshJobs = [{ id: "fresh" }];

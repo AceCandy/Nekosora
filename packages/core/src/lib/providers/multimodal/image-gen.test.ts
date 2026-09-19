@@ -11,7 +11,8 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 
 // Mock AI SDK(vi.mock 自动提升到文件顶部;factory 仅用 vi.fn 与字面量,不引用外部变量)。
-vi.mock("ai", () => ({
+vi.mock("ai", async (importOriginal) => ({
+  ...await importOriginal<typeof import("ai")>(),
   generateImage: vi.fn().mockResolvedValue({
     images: [{ base64: "ZmFrZQ==" }], // "fake" 的 base64
   }),
@@ -46,6 +47,7 @@ import {
 } from "../../repositories/route-repository";
 import { encrypt } from "../../infra/crypto";
 import type { CallContext } from "../types";
+import type { ModelCapabilities } from "@nekusora/db/types";
 
 const ENC_KEY_PLAIN = JSON.stringify({ keys: [{ key: "sk-test-fake", weight: 1 }] });
 let ENC_KEY = "";
@@ -57,9 +59,10 @@ interface MockModel {
   ownerUserId: string;
   visibility: "public" | "private";
   enabled: boolean;
-  capabilities?: Record<string, boolean>;
+  capabilities?: ModelCapabilities;
 }
 interface MockRoute {
+  supportsTools?: boolean;
   id: string;
   modelId: string;
   providerId: string;
@@ -183,6 +186,62 @@ describe("generateImageViaRoute (image byId 可见性)", () => {
 
   afterEach(() => {
     resetRouteRepository();
+  });
+
+  it.each([true, false])("Responses 使用真实 SDK 发起绘图工具请求，有图片=%s", async (hasImage) => {
+    data.models[0].capabilities = { imageGeneration: true, imageGenerationFormat: "openai-responses", tools: true };
+    data.routes[0].supportsTools = true;
+    data.routes[0].upstreamModelName = "chat-image-tool-model";
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(Response.json({
+      id: "resp_test", created_at: 1, model: "chat-image-tool-model", status: "completed",
+      output: hasImage ? [{ type: "image_generation_call", id: "ig_test", status: "completed", result: "ZmFrZQ==" }] : [],
+      usage: { input_tokens: 10, output_tokens: 20, total_tokens: 30 },
+    }));
+    const actual = await vi.importActual<typeof import("@ai-sdk/openai")>("@ai-sdk/openai");
+    vi.mocked(createOpenAI).mockImplementationOnce((options) => actual.createOpenAI({ ...options, fetch: fetchMock }));
+    const result = generateImageViaRoute(
+      { userId: "U_OTHER", keyKind: null, source: "chat" }, "dalle-pub",
+      { prompt: "一只猫", size: "1024x1536" }, "M_PUB",
+    );
+    if (hasImage) {
+      await expect(result).resolves.toMatchObject({ images: [{ base64: "ZmFrZQ==" }] });
+      expect(gatewayTelemetry.finalizeExecution).toHaveBeenCalledWith(expect.objectContaining({
+        outcome: expect.objectContaining({ usage: expect.objectContaining({ imageCount: 1, inputTokens: 10, outputTokens: 20 }) }),
+      }));
+    } else {
+      await expect(result).rejects.toThrow("未返回图片");
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toBe("https://a.example.com/v1/responses");
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      model: "chat-image-tool-model",
+      tools: [{ type: "image_generation", output_format: "png", size: "1024x1536" }],
+      tool_choice: { type: "image_generation" },
+    });
+    expect(generateImage).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { n: 2 }, { size: "1792x1024" as const },
+  ])("Responses 在请求上游前拒绝不支持的参数 %j", async (options) => {
+    data.models[0].capabilities = { imageGeneration: true, imageGenerationFormat: "openai-responses", tools: true };
+    data.routes[0].supportsTools = true;
+    await expect(generateImageViaRoute(
+      { userId: "U_OTHER", keyKind: null, source: "chat" }, "dalle-pub",
+      { prompt: "一只猫", ...options }, "M_PUB",
+    )).rejects.toMatchObject({ code: "request.unsupported_parameter" });
+    expect(createOpenAI).not.toHaveBeenCalled();
+  });
+
+  it.each(["route", "catalog", "protocol"])("Responses 拒绝缺少工具权限或协议不兼容：%s", async (missing) => {
+    data.models[0].capabilities = { imageGeneration: true, imageGenerationFormat: "openai-responses", tools: missing !== "catalog" };
+    data.routes[0].supportsTools = missing !== "route";
+    if (missing === "protocol") data.providers[0].protocol = "openai-images";
+    await expect(generateImageViaRoute(
+      { userId: "U_OTHER", keyKind: null, source: "chat" }, "dalle-pub", { prompt: "一只猫" }, "M_PUB",
+    )).rejects.toThrow();
+    expect(createOpenAI).not.toHaveBeenCalled();
   });
 
   it("WebChat byId:非 owner 用户可生成 public 图像模型(回归守护)", async () => {

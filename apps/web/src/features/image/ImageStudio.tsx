@@ -6,12 +6,15 @@ import { ImageIcon, Sparkles, Download } from "lucide-react";
 import { clsx } from "clsx";
 import { Button } from "@/shared/ui/Button";
 import Link from "next/link";
+import type { ModelCapabilities } from "@nekusora/db/types";
+import { getImageGenerationSettings } from "@nekusora/core/model-catalog";
 
 interface ImageModel {
   /** 模型 id(选项唯一标识,WebChat byId 路由解析,避免 public/private 同名歧义)。 */
   modelId: string;
   name: string;
   displayName?: string;
+  capabilities?: ModelCapabilities;
 }
 
 interface ImageJob {
@@ -26,8 +29,6 @@ interface ImageJob {
   createdAt: string;
 }
 
-const SIZES = ["1024x1024", "1792x1024", "1024x1792"] as const;
-
 export default function ImageStudio({ models }: { models: ImageModel[] }) {
   const t = useTranslations("image");
   // model 状态持有 modelId(配合 byId 路由解析);modelName 反查用于 image_jobs 记录。
@@ -41,6 +42,9 @@ export default function ImageStudio({ models }: { models: ImageModel[] }) {
   const [currentUrls, setCurrentUrls] = useState<string[]>([]);
   const [history, setHistory] = useState<ImageJob[]>([]);
   const historyRequestRef = useRef<AbortController | null>(null);
+  const settings = getImageGenerationSettings(selectedModel?.capabilities);
+  const effectiveN = Math.min(n, settings.maxImages);
+  const effectiveSize = settings.sizes.some((value) => value === size) ? size : settings.sizes[0];
 
   const loadHistory = useCallback(async () => {
     historyRequestRef.current?.abort();
@@ -82,8 +86,8 @@ export default function ImageStudio({ models }: { models: ImageModel[] }) {
           model: selectedModel.name,
           modelId: selectedModel.modelId,
           prompt: prompt.trim(),
-          n,
-          size,
+          n: effectiveN,
+          size: effectiveSize,
         }),
       });
       const data = await res.json();
@@ -144,11 +148,12 @@ export default function ImageStudio({ models }: { models: ImageModel[] }) {
           <label className="block space-y-1.5">
             <span className="text-ui-caption font-semibold text-neutral-600 ">{t("count")}</span>
             <select
-              value={n}
+              value={effectiveN}
+              disabled={settings.maxImages === 1}
               onChange={(e) => setN(Number(e.target.value))}
               className="w-full rounded-md border border-morning-mist  bg-white  px-3 py-2 text-ui-body text-neutral-700  focus:outline-none focus:border-sora-blue cursor-pointer"
             >
-              {[1, 2, 3, 4].map((v) => (
+              {Array.from({ length: settings.maxImages }, (_, index) => index + 1).map((v) => (
                 <option key={v} value={v}>{v}</option>
               ))}
             </select>
@@ -156,11 +161,11 @@ export default function ImageStudio({ models }: { models: ImageModel[] }) {
           <label className="block space-y-1.5">
             <span className="text-ui-caption font-semibold text-neutral-600 ">{t("size")}</span>
             <select
-              value={size}
+              value={effectiveSize}
               onChange={(e) => setSize(e.target.value)}
               className="w-full rounded-md border border-morning-mist  bg-white  px-3 py-2 text-ui-body text-neutral-700  focus:outline-none focus:border-sora-blue cursor-pointer"
             >
-              {SIZES.map((s) => (
+              {settings.sizes.map((s) => (
                 <option key={s} value={s}>{s}</option>
               ))}
             </select>

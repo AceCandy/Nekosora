@@ -6,6 +6,7 @@ import {
   normalizeCatalogModelId,
   normalizeComparableModelId,
   rankSimilarModels,
+  getImageGenerationSettings,
 } from "./model-catalog";
 import { passesInvariants } from "./sync-pi-models";
 import type { ModelCapabilities } from "@nekusora/db/types";
@@ -22,6 +23,13 @@ const entries = [
     aliases: [],
   },
 ];
+
+it("出图设置缺省沿用 Images，Responses 限制单图及独立尺寸", () => {
+  expect(getImageGenerationSettings()).toMatchObject({ format: "openai-images", maxImages: 4 });
+  expect(getImageGenerationSettings({ imageGenerationFormat: "openai-responses" })).toEqual({
+    format: "openai-responses", maxImages: 1, sizes: ["1024x1024", "1024x1536", "1536x1024"],
+  });
+});
 
 describe("model catalog matching", () => {
   it("normalizes case and surrounding whitespace", () => {

@@ -45,6 +45,8 @@ export interface ModelCapabilities {
   thinkingLevelMap?: ThinkingLevelMap;
   /** P1-D:图像生成(DALL-E / gpt-image 兼容)。 */
   imageGeneration?: boolean;
+  /** 出图请求语义；缺省沿用 Images，与聊天协议及模型类型独立。 */
+  imageGenerationFormat?: "openai-images" | "openai-responses";
   /** P1-D:语音转文字(Whisper 兼容)。 */
   audioTranscription?: boolean;
   /** P1-D:文字转语音(TTS 兼容)。 */

@@ -535,11 +535,12 @@ export async function getMyModels() {
 export async function listModelCatalog() {
   await requireSession();
   const db = await getDb();
+  const { modelCatalog } = getSchema();
   return db
     .select()
-    .from(S().modelCatalog)
-    .where(eq(S().modelCatalog.enabled, true))
-    .orderBy(asc(S().modelCatalog.sortOrder), asc(S().modelCatalog.name));
+    .from(modelCatalog)
+    .where(eq(modelCatalog.enabled, true))
+    .orderBy(asc(modelCatalog.sortOrder), asc(modelCatalog.name));
 }
 
 async function resolveCatalogId(

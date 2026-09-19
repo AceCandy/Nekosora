@@ -1,6 +1,7 @@
 import { getTranslations } from "next-intl/server";
 import { getImageModels } from "@/features/chat/actions/conversations";
 import ImageStudio from "@/features/image/ImageStudio";
+import type { ModelCapabilities } from "@nekusora/db/types";
 
 export default async function ImagePage() {
   const t = await getTranslations("image");
@@ -11,6 +12,7 @@ export default async function ImagePage() {
     modelId: m.id as string,
     name: m.name as string,
     displayName: (m.displayName as string | undefined) ?? undefined,
+    capabilities: m.capabilities as ModelCapabilities,
   }));
 
   return (

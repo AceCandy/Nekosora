@@ -8,7 +8,8 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb, getSchema } from "../../lib/infra/db/index";
 import { getSessionFromHeaders } from "../../lib/session-request";
-import { generateImageViaRoute } from "../../lib/providers/multimodal/image-gen";
+import { generateImageViaRoute, RoutingError } from "../../lib/providers/multimodal/image-gen";
+import { ErrorCode } from "../../lib/errors";
 import { getStorage } from "../../lib/infra/storage/index";
 import { redactErrorMessage } from "../../lib/redaction";
 
@@ -20,7 +21,7 @@ const imageRequestSchema = z.object({
   modelId: z.string().min(1).optional(),
   prompt: z.string().min(1),
   n: z.number().int().nullish().transform((n) => Math.min(Math.max(n ?? 1, 1), 4)),
-  size: z.enum(["256x256", "512x512", "1024x1024", "1792x1024", "1024x1792"]).optional(),
+  size: z.enum(["256x256", "512x512", "1024x1024", "1792x1024", "1024x1792", "1024x1536", "1536x1024"]).optional(),
 });
 
 export async function POST(req: Request) {
@@ -65,6 +66,7 @@ export async function POST(req: Request) {
       n: body.n,
       size: body.size,
       responseFormat: "url",
+      abortSignal: req.signal,
     }, body.modelId);
 
     // 把生成图存入 StorageDriver,收集 url
@@ -93,6 +95,8 @@ export async function POST(req: Request) {
       .update(s.imageJobs)
       .set({ status: "failed", error: errorMsg })
       .where(eq(s.imageJobs.id, job.id));
-    return Response.json({ error: errorMsg }, { status: 500 });
+    return Response.json({ error: errorMsg }, {
+      status: err instanceof RoutingError && err.code === ErrorCode.REQUEST_UNSUPPORTED_PARAMETER ? 400 : 500,
+    });
   }
 }
